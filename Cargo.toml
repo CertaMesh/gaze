@@ -10,6 +10,10 @@ description = "GDPR-compliant debugging proxy between AI coding agents and produ
 name = "gaze"
 path = "src/lib.rs"
 
+[features]
+default = []
+test-utils = []
+
 [dependencies]
 rmcp = "0.2"
 clap = { version = "4.5", features = ["derive"] }
