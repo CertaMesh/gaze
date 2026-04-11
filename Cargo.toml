@@ -1,3 +1,7 @@
+[workspace]
+members = ["crates/ghostwriter"]
+resolver = "2"
+
 [package]
 name = "gaze"
 version = "0.1.0"
