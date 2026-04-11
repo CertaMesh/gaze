@@ -14,15 +14,13 @@ use std::sync::Arc;
 use gaze::adapter::mysql::MysqlAdapter;
 use gaze::anon::Anonymizer;
 use gaze::audit::AuditLog;
-use gaze::mcp::errors::ErrorSanitizer;
+use gaze::mcp::errors::{ErrorSanitizer, CANARY};
 use gaze::mcp::tools::{SampleArgs, ToolContext};
 use gaze::policy::classifier::{Classifier, PiiClass};
 use gaze::policy::parser::{ConnectionConfig, DatabasePolicy, Policy, PolicySection};
 use gaze::scanner::Scanner;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::mysql::Mysql;
-
-const CANARY: &str = "CANARY_EMAIL_DO_NOT_LEAK@test.local";
 
 async fn boot_ctx() -> (ToolContext, testcontainers::ContainerAsync<Mysql>) {
     let container = Mysql::default().start().await.expect("docker/mysql start");
@@ -41,11 +39,16 @@ async fn boot_ctx() -> (ToolContext, testcontainers::ContainerAsync<Mysql>) {
                 id BIGINT PRIMARY KEY,
                 email VARCHAR(191) NOT NULL
             );
-            INSERT INTO users VALUES (1, 'CANARY_EMAIL_DO_NOT_LEAK@test.local');
             "#,
         )
         .await
-        .expect("seed");
+        .expect("seed schema");
+    adapter
+        .raw_execute(&format!(
+            "INSERT INTO users VALUES (1, '{CANARY}');"
+        ))
+        .await
+        .expect("seed canary row");
 
     // Build a minimal policy with one connection.production block.
     let mut connection = HashMap::new();
