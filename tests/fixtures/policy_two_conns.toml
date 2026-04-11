@@ -1,0 +1,23 @@
+[connection.production]
+kind = "mysql"
+ssh_host = "deploy@prod.example.com"
+local_port = 13306
+remote_host = "127.0.0.1"
+remote_port = 3306
+database = "artistfy"
+user = "gaze_ro"
+password_env = "GAZE_DB_PASSWORD"
+
+[connection.staging]
+kind = "mysql"
+ssh_host = "deploy@staging.example.com"
+local_port = 13307
+remote_host = "127.0.0.1"
+remote_port = 3306
+database = "artistfy_stg"
+user = "gaze_ro"
+password_env = "GAZE_DB_PASSWORD_STG"
+
+[policy.database]
+allowed_tables = ["users"]
+max_rows = 50
