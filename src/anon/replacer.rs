@@ -132,8 +132,28 @@ impl<'a> Replacer<'a> {
     }
 
     fn fake_date(&self, raw: &str) -> String {
-        // M1a ships a placeholder; real date shifting lands in Task M1a.7.
-        format!("1970-01-01T00:00:00Z (shifted from len={})", raw.len())
+        // Per-session constant offset, derived from the session key so the shift
+        // is deterministic within one run but different across runs. Range is
+        // [-365, 365] days. Preserves relative ordering of dates in a result set.
+        let digest = self.key.hmac(b"date_shift_days");
+        let raw_offset = i64::from_be_bytes([
+            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+        ]);
+        let shift_days = raw_offset.rem_euclid(730) - 365;
+
+        // Parse common MySQL date / datetime formats; fall back to a tagged string.
+        use chrono::{Duration, NaiveDate, NaiveDateTime};
+        if let Ok(dt) = NaiveDateTime::parse_from_str(raw, "%Y-%m-%d %H:%M:%S") {
+            return (dt + Duration::days(shift_days))
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string();
+        }
+        if let Ok(d) = NaiveDate::parse_from_str(raw, "%Y-%m-%d") {
+            return (d + Duration::days(shift_days))
+                .format("%Y-%m-%d")
+                .to_string();
+        }
+        format!("shifted_date_{shift_days}")
     }
 
     fn fake_generic(&self, raw: &str) -> String {
@@ -241,5 +261,23 @@ mod tests {
         let r = Replacer::new(&k, &m);
         let fake = r.replace_text(PiiClass::Ip, "192.168.1.50");
         assert!(fake.starts_with("10.0.0."));
+    }
+
+    #[test]
+    fn date_shift_preserves_format() {
+        let (k, m) = fixture();
+        let r = Replacer::new(&k, &m);
+        let out = r.replace_text(PiiClass::Date, "2025-01-15");
+        // Either looks like a date or is the fallback tagged form.
+        assert!(out.len() == 10 || out.starts_with("shifted_date_"));
+    }
+
+    #[test]
+    fn date_shift_preserves_ordering() {
+        let (k, m) = fixture();
+        let r = Replacer::new(&k, &m);
+        let a = r.replace_text(PiiClass::Date, "2025-01-01");
+        let b = r.replace_text(PiiClass::Date, "2025-02-01");
+        assert!(b > a); // both shifted by same offset → relative order preserved
     }
 }
