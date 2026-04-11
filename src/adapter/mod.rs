@@ -3,6 +3,7 @@
 //! handler, so every byte an adapter produces is funnelled through
 //! `Anonymizer::clean()` before reaching the wire.
 
+pub mod laravel_log;
 pub mod mysql;
 pub mod ssh_tunnel;
 
@@ -74,4 +75,26 @@ pub trait DatabaseAdapter: Send + Sync {
         limit: usize,
     ) -> Result<Vec<RawRow>, AdapterError>;
     async fn explain(&self, table: &str, filters: &[Filter]) -> Result<String, AdapterError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct LogLine {
+    pub timestamp: String,
+    pub level: String,
+    pub message: String,
+    pub raw: String,
+}
+
+#[async_trait]
+pub trait LogAdapter: Send + Sync {
+    async fn search(
+        &self,
+        pattern: &str,
+        level: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<LogLine>, AdapterError>;
+
+    async fn tail(&self, n: usize) -> Result<Vec<LogLine>, AdapterError>;
+
+    async fn context(&self, request_id: &str) -> Result<Vec<LogLine>, AdapterError>;
 }
