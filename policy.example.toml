@@ -1,0 +1,39 @@
+# Gaze v0.1 policy file.
+# The Datenschutzbeauftragter reviews THIS file.
+# Exactly one [connection.production] block is required in v0.1.
+
+[connection.production]
+kind = "mysql"
+ssh_host = "deploy@prod.example.com"
+local_port = 13306
+remote_host = "127.0.0.1"
+remote_port = 3306
+database = "myapp"
+user = "gaze_ro"
+password_env = "GAZE_DB_PASSWORD"
+
+[policy.database]
+allowed_tables = ["users", "orders"]
+blocked_columns = ["iban", "tax_id"]
+max_rows = 50
+max_distinct = 50
+count_allowed_columns = ["id", "status", "created_at"]
+distinct_allowed_columns = ["status", "country"]
+allowed_operations = ["schema", "sample", "count", "distinct", "explain"]
+
+[[policy.database.columns]]
+table = "users"
+column = "id"
+class = "id"
+
+[[policy.database.columns]]
+table = "users"
+column = "email"
+class = "email"
+
+[policy.logs]
+path = "/var/log/myapp/laravel.log"
+strip_patterns = [
+    "(?i)password[=:][^ ]+",
+    "Bearer [A-Za-z0-9._-]+",
+]
