@@ -2,7 +2,7 @@
 //! if Docker isn't reachable (testcontainers returns an error).
 
 use gaze::adapter::mysql::MysqlAdapter;
-use gaze::adapter::DatabaseAdapter;
+use gaze::adapter::{DatabaseAdapter, Filter, FilterOp};
 use gaze::types::ColumnType;
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::mysql::Mysql;
@@ -48,4 +48,57 @@ async fn schema_returns_columns_and_pk() {
     assert_eq!(schema.primary_key, vec!["id".to_string()]);
     let id_col = schema.columns.iter().find(|c| c.name == "id").unwrap();
     assert_eq!(id_col.ty, ColumnType::Int);
+}
+
+#[tokio::test]
+async fn sample_without_filters_returns_rows() {
+    let (adapter, _c) = boot().await;
+    let rows = adapter.sample("users", &[], 10).await.expect("sample");
+    assert_eq!(rows.len(), 3);
+    // Columns should include email + id.
+    assert!(rows[0].columns.contains_key("email"));
+    assert!(rows[0].columns.contains_key("id"));
+}
+
+#[tokio::test]
+async fn sample_respects_limit() {
+    let (adapter, _c) = boot().await;
+    let rows = adapter.sample("users", &[], 2).await.expect("sample");
+    assert_eq!(rows.len(), 2);
+}
+
+#[tokio::test]
+async fn sample_with_eq_filter() {
+    let (adapter, _c) = boot().await;
+    let f = Filter {
+        column: "id".into(),
+        op: FilterOp::Eq,
+        values: vec!["1".into()],
+    };
+    let rows = adapter.sample("users", &[f], 10).await.expect("sample");
+    assert_eq!(rows.len(), 1);
+}
+
+#[tokio::test]
+async fn count_returns_integer() {
+    let (adapter, _c) = boot().await;
+    let n = adapter.count("users", &[]).await.expect("count");
+    assert_eq!(n, 3);
+}
+
+#[tokio::test]
+async fn distinct_returns_values() {
+    let (adapter, _c) = boot().await;
+    let rows = adapter
+        .distinct("users", "email", 50)
+        .await
+        .expect("distinct");
+    assert_eq!(rows.len(), 3);
+}
+
+#[tokio::test]
+async fn explain_returns_plan_text() {
+    let (adapter, _c) = boot().await;
+    let plan = adapter.explain("users", &[]).await.expect("explain");
+    assert!(plan.to_lowercase().contains("users"));
 }

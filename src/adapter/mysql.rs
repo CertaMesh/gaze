@@ -9,7 +9,7 @@ use sqlx::Row;
 use sqlx::TypeInfo;
 use std::collections::BTreeMap;
 
-use crate::adapter::{AdapterError, ColumnSchema, DatabaseAdapter, Filter, TableSchema};
+use crate::adapter::{AdapterError, ColumnSchema, DatabaseAdapter, Filter, FilterOp, TableSchema};
 use crate::types::{ColumnType, RawRow, Value};
 
 pub struct MysqlAdapter {
@@ -101,29 +101,86 @@ impl DatabaseAdapter for MysqlAdapter {
 
     async fn sample(
         &self,
-        _table: &str,
-        _filters: &[Filter],
-        _limit: usize,
+        table: &str,
+        filters: &[Filter],
+        limit: usize,
     ) -> Result<Vec<RawRow>, AdapterError> {
-        // Lands in Task M2.3.
-        Err(AdapterError::Query("unimplemented".into()))
+        let (where_sql, bindings) = build_where(filters)?;
+        let sql = format!(
+            "SELECT * FROM `{}` {} LIMIT ?",
+            escape_ident(table),
+            where_sql
+        );
+        let mut q = sqlx::query(&sql);
+        for b in &bindings {
+            q = q.bind(b);
+        }
+        q = q.bind(limit as i64);
+        let rows = q
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AdapterError::Query(e.to_string()))?;
+        Ok(rows.iter().map(row_from_sqlx).collect())
     }
 
-    async fn count(&self, _table: &str, _filters: &[Filter]) -> Result<u64, AdapterError> {
-        Err(AdapterError::Query("unimplemented".into()))
+    async fn count(&self, table: &str, filters: &[Filter]) -> Result<u64, AdapterError> {
+        let (where_sql, bindings) = build_where(filters)?;
+        let sql = format!(
+            "SELECT COUNT(*) AS n FROM `{}` {}",
+            escape_ident(table),
+            where_sql
+        );
+        let mut q = sqlx::query_as::<_, (i64,)>(&sql);
+        for b in &bindings {
+            q = q.bind(b);
+        }
+        let (n,) = q
+            .fetch_one(&self.pool)
+            .await
+            .map_err(|e| AdapterError::Query(e.to_string()))?;
+        Ok(n.max(0) as u64)
     }
 
     async fn distinct(
         &self,
-        _table: &str,
-        _column: &str,
-        _limit: usize,
+        table: &str,
+        column: &str,
+        limit: usize,
     ) -> Result<Vec<RawRow>, AdapterError> {
-        Err(AdapterError::Query("unimplemented".into()))
+        let sql = format!(
+            "SELECT DISTINCT `{col}` FROM `{tab}` LIMIT ?",
+            col = escape_ident(column),
+            tab = escape_ident(table)
+        );
+        let rows = sqlx::query(&sql)
+            .bind(limit as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AdapterError::Query(e.to_string()))?;
+        Ok(rows.iter().map(row_from_sqlx).collect())
     }
 
-    async fn explain(&self, _table: &str, _filters: &[Filter]) -> Result<String, AdapterError> {
-        Err(AdapterError::Query("unimplemented".into()))
+    async fn explain(&self, table: &str, filters: &[Filter]) -> Result<String, AdapterError> {
+        let (where_sql, bindings) = build_where(filters)?;
+        let sql = format!(
+            "EXPLAIN SELECT * FROM `{}` {}",
+            escape_ident(table),
+            where_sql
+        );
+        let mut q = sqlx::query(&sql);
+        for b in &bindings {
+            q = q.bind(b);
+        }
+        let rows = q
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| AdapterError::Query(e.to_string()))?;
+        let mut out = String::new();
+        for row in rows {
+            let line = row_from_sqlx(&row);
+            out.push_str(&format!("{:?}\n", line.columns));
+        }
+        Ok(out)
     }
 }
 
@@ -145,7 +202,6 @@ fn mysql_type_to_column_type(ty: &str) -> ColumnType {
 }
 
 /// Convert one sqlx MySQL row into our `RawRow`. Used by sample/distinct.
-#[allow(dead_code)]
 pub(crate) fn row_from_sqlx(row: &sqlx::mysql::MySqlRow) -> RawRow {
     let mut columns: BTreeMap<String, Value> = BTreeMap::new();
     for (idx, col) in row.columns().iter().enumerate() {
@@ -156,7 +212,6 @@ pub(crate) fn row_from_sqlx(row: &sqlx::mysql::MySqlRow) -> RawRow {
     RawRow { columns }
 }
 
-#[allow(dead_code)]
 fn decode_one(row: &sqlx::mysql::MySqlRow, idx: usize, type_name: &str) -> Value {
     match type_name.to_ascii_uppercase().as_str() {
         "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "BIGINT" | "INT UNSIGNED"
@@ -185,4 +240,75 @@ fn decode_one(row: &sqlx::mysql::MySqlRow, idx: usize, type_name: &str) -> Value
             .map(Value::Text)
             .unwrap_or(Value::Null),
     }
+}
+
+fn escape_ident(ident: &str) -> String {
+    // Backticks inside identifiers get doubled. This is the only escape
+    // we need because we never interpolate user-provided identifiers —
+    // the policy engine validates `table` and `column` against allowlists
+    // before the adapter ever sees them.
+    ident.replace('`', "``")
+}
+
+fn build_where(filters: &[Filter]) -> Result<(String, Vec<String>), AdapterError> {
+    if filters.is_empty() {
+        return Ok((String::new(), Vec::new()));
+    }
+    let mut clauses: Vec<String> = Vec::new();
+    let mut bindings: Vec<String> = Vec::new();
+    for f in filters {
+        let col = escape_ident(&f.column);
+        match f.op {
+            FilterOp::Eq => {
+                clauses.push(format!("`{col}` = ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::Neq => {
+                clauses.push(format!("`{col}` <> ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::Lt => {
+                clauses.push(format!("`{col}` < ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::Lte => {
+                clauses.push(format!("`{col}` <= ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::Gt => {
+                clauses.push(format!("`{col}` > ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::Gte => {
+                clauses.push(format!("`{col}` >= ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::In => {
+                if f.values.is_empty() {
+                    return Err(AdapterError::Query("empty IN list".into()));
+                }
+                let placeholders = vec!["?"; f.values.len()].join(", ");
+                clauses.push(format!("`{col}` IN ({placeholders})"));
+                bindings.extend(f.values.iter().cloned());
+            }
+            FilterOp::Like => {
+                clauses.push(format!("`{col}` LIKE ?"));
+                bindings.push(require_one(f)?);
+            }
+            FilterOp::IsNull => {
+                clauses.push(format!("`{col}` IS NULL"));
+            }
+            FilterOp::IsNotNull => {
+                clauses.push(format!("`{col}` IS NOT NULL"));
+            }
+        }
+    }
+    Ok((format!("WHERE {}", clauses.join(" AND ")), bindings))
+}
+
+fn require_one(f: &Filter) -> Result<String, AdapterError> {
+    f.values
+        .first()
+        .cloned()
+        .ok_or_else(|| AdapterError::Query(format!("filter on {} missing value", f.column)))
 }
