@@ -1,13 +1,12 @@
-//! `gaze serve` — start the MCP stdio server. Real wiring lands in M5;
-//! for M3 this stub prints "not yet implemented" so downstream CLI
-//! dispatching compiles.
+//! `gaze serve` — start the MCP stdio server. Real wiring lives in
+//! `crate::mcp::server`; this module is the thin CLI-facing entry point.
 
-#[derive(Debug, thiserror::Error)]
-pub enum ServeError {
-    #[error("not yet implemented (wired in M5)")]
-    NotYet,
-}
+use std::path::Path;
 
-pub async fn run() -> Result<(), ServeError> {
-    Err(ServeError::NotYet)
+pub use crate::mcp::server::ServerError;
+
+/// CLI entry point: loads policy, opens tunnel/DB, and hands off to the
+/// rmcp stdio transport.
+pub async fn run_cmd(policy: &Path, global_audit: bool) -> Result<(), ServerError> {
+    crate::mcp::server::run(policy, global_audit).await
 }

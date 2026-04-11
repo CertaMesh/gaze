@@ -65,7 +65,7 @@ async fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Command::Serve { policy: _ } => match gaze::cli::serve::run().await {
+        Command::Serve { policy } => match gaze::cli::serve::run_cmd(&policy, cli.global).await {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("gaze serve: {e}");

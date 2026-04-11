@@ -10,6 +10,7 @@
 //! to the MCP peer, and collapse to `InvalidFilterValue` on any
 //! PII-adjacent failure per spec §error handling.
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -23,7 +24,7 @@ use crate::policy::parser::Policy;
 use crate::scanner::Scanner;
 use crate::types::{CleanRow, ColumnType, RawRow, Value};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct SampleArgs {
     pub env: String,
     pub table: String,
@@ -33,7 +34,7 @@ pub struct SampleArgs {
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct FilterArg {
     pub column: String,
     pub op: String,
@@ -46,7 +47,7 @@ pub struct SampleResult {
     pub rows: Vec<CleanRow>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct SchemaArgs {
     pub env: String,
     pub table: String,
@@ -68,7 +69,7 @@ pub struct ColumnOut {
     pub pii_class: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct CountArgs {
     pub env: String,
     pub table: String,
@@ -81,7 +82,7 @@ pub struct CountResult {
     pub count: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct DistinctArgs {
     pub env: String,
     pub table: String,
@@ -95,7 +96,7 @@ pub struct DistinctResult {
     pub values: Vec<serde_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct ExplainArgs {
     pub env: String,
     pub table: String,
@@ -108,7 +109,7 @@ pub struct ExplainResult {
     pub plan: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogsSearchArgs {
     pub env: String,
     pub pattern: String,
@@ -118,14 +119,14 @@ pub struct LogsSearchArgs {
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogsTailArgs {
     pub env: String,
     #[serde(default)]
     pub n: Option<usize>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, JsonSchema)]
 pub struct LogsContextArgs {
     pub env: String,
     pub request_id: String,

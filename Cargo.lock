@@ -790,6 +790,7 @@ dependencies = [
  "regex",
  "rmcp",
  "rusqlite",
+ "schemars 0.8.22",
  "secrecy",
  "serde",
  "serde_json",
