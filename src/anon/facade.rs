@@ -3,6 +3,7 @@
 //! cannot build a `CleanRow` any other way.
 
 use std::collections::BTreeMap;
+use std::sync::Once;
 
 use crate::anon::replacer::Replacer;
 use crate::anon::session::{SessionKey, SessionMap};
@@ -15,6 +16,8 @@ pub struct Anonymizer {
     classifier: Classifier,
 }
 
+static MLOCKALL_ONCE: Once = Once::new();
+
 impl Anonymizer {
     pub fn new(classifier: Classifier) -> Self {
         let key = SessionKey::generate().unwrap_or_else(|_| SessionKey::generate_unlocked());
@@ -22,6 +25,7 @@ impl Anonymizer {
     }
 
     pub fn with_key(classifier: Classifier, key: SessionKey) -> Self {
+        MLOCKALL_ONCE.call_once(crate::anon::session::try_mlockall_current);
         Self {
             key,
             map: SessionMap::new(),

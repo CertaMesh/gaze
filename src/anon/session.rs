@@ -126,6 +126,13 @@ mod tests {
         };
         assert_eq!(k.hmac(b"x").len(), 32);
     }
+
+    #[test]
+    fn mlockall_is_idempotent() {
+        // Calling twice must not panic or double-lock.
+        try_mlockall_current();
+        try_mlockall_current();
+    }
 }
 
 /// Bidirectional map between raw values and their fake replacements.
@@ -207,6 +214,26 @@ pub struct CollisionError {
     pub class: String,
     pub fake: String,
 }
+
+/// Best-effort lock of currently-resident pages. This is a process-wide
+/// operation so we only call it once, when the first `SessionMap` is
+/// constructed. Failure is logged but non-fatal — the load-bearing
+/// guarantee is zeroize-on-drop, not mlock.
+#[cfg(unix)]
+pub fn try_mlockall_current() {
+    // SAFETY: MCL_CURRENT is a flag constant, no pointers involved.
+    let rc = unsafe { libc::mlockall(libc::MCL_CURRENT) };
+    if rc != 0 {
+        let err = std::io::Error::last_os_error();
+        tracing::warn!(
+            error = %err,
+            "mlockall(MCL_CURRENT) failed; session map pages may be swappable"
+        );
+    }
+}
+
+#[cfg(not(unix))]
+pub fn try_mlockall_current() {}
 
 #[cfg(test)]
 mod map_tests {
