@@ -31,22 +31,40 @@ impl<'a> Replacer<'a> {
         if let Some(existing) = self.map.get_fake(class_name, raw) {
             return existing;
         }
-        let fake = match class {
-            PiiClass::NonPii => unreachable!(),
-            PiiClass::Id => unreachable!("ids go through replace_id"),
-            PiiClass::Email => self.fake_email(raw),
-            PiiClass::Name => self.fake_name(raw),
-            PiiClass::Phone => self.fake_phone(raw),
-            PiiClass::Address => self.fake_address(raw),
-            PiiClass::Iban => self.fake_iban(raw),
-            PiiClass::Ip => self.fake_ip(raw),
-            PiiClass::Date => self.fake_date(raw),
-            PiiClass::GenericText => self.fake_generic(raw),
-        };
-        self.map
-            .insert(class_name, raw.to_string(), fake.clone())
-            .expect("non-id classes never collide on first insert");
-        fake
+        // Index space for text fakes is bounded (e.g. `user_{n}` with
+        // n in 0..10_000), so different raws can land on the same fake.
+        // On collision, suffix the raw with a counter byte and rehash —
+        // mirrors the `replace_id` rehash strategy so the bijection
+        // raw <-> fake holds within a session.
+        let mut counter: u32 = 0;
+        loop {
+            let salted: String = if counter == 0 {
+                raw.to_string()
+            } else {
+                format!("{raw}\x00{counter}")
+            };
+            let fake = match class {
+                PiiClass::NonPii => unreachable!(),
+                PiiClass::Id => unreachable!("ids go through replace_id"),
+                PiiClass::Email => self.fake_email(&salted),
+                PiiClass::Name => self.fake_name(&salted),
+                PiiClass::Phone => self.fake_phone(&salted),
+                PiiClass::Address => self.fake_address(&salted),
+                PiiClass::Iban => self.fake_iban(&salted),
+                PiiClass::Ip => self.fake_ip(&salted),
+                PiiClass::Date => self.fake_date(&salted),
+                PiiClass::GenericText => self.fake_generic(&salted),
+            };
+            match self.map.insert(class_name, raw.to_string(), fake.clone()) {
+                Ok(()) => return fake,
+                Err(_) => {
+                    counter = counter
+                        .checked_add(1)
+                        .expect("text rehash counter overflow");
+                    continue;
+                }
+            }
+        }
     }
 
     /// Replace an integer `id`. Uses HMAC(raw) mod 2^31, rehashing on

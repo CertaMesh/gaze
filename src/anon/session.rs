@@ -137,6 +137,7 @@ impl SessionMap {
     }
 
     #[cfg(test)]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.forward.lock().unwrap().len()
     }
