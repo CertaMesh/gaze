@@ -4,8 +4,6 @@
 //! Invariant: `RawRow` MUST NOT implement `serde::Serialize`. This is enforced
 //! by `tests/ui/rawrow_no_serialize.rs`.
 
-#![allow(dead_code)]
-
 use serde::Serialize;
 use std::collections::BTreeMap;
 

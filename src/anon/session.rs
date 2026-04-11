@@ -1,8 +1,6 @@
 //! Session key: 32 random bytes, held in a `SecretBox`, zeroized on Drop.
 //! Lives for the duration of one `gaze serve` process. Never written to disk.
 
-#![allow(dead_code)]
-
 use hmac::{Hmac, Mac};
 use rand::RngCore;
 use secrecy::{ExposeSecret, SecretBox};

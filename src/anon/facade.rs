@@ -2,8 +2,6 @@
 //! exposes `clean(RawRow)` → `CleanRow`. Callers outside this module
 //! cannot build a `CleanRow` any other way.
 
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 
 use crate::anon::replacer::Replacer;

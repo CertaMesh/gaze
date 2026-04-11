@@ -6,8 +6,6 @@
 //! The deterministic-within-session property is what lets an agent
 //! correlate `Person_7` across `db.sample` results and log lines.
 
-#![allow(dead_code)]
-
 use crate::anon::session::{SessionKey, SessionMap};
 use crate::policy::classifier::PiiClass;
 

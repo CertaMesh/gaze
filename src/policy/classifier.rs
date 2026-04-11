@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Maps column names to PII classes. In v0.1 this is a lookup against
 //! the policy file's column rules. For M1a we ship a hand-rolled fallback
 //! so the anonymizer can be tested without a full policy loader.
