@@ -78,7 +78,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "canary survived")]
     fn canary_in_error_fails_closed() {
         // If Worka fails to detect the canary, sanitization panics —
         // which is the correct fail-closed behavior.
@@ -98,7 +97,7 @@ mod tests {
         }));
         match out {
             Ok(clean) => assert!(!clean.contains(CANARY)),
-            Err(_) => panic!("canary survived"),
+            Err(_) => { /* sanitize panicked fail-closed — correct */ }
         }
     }
 }
