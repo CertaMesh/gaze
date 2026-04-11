@@ -3,6 +3,7 @@
 //! must return the exact raw value. This is the core invariant that
 //! db.sample followed by a filter on the returned token depends on.
 
+use gaze::anon::session::SessionKey;
 use gaze::anon::Anonymizer;
 use gaze::policy::classifier::{Classifier, PiiClass};
 use gaze::types::{RawRow, Value};
@@ -10,10 +11,11 @@ use proptest::prelude::*;
 use std::collections::BTreeMap;
 
 fn anonymizer() -> Anonymizer {
-    Anonymizer::new(
+    Anonymizer::with_key(
         Classifier::new()
             .with_column("email", PiiClass::Email)
             .with_column("id", PiiClass::Id),
+        SessionKey::generate_unlocked(),
     )
 }
 

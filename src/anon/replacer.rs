@@ -197,7 +197,10 @@ mod tests {
     use super::*;
 
     fn fixture() -> (SessionKey, SessionMap) {
-        (SessionKey::generate(), SessionMap::new())
+        (
+            SessionKey::generate().expect("mlock should succeed on dev machine"),
+            SessionMap::new(),
+        )
     }
 
     #[test]

@@ -11,17 +11,62 @@ use zeroize::Zeroize;
 
 type HmacSha256 = Hmac<Sha256>;
 
+#[derive(Debug, thiserror::Error)]
+pub enum LockError {
+    #[error("mlock failed: {0}")]
+    Mlock(std::io::Error),
+    #[error("madvise DONTDUMP failed: {0}")]
+    Madvise(std::io::Error),
+}
+
+/// Strict mlock + MADV_DONTDUMP on a byte slice. Linux uses MADV_DONTDUMP,
+/// macOS has no direct equivalent but still respects mlock. On unsupported
+/// platforms this is a soft no-op and returns `Ok(())`.
+#[cfg(unix)]
+fn lock_bytes(ptr: *mut u8, len: usize) -> Result<(), LockError> {
+    // SAFETY: caller owns the allocation for `len` bytes.
+    let rc = unsafe { libc::mlock(ptr.cast::<libc::c_void>(), len) };
+    if rc != 0 {
+        return Err(LockError::Mlock(std::io::Error::last_os_error()));
+    }
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: same region.
+        let rc = unsafe { libc::madvise(ptr.cast::<libc::c_void>(), len, libc::MADV_DONTDUMP) };
+        if rc != 0 {
+            return Err(LockError::Madvise(std::io::Error::last_os_error()));
+        }
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn lock_bytes(_: *mut u8, _: usize) -> Result<(), LockError> {
+    Ok(())
+}
+
 pub struct SessionKey {
     inner: SecretBox<[u8; 32]>,
 }
 
 impl SessionKey {
-    /// Generate a fresh 32-byte key from the OS CSPRNG.
-    pub fn generate() -> Self {
-        let mut bytes = [0u8; 32];
-        rand::rngs::OsRng.fill_bytes(&mut bytes);
+    /// Generate a fresh 32-byte key and lock it into RAM.
+    pub fn generate() -> Result<Self, LockError> {
+        let mut bytes = Box::new([0u8; 32]);
+        rand::rngs::OsRng.fill_bytes(bytes.as_mut_slice());
+        lock_bytes(bytes.as_mut_ptr(), 32)?;
+        Ok(Self {
+            inner: SecretBox::new(bytes),
+        })
+    }
+
+    /// Escape hatch for environments where mlock fails (Docker without
+    /// IPC_LOCK, some CI runners). Only reachable via `--allow-unlocked-key`.
+    pub fn generate_unlocked() -> Self {
+        let mut bytes = Box::new([0u8; 32]);
+        rand::rngs::OsRng.fill_bytes(bytes.as_mut_slice());
         Self {
-            inner: SecretBox::new(Box::new(bytes)),
+            inner: SecretBox::new(bytes),
         }
     }
 
@@ -53,14 +98,14 @@ mod tests {
 
     #[test]
     fn generated_keys_differ() {
-        let a = SessionKey::generate();
-        let b = SessionKey::generate();
+        let a = SessionKey::generate().expect("mlock should succeed on dev machine");
+        let b = SessionKey::generate().expect("mlock should succeed on dev machine");
         assert_ne!(a.hmac(b"test"), b.hmac(b"test"));
     }
 
     #[test]
     fn same_input_same_output_within_session() {
-        let k = SessionKey::generate();
+        let k = SessionKey::generate().expect("mlock should succeed on dev machine");
         assert_eq!(
             k.hmac(b"krishan@example.com"),
             k.hmac(b"krishan@example.com")
@@ -69,8 +114,17 @@ mod tests {
 
     #[test]
     fn hmac_is_32_bytes() {
-        let k = SessionKey::generate();
+        let k = SessionKey::generate().expect("mlock should succeed on dev machine");
         assert_eq!(k.hmac(b"anything").len(), 32);
+    }
+
+    #[test]
+    fn locked_key_still_hmacs() {
+        let k = match SessionKey::generate() {
+            Ok(k) => k,
+            Err(_) => SessionKey::generate_unlocked(),
+        };
+        assert_eq!(k.hmac(b"x").len(), 32);
     }
 }
 

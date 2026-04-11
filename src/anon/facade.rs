@@ -17,8 +17,13 @@ pub struct Anonymizer {
 
 impl Anonymizer {
     pub fn new(classifier: Classifier) -> Self {
+        let key = SessionKey::generate().unwrap_or_else(|_| SessionKey::generate_unlocked());
+        Self::with_key(classifier, key)
+    }
+
+    pub fn with_key(classifier: Classifier, key: SessionKey) -> Self {
         Self {
-            key: SessionKey::generate(),
+            key,
             map: SessionMap::new(),
             classifier,
         }

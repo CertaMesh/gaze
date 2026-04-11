@@ -781,6 +781,7 @@ dependencies = [
  "clap",
  "fake",
  "hmac",
+ "libc",
  "once_cell",
  "pii",
  "proptest",
