@@ -1,6 +1,6 @@
-# Gaze — Laravel Integration (v0.2 Pipe Mode)
+# Gaze — Laravel Integration (v0.3 Pipe Mode)
 
-**Status:** Draft / targets Gaze v0.2 — pipe mode is not shipped in v0.1. This document describes the planned integration surface so the v0.1 anonymizer core can be designed to support it without rework.
+**Status:** Roadmap / targets Gaze v0.3 — pipe mode is not shipped in v0.1. This document describes the planned integration surface so the v0.1 anonymizer core can be designed to support it without rework.
 
 ---
 
@@ -45,7 +45,7 @@ Two Gaze invocations per request, one LLM call in between. Session state travels
 
 ## Prerequisites
 
-- Gaze v0.2 binary on the Laravel server's `PATH` (install via `cargo install gaze` or the Homebrew tap).
+- Gaze v0.3 binary on the Laravel server's `PATH` (install via `cargo install gaze` or the Homebrew tap).
 - A `policy.toml` in the Laravel project root (or configurable via `config/gaze.php`).
 - Laravel 11+ (for the `Process` facade's piping support).
 - `APP_KEY` set to a strong random value — used to encrypt session blobs in flight.

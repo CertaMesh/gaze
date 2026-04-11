@@ -797,7 +797,7 @@ $blob = Crypt::decryptString($this->encryptedSession);
 $final = Gaze::restore(new GazeSession($blob), $llmReply);
 ```
 
-This protects the blob while it sits in Redis, MySQL `jobs`/`failed_jobs`, debug logs, and Horizon dashboards. Plaintext only exists inside the Laravel worker process during the brief window between decrypt and restore. A standalone integration doc (`docs/integrations/laravel.md`) walks through the full Ghostwriter-style email reply pipeline.
+This protects the blob while it sits in Redis, MySQL `jobs`/`failed_jobs`, debug logs, and Horizon dashboards. Plaintext only exists inside the Laravel worker process during the brief window between decrypt and restore. A standalone integration doc (`docs/roadmap/v0.3/laravel.md`) walks through the full Ghostwriter-style email reply pipeline.
 
 ### Why pipe mode, not HTTP (reprise)
 
