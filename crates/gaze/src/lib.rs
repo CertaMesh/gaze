@@ -8,7 +8,7 @@ mod types;
 
 pub use detector::{Detection, Detector, PiiClass, RegexDetector};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
-pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
+pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
 pub use rule::{Action, ClassRule, ColumnRule, Context, DefaultRule, Rule};
 pub use session::{Scope, SensitiveSnapshot, Session};
 pub use types::{CleanDocument, RawDocument, Value};

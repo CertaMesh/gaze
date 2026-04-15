@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use gaze::{
     Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, Pipeline, PiiClass, RawDocument,
-    RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, Value,
+    RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, SqliteLogger, Value,
 };
 
 #[test]
@@ -355,4 +355,26 @@ fn column_rule_uses_field_name_context() {
 
     assert_eq!(fields["primary_email"], "[REDACTED]");
     assert_eq!(fields["secondary_email"], "Email_1");
+}
+
+#[test]
+fn sqlite_logger_persists_entries() {
+    let temp = tempfile::NamedTempFile::new().expect("temp db");
+    let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
+
+    logger
+        .log(&RedactionEntry {
+            source: "regex".to_string(),
+            class: PiiClass::Email,
+            action: Action::Tokenize,
+            field_name: Some("email".to_string()),
+            document_kind: gaze::DocumentKind::Structured,
+            conflict_loser: false,
+        })
+        .expect("log entry");
+
+    let rows = logger.entries().expect("read entries");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].source, "regex");
+    assert_eq!(rows[0].field_name.as_deref(), Some("email"));
 }

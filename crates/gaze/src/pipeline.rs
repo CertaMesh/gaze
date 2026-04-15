@@ -26,6 +26,8 @@ pub enum Error {
     InvalidSnapshotSignature,
     #[error("snapshot decode failed: {0}")]
     SnapshotDecode(#[source] serde_json::Error),
+    #[error("sqlite error: {0}")]
+    Sqlite(String),
 }
 
 #[derive(Clone)]
