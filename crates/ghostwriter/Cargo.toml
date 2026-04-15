@@ -21,7 +21,7 @@ thiserror = "1"
 base64 = "0.22"
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1"
-pii = { git = "https://github.com/worka-ai/pii", branch = "main" }
+gaze = { path = "../gaze" }
 
 [dev-dependencies]
 assert_cmd = "2"

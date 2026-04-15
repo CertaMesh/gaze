@@ -1,35 +1,55 @@
 //! Session blob schema.
 //!
-//! A `SessionBlob` carries the mapping from placeholder tokens back to raw
-//! values. It is opaque to callers: we serialize to JSON, then wrap in
-//! base64 so Laravel can transport it as a single string.
+//! A `SessionBlob` carries the opaque `gaze::SensitiveSnapshot` plus the
+//! outward placeholder aliases ghostwriter exposes to callers. Laravel still
+//! sees a single opaque base64 string.
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
+use gaze::SensitiveSnapshot;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 use crate::errors::{RestoreError, SanitizeError};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AliasEntry {
+    pub external: String,
+    pub internal: String,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SessionBlob {
     pub schema_version: u32,
-    /// Map from placeholder token (e.g. "<CUSTOMER_NAME>") to raw value.
-    /// Uses BTreeMap so the serialized form is deterministic.
-    pub placeholders: BTreeMap<String, String>,
+    pub snapshot: String,
+    pub aliases: Vec<AliasEntry>,
 }
 
 impl SessionBlob {
-    pub fn new() -> Self {
+    pub fn new(snapshot: SensitiveSnapshot) -> Self {
         Self {
             schema_version: SCHEMA_VERSION,
-            placeholders: BTreeMap::new(),
+            snapshot: B64.encode(snapshot.into_bytes()),
+            aliases: Vec::new(),
         }
     }
 
-    pub fn insert(&mut self, placeholder: impl Into<String>, raw: impl Into<String>) {
-        self.placeholders.insert(placeholder.into(), raw.into());
+    pub fn insert_alias(
+        &mut self,
+        external: impl Into<String>,
+        internal: impl Into<String>,
+    ) {
+        self.aliases.push(AliasEntry {
+            external: external.into(),
+            internal: internal.into(),
+        });
+    }
+
+    pub fn snapshot(&self) -> Result<SensitiveSnapshot, RestoreError> {
+        let bytes = B64
+            .decode(self.snapshot.as_bytes())
+            .map_err(|e| RestoreError::InvalidSessionBlob(format!("snapshot base64: {e}")))?;
+        Ok(bytes.into())
     }
 
     pub fn encode(&self) -> Result<String, SanitizeError> {
@@ -59,7 +79,7 @@ impl SessionBlob {
 
 impl Default for SessionBlob {
     fn default() -> Self {
-        Self::new()
+        Self::new(Vec::new().into())
     }
 }
 
@@ -69,24 +89,21 @@ mod tests {
 
     #[test]
     fn empty_blob_roundtrips() {
-        let b = SessionBlob::new();
+        let b = SessionBlob::new(vec![1, 2, 3].into());
         let encoded = b.encode().unwrap();
         let decoded = SessionBlob::decode(&encoded).unwrap();
         assert_eq!(b, decoded);
     }
 
     #[test]
-    fn blob_with_entries_roundtrips() {
-        let mut b = SessionBlob::new();
-        b.insert("<CUSTOMER_NAME>", "Markus Mueller");
-        b.insert("<EMAIL_1>", "markus.mueller@example.de");
+    fn blob_with_aliases_roundtrips() {
+        let mut b = SessionBlob::new(vec![1, 2, 3].into());
+        b.insert_alias("<CUSTOMER_NAME>", "CustomerName_1");
+        b.insert_alias("<EMAIL_1>", "Email_1");
         let encoded = b.encode().unwrap();
         let decoded = SessionBlob::decode(&encoded).unwrap();
         assert_eq!(b, decoded);
-        assert_eq!(
-            decoded.placeholders.get("<CUSTOMER_NAME>").unwrap(),
-            "Markus Mueller"
-        );
+        assert_eq!(decoded.snapshot().unwrap().into_bytes(), vec![1, 2, 3]);
     }
 
     #[test]
@@ -105,7 +122,8 @@ mod tests {
     fn decode_rejects_wrong_schema_version() {
         let bad = serde_json::json!({
             "schema_version": 999,
-            "placeholders": {}
+            "snapshot": "",
+            "aliases": []
         });
         let encoded = B64.encode(serde_json::to_vec(&bad).unwrap());
         let err = SessionBlob::decode(&encoded).unwrap_err();
@@ -114,12 +132,12 @@ mod tests {
 
     #[test]
     fn encoding_is_deterministic() {
-        let mut a = SessionBlob::new();
-        a.insert("<B>", "second");
-        a.insert("<A>", "first");
-        let mut b = SessionBlob::new();
-        b.insert("<A>", "first");
-        b.insert("<B>", "second");
+        let mut a = SessionBlob::new(vec![1, 2, 3].into());
+        a.insert_alias("<B>", "Email_2");
+        a.insert_alias("<A>", "Email_1");
+        let mut b = SessionBlob::new(vec![1, 2, 3].into());
+        b.insert_alias("<B>", "Email_2");
+        b.insert_alias("<A>", "Email_1");
         assert_eq!(a.encode().unwrap(), b.encode().unwrap());
     }
 }

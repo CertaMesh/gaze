@@ -1,6 +1,0 @@
-[2025-04-10 10:00:00] production.INFO: Request start request_id=req_1 user_id=42 ip=192.168.1.50
-[2025-04-10 10:00:01] production.INFO: Authenticated user email=krishan@example.com password=hunter2 request_id=req_1
-[2025-04-10 10:00:02] production.ERROR: SQLSTATE[23000] Integrity constraint violation request_id=req_1 {"exception":"QueryException","message":"Duplicate entry"}
-[2025-04-10 10:00:03] production.INFO: Request end request_id=req_1 status=500
-[2025-04-10 10:05:00] production.INFO: Request start request_id=req_2 user_id=43
-[2025-04-10 10:05:01] production.INFO: Request end request_id=req_2 status=200
