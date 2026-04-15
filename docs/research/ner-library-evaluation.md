@@ -95,6 +95,70 @@ General NER focuses on PER/ORG/LOC (CoNLL 4-class). **Business identifiers** (or
 - Target categories where real positives are rare: IBAN, VIN, IMEI, UUID.
 - For NER: generate German sentences exercising compounding + derived forms (GermEval-style).
 
+## Pinned artifacts
+
+> Status: Phase 2 scaffolding — placeholder hashes. Replace every `TODO`
+> value below before the first real production run and flip this status
+> to "signed off".
+
+The runtime `NerDetector` consumes a pinned local artifact set. No network
+at runtime. Artifacts are produced by `scripts/fetch-ner-model.sh` against
+the pinned HF commit and installed at the runtime model directory.
+
+| Field | Value |
+|---|---|
+| HF repo | `Davlan/bert-base-multilingual-cased-ner-hrl` |
+| Pinned HF commit SHA | `__PINNED_COMMIT_SHA_TODO__` (fill before first sign-off run) |
+| Default runtime model dir | `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/` |
+| Operator override | `[ner] model_dir = "..."` in `policy.toml` |
+
+### Expected files
+
+Every file is required; absence is fail-closed:
+
+| File | Purpose |
+|---|---|
+| `model.onnx` | Token-classification head export. |
+| `tokenizer.json` | HuggingFace `tokenizers` serialized form; used for byte-offset reconstruction. |
+| `config.json` | Must carry `id2label` (stringified indices → CoNLL labels). |
+| `labels.json` | Gaze-authored CoNLL-label → `PiiClass` map. `"drop"` is the skip sentinel. |
+| `SHA256SUMS` | `shasum -a 256` output covering all four files above. |
+
+### Expected SHA-256 hashes (placeholders)
+
+These values are **placeholders**. Replace with the hashes produced by the
+first sign-off run of `scripts/fetch-ner-model.sh`.
+
+```
+0000000000000000000000000000000000000000000000000000000000000000  model.onnx
+1111111111111111111111111111111111111111111111111111111111111111  tokenizer.json
+2222222222222222222222222222222222222222222222222222222222222222  config.json
+3333333333333333333333333333333333333333333333333333333333333333  labels.json
+```
+
+### Follow-ups
+
+- TODO: run `scripts/fetch-ner-model.sh` once against the pinned commit,
+  copy the resulting `SHA256SUMS` into this section and into
+  `crates/gaze/testdata/ner/SHA256SUMS.example` (shape only; placeholder
+  hashes remain there for unit-test fixtures).
+- TODO: open a follow-up issue tracking the pinned-artifact review by
+  Datenschutz (model-license + weight provenance).
+- TODO: decide whether `MISC` stays as `drop` by default or is opted into
+  a new `PiiClass` for deployments where Wikipedia-entity MISC recall is
+  useful. Currently the label map ships `MISC → drop`.
+
+### Running ignored / real-model tests
+
+```
+scripts/fetch-ner-model.sh
+export GAZE_NER_MODEL_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl"
+cargo test -p gaze -- --ignored ner_span_correctness
+```
+
+CI does NOT run these tests; operator invokes them when pinning a new
+artifact.
+
 ## Decision Ask
 
 Spec Phase 0 gate: **adopt direct `ort` + `tokenizers` integration as the v0.2 `NerDetector` backing, with `Davlan/bert-base-multilingual-cased-ner-hrl` (mBERT, 10 langs incl. DE+EN) exported to ONNX and mounted as a pinned local artifact.** Upgrade path to stacked DE+EN models or language-routed dispatch is additive. Defer encoderfile-sidecar packaging to v0.3+.
