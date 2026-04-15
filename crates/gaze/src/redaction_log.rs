@@ -103,6 +103,8 @@ fn pii_class_to_db(class: &PiiClass) -> String {
     match class {
         PiiClass::Email => "email".to_string(),
         PiiClass::Name => "name".to_string(),
+        PiiClass::Location => "location".to_string(),
+        PiiClass::Organization => "organization".to_string(),
         PiiClass::Custom(name) => format!("custom:{name}"),
     }
 }
@@ -111,6 +113,8 @@ fn pii_class_from_db(value: &str) -> std::result::Result<PiiClass, rusqlite::Err
     Ok(match value {
         "email" => PiiClass::Email,
         "name" => PiiClass::Name,
+        "location" => PiiClass::Location,
+        "organization" => PiiClass::Organization,
         custom if custom.starts_with("custom:") => PiiClass::Custom(custom[7..].to_string()),
         other => {
             return Err(rusqlite::Error::FromSqlConversionFailure(

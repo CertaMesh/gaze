@@ -14,6 +14,8 @@ pub trait Detector: Send + Sync {
 pub enum PiiClass {
     Email,
     Name,
+    Location,
+    Organization,
     Custom(String),
 }
 

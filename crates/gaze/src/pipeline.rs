@@ -273,6 +273,8 @@ fn generalize_token(class: &crate::detector::PiiClass) -> String {
     match class {
         crate::detector::PiiClass::Email => "[EMAIL]".to_string(),
         crate::detector::PiiClass::Name => "[NAME]".to_string(),
+        crate::detector::PiiClass::Location => "[LOCATION]".to_string(),
+        crate::detector::PiiClass::Organization => "[ORGANIZATION]".to_string(),
         crate::detector::PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
     }
 }
