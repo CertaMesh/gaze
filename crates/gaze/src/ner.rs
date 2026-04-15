@@ -1,4 +1,4 @@
-//! Transformer-based NER detector backed by `ort` + `tokenizers`.
+//! Transformer-based NER detector with pluggable backends.
 //!
 //! Model artifacts live out-of-repo at `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/`
 //! by default, or at an operator-supplied `[ner] model_dir` in `policy.toml`.
@@ -10,7 +10,8 @@
 //! - `labels.json` maps CoNLL-style model label strings (e.g. `B-PER`) to
 //!   Gaze `PiiClass` values. Labels absent from the map are dropped.
 //! - `config.json` provides `id2label` so we can translate model output logits
-//!   back to label strings.
+//!   back to label strings. It may also specify the `backend` driver; omitted
+//!   backends default to `ort`.
 //! - `tokenizer.json` is consumed by HuggingFace `tokenizers` with
 //!   byte-offset reconstruction enabled.
 //!
@@ -20,6 +21,7 @@
 //! and emitted as byte `Range<usize>` against that pre-pass string.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -41,12 +43,38 @@ pub const CHECKSUMS_FILE: &str = "SHA256SUMS";
 /// Labels file format: `{ "PER": "Name", "LOC": "Location", ... }`.
 /// Values are matched against `PiiClass` variants by lowercase name,
 /// falling back to `PiiClass::custom(value)` if no built-in matches.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelMap(pub BTreeMap<String, PiiClass>);
 
 impl LabelMap {
     pub fn get(&self, conll_label: &str) -> Option<&PiiClass> {
         self.0.get(conll_label)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NerBackendKind {
+    Ort,
+    Redact,
+}
+
+impl NerBackendKind {
+    fn parse(raw: Option<&str>) -> Result<Self, NerLoadError> {
+        match raw.map(str::trim).filter(|value| !value.is_empty()) {
+            None => Ok(Self::Ort),
+            Some("ort") | Some("onnxruntime") => Ok(Self::Ort),
+            Some("redact") => Ok(Self::Redact),
+            Some(other) => Err(NerLoadError::UnsupportedBackend {
+                backend: other.to_string(),
+            }),
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Ort => "ort",
+            Self::Redact => "redact",
+        }
     }
 }
 
@@ -76,37 +104,72 @@ pub enum NerLoadError {
     LabelsParse(String),
     #[error("config.json parse error: {0}")]
     ConfigParse(String),
+    #[error("unsupported ner backend: {backend}")]
+    UnsupportedBackend { backend: String },
     #[error("tokenizer load error: {0}")]
     Tokenizer(String),
     #[error("onnx runtime load error: {0}")]
     Runtime(String),
 }
 
-/// NER detector backed by a pinned local ONNX model.
+#[derive(Debug, Error)]
+enum NerRuntimeError {
+    #[error("tokenizer encode error: {0}")]
+    Tokenizer(String),
+    #[error("input tensor build error: {0}")]
+    InputTensor(String),
+    #[error("session mutex poisoned: {0}")]
+    Poisoned(String),
+    #[error("inference failed: {0}")]
+    Inference(String),
+    #[error("logits extract failed: {0}")]
+    Output(String),
+}
+
+trait NerBackend: Send + Sync {
+    fn detect(
+        &self,
+        input: &str,
+        labels: &LabelMap,
+        id2label: &[String],
+        source: &str,
+    ) -> Result<Vec<Detection>, NerRuntimeError>;
+}
+
+/// NER detector backed by a pinned local model artifact set.
 pub struct NerDetector {
     #[allow(dead_code)]
     model_dir: PathBuf,
     #[allow(dead_code)]
+    backend_kind: NerBackendKind,
     labels: LabelMap,
-    #[allow(dead_code)]
     id2label: Vec<String>,
-    tokenizer: tokenizers::Tokenizer,
-    session: Mutex<ort::session::Session>,
+    backend: Box<dyn NerBackend>,
+}
+
+impl fmt::Debug for NerDetector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NerDetector")
+            .field("model_dir", &self.model_dir)
+            .field("backend_kind", &self.backend_kind)
+            .finish_non_exhaustive()
+    }
 }
 
 /// Verified artifact handles. Produced by `verify_artifacts`, consumed by
 /// `NerDetector::load`. Split out so the load contract can be exercised by
-/// unit tests without initializing the ONNX runtime.
+/// unit tests without initializing a backend runtime.
 #[derive(Debug, Clone)]
 pub struct VerifiedArtifacts {
     pub model_dir: PathBuf,
+    pub backend_kind: NerBackendKind,
     pub labels: LabelMap,
     pub id2label: Vec<String>,
 }
 
 impl NerDetector {
-    /// Verify SHA256SUMS, parse labels.json and config.json. No ORT or
-    /// tokenizer initialization. Used both by `load` and by unit tests.
+    /// Verify SHA256SUMS, parse labels.json and config.json. No backend
+    /// initialization. Used both by `load` and by unit tests.
     pub fn verify_artifacts(model_dir: &Path) -> Result<VerifiedArtifacts, NerLoadError> {
         if !model_dir.is_dir() {
             return Err(NerLoadError::ModelDirMissing {
@@ -144,32 +207,30 @@ impl NerDetector {
         }
 
         let labels = parse_labels(&model_dir.join(LABELS_FILE))?;
-        let id2label = parse_id2label(&model_dir.join(CONFIG_FILE))?;
+        let config = parse_config(&model_dir.join(CONFIG_FILE))?;
+        let backend_kind = NerBackendKind::parse(config.backend.as_deref())?;
+        let id2label = config_to_id2label(config.id2label)?;
 
         Ok(VerifiedArtifacts {
             model_dir: model_dir.to_path_buf(),
+            backend_kind,
             labels,
             id2label,
         })
     }
 
-    /// Full load: verify artifacts, initialize tokenizer and ORT session.
+    /// Full load: verify artifacts, initialize the configured backend.
     /// Fails closed on any load error.
     pub fn load(model_dir: &Path) -> Result<Self, NerLoadError> {
         let verified = Self::verify_artifacts(model_dir)?;
-        let tokenizer = tokenizers::Tokenizer::from_file(verified.model_dir.join(TOKENIZER_FILE))
-            .map_err(|err| NerLoadError::Tokenizer(err.to_string()))?;
-        let session = ort::session::Session::builder()
-            .map_err(|err| NerLoadError::Runtime(err.to_string()))?
-            .commit_from_file(verified.model_dir.join(MODEL_FILE))
-            .map_err(|err| NerLoadError::Runtime(err.to_string()))?;
+        let backend = load_backend(&verified)?;
 
         Ok(Self {
             model_dir: verified.model_dir,
+            backend_kind: verified.backend_kind,
             labels: verified.labels,
             id2label: verified.id2label,
-            tokenizer,
-            session: Mutex::new(session),
+            backend,
         })
     }
 
@@ -197,7 +258,6 @@ impl NerDetector {
                 i += 1;
                 continue;
             };
-            // Span start: first non-empty subword offset.
             let (start, mut end) = subword_spans[i];
             if start == end {
                 i += 1;
@@ -206,7 +266,6 @@ impl NerDetector {
             let mut j = i + 1;
             while j < subword_labels.len() {
                 let (p2, e2) = split_bio(subword_labels[j]);
-                // Continue entity only on I-<same> (strict IOB2).
                 if p2 == 'I' && e2 == entity {
                     let (s, e) = subword_spans[j];
                     if s != e {
@@ -230,19 +289,54 @@ impl NerDetector {
 
 impl Detector for NerDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
-        // Encode with offsets.
-        let encoded = match self.tokenizer.encode(input, true) {
-            Ok(enc) => enc,
+        let source = format!("ner/{}", self.backend_kind.as_str());
+        match self.backend.detect(input, &self.labels, &self.id2label, &source) {
+            Ok(detections) => detections,
             Err(err) => {
-                tracing::warn!(error = %err, "ner: tokenizer encode failed");
-                return Vec::new();
+                tracing::warn!(backend = self.backend_kind.as_str(), error = %err, "ner: backend detect failed");
+                Vec::new()
             }
-        };
+        }
+    }
+}
+
+struct OrtBackend {
+    tokenizer: tokenizers::Tokenizer,
+    session: Mutex<ort::session::Session>,
+}
+
+impl OrtBackend {
+    fn load(model_dir: &Path) -> Result<Self, NerLoadError> {
+        let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join(TOKENIZER_FILE))
+            .map_err(|err| NerLoadError::Tokenizer(err.to_string()))?;
+        let session = ort::session::Session::builder()
+            .map_err(|err| NerLoadError::Runtime(err.to_string()))?
+            .commit_from_file(model_dir.join(MODEL_FILE))
+            .map_err(|err| NerLoadError::Runtime(err.to_string()))?;
+        Ok(Self {
+            tokenizer,
+            session: Mutex::new(session),
+        })
+    }
+}
+
+impl NerBackend for OrtBackend {
+    fn detect(
+        &self,
+        input: &str,
+        labels: &LabelMap,
+        id2label: &[String],
+        source: &str,
+    ) -> Result<Vec<Detection>, NerRuntimeError> {
+        let encoded = self
+            .tokenizer
+            .encode(input, true)
+            .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
         let offsets = encoded.get_offsets();
         let ids = encoded.get_ids();
         let attention = encoded.get_attention_mask();
         if ids.is_empty() {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let seq_len = ids.len();
@@ -251,27 +345,12 @@ impl Detector for NerDetector {
         let token_type: Vec<i64> = vec![0i64; seq_len];
 
         let shape = [1usize, seq_len];
-        let input_ids_tensor = match ort::value::Tensor::from_array((shape, input_ids)) {
-            Ok(t) => t,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: input_ids tensor failed");
-                return Vec::new();
-            }
-        };
-        let attn_tensor = match ort::value::Tensor::from_array((shape, attn_mask)) {
-            Ok(t) => t,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: attention_mask tensor failed");
-                return Vec::new();
-            }
-        };
-        let type_tensor = match ort::value::Tensor::from_array((shape, token_type)) {
-            Ok(t) => t,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: token_type tensor failed");
-                return Vec::new();
-            }
-        };
+        let input_ids_tensor = ort::value::Tensor::from_array((shape, input_ids))
+            .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
+        let attn_tensor = ort::value::Tensor::from_array((shape, attn_mask))
+            .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
+        let type_tensor = ort::value::Tensor::from_array((shape, token_type))
+            .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
 
         let inputs = ort::inputs![
             "input_ids" => input_ids_tensor,
@@ -279,59 +358,63 @@ impl Detector for NerDetector {
             "token_type_ids" => type_tensor,
         ];
 
-        let mut session = match self.session.lock() {
-            Ok(s) => s,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: session mutex poisoned");
-                return Vec::new();
-            }
-        };
-        let outputs = match session.run(inputs) {
-            Ok(o) => o,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: inference failed");
-                return Vec::new();
-            }
-        };
+        let mut session = self
+            .session
+            .lock()
+            .map_err(|err| NerRuntimeError::Poisoned(err.to_string()))?;
+        let outputs = session
+            .run(inputs)
+            .map_err(|err| NerRuntimeError::Inference(err.to_string()))?;
 
-        // Output shape: [1, seq_len, num_labels]. Take argmax per position.
         let logits = match outputs.iter().next() {
-            Some((_, v)) => v,
-            None => return Vec::new(),
+            Some((_, value)) => value,
+            None => return Ok(Vec::new()),
         };
-        let (shape_obj, flat) = match logits.try_extract_tensor::<f32>() {
-            Ok(t) => t,
-            Err(err) => {
-                tracing::warn!(error = %err, "ner: logits extract failed");
-                return Vec::new();
-            }
-        };
+        let (shape_obj, flat) = logits
+            .try_extract_tensor::<f32>()
+            .map_err(|err| NerRuntimeError::Output(err.to_string()))?;
         let shape: Vec<usize> = shape_obj.iter().map(|d| *d as usize).collect();
         if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
-            tracing::warn!(?shape, "ner: unexpected logits shape");
-            return Vec::new();
+            return Ok(Vec::new());
         }
+
         let num_labels = shape[2];
         let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
-        let unk = "O";
         for pos in 0..seq_len {
             let base = pos * num_labels;
             let row = &flat[base..base + num_labels];
-            let (argmax, _) = row
-                .iter()
-                .enumerate()
-                .fold((0usize, f32::NEG_INFINITY), |acc, (i, &v)| {
-                    if v > acc.1 { (i, v) } else { acc }
-                });
-            let label = self.id2label.get(argmax).map(String::as_str).unwrap_or(unk);
+            let (argmax, _) =
+                row.iter()
+                    .enumerate()
+                    .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
+                        if value > acc.1 {
+                            (index, value)
+                        } else {
+                            acc
+                        }
+                    });
+            let label = id2label.get(argmax).map(String::as_str).unwrap_or("O");
             subword_labels.push(label);
         }
 
-        let subword_spans: Vec<(usize, usize)> = offsets.to_vec();
-        Self::merge_bio_spans(&self.labels, &subword_spans, &subword_labels, "ner")
-            .into_iter()
-            .filter(|d| d.span.end <= input.len())
-            .collect()
+        Ok(NerDetector::merge_bio_spans(
+            labels,
+            offsets,
+            &subword_labels,
+            source,
+        )
+        .into_iter()
+        .filter(|detection| detection.span.end <= input.len())
+        .collect())
+    }
+}
+
+fn load_backend(verified: &VerifiedArtifacts) -> Result<Box<dyn NerBackend>, NerLoadError> {
+    match verified.backend_kind {
+        NerBackendKind::Ort => Ok(Box::new(OrtBackend::load(&verified.model_dir)?)),
+        NerBackendKind::Redact => Err(NerLoadError::UnsupportedBackend {
+            backend: verified.backend_kind.as_str().to_string(),
+        }),
     }
 }
 
@@ -366,7 +449,6 @@ fn parse_checksums(path: &Path) -> Result<Vec<(String, String)>, NerLoadError> {
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        // Standard `sha256sum` format: `<hex>  <path>` (two spaces) or `<hex> *<path>`.
         let mut parts = trimmed.splitn(2, char::is_whitespace);
         let Some(hash) = parts.next() else {
             return Err(NerLoadError::ChecksumsMalformed {
@@ -416,8 +498,8 @@ fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
     let raw: BTreeMap<String, String> = serde_json::from_slice(&bytes)
         .map_err(|err| NerLoadError::LabelsParse(err.to_string()))?;
     let mut map = BTreeMap::new();
-    for (k, v) in raw {
-        let class = match v.to_ascii_lowercase().as_str() {
+    for (key, value) in raw {
+        let class = match value.to_ascii_lowercase().as_str() {
             "name" | "per" | "person" => PiiClass::Name,
             "location" | "loc" => PiiClass::Location,
             "organization" | "org" => PiiClass::Organization,
@@ -425,7 +507,7 @@ fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
             "drop" | "ignore" | "" => continue,
             other => PiiClass::custom(other),
         };
-        map.insert(k, class);
+        map.insert(key, class);
     }
     if map.is_empty() {
         return Err(NerLoadError::LabelsParse(
@@ -436,34 +518,37 @@ fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
 }
 
 #[derive(Deserialize)]
-struct ConfigId2Label {
+struct ConfigFile {
+    backend: Option<String>,
     id2label: Option<BTreeMap<String, String>>,
 }
 
-fn parse_id2label(path: &Path) -> Result<Vec<String>, NerLoadError> {
+fn parse_config(path: &Path) -> Result<ConfigFile, NerLoadError> {
     let bytes = fs::read(path).map_err(|source| NerLoadError::Io {
         path: path.to_path_buf(),
         source,
     })?;
-    let cfg: ConfigId2Label = serde_json::from_slice(&bytes)
-        .map_err(|err| NerLoadError::ConfigParse(err.to_string()))?;
-    let map = cfg.id2label.ok_or_else(|| {
-        NerLoadError::ConfigParse("config.json missing id2label".to_string())
-    })?;
-    // id2label keys are stringified ints; build dense vec sorted by index.
+    serde_json::from_slice(&bytes).map_err(|err| NerLoadError::ConfigParse(err.to_string()))
+}
+
+fn config_to_id2label(
+    id2label: Option<BTreeMap<String, String>>,
+) -> Result<Vec<String>, NerLoadError> {
+    let map =
+        id2label.ok_or_else(|| NerLoadError::ConfigParse("config.json missing id2label".to_string()))?;
     let mut pairs: Vec<(usize, String)> = map
         .into_iter()
-        .map(|(k, v)| {
-            k.parse::<usize>()
-                .map(|idx| (idx, v))
-                .map_err(|err| NerLoadError::ConfigParse(format!("id2label key {k}: {err}")))
+        .map(|(key, value)| {
+            key.parse::<usize>()
+                .map(|index| (index, value))
+                .map_err(|err| NerLoadError::ConfigParse(format!("id2label key {key}: {err}")))
         })
         .collect::<Result<_, _>>()?;
-    pairs.sort_by_key(|(idx, _)| *idx);
-    let max_idx = pairs.last().map(|(i, _)| *i).unwrap_or(0);
+    pairs.sort_by_key(|(index, _)| *index);
+    let max_idx = pairs.last().map(|(index, _)| *index).unwrap_or(0);
     let mut out = vec!["O".to_string(); max_idx + 1];
-    for (idx, label) in pairs {
-        out[idx] = label;
+    for (index, label) in pairs {
+        out[index] = label;
     }
     Ok(out)
 }
@@ -479,9 +564,9 @@ mod tests {
     }
 
     fn sha256_hex(bytes: &[u8]) -> String {
-        let mut h = Sha256::new();
-        h.update(bytes);
-        hex::encode(h.finalize())
+        let mut hasher = Sha256::new();
+        hasher.update(bytes);
+        hex::encode(hasher.finalize())
     }
 
     fn good_labels() -> &'static [u8] {
@@ -493,26 +578,30 @@ mod tests {
     }
 
     fn setup_good_dir() -> tempfile::TempDir {
+        setup_dir_with_config(good_config())
+    }
+
+    fn setup_dir_with_config(config: &[u8]) -> tempfile::TempDir {
         let dir = tempdir().unwrap();
-        let p = dir.path();
+        let path = dir.path();
         let model_bytes = b"fake-onnx";
-        let tok_bytes = b"fake-tokenizer";
-        write(&p.join(MODEL_FILE), model_bytes);
-        write(&p.join(TOKENIZER_FILE), tok_bytes);
-        write(&p.join(CONFIG_FILE), good_config());
-        write(&p.join(LABELS_FILE), good_labels());
+        let tokenizer_bytes = b"fake-tokenizer";
+        write(&path.join(MODEL_FILE), model_bytes);
+        write(&path.join(TOKENIZER_FILE), tokenizer_bytes);
+        write(&path.join(CONFIG_FILE), config);
+        write(&path.join(LABELS_FILE), good_labels());
         let sums = format!(
             "{}  {}\n{}  {}\n{}  {}\n{}  {}\n",
             sha256_hex(model_bytes),
             MODEL_FILE,
-            sha256_hex(tok_bytes),
+            sha256_hex(tokenizer_bytes),
             TOKENIZER_FILE,
-            sha256_hex(good_config()),
+            sha256_hex(config),
             CONFIG_FILE,
             sha256_hex(good_labels()),
             LABELS_FILE,
         );
-        write(&p.join(CHECKSUMS_FILE), sums.as_bytes());
+        write(&path.join(CHECKSUMS_FILE), sums.as_bytes());
         dir
     }
 
@@ -520,14 +609,35 @@ mod tests {
     fn verify_artifacts_succeeds_on_matching_checksums() {
         let dir = setup_good_dir();
         let verified = NerDetector::verify_artifacts(dir.path()).expect("verify");
+        assert_eq!(verified.backend_kind, NerBackendKind::Ort);
         assert!(verified.labels.get("PER").is_some());
         assert_eq!(verified.id2label[1], "B-PER");
     }
 
     #[test]
+    fn verify_artifacts_honors_explicit_backend_selection() {
+        let dir = setup_dir_with_config(
+            br#"{"backend":"redact","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+        );
+        let verified = NerDetector::verify_artifacts(dir.path()).expect("verify");
+        assert_eq!(verified.backend_kind, NerBackendKind::Redact);
+    }
+
+    #[test]
+    fn load_fails_closed_for_unsupported_backend() {
+        let dir = setup_dir_with_config(
+            br#"{"backend":"redact","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+        );
+        let err = NerDetector::load(dir.path()).unwrap_err();
+        assert!(
+            matches!(err, NerLoadError::UnsupportedBackend { .. }),
+            "unexpected: {err:?}"
+        );
+    }
+
+    #[test]
     fn checksum_mismatch_fails_closed() {
         let dir = setup_good_dir();
-        // Corrupt one artifact after the fact.
         fs::write(dir.path().join(MODEL_FILE), b"tampered").unwrap();
         let err = NerDetector::verify_artifacts(dir.path()).unwrap_err();
         assert!(
@@ -550,7 +660,6 @@ mod tests {
     #[test]
     fn missing_sums_fails_closed() {
         let dir = tempdir().unwrap();
-        // No SHA256SUMS.
         let err = NerDetector::verify_artifacts(dir.path()).unwrap_err();
         assert!(
             matches!(err, NerLoadError::ChecksumsMissing { .. }),
@@ -572,18 +681,17 @@ mod tests {
     fn label_map_parse_error_fails_closed() {
         let dir = setup_good_dir();
         fs::write(dir.path().join(LABELS_FILE), b"{not-json").unwrap();
-        // Must rewrite SHA256SUMS to make checksum pass so we reach label parse.
         let labels_bytes = fs::read(dir.path().join(LABELS_FILE)).unwrap();
         let model_bytes = fs::read(dir.path().join(MODEL_FILE)).unwrap();
-        let tok_bytes = fs::read(dir.path().join(TOKENIZER_FILE)).unwrap();
-        let cfg_bytes = fs::read(dir.path().join(CONFIG_FILE)).unwrap();
+        let tokenizer_bytes = fs::read(dir.path().join(TOKENIZER_FILE)).unwrap();
+        let config_bytes = fs::read(dir.path().join(CONFIG_FILE)).unwrap();
         let sums = format!(
             "{}  {}\n{}  {}\n{}  {}\n{}  {}\n",
             sha256_hex(&model_bytes),
             MODEL_FILE,
-            sha256_hex(&tok_bytes),
+            sha256_hex(&tokenizer_bytes),
             TOKENIZER_FILE,
-            sha256_hex(&cfg_bytes),
+            sha256_hex(&config_bytes),
             CONFIG_FILE,
             sha256_hex(&labels_bytes),
             LABELS_FILE,
@@ -612,7 +720,6 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
-        // "Angela Merkel": two subwords both PER.
         let spans = vec![(0, 6), (7, 13)];
         let tags = vec!["B-PER", "I-PER"];
         let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
@@ -650,7 +757,6 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
-        // Leading [CLS] has (0,0); one real PER subword.
         let spans = vec![(0, 0), (0, 5)];
         let tags = vec!["B-PER", "B-PER"];
         let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");

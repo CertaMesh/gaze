@@ -120,7 +120,7 @@ Every file is required; absence is fail-closed:
 |---|---|
 | `model.onnx` | Token-classification head export. |
 | `tokenizer.json` | HuggingFace `tokenizers` serialized form; used for byte-offset reconstruction. |
-| `config.json` | Must carry `id2label` (stringified indices → CoNLL labels). |
+| `config.json` | Must carry `id2label` (stringified indices → CoNLL labels). May also carry `backend` so the same `NerDetector` load path can switch driver without pipeline code changes; omitted defaults to `ort`. |
 | `labels.json` | Gaze-authored CoNLL-label → `PiiClass` map. `"drop"` is the skip sentinel. |
 | `SHA256SUMS` | `shasum -a 256` output covering all four files above. |
 

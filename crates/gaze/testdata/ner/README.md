@@ -14,6 +14,10 @@ are fetched out-of-repo via `scripts/fetch-ner-model.sh`.
   by integration tests that verify `labels.json` parsing. `MISC` maps to
   `"drop"` by default (the sentinel that causes `NerDetector` to silently
   skip those spans).
+- Production `config.json` may include `"backend": "ort"` (or another
+  supported driver name in the future). `NerDetector::load` reads that
+  field to choose the runtime backend while keeping the pipeline API
+  unchanged.
 
 ## Running the span-correctness tests (real model)
 
