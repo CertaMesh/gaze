@@ -5,7 +5,11 @@ use crate::context::ContextDetector;
 use crate::errors::SanitizeError;
 use crate::index::IndexDetector;
 use crate::types::{Context, Metadata, SanitizeRequest, SanitizeResponse};
-use gaze::{Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RegexDetector, Scope, Session};
+use gaze::{
+    Action, ClassRule, CleanDocument, DefaultRule, NerConfig, Pipeline, RawDocument,
+    RegexDetector, Scope, Session,
+};
+use std::path::PathBuf;
 
 pub fn sanitize(req: SanitizeRequest) -> Result<SanitizeResponse, SanitizeError> {
     if req.text.is_empty() {
@@ -61,13 +65,19 @@ pub fn sanitize(req: SanitizeRequest) -> Result<SanitizeResponse, SanitizeError>
 }
 
 fn build_pipeline(context: &Context) -> Result<Pipeline, SanitizeError> {
-    Pipeline::builder()
+    let builder = Pipeline::builder()
         .detector(ContextDetector::new(context))
         .detector(IndexDetector::new(context))
         .detector(
             RegexDetector::emails()
                 .map_err(|e| SanitizeError::DetectorFailure(e.to_string()))?,
-        )
+        );
+
+    let builder = builder
+        .with_ner_config(resolve_ner_config(context))
+        .map_err(|e| SanitizeError::DetectorFailure(e.to_string()))?;
+
+    builder
         .rule(ClassRule::new(
             gaze::PiiClass::custom("customer_name"),
             Action::Tokenize,
@@ -95,6 +105,15 @@ fn build_pipeline(context: &Context) -> Result<Pipeline, SanitizeError> {
         .rule(DefaultRule::new(Action::Tokenize))
         .build()
         .map_err(|e| SanitizeError::DetectorFailure(e.to_string()))
+}
+
+fn resolve_ner_config(context: &Context) -> NerConfig {
+    NerConfig {
+        model_dir: std::env::var_os("GAZE_NER_MODEL_DIR")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from),
+        locale: context.locale.clone(),
+    }
 }
 
 fn extract_aliases(clean_text: &str) -> Vec<(String, String)> {
@@ -236,5 +255,33 @@ mod tests {
         assert_eq!(outward_placeholder("CustomerName_1").unwrap(), "<CUSTOMER_NAME>");
         assert_eq!(outward_placeholder("OrderId_3").unwrap(), "<ORDER_ID_3>");
         assert_eq!(outward_placeholder("Email_2").unwrap(), "<EMAIL_2>");
+    }
+
+    #[test]
+    fn locale_is_forwarded_into_ner_config() {
+        let config = resolve_ner_config(&Context {
+            locale: Some("de".into()),
+            ..Context::default()
+        });
+
+        assert_eq!(config.locale.as_deref(), Some("de"));
+        assert!(config.model_dir.is_none());
+    }
+
+    #[test]
+    fn sanitize_accepts_locale_without_model_dir() {
+        let response = sanitize(req(
+            "Markus Mueller at mueller.markus@icloud.com",
+            Context {
+                locale: Some("de".into()),
+                customer_name: Some("Markus Mueller".into()),
+                customer_email: Some("mueller.markus@icloud.com".into()),
+                ..Context::default()
+            },
+        ))
+        .expect("sanitize with locale");
+
+        assert!(response.clean_text.contains("<CUSTOMER_NAME>"));
+        assert!(response.clean_text.contains("<CUSTOMER_EMAIL>"));
     }
 }
