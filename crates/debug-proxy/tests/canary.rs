@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use debug_proxy::adapter::{AdapterError, DatabaseAdapter, LogAdapter, ToolContext};
+use debug_proxy::adapter::{
+    AdapterError, ColumnSchema, ColumnType, DatabaseAdapter, LogAdapter, TableSchema, ToolContext,
+};
 use debug_proxy::mcp::errors::CANARY;
 use debug_proxy::policy::{build_pipeline, PolicyFile};
 use gaze::{CleanDocument, Scope, Session, Value};
@@ -11,6 +13,28 @@ struct FakeDb;
 
 #[async_trait]
 impl DatabaseAdapter for FakeDb {
+    async fn tables(&self) -> Result<Vec<String>, AdapterError> {
+        Ok(vec!["users".to_string()])
+    }
+
+    async fn schema(&self, table: &str) -> Result<TableSchema, AdapterError> {
+        if table != "users" {
+            return Err(AdapterError::UnknownTable(table.to_string()));
+        }
+
+        Ok(TableSchema {
+            table: "users".to_string(),
+            columns: vec![
+                ColumnSchema {
+                    name: "email".to_string(),
+                    ty: ColumnType::Text,
+                    nullable: false,
+                },
+            ],
+            primary_key: vec![],
+        })
+    }
+
     async fn sample(
         &self,
         table: &str,
@@ -24,6 +48,28 @@ impl DatabaseAdapter for FakeDb {
             "email".to_string(),
             Value::String(CANARY.to_string()),
         )])])
+    }
+
+    async fn count(&self, table: &str) -> Result<u64, AdapterError> {
+        if table != "users" {
+            return Err(AdapterError::UnknownTable(table.to_string()));
+        }
+        Ok(1)
+    }
+
+    async fn distinct(
+        &self,
+        table: &str,
+        column: &str,
+        _limit: usize,
+    ) -> Result<Vec<Value>, AdapterError> {
+        if table != "users" {
+            return Err(AdapterError::UnknownTable(table.to_string()));
+        }
+        if column != "email" {
+            return Err(AdapterError::Query(format!("unknown column: {column}")));
+        }
+        Ok(vec![Value::String(CANARY.to_string())])
     }
 }
 
@@ -99,11 +145,32 @@ async fn adapter_errors_are_sanitized_through_pipeline() {
 
     #[async_trait]
     impl DatabaseAdapter for BrokenDb {
+        async fn tables(&self) -> Result<Vec<String>, AdapterError> {
+            Ok(vec!["users".to_string()])
+        }
+
+        async fn schema(&self, _table: &str) -> Result<TableSchema, AdapterError> {
+            Err(AdapterError::Query(format!("duplicate key for {CANARY}")))
+        }
+
         async fn sample(
             &self,
             _table: &str,
             _limit: usize,
         ) -> Result<Vec<BTreeMap<String, Value>>, AdapterError> {
+            Err(AdapterError::Query(format!("duplicate key for {CANARY}")))
+        }
+
+        async fn count(&self, _table: &str) -> Result<u64, AdapterError> {
+            Err(AdapterError::Query(format!("duplicate key for {CANARY}")))
+        }
+
+        async fn distinct(
+            &self,
+            _table: &str,
+            _column: &str,
+            _limit: usize,
+        ) -> Result<Vec<Value>, AdapterError> {
             Err(AdapterError::Query(format!("duplicate key for {CANARY}")))
         }
     }
