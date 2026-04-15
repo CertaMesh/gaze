@@ -53,6 +53,16 @@ impl LogAdapter for FakeLogs {
 async fn canary_never_leaks_and_pseudonyms_match_across_channels() {
     let policy = PolicyFile::from_toml(
         r#"
+        [connection.production]
+        kind = "mysql"
+        ssh_host = "deploy@example.com"
+        local_port = 13306
+        remote_host = "127.0.0.1"
+        remote_port = 3306
+        database = "app"
+        user = "gaze_ro"
+        password_env = "GAZE_DB_PASSWORD"
+
         [policy.database]
 
         [[policy.database.columns]]
@@ -100,6 +110,16 @@ async fn adapter_errors_are_sanitized_through_pipeline() {
 
     let policy = PolicyFile::from_toml(
         r#"
+        [connection.production]
+        kind = "mysql"
+        ssh_host = "deploy@example.com"
+        local_port = 13306
+        remote_host = "127.0.0.1"
+        remote_port = 3306
+        database = "app"
+        user = "gaze_ro"
+        password_env = "GAZE_DB_PASSWORD"
+
         [policy.database]
 
         [[policy.database.columns]]

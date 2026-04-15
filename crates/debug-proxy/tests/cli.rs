@@ -7,6 +7,16 @@ fn valid_policy() -> &'static str {
 [ner]
 locale = "de"
 
+[connection.production]
+kind = "mysql"
+ssh_host = "deploy@example.com"
+local_port = 13306
+remote_host = "127.0.0.1"
+remote_port = 3306
+database = "app"
+user = "gaze_ro"
+password_env = "GAZE_DB_PASSWORD"
+
 [policy.database]
 
 [[policy.database.columns]]
@@ -60,6 +70,16 @@ fn check_rejects_invalid_action() {
     fs::write(
         &policy_path,
         r#"
+ [connection.production]
+ kind = "mysql"
+ ssh_host = "deploy@example.com"
+ local_port = 13306
+ remote_host = "127.0.0.1"
+ remote_port = 3306
+ database = "app"
+ user = "gaze_ro"
+ password_env = "GAZE_DB_PASSWORD"
+
 [policy.database]
 
 [[policy.database.columns]]

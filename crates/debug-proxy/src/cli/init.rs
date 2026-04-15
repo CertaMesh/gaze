@@ -16,6 +16,16 @@ pub enum InitError {
 const EXAMPLE_POLICY: &str = r#"[ner]
 locale = "de"
 
+[connection.production]
+kind = "mysql"
+ssh_host = "deploy@prod.example.com"
+local_port = 13306
+remote_host = "127.0.0.1"
+remote_port = 3306
+database = "app"
+user = "gaze_ro"
+password_env = "GAZE_DB_PASSWORD"
+
 [policy.database]
 
 [[policy.database.columns]]
@@ -24,6 +34,7 @@ class = "email"
 action = "tokenize"
 
 [policy.logs]
+path = "/var/log/app/laravel.log"
 strip_patterns = ["(?i)password[=:][^ ]+"]
 "#;
 

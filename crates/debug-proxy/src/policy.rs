@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gaze::{
@@ -9,8 +10,22 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 pub struct PolicyFile {
     #[serde(default)]
+    pub connection: HashMap<String, ConnectionConfig>,
+    #[serde(default)]
     pub ner: NerSection,
     pub policy: PolicySection,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConnectionConfig {
+    pub kind: String,
+    pub ssh_host: String,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+    pub database: String,
+    pub user: String,
+    pub password_env: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -52,6 +67,10 @@ pub struct LogsPolicy {
 pub enum PolicyError {
     #[error("failed to parse TOML: {0}")]
     Parse(#[from] toml::de::Error),
+    #[error("policy must contain exactly one [connection.production] block; found {found}")]
+    ConnectionCount { found: usize },
+    #[error("only [connection.production] is supported (found `{name}`)")]
+    NonProductionConnection { name: String },
     #[error("invalid action `{action}` for column `{column}`")]
     InvalidAction { column: String, action: String },
     #[error("unknown pii class `{class}` for column `{column}`")]
@@ -62,7 +81,9 @@ pub enum PolicyError {
 
 impl PolicyFile {
     pub fn from_toml(input: &str) -> Result<Self, PolicyError> {
-        Ok(toml::from_str(input)?)
+        let policy: Self = toml::from_str(input)?;
+        validate_connection(&policy)?;
+        Ok(policy)
     }
 }
 
@@ -107,6 +128,19 @@ fn parse_action(raw: &str, column: &str) -> Result<Action, PolicyError> {
     }
 }
 
+fn validate_connection(policy: &PolicyFile) -> Result<(), PolicyError> {
+    if policy.connection.len() != 1 {
+        return Err(PolicyError::ConnectionCount {
+            found: policy.connection.len(),
+        });
+    }
+    let (name, _) = policy.connection.iter().next().expect("len checked");
+    if name != "production" {
+        return Err(PolicyError::NonProductionConnection { name: name.clone() });
+    }
+    Ok(())
+}
+
 fn parse_class(raw: &str, column: &str) -> Result<PiiClass, PolicyError> {
     Ok(match raw {
         "email" => PiiClass::Email,
@@ -131,6 +165,16 @@ mod tests {
     fn policy_builds_pipeline_with_ner_locale() {
         let policy = PolicyFile::from_toml(
             r#"
+            [connection.production]
+            kind = "mysql"
+            ssh_host = "deploy@example.com"
+            local_port = 13306
+            remote_host = "127.0.0.1"
+            remote_port = 3306
+            database = "app"
+            user = "gaze_ro"
+            password_env = "GAZE_DB_PASSWORD"
+
             [ner]
             locale = "de"
 
@@ -151,6 +195,16 @@ mod tests {
     fn invalid_action_is_rejected() {
         let policy = PolicyFile::from_toml(
             r#"
+            [connection.production]
+            kind = "mysql"
+            ssh_host = "deploy@example.com"
+            local_port = 13306
+            remote_host = "127.0.0.1"
+            remote_port = 3306
+            database = "app"
+            user = "gaze_ro"
+            password_env = "GAZE_DB_PASSWORD"
+
             [policy.database]
 
             [[policy.database.columns]]
@@ -165,5 +219,20 @@ mod tests {
             Ok(_) => panic!("expected invalid action"),
             Err(err) => assert!(matches!(err, PolicyError::InvalidAction { .. })),
         }
+    }
+
+    #[test]
+    fn policy_rejects_missing_production_connection() {
+        let err = PolicyFile::from_toml(
+            r#"
+            [policy.database]
+
+            [[policy.database.columns]]
+            column = "email"
+            class = "email"
+            "#,
+        )
+        .unwrap_err();
+        assert!(matches!(err, PolicyError::ConnectionCount { found: 0 }));
     }
 }
