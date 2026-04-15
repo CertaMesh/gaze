@@ -34,6 +34,19 @@ impl LogAdapter for FakeLogs {
     async fn tail(&self, _limit: usize) -> Result<Vec<String>, AdapterError> {
         Ok(vec![format!("request failed for user={CANARY}")])
     }
+
+    async fn search(
+        &self,
+        _pattern: &str,
+        _level: Option<&str>,
+        _limit: usize,
+    ) -> Result<Vec<String>, AdapterError> {
+        Ok(Vec::new())
+    }
+
+    async fn context(&self, _request_id: &str) -> Result<Vec<String>, AdapterError> {
+        Ok(Vec::new())
+    }
 }
 
 #[tokio::test]

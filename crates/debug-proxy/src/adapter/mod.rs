@@ -7,6 +7,8 @@ use thiserror::Error;
 
 use crate::mcp::errors::ErrorSanitizer;
 
+pub mod laravel_log;
+
 #[derive(Debug, Error)]
 pub enum AdapterError {
     #[error("connection error: {0}")]
@@ -29,6 +31,13 @@ pub trait DatabaseAdapter: Send + Sync {
 #[async_trait]
 pub trait LogAdapter: Send + Sync {
     async fn tail(&self, limit: usize) -> Result<Vec<String>, AdapterError>;
+    async fn search(
+        &self,
+        pattern: &str,
+        level: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<String>, AdapterError>;
+    async fn context(&self, request_id: &str) -> Result<Vec<String>, AdapterError>;
 }
 
 #[derive(Debug, Error)]

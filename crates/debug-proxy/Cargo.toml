@@ -19,6 +19,7 @@ async-trait = "0.1"
 gaze = { path = "../gaze" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
+tokio = { version = "1", features = ["fs", "io-util"] }
 toml = "0.8"
 
 [dev-dependencies]
