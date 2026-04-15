@@ -1,0 +1,14 @@
+# Example SHA256SUMS for the pinned Davlan/bert-base-multilingual-cased-ner-hrl
+# artifact. Shape mirrors what `scripts/fetch-ner-model.sh` produces via
+# `shasum -a 256`.
+#
+# All four hashes below are TODO placeholders. Replace with the real hashes
+# produced by the first sign-off run of the fetch script, then update the
+# "Pinned artifacts" section of docs/research/ner-library-evaluation.md to
+# match.
+#
+# NerDetector::verify_artifacts will fail-closed on any mismatch.
+0000000000000000000000000000000000000000000000000000000000000000  model.onnx
+1111111111111111111111111111111111111111111111111111111111111111  tokenizer.json
+2222222222222222222222222222222222222222222222222222222222222222  config.json
+3333333333333333333333333333333333333333333333333333333333333333  labels.json

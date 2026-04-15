@@ -15,6 +15,14 @@ pub struct Context {
     pub customer_email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_phone: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub locale: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub order_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,7 +82,8 @@ mod tests {
             "context": {
                 "customer_name": "Markus Mueller",
                 "customer_email": "mueller.markus@icloud.com",
-                "customer_phone": "+49 151 23456789"
+                "customer_phone": "+49 151 23456789",
+                "locale": "de"
             }
         }"#;
 
@@ -89,6 +98,7 @@ mod tests {
             req.context.customer_phone.as_deref(),
             Some("+49 151 23456789")
         );
+        assert_eq!(req.context.locale.as_deref(), Some("de"));
     }
 
     #[test]
@@ -122,5 +132,9 @@ mod tests {
         assert!(ctx.customer_name.is_none());
         assert!(ctx.customer_email.is_none());
         assert!(ctx.customer_phone.is_none());
+        assert!(ctx.locale.is_none());
+        assert!(ctx.order_ids.is_empty());
+        assert!(ctx.songs.is_empty());
+        assert!(ctx.artists.is_empty());
     }
 }

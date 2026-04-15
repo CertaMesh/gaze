@@ -25,7 +25,7 @@ fn sanitize_replaces_customer_name() {
     let out = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     let resp: serde_json::Value = serde_json::from_str(out.trim()).unwrap();
     assert_eq!(resp["clean_text"], "Hi <CUSTOMER_NAME>, please reply");
-    assert!(resp["session_blob"].as_str().unwrap().len() > 0);
+    assert!(!resp["session_blob"].as_str().unwrap().is_empty());
     assert_eq!(resp["metadata"]["placeholders"][0], "<CUSTOMER_NAME>");
 }
 
