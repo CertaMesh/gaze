@@ -209,7 +209,7 @@ struct Context {
 
 **Detectors:**
 - `RegexDetector` — compiled `RegexSet` or Aho-Corasick automaton. Constructed from a list of patterns. Returns spans with PiiClass inferred from which pattern matched.
-- `NerDetector` — backed by `censgate/redact` (`redact-core` + `redact-ner`, ONNX via `ort`) with the `Davlan/bert-base-multilingual-cased-ner-hrl` model exported to ONNX as a pinned local artifact.
+- `NerDetector` — backed directly by `ort` + `tokenizers` with the `Davlan/bert-base-multilingual-cased-ner-hrl` model exported to ONNX as a pinned local artifact.
 
 **Rules:**
 - `ColumnRule` — matches on field name. "If field is X, action is Y."
@@ -461,7 +461,7 @@ Move current `src/` and `tests/` to `old/`. Read-only reference, not compiled. D
 
 ### Phase 2: Build `crates/gaze`
 
-Core types, traits, Pipeline builder. RegexDetector, `NerDetector` backed by `censgate/redact`, SqliteAuditor. Session with export/import. Full test suite. No consumer code.
+Core types, traits, Pipeline builder. RegexDetector, `NerDetector` backed directly by `ort` + `tokenizers`, SqliteAuditor. Session with export/import. Full test suite. No consumer code.
 
 ### Phase 3: Build `crates/debug-proxy`
 

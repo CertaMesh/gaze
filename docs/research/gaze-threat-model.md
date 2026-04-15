@@ -83,7 +83,7 @@
 **Goal:** Exfiltrate raw PII during detection (NER crate logs raw input, regex crate sends spans to attacker, etc.).
 
 **Mitigations:**
-- NER backing is `censgate/redact` (Phase 0). All Git deps pinned to rev SHA, not branch.
+- NER backing is `ort` + `tokenizers` with pinned local ONNX artifacts (Phase 0). All Git deps pinned to rev SHA, not branch.
 - `cargo-deny` / `cargo-audit` in CI.
 - Core has **zero network I/O**; any detector attempting to open sockets would fail in v0.5 sandbox even if compromised.
 - Long-term: fork critical deps, vendor.
