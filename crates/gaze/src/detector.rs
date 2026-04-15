@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use serde::{Deserialize, Serialize};
+
 use regex::Regex;
 
 use crate::{Error, Result};
@@ -8,7 +10,7 @@ pub trait Detector: Send + Sync {
     fn detect(&self, input: &str) -> Vec<Detection>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PiiClass {
     Email,
     Name,

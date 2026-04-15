@@ -16,10 +16,16 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
-    #[error("session mutex poisoned")]
-    SessionPoisoned,
     #[error("unknown token: {0}")]
     UnknownToken(String),
+    #[error("ephemeral sessions cannot be exported")]
+    ExportForbidden,
+    #[error("invalid snapshot version: {0}")]
+    InvalidSnapshotVersion(u8),
+    #[error("snapshot signature verification failed")]
+    InvalidSnapshotSignature,
+    #[error("snapshot decode failed: {0}")]
+    SnapshotDecode(#[source] serde_json::Error),
 }
 
 #[derive(Clone)]

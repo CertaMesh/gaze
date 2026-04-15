@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
+use std::sync::Arc;
+use std::time::Duration;
 
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument,
@@ -175,4 +177,89 @@ impl RedactionLogger for MemoryLogger {
         self.entries.lock().expect("entries lock").push(entry.clone());
         Ok(())
     }
+}
+
+#[test]
+fn persistent_session_snapshot_roundtrips() {
+    let session = Session::new(Scope::Persistent {
+        ttl: Duration::from_secs(300),
+    })
+    .expect("session");
+    let token = session
+        .tokenize(&PiiClass::Email, "alice@example.com")
+        .expect("tokenize");
+
+    let snapshot = session.export().expect("export snapshot");
+    let imported = Session::import(snapshot).expect("import snapshot");
+
+    assert_eq!(
+        imported.restore_strict(&token).expect("restore"),
+        "alice@example.com"
+    );
+}
+
+#[test]
+fn snapshot_import_rejects_tampering() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    session
+        .tokenize(&PiiClass::Email, "alice@example.com")
+        .expect("tokenize");
+
+    let mut bytes = session.export().expect("export snapshot").into_bytes();
+    let last = bytes.last_mut().expect("snapshot bytes");
+    *last ^= 0x01;
+
+    assert!(Session::import(bytes.into()).is_err());
+}
+
+#[test]
+fn ephemeral_session_cannot_export() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    assert!(session.export().is_err());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_redact_reuses_same_token_across_tasks() {
+    let session = Arc::new(
+        Session::new(Scope::Conversation("msg-42".to_string())).expect("session"),
+    );
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .expect("pipeline");
+
+    let left_pipeline = pipeline.clone();
+    let left_session = Arc::clone(&session);
+    let left = tokio::spawn(async move {
+        left_pipeline.redact(
+            &left_session,
+            RawDocument::Text("alice@example.com".to_string()),
+        )
+    });
+
+    let right_pipeline = pipeline.clone();
+    let right_session = Arc::clone(&session);
+    let right = tokio::spawn(async move {
+        right_pipeline.redact(
+            &right_session,
+            RawDocument::Text("alice@example.com".to_string()),
+        )
+    });
+
+    let left = left.await.expect("left task").expect("left redact");
+    let right = right.await.expect("right task").expect("right redact");
+
+    let CleanDocument::Text(left) = left else {
+        panic!("expected text clean document");
+    };
+    let CleanDocument::Text(right) = right else {
+        panic!("expected text clean document");
+    };
+
+    assert_eq!(left, right);
+    assert_eq!(
+        session.restore_strict(&left).expect("restore"),
+        "alice@example.com"
+    );
 }
