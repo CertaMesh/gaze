@@ -15,6 +15,12 @@ pub struct Context {
     pub customer_email: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub customer_phone: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub order_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub songs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub artists: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -122,5 +128,8 @@ mod tests {
         assert!(ctx.customer_name.is_none());
         assert!(ctx.customer_email.is_none());
         assert!(ctx.customer_phone.is_none());
+        assert!(ctx.order_ids.is_empty());
+        assert!(ctx.songs.is_empty());
+        assert!(ctx.artists.is_empty());
     }
 }

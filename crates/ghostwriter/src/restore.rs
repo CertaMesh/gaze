@@ -7,36 +7,53 @@
 use crate::blob::SessionBlob;
 use crate::errors::RestoreError;
 use crate::types::{RestoreRequest, RestoreResponse, Warning};
+use gaze::Session;
 
 pub fn restore(req: RestoreRequest) -> Result<RestoreResponse, RestoreError> {
     let blob = SessionBlob::decode(&req.session_blob)?;
+    let session = Session::import(blob.snapshot()?)
+        .map_err(|e| RestoreError::InvalidSessionBlob(e.to_string()))?;
 
     let mut restored = req.text.clone();
     let mut used: Vec<String> = Vec::new();
 
-    // Replace longest tokens first so that e.g. <EMAIL_11> is replaced
-    // before <EMAIL_1> would be considered.
-    let mut tokens: Vec<(&String, &String)> = blob.placeholders.iter().collect();
-    tokens.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    let mut aliases = blob.aliases.clone();
+    aliases.sort_by(|left, right| right.external.len().cmp(&left.external.len()));
 
-    for (token, raw) in tokens {
-        if restored.contains(token.as_str()) {
-            restored = restored.replace(token.as_str(), raw);
-            used.push(token.clone());
+    for alias in &aliases {
+        if restored.contains(alias.external.as_str()) {
+            restored = restored.replace(alias.external.as_str(), &alias.internal);
+            used.push(alias.external.clone());
         }
     }
 
     let mut warnings: Vec<Warning> = blob
-        .placeholders
-        .keys()
+        .aliases
+        .iter()
+        .map(|alias| alias.external.clone())
         .filter(|t| !used.contains(t))
         .map(|t| Warning::new(format!("placeholder {t} was not used")))
         .collect();
 
+    let mut internal_tokens: Vec<String> = blob
+        .aliases
+        .iter()
+        .map(|alias| alias.internal.clone())
+        .collect();
+    internal_tokens.sort_by_key(|token| std::cmp::Reverse(token.len()));
+    for token in internal_tokens {
+        if restored.contains(token.as_str()) {
+            let raw = session
+                .restore_strict(&token)
+                .map_err(|e| RestoreError::InvalidSessionBlob(e.to_string()))?;
+            restored = restored.replace(token.as_str(), &raw);
+        }
+    }
+
     // Look for placeholder-shaped tokens that survived because they are
     // NOT in the blob (e.g. the model invented <EMAIL_9>).
     for token in find_placeholder_tokens(&restored) {
-        if !blob.placeholders.contains_key(&token) {
+        if !blob.aliases.iter().any(|alias| alias.external == token) {
             warnings.push(Warning::new(format!(
                 "unknown placeholder {token} left unchanged"
             )));
@@ -79,13 +96,29 @@ fn find_placeholder_tokens(text: &str) -> Vec<String> {
 mod tests {
     use super::*;
     use crate::blob::SessionBlob;
+    use gaze::{PiiClass, Scope};
 
     fn blob_with(pairs: &[(&str, &str)]) -> String {
-        let mut b = SessionBlob::new();
-        for (t, r) in pairs {
-            b.insert(*t, *r);
+        let session = Session::new(Scope::Conversation("msg-42".into())).unwrap();
+        let mut aliases = Vec::new();
+        for (external, raw) in pairs {
+            let class = match *external {
+                "<CUSTOMER_NAME>" => PiiClass::custom("customer_name"),
+                "<CUSTOMER_EMAIL>" => PiiClass::custom("customer_email"),
+                "<CUSTOMER_PHONE>" => PiiClass::custom("customer_phone"),
+                "email" => PiiClass::Email,
+                _ if external.starts_with("<EMAIL_") => PiiClass::Email,
+                _ => PiiClass::custom("customer_name"),
+            };
+            let internal = session.tokenize(&class, raw).unwrap();
+            aliases.push(((*external).to_string(), internal));
         }
-        b.encode().unwrap()
+
+        let mut blob = SessionBlob::new(session.export().unwrap());
+        for (external, internal) in aliases {
+            blob.insert_alias(external, internal);
+        }
+        blob.encode().unwrap()
     }
 
     #[test]

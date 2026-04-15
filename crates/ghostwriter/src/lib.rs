@@ -4,13 +4,11 @@
 //! for the full design.
 
 pub mod blob;
-pub mod detect;
+pub mod context;
 pub mod errors;
-pub mod known_context;
-pub mod placeholder;
+pub mod index;
 pub mod restore;
 pub mod sanitize;
-pub mod typed_unknown;
 pub mod types;
 
 pub use errors::{RestoreError, SanitizeError};
