@@ -17,6 +17,16 @@ use crate::adapter::ssh_tunnel::{SshTunnel, TunnelError, TunnelSpec};
 use crate::adapter::{TableSchemaOut, ToolContext};
 use crate::cli::serve::{self, ServeError};
 
+/// Hard caps on caller-supplied limits. MCP clients (LLMs, operators) cannot
+/// exceed these, regardless of what they request. Prevents unbounded fetches.
+const MAX_DB_SAMPLE_ROWS: usize = 10_000;
+const MAX_DB_DISTINCT_ROWS: usize = 10_000;
+const MAX_LOG_LINES: usize = 10_000;
+
+fn clamp_limit(requested: Option<usize>, default: usize, max: usize) -> usize {
+    requested.unwrap_or(default).min(max)
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     #[error(transparent)]
@@ -141,7 +151,7 @@ impl DebugProxyServer {
     ) -> Result<CallToolResult, ErrorData> {
         to_result(
             self.ctx
-                .db_sample(&args.table, args.limit.unwrap_or(10))
+                .db_sample(&args.table, clamp_limit(args.limit, 10, MAX_DB_SAMPLE_ROWS))
                 .await
                 .map(|rows| DbSampleResult { rows }),
         )
@@ -167,7 +177,11 @@ impl DebugProxyServer {
     ) -> Result<CallToolResult, ErrorData> {
         to_result(
             self.ctx
-                .db_distinct(&args.table, &args.column, args.limit.unwrap_or(50))
+                .db_distinct(
+                    &args.table,
+                    &args.column,
+                    clamp_limit(args.limit, 50, MAX_DB_DISTINCT_ROWS),
+                )
                 .await
                 .map(|values| DbDistinctResult { values }),
         )
@@ -180,7 +194,11 @@ impl DebugProxyServer {
     ) -> Result<CallToolResult, ErrorData> {
         to_result(
             self.ctx
-                .logs_search(&args.pattern, args.level.as_deref(), args.limit.unwrap_or(100))
+                .logs_search(
+                    &args.pattern,
+                    args.level.as_deref(),
+                    clamp_limit(args.limit, 100, MAX_LOG_LINES),
+                )
                 .await
                 .map(|lines| LogsResult { lines }),
         )
@@ -193,7 +211,7 @@ impl DebugProxyServer {
     ) -> Result<CallToolResult, ErrorData> {
         to_result(
             self.ctx
-                .log_tail(args.limit.unwrap_or(100))
+                .log_tail(clamp_limit(args.limit, 100, MAX_LOG_LINES))
                 .await
                 .map(|lines| LogsResult {
                     lines: lines.into_iter().map(clean_document_to_text).collect(),

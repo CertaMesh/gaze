@@ -56,6 +56,8 @@ enum SnapshotScope {
 struct SnapshotPayload {
     scope: SnapshotScope,
     entries: Vec<SnapshotEntry>,
+    #[serde(default)]
+    next_by_class: Vec<(PiiClass, usize)>,
 }
 
 pub struct Session {
@@ -139,6 +141,11 @@ impl Session {
                     token: entry.value().clone(),
                 })
                 .collect(),
+            next_by_class: self
+                .next_by_class
+                .iter()
+                .map(|entry| (entry.key().clone(), *entry.value()))
+                .collect(),
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let signing_key = self.signing_key.signing_key();
@@ -196,6 +203,16 @@ impl Session {
                 if *next < index {
                     *next = index;
                 }
+            }
+        }
+        // Authoritative counter state from the exporter. Overrides any
+        // index we reconstructed from parseable token suffixes above so
+        // that format-preserving tokens (e.g. `email1@example.test`)
+        // also round-trip safely.
+        for (class, index) in payload.next_by_class {
+            let mut next = session.next_by_class.entry(class).or_insert(0);
+            if *next < index {
+                *next = index;
             }
         }
         Ok(session)

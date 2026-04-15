@@ -167,20 +167,35 @@ fn row_to_values(row: &sqlx::mysql::MySqlRow) -> BTreeMap<String, Value> {
 }
 
 fn decode_value(row: &sqlx::mysql::MySqlRow, index: usize, ty: &str) -> Value {
-    match ty.to_ascii_uppercase().as_str() {
+    let upper = ty.to_ascii_uppercase();
+    match upper.as_str() {
         "TINYINT" | "SMALLINT" | "MEDIUMINT" | "INT" | "BIGINT" | "INT UNSIGNED"
-        | "BIGINT UNSIGNED" => row
-            .try_get::<Option<i64>, _>(index)
-            .ok()
-            .flatten()
-            .map(Value::I64)
-            .unwrap_or_else(|| Value::String(String::new())),
-        _ => row
-            .try_get::<Option<String>, _>(index)
-            .ok()
-            .flatten()
-            .map(Value::String)
-            .unwrap_or_else(|| Value::String(String::new())),
+        | "BIGINT UNSIGNED" => match row.try_get::<Option<i64>, _>(index) {
+            Ok(Some(value)) => Value::I64(value),
+            Ok(None) => Value::String(String::new()),
+            Err(err) => {
+                tracing::warn!(
+                    column_index = index,
+                    column_type = %ty,
+                    error = %err,
+                    "mysql decode: integer column fell back to empty string"
+                );
+                Value::String(String::new())
+            }
+        },
+        _ => match row.try_get::<Option<String>, _>(index) {
+            Ok(Some(value)) => Value::String(value),
+            Ok(None) => Value::String(String::new()),
+            Err(err) => {
+                tracing::warn!(
+                    column_index = index,
+                    column_type = %ty,
+                    error = %err,
+                    "mysql decode: unsupported column type fell back to empty string (potential PII silently dropped)"
+                );
+                Value::String(String::new())
+            }
+        },
     }
 }
 
