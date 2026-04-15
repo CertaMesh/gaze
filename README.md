@@ -1,75 +1,260 @@
 # Gaze
 
-GDPR-compliant debugging proxy between AI coding agents and production data.
+Channel-agnostic redaction workspace for AI-facing production tooling.
 
-Single-binary Rust MCP server. Anonymizes MySQL access for LLMs. Session-scoped pseudonymous mode only — no raw PII leaves the proxy.
+`gaze` v0.2 is no longer a single-purpose debug proxy binary. The workspace now has three crates:
 
-## What it does
+- `crates/gaze` — shared redaction core library
+- `crates/debug-proxy` — MCP debug server for MySQL + Laravel logs
+- `crates/ghostwriter` — deterministic sanitize/restore tool for LLM-facing customer text
 
-AI agents need to poke at prod to debug. Prod has real user data. Gaze sits between them: agent speaks MCP, Gaze runs the query, strips PII, returns sanitized rows. Every call hits an audit log.
+## Workspace Layout
 
-Two layers of defense:
-
-1. **Policy allowlist** — `policy.toml` declares which tables/columns are reachable and their PII class. Datenschutzbeauftragter reviews this file.
-2. **PII detector** — [`pii`](https://github.com/worka-ai/pii) crate scans results for anything the allowlist missed. Active error sanitization with canary guard so nothing slips through error paths either.
-
-## MCP tools
-
-Served over stdio via `rmcp 0.2`:
-
-- `db.schema` — table/column listing within allowed scope
-- `db.sample` — anonymized row sample (`max_rows` capped)
-- `db.count` — count on allowed columns
-- `db.distinct` — distinct values on allowed columns (`max_distinct` capped)
-- `db.explain` — query plan
-- `logs.*` — Laravel log adapter with regex strip patterns
-
-## CLI
-
-```
-gaze init                  # scaffold policy.toml + .gaze/
-gaze check  [policy.toml]  # parse + validate policy
-gaze serve  [policy.toml]  # start MCP stdio server
-gaze audit                 # print SQLite audit log
+```text
+crates/
+  gaze/         core library
+  debug-proxy/  MCP debug server consumer
+  ghostwriter/  sanitize/restore consumer
 ```
 
-Global flags: `--global` (use `~/.gaze/audit.db`), `--allow-unlocked-key` (skip mlock in containers).
+## Crate Guide
 
-## Policy
+### `gaze`
 
-See `policy.example.toml`. One `[connection.production]` block required. SSH tunnel supported for prod access. Allowed operations and per-column PII classes declared explicitly.
+Pure Rust library for:
 
-```toml
-[connection.production]
-kind = "mysql"
-ssh_host = "deploy@prod.example.com"
-database = "myapp"
-user = "gaze_ro"
-password_env = "GAZE_DB_PASSWORD"
+- detector composition
+- rule-based redaction
+- session-scoped tokenization
+- signed sensitive snapshots
+- redaction logging
+- pluggable sandbox trait shape for future action-side work
 
-[policy.database]
-allowed_tables = ["users", "orders"]
-blocked_columns = ["iban", "tax_id"]
-max_rows = 50
-allowed_operations = ["schema", "sample", "count", "distinct", "explain"]
+What it does not do by itself:
 
-[[policy.database.columns]]
-table = "users"
-column = "email"
-class = "email"
+- no standalone `gaze clean` / `gaze restore` CLI yet
+- no sandbox backend implementation yet
+- no direct application protocol
+
+Those are consumer concerns.
+
+#### Library Example
+
+```rust
+use gaze::{
+    Action, ClassRule, Pipeline, RawDocument, RegexDetector, Scope, Session, PiiClass,
+};
+
+let pipeline = Pipeline::builder()
+    .detector(RegexDetector::emails()?)
+    .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+    .build()?;
+
+let session = Session::new(Scope::Conversation("msg-42".into()))?;
+let clean = pipeline.redact(
+    &session,
+    RawDocument::Text("alice@example.com".to_string()),
+)?;
 ```
+
+#### NER Model Runtime
+
+Transformer NER is optional and only enabled when a pinned local model directory is provided.
+
+Expected runtime model directory:
+
+```text
+${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/
+```
+
+Required files:
+
+- `model.onnx`
+- `tokenizer.json`
+- `config.json`
+- `labels.json`
+- `SHA256SUMS`
+
+See [crates/gaze/testdata/ner/README.md](/Users/krishankonig/Workspace/bets/Gaze/crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](/Users/krishankonig/Workspace/bets/Gaze/docs/research/ner-library-evaluation.md).
+
+### `ghostwriter`
+
+Deterministic sanitize/restore wrapper around `gaze` for customer-facing LLM flows.
+
+Commands:
+
+```text
+ghostwriter sanitize
+ghostwriter restore
+```
+
+#### Sanitize Input
+
+```json
+{
+  "text": "Hallo Markus Müller, bitte antworten Sie an mueller.markus@icloud.com",
+  "context": {
+    "customer_name": "Markus Müller",
+    "customer_email": "mueller.markus@icloud.com",
+    "customer_phone": "+49 151 23456789",
+    "order_ids": ["SO-12345"],
+    "songs": ["Midnight City"],
+    "artists": ["M83"],
+    "locale": "de"
+  }
+}
+```
+
+Supported `context` fields:
+
+- `customer_name`
+- `customer_email`
+- `customer_phone`
+- `order_ids`
+- `songs`
+- `artists`
+- `locale`
+
+Notes:
+
+- known customer fields become semantic placeholders like `<CUSTOMER_NAME>`
+- indexed values become placeholders like `<ORDER_ID_1>` or `<SONG_1>`
+- regex email detection is always enabled
+- transformer NER is only attempted when `GAZE_NER_MODEL_DIR` is set
+- if no NER model directory is set, sanitize still succeeds
+
+#### Sanitize Usage
+
+```bash
+cargo run -p ghostwriter -- sanitize < sanitize.json
+```
+
+Pretty-print:
+
+```bash
+cargo run -p ghostwriter -- sanitize < sanitize.json | jq
+```
+
+#### Restore Usage
+
+```bash
+cargo run -p ghostwriter -- restore < restore.json
+```
+
+Restore input shape:
+
+```json
+{
+  "text": "Hallo <CUSTOMER_NAME>, wir senden an <CUSTOMER_EMAIL>.",
+  "session_blob": "opaque blob returned by sanitize"
+}
+```
+
+#### Example
+
+Sanitize:
+
+```bash
+printf '%s\n' '{"text":"Betreff: Rückfrage zu Bestellung SO-12345\n\nHallo Markus Müller,\n\nvielen Dank für Ihre Nachricht. Wir haben die Bestellung SO-12345 geprüft und den Versand der Dateien soeben erneut angestoßen.\n\nDie Unterlagen gehen wie gewünscht an mueller.markus@icloud.com. Falls Sie stattdessen die alternative Adresse markus.mueller@example.de verwenden möchten, geben Sie uns bitte kurz Bescheid.\n\nWenn noch etwas fehlt, erreichen wir Sie auch telefonisch unter +49 151 23456789.\n\nFreundliche Grüße\nAnna Becker\nKundensupport\n","context":{"customer_name":"Markus Müller","customer_email":"mueller.markus@icloud.com","customer_phone":"+49 151 23456789","order_ids":["SO-12345"],"locale":"de"}}' | cargo run -p ghostwriter -- sanitize | jq
+```
+
+Restore:
+
+```bash
+printf '%s\n' '{"text":"Betreff: Rückfrage zu Bestellung <ORDER_ID_1>\n\nHallo <CUSTOMER_NAME>,\n\nvielen Dank für Ihre Nachricht. Wir haben die Bestellung <ORDER_ID_1> geprüft und den Versand der Dateien soeben erneut angestoßen.\n\nDie Unterlagen gehen wie gewünscht an <CUSTOMER_EMAIL>. Falls Sie stattdessen die alternative Adresse <EMAIL_1> verwenden möchten, geben Sie uns bitte kurz Bescheid.\n\nWenn noch etwas fehlt, erreichen wir Sie auch telefonisch unter <CUSTOMER_PHONE>.\n\nFreundliche Grüße\nAnna Becker\nKundensupport\n","session_blob":"PASTE_SESSION_BLOB_HERE"}' | cargo run -p ghostwriter -- restore | jq
+```
+
+### `debug-proxy`
+
+MCP server consumer built on top of `gaze`.
+
+Commands:
+
+```text
+debug-proxy init
+debug-proxy check [policy.toml]
+debug-proxy serve [policy.toml]
+debug-proxy audit
+```
+
+#### What It Exposes
+
+- `db.schema`
+- `db.sample`
+- `db.count`
+- `db.distinct`
+- `db.explain`
+- `logs.search`
+- `logs.context`
+- `logs.tail`
+
+#### Typical Flow
+
+1. Scaffold a policy:
+
+```bash
+cargo run -p debug-proxy -- init
+```
+
+2. Validate it:
+
+```bash
+cargo run -p debug-proxy -- check policy.toml
+```
+
+3. Serve MCP over stdio:
+
+```bash
+cargo run -p debug-proxy -- serve policy.toml
+```
+
+4. Inspect the redaction log:
+
+```bash
+cargo run -p debug-proxy -- audit
+```
+
+#### Policy Notes
+
+- one production connection is required
+- table/column scope is allowlisted
+- NER locale is configured in policy
+- shared session state lets DB rows and logs reuse the same pseudonyms
 
 ## Build
 
+```bash
+cargo build
 ```
+
+Release:
+
+```bash
 cargo build --release
 ```
 
-MSRV: Rust 1.89 (forced by transitive deps).
+## Verification
+
+```bash
+cargo test -p ghostwriter -p gaze -p debug-proxy
+cargo clippy -p ghostwriter -p gaze -p debug-proxy --all-targets --all-features -- -D warnings
+```
 
 ## Status
 
-v0.1 — M0–M5 complete. Scaffold, types, adapter trait + MySQL impl, SSH tunnel, policy parser, CLI wiring, regex scanner + Laravel log adapter, SQLite audit log, all 8 MCP handlers, rmcp stdio bootstrap, canary e2e leak guard. M6 (dogfood) and M7 (release) out of scope for v0.1.
+Implemented for the v0.2 rewrite:
+
+- shared `gaze` core
+- `debug-proxy` consumer
+- `ghostwriter` consumer
+- core sandbox trait shape
+
+Deferred beyond v0.2:
+
+- standalone `gaze clean` / `gaze restore` CLI
+- real sandbox backend implementations
+- k-anonymity / query-budget controls
+- full format-preserving fake generation
 
 ## License
 
