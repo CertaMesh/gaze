@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
@@ -95,19 +96,20 @@ impl Session {
             class: class.clone(),
             raw: raw.to_string(),
         };
-        if let Some(token) = self.token_by_value.get(&key) {
-            return Ok(token.value().clone());
+        match self.token_by_value.entry(key) {
+            Entry::Occupied(existing) => Ok(existing.get().clone()),
+            Entry::Vacant(vacant) => {
+                let token = {
+                    let mut next = self.next_by_class.entry(class.clone()).or_insert(0);
+                    *next += 1;
+                    build(*next)
+                };
+
+                vacant.insert(token.clone());
+                self.value_by_token.insert(token.clone(), raw.to_string());
+                Ok(token)
+            }
         }
-
-        let token = {
-            let mut next = self.next_by_class.entry(class.clone()).or_insert(0);
-            *next += 1;
-            build(*next)
-        };
-
-        self.token_by_value.insert(key, token.clone());
-        self.value_by_token.insert(token.clone(), raw.to_string());
-        Ok(token)
     }
 
     pub fn restore_strict(&self, token: &str) -> Result<String> {
