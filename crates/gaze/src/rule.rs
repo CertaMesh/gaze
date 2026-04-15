@@ -3,6 +3,7 @@ use crate::detector::PiiClass;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
     Tokenize,
+    Redact,
     Preserve,
 }
 

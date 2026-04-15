@@ -11,6 +11,7 @@ pub trait Detector: Send + Sync {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum PiiClass {
     Email,
+    Name,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,13 +26,16 @@ pub struct RegexDetector {
 }
 
 impl RegexDetector {
+    pub fn new(pattern: &str, class: PiiClass) -> Result<Self> {
+        let regex = Regex::new(pattern).map_err(Error::InvalidRegex)?;
+        Ok(Self { regex, class })
+    }
+
     pub fn emails() -> Result<Self> {
-        let regex = Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
-            .map_err(Error::InvalidRegex)?;
-        Ok(Self {
-            regex,
-            class: PiiClass::Email,
-        })
+        Self::new(
+            r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b",
+            PiiClass::Email,
+        )
     }
 }
 

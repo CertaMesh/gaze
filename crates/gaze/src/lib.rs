@@ -1,4 +1,5 @@
 mod detector;
+mod normalize;
 mod pipeline;
 mod rule;
 mod session;

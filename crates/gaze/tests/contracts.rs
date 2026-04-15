@@ -46,3 +46,77 @@ fn raw_document_is_not_serializable() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/raw_document_serialize.rs");
 }
+
+#[test]
+fn normalization_runs_before_detection() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("pipeline");
+
+    let raw = RawDocument::Text("a\u{200D}lice＠example.com".to_string());
+    let clean = pipeline.redact(&session, raw).expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(text, "Email_1");
+    assert_eq!(
+        session.restore_strict("Email_1").expect("restore"),
+        "a\u{200D}lice＠example.com"
+    );
+}
+
+#[test]
+fn longest_span_wins_for_overlaps() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::new("alice@example.com", PiiClass::Name).expect("name detector"))
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Name, Action::Redact))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("reach alice@example.com".to_string()),
+        )
+        .expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(text, "reach [REDACTED]");
+}
+
+#[test]
+fn first_detector_wins_exact_length_tie() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::new("alice@example.com", PiiClass::Name).expect("name detector"))
+        .detector(RegexDetector::new("alice@example.com", PiiClass::Email).expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Name, Action::Redact))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("reach alice@example.com".to_string()),
+        )
+        .expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(text, "reach [REDACTED]");
+}

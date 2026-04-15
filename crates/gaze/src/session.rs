@@ -67,5 +67,6 @@ impl Session {
 fn class_name(class: &PiiClass) -> &'static str {
     match class {
         PiiClass::Email => "Email",
+        PiiClass::Name => "Name",
     }
 }
