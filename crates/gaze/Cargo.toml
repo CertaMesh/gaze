@@ -1,0 +1,13 @@
+[package]
+name = "gaze"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.89"
+license = "Apache-2.0"
+description = "Channel-agnostic GDPR-compliant redaction engine"
+
+[lib]
+name = "gaze"
+path = "src/lib.rs"
+
+[dependencies]

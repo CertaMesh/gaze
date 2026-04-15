@@ -24,9 +24,7 @@ fn spec_example_roundtrip() {
     assert!(!sanitized.clean_text.contains("mueller.markus@icloud.com"));
     assert!(!sanitized.clean_text.contains("+49 151 23456789"));
 
-    let draft = format!(
-        "Hello <CUSTOMER_NAME>, we will resend the files to <CUSTOMER_EMAIL> today. If needed we will contact you at <CUSTOMER_PHONE>."
-    );
+    let draft = "Hello <CUSTOMER_NAME>, we will resend the files to <CUSTOMER_EMAIL> today. If needed we will contact you at <CUSTOMER_PHONE>.".to_string();
 
     let restored = restore(RestoreRequest {
         text: draft,

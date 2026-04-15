@@ -1,0 +1,13 @@
+[package]
+name = "debug-proxy"
+version = "0.2.0"
+edition = "2021"
+rust-version = "1.89"
+license = "Apache-2.0"
+description = "Debug proxy consumer for the Gaze core engine"
+
+[[bin]]
+name = "debug-proxy"
+path = "src/main.rs"
+
+[dependencies]
