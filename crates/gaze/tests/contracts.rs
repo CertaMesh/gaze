@@ -5,14 +5,21 @@ use std::time::Duration;
 
 use gaze::{
     Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, NerConfig, Pipeline, PiiClass,
-    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, SqliteLogger,
-    Value,
+    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Sandbox, SandboxPlan, Scope,
+    Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value, ExecPolicy,
+    SandboxError,
 };
 
 #[test]
 fn pipeline_is_clone_send_and_sync() {
     fn assert_traits<T: Clone + Send + Sync>() {}
     assert_traits::<Pipeline>();
+}
+
+#[test]
+fn sandbox_trait_is_object_safe_send_and_sync() {
+    fn assert_traits<T: Send + Sync>() {}
+    assert_traits::<Box<dyn Sandbox>>();
 }
 
 #[test]
@@ -177,6 +184,16 @@ impl RedactionLogger for MemoryLogger {
     fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
         self.entries.lock().expect("entries lock").push(entry.clone());
         Ok(())
+    }
+}
+
+struct PrefixSandbox;
+
+impl Sandbox for PrefixSandbox {
+    fn prepare(&self, request: &ValidatedExecRequest) -> Result<SandboxPlan, SandboxError> {
+        let mut plan = SandboxPlan::passthrough(request);
+        plan.args.insert(0, "--sandboxed".to_string());
+        Ok(plan)
     }
 }
 
@@ -387,6 +404,55 @@ fn column_rule_uses_field_name_context() {
 
     assert_eq!(fields["primary_email"], "[REDACTED]");
     assert_eq!(fields["secondary_email"], "Email_1");
+}
+
+#[test]
+fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
+    let policy = ExecPolicy::new()
+        .allow_program("/usr/local/bin/gaze-hook")
+        .allow_env("MAIL_FROM");
+    let request = UntrustedExecRequest {
+        program: "/usr/local/bin/gaze-hook".into(),
+        args: vec!["send-email".to_string(), "Email_1".to_string()],
+        env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
+        cwd: Some("/tmp".into()),
+    };
+
+    let validated = request.validate(&policy).expect("validated");
+    let plan = PrefixSandbox.prepare(&validated).expect("sandbox plan");
+
+    assert_eq!(plan.program, std::path::Path::new("/usr/local/bin/gaze-hook"));
+    assert_eq!(plan.args[0], "--sandboxed");
+    assert_eq!(plan.args[1], "send-email");
+}
+
+#[test]
+fn exec_policy_rejects_non_allowlisted_env_keys() {
+    let policy = ExecPolicy::new().allow_program("/usr/local/bin/gaze-hook");
+    let request = UntrustedExecRequest {
+        program: "/usr/local/bin/gaze-hook".into(),
+        args: vec!["send-email".to_string()],
+        env: BTreeMap::from([("LD_PRELOAD".to_string(), "/tmp/hook.dylib".to_string())]),
+        cwd: None,
+    };
+
+    assert_eq!(
+        request.validate(&policy),
+        Err(SandboxError::EnvNotAllowed("LD_PRELOAD".to_string()))
+    );
+}
+
+#[test]
+fn exec_policy_rejects_shell_metacharacters_in_argv() {
+    let policy = ExecPolicy::new().allow_program("/usr/local/bin/gaze-hook");
+    let request = UntrustedExecRequest {
+        program: "/usr/local/bin/gaze-hook".into(),
+        args: vec!["send-email;cat".to_string()],
+        env: BTreeMap::new(),
+        cwd: None,
+    };
+
+    assert_eq!(request.validate(&policy), Err(SandboxError::UnsafeArgv));
 }
 
 #[test]
