@@ -8,6 +8,8 @@ use thiserror::Error;
 use crate::mcp::errors::ErrorSanitizer;
 
 pub mod laravel_log;
+pub mod mysql;
+pub mod ssh_tunnel;
 
 #[derive(Debug, Error)]
 pub enum AdapterError {
