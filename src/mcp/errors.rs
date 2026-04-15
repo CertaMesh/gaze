@@ -81,7 +81,6 @@ mod tests {
     fn canary_in_error_fails_closed() {
         // If Worka fails to detect the canary, sanitization panics —
         // which is the correct fail-closed behavior.
-        struct NeverDetects;
         // We can't easily swap the detector in this unit test without
         // refactoring, so just hand-build the canary into a sanitized
         // string that mimics what a broken detector would return and

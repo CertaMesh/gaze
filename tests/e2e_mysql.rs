@@ -1,6 +1,8 @@
 //! End-to-end tests against a real MySQL 8 container. Skipped automatically
 //! if Docker isn't reachable (testcontainers returns an error).
 
+#![cfg(feature = "test-utils")]
+
 use gaze::adapter::mysql::MysqlAdapter;
 use gaze::adapter::{DatabaseAdapter, Filter, FilterOp};
 use gaze::types::ColumnType;
