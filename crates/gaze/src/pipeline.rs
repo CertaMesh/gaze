@@ -90,10 +90,11 @@ impl Pipeline {
             )?;
         }
 
-        detections.sort_by_key(|d| std::cmp::Reverse(d.detection.span.start));
+        detections.sort_by_key(|d| d.detection.span.start);
+        let mut replacements = Vec::with_capacity(detections.len());
 
         for detection in detections {
-            let raw = out[detection.detection.span.clone()].to_string();
+            let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
             self.log_entry(
@@ -104,21 +105,21 @@ impl Pipeline {
                 false,
             )?;
 
-            match action {
-                Action::Tokenize => {
-                    let token = session.tokenize(&detection.detection.class, &raw)?;
-                    out.replace_range(detection.detection.span, &token);
-                }
-                Action::Redact => out.replace_range(detection.detection.span, "[REDACTED]"),
-                Action::FormatPreserve => {
-                    let fake = session.format_preserving_fake(&detection.detection.class, &raw)?;
-                    out.replace_range(detection.detection.span, &fake);
-                }
-                Action::Generalize => {
-                    let generalized = generalize_token(&detection.detection.class);
-                    out.replace_range(detection.detection.span, &generalized);
-                }
-                Action::Preserve => {}
+            let replacement = match action {
+                Action::Tokenize => Some(session.tokenize(&detection.detection.class, &raw)?),
+                Action::Redact => Some("[REDACTED]".to_string()),
+                Action::FormatPreserve => Some(
+                    session.format_preserving_fake(&detection.detection.class, &raw)?,
+                ),
+                Action::Generalize => Some(generalize_token(&detection.detection.class)),
+                Action::Preserve => None,
+            };
+            replacements.push((detection.detection.span, replacement));
+        }
+
+        for (span, replacement) in replacements.into_iter().rev() {
+            if let Some(replacement) = replacement {
+                out.replace_range(span, &replacement);
             }
         }
 

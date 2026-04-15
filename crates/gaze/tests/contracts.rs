@@ -317,6 +317,37 @@ fn generalize_replaces_with_class_token_without_restore_mapping() {
 }
 
 #[test]
+fn tokenize_assigns_indices_left_to_right() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("first@example.com then second@example.com".to_string()),
+        )
+        .expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(text, "Email_1 then Email_2");
+    assert_eq!(
+        session.restore_strict("Email_1").expect("restore first"),
+        "first@example.com"
+    );
+    assert_eq!(
+        session.restore_strict("Email_2").expect("restore second"),
+        "second@example.com"
+    );
+}
+
+#[test]
 fn custom_pii_class_normalizes_name() {
     assert_eq!(
         PiiClass::custom(" Order-ID ").as_custom_name(),

@@ -294,13 +294,31 @@ fn advise_dontdump(_ptr: *const u8, _len: usize) {
     }
 }
 
-fn class_name(class: &PiiClass) -> &'static str {
+fn class_name(class: &PiiClass) -> String {
     match class {
-        PiiClass::Email => "Email",
-        PiiClass::Name => "Name",
-        PiiClass::Location => "Location",
-        PiiClass::Organization => "Organization",
-        PiiClass::Custom(_) => "Custom",
+        PiiClass::Email => "Email".to_string(),
+        PiiClass::Name => "Name".to_string(),
+        PiiClass::Location => "Location".to_string(),
+        PiiClass::Organization => "Organization".to_string(),
+        PiiClass::Custom(name) => custom_class_name(name),
+    }
+}
+
+fn custom_class_name(name: &str) -> String {
+    let mut out = String::new();
+    for segment in name.split('_').filter(|segment| !segment.is_empty()) {
+        let mut chars = segment.chars();
+        if let Some(first) = chars.next() {
+            out.push(first.to_ascii_uppercase());
+            for ch in chars {
+                out.push(ch.to_ascii_lowercase());
+            }
+        }
+    }
+    if out.is_empty() {
+        "Custom".to_string()
+    } else {
+        out
     }
 }
 
