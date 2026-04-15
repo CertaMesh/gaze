@@ -174,7 +174,6 @@ Commands:
 debug-proxy init
 debug-proxy check [policy.toml]
 debug-proxy serve [policy.toml]
-debug-proxy audit
 ```
 
 #### What It Exposes
@@ -206,12 +205,6 @@ cargo run -p debug-proxy -- check policy.toml
 
 ```bash
 cargo run -p debug-proxy -- serve policy.toml
-```
-
-4. Inspect the redaction log:
-
-```bash
-cargo run -p debug-proxy -- audit
 ```
 
 #### Policy Notes

@@ -4,11 +4,9 @@ This formula installs `ghostwriter` from source using `cargo`.
 
 ## Publish to naoray/homebrew-tap
 
-1. Push the `ghostwriter-v0.1` branch (or its merged main commit) to GitHub:
-
-   ```bash
-   git push origin ghostwriter-v0.1
-   ```
+1. Ensure the target branch/tag is pushed to GitHub. The formula currently
+   tracks `main` via `head`; update `url` to a release tag tarball once one
+   exists for the workspace.
 
 2. In a clone of `naoray/homebrew-tap`, copy this formula into `Formula/`:
 
