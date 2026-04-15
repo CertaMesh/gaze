@@ -358,6 +358,45 @@ fn column_rule_uses_field_name_context() {
 }
 
 #[test]
+fn pipeline_builds_without_ner_when_model_dir_absent() {
+    // Contract: absent/empty [ner] model_dir must not panic and must not
+    // poison the rest of the pipeline. A warn is emitted (not asserted here
+    // because tracing subscribers aren't wired in unit tests) and regex
+    // detectors still work end to end.
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .with_ner_model_dir(None)
+        .expect("build with ner=None")
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("pipeline");
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("alice@example.com".into()))
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert_eq!(text, "Email_1");
+}
+
+#[test]
+fn pipeline_builder_fails_when_ner_model_dir_missing_on_disk() {
+    // Explicit model_dir that doesn't exist must propagate NerLoad, not
+    // silently drop NER. This is the fail-closed contract for explicit config.
+    let result =
+        Pipeline::builder().with_ner_model_dir(Some(std::path::Path::new("/nonexistent/gaze/ner/xyz")));
+    match result {
+        Ok(_) => panic!("expected NerLoad error"),
+        Err(err) => {
+            let msg = format!("{err}");
+            assert!(msg.contains("ner load error"), "unexpected: {msg}");
+        }
+    }
+}
+
+#[test]
 fn sqlite_logger_persists_entries() {
     let temp = tempfile::NamedTempFile::new().expect("temp db");
     let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");

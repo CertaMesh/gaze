@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
+use std::path::Path;
 use std::sync::Arc;
 
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector};
+use crate::ner::NerDetector;
 use crate::normalize::normalize;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Context, Rule};
@@ -28,6 +30,8 @@ pub enum Error {
     SnapshotDecode(#[source] serde_json::Error),
     #[error("sqlite error: {0}")]
     Sqlite(String),
+    #[error("ner load error: {0}")]
+    NerLoad(#[source] crate::ner::NerLoadError),
 }
 
 #[derive(Clone)]
@@ -188,6 +192,38 @@ impl PipelineBuilder {
     {
         self.redaction_loggers.push(Arc::new(logger));
         self
+    }
+
+    /// Wire up the NER detector from a resolved model directory.
+    ///
+    /// Fail-closed defaults:
+    /// - `None` or empty path → NER is disabled, a `tracing::warn!` is emitted,
+    ///   and the pipeline still builds with regex + index detectors intact.
+    /// - `Some(path)` → `NerDetector::load` must succeed; any load error
+    ///   propagates as `Error::NerLoad` and the pipeline does NOT build.
+    ///
+    /// No runtime downloads. Caller resolves the model directory from
+    /// `[ner] model_dir` in `policy.toml` or the
+    /// `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/` default.
+    pub fn with_ner_model_dir(self, model_dir: Option<&Path>) -> Result<Self> {
+        match model_dir {
+            None => {
+                tracing::warn!(
+                    "ner: no [ner] model_dir configured; transformer NER disabled, regex + index detectors still run"
+                );
+                Ok(self)
+            }
+            Some(path) if path.as_os_str().is_empty() => {
+                tracing::warn!(
+                    "ner: [ner] model_dir is empty; transformer NER disabled, regex + index detectors still run"
+                );
+                Ok(self)
+            }
+            Some(path) => {
+                let detector = NerDetector::load(path).map_err(Error::NerLoad)?;
+                Ok(self.detector(detector))
+            }
+        }
     }
 
     pub fn build(self) -> Result<Pipeline> {
