@@ -6,8 +6,20 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Debug proxy consumer for the Gaze core engine"
 
+[lib]
+name = "debug_proxy"
+path = "src/lib.rs"
+
 [[bin]]
 name = "debug-proxy"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = "0.1"
+gaze = { path = "../gaze" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "1"
+toml = "0.8"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
