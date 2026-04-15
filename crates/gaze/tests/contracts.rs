@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument,
+    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, Pipeline, PiiClass, RawDocument,
     RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, Value,
 };
 
@@ -262,4 +262,97 @@ async fn concurrent_redact_reuses_same_token_across_tasks() {
         session.restore_strict(&left).expect("restore"),
         "alice@example.com"
     );
+}
+
+#[test]
+fn format_preserve_is_deterministic_and_restorable() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::FormatPreserve))
+        .build()
+        .expect("pipeline");
+
+    let once = pipeline
+        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .expect("redact once");
+    let twice = pipeline
+        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .expect("redact twice");
+
+    let CleanDocument::Text(once) = once else {
+        panic!("expected text document");
+    };
+    let CleanDocument::Text(twice) = twice else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(once, twice);
+    assert!(once.contains("@example.test"));
+    assert_eq!(
+        session.restore_strict(&once).expect("restore"),
+        "alice@example.com"
+    );
+}
+
+#[test]
+fn generalize_replaces_with_class_token_without_restore_mapping() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Generalize))
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert_eq!(text, "[EMAIL]");
+    assert!(session.restore_strict("[EMAIL]").is_err());
+}
+
+#[test]
+fn custom_pii_class_normalizes_name() {
+    assert_eq!(
+        PiiClass::custom(" Order-ID ").as_custom_name(),
+        Some("order_id")
+    );
+}
+
+#[test]
+fn column_rule_uses_field_name_context() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ColumnRule::new("primary_email", Action::Redact))
+        .rule(DefaultRule::new(Action::Tokenize))
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Structured(BTreeMap::from([
+                (
+                    "primary_email".to_string(),
+                    Value::String("alice@example.com".to_string()),
+                ),
+                (
+                    "secondary_email".to_string(),
+                    Value::String("alice@example.com".to_string()),
+                ),
+            ])),
+        )
+        .expect("redact");
+
+    let CleanDocument::Structured(fields) = clean else {
+        panic!("expected structured document");
+    };
+
+    assert_eq!(fields["primary_email"], "[REDACTED]");
+    assert_eq!(fields["secondary_email"], "Email_1");
 }

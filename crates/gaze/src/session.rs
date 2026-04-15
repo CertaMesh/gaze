@@ -80,6 +80,20 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
+        self.intern_mapping(class, raw, |index| format!("{}_{}", class_name(class), index))
+    }
+
+    pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
+        self.intern_mapping(class, raw, |index| match class {
+            PiiClass::Email => format!("email{index}@example.test"),
+            _ => format!("{}_{}", class_name(class).to_ascii_lowercase(), index),
+        })
+    }
+
+    fn intern_mapping<F>(&self, class: &PiiClass, raw: &str, build: F) -> Result<String>
+    where
+        F: FnOnce(usize) -> String,
+    {
         let key = TokenKey {
             class: class.clone(),
             raw: raw.to_string(),
@@ -91,7 +105,7 @@ impl Session {
         let token = {
             let mut next = self.next_by_class.entry(class.clone()).or_insert(0);
             *next += 1;
-            format!("{}_{}", class_name(class), *next)
+            build(*next)
         };
 
         self.token_by_value.insert(key, token.clone());
@@ -192,6 +206,7 @@ fn class_name(class: &PiiClass) -> &'static str {
     match class {
         PiiClass::Email => "Email",
         PiiClass::Name => "Name",
+        PiiClass::Custom(_) => "Custom",
     }
 }
 

@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::detector::{Detection, Detector};
 use crate::normalize::normalize;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
-use crate::rule::{Action, Rule};
+use crate::rule::{Action, Context, Rule};
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
 
@@ -78,7 +78,7 @@ impl Pipeline {
                 loser,
                 field_name,
                 document_kind.clone(),
-                self.action_for(&loser.detection),
+                self.action_for(&loser.detection, &build_context(field_name)),
                 true,
             )?;
         }
@@ -87,7 +87,8 @@ impl Pipeline {
 
         for detection in detections {
             let raw = out[detection.detection.span.clone()].to_string();
-            let action = self.action_for(&detection.detection);
+            let context = build_context(field_name);
+            let action = self.action_for(&detection.detection, &context);
             self.log_entry(
                 &detection,
                 field_name,
@@ -102,6 +103,14 @@ impl Pipeline {
                     out.replace_range(detection.detection.span, &token);
                 }
                 Action::Redact => out.replace_range(detection.detection.span, "[REDACTED]"),
+                Action::FormatPreserve => {
+                    let fake = session.format_preserving_fake(&detection.detection.class, &raw)?;
+                    out.replace_range(detection.detection.span, &fake);
+                }
+                Action::Generalize => {
+                    let generalized = generalize_token(&detection.detection.class);
+                    out.replace_range(detection.detection.span, &generalized);
+                }
                 Action::Preserve => {}
             }
         }
@@ -109,10 +118,10 @@ impl Pipeline {
         Ok(out)
     }
 
-    fn action_for(&self, detection: &Detection) -> Action {
+    fn action_for(&self, detection: &Detection, context: &Context) -> Action {
         self.rules
             .iter()
-            .find_map(|rule| rule.action(&detection.class))
+            .find_map(|rule| rule.action(&detection.class, context))
             .unwrap_or(Action::Preserve)
     }
 
@@ -256,4 +265,18 @@ fn select_winners(mut detections: Vec<IndexedDetection>) -> (Vec<IndexedDetectio
 
 fn overlaps(left: &std::ops::Range<usize>, right: &std::ops::Range<usize>) -> bool {
     left.start < right.end && right.start < left.end
+}
+
+fn generalize_token(class: &crate::detector::PiiClass) -> String {
+    match class {
+        crate::detector::PiiClass::Email => "[EMAIL]".to_string(),
+        crate::detector::PiiClass::Name => "[NAME]".to_string(),
+        crate::detector::PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+    }
+}
+
+fn build_context(field_name: Option<&str>) -> Context {
+    Context {
+        field_name: field_name.map(str::to_string),
+    }
 }

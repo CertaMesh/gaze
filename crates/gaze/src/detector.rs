@@ -14,6 +14,33 @@ pub trait Detector: Send + Sync {
 pub enum PiiClass {
     Email,
     Name,
+    Custom(String),
+}
+
+impl PiiClass {
+    pub fn custom(name: &str) -> Self {
+        let mut normalized = String::new();
+        let mut pending_underscore = false;
+        for ch in name.trim().chars() {
+            if ch.is_ascii_alphanumeric() {
+                if pending_underscore && !normalized.is_empty() {
+                    normalized.push('_');
+                }
+                normalized.push(ch.to_ascii_lowercase());
+                pending_underscore = false;
+            } else {
+                pending_underscore = true;
+            }
+        }
+        Self::Custom(normalized)
+    }
+
+    pub fn as_custom_name(&self) -> Option<&str> {
+        match self {
+            Self::Custom(name) => Some(name.as_str()),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
