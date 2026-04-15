@@ -5,6 +5,7 @@ use thiserror::Error;
 
 use crate::detector::{Detection, Detector};
 use crate::normalize::normalize;
+use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Rule};
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
@@ -24,6 +25,7 @@ pub enum Error {
 #[derive(Clone)]
 pub struct Pipeline {
     detectors: Vec<Arc<dyn Detector>>,
+    redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -34,12 +36,22 @@ impl Pipeline {
 
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
         match raw {
-            RawDocument::Structured(fields) => redact_structured(self, session, fields),
-            RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(session, &text)?)),
+            RawDocument::Structured(fields) => {
+                redact_structured(self, session, fields, DocumentKind::Structured)
+            }
+            RawDocument::Text(text) => Ok(CleanDocument::Text(
+                self.redact_text(session, &text, None, DocumentKind::Text)?,
+            )),
         }
     }
 
-    fn redact_text(&self, session: &Session, text: &str) -> Result<String> {
+    fn redact_text(
+        &self,
+        session: &Session,
+        text: &str,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+    ) -> Result<String> {
         let mut out = text.to_string();
         let normalized = normalize(text);
         let spans = &normalized.spans;
@@ -54,12 +66,31 @@ impl Pipeline {
                     .filter_map(move |detection| translate_detection(detection, spans, index))
             })
             .collect::<Vec<_>>();
-        let mut detections = select_winners(detections);
+        let (mut detections, losers) = select_winners(detections);
+        for loser in &losers {
+            self.log_entry(
+                loser,
+                field_name,
+                document_kind.clone(),
+                self.action_for(&loser.detection),
+                true,
+            )?;
+        }
+
         detections.sort_by_key(|d| std::cmp::Reverse(d.detection.span.start));
 
         for detection in detections {
             let raw = out[detection.detection.span.clone()].to_string();
-            match self.action_for(&detection.detection) {
+            let action = self.action_for(&detection.detection);
+            self.log_entry(
+                &detection,
+                field_name,
+                document_kind.clone(),
+                action,
+                false,
+            )?;
+
+            match action {
                 Action::Tokenize => {
                     let token = session.tokenize(&detection.detection.class, &raw)?;
                     out.replace_range(detection.detection.span, &token);
@@ -78,6 +109,30 @@ impl Pipeline {
             .find_map(|rule| rule.action(&detection.class))
             .unwrap_or(Action::Preserve)
     }
+
+    fn log_entry(
+        &self,
+        detection: &IndexedDetection,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        action: Action,
+        conflict_loser: bool,
+    ) -> Result<()> {
+        let entry = RedactionEntry {
+            source: detection.detection.source.clone(),
+            class: detection.detection.class.clone(),
+            action,
+            field_name: field_name.map(str::to_string),
+            document_kind,
+            conflict_loser,
+        };
+
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -89,6 +144,7 @@ struct IndexedDetection {
 #[derive(Default)]
 pub struct PipelineBuilder {
     detectors: Vec<Arc<dyn Detector>>,
+    redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -109,9 +165,18 @@ impl PipelineBuilder {
         self
     }
 
+    pub fn redaction_logger<L>(mut self, logger: L) -> Self
+    where
+        L: RedactionLogger + 'static,
+    {
+        self.redaction_loggers.push(Arc::new(logger));
+        self
+    }
+
     pub fn build(self) -> Result<Pipeline> {
         Ok(Pipeline {
             detectors: self.detectors,
+            redaction_loggers: self.redaction_loggers,
             rules: self.rules,
         })
     }
@@ -121,11 +186,14 @@ fn redact_structured(
     pipeline: &Pipeline,
     session: &Session,
     fields: BTreeMap<String, Value>,
+    document_kind: DocumentKind,
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
         let value = match value {
-            Value::String(text) => serde_json::Value::String(pipeline.redact_text(session, &text)?),
+            Value::String(text) => serde_json::Value::String(
+                pipeline.redact_text(session, &text, Some(&key), document_kind.clone())?,
+            ),
             Value::I64(value) => serde_json::Value::Number(value.into()),
         };
         clean.insert(key, value);
@@ -148,12 +216,13 @@ fn translate_detection(
         detection: Detection {
             span: start..end,
             class: detection.class,
+            source: detection.source,
         },
         detector_index,
     })
 }
 
-fn select_winners(mut detections: Vec<IndexedDetection>) -> Vec<IndexedDetection> {
+fn select_winners(mut detections: Vec<IndexedDetection>) -> (Vec<IndexedDetection>, Vec<IndexedDetection>) {
     detections.sort_by(|a, b| {
         let a_len = a.detection.span.end - a.detection.span.start;
         let b_len = b.detection.span.end - b.detection.span.start;
@@ -164,17 +233,19 @@ fn select_winners(mut detections: Vec<IndexedDetection>) -> Vec<IndexedDetection
     });
 
     let mut winners = Vec::new();
+    let mut losers = Vec::new();
     for detection in detections {
         if winners
             .iter()
             .any(|winner: &IndexedDetection| overlaps(&winner.detection.span, &detection.detection.span))
         {
+            losers.push(detection);
             continue;
         }
         winners.push(detection);
     }
 
-    winners
+    (winners, losers)
 }
 
 fn overlaps(left: &std::ops::Range<usize>, right: &std::ops::Range<usize>) -> bool {

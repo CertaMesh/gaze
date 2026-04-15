@@ -18,17 +18,27 @@ pub enum PiiClass {
 pub struct Detection {
     pub span: Range<usize>,
     pub class: PiiClass,
+    pub source: String,
 }
 
 pub struct RegexDetector {
     regex: Regex,
     class: PiiClass,
+    source: String,
 }
 
 impl RegexDetector {
     pub fn new(pattern: &str, class: PiiClass) -> Result<Self> {
+        Self::with_source(pattern, class, "regex")
+    }
+
+    pub fn with_source(pattern: &str, class: PiiClass, source: &str) -> Result<Self> {
         let regex = Regex::new(pattern).map_err(Error::InvalidRegex)?;
-        Ok(Self { regex, class })
+        Ok(Self {
+            regex,
+            class,
+            source: source.to_string(),
+        })
     }
 
     pub fn emails() -> Result<Self> {
@@ -46,6 +56,7 @@ impl Detector for RegexDetector {
             .map(|m| Detection {
                 span: m.range(),
                 class: self.class.clone(),
+                source: self.source.clone(),
             })
             .collect()
     }

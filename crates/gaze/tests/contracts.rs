@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
+use std::sync::Mutex;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument, RegexDetector,
-    Scope, Session, Value,
+    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument,
+    RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, Value,
 };
 
 #[test]
@@ -119,4 +120,59 @@ fn first_detector_wins_exact_length_tie() {
     };
 
     assert_eq!(text, "reach [REDACTED]");
+}
+
+#[test]
+fn overlap_conflict_logs_losing_detection_without_raw_pii() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = Pipeline::builder()
+        .detector(
+            RegexDetector::with_source("alice@example.com", PiiClass::Name, "name-detector")
+                .expect("name detector"),
+        )
+        .detector(
+            RegexDetector::with_source("example.com", PiiClass::Email, "email-detector")
+                .expect("email detector"),
+        )
+        .rule(ClassRule::new(PiiClass::Name, Action::Redact))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("reach alice@example.com".to_string()),
+        )
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+    assert_eq!(text, "reach [REDACTED]");
+
+    let entries = logger.entries();
+    assert_eq!(entries.len(), 2);
+    assert!(entries.iter().any(|entry| !entry.conflict_loser));
+    assert!(entries.iter().any(|entry| entry.conflict_loser));
+    assert!(entries.iter().all(|entry| entry.field_name.is_none()));
+}
+
+#[derive(Clone, Default)]
+struct MemoryLogger {
+    entries: std::sync::Arc<Mutex<Vec<RedactionEntry>>>,
+}
+
+impl MemoryLogger {
+    fn entries(&self) -> Vec<RedactionEntry> {
+        self.entries.lock().expect("entries lock").clone()
+    }
+}
+
+impl RedactionLogger for MemoryLogger {
+    fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
+        self.entries.lock().expect("entries lock").push(entry.clone());
+        Ok(())
+    }
 }
