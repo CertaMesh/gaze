@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector};
-use crate::ner::NerDetector;
+use crate::ner::{NerDetector, NerOptions};
 use crate::normalize::normalize;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Context, Rule};
@@ -169,6 +170,12 @@ pub struct PipelineBuilder {
     rules: Vec<Arc<dyn Rule>>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NerConfig {
+    pub model_dir: Option<PathBuf>,
+    pub locale: Option<String>,
+}
+
 impl PipelineBuilder {
     pub fn detector<D>(mut self, detector: D) -> Self
     where
@@ -206,6 +213,14 @@ impl PipelineBuilder {
     /// `[ner] model_dir` in `policy.toml` or the
     /// `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/` default.
     pub fn with_ner_model_dir(self, model_dir: Option<&Path>) -> Result<Self> {
+        self.with_ner_config(NerConfig {
+            model_dir: model_dir.map(Path::to_path_buf),
+            locale: None,
+        })
+    }
+
+    pub fn with_ner_config(self, config: NerConfig) -> Result<Self> {
+        let NerConfig { model_dir, locale } = config;
         match model_dir {
             None => {
                 tracing::warn!(
@@ -220,7 +235,11 @@ impl PipelineBuilder {
                 Ok(self)
             }
             Some(path) => {
-                let detector = NerDetector::load(path).map_err(Error::NerLoad)?;
+                let detector = NerDetector::load_with_options(
+                    &path,
+                    NerOptions { locale },
+                )
+                .map_err(Error::NerLoad)?;
                 Ok(self.detector(detector))
             }
         }

@@ -8,8 +8,8 @@ mod session;
 mod types;
 
 pub use detector::{Detection, Detector, PiiClass, RegexDetector};
-pub use ner::{LabelMap, NerDetector, NerLoadError, VerifiedArtifacts};
-pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
+pub use ner::{LabelMap, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
+pub use pipeline::{Error, NerConfig, Pipeline, PipelineBuilder, Result};
 pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
 pub use rule::{Action, ClassRule, ColumnRule, Context, DefaultRule, Rule};
 pub use session::{Scope, SensitiveSnapshot, Session};

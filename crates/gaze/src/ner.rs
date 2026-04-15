@@ -52,6 +52,11 @@ impl LabelMap {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NerOptions {
+    pub locale: Option<String>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NerBackendKind {
     Ort,
@@ -142,6 +147,7 @@ pub struct NerDetector {
     model_dir: PathBuf,
     #[allow(dead_code)]
     backend_kind: NerBackendKind,
+    locale: Option<String>,
     labels: LabelMap,
     id2label: Vec<String>,
     backend: Box<dyn NerBackend>,
@@ -152,6 +158,7 @@ impl fmt::Debug for NerDetector {
         f.debug_struct("NerDetector")
             .field("model_dir", &self.model_dir)
             .field("backend_kind", &self.backend_kind)
+            .field("locale", &self.locale)
             .finish_non_exhaustive()
     }
 }
@@ -222,16 +229,25 @@ impl NerDetector {
     /// Full load: verify artifacts, initialize the configured backend.
     /// Fails closed on any load error.
     pub fn load(model_dir: &Path) -> Result<Self, NerLoadError> {
+        Self::load_with_options(model_dir, NerOptions::default())
+    }
+
+    pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
         let verified = Self::verify_artifacts(model_dir)?;
         let backend = load_backend(&verified)?;
 
         Ok(Self {
             model_dir: verified.model_dir,
             backend_kind: verified.backend_kind,
+            locale: options.locale,
             labels: verified.labels,
             id2label: verified.id2label,
             backend,
         })
+    }
+
+    pub fn locale(&self) -> Option<&str> {
+        self.locale.as_deref()
     }
 
     /// Label/offset reconstruction helper. Public for testing the BIO merge.

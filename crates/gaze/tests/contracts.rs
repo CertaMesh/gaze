@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
-use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, Pipeline, PiiClass, RawDocument,
-    RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, SqliteLogger, Value,
+    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, NerConfig, Pipeline, PiiClass,
+    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Scope, Session, SqliteLogger,
+    Value,
 };
 
 #[test]
@@ -372,6 +373,30 @@ fn pipeline_builds_without_ner_when_model_dir_absent() {
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .expect("pipeline");
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("alice@example.com".into()))
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert_eq!(text, "Email_1");
+}
+
+#[test]
+fn pipeline_builder_accepts_ner_locale_config_without_model_dir() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .with_ner_config(NerConfig {
+            model_dir: None,
+            locale: Some("de".to_string()),
+        })
+        .expect("build with ner config")
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("pipeline");
+
     let clean = pipeline
         .redact(&session, RawDocument::Text("alice@example.com".into()))
         .expect("redact");
