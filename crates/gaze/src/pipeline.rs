@@ -20,6 +20,7 @@ pub enum Error {
     UnknownToken(String),
 }
 
+#[derive(Clone)]
 pub struct Pipeline {
     detectors: Vec<Arc<dyn Detector>>,
     rules: Vec<Arc<dyn Rule>>,

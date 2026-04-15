@@ -57,6 +57,11 @@ impl Session {
             .cloned()
             .ok_or_else(|| Error::UnknownToken(token.to_string()))
     }
+
+    pub fn restore(&self, token: &str) -> Option<String> {
+        let state = self.state.lock().ok()?;
+        state.value_by_token.get(token).cloned()
+    }
 }
 
 fn class_name(class: &PiiClass) -> &'static str {
