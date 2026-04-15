@@ -3,6 +3,7 @@ use std::time::Duration;
 use dashmap::DashMap;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
+use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Serialize};
 
 use crate::detector::PiiClass;
@@ -61,7 +62,7 @@ pub struct Session {
     next_by_class: DashMap<PiiClass, usize>,
     token_by_value: DashMap<TokenKey, String>,
     value_by_token: DashMap<String, String>,
-    signing_key: SigningKey,
+    signing_key: SessionKey,
 }
 
 impl Session {
@@ -71,11 +72,7 @@ impl Session {
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
-            signing_key: {
-                let mut seed = [0_u8; 32];
-                rand::thread_rng().fill_bytes(&mut seed);
-                SigningKey::from_bytes(&seed)
-            },
+            signing_key: SessionKey::generate()?,
         })
     }
 
@@ -142,8 +139,9 @@ impl Session {
                 .collect(),
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
-        let signature = self.signing_key.sign(&payload_bytes);
-        let verifying_key = self.signing_key.verifying_key();
+        let signing_key = self.signing_key.signing_key();
+        let signature = signing_key.sign(&payload_bytes);
+        let verifying_key = signing_key.verifying_key();
 
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
         snapshot.push(1);
@@ -202,6 +200,98 @@ impl Session {
     }
 }
 
+struct SessionKey {
+    secret: SecretBox<[u8; 32]>,
+    protection: MemoryProtection,
+}
+
+impl SessionKey {
+    fn generate() -> Result<Self> {
+        let secret = SecretBox::init_with_mut(|bytes: &mut [u8; 32]| {
+            rand::thread_rng().fill_bytes(bytes);
+        });
+        let protection = MemoryProtection::best_effort(secret.expose_secret().as_ptr(), 32);
+        Ok(Self { secret, protection })
+    }
+
+    fn signing_key(&self) -> SigningKey {
+        SigningKey::from_bytes(self.secret.expose_secret())
+    }
+}
+
+impl Drop for SessionKey {
+    fn drop(&mut self) {
+        self.protection.unlock();
+    }
+}
+
+struct MemoryProtection {
+    addr: usize,
+    len: usize,
+    locked: bool,
+}
+
+impl MemoryProtection {
+    fn best_effort(ptr: *const u8, len: usize) -> Self {
+        let locked = lock_memory(ptr, len);
+        advise_dontdump(ptr, len);
+        Self {
+            addr: ptr as usize,
+            len,
+            locked,
+        }
+    }
+
+    fn unlock(&mut self) {
+        if self.locked {
+            unlock_memory(self.addr as *const u8, self.len);
+            self.locked = false;
+        }
+    }
+}
+
+fn lock_memory(ptr: *const u8, len: usize) -> bool {
+    #[cfg(unix)]
+    unsafe {
+        if libc::mlock(ptr.cast(), len) == 0 {
+            return true;
+        }
+        tracing::warn!(
+            error = %std::io::Error::last_os_error(),
+            "session key mlock failed; continuing with unlocked key material"
+        );
+    }
+
+    false
+}
+
+fn unlock_memory(ptr: *const u8, len: usize) {
+    #[cfg(unix)]
+    unsafe {
+        let _ = libc::munlock(ptr.cast(), len);
+    }
+}
+
+fn advise_dontdump(_ptr: *const u8, _len: usize) {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    unsafe {
+        let ptr = _ptr;
+        let len = _len;
+        let page_size = libc::sysconf(libc::_SC_PAGESIZE);
+        if page_size <= 0 {
+            return;
+        }
+        let page_size = page_size as usize;
+        let start = (ptr as usize) & !(page_size - 1);
+        let end = ((ptr as usize + len + page_size - 1) / page_size) * page_size;
+        let aligned_len = end.saturating_sub(start);
+        if aligned_len == 0 {
+            return;
+        }
+        let _ = libc::madvise(start as *mut libc::c_void, aligned_len, libc::MADV_DONTDUMP);
+    }
+}
+
 fn class_name(class: &PiiClass) -> &'static str {
     match class {
         PiiClass::Email => "Email",
@@ -234,4 +324,19 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
 
 fn parse_token_index(token: &str) -> Option<usize> {
     token.rsplit_once('_')?.1.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_key_produces_valid_signatures() {
+        let key = SessionKey::generate().expect("session key");
+        let signing_key = key.signing_key();
+        let message = b"gaze";
+        let signature = signing_key.sign(message);
+
+        assert!(signing_key.verifying_key().verify(message, &signature).is_ok());
+    }
 }

@@ -27,6 +27,23 @@ pub struct RedactionEntry {
     pub conflict_loser: bool,
 }
 
+/// `RedactionEntry` must remain metadata-only.
+///
+/// ```compile_fail
+/// use gaze::{Action, DocumentKind, PiiClass, RedactionEntry};
+///
+/// let _entry = RedactionEntry {
+///     source: "regex".to_string(),
+///     class: PiiClass::Email,
+///     action: Action::Tokenize,
+///     field_name: None,
+///     document_kind: DocumentKind::Text,
+///     conflict_loser: false,
+///     raw: Some("alice@example.com".to_string()),
+/// };
+/// ```
+const _: () = ();
+
 pub struct SqliteLogger {
     conn: Mutex<Connection>,
 }
