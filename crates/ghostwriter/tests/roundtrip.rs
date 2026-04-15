@@ -7,6 +7,7 @@ fn ctx_markus() -> Context {
         customer_name: Some("Markus Mueller".into()),
         customer_email: Some("mueller.markus@icloud.com".into()),
         customer_phone: Some("+49 151 23456789".into()),
+        ..Context::default()
     }
 }
 
@@ -57,4 +58,43 @@ fn paraphrased_draft_leaves_invented_names_alone() {
         .warnings
         .iter()
         .any(|w| w.0.contains("<CUSTOMER_NAME>") && w.0.contains("not used")));
+}
+
+#[test]
+fn indexed_terms_are_sanitized_and_restored() {
+    let text = "Markus Mueller says order SO-12345 includes Midnight City by M83.";
+    let sanitized = sanitize(SanitizeRequest {
+        text: text.into(),
+        context: Context {
+            customer_name: Some("Markus Mueller".into()),
+            order_ids: vec!["SO-12345".into()],
+            songs: vec!["Midnight City".into()],
+            artists: vec!["M83".into()],
+            ..Context::default()
+        },
+    })
+    .expect("sanitize");
+
+    assert_eq!(
+        sanitized.clean_text,
+        "<CUSTOMER_NAME> says order <ORDER_ID_1> includes <SONG_1> by <ARTIST_1>."
+    );
+    assert_eq!(
+        sanitized.metadata.placeholders,
+        vec![
+            "<CUSTOMER_NAME>",
+            "<ORDER_ID_1>",
+            "<SONG_1>",
+            "<ARTIST_1>",
+        ]
+    );
+
+    let restored = restore(RestoreRequest {
+        text: sanitized.clean_text,
+        session_blob: sanitized.session_blob,
+    })
+    .expect("restore");
+
+    assert_eq!(restored.restored_text, text);
+    assert!(restored.warnings.is_empty());
 }
