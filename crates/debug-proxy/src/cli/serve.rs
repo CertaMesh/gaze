@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::policy::{build_pipeline, ConnectionConfig, PolicyError, PolicyFile};
+pub use crate::mcp::server::ServerError;
 
 pub struct PreparedServe {
     pub policy: PolicyFile,
@@ -44,4 +45,15 @@ pub fn prepare(policy_path: &Path) -> Result<PreparedServe, ServeError> {
         password,
         pipeline,
     })
+}
+
+pub fn mysql_url(connection: &ConnectionConfig, password: &str) -> String {
+    format!(
+        "mysql://{}:{}@127.0.0.1:{}/{}",
+        connection.user, password, connection.local_port, connection.database
+    )
+}
+
+pub async fn run_cmd(policy_path: &Path) -> Result<(), ServerError> {
+    crate::mcp::server::run(policy_path).await
 }

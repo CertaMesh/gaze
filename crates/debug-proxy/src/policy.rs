@@ -60,6 +60,8 @@ pub struct ColumnRule {
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct LogsPolicy {
     #[serde(default)]
+    pub path: Option<PathBuf>,
+    #[serde(default)]
     pub strip_patterns: Vec<String>,
 }
 
