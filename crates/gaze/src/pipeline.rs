@@ -202,17 +202,23 @@ impl PipelineBuilder {
         self
     }
 
-    /// Wire up the NER detector from a resolved model directory.
+    /// Wire up a transformer NER detector from a resolved model directory.
+    ///
+    /// **Additive / stackable.** Each call appends another `NerDetector` to
+    /// the pipeline. Stacking multiple backends (for example, a BERT-family
+    /// token classifier plus a GLiNER zero-shot extractor) is supported —
+    /// the span-conflict resolver picks winners across all detectors by
+    /// span length, then insertion order.
     ///
     /// Fail-closed defaults:
-    /// - `None` or empty path → NER is disabled, a `tracing::warn!` is emitted,
-    ///   and the pipeline still builds with regex + index detectors intact.
+    /// - `None` or empty path → NER is disabled for this call, a `tracing::warn!`
+    ///   is emitted, and the pipeline still builds with other detectors intact.
     /// - `Some(path)` → `NerDetector::load` must succeed; any load error
     ///   propagates as `Error::NerLoad` and the pipeline does NOT build.
     ///
     /// No runtime downloads. Caller resolves the model directory from
-    /// `[ner] model_dir` in `policy.toml` or the
-    /// `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/` default.
+    /// `[ner] model_dir` in `policy.toml` or the platform default under
+    /// `${XDG_DATA_HOME:-~/.local/share}/gaze/models/`.
     pub fn with_ner_model_dir(self, model_dir: Option<&Path>) -> Result<Self> {
         self.with_ner_config(NerConfig {
             model_dir: model_dir.map(Path::to_path_buf),
@@ -220,6 +226,8 @@ impl PipelineBuilder {
         })
     }
 
+    /// Additive / stackable — see `with_ner_model_dir`. Call repeatedly to
+    /// stack backends with different locales or model artifacts.
     pub fn with_ner_config(self, config: NerConfig) -> Result<Self> {
         let NerConfig { model_dir, locale } = config;
         match model_dir {
@@ -338,5 +346,128 @@ fn generalize_token(class: &crate::detector::PiiClass) -> String {
 fn build_context(field_name: Option<&str>) -> Context {
     Context {
         field_name: field_name.map(str::to_string),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::detector::{Detection, PiiClass};
+    use crate::ner::test_support::detector_with_detections;
+    use crate::rule::{ClassRule, DefaultRule};
+    use crate::session::{Scope, Session};
+    use std::sync::Mutex;
+
+    /// Shared-handle test double: callers keep an `Arc<Mutex<Vec<_>>>` and
+    /// clone it into the logger, letting the builder take ownership while
+    /// the test retains read access.
+    struct CapturingLogger {
+        entries: Arc<Mutex<Vec<RedactionEntry>>>,
+    }
+
+    impl RedactionLogger for CapturingLogger {
+        fn log(&self, entry: &RedactionEntry) -> Result<()> {
+            self.entries.lock().unwrap().push(entry.clone());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn stacked_ner_detectors_resolve_via_span_conflict() {
+        // Input: "Alice Smith works here" — byte spans: Alice=0..5, full name=0..11.
+        let text = "Alice Smith works here";
+        let short_detection = Detection {
+            span: 0..5,
+            class: PiiClass::Name,
+            source: "ner/bert".to_string(),
+        };
+        let long_detection = Detection {
+            span: 0..11,
+            class: PiiClass::Name,
+            source: "ner/gliner".to_string(),
+        };
+
+        let bert = detector_with_detections("ort", vec![short_detection]);
+        let gliner = detector_with_detections("gliner", vec![long_detection]);
+
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+
+        let pipeline = Pipeline::builder()
+            .detector(bert)
+            .detector(gliner)
+            .rule(ClassRule::new(PiiClass::Name, Action::Redact))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(&session, RawDocument::Text(text.to_string()))
+            .expect("redact");
+
+        let out = match clean {
+            CleanDocument::Text(t) => t,
+            _ => panic!("expected text"),
+        };
+
+        // Longer span wins: full name replaced, trailing " works here" preserved.
+        assert_eq!(out, "[REDACTED] works here");
+
+        let entries = entries.lock().unwrap();
+        assert_eq!(entries.len(), 2, "expected one winner + one loser: {entries:?}");
+        let winner = entries.iter().find(|e| !e.conflict_loser).expect("winner");
+        let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
+        assert_eq!(winner.source, "ner/gliner", "longer span should win");
+        assert_eq!(loser.source, "ner/bert", "shorter span should lose");
+    }
+
+    #[test]
+    fn stacked_detectors_both_win_when_spans_disjoint() {
+        let text = "Alice visited Berlin";
+        let alice = Detection {
+            span: 0..5,
+            class: PiiClass::Name,
+            source: "ner/bert".to_string(),
+        };
+        let berlin = Detection {
+            span: 14..20,
+            class: PiiClass::Location,
+            source: "ner/gliner".to_string(),
+        };
+
+        let bert = detector_with_detections("ort", vec![alice]);
+        let gliner = detector_with_detections("gliner", vec![berlin]);
+
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+
+        let pipeline = Pipeline::builder()
+            .detector(bert)
+            .detector(gliner)
+            .rule(ClassRule::new(PiiClass::Name, Action::Redact))
+            .rule(ClassRule::new(PiiClass::Location, Action::Redact))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(&session, RawDocument::Text(text.to_string()))
+            .expect("redact");
+
+        let out = match clean {
+            CleanDocument::Text(t) => t,
+            _ => panic!("expected text"),
+        };
+
+        assert_eq!(out, "[REDACTED] visited [REDACTED]");
+        let entries = entries.lock().unwrap();
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| !e.conflict_loser));
     }
 }
