@@ -57,18 +57,28 @@ pub struct NerOptions {
     pub locale: Option<String>,
 }
 
+/// Driver-style enum for NER backends. Backends are swappable under a common
+/// `NerBackend` trait; each owns its own model-specific state. Multiple
+/// `NerDetector` instances (e.g. a BERT token-classifier plus a GLiNER
+/// zero-shot model) can be stacked in the same `Pipeline` — span-conflict
+/// resolution picks winners across all detectors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NerBackendKind {
+    /// Standard BERT-family token classifier: fixed label vocabulary, BIO/IOB2
+    /// subword tagging, merged via `merge_bio_spans`. Driven by ONNX Runtime.
     Ort,
-    Redact,
+    /// GLiNER-family zero-shot / open-schema extractor: entity type strings
+    /// passed at inference, output is a span-score matrix. Shape reserved;
+    /// backend implementation lands when GLiNER artifacts are pinned.
+    Gliner,
 }
 
 impl NerBackendKind {
     fn parse(raw: Option<&str>) -> Result<Self, NerLoadError> {
         match raw.map(str::trim).filter(|value| !value.is_empty()) {
             None => Ok(Self::Ort),
-            Some("ort") | Some("onnxruntime") => Ok(Self::Ort),
-            Some("redact") => Ok(Self::Redact),
+            Some("ort") | Some("onnxruntime") | Some("bert-ort") => Ok(Self::Ort),
+            Some("gliner") | Some("gliner-ort") => Ok(Self::Gliner),
             Some(other) => Err(NerLoadError::UnsupportedBackend {
                 backend: other.to_string(),
             }),
@@ -78,7 +88,7 @@ impl NerBackendKind {
     fn as_str(self) -> &'static str {
         match self {
             Self::Ort => "ort",
-            Self::Redact => "redact",
+            Self::Gliner => "gliner",
         }
     }
 }
@@ -131,25 +141,22 @@ enum NerRuntimeError {
     Output(String),
 }
 
+/// Driver contract: produce byte-offset detections against a pre-normalized
+/// input string. Each backend owns its own model-specific state (label map,
+/// id2label for BERT, entity-type list for GLiNER, etc.) — the trait stays
+/// shape-agnostic so new backends plug in without changing `NerDetector`.
 trait NerBackend: Send + Sync {
-    fn detect(
-        &self,
-        input: &str,
-        labels: &LabelMap,
-        id2label: &[String],
-        source: &str,
-    ) -> Result<Vec<Detection>, NerRuntimeError>;
+    fn detect(&self, input: &str) -> Result<Vec<Detection>, NerRuntimeError>;
 }
 
-/// NER detector backed by a pinned local model artifact set.
+/// NER detector backed by a pinned local model artifact set. Multiple
+/// `NerDetector` instances with different backends may be stacked in the
+/// same `Pipeline`; span-conflict resolution picks winners across detectors.
 pub struct NerDetector {
     #[allow(dead_code)]
     model_dir: PathBuf,
-    #[allow(dead_code)]
     backend_kind: NerBackendKind,
     locale: Option<String>,
-    labels: LabelMap,
-    id2label: Vec<String>,
     backend: Box<dyn NerBackend>,
 }
 
@@ -234,14 +241,14 @@ impl NerDetector {
 
     pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
         let verified = Self::verify_artifacts(model_dir)?;
-        let backend = load_backend(&verified)?;
+        let backend_kind = verified.backend_kind;
+        let model_dir_path = verified.model_dir.clone();
+        let backend = load_backend(verified)?;
 
         Ok(Self {
-            model_dir: verified.model_dir,
-            backend_kind: verified.backend_kind,
+            model_dir: model_dir_path,
+            backend_kind,
             locale: options.locale,
-            labels: verified.labels,
-            id2label: verified.id2label,
             backend,
         })
     }
@@ -305,8 +312,7 @@ impl NerDetector {
 
 impl Detector for NerDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
-        let source = format!("ner/{}", self.backend_kind.as_str());
-        match self.backend.detect(input, &self.labels, &self.id2label, &source) {
+        match self.backend.detect(input) {
             Ok(detections) => detections,
             Err(err) => {
                 tracing::warn!(backend = self.backend_kind.as_str(), error = %err, "ner: backend detect failed");
@@ -316,13 +322,19 @@ impl Detector for NerDetector {
     }
 }
 
+/// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
+/// label map, `id2label` vocab, and pre-computed source tag. BIO/IOB2 subword
+/// tags are merged via `NerDetector::merge_bio_spans`.
 struct OrtBackend {
     tokenizer: tokenizers::Tokenizer,
     session: Mutex<ort::session::Session>,
+    labels: LabelMap,
+    id2label: Vec<String>,
+    source: String,
 }
 
 impl OrtBackend {
-    fn load(model_dir: &Path) -> Result<Self, NerLoadError> {
+    fn load(model_dir: &Path, labels: LabelMap, id2label: Vec<String>) -> Result<Self, NerLoadError> {
         let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join(TOKENIZER_FILE))
             .map_err(|err| NerLoadError::Tokenizer(err.to_string()))?;
         let session = ort::session::Session::builder()
@@ -332,18 +344,18 @@ impl OrtBackend {
         Ok(Self {
             tokenizer,
             session: Mutex::new(session),
+            labels,
+            id2label,
+            source: format!("ner/{}", NerBackendKind::Ort.as_str()),
         })
     }
 }
 
 impl NerBackend for OrtBackend {
-    fn detect(
-        &self,
-        input: &str,
-        labels: &LabelMap,
-        id2label: &[String],
-        source: &str,
-    ) -> Result<Vec<Detection>, NerRuntimeError> {
+    fn detect(&self, input: &str) -> Result<Vec<Detection>, NerRuntimeError> {
+        let labels = &self.labels;
+        let id2label: &[String] = &self.id2label;
+        let source = self.source.as_str();
         let encoded = self
             .tokenizer
             .encode(input, true)
@@ -425,10 +437,14 @@ impl NerBackend for OrtBackend {
     }
 }
 
-fn load_backend(verified: &VerifiedArtifacts) -> Result<Box<dyn NerBackend>, NerLoadError> {
+fn load_backend(verified: VerifiedArtifacts) -> Result<Box<dyn NerBackend>, NerLoadError> {
     match verified.backend_kind {
-        NerBackendKind::Ort => Ok(Box::new(OrtBackend::load(&verified.model_dir)?)),
-        NerBackendKind::Redact => Err(NerLoadError::UnsupportedBackend {
+        NerBackendKind::Ort => Ok(Box::new(OrtBackend::load(
+            &verified.model_dir,
+            verified.labels,
+            verified.id2label,
+        )?)),
+        NerBackendKind::Gliner => Err(NerLoadError::UnsupportedBackend {
             backend: verified.backend_kind.as_str().to_string(),
         }),
     }
@@ -569,6 +585,42 @@ fn config_to_id2label(
     Ok(out)
 }
 
+/// Test-only helpers for stacking multiple `NerDetector` instances with
+/// in-memory fake backends. Lets pipeline tests verify Layer-1 stackability
+/// without real ONNX artifacts.
+#[cfg(test)]
+pub(crate) mod test_support {
+    use super::*;
+
+    struct FixedBackend {
+        detections: Vec<Detection>,
+    }
+
+    impl NerBackend for FixedBackend {
+        fn detect(&self, _input: &str) -> Result<Vec<Detection>, NerRuntimeError> {
+            Ok(self.detections.clone())
+        }
+    }
+
+    /// Build a `NerDetector` that emits a fixed detection set, bypassing the
+    /// SHA256-pinned artifact contract. For tests only.
+    pub(crate) fn detector_with_detections(
+        source: &str,
+        detections: Vec<Detection>,
+    ) -> NerDetector {
+        let kind = match source {
+            "gliner" => NerBackendKind::Gliner,
+            _ => NerBackendKind::Ort,
+        };
+        NerDetector {
+            model_dir: PathBuf::from("/test/fake"),
+            backend_kind: kind,
+            locale: None,
+            backend: Box::new(FixedBackend { detections }),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -633,20 +685,32 @@ mod tests {
     #[test]
     fn verify_artifacts_honors_explicit_backend_selection() {
         let dir = setup_dir_with_config(
-            br#"{"backend":"redact","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+            br#"{"backend":"gliner","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
         );
         let verified = NerDetector::verify_artifacts(dir.path()).expect("verify");
-        assert_eq!(verified.backend_kind, NerBackendKind::Redact);
+        assert_eq!(verified.backend_kind, NerBackendKind::Gliner);
     }
 
     #[test]
-    fn load_fails_closed_for_unsupported_backend() {
+    fn load_fails_closed_for_gliner_backend_until_impl_lands() {
         let dir = setup_dir_with_config(
-            br#"{"backend":"redact","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+            br#"{"backend":"gliner","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
         );
         let err = NerDetector::load(dir.path()).unwrap_err();
         assert!(
-            matches!(err, NerLoadError::UnsupportedBackend { .. }),
+            matches!(&err, NerLoadError::UnsupportedBackend { backend } if backend == "gliner"),
+            "unexpected: {err:?}"
+        );
+    }
+
+    #[test]
+    fn load_fails_closed_for_unknown_backend() {
+        let dir = setup_dir_with_config(
+            br#"{"backend":"nonesuch","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+        );
+        let err = NerDetector::load(dir.path()).unwrap_err();
+        assert!(
+            matches!(&err, NerLoadError::UnsupportedBackend { backend } if backend == "nonesuch"),
             "unexpected: {err:?}"
         );
     }
