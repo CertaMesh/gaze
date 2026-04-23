@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-rc.2] — 2026-04-23
+
+Same contents as rc.1 — only the release workflow matrix changed
+(x86_64-apple-darwin dropped). rc.1 was tagged but its workflow never
+published a release: the `macos-13` Intel runner pool could not
+allocate a runner for the x86_64 build, leaving the release job blocked
+on an unmet dependency. Markus is on Apple Silicon, so dropping x86_64
+for rc unblocks the adapter retarget immediately; Intel + Linux return
+in a later rc when runner strategy is worked out.
+
 ## [0.3.0-rc.1] — 2026-04-23
 
 First release candidate of the standalone `gaze` CLI. Ships the
@@ -76,5 +86,6 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0-rc.1...HEAD
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0-rc.2...HEAD
+[0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.1
