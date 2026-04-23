@@ -510,4 +510,23 @@ mod tests {
             Err(Error::InvalidSnapshotSignature)
         ));
     }
+
+    #[test]
+    fn tokenize_distinguishes_builtin_and_reserved_custom_class_names() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let custom_email = PiiClass::custom("email");
+
+        let builtin_token = session
+            .tokenize(&PiiClass::Email, "alice@corp.com")
+            .expect("builtin token");
+        let custom_token = session
+            .tokenize(&custom_email, "hello")
+            .expect("custom token");
+
+        assert_eq!(builtin_token, "Email_1");
+        assert_eq!(custom_token, "CustomEmail_1");
+        assert_ne!(builtin_token, custom_token);
+        assert_eq!(session.restore(&builtin_token).as_deref(), Some("alice@corp.com"));
+        assert_eq!(session.restore(&custom_token).as_deref(), Some("hello"));
+    }
 }
