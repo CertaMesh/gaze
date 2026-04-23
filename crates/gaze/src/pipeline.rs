@@ -96,6 +96,14 @@ impl Pipeline {
         builder.build()
     }
 
+    pub fn with_redaction_logger<L>(mut self, logger: L) -> Pipeline
+    where
+        L: RedactionLogger + 'static,
+    {
+        self.redaction_loggers.push(Arc::new(logger));
+        self
+    }
+
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
         match raw {
             RawDocument::Structured(fields) => {
