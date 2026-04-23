@@ -45,7 +45,9 @@ subcommand surface, the wire format, and the failure semantics so the wrapper
 and the binary can be built independently without rework.
 
 Scope: stdin/stdout JSON contract, exit codes, session handling. Policy loading
-has its own spec — see solo todo `#3 policy.toml loader (Phase 0 gate)`.
+has its own spec — see solo todo `#3 policy.toml loader (Phase 0 gate)`. The
+user-facing authoring guide for `policy.toml` lives at
+[`docs/policy.md`](../../policy.md).
 
 ## Binary layout
 
@@ -510,6 +512,9 @@ The stdin/stdout contract, exit codes, and session handling do not change.
 A host integration written against this spec today continues to work
 unmodified after #3 lands — it just starts seeing detections from the full
 detector set rather than just email regex.
+
+See [`docs/policy.md`](../../policy.md) for the schema users author against
+once `--policy` is wired through.
 
 ## Test strategy
 
