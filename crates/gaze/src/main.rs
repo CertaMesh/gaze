@@ -54,37 +54,92 @@ enum Cmd {
 
 /// Structured CLI error. Each variant maps to an exit code; only the variant
 /// name reaches stderr so raw input or plaintext blob entries never leak into
-/// caller logs (see docs/roadmap/v0.3/laravel.md "active stderr sanitization").
+/// caller logs (see docs/roadmap/v0.3/cli.md "Stderr discipline").
 #[derive(Debug)]
 enum CliError {
     StdinParse,
+    EmptyInput,
+    InputTooLarge,
+    InvalidEncoding,
     PolicyConfig,
+    UnknownToken,
+    InvalidSignature,
+    InvalidBlobVersion,
+    #[allow(dead_code)] // Reserved — emitted once solo #4 lands library TTL enforcement.
+    BlobExpired,
     Pipeline,
     Io,
+    #[allow(dead_code)] // Emitted once solo #3 lands policy.toml loader with file-open path.
+    PolicyOpen,
 }
 
 impl CliError {
     fn exit_code(&self) -> u8 {
         match self {
-            Self::StdinParse => 1,
+            Self::StdinParse
+            | Self::EmptyInput
+            | Self::InputTooLarge
+            | Self::InvalidEncoding => 1,
             Self::PolicyConfig => 2,
-            Self::Pipeline => 3,
-            Self::Io => 4,
+            Self::UnknownToken
+            | Self::InvalidSignature
+            | Self::InvalidBlobVersion
+            | Self::BlobExpired
+            | Self::Pipeline => 3,
+            Self::Io | Self::PolicyOpen => 4,
         }
     }
 
     fn variant_name(&self) -> &'static str {
         match self {
             Self::StdinParse => "StdinParse",
+            Self::EmptyInput => "EmptyInput",
+            Self::InputTooLarge => "InputTooLarge",
+            Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig => "PolicyConfig",
+            Self::UnknownToken => "UnknownToken",
+            Self::InvalidSignature => "InvalidSignature",
+            Self::InvalidBlobVersion => "InvalidBlobVersion",
+            Self::BlobExpired => "BlobExpired",
             Self::Pipeline => "Pipeline",
             Self::Io => "Io",
+            Self::PolicyOpen => "PolicyOpen",
         }
+    }
+
+    fn emit_stderr(&self) {
+        eprintln!(
+            r#"{{"error":"{}","exit":{}}}"#,
+            self.variant_name(),
+            self.exit_code()
+        );
     }
 }
 
+/// Install a panic hook that prints a sanitized error line and exits 3.
+/// Without this, a panic in `ort`, `regex`, or any other dep would leak a raw
+/// backtrace to stderr whenever `RUST_BACKTRACE` is set — violating the
+/// stderr discipline in docs/roadmap/v0.3/cli.md §"Stderr discipline".
+fn install_panic_hook() {
+    std::panic::set_hook(Box::new(|_info| {
+        eprintln!(r#"{{"error":"Pipeline","exit":3}}"#);
+    }));
+}
+
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    install_panic_hook();
+
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(_) => {
+            // clap's default handler would dump usage text to stderr before our
+            // sanitizer runs. Route argv errors through the standard stderr line
+            // so the host wrapper can parse a variant even on malformed argv.
+            CliError::PolicyConfig.emit_stderr();
+            return ExitCode::from(CliError::PolicyConfig.exit_code());
+        }
+    };
+
     let result = match cli.cmd {
         Cmd::Clean {
             policy,
@@ -97,12 +152,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            let payload = format!(
-                r#"{{"error":"{}","exit":{}}}"#,
-                err.variant_name(),
-                err.exit_code()
-            );
-            eprintln!("{payload}");
+            err.emit_stderr();
             ExitCode::from(err.exit_code())
         }
     }
