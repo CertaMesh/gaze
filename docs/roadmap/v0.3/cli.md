@@ -125,17 +125,19 @@ policy loader work (solo #3). It is not part of this spec.
 The restore handler runs two sequential passes over the LLM response:
 
 **Pass 1 — Exact-literal alternation from `Session::tokens()`.**
-After `Session::import`, enumerate the live token map via the library API
-(solo #6 tracks exposing this) and build a regex whose alternatives are the
-actual emitted token strings, escaped, sorted longest-first. Scan the LLM
-text with this pattern; every match is an exact literal from the session map
-and gets substring-replaced with the real PII via `session.restore_strict`.
+After `Session::import`, enumerate the live token map via `Session::tokens()`
+and build a regex whose alternatives are the actual emitted token strings,
+escaped, sorted longest-first. Wrapped counter tokens like `<Email_2>` stay
+literal, while bare format-preserving tokens like `email1@example.test` keep
+word-boundary guards. Scan the LLM text with this pattern; every match is an
+exact literal from the session map and gets substring-replaced with the real
+PII via `session.restore_strict`.
 
 ```
-session.tokens()  =  ["Email_2", "Name_1", "email1@example.test"]
-pattern           =  "email1@example\.test|Email_2|Name_1"   (longest-first)
-scan("Hello Name_1, your email1@example.test order is ready")
-                   ^ matches Name_1 and email1@example.test exactly
+session.tokens()  =  ["<Email_2>", "<Name_1>", "email1@example.test"]
+pattern           =  "email1@example\.test|<Email_2>|<Name_1>"   (longest-first)
+scan("Hello <Name_1>, your email1@example.test order is ready")
+                   ^ matches <Name_1> and email1@example.test exactly
 ```
 
 Because matches are literal, Pass 1 **cannot straddle word boundaries**
@@ -144,19 +146,29 @@ the way a class-shape regex can — it physically cannot eat `Name_1` inside
 is not in the session map.
 
 **Pass 2 — Shape-validator on Pass 1's output.**
-Run a shape regex against the text *already restored by Pass 1*:
+Run `gaze::token_shape::contains_token(text)` against the text *already
+restored by Pass 1*. That library-owned matcher is the canonical grammar for
+every token shape Gaze can plausibly emit.
 
-```text
-\b[A-Z][a-zA-Z]+_\d+\b            # built-in classes and PascalCase Custom
-\b[a-z][a-z_]+_\d+\b              # lowercase FormatPreserve shapes
-\bemail\d+@example\.test\b        # format-preserved email
-```
+The matched shape families are:
+
+- Wrapped counter tokens: `<Email_1>`, `<Name_1>`, `<Location_1>`,
+  `<Organization_1>`, `<Custom:order_id_1>`.
+- Bare format-preserving tokens: `name_1`, `location_1`, `organization_1`,
+  `custom:order_id_1`, `email1@example.test`.
+- Wide defense-in-depth branches for wrapped or bare `Class_N`-style shapes
+  beyond the current built-ins, so future classes still fail closed if Pass 2
+  sees them before the CLI learns about them explicitly.
 
 Any remaining match is a token-shaped string that Pass 1 did not resolve —
 by definition, an LLM hallucination the session never emitted. Emit
 `Error::UnknownToken(_)` → exit `3` with `UnknownToken`. This preserves
 `laravel.md:424`'s "flag for human review" signal without requiring the
 scanner to know class names up front.
+
+The exact regex is an implementation detail. The stable contract for v0.3.x is
+that `gaze::token_shape::contains_token` owns the grammar, Pass 2 calls it,
+and a `true` result maps to the CLI's `UnknownToken` failure path.
 
 **Why not map-walk alone?** Map-walk (Pass 1 only) leaves hallucinated
 token shapes untouched; the caller never sees `UnknownToken` and ships

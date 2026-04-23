@@ -22,7 +22,7 @@ fn build_pattern() -> String {
         .join("|");
 
     format!(
-        r"\b(?:{builtin_alt})_\d+\b|\bCustom:[a-z0-9_]*_\d+\b|\b(?:{builtin_lower_alt})_\d+\b|\bcustom:[a-z0-9_]*_\d+\b|\bemail\d+@example\.test\b|\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b",
+        r"<(?:{builtin_alt})_\d+>|<Custom:[a-z0-9_]*_\d+>|\b(?:{builtin_lower_alt})_\d+\b|\bcustom:[a-z0-9_]*_\d+\b|\bemail\d+@example\.test\b|<[A-Z][a-zA-Z]+_\d+>|<[a-z][a-z_]+_\d+>|\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b",
         builtin_alt = builtin_alt,
         builtin_lower_alt = builtin_lower_alt,
     )
@@ -96,8 +96,8 @@ mod tests {
         let builtin = tokenized_for(PiiClass::Email);
         let custom = tokenized_for(PiiClass::custom("email"));
 
-        assert_eq!(builtin, "Email_1");
-        assert_eq!(custom, "Custom:email_1");
+        assert_eq!(builtin, "<Email_1>");
+        assert_eq!(custom, "<Custom:email_1>");
         assert_ne!(builtin, custom);
         assert!(contains_token(&builtin));
         assert!(contains_token(&custom));
@@ -106,36 +106,61 @@ mod tests {
     #[test]
     fn empty_normalized_name_matches_current_shape() {
         let token = tokenized_for(PiiClass::custom("!!!"));
-        assert_eq!(token, "Custom:_1");
+        assert_eq!(token, "<Custom:_1>");
         assert!(contains_token(&token));
     }
 
     #[test]
     fn single_char_custom_name_matches_current_shape() {
         let token = tokenized_for(PiiClass::custom("x"));
-        assert_eq!(token, "Custom:x_1");
+        assert_eq!(token, "<Custom:x_1>");
         assert!(contains_token(&token));
     }
 
     #[test]
     fn custom_token_matches_as_single_span() {
-        let haystack = "before Custom:order_id_1 after";
+        let haystack = "before <Custom:order_id_1> after";
         let matched = pattern().find(haystack).expect("custom token match");
-        assert_eq!(matched.as_str(), "Custom:order_id_1");
+        assert_eq!(matched.as_str(), "<Custom:order_id_1>");
     }
 
     #[test]
     fn contains_bare_shapes_in_prose() {
-        assert!(contains_token("See Email_1."));
-        assert!(contains_token("See Custom:order_id_1."));
+        assert!(contains_token("See <Email_1>."));
+        assert!(contains_token("See <Custom:order_id_1>."));
         assert!(contains_token("Reply to name_1."));
         assert!(contains_token("Email email1@example.test later."));
     }
 
     #[test]
     fn rejects_non_tokens() {
-        assert!(!contains_token("See Email_1bar."));
+        assert!(!contains_token("See <Email_1bar>."));
         assert!(!contains_token("literal email@example.com address"));
-        assert!(!contains_token("Custom:-_1"));
+        assert!(!contains_token("<Custom:-_1>"));
+    }
+
+    #[test]
+    fn wrapped_tokens_match_across_text_contexts() {
+        assert!(contains_token("See <Email_1>."));
+        assert!(contains_token("Plain <Email_1> token"));
+        assert!(contains_token("<<Email_1>>"));
+    }
+
+    #[test]
+    fn restore_wrapped_token_in_prose() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let first = session
+            .tokenize(&PiiClass::Email, "alice@example.com")
+            .expect("first token");
+        let second = session
+            .tokenize(&PiiClass::Email, "bob@example.com")
+            .expect("second token");
+
+        let rendered = format!("See {first}. Reply {second}");
+        let restored = pattern().replace_all(&rendered, |captures: &regex::Captures<'_>| {
+            session.restore_strict(&captures[0]).expect("known token")
+        });
+
+        assert_eq!(restored, "See alice@example.com. Reply bob@example.com");
     }
 }
