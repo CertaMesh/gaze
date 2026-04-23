@@ -98,7 +98,7 @@ action = "preserve"
 }
 
 /// Build a session blob by hand via the library. Used where the stub CLI
-/// pipeline cannot emit the token shape under test (Name_1, lowercase
+/// pipeline cannot emit the token shape under test (`<Name_1>`, lowercase
 /// FormatPreserve, etc.) until solo #3 ships the real policy loader.
 fn build_blob_with<F>(configure: F) -> String
 where
@@ -124,7 +124,7 @@ fn t01_roundtrip_email_tokenized_then_restored() {
 
     assert_eq!(detections, 1, "stub pipeline tokenizes one email");
     assert!(!clean_text.contains("alice@example.com"), "raw email leaked");
-    assert!(clean_text.contains("Email_1"), "expected Email_1 token: {clean_text}");
+    assert!(clean_text.contains("<Email_1>"), "expected <Email_1> token: {clean_text}");
 
     // LLM reply reuses the tokens.
     let llm_reply = clean_text.replace("Contact", "Reply to");
@@ -163,8 +163,8 @@ fn t02_canary_absent_in_clean_reappears_in_restore() {
 #[test]
 fn t03_unknown_token_pascalcase_shape() {
     let (_, blob, _) = clean_ok("Email is alice@example.com please.");
-    // Session has Email_1. LLM invents Email_999.
-    let (code, stdout, stderr) = restore_json(&blob, "Your Email_999 is queued.");
+    // Session has <Email_1>. LLM invents <Email_999>.
+    let (code, stdout, stderr) = restore_json(&blob, "Your <Email_999> is queued.");
     assert_eq!(code, Some(3), "expected exit 3, stdout={} stderr={}",
         String::from_utf8_lossy(&stdout), String::from_utf8_lossy(&stderr));
     assert_eq!(
@@ -200,8 +200,8 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
 #[test]
 fn t05_adjacency_corruption_name_inside_larger_word() {
     // Stub pipeline lacks a Name detector; build the session via the
-    // library so we can prove `\b` boundaries keep Pass 1 from swallowing
-    // `Name_1` inside `hostName_1s-record`.
+    // library so we can prove Pass 1 only restores exact wrapped tokens and
+    // leaves `Name_1` inside `hostName_1s-record` alone.
     let blob = build_blob_with(|s| {
         s.tokenize(&PiiClass::Name, "Alice Smith").unwrap();
     });
@@ -226,7 +226,7 @@ fn t06_tamper_flipped_byte_in_payload_rejected() {
     raw[flip_idx] ^= 0x01;
     let tampered = BASE64.encode(&raw);
 
-    let (code, _, stderr) = restore_json(&tampered, "Hello Email_1.");
+    let (code, _, stderr) = restore_json(&tampered, "Hello <Email_1>.");
     assert_eq!(code, Some(3));
     assert_eq!(
         parse_stderr_variant(&stderr),
@@ -262,7 +262,7 @@ fn t07b_restore_rejects_expired_blob() {
     let (_, blob, _) = clean_ok_with_args(&["--session-ttl=1"], "Email: alice@example.com");
     sleep(Duration::from_secs(2));
 
-    let (code, _, stderr) = restore_json(&blob, "Hello Email_1.");
+    let (code, _, stderr) = restore_json(&blob, "Hello <Email_1>.");
     assert_eq!(code, Some(3));
     assert_eq!(
         parse_stderr_variant(&stderr),
@@ -465,7 +465,60 @@ fn t16_clean_with_policy_tokenizes_email() {
         .unwrap();
     assert!(out.status.success(), "stderr={}", String::from_utf8_lossy(&out.stderr));
     let value: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(value["clean_text"].as_str().unwrap(), "Email Email_1 now");
+    assert_eq!(value["clean_text"].as_str().unwrap(), "Email <Email_1> now");
+}
+
+#[test]
+fn t19_restore_custom_token_round_trip_ok() {
+    let blob = build_blob_with(|s| {
+        s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
+    });
+
+    let (code, stdout, stderr) =
+        restore_json(&blob, "Order <Custom:order_id_1> is shipped.");
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(resp["text"].as_str().unwrap(), "Order 42 is shipped.");
+}
+
+#[test]
+fn t20_restore_custom_hallucination_exits_3() {
+    let blob = build_blob_with(|s| {
+        s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
+    });
+
+    let (code, stdout, stderr) = restore_json(
+        &blob,
+        "Order <Custom:order_id_1> and <Custom:fake_id_99> are shipped.",
+    );
+    assert_eq!(
+        code,
+        Some(3),
+        "expected exit 3, stdout={} stderr={}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr)
+    );
+    assert_eq!(
+        parse_stderr_variant(&stderr),
+        json!({ "error": "UnknownToken", "exit": 3 })
+    );
+}
+
+#[test]
+fn t21_restore_wrapped_token_in_prose() {
+    let blob = build_blob_with(|s| {
+        s.tokenize(&PiiClass::Email, "alice@example.com").unwrap();
+        s.tokenize(&PiiClass::Email, "bob@example.com").unwrap();
+    });
+
+    let (code, stdout, stderr) =
+        restore_json(&blob, "See <Email_1>. Reply <Email_2>");
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(
+        resp["text"].as_str().unwrap(),
+        "See alice@example.com. Reply bob@example.com"
+    );
 }
 
 #[test]

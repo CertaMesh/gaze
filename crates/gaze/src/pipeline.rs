@@ -571,7 +571,7 @@ action = "preserve"
             .unwrap();
 
         match clean {
-            CleanDocument::Text(text) => assert_eq!(text, "Reach Email_1 today"),
+            CleanDocument::Text(text) => assert_eq!(text, "Reach <Email_1> today"),
             other => panic!("expected text output, got {other:?}"),
         }
     }
