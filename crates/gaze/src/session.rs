@@ -114,6 +114,25 @@ impl Session {
         }
     }
 
+    /// Enumerate every live token string emitted by this session.
+    ///
+    /// Intended for restore-side callers that need to build an exact-literal
+    /// alternation regex over the session map (Pass 1 of the two-pass restore
+    /// strategy in `docs/roadmap/v0.3/cli.md`): replacing token-shaped strings
+    /// via a class-shape regex alone is unsafe because it either (a) straddles
+    /// word boundaries into adjacent text, or (b) misses lowercase
+    /// FormatPreserve shapes like `location_1`. Feeding these exact strings
+    /// into `regex::escape` and sorting longest-first avoids both pitfalls.
+    ///
+    /// Returned order is unspecified — callers that rely on longest-first
+    /// matching must sort the returned vector themselves.
+    pub fn tokens(&self) -> Vec<String> {
+        self.value_by_token
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
+
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)
