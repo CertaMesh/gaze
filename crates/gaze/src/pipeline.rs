@@ -27,6 +27,8 @@ pub enum Error {
     InvalidSnapshotVersion(u8),
     #[error("snapshot signature verification failed")]
     InvalidSnapshotSignature,
+    #[error("snapshot expired: issued_at={issued_at}, ttl_secs={ttl_secs}")]
+    BlobExpired { issued_at: u64, ttl_secs: u64 },
     #[error("snapshot decode failed: {0}")]
     SnapshotDecode(#[source] serde_json::Error),
     #[error("sqlite error: {0}")]
