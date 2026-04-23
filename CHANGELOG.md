@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0-rc.3] — 2026-04-23
+
+### Changed
+
+- **Counter-family tokens now wrap in angle brackets.** `<Email_1>`,
+  `<Name_1>`, `<Custom:order_id_1>`. Format-preserving email tokens
+  (`email1@example.test`) stay bare — angle brackets defeat the
+  format-preserving purpose.
+
+### Added
+
+- **`crate::token_shape` module** exposing `pattern()` +
+  `contains_token()`. Centralizes the token grammar the CLI's Pass 2
+  hallucination detector uses. Drift-gate fixture forces compile
+  errors if `PiiClass` grows without grammar updates.
+- **Exhaustive Pass 1 + Pass 2 regex for wrapped tokens.** Pass 1 uses
+  a delimiter-sensitive match (angle brackets serve as explicit
+  delimiters); Pass 2 whitelists via `contains_token()`.
+- **`docs/policy.md`** — user-facing `policy.toml` authoring guide.
+
+### Fixed
+
+- PR #10 follow-up — `Custom:` namespace round-trip + hallucination
+  tests.
+
 ## [0.3.0-rc.2] — 2026-04-23
 
 Same contents as rc.1 — only the release workflow matrix changed
@@ -86,6 +111,7 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0-rc.2...HEAD
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0-rc.3...HEAD
+[0.3.0-rc.3]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.3
 [0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.1
