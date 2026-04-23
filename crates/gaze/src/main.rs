@@ -76,7 +76,6 @@ enum CliError {
     UnknownToken,
     InvalidSignature,
     InvalidBlobVersion,
-    #[allow(dead_code)] // Reserved — emitted once solo #4 lands library TTL enforcement.
     BlobExpired,
     Pipeline,
     Io,
@@ -283,6 +282,7 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
     let session = Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
         gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
         gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
+        gaze::Error::BlobExpired { .. } => CliError::BlobExpired,
         _ => CliError::Pipeline,
     })?;
 
