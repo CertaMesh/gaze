@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 
 use gaze::{
     Action, ClassRule, DefaultRule, DocumentKind, Pipeline, PiiClass, RawDocument,
-    RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult, Scope, Session,
-    SensitiveSnapshot,
+    Policy, PolicyError, RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult,
+    Scope, Session, SensitiveSnapshot,
 };
 
 #[derive(Parser, Debug)]
@@ -79,7 +79,6 @@ enum CliError {
     BlobExpired,
     Pipeline,
     Io,
-    #[allow(dead_code)] // Emitted once solo #3 lands policy.toml loader with file-open path.
     PolicyOpen,
 }
 
@@ -223,7 +222,7 @@ fn require_json_format(format: &str) -> std::result::Result<(), CliError> {
 }
 
 fn run_clean(
-    _policy: Option<&std::path::Path>,
+    policy: Option<&std::path::Path>,
     format: &str,
     session_ttl: u64,
     max_bytes: u64,
@@ -232,8 +231,21 @@ fn run_clean(
     let raw = read_stdin_text(max_bytes)?;
 
     let counter = Arc::new(CountingLogger::default());
-    let pipeline = build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
-        .map_err(|_| CliError::PolicyConfig)?;
+    let pipeline = match policy {
+        Some(path) => {
+            let policy = Policy::load(path).map_err(map_policy_error)?;
+            Pipeline::from_policy(&policy)
+                .map_err(map_pipeline_error)?
+                .with_redaction_logger(ArcLogger(
+                    Arc::clone(&counter) as Arc<dyn RedactionLogger>
+                ))
+        }
+        None => {
+            tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
+            build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
+                .map_err(|_| CliError::PolicyConfig)?
+        }
+    };
 
     let session = Session::new(Scope::Persistent {
         ttl: Duration::from_secs(session_ttl),
@@ -293,6 +305,20 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+fn map_policy_error(err: PolicyError) -> CliError {
+    match err {
+        PolicyError::Io(_) => CliError::PolicyOpen,
+        _ => CliError::PolicyConfig,
+    }
+}
+
+fn map_pipeline_error(err: gaze::Error) -> CliError {
+    match err {
+        gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
+        _ => CliError::Pipeline,
+    }
 }
 
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.

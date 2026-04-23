@@ -4,6 +4,7 @@
 //! in `docs/roadmap/v0.3/cli.md` §"Test strategy". Each test maps 1:1 to a
 //! numbered item in that section.
 
+use std::fs;
 use std::thread::sleep;
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use serde_json::{json, Value};
+use tempfile::tempdir;
 
 use gaze::{PiiClass, Scope, Session};
 
@@ -63,6 +65,36 @@ fn restore_json(session_blob: &str, text: &str) -> (Option<i32>, Vec<u8>, Vec<u8
 
 fn parse_stderr_variant(stderr: &[u8]) -> Value {
     serde_json::from_slice(stderr).expect("stderr is one-line JSON")
+}
+
+fn write_minimal_policy() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    (dir, path)
 }
 
 /// Build a session blob by hand via the library. Used where the stub CLI
@@ -420,4 +452,71 @@ fn t15_stats_detections_excludes_preserve() {
 fn t15b_stats_detections_excludes_preserve_verbatim_spec() {
     let (_, _, detections) = clean_ok("Alice at alice@example.com works at Acme Corp.");
     assert_eq!(detections, 1, "tokenized email counts; preserved Organization does not");
+}
+
+#[test]
+fn t16_clean_with_policy_tokenizes_email() {
+    let (_dir, policy_path) = write_minimal_policy();
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", policy_path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "stderr={}", String::from_utf8_lossy(&out.stderr));
+    let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(value["clean_text"].as_str().unwrap(), "Email Email_1 now");
+}
+
+#[test]
+fn t17_missing_policy_path_emits_policy_open() {
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", "--policy=/definitely/missing/policy.toml"])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(4));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyOpen", "exit": 4 })
+    );
+}
+
+#[test]
+fn t18_malformed_policy_emits_policy_config() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+bogus = true
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
 }
