@@ -153,10 +153,21 @@ fn main() -> ExitCode {
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
-        Err(_) => {
-            // clap's default handler would dump usage text to stderr before our
-            // sanitizer runs. Route argv errors through the standard stderr line
-            // so the host wrapper can parse a variant even on malformed argv.
+        Err(err) => {
+            // --help and --version are surfaced by clap as Err variants whose
+            // intent is "print info to stdout and exit 0"; they are not argv
+            // failures and must bypass the sanitizer so `gaze --version`
+            // prints the crate version cleanly (required by the homebrew test
+            // block).
+            use clap::error::ErrorKind;
+            if matches!(err.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+                let _ = err.print();
+                return ExitCode::SUCCESS;
+            }
+            // Real argv errors: clap's default handler would dump usage text
+            // to stderr before our sanitizer runs. Route them through the
+            // standard stderr line so the host wrapper can parse a variant
+            // even on malformed argv.
             CliError::PolicyConfig.emit_stderr();
             return ExitCode::from(CliError::PolicyConfig.exit_code());
         }
