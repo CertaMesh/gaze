@@ -134,11 +134,23 @@ impl CliError {
 fn install_panic_hook() {
     std::panic::set_hook(Box::new(|_info| {
         eprintln!(r#"{{"error":"Pipeline","exit":3}}"#);
+        // Force exit 3 so the host wrapper sees the documented code instead
+        // of Rust's default 101. The hook runs BEFORE the runtime unwinds,
+        // so `process::exit` here is the only way to guarantee both the
+        // sanitized stderr line AND the contracted exit code.
+        std::process::exit(3);
     }));
 }
 
 fn main() -> ExitCode {
     install_panic_hook();
+
+    // Test-only panic trigger. Lets the integration suite prove the panic
+    // hook sanitizes stderr under `RUST_BACKTRACE=1`. Gated by an env var
+    // so no production invocation can stumble into it.
+    if std::env::var_os("GAZE_TEST_PANIC").is_some() {
+        panic!("gaze test-only panic trigger");
+    }
 
     let cli = match Cli::try_parse() {
         Ok(cli) => cli,
@@ -287,9 +299,11 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
 ///
 /// Sorts tokens longest-first so a format-preserved email like
 /// `email1@example.test` wins over a substring match like `Email_1`. Each
-/// token is `regex::escape`-d, so the alternation cannot straddle
-/// word boundaries into adjacent LLM text. An empty session map is a no-op:
-/// `Regex::new("")` would match everywhere, so we short-circuit.
+/// token is `regex::escape`-d, and the whole alternation is wrapped in `\b`
+/// word boundaries so a token cannot be swallowed inside an adjacent
+/// identifier (the `hostName_1s-record` regression in
+/// `docs/roadmap/v0.3/cli.md` §"Test strategy" #5). Empty session map is a
+/// no-op: `Regex::new("")` would match everywhere, so short-circuit.
 fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, CliError> {
     let mut tokens = session.tokens();
     if tokens.is_empty() {
@@ -297,11 +311,14 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
     }
     tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
 
-    let pattern = tokens
-        .iter()
-        .map(|t| regex::escape(t))
-        .collect::<Vec<_>>()
-        .join("|");
+    let pattern = format!(
+        r"\b(?:{})\b",
+        tokens
+            .iter()
+            .map(|t| regex::escape(t))
+            .collect::<Vec<_>>()
+            .join("|")
+    );
     let re = Regex::new(&pattern).map_err(|_| CliError::Pipeline)?;
 
     let mut out = String::with_capacity(text.len());
