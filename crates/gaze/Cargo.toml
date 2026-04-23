@@ -39,6 +39,7 @@ unicode-normalization = "0.1"
 zeroize = "1"
 
 [dev-dependencies]
+assert_cmd = "2"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 trybuild = "1"
