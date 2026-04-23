@@ -82,9 +82,7 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| {
-            format!("{}_{}", class_name(class), index)
-        })
+        self.intern_mapping(class, raw, |index| format!("{}_{}", class.class_name(), index))
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -92,7 +90,7 @@ impl Session {
             PiiClass::Email => format!("email{index}@example.test"),
             // Lowercasing preserves the dedicated `custom:` sentinel namespace
             // for format-preserving fakes, so restore can detect them too.
-            _ => format!("{}_{}", class_name(class).to_ascii_lowercase(), index),
+            _ => format!("{}_{}", class.class_name().to_ascii_lowercase(), index),
         })
     }
 
@@ -369,16 +367,6 @@ fn advise_dontdump(_ptr: *const u8, _len: usize) {
     }
 }
 
-fn class_name(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "Email".to_string(),
-        PiiClass::Name => "Name".to_string(),
-        PiiClass::Location => "Location".to_string(),
-        PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => format!("Custom:{name}"),
-    }
-}
-
 fn snapshot_scope(scope: &Scope) -> SnapshotScope {
     match scope {
         Scope::Ephemeral => SnapshotScope::Ephemeral,
@@ -524,7 +512,7 @@ mod tests {
                 .tokenize(&custom_class, &custom_value)
                 .expect("custom token");
 
-            assert_eq!(builtin_token, format!("{}_1", class_name(&builtin)));
+            assert_eq!(builtin_token, format!("{}_1", builtin.class_name()));
             assert_eq!(custom_token, format!("Custom:{name}_1"));
             assert_ne!(builtin_token, custom_token);
             assert_eq!(
