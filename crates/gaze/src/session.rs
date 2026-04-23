@@ -217,7 +217,28 @@ impl Session {
 
         let payload: SnapshotPayload =
             serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
-        let session = Self::new(scope_from_snapshot(payload.scope))?;
+        let scope = scope_from_snapshot(payload.scope);
+        let issued_at = payload.issued_at;
+        if let Scope::Persistent { ttl } = &scope {
+            let ttl_secs = ttl.as_secs();
+            if issued_at > 0 {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_secs())
+                    .unwrap_or(0);
+                if issued_at > now.saturating_add(60) {
+                    return Err(Error::InvalidSnapshotSignature);
+                }
+                if now.saturating_sub(issued_at) > ttl_secs {
+                    return Err(Error::BlobExpired {
+                        issued_at,
+                        ttl_secs,
+                    });
+                }
+            }
+        }
+
+        let session = Self::new(scope)?;
         for entry in payload.entries {
             session.token_by_value.insert(
                 TokenKey {
@@ -396,6 +417,21 @@ fn parse_token_index(token: &str) -> Option<usize> {
 mod tests {
     use super::*;
 
+    fn signed_snapshot(payload: SnapshotPayload) -> SensitiveSnapshot {
+        let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
+        let key = SessionKey::generate().expect("session key");
+        let signing_key = key.signing_key();
+        let signature = signing_key.sign(&payload_bytes);
+        let verifying_key = signing_key.verifying_key();
+
+        let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
+        snapshot.push(1);
+        snapshot.extend_from_slice(&verifying_key.to_bytes());
+        snapshot.extend_from_slice(&signature.to_bytes());
+        snapshot.extend_from_slice(&payload_bytes);
+        SensitiveSnapshot::from(snapshot)
+    }
+
     #[test]
     fn session_key_produces_valid_signatures() {
         let key = SessionKey::generate().expect("session key");
@@ -404,5 +440,74 @@ mod tests {
         let signature = signing_key.sign(message);
 
         assert!(signing_key.verifying_key().verify(message, &signature).is_ok());
+    }
+
+    #[test]
+    fn import_accepts_persistent_snapshot_within_ttl() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            entries: Vec::new(),
+            issued_at: now,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_expired_persistent_snapshot() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 10 },
+            entries: Vec::new(),
+            issued_at: now.saturating_sub(11),
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::BlobExpired {
+                issued_at,
+                ttl_secs: 10,
+            }) if issued_at == now.saturating_sub(11)
+        ));
+    }
+
+    #[test]
+    fn import_accepts_legacy_persistent_snapshot_without_issued_at() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 1 },
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_forward_dated_persistent_snapshot() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            entries: Vec::new(),
+            issued_at: now.saturating_add(61),
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotSignature)
+        ));
     }
 }
