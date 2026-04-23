@@ -30,6 +30,17 @@ Pure Rust library for:
 
 v0.3 adds a standalone CLI that consumes the library for LLM pipe-mode integration (Laravel wrapper ships out-of-tree via `gaze/laravel`). See `docs/roadmap/v0.3/cli.md` for the surface and `docs/roadmap/v0.3/laravel.md` for the host integration.
 
+#### CLI Example
+
+```bash
+echo "Email alice@example.com now" | gaze clean --policy=policy.toml
+# {"clean_text":"Email Email_1 now","session_blob":"<base64>","stats":{"detections":1}}
+```
+
+#### Policy Configuration
+
+`gaze clean --policy=<path>` loads a TOML policy that declares detectors, classes, and per-class actions. See [`docs/policy.md`](docs/policy.md) for the full schema reference and worked examples.
+
 #### Library Example
 
 ```rust
