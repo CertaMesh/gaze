@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -56,6 +56,8 @@ enum SnapshotScope {
 struct SnapshotPayload {
     scope: SnapshotScope,
     entries: Vec<SnapshotEntry>,
+    #[serde(default)]
+    issued_at: u64,
     #[serde(default)]
     next_by_class: Vec<(PiiClass, usize)>,
 }
@@ -149,6 +151,13 @@ impl Session {
             return Err(Error::ExportForbidden);
         }
 
+        // If the host clock is before the Unix epoch, preserve compatibility by
+        // exporting `issued_at = 0` rather than failing snapshot export.
+        let issued_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.scope),
             entries: self
@@ -165,6 +174,7 @@ impl Session {
                 .iter()
                 .map(|entry| (entry.key().clone(), *entry.value()))
                 .collect(),
+            issued_at,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let signing_key = self.signing_key.signing_key();
