@@ -30,6 +30,10 @@ struct Cli {
     cmd: Cmd,
 }
 
+/// Default max-bytes cap for stdin. Keeps a runaway or attacker-controlled
+/// upstream from OOM'ing the worker. Override with `--max-bytes`.
+const DEFAULT_MAX_BYTES: u64 = 10 * 1024 * 1024;
+
 #[derive(Subcommand, Debug)]
 enum Cmd {
     /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
@@ -43,12 +47,18 @@ enum Cmd {
         /// Persistent session TTL in seconds. Default 24h — matches typical queue retention.
         #[arg(long, default_value_t = 86_400)]
         session_ttl: u64,
+        /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
+        #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
+        max_bytes: u64,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
         /// Output format. Only `json` is supported today.
         #[arg(long, default_value = "json")]
         format: String,
+        /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
+        #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
+        max_bytes: u64,
     },
 }
 
@@ -145,8 +155,9 @@ fn main() -> ExitCode {
             policy,
             format,
             session_ttl,
-        } => run_clean(policy.as_deref(), &format, session_ttl),
-        Cmd::Restore { format } => run_restore(&format),
+            max_bytes,
+        } => run_clean(policy.as_deref(), &format, session_ttl, max_bytes),
+        Cmd::Restore { format, max_bytes } => run_restore(&format, max_bytes),
     };
 
     match result {
@@ -158,10 +169,37 @@ fn main() -> ExitCode {
     }
 }
 
-fn read_stdin() -> std::result::Result<String, CliError> {
-    let mut buf = String::new();
-    io::stdin().read_to_string(&mut buf).map_err(|_| CliError::Io)?;
+/// Read stdin up to `max_bytes + 1` and return the bytes.
+///
+/// Reading one extra byte past the cap lets us distinguish "input exactly
+/// at the limit" from "input exceeds the limit" without a second probe.
+fn read_stdin_bytes(max_bytes: u64) -> std::result::Result<Vec<u8>, CliError> {
+    let mut buf = Vec::new();
+    let limit = max_bytes.saturating_add(1);
+    io::stdin()
+        .take(limit)
+        .read_to_end(&mut buf)
+        .map_err(|_| CliError::Io)?;
+    if buf.len() as u64 > max_bytes {
+        return Err(CliError::InputTooLarge);
+    }
     Ok(buf)
+}
+
+/// Read stdin as UTF-8 text, enforcing the size cap. Distinguishes:
+///   - 0 bytes              → `EmptyInput`     (exit 1)
+///   - > max_bytes           → `InputTooLarge` (exit 1)
+///   - non-UTF-8             → `InvalidEncoding` (exit 1)
+///   - IO / OS error         → `Io`            (exit 4)
+///
+/// `clean` calls this; `restore` uses the bytes path directly since the
+/// restore stdin is JSON and serde_json does its own UTF-8 validation.
+fn read_stdin_text(max_bytes: u64) -> std::result::Result<String, CliError> {
+    let bytes = read_stdin_bytes(max_bytes)?;
+    if bytes.is_empty() {
+        return Err(CliError::EmptyInput);
+    }
+    String::from_utf8(bytes).map_err(|_| CliError::InvalidEncoding)
 }
 
 fn require_json_format(format: &str) -> std::result::Result<(), CliError> {
@@ -176,9 +214,10 @@ fn run_clean(
     _policy: Option<&std::path::Path>,
     format: &str,
     session_ttl: u64,
+    max_bytes: u64,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
-    let raw = read_stdin()?;
+    let raw = read_stdin_text(max_bytes)?;
 
     let counter = Arc::new(CountingLogger::default());
     let pipeline = build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
@@ -213,10 +252,11 @@ fn run_clean(
     Ok(())
 }
 
-fn run_restore(format: &str) -> std::result::Result<(), CliError> {
+fn run_restore(format: &str, _max_bytes: u64) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     // Restore is implemented in the next step. Keeping the stub error so the
     // scaffold is already wired through the exit-code contract.
+    // `max_bytes` will be consumed when the JSON parser is wired in.
     Err(CliError::Pipeline)
 }
 
