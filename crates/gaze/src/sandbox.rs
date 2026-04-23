@@ -155,7 +155,7 @@ pub enum SandboxError {
 }
 
 fn contains_shell_metachar(input: &str) -> bool {
-    input.chars().any(|ch| matches!(ch, ';' | '|' | '&' | '>' | '<' | '$' | '`'))
+    input.chars().any(|ch| matches!(ch, ';' | '|' | '&' | '$' | '`'))
 }
 
 fn contains_control_chars(input: &str) -> bool {
@@ -175,14 +175,14 @@ mod tests {
             .allow_env("MAIL_FROM");
         let request = UntrustedExecRequest {
             program: PathBuf::from("/usr/local/bin/gaze-hook"),
-            args: vec!["send-email".to_string(), "Email_1".to_string()],
+            args: vec!["send-email".to_string(), "<Email_1>".to_string()],
             env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
             cwd: Some(PathBuf::from("/tmp")),
         };
 
         let validated = request.validate(&policy).expect("validated request");
         assert_eq!(validated.program, PathBuf::from("/usr/local/bin/gaze-hook"));
-        assert_eq!(validated.args[1], "Email_1");
+        assert_eq!(validated.args[1], "<Email_1>");
     }
 
     #[test]

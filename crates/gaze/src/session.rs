@@ -82,7 +82,7 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| format!("{}_{}", class.class_name(), index))
+        self.intern_mapping(class, raw, |index| format!("<{}_{}>", class.class_name(), index))
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -388,7 +388,8 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
 }
 
 fn parse_token_index(token: &str) -> Option<usize> {
-    token.rsplit_once('_')?.1.parse().ok()
+    let suffix = token.rsplit_once('_')?.1.strip_suffix('>').unwrap_or(token.rsplit_once('_')?.1);
+    suffix.parse().ok()
 }
 
 #[cfg(test)]
@@ -512,8 +513,8 @@ mod tests {
                 .tokenize(&custom_class, &custom_value)
                 .expect("custom token");
 
-            assert_eq!(builtin_token, format!("{}_1", builtin.class_name()));
-            assert_eq!(custom_token, format!("Custom:{name}_1"));
+            assert_eq!(builtin_token, format!("<{}_1>", builtin.class_name()));
+            assert_eq!(custom_token, format!("<Custom:{name}_1>"));
             assert_ne!(builtin_token, custom_token);
             assert_eq!(
                 session.restore(&builtin_token).as_deref(),
@@ -539,8 +540,8 @@ mod tests {
             .tokenize(&second_class, "hello")
             .expect("second custom token");
 
-        assert_eq!(first_token, "Custom:email_1");
-        assert_eq!(second_token, "Custom:custom_email_1");
+        assert_eq!(first_token, "<Custom:email_1>");
+        assert_eq!(second_token, "<Custom:custom_email_1>");
         assert_ne!(first_token, second_token);
         assert_eq!(
             session.restore(&first_token).as_deref(),

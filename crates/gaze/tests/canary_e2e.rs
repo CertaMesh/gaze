@@ -38,7 +38,10 @@ fn canary_never_leaks_through_structured_redaction() {
         CleanDocument::Text(_) => panic!("expected structured clean document"),
     };
 
-    assert!(token.starts_with("Email_"), "unexpected token format: {token}");
+    assert!(
+        token.starts_with("<Email_") && token.ends_with('>'),
+        "unexpected token format: {token}"
+    );
     assert_eq!(
         session.restore_strict(&token).expect("restore token"),
         CANARY

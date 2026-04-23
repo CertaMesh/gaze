@@ -337,12 +337,14 @@ fn map_pipeline_error(err: gaze::Error) -> CliError {
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
 ///
 /// Sorts tokens longest-first so a format-preserved email like
-/// `email1@example.test` wins over a substring match like `Email_1`. Each
-/// token is `regex::escape`-d, and the whole alternation is wrapped in `\b`
-/// word boundaries so a token cannot be swallowed inside an adjacent
-/// identifier (the `hostName_1s-record` regression in
-/// `docs/roadmap/v0.3/cli.md` §"Test strategy" #5). Empty session map is a
-/// no-op: `Regex::new("")` would match everywhere, so short-circuit.
+/// `email1@example.test` wins over a substring match like `<Email_1>`. Bare
+/// format-preserving tokens stay wrapped in `\b` word boundaries so a token
+/// cannot be swallowed inside an adjacent identifier (the
+/// `hostName_1s-record` regression in `docs/roadmap/v0.3/cli.md` §"Test
+/// strategy" #5). Wrapped counter tokens intentionally skip `\b`: `<` and
+/// `>` are explicit delimiters, and `\b` would miss `See <Email_1>.` because
+/// it does not fire across non-word characters. Empty session map is a no-op:
+/// `Regex::new("")` would match everywhere, so short-circuit.
 fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, CliError> {
     let mut tokens = session.tokens();
     if tokens.is_empty() {
@@ -350,14 +352,18 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
     }
     tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
 
-    let pattern = format!(
-        r"\b(?:{})\b",
-        tokens
-            .iter()
-            .map(|t| regex::escape(t))
-            .collect::<Vec<_>>()
-            .join("|")
-    );
+    let pattern = tokens
+        .iter()
+        .map(|token| {
+            let escaped = regex::escape(token);
+            if token.starts_with('<') && token.ends_with('>') {
+                escaped
+            } else {
+                format!(r"\b(?:{escaped})\b")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|");
     let re = Regex::new(&pattern).map_err(|_| CliError::Pipeline)?;
 
     let mut out = String::with_capacity(text.len());
@@ -377,15 +383,10 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
 /// Pass 2 — shape-validator over Pass-1 output.
 ///
 /// Any remaining token-shaped substring means the LLM invented a token the
-/// session never emitted → `UnknownToken`. Three shapes cover the library's
-/// output: PascalCase `Class_N`, namespaced `Custom:name_N`, lowercase
-/// `class_n` / `custom:name_n` FormatPreserve, and the format-preserved email
-/// shape. \b word boundaries keep legitimate text like `hostName_1s-record`
-/// from triggering false positives.
+/// session never emitted → `UnknownToken`. The canonical grammar lives in
+/// `gaze::token_shape`, so the CLI no longer re-encodes token shapes locally.
 fn restore_pass2_validate(text: &str) -> std::result::Result<(), CliError> {
-    static PATTERN: &str = r"\bCustom:[a-z][a-z0-9_]*_\d+\b|\bcustom:[a-z][a-z0-9_]*_\d+\b|\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b|\bemail\d+@example\.test\b";
-    let re = Regex::new(PATTERN).map_err(|_| CliError::Pipeline)?;
-    if re.is_match(text) {
+    if gaze::token_shape::contains_token(text) {
         return Err(CliError::UnknownToken);
     }
     Ok(())
