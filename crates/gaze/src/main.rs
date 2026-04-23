@@ -19,13 +19,17 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, DefaultRule, DocumentKind, Pipeline, PiiClass, RawDocument,
-    Policy, PolicyError, RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult,
-    Scope, Session, SensitiveSnapshot,
+    Action, ClassRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy, PolicyError,
+    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult, Scope,
+    SensitiveSnapshot, Session,
 };
 
 #[derive(Parser, Debug)]
-#[command(name = "gaze", version, about = "Channel-agnostic PII redaction for LLM pipes")]
+#[command(
+    name = "gaze",
+    version,
+    about = "Channel-agnostic PII redaction for LLM pipes"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
@@ -85,10 +89,7 @@ enum CliError {
 impl CliError {
     fn exit_code(&self) -> u8 {
         match self {
-            Self::StdinParse
-            | Self::EmptyInput
-            | Self::InputTooLarge
-            | Self::InvalidEncoding => 1,
+            Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
             Self::PolicyConfig => 2,
             Self::UnknownToken
             | Self::InvalidSignature
@@ -291,12 +292,13 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
         .decode(request.session_blob.as_bytes())
         .map_err(|_| CliError::StdinParse)?;
 
-    let session = Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
-        gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
-        gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
-        gaze::Error::BlobExpired { .. } => CliError::BlobExpired,
-        _ => CliError::Pipeline,
-    })?;
+    let session =
+        Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
+            gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
+            gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
+            gaze::Error::BlobExpired { .. } => CliError::BlobExpired,
+            _ => CliError::Pipeline,
+        })?;
 
     let pass1 = restore_pass1(&session, &request.text)?;
     restore_pass2_validate(&pass1)?;
@@ -365,11 +367,12 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
 ///
 /// Any remaining token-shaped substring means the LLM invented a token the
 /// session never emitted → `UnknownToken`. Three shapes cover the library's
-/// output: PascalCase `Class_N`, lowercase `class_n` FormatPreserve, and the
-/// format-preserved email shape. \b word boundaries keep legitimate text like
-/// `hostName_1s-record` from triggering false positives.
+/// output: PascalCase `Class_N`, namespaced `Custom:name_N`, lowercase
+/// `class_n` / `custom:name_n` FormatPreserve, and the format-preserved email
+/// shape. \b word boundaries keep legitimate text like `hostName_1s-record`
+/// from triggering false positives.
 fn restore_pass2_validate(text: &str) -> std::result::Result<(), CliError> {
-    static PATTERN: &str = r"\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b|\bemail\d+@example\.test\b";
+    static PATTERN: &str = r"\bCustom:[a-z][a-z0-9_]*_\d+\b|\bcustom:[a-z][a-z0-9_]*_\d+\b|\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b|\bemail\d+@example\.test\b";
     let re = Regex::new(PATTERN).map_err(|_| CliError::Pipeline)?;
     if re.is_match(text) {
         return Err(CliError::UnknownToken);
