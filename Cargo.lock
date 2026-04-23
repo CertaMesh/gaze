@@ -689,7 +689,7 @@ dependencies = [
 
 [[package]]
 name = "debug-proxy"
-version = "0.3.0-rc.2"
+version = "0.3.0-rc.3"
 dependencies = [
  "async-trait",
  "clap",
@@ -1084,7 +1084,7 @@ dependencies = [
 
 [[package]]
 name = "gaze"
-version = "0.3.0-rc.2"
+version = "0.3.0-rc.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
