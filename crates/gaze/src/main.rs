@@ -234,7 +234,11 @@ fn run_clean(
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
-        gaze::CleanDocument::Structured(_) => return Err(CliError::Pipeline),
+        gaze::CleanDocument::Structured(_) => {
+            unreachable!(
+                "clean submits only RawDocument::Text; library cannot produce Structured output from Text input"
+            )
+        }
     };
 
     let snapshot: SensitiveSnapshot = session.export().map_err(|_| CliError::Pipeline)?;
@@ -279,7 +283,10 @@ struct CountingLogger {
 
 impl RedactionLogger for CountingLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
-        if !entry.conflict_loser && entry.document_kind == DocumentKind::Text {
+        if !entry.conflict_loser
+            && entry.document_kind == DocumentKind::Text
+            && entry.action != gaze::Action::Preserve
+        {
             self.detections.fetch_add(1, Ordering::Relaxed);
         }
         Ok(())
