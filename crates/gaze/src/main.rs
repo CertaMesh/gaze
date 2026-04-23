@@ -15,7 +15,8 @@ use std::time::Duration;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use clap::{Parser, Subcommand};
-use serde::Serialize;
+use regex::Regex;
+use serde::{Deserialize, Serialize};
 
 use gaze::{
     Action, ClassRule, DefaultRule, DocumentKind, Pipeline, PiiClass, RawDocument,
@@ -256,12 +257,92 @@ fn run_clean(
     Ok(())
 }
 
-fn run_restore(format: &str, _max_bytes: u64) -> std::result::Result<(), CliError> {
+fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
-    // Restore is implemented in the next step. Keeping the stub error so the
-    // scaffold is already wired through the exit-code contract.
-    // `max_bytes` will be consumed when the JSON parser is wired in.
-    Err(CliError::Pipeline)
+    let stdin_bytes = read_stdin_bytes(max_bytes)?;
+
+    let request: RestoreRequest =
+        serde_json::from_slice(&stdin_bytes).map_err(|_| CliError::StdinParse)?;
+
+    let blob_bytes = BASE64
+        .decode(request.session_blob.as_bytes())
+        .map_err(|_| CliError::StdinParse)?;
+
+    let session = Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
+        gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
+        gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
+        _ => CliError::Pipeline,
+    })?;
+
+    let pass1 = restore_pass1(&session, &request.text)?;
+    restore_pass2_validate(&pass1)?;
+
+    let response = RestoreResponse { text: pass1 };
+    let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
+    println!("{json}");
+    Ok(())
+}
+
+/// Pass 1 — exact-literal alternation built from `session.tokens()`.
+///
+/// Sorts tokens longest-first so a format-preserved email like
+/// `email1@example.test` wins over a substring match like `Email_1`. Each
+/// token is `regex::escape`-d, so the alternation cannot straddle
+/// word boundaries into adjacent LLM text. An empty session map is a no-op:
+/// `Regex::new("")` would match everywhere, so we short-circuit.
+fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, CliError> {
+    let mut tokens = session.tokens();
+    if tokens.is_empty() {
+        return Ok(text.to_string());
+    }
+    tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+
+    let pattern = tokens
+        .iter()
+        .map(|t| regex::escape(t))
+        .collect::<Vec<_>>()
+        .join("|");
+    let re = Regex::new(&pattern).map_err(|_| CliError::Pipeline)?;
+
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0usize;
+    for m in re.find_iter(text) {
+        out.push_str(&text[last..m.start()]);
+        let real = session
+            .restore_strict(m.as_str())
+            .map_err(|_| CliError::Pipeline)?;
+        out.push_str(&real);
+        last = m.end();
+    }
+    out.push_str(&text[last..]);
+    Ok(out)
+}
+
+/// Pass 2 — shape-validator over Pass-1 output.
+///
+/// Any remaining token-shaped substring means the LLM invented a token the
+/// session never emitted → `UnknownToken`. Three shapes cover the library's
+/// output: PascalCase `Class_N`, lowercase `class_n` FormatPreserve, and the
+/// format-preserved email shape. \b word boundaries keep legitimate text like
+/// `hostName_1s-record` from triggering false positives.
+fn restore_pass2_validate(text: &str) -> std::result::Result<(), CliError> {
+    static PATTERN: &str = r"\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b|\bemail\d+@example\.test\b";
+    let re = Regex::new(PATTERN).map_err(|_| CliError::Pipeline)?;
+    if re.is_match(text) {
+        return Err(CliError::UnknownToken);
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct RestoreRequest {
+    session_blob: String,
+    text: String,
+}
+
+#[derive(Serialize)]
+struct RestoreResponse {
+    text: String,
 }
 
 /// Stub pipeline used until the policy.toml loader (solo #3) lands.
