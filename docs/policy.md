@@ -214,20 +214,21 @@ The `<name>` after `custom:` is normalised before use:
 So `"custom:Order ID"`, `"custom:order-id"`, and `"custom:order_id"` all
 produce the same internal class.
 
-The emitted token PascalCases the normalised name segment-by-segment:
+Custom tokens carry a `Custom:` namespace prefix so they cannot collide with
+built-ins or with each other:
 
-| Policy `class`           | Normalised name | `tokenize` token | `format_preserve` token | `generalize` token |
-|--------------------------|-----------------|------------------|-------------------------|--------------------|
-| `"custom:order_id"`      | `order_id`      | `OrderId_1`      | `orderid_1`             | `[ORDERID]`        |
-| `"custom:tenant_slug"`   | `tenant_slug`   | `TenantSlug_1`   | `tenantslug_1`          | `[TENANTSLUG]`     |
-| `"custom:song"`          | `song`          | `Song_1`         | `song_1`                | `[SONG]`           |
+| Policy `class`           | Normalised name | `tokenize` token       | `format_preserve` token | `generalize` token |
+|--------------------------|-----------------|------------------------|-------------------------|--------------------|
+| `"custom:order_id"`      | `order_id`      | `Custom:order_id_1`    | `custom:order_id_1`     | `[ORDER_ID]`       |
+| `"custom:tenant_slug"`   | `tenant_slug`   | `Custom:tenant_slug_1` | `custom:tenant_slug_1`  | `[TENANT_SLUG]`    |
+| `"custom:song"`          | `song`          | `Custom:song_1`        | `custom:song_1`         | `[SONG]`           |
 
 A class string of `"custom:"` (empty name) is rejected with `PolicyConfig`.
 
-> **Avoid `custom:email`** — and any other custom name that collides with a
-> built-in. Both will produce `Email_N` tokens, which can confuse the restore
-> shape-validator (see `docs/roadmap/v0.3/cli.md` "Known pre-release gaps",
-> tracked under solo #5).
+`custom:email` and other names that mirror built-ins are safe to use — the
+`Custom:` prefix keeps them in their own counter family, so `custom:email`
+emits `Custom:email_1` while built-in email detections continue to emit
+`Email_1`.
 
 ## Detectors
 
@@ -271,10 +272,10 @@ then act on the classes the model produces.
 
 | `action` value      | What it does                                                                                                       |
 |---------------------|--------------------------------------------------------------------------------------------------------------------|
-| `"tokenize"`        | Replace the matched span with a counter-family token (`Email_1`, `Name_2`, `OrderId_3`, …). Restorable via the session blob. |
+| `"tokenize"`        | Replace the matched span with a counter-family token (`Email_1`, `Name_2`, `Custom:order_id_3`, …). Restorable via the session blob. |
 | `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
-| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1@example.test` for emails; `name_1`, `location_1`, `orderid_1` for everything else). Restorable. |
-| `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOMNAME]`. Restoration returns the label, not the original value. |
+| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1@example.test` for emails; `name_1`, `location_1`, `custom:order_id_1` for everything else). Restorable. |
+| `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
 | `"preserve"`        | Leave the matched span unchanged. The detection is still logged, but no replacement happens. |
 
 `Tokenize`, `FormatPreserve`, `Redact`, and `Generalize` all increment the
@@ -368,7 +369,7 @@ kind = "default"
 action = "preserve"
 ```
 
-`Order ORD-123456 is queued.` → `Order OrderId_1 is queued.`
+`Order ORD-123456 is queued.` → `Order Custom:order_id_1 is queued.`
 
 ### Example C — Format-preserving emails for downstream parsers
 
