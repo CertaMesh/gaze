@@ -98,18 +98,27 @@ policy loader work (solo #3). It is not part of this spec.
   substring-replacing — would leave hallucinated shapes in the output and
   violate the fail-closed rule at `laravel.md:429`.
 
-## Exit codes
+## Exit codes and stderr variants
 
-| Code | Variant          | Meaning                                                                 |
-|------|------------------|-------------------------------------------------------------------------|
-| 0    | —                | Success; stdout holds the JSON response.                                |
-| 1    | `StdinParse`     | Stdin was not valid JSON (restore) or not readable UTF-8 (clean).       |
-| 2    | `PolicyConfig`   | `--policy` missing, unparseable, or `--format` is not `json`.           |
-| 3    | `Pipeline`       | Redaction or restore failure: `UnknownToken`, `InvalidSnapshotSignature`, `InvalidSnapshotVersion`, `ExportForbidden`, `NerLoad`, etc. |
-| 4    | `Io`             | Filesystem or stream IO error (stdin read, stdout write, policy open).  |
+Exit codes stay coarse (five buckets); the `error` field on stderr carries the
+finer-grained diagnostic the Laravel failure matrix (`laravel.md:420`) needs
+to decide between retry, re-clean, and flag-for-human-review.
 
-Codes are stable for v0.3.x. New error classes either slot into an existing
-code or, if they need a new code, wait for v0.4.
+| Code | Variant             | Trigger                                                                 | Caller action                                     |
+|------|---------------------|-------------------------------------------------------------------------|---------------------------------------------------|
+| 0    | —                   | Success; stdout holds the JSON response.                                | proceed                                           |
+| 1    | `StdinParse`        | Restore stdin is not valid JSON.                                        | caller bug, fix upstream                          |
+| 1    | `EmptyInput`        | `clean` stdin was zero bytes.                                           | caller bug, do not retry                          |
+| 2    | `PolicyConfig`      | `--policy` missing / unparseable, or `--format` is not `json`.          | ops / config fix                                  |
+| 3    | `UnknownToken`      | Restore saw a token-shaped string not in the session map.               | draft corruption — flag for human review, do **not** retry |
+| 3    | `InvalidSignature`  | Snapshot signature or version rejected (maps `InvalidSnapshotSignature` + `InvalidSnapshotVersion`). | tamper or cross-version — hard fail               |
+| 3    | `BlobExpired`       | Session TTL elapsed before restore. *(Reserved — library does not emit this in v0.3.0; see `laravel.md:425`.)* | re-run `clean` from scratch on original input     |
+| 3    | `Pipeline`          | Any other library error during redaction or restore (`ExportForbidden`, `NerLoad`, `SnapshotDecode`, `InvalidRegex`, `Sqlite`). | retry with backoff, then alert                    |
+| 4    | `Io`                | Stream IO or filesystem error (unreadable / non-UTF-8 stdin on `clean`, stdout write failure, policy open). | infra — alert                                     |
+
+Exit codes are stable for v0.3.x. Stderr variants may be added (e.g.
+`BlobExpired` when the library starts enforcing TTL) but never renamed
+within a minor version.
 
 ### Stderr discipline (active sanitization)
 
@@ -118,18 +127,29 @@ stderr. Gaze CLI commits to this by emitting **only** a single-line JSON
 object on failure:
 
 ```json
-{"error":"Pipeline","exit":3}
+{"error":"UnknownToken","exit":3}
 ```
 
 No raw input, no decoded blob entries, no panic backtraces, no error `Display`
-strings. The variant name is enough for an operator to triage; if they need
-more, they correlate against the optional `RedactionLogger`'s audit log. This
-is deliberately stricter than a typical CLI would be — the payoff is that a
-Laravel wrapper forwarding stderr into `failed_jobs.exception` or a Sentry
-breadcrumb cannot accidentally leak PII.
+strings. The variant name is safe to forward — the set of variants above is
+closed, all values are Gaze-generated ASCII identifiers, never user PII. An
+operator who needs more than the variant correlates against the optional
+`RedactionLogger`'s audit log.
+
+This is deliberately stricter than a typical CLI would be — the payoff is
+that a Laravel wrapper forwarding stderr into `failed_jobs.exception` or a
+Sentry breadcrumb cannot accidentally leak PII.
 
 The Laravel wrapper adds a second layer: it sha256s stderr and logs the hash
 only. These two defenses are independent.
+
+### Exit 0 silence
+
+On success the CLI writes exactly one JSON object to stdout followed by a
+single `\n`, and nothing to stderr. No "processing…" logs, no timing traces,
+no warning lines. A Laravel wrapper that captures stderr and logs it when
+the exit code is non-zero is therefore safe: a successful call produces a
+blank stderr string, not a stderr string it has to filter.
 
 ## Session handling
 
@@ -159,7 +179,55 @@ snapshot layout is:
 
 Forward-compat: the version byte lets us evolve the payload schema without
 breaking old blobs. A blob with a version the current binary does not
-understand exits `3` with `Pipeline` (wrapping `InvalidSnapshotVersion`).
+understand exits `3` with `InvalidSignature` (mapped from
+`InvalidSnapshotVersion`).
+
+## Edge cases
+
+- **Empty stdin on `clean`** → exit 1 (`EmptyInput`). Zero-byte input is
+  treated as a caller bug: a Laravel wrapper should never dispatch a job
+  without content. Accepting empty input and emitting an empty-session blob
+  would just paper over that bug on the Gaze side.
+- **Non-UTF-8 stdin on `clean`** → exit 4 (`Io`). `read_to_string` collapses
+  the decode failure into an IO error and the bin does not split the two
+  paths today; the extra byte-level reader is not worth the surface for a
+  failure that only happens when the caller bypasses their own encoding
+  layer.
+- **Empty `text` in `restore` stdin** → success, returns `{ "text": "" }`.
+- **Empty `session_blob` in `restore` stdin** → exit 3 (`InvalidSignature`);
+  the library rejects any payload shorter than the 97-byte version +
+  key + signature header.
+- **No detections on `clean`** → success. `clean_text` equals the input,
+  `session_blob` encodes a valid but empty session map (still signed), and
+  `stats.detections` is `0`.
+
+## `stats` field stability
+
+The `stats` object in `gaze clean`'s response is a forward-compatible
+namespace. The v0.3.x contract:
+
+- Keys present in v0.3.0 (`detections`) stay in every subsequent v0.3.x
+  release with the same type and the same semantics.
+- New keys may be added. Parsers MUST ignore unknown keys.
+- No key is renamed or removed within a minor version.
+
+Consumers that want to lock specific field shapes should pin the keys they
+depend on explicitly and tolerate extras.
+
+## Timeouts
+
+Gaze CLI has no built-in timeout. The handler reads all of stdin eagerly,
+runs the pipeline synchronously, and writes the response before exit.
+
+Callers that need bounded wall-clock time wrap the subprocess in their own
+timeout (Laravel's `Process::timeout(30)` at `laravel.md:96` is the canonical
+example). The CLI installs no signal handlers and does not self-kill —
+`SIGTERM` / `SIGKILL` from the supervisor is the correct termination path.
+
+Rationale: the CLI does one thing; deadline enforcement belongs to whoever
+owns the job queue and knows the SLA. Stacking an internal deadline on top
+of `Process::timeout` would mean two competing clocks with no guarantee
+about which fires first.
 
 ## Pipeline wiring today vs. after #3
 
@@ -192,12 +260,17 @@ via `assert_cmd`. The suite covers:
    it is absent from `clean_text`, then assert it reappears in the `restore`
    output. Mirrors the test strategy at `laravel.md:433`.
 3. **UnknownToken.** Hand `restore` an LLM reply containing `Email_999` that
-   was never in the session. Assert exit code `3` and stderr JSON
-   `{"error":"Pipeline","exit":3}`.
+   was never in the session. Assert exit `3` and stderr JSON
+   `{"error":"UnknownToken","exit":3}`.
 4. **Tamper.** Flip a byte inside the base64-decoded blob before re-encoding
-   and calling `restore`. Assert exit code `3` (maps from
-   `InvalidSnapshotSignature`).
-5. **Format rejection.** `--format=xml` exits `2`.
+   and calling `restore`. Assert exit `3` and stderr JSON
+   `{"error":"InvalidSignature","exit":3}`.
+5. **Format rejection.** `--format=xml` exits `2` with
+   `{"error":"PolicyConfig","exit":2}`.
+6. **Empty-stdin on clean.** Zero-byte stdin exits `1` with
+   `{"error":"EmptyInput","exit":1}`.
+7. **Silence on success.** Assert stderr is empty on every successful
+   invocation across the suite.
 
 No unit tests on the CLI module itself — the bin is thin glue over library
 calls, and the library has its own unit tests. Integration tests are the
@@ -224,3 +297,9 @@ load-bearing layer for the pipe contract.
 | 2026-04-23 | Regex scanner for restore (not map-walk)                    | Map-walk cannot surface `UnknownToken` — fail-closed contract needs it.   |
 | 2026-04-23 | Stderr = `{"error":"Variant","exit":N}` only, one line      | Active sanitization per `laravel.md:165`; second layer on wrapper side.   |
 | 2026-04-23 | Policy loader split to solo #3, runs in parallel            | Lets CLI surface + tests land without blocking on file-format bikeshed.   |
+| 2026-04-23 | Expanded stderr variants, exit codes stay coarse (option 1a) | Laravel's failure matrix needs `UnknownToken` ≠ `InvalidSignature`; variant names are Gaze-generated, safe to emit. |
+| 2026-04-23 | Empty stdin on `clean` → exit 1 `EmptyInput`                | Zero-byte input is a caller bug; accepting it would paper over upstream failure. |
+| 2026-04-23 | No built-in timeout                                         | Caller owns the deadline (`Process::timeout`); two clocks is worse than one. |
+| 2026-04-23 | `stats` is forward-compatible: keys stable, new keys may be added | Standard JSON-evolution rule; parsers must tolerate unknown keys. |
+| 2026-04-23 | Exit 0 guarantees empty stderr                              | Laravel can trust "non-zero ⇒ log stderr" without filtering a success banner. |
+| 2026-04-23 | Windows not a target for v0.3                               | Library uses `libc::mlock`/`madvise` for key protection; a Windows path is out of scope. |
