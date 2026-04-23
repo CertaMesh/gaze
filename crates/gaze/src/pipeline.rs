@@ -8,10 +8,12 @@ use thiserror::Error;
 use crate::detector::{Detection, Detector};
 use crate::ner::{NerDetector, NerOptions};
 use crate::normalize::normalize;
+use crate::policy::{DetectorKind, Policy, PolicyError, RuleSpec};
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Context, Rule};
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
+use crate::{ClassRule, ColumnRule, DefaultRule, RegexDetector};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -35,6 +37,8 @@ pub enum Error {
     Sqlite(String),
     #[error("ner load error: {0}")]
     NerLoad(#[source] crate::ner::NerLoadError),
+    #[error("policy error: {0}")]
+    Policy(#[from] PolicyError),
 }
 
 #[derive(Clone)]
@@ -47,6 +51,49 @@ pub struct Pipeline {
 impl Pipeline {
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
+    }
+
+    pub fn from_policy(policy: &Policy) -> Result<Pipeline> {
+        let mut builder = Pipeline::builder();
+
+        for detector in &policy.detectors {
+            builder = match &detector.kind {
+                DetectorKind::Regex => builder.detector(RegexDetector::with_source(
+                    &detector.pattern,
+                    detector.class.clone(),
+                    &detector.name,
+                )?),
+                DetectorKind::Unknown(kind) => {
+                    return Err(PolicyError::BadTtl(format!(
+                        "unknown detector.kind '{kind}'"
+                    ))
+                    .into())
+                }
+            };
+        }
+
+        for rule in &policy.rules {
+            builder = match rule {
+                RuleSpec::Class { class, action } => {
+                    builder.rule(ClassRule::new(class.clone(), *action))
+                }
+                RuleSpec::Column { column, action } => {
+                    builder.rule(ColumnRule::new(column, *action))
+                }
+                RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
+            };
+        }
+
+        if let Some(ner) = &policy.ner {
+            if ner.model_dir.is_some() {
+                builder = builder.with_ner_config(NerConfig {
+                    model_dir: ner.model_dir.clone(),
+                    locale: ner.locale.clone(),
+                })?;
+            }
+        }
+
+        builder.build()
     }
 
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
@@ -353,12 +400,14 @@ fn build_context(field_name: Option<&str>) -> Context {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use super::*;
     use crate::detector::{Detection, PiiClass};
     use crate::ner::test_support::detector_with_detections;
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
     use std::sync::Mutex;
+    use tempfile::tempdir;
 
     /// Shared-handle test double: callers keep an `Arc<Mutex<Vec<_>>>` and
     /// clone it into the logger, letting the builder take ownership while
@@ -471,5 +520,51 @@ mod tests {
         let entries = entries.lock().unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries.iter().all(|e| !e.conflict_loser));
+    }
+
+    #[test]
+    fn pipeline_builds_from_policy_and_detects_email() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        fs::write(
+            &path,
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+        )
+        .unwrap();
+
+        let policy = Policy::load(&path).unwrap();
+        let pipeline = Pipeline::from_policy(&policy).unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+
+        let clean = pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Reach alice@example.com today".to_string()),
+            )
+            .unwrap();
+
+        match clean {
+            CleanDocument::Text(text) => assert_eq!(text, "Reach Email_1 today"),
+            other => panic!("expected text output, got {other:?}"),
+        }
     }
 }
