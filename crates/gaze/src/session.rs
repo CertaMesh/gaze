@@ -82,12 +82,16 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| format!("{}_{}", class_name(class), index))
+        self.intern_mapping(class, raw, |index| {
+            format!("{}_{}", class_name(class), index)
+        })
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(class, raw, |index| match class {
             PiiClass::Email => format!("email{index}@example.test"),
+            // Lowercasing preserves the dedicated `custom:` sentinel namespace
+            // for format-preserving fakes, so restore can detect them too.
             _ => format!("{}_{}", class_name(class).to_ascii_lowercase(), index),
         })
     }
@@ -143,7 +147,9 @@ impl Session {
     }
 
     pub fn restore(&self, token: &str) -> Option<String> {
-        self.value_by_token.get(token).map(|value| value.value().clone())
+        self.value_by_token
+            .get(token)
+            .map(|value| value.value().clone())
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
@@ -247,7 +253,9 @@ impl Session {
                 },
                 entry.token.clone(),
             );
-            session.value_by_token.insert(entry.token.clone(), entry.raw);
+            session
+                .value_by_token
+                .insert(entry.token.clone(), entry.raw);
             if let Some(index) = parse_token_index(&entry.token) {
                 let mut next = session.next_by_class.entry(entry.class).or_insert(0);
                 if *next < index {
@@ -367,25 +375,7 @@ fn class_name(class: &PiiClass) -> String {
         PiiClass::Name => "Name".to_string(),
         PiiClass::Location => "Location".to_string(),
         PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => custom_class_name(name),
-    }
-}
-
-fn custom_class_name(name: &str) -> String {
-    let mut out = String::new();
-    for segment in name.split('_').filter(|segment| !segment.is_empty()) {
-        let mut chars = segment.chars();
-        if let Some(first) = chars.next() {
-            out.push(first.to_ascii_uppercase());
-            for ch in chars {
-                out.push(ch.to_ascii_lowercase());
-            }
-        }
-    }
-    if out.is_empty() {
-        "Custom".to_string()
-    } else {
-        out
+        PiiClass::Custom(name) => format!("Custom:{name}"),
     }
 }
 
@@ -439,7 +429,10 @@ mod tests {
         let message = b"gaze";
         let signature = signing_key.sign(message);
 
-        assert!(signing_key.verifying_key().verify(message, &signature).is_ok());
+        assert!(signing_key
+            .verifying_key()
+            .verify(message, &signature)
+            .is_ok());
     }
 
     #[test]
@@ -512,21 +505,59 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_distinguishes_builtin_and_reserved_custom_class_names() {
+    fn tokenize_distinguishes_builtin_and_custom_class_names() {
         let session = Session::new(Scope::Ephemeral).expect("session");
-        let custom_email = PiiClass::custom("email");
+        for (builtin, name) in [
+            (PiiClass::Email, "email"),
+            (PiiClass::Name, "name"),
+            (PiiClass::Location, "location"),
+            (PiiClass::Organization, "organization"),
+        ] {
+            let builtin_value = format!("{name}-builtin");
+            let custom_value = format!("{name}-custom");
 
-        let builtin_token = session
-            .tokenize(&PiiClass::Email, "alice@corp.com")
-            .expect("builtin token");
-        let custom_token = session
-            .tokenize(&custom_email, "hello")
-            .expect("custom token");
+            let builtin_token = session
+                .tokenize(&builtin, &builtin_value)
+                .expect("builtin token");
+            let custom_class = PiiClass::custom(name);
+            let custom_token = session
+                .tokenize(&custom_class, &custom_value)
+                .expect("custom token");
 
-        assert_eq!(builtin_token, "Email_1");
-        assert_eq!(custom_token, "CustomEmail_1");
-        assert_ne!(builtin_token, custom_token);
-        assert_eq!(session.restore(&builtin_token).as_deref(), Some("alice@corp.com"));
-        assert_eq!(session.restore(&custom_token).as_deref(), Some("hello"));
+            assert_eq!(builtin_token, format!("{}_1", class_name(&builtin)));
+            assert_eq!(custom_token, format!("Custom:{name}_1"));
+            assert_ne!(builtin_token, custom_token);
+            assert_eq!(
+                session.restore(&builtin_token).as_deref(),
+                Some(builtin_value.as_str())
+            );
+            assert_eq!(
+                session.restore(&custom_token).as_deref(),
+                Some(custom_value.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn tokenize_distinguishes_custom_classes_with_matching_pascal_case() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let first_class = PiiClass::custom("email");
+        let second_class = PiiClass::custom("custom_email");
+
+        let first_token = session
+            .tokenize(&first_class, "alice@corp.com")
+            .expect("first custom token");
+        let second_token = session
+            .tokenize(&second_class, "hello")
+            .expect("second custom token");
+
+        assert_eq!(first_token, "Custom:email_1");
+        assert_eq!(second_token, "Custom:custom_email_1");
+        assert_ne!(first_token, second_token);
+        assert_eq!(
+            session.restore(&first_token).as_deref(),
+            Some("alice@corp.com")
+        );
+        assert_eq!(session.restore(&second_token).as_deref(), Some("hello"));
     }
 }
