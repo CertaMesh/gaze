@@ -17,9 +17,6 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: gaze-aarch64-apple-darwin
-          - os: macos-13
-            target: x86_64-apple-darwin
-            artifact: gaze-x86_64-apple-darwin
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
