@@ -26,13 +26,18 @@ Everything else — databases, logs, MCP protocol, CLI, TOML config — is a con
 
 ## Goal
 
-Restructure Gaze into a workspace with three crates:
+Restructure Gaze into a workspace with **two crates** for v0.2:
 
 1. **`crates/gaze`** — channel-agnostic redaction engine. Pure library. No I/O, no protocol knowledge.
 2. **`crates/debug-proxy`** — MCP server for AI agents debugging production MySQL + Laravel logs. Consumer of gaze core.
-3. **`crates/ghostwriter`** — deterministic text sanitization + restoration for LLM conversations. Consumer of gaze core.
 
-Current `src/` is moved to `old/src/` as read-only reference. All three crates are built fresh with clean APIs. `old/` is deleted once migration is complete and tests pass.
+**`crates/ghostwriter`** stays where it is and migrates its internals to consume `gaze` core, but the binary/CLI surface is preserved. A third crate split happens in v0.3 when pipe-mode arrives — at that point we have three proven consumer patterns to factor. Splitting earlier is architecture astronautics.
+
+Current `src/` is deleted in a clean-room rewrite. A `v0.1-final` git tag preserves the reference point; `git show v0.1-final:src/foo.rs` provides on-demand lookup. No in-tree `old/` — it invites copy-paste porting and re-inheriting v0.1's coupled architecture.
+
+## Threat Model
+
+See `docs/research/gaze-threat-model.md`. Core design decisions below reference adversary IDs (A1 curious LLM provider, A2 malicious agent, A3 on-path/at-rest, A4 supply chain, A5 prompt injection into detection).
 
 ## Non-Goals
 
@@ -51,29 +56,29 @@ Current `src/` is moved to `old/src/` as read-only reference. All three crates a
 ### Workspace Layout
 
 ```
-Cargo.toml              (workspace root)
-old/
-  src/                   read-only reference (current v0.1 code)
-  tests/                 read-only reference (current v0.1 tests)
+Cargo.toml              (workspace root — src/ deleted, v0.1-final tag preserves history)
 crates/
   gaze/                  core engine
     src/
       lib.rs
-      pipeline.rs        Pipeline builder + execution
-      session.rs         SessionKey, SessionMap, export/import
+      pipeline.rs        Pipeline builder + execution, Unicode normalization pre-pass
+      session.rs         SessionKey, SessionMap, Scope, export/import (signed opaque bytes)
       detector/
         mod.rs           Detector trait
         regex.rs         RegexDetector
-        worka.rs         WorkaDetector (NER)
+        ner.rs           NER-backed detector (lib TBD — see open question)
+        normalize.rs     Unicode NFC + ZWJ/ZWNJ strip + full-width → ASCII
       rule/
         mod.rs           Rule trait, Action enum
         column.rs        ColumnRule
         class.rs         ClassRule
         default.rs       DefaultRule
-      audit/
-        mod.rs           Auditor trait, AuditEntry
-        sqlite.rs        SqliteAuditor
+      redaction_log/     (renamed from "audit" — see Auditor contract below)
+        mod.rs           RedactionLogger trait, RedactionEntry
+        sqlite.rs        SqliteLogger
       types.rs           RawDocument, CleanDocument, PiiClass, Detection, Context, Value
+      sandbox/           (v0.5; trait-shape landed in v0.2 for forward compat)
+        mod.rs           Sandbox trait
   debug-proxy/           MCP debug server
     src/
       main.rs
@@ -102,7 +107,7 @@ Pure library. Zero I/O, zero protocol knowledge, zero config file formats.
 
 #### Composable Traits
 
-Three extension points, all trait-based and stackable:
+Three extension points, all trait-based and stackable. All are `Send + Sync + 'static` so `Pipeline: Send + Sync + Clone` via `Arc`.
 
 ```rust
 /// Finds PII in text. Multiple detectors run in sequence, spans merged.
@@ -112,14 +117,18 @@ trait Detector: Send + Sync {
 
 /// Decides what to do with detected PII. First matching rule wins.
 trait Rule: Send + Sync {
-    fn action(&self, class: PiiClass, context: &Context) -> Action;
+    fn action(&self, class: &PiiClass, context: &Context) -> Action;
 }
 
-/// Receives audit entries. Every redaction is logged.
-trait Auditor: Send + Sync {
-    fn log(&self, entry: &AuditEntry) -> Result<()>;
+/// Receives redaction-log entries. Every redaction decision is logged —
+/// including losers of span conflicts, for detection-QA.
+/// MUST NOT store raw values or token↔value pairs (Art.30 / EDPB 01/2025).
+trait RedactionLogger: Send + Sync {
+    fn log(&self, entry: &RedactionEntry) -> Result<()>;
 }
 ```
+
+Note the rename: `Auditor` → `RedactionLogger`. The previous name implied GDPR Art.30 processing-record compliance, which this log does *not* provide (no purpose, data-subject category, retention). Consumers who need Art.30 records must build that on top. This log is operational — what was redacted, when, by which detector.
 
 Consumers compose these via the builder to construct their pipeline. Core provides common implementations; consumers bring domain-specific ones.
 
@@ -131,13 +140,17 @@ Entry point. Built via builder, immutable after construction.
 let pipeline = Pipeline::builder()
     .detector(RegexDetector::new(patterns))
     .detector(IndexDetector::new(customer_data))
-    .detector(WorkaDetector::new())
-    .rule(ColumnRule::new("email", Action::FormatPreserve))
+    .detector(NerDetector::new())
+    .rule(ColumnRule::new("email", Action::Tokenize))  // Tokenize default; FormatPreserve opt-in per class (leaks structure)
     .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
     .rule(DefaultRule::new(Action::Redact))
-    .auditor(SqliteAuditor::new(path))
+    .redaction_logger(SqliteLogger::new(path))
     .build()?;
 ```
+
+**Detector ordering is load-bearing.** Span-conflict resolution is deterministic (longest span wins, first-in-builder on exact-length tie). When two detectors overlap with *different* `PiiClass`, the loser is still emitted to the `RedactionLogger` as a `conflict` entry — free detection-QA signal.
+
+**Unicode normalization** runs before the detector stack: NFC, zero-width-joiner/non-joiner strip, full-width → ASCII. Mitigates A5 (prompt injection into detection path) — attacker can't hide `K​r​i​s​h​a​n` with ZWJ chars. Configurable via `Pipeline::builder().normalize(NormalizeConfig::default())`; default is *on*.
 
 Two operations:
 
@@ -146,19 +159,41 @@ let clean: CleanDocument = pipeline.redact(&session, raw_document)?;
 let raw: Option<String>  = session.restore(token);
 ```
 
+**Concurrency contract:** `Pipeline` is `Send + Sync + Clone` (internally `Arc`-wrapped). `Session` is `Send + Sync` and shared via `Arc<Session>`. Internal map uses `DashMap` (sharded) — multiple `pipeline.redact()` calls against the same session from concurrent tokio tasks are supported without external locking. A concurrent-redact test gates this contract in CI.
+
 #### Session
 
-Owns the HMAC key and bidirectional token map. One per agent interaction. Created by core, opaque to consumers.
+Owns the HMAC key and bidirectional token map. Created by core, opaque to consumers.
 
 ```rust
-let session = Session::new()?;           // generates key, mlocks memory
-let snapshot = session.export()?;        // for serialization (Ghostwriter blob)
-let session = Session::import(snapshot)?; // restore from snapshot (new key, restored map)
+let session = Session::new(Scope::Conversation("msg-42".into()))?;
+let blob: SensitiveSnapshot = session.export()?;        // signed opaque bytes
+let session = Session::import(blob)?;                    // verifies signature, new key, restored map
 ```
 
-`Session::new()` generates a random 32-byte key in a `SecretBox`, mlocks the memory page, and sets up zeroize-on-drop. The key never leaves the `Session` struct, is never serializable, and is never written to disk.
+**Scope** is explicit, not implicit:
 
-`Session::export()` returns the token map (bidirectional mapping of `(class, raw) ↔ fake`) without the key. This is what Ghostwriter serializes into its blob. `Session::import()` creates a new session with a fresh key and the restored map — the old key is gone, but restore still works because the map is the lookup structure.
+```rust
+enum Scope {
+    Ephemeral,                       // single call; snapshot never exported
+    Conversation(ConversationId),    // bounded lifetime, consumer-provided id
+    Persistent { ttl: Duration },    // long-lived; TTL mandatory, enforced on import
+}
+```
+
+Why explicit scope: cross-session unlinkability is a contract, not an accident. Markus / counselors flagged that "session per agent interaction" is under-specified — different scopes imply different compositional-attack surfaces and different blob lifetimes. Consumers declare intent.
+
+`Session::new()` generates a random 32-byte key in a `SecretBox`, mlocks the memory page (best-effort; on macOS dev without `ulimit -l` raised, degrades to unlocked with warning — a `--allow-unlocked-key` flag exists for containers and dev), zeroize-on-drop, `MADV_DONTDUMP`.
+
+**Export semantics — corrected.** `Session::export()` returns `SensitiveSnapshot(Vec<u8>)` — an opaque signed byte string, NOT a structured type. The bytes contain:
+
+1. **Version byte** — wire-format lock-in; lets us rotate format without breaking stored blobs.
+2. The bidirectional token map (without the key).
+3. An HMAC signature over the map, produced with the about-to-be-dropped key.
+
+Consumers cannot inspect, log, or partially use the snapshot — they serialize the opaque bytes and hand them to storage. `Session::import()` verifies the signature (detects tampering: A3) before reconstituting the map under a fresh key.
+
+**The snapshot is as sensitive as the raw PII it references.** Possession = full recovery. Consumers MUST encrypt the blob at rest and in transit (AEAD envelope; Laravel integration uses `APP_KEY` via Laravel's Crypt facade). Core does not implement the AEAD envelope — encryption is a deployment concern with consumer-specific KMS choices — but core signs the payload so tampering is detectable regardless of the storage layer.
 
 #### Types
 
@@ -185,14 +220,26 @@ struct Detection {
 /// PII categories.
 enum PiiClass {
     Name, Email, Phone, Address, Id, Iban, Ip, Date, GenericText,
-    Custom(String),  // domain-specific (e.g., "order_id", "song_title", "artist_name")
+    Custom(CustomPiiClass),  // domain-specific — see below
+}
+
+/// Normalized wrapper. Constructed only via `PiiClass::custom("order_id")`
+/// which lowercases + trims + snake_case-normalizes. Prevents
+/// Custom("order_id") vs Custom("ORDER_ID") vs Custom("orderId") divergence
+/// silently breaking Rule matches.
+struct CustomPiiClass(String);
+
+impl PiiClass {
+    pub fn custom(name: &str) -> Self { /* normalize → CustomPiiClass */ }
 }
 
 /// What to do with detected PII.
 enum Action {
-    Tokenize,        // session-scoped HMAC pseudonym (Person_7)
+    Tokenize,        // session-scoped HMAC pseudonym (Person_7) — DEFAULT for sensitive classes
     Redact,          // [REDACTED] — destroys information
-    FormatPreserve,  // deterministic fake that validates as original type (v0.3 impl)
+    FormatPreserve,  // deterministic fake (v0.3 impl). WARNING: leaks structure
+                     //   (local-part length, domain distribution — NoPII-style leakage).
+                     //   Opt-in per ClassRule; never a DefaultRule target.
     Generalize,      // category token (Berlin → [REGION])
     Preserve,        // pass through untouched
 }
@@ -209,15 +256,15 @@ struct Context {
 
 **Detectors:**
 - `RegexDetector` — compiled `RegexSet` or Aho-Corasick automaton. Constructed from a list of patterns. Returns spans with PiiClass inferred from which pattern matched.
-- `NerDetector` — backed directly by `ort` + `tokenizers` with the `Davlan/bert-base-multilingual-cased-ner-hrl` model exported to ONNX as a pinned local artifact.
+- `NerDetector` — NER-based. Backed directly by **`ort` + `tokenizers`** with **`Davlan/bert-base-multilingual-cased-ner-hrl`** exported to ONNX and mounted as a pinned local artifact. Upgrade paths (stacked DE+EN detectors, or language-routed dispatch via `whatlang`) are additive and require no pipeline architecture change.
 
 **Rules:**
 - `ColumnRule` — matches on field name. "If field is X, action is Y."
-- `ClassRule` — matches on PiiClass. "If class is Email, action is FormatPreserve."
-- `DefaultRule` — catch-all. "Everything else gets Redacted."
+- `ClassRule` — matches on PiiClass. "If class is Email, action is Tokenize."
+- `DefaultRule` — catch-all. "Everything else gets Redacted." Fail-closed.
 
-**Auditors:**
-- `SqliteAuditor` — append-only SQLite log. Stores: timestamp, detector source, PiiClass, action taken, field name, document type. Never stores raw values or token mappings.
+**Redaction loggers:**
+- `SqliteLogger` — append-only SQLite log. Stores: timestamp, detector source, PiiClass, action taken, field name, document type, conflict-loser (if span conflict). Never stores raw values or token mappings. Enforced by doc-test + compile-time `RedactionEntry` shape.
 
 #### What Core Does NOT Do
 
@@ -291,8 +338,8 @@ let pipeline = Pipeline::builder()
     .detector(ContextDetector::new(customer.name, customer.email, customer.phone))
     .detector(IndexDetector::new(customer.order_ids, customer.songs, customer.artists))
     .detector(RegexDetector::new(standard_patterns))
-    .detector(WorkaDetector::new())
-    .rule(ClassRule::new(PiiClass::Custom("customer_name".into()), Action::Tokenize))
+    .detector(NerDetector::new())
+    .rule(ClassRule::new(PiiClass::custom("customer_name"), Action::Tokenize))
     .rule(DefaultRule::new(Action::Tokenize))
     .build()?;
 ```
@@ -341,7 +388,7 @@ pipeline.redact(&session, raw_document)
     │   Generalize   → category token, no map entry
     │   Preserve     → pass through untouched
     │
-    ├─ Auditor logs: detector source, PiiClass, action, field name
+    ├─ RedactionLogger: detector source, PiiClass, action, field name, conflict-losers
     │   Never logs raw values or token mappings
     │
     ▼
@@ -366,22 +413,23 @@ Result goes through pipeline.redact() again before returning to agent
 ### Session Export/Import (Ghostwriter)
 
 ```
-session.export() → SessionSnapshot (token map without key)
+session.export() → SensitiveSnapshot(Vec<u8>)
+    │  (version byte + serialized map + HMAC signature under session key)
+    │  session key dropped immediately after signing
+    ▼
+Ghostwriter treats bytes as opaque, wraps in base64
     │
     ▼
-Ghostwriter serializes → base64 JSON blob
-    │
-    ▼
-Laravel encrypts and stores blob
+Laravel AEAD-encrypts (APP_KEY via Crypt) and stores blob
     ... later ...
 Laravel decrypts blob
     │
     ▼
-Ghostwriter deserializes → SessionSnapshot
+Ghostwriter hands opaque bytes to Session::import
     │
     ▼
-Session::import(snapshot) → Session (fresh key, restored map)
-    │
+Session::import(bytes) → verifies signature, reconstitutes map under fresh key
+    │  on signature mismatch → error (tampering detected; A3)
     ▼
 session.restore(token) works against imported map
 ```
@@ -392,9 +440,9 @@ session.restore(token) works against imported map
 
 ### Core Errors
 
-- **`DetectionError`** — a detector failed (regex compile error, NER model load failure). Pipeline continues with remaining detectors. Logged via auditor. Non-fatal by default. Configurable via builder: `.on_detector_error(FailStrategy::Continue | FailStrategy::Abort)`.
-- **`SessionError`** — mlock failure is non-fatal (degrades to unlocked memory with warning). Key generation failure is fatal.
-- **`AuditError`** — auditor write failure is non-fatal. Redaction still proceeds. Error logged to stderr.
+- **`DetectionError`** — a detector failed (regex compile error, NER model load failure). Pipeline continues with remaining detectors. Logged via RedactionLogger. Non-fatal by default. Configurable via builder: `.on_detector_error(FailStrategy::Continue | FailStrategy::Abort)`.
+- **`SessionError`** — mlock failure is non-fatal on macOS dev (ulimit -l default too small); degrades to unlocked memory with warning. Key generation failure is fatal. Signature verification failure on `Session::import` is fatal (A3 tampering).
+- **`RedactionLogError`** — logger write failure is non-fatal. Redaction still proceeds. Error logged to stderr.
 
 ### Fail-Closed Principle
 
@@ -411,9 +459,12 @@ When multiple detectors find overlapping spans:
 
 ### Restore on Unknown Token
 
-`session.restore(token)` returns `Option<String>`. Consumer decides behavior:
-- Debug-proxy: rejects the query with an error.
-- Ghostwriter: emits a warning, leaves the token as-is in restored text.
+`session.restore(token)` returns `Option<String>`. Behavior is **phase-dependent** and explicitly contractual:
+
+- **Read-phase** (ghostwriter restoring LLM output text): may be lax. Emit warning, leave token as-is. Rationale: LLM paraphrased `Person_7` → `User_7`; the user still gets readable text.
+- **Action-phase** (operations proxy; v0.5): **fail-closed**. Unknown token ⇒ abort action with error. Rationale: executing `send_email(User_7)` where `User_7` is an LLM hallucination could exfiltrate to an unintended recipient, escalate privilege, or corrupt state. Must never silently pass.
+
+Core provides both `restore` (lax) and `restore_strict` (fail-closed); consumers pick per call site.
 
 ---
 
@@ -421,10 +472,10 @@ When multiple detectors find overlapping spans:
 
 Carried from v0.1, enforced in core:
 
-- **`SessionKey`** — 32 random bytes in a `SecretBox`. `mlock` on allocation (strict failure on key, best-effort on map). `zeroize` on drop. `MADV_DONTDUMP` on the memory page.
+- **`SessionKey`** — 32 random bytes in a `SecretBox`. `mlock` on allocation (strict failure on key, best-effort on map). On macOS dev the default `ulimit -l` is tiny (64KB); sessions larger than that degrade to unlocked memory with a warning. Dev doc must call this out and point to `ulimit -l unlimited` or the `--allow-unlocked-key` flag. `zeroize` on drop. `MADV_DONTDUMP` on the memory page.
 - **`RawDocument`** — intentionally not `Serialize`. Enforced by trybuild compile-fail test. Only `CleanDocument` can cross the consumer boundary.
-- **`SessionSnapshot`** — contains the token map but not the key. Safe to serialize. Key material never leaves `Session`.
-- **Audit log** — never stores raw values or token-to-value mappings. The audit trail itself must not become a re-identification vector (EDPB Guidelines 01/2025).
+- **`SensitiveSnapshot`** — opaque signed byte string. Contains the token map but not the key; the signature binds the payload to the session's creation event. **As sensitive as raw PII** — consumers MUST encrypt at rest and in transit. Version byte inside enables future crypto rotation without breaking stored blobs.
+- **Redaction log** — never stores raw values or token-to-value mappings. The log must not become a re-identification vector (EDPB Guidelines 01/2025). Structural enforcement: the `RedactionEntry` type has no field that can hold raw PII; a doc-test verifies this.
 
 ---
 
@@ -455,25 +506,56 @@ Carried from v0.1, enforced in core:
 
 ## Migration Strategy
 
-### Phase 1: Create Reference Copy
+### Phase 0: Decision Gate
 
-Move current `src/` and `tests/` to `old/`. Read-only reference, not compiled. Delete workspace-level `[[bin]]` and `[lib]` entries that pointed to `src/`.
+Before cutting code, resolve open items that affect architecture:
 
-### Phase 2: Build `crates/gaze`
+1. **NER library choice** — resolved in `docs/research/ner-library-evaluation.md`. Adopt direct **`ort` + `tokenizers`** integration for `NerDetector`. Default model: **`Davlan/bert-base-multilingual-cased-ner-hrl`** (mBERT, 10 high-resource languages incl. German + English, CoNLL schema) exported to ONNX and mounted as a pinned local artifact. Upgrade paths (stacked DE+EN detectors, or language-routed dispatch via `whatlang`) are additive and require no architecture change. Drop `worka-ai/pii`. Encoderfile-sidecar packaging deferred to v0.3+.
+2. **Threat model review** — `docs/research/gaze-threat-model.md` reviewed and adopted.
+3. **Verify** — unit-test `redact-*` returns byte spans (not char offsets) on German umlaut / emoji text *before* building the wrapper.
 
-Core types, traits, Pipeline builder. RegexDetector, `NerDetector` backed directly by `ort` + `tokenizers`, SqliteAuditor. Session with export/import. Full test suite. No consumer code.
+### Phase 1: Freeze v0.1
+
+Tag current `main` as `v0.1-final`. Push tag. Delete `src/` and `tests/` (the top-level monolith) in the same commit that lands the v0.2 workspace skeleton — no `old/` directory. Historical reference via `git show v0.1-final:src/foo.rs`.
+
+### Phase 2: Build `crates/gaze` + Port Canary First
+
+1. Workspace skeleton, `crates/gaze` empty.
+2. **Port the canary e2e test (76e55b7) before any detector code.** The canary is the strongest leak guard we have; everything else builds against it.
+3. Core types, traits, Pipeline builder. Unicode normalization. Span-conflict resolution with loser-logging. `RegexDetector`, `NerDetector` (backing lib per Phase 0 decision), `SqliteLogger`. `Session` with `Scope`, signed `SensitiveSnapshot`, `restore` / `restore_strict`. Concurrent-redact test. Full test suite. No consumer code.
 
 ### Phase 3: Build `crates/debug-proxy`
 
-Port adapters (MySQL, Laravel log, SSH tunnel) referencing `old/` for logic. Port TOML policy → Rule + Detector construction. Port MCP handlers to use `pipeline.redact()`. Port CLI. Canary e2e test passes with consistent cross-channel pseudonyms.
+Adapters (MySQL, Laravel log, SSH tunnel) written clean-room against the v0.1 tag for reference. TOML policy → Rule + Detector construction. MCP handlers use `pipeline.redact()` with shared `Session` across channels. Error-path sanitization (stderr / DB errors quoting values go through `pipeline.redact`). Canary e2e passes with consistent cross-channel pseudonyms.
 
-### Phase 4: Rebuild `crates/ghostwriter`
+### Phase 4: Migrate `crates/ghostwriter` onto Core
 
-ContextDetector for known customer data. IndexDetector for domain-specific values (order IDs, songs, artists). Session export/import for blob format. CLI preserved. Roundtrip tests pass.
+Rip out ghostwriter's internal detection code. Add `ContextDetector` (known customer data) and `IndexDetector` (order IDs, songs, artists) as consumer-side detectors — both implement the core `Detector` trait. Update blob format to use `SensitiveSnapshot`. CLI surface preserved; existing roundtrip tests pass. Ghostwriter stays a separate crate but shares core.
 
-### Phase 5: Delete `old/`
+### Phase 5: Sandbox Trait Landing
 
-All tests pass. Old code no longer referenced. Remove `old/` directory.
+Land the `Sandbox` trait shape in core (no impls yet — v0.5 delivers birdcage-default and nono-upgrade impls). Shape must be pluggable; no direct `nono::*` dependency in core. Documents the v0.5 argv/env trust boundary (agent-controlled inputs to `gaze exec` are untrusted; validation is core's job, not the sandbox's).
+
+---
+
+## Open-Issue Acceptance Matrix
+
+Every open GitHub issue is explicitly mapped to a v0.2 deliverable or deferred with reason. No silent drops.
+
+| Issue | Topic | Status in v0.2 |
+|-------|-------|---------------|
+| #1 | k-anonymity | **Deferred to v0.3.** Consumer-level concern (debug-proxy policy). Threat-model A2 documents the gap. |
+| #2 | Per-session query budget | **Deferred to v0.3.** Same as #1. |
+| #3 | Audit-log reversibility | **Closed by v0.2 design.** `RedactionEntry` is structurally incapable of holding raw values; doc-test enforces. Rename from "audit" to "redaction log" removes the false Art.30 implication. |
+| #4 | `typed_terms` for ghostwriter | **In scope for v0.2.** Covered by `IndexDetector`. |
+| #5 | Date-shift trade-off doc | **In scope for v0.2.** Brief doc in `Action::Generalize` section + future-considerations. |
+| #6 | Ghostwriter language config | **In scope for v0.2.** Pipeline builder accepts per-detector language config; NerDetector takes a locale. |
+
+## References to Other Design Changes
+
+- **Sandbox backend choice** — nono is no longer the default. `Sandbox` trait with pluggable backends; birdcage as conservative default (Phylum, production-used, cross-platform, deny-all network); nono as upgrade target once it hits 1.0. Windows-compatible backend (Tauri future) designed as a third impl. No `nono::*` in core.
+- **NER library** — resolved in Phase 0 research. `NerDetector` is backed directly by `ort` + `tokenizers` with pinned local ONNX artifacts; no `worka-ai/pii` dependency remains in scope for v0.2.
+- **Audit → Redaction Log** — rename throughout. Don't claim GDPR Art.30 compliance from this artifact; it's an operational trail.
 
 ---
 
@@ -483,7 +565,9 @@ Documented for context. Not designed or implemented in v0.2.
 
 ### Operations Proxy
 
-Agents act on tokenized handles without seeing PII. `Session::restore()` resolves tokens; consumer executes the action; result goes back through `pipeline.redact()`. Combined with [nono](https://github.com/always-further/nono) for kernel-level ACL enforcement (Landlock/Seatbelt): agent has `exec` permission on gaze binary but not `read` on raw PII path. Separate brainstorming session planned.
+Agents act on tokenized handles without seeing PII. `Session::restore_strict()` resolves tokens (fail-closed on unknown); consumer executes the action; result — **including stderr and structured errors** — goes back through `pipeline.redact()` before returning to the agent. DB constraint violations quoting values, SMTP bounces containing raw addresses, shell error output: all must be sanitized. The "agent never sees raw output" invariant only holds if the error path is included.
+
+Kernel-level ACL enforcement via the `Sandbox` trait (Landlock/Seatbelt via birdcage default; nono once 1.0). Agent has `exec` on the gaze binary but not `read` on raw PII paths. Because gaze runs outside the sandbox boundary ("trusted"), every input it receives from the agent (argv, env, stdin) is untrusted and validated: script-path allowlist, shell-metachar rejection, env-var allowlist. Separate v0.5 brainstorming session will expand this.
 
 ### Pipe Mode (v0.3)
 
@@ -514,8 +598,11 @@ Configurable generalization of attributes (city → region, exact age → age ra
 
 - Gaze v0.1 design: `docs/superpowers/specs/2026-04-10-gaze-design.md`
 - Ghostwriter v0.1 design: `docs/superpowers/specs/2026-04-11-ghostwriter-sanitization-design.md`
+- Threat model: `docs/research/gaze-threat-model.md`
+- First-principles vision: `docs/research/gaze-first-principles-vision.md`
 - Privacy research: `docs/research/privacy-conformant-agent-patterns.md`
 - v0.2 reframe notes: `docs/research/gaze-v0.2-reframe.md`
+- Counselors review (2026-04-15): `agents/counselors/1776242804-review-request-gaze-v02-design-first-pr/claude-opus.md`
 - Markus's detection gap feedback: project memory `project_markus_feedback.md`
 - Operations proxy concept: project memory `project_operations_proxy_idea.md`
-- nono agent sandbox: `https://github.com/always-further/nono`
+- Sandbox candidates: birdcage `https://github.com/phylum-dev/birdcage`, nono `https://github.com/always-further/nono`
