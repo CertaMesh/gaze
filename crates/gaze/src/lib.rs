@@ -7,6 +7,7 @@ mod redaction_log;
 mod rule;
 mod sandbox;
 mod session;
+pub mod token_shape;
 mod types;
 
 pub use detector::{Detection, Detector, PiiClass, RegexDetector};
