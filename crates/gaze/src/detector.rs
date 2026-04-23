@@ -19,6 +19,8 @@ pub enum PiiClass {
     Custom(String),
 }
 
+const RESERVED_CUSTOM_CLASS_NAMES: &[&str] = &["email", "name", "location", "organization"];
+
 impl PiiClass {
     pub fn custom(name: &str) -> Self {
         let mut normalized = String::new();
@@ -34,6 +36,13 @@ impl PiiClass {
                 pending_underscore = true;
             }
         }
+
+        // Reserve built-in slot names so custom classes cannot emit the same
+        // PascalCase token prefix as built-in classes during tokenization.
+        if RESERVED_CUSTOM_CLASS_NAMES.contains(&normalized.as_str()) {
+            return Self::Custom(format!("_custom_{normalized}"));
+        }
+
         Self::Custom(normalized)
     }
 
@@ -90,5 +99,18 @@ impl Detector for RegexDetector {
                 source: self.source.clone(),
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PiiClass;
+
+    #[test]
+    fn custom_reserved_name_gets_prefixed() {
+        assert_eq!(
+            PiiClass::custom("email"),
+            PiiClass::Custom("_custom_email".to_string())
+        );
     }
 }
