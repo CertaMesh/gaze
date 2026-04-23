@@ -4,6 +4,7 @@
 //! in `docs/roadmap/v0.3/cli.md` §"Test strategy". Each test maps 1:1 to a
 //! numbered item in that section.
 
+use std::thread::sleep;
 use std::time::Duration;
 
 use assert_cmd::Command;
@@ -15,9 +16,14 @@ use gaze::{PiiClass, Scope, Session};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
+    clean_ok_with_args(&[], input)
+}
+
+fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .arg("clean")
+        .args(args)
         .write_stdin(input.as_bytes().to_vec())
         .output()
         .unwrap();
@@ -212,6 +218,23 @@ fn t07_version_byte_rejection() {
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "InvalidBlobVersion", "exit": 3 })
+    );
+}
+
+// -----------------------------------------------------------------------
+// 7b. BlobExpired after persistent TTL elapses
+// -----------------------------------------------------------------------
+
+#[test]
+fn t07b_restore_rejects_expired_blob() {
+    let (_, blob, _) = clean_ok_with_args(&["--session-ttl=1"], "Email: alice@example.com");
+    sleep(Duration::from_secs(2));
+
+    let (code, _, stderr) = restore_json(&blob, "Hello Email_1.");
+    assert_eq!(code, Some(3));
+    assert_eq!(
+        parse_stderr_variant(&stderr),
+        json!({ "error": "BlobExpired", "exit": 3 })
     );
 }
 
