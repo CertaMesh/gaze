@@ -6,10 +6,10 @@
 class Ghostwriter < Formula
   desc "Deterministic PII sanitization + exact restoration for LLM prompts"
   homepage "https://github.com/naoray/gaze"
-  url "https://github.com/naoray/gaze/archive/refs/heads/ghostwriter-v0.1.tar.gz"
+  url "https://github.com/naoray/gaze/archive/refs/heads/main.tar.gz"
   version "0.1.0"
   license "Apache-2.0"
-  head "https://github.com/naoray/gaze.git", branch: "ghostwriter-v0.1"
+  head "https://github.com/naoray/gaze.git", branch: "main"
 
   depends_on "rust" => :build
 
