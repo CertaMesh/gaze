@@ -64,10 +64,9 @@ impl Pipeline {
                     &detector.name,
                 )?),
                 DetectorKind::Unknown(kind) => {
-                    return Err(PolicyError::BadTtl(format!(
-                        "unknown detector.kind '{kind}'"
-                    ))
-                    .into())
+                    return Err(
+                        PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into(),
+                    )
                 }
             };
         }
@@ -86,10 +85,15 @@ impl Pipeline {
 
         if let Some(ner) = &policy.ner {
             if ner.model_dir.is_some() {
-                builder = builder.with_ner_config(NerConfig {
-                    model_dir: ner.model_dir.clone(),
-                    locale: ner.locale.clone(),
-                })?;
+                builder = builder
+                    .with_ner_config(NerConfig {
+                        model_dir: ner.model_dir.clone(),
+                        locale: ner.locale.clone(),
+                    })
+                    .map_err(|err| match err {
+                        Error::NerLoad(source) => Error::Policy(PolicyError::NerLoad(source)),
+                        other => other,
+                    })?;
             }
         }
 
@@ -109,9 +113,12 @@ impl Pipeline {
             RawDocument::Structured(fields) => {
                 redact_structured(self, session, fields, DocumentKind::Structured)
             }
-            RawDocument::Text(text) => Ok(CleanDocument::Text(
-                self.redact_text(session, &text, None, DocumentKind::Text)?,
-            )),
+            RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
+                session,
+                &text,
+                None,
+                DocumentKind::Text,
+            )?)),
         }
     }
 
@@ -154,20 +161,14 @@ impl Pipeline {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
-            self.log_entry(
-                &detection,
-                field_name,
-                document_kind.clone(),
-                action,
-                false,
-            )?;
+            self.log_entry(&detection, field_name, document_kind.clone(), action, false)?;
 
             let replacement = match action {
                 Action::Tokenize => Some(session.tokenize(&detection.detection.class, &raw)?),
                 Action::Redact => Some("[REDACTED]".to_string()),
-                Action::FormatPreserve => Some(
-                    session.format_preserving_fake(&detection.detection.class, &raw)?,
-                ),
+                Action::FormatPreserve => {
+                    Some(session.format_preserving_fake(&detection.detection.class, &raw)?)
+                }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
             };
@@ -301,11 +302,8 @@ impl PipelineBuilder {
                 Ok(self)
             }
             Some(path) => {
-                let detector = NerDetector::load_with_options(
-                    &path,
-                    NerOptions { locale },
-                )
-                .map_err(Error::NerLoad)?;
+                let detector = NerDetector::load_with_options(&path, NerOptions { locale })
+                    .map_err(Error::NerLoad)?;
                 Ok(self.detector(detector))
             }
         }
@@ -329,9 +327,12 @@ fn redact_structured(
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
         let value = match value {
-            Value::String(text) => serde_json::Value::String(
-                pipeline.redact_text(session, &text, Some(&key), document_kind.clone())?,
-            ),
+            Value::String(text) => serde_json::Value::String(pipeline.redact_text(
+                session,
+                &text,
+                Some(&key),
+                document_kind.clone(),
+            )?),
             Value::I64(value) => serde_json::Value::Number(value.into()),
         };
         clean.insert(key, value);
@@ -360,7 +361,9 @@ fn translate_detection(
     })
 }
 
-fn select_winners(mut detections: Vec<IndexedDetection>) -> (Vec<IndexedDetection>, Vec<IndexedDetection>) {
+fn select_winners(
+    mut detections: Vec<IndexedDetection>,
+) -> (Vec<IndexedDetection>, Vec<IndexedDetection>) {
     detections.sort_by(|a, b| {
         let a_len = a.detection.span.end - a.detection.span.start;
         let b_len = b.detection.span.end - b.detection.span.start;
@@ -373,10 +376,9 @@ fn select_winners(mut detections: Vec<IndexedDetection>) -> (Vec<IndexedDetectio
     let mut winners = Vec::new();
     let mut losers = Vec::new();
     for detection in detections {
-        if winners
-            .iter()
-            .any(|winner: &IndexedDetection| overlaps(&winner.detection.span, &detection.detection.span))
-        {
+        if winners.iter().any(|winner: &IndexedDetection| {
+            overlaps(&winner.detection.span, &detection.detection.span)
+        }) {
             losers.push(detection);
             continue;
         }
@@ -408,12 +410,12 @@ fn build_context(field_name: Option<&str>) -> Context {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
     use super::*;
     use crate::detector::{Detection, PiiClass};
     use crate::ner::test_support::detector_with_detections;
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
+    use std::fs;
     use std::sync::Mutex;
     use tempfile::tempdir;
 
@@ -476,7 +478,11 @@ mod tests {
         assert_eq!(out, "[REDACTED] works here");
 
         let entries = entries.lock().unwrap();
-        assert_eq!(entries.len(), 2, "expected one winner + one loser: {entries:?}");
+        assert_eq!(
+            entries.len(),
+            2,
+            "expected one winner + one loser: {entries:?}"
+        );
         let winner = entries.iter().find(|e| !e.conflict_loser).expect("winner");
         let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
         assert_eq!(winner.source, "ner/gliner", "longer span should win");

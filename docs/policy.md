@@ -161,11 +161,9 @@ locale = "de"
 | `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`).          |
 
 If `model_dir` is set but the model fails to load (missing files, bad
-manifest), the pipeline build fails with `Error::NerLoad`, which the CLI
-maps to **exit `3` `Pipeline`** — not exit `2` `PolicyConfig`. Treat NER
-load errors as a runtime failure, not a config failure. See
-[README §"NER Model Runtime"](../README.md#ner-model-runtime) for the
-expected directory layout.
+manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
+NER load errors as policy configuration failures: verify the install path
+against [README §"NER Model Runtime"](../README.md#ner-model-runtime).
 
 ## Classes
 
@@ -471,7 +469,7 @@ and is summarised here.
 | `{"error":"PolicyConfig","exit":2}`     | `NoDetectors`              | 2    | Zero `[[detector]]` blocks. At least one is required.                        |
 | `{"error":"PolicyConfig","exit":2}`     | `NoRules`                  | 2    | Zero `[[rule]]` blocks. At least one is required.                            |
 | `{"error":"PolicyConfig","exit":2}`     | `BadTtl("unknown detector.kind …")` | 2 | `kind` was not `"regex"`. Surfaced from `Pipeline::from_policy`, not the parser. |
-| `{"error":"Pipeline","exit":3}`         | (NER load failure)         | 3    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
+| `{"error":"PolicyConfig","exit":2}`     | `NerLoad`                  | 2    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
 
 ## See also
 
@@ -491,11 +489,9 @@ gaps land on the engineering board:
 1. **Resolved in v0.3.1: `policy.session` is honoured by `gaze clean`.**
    The CLI constructs sessions from `[session]`; `--session-ttl` is now only
    an explicit persistent-TTL override.
-2. **`[ner]` load failures exit `3` `Pipeline`, not `2` `PolicyConfig`.**
-   Users editing `model_dir` get a runtime variant for what is morally a
-   config error. Fix: map `Error::NerLoad` to `PolicyConfig` (or introduce a
-   `NerConfig` variant) so failure mode lines up with where the user can
-   make the change.
+2. **Resolved in v0.3.1: `[ner]` load failures exit `2` `PolicyConfig`.**
+   `PolicyError::NerLoad` keeps missing or corrupt model bundles in the
+   policy/configuration failure class.
 3. **`kind = "column"` rules never fire from `gaze clean`.** The CLI only
    submits `RawDocument::Text`, so `Context::field_name` is always `None`
    and `ColumnRule` cannot match. Either document this as library-only or

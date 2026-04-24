@@ -77,6 +77,8 @@ pub enum PolicyError {
     NoRules,
     #[error("policy must define at least one detector")]
     NoDetectors,
+    #[error("ner load error: {0}")]
+    NerLoad(#[source] crate::ner::NerLoadError),
 }
 
 impl Policy {
@@ -169,7 +171,11 @@ fn parse_session(raw: RawSessionPolicy) -> Result<SessionPolicy, PolicyError> {
         "ephemeral" => SessionScope::Ephemeral,
         "conversation" => SessionScope::Conversation,
         "persistent" => SessionScope::Persistent,
-        other => return Err(PolicyError::BadTtl(format!("unknown session.scope '{other}'"))),
+        other => {
+            return Err(PolicyError::BadTtl(format!(
+                "unknown session.scope '{other}'"
+            )))
+        }
     };
 
     match scope {
@@ -278,7 +284,9 @@ fn parse_action(input: &str) -> Result<Action, PolicyError> {
         "format_preserve" => Ok(Action::FormatPreserve),
         "generalize" => Ok(Action::Generalize),
         "preserve" => Ok(Action::Preserve),
-        other => Err(PolicyError::BadTtl(format!("unknown rule.action '{other}'"))),
+        other => Err(PolicyError::BadTtl(format!(
+            "unknown rule.action '{other}'"
+        ))),
     }
 }
 
@@ -365,6 +373,9 @@ action = "preserve"
         )
         .unwrap();
 
-        assert!(matches!(Policy::load(&path), Err(PolicyError::TomlParse(_))));
+        assert!(matches!(
+            Policy::load(&path),
+            Err(PolicyError::TomlParse(_))
+        ));
     }
 }

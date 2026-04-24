@@ -626,6 +626,55 @@ action = "preserve"
 }
 
 #[test]
+fn broken_ner_model_dir_exits_policy_config() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    let missing_model = dir.path().join("missing-model");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{{2,}}\b'
+class = "email"
+
+[ner]
+model_dir = "{}"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            missing_model.display()
+        ),
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
 fn t19_restore_custom_token_round_trip_ok() {
     let blob = build_blob_with(|s| {
         s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
