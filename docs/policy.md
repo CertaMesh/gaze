@@ -81,13 +81,9 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 | `scope`    | string   | yes                          | One of `"ephemeral"`, `"conversation"`, `"persistent"`. |
 | `ttl_secs` | integer  | yes if `scope = "persistent"`| Must be `> 0`. Zero is rejected.                |
 
-> **Caveat — `gaze clean` does not yet honour `policy.session`.** The CLI
-> currently constructs its session from `--session-ttl` (default 86 400 s)
-> using `Scope::Persistent`, regardless of what `[session]` says. The block
-> is parsed (and its presence is required) but the values are not yet routed
-> into `Session::new`. Tracked via solo todo (see "Known spec drift" below).
-> Until that lands, treat `[session]` as a forward-looking reservation:
-> declare it correctly so a future binary picks it up automatically.
+> Resolved in v0.3.1: `gaze clean` now constructs its session from
+> `[session]`. `--session-ttl` is an explicit CLI override for persistent
+> session TTL; when the flag is omitted, `ttl_secs` from policy is used.
 
 ### `[[detector]]`
 
@@ -143,10 +139,11 @@ action = "preserve"
 - **`kind = "class"`** — fires when a detection's class equals `class`. The
   most common rule shape.
 - **`kind = "column"`** — fires when the document being redacted is a
-  structured value and the current field name equals `column`. **From
-  `gaze clean` today, this never fires:** the CLI only accepts text on
-  stdin, so there is no field name. `column` rules are useful only when
-  driving the library directly with `RawDocument::Structured`.
+  structured value and the current field name equals `column`. Resolved in
+  v0.3.1: `gaze clean` rejects policies containing `column` rules with
+  `PolicyConfig`, because the CLI only accepts text on stdin and has no field
+  name. `column` rules are useful only when driving the library directly with
+  `RawDocument::Structured`.
 - **`kind = "default"`** — always fires. Place last as a catch-all. If
   omitted, unmatched detections fall through to `Preserve` automatically,
   but an explicit `default` makes the policy intent visible.
@@ -165,11 +162,9 @@ locale = "de"
 | `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`).          |
 
 If `model_dir` is set but the model fails to load (missing files, bad
-manifest), the pipeline build fails with `Error::NerLoad`, which the CLI
-maps to **exit `3` `Pipeline`** — not exit `2` `PolicyConfig`. Treat NER
-load errors as a runtime failure, not a config failure. See
-[README §"NER Model Runtime"](../README.md#ner-model-runtime) for the
-expected directory layout.
+manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
+NER load errors as policy configuration failures: verify the install path
+against [README §"NER Model Runtime"](../README.md#ner-model-runtime).
 
 ## Classes
 
@@ -300,9 +295,9 @@ exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
 - `scope = "persistent"` — the only scope `gaze clean` produces. Requires
   `ttl_secs > 0`.
 
-The `--session-ttl=<secs>` CLI flag (default `86400`) is the value `gaze
-clean` actually uses today. See the caveat in [`[session]`](#session)
-above.
+The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
+sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
+policy-less stub mode falls back to `86400`.
 
 TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
 ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
@@ -477,7 +472,8 @@ and is summarised here.
 | `{"error":"PolicyConfig","exit":2}`     | `NoDetectors`              | 2    | Zero `[[detector]]` blocks. At least one is required.                        |
 | `{"error":"PolicyConfig","exit":2}`     | `NoRules`                  | 2    | Zero `[[rule]]` blocks. At least one is required.                            |
 | `{"error":"PolicyConfig","exit":2}`     | `BadTtl("unknown detector.kind …")` | 2 | `kind` was not `"regex"`. Surfaced from `Pipeline::from_policy`, not the parser. |
-| `{"error":"Pipeline","exit":3}`         | (NER load failure)         | 3    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
+| `{"error":"PolicyConfig","exit":2}`     | `NerLoad`                  | 2    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
+| `{"error":"PolicyConfig","exit":2,"detail":"column rules not supported in CLI mode"}` | `UnsupportedRuleKind` | 2 | `gaze clean` received a policy containing `kind = "column"`. Use library structured input for column rules. |
 
 ## See also
 
@@ -494,17 +490,12 @@ and is summarised here.
 Documented here so users get the truth, with corresponding solo todos so the
 gaps land on the engineering board:
 
-1. **`policy.session` is parsed but ignored by `gaze clean`.** The CLI
-   forces `Scope::Persistent { ttl: --session-ttl }` regardless of what the
-   policy declares. Fix: thread `policy.session` into `Session::new` and
-   document `--session-ttl` as an override, not the source of truth.
-2. **`[ner]` load failures exit `3` `Pipeline`, not `2` `PolicyConfig`.**
-   Users editing `model_dir` get a runtime variant for what is morally a
-   config error. Fix: map `Error::NerLoad` to `PolicyConfig` (or introduce a
-   `NerConfig` variant) so failure mode lines up with where the user can
-   make the change.
-3. **`kind = "column"` rules never fire from `gaze clean`.** The CLI only
-   submits `RawDocument::Text`, so `Context::field_name` is always `None`
-   and `ColumnRule` cannot match. Either document this as library-only or
-   plumb a field-name hint through stdin (e.g. accept JSON `{field, text}`
-   on stdin under an opt-in flag).
+1. **Resolved in v0.3.1: `policy.session` is honoured by `gaze clean`.**
+   The CLI constructs sessions from `[session]`; `--session-ttl` is now only
+   an explicit persistent-TTL override.
+2. **Resolved in v0.3.1: `[ner]` load failures exit `2` `PolicyConfig`.**
+   `PolicyError::NerLoad` keeps missing or corrupt model bundles in the
+   policy/configuration failure class.
+3. **Resolved in v0.3.1: `kind = "column"` rules are rejected in CLI mode.**
+   `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
+   detail string, avoiding silent no-op column rules for text stdin.

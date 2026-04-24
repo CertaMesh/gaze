@@ -97,6 +97,12 @@ action = "preserve"
     (dir, path)
 }
 
+fn session_blob_ttl_secs(blob: &str) -> u64 {
+    let raw = BASE64.decode(blob.as_bytes()).unwrap();
+    let payload: Value = serde_json::from_slice(&raw[97..]).unwrap();
+    payload["scope"]["Persistent"]["ttl_secs"].as_u64().unwrap()
+}
+
 /// Build a session blob by hand via the library. Used where the stub CLI
 /// pipeline cannot emit the token shape under test (`<Name_1>`, lowercase
 /// FormatPreserve, etc.) until solo #3 ships the real policy loader.
@@ -123,13 +129,24 @@ fn t01_roundtrip_email_tokenized_then_restored() {
     let (clean_text, blob, detections) = clean_ok(input);
 
     assert_eq!(detections, 1, "stub pipeline tokenizes one email");
-    assert!(!clean_text.contains("alice@example.com"), "raw email leaked");
-    assert!(clean_text.contains("<Email_1>"), "expected <Email_1> token: {clean_text}");
+    assert!(
+        !clean_text.contains("alice@example.com"),
+        "raw email leaked"
+    );
+    assert!(
+        clean_text.contains("<Email_1>"),
+        "expected <Email_1> token: {clean_text}"
+    );
 
     // LLM reply reuses the tokens.
     let llm_reply = clean_text.replace("Contact", "Reply to");
     let (code, stdout, stderr) = restore_json(&blob, &llm_reply);
-    assert_eq!(code, Some(0), "restore should succeed, stderr={}", String::from_utf8_lossy(&stderr));
+    assert_eq!(
+        code,
+        Some(0),
+        "restore should succeed, stderr={}",
+        String::from_utf8_lossy(&stderr)
+    );
     assert!(stderr.is_empty(), "expected empty stderr");
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(
@@ -148,12 +165,18 @@ fn t02_canary_absent_in_clean_reappears_in_restore() {
     let input = format!("Ping {canary} before noon.");
 
     let (clean_text, blob, _) = clean_ok(&input);
-    assert!(!clean_text.contains(canary), "canary leaked into clean_text: {clean_text}");
+    assert!(
+        !clean_text.contains(canary),
+        "canary leaked into clean_text: {clean_text}"
+    );
 
     let (code, stdout, _) = restore_json(&blob, &clean_text);
     assert_eq!(code, Some(0));
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
-    assert!(resp["text"].as_str().unwrap().contains(canary), "canary did not round-trip");
+    assert!(
+        resp["text"].as_str().unwrap().contains(canary),
+        "canary did not round-trip"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -165,8 +188,13 @@ fn t03_unknown_token_pascalcase_shape() {
     let (_, blob, _) = clean_ok("Email is alice@example.com please.");
     // Session has <Email_1>. LLM invents <Email_999>.
     let (code, stdout, stderr) = restore_json(&blob, "Your <Email_999> is queued.");
-    assert_eq!(code, Some(3), "expected exit 3, stdout={} stderr={}",
-        String::from_utf8_lossy(&stdout), String::from_utf8_lossy(&stderr));
+    assert_eq!(
+        code,
+        Some(3),
+        "expected exit 3, stdout={} stderr={}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr)
+    );
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "UnknownToken", "exit": 3 })
@@ -185,8 +213,13 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
     // arm catches the LLM hallucination.
     let (_, blob, _) = clean_ok("No PII here.");
     let (code, stdout, stderr) = restore_json(&blob, "Your location_7 order arrives soon.");
-    assert_eq!(code, Some(3), "expected exit 3, stdout={} stderr={}",
-        String::from_utf8_lossy(&stdout), String::from_utf8_lossy(&stderr));
+    assert_eq!(
+        code,
+        Some(3),
+        "expected exit 3, stdout={} stderr={}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr)
+    );
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "UnknownToken", "exit": 3 })
@@ -208,9 +241,18 @@ fn t05_adjacency_corruption_name_inside_larger_word() {
 
     let reply = "User-Name_1s-record is internal.";
     let (code, stdout, stderr) = restore_json(&blob, reply);
-    assert_eq!(code, Some(0), "expected success, stderr={}", String::from_utf8_lossy(&stderr));
+    assert_eq!(
+        code,
+        Some(0),
+        "expected success, stderr={}",
+        String::from_utf8_lossy(&stderr)
+    );
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
-    assert_eq!(resp["text"].as_str().unwrap(), reply, "Pass 1 must not eat Name_1 substring");
+    assert_eq!(
+        resp["text"].as_str().unwrap(),
+        reply,
+        "Pass 1 must not eat Name_1 substring"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -307,8 +349,14 @@ fn t09_bad_flag_emits_sanitized_json_not_clap_usage() {
     );
     // No clap usage banner, no "Usage:" string.
     let stderr_str = String::from_utf8_lossy(&out.stderr);
-    assert!(!stderr_str.contains("Usage"), "clap usage leaked: {stderr_str}");
-    assert!(!stderr_str.contains("--help"), "clap help leaked: {stderr_str}");
+    assert!(
+        !stderr_str.contains("Usage"),
+        "clap usage leaked: {stderr_str}"
+    );
+    assert!(
+        !stderr_str.contains("--help"),
+        "clap help leaked: {stderr_str}"
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -409,7 +457,11 @@ fn t14_silence_on_success_across_subcommands() {
         .output()
         .unwrap();
     assert!(out.status.success());
-    assert!(out.stderr.is_empty(), "clean stderr: {}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.stderr.is_empty(),
+        "clean stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
 
     // Re-use the emitted blob for `restore`.
     let v: Value = serde_json::from_slice(&out.stdout).unwrap();
@@ -417,7 +469,11 @@ fn t14_silence_on_success_across_subcommands() {
 
     let (code, _, stderr) = restore_json(&blob, "plain text reply");
     assert_eq!(code, Some(0));
-    assert!(stderr.is_empty(), "restore stderr: {}", String::from_utf8_lossy(&stderr));
+    assert!(
+        stderr.is_empty(),
+        "restore stderr: {}",
+        String::from_utf8_lossy(&stderr)
+    );
 }
 
 // -----------------------------------------------------------------------
@@ -451,7 +507,10 @@ fn t15_stats_detections_excludes_preserve() {
 #[ignore = "requires policy loader (solo #3) to drive an Organization detector with Preserve"]
 fn t15b_stats_detections_excludes_preserve_verbatim_spec() {
     let (_, _, detections) = clean_ok("Alice at alice@example.com works at Acme Corp.");
-    assert_eq!(detections, 1, "tokenized email counts; preserved Organization does not");
+    assert_eq!(
+        detections, 1,
+        "tokenized email counts; preserved Organization does not"
+    );
 }
 
 #[test]
@@ -463,9 +522,202 @@ fn t16_clean_with_policy_tokenizes_email() {
         .write_stdin(b"Email alice@example.com now".to_vec())
         .output()
         .unwrap();
-    assert!(out.status.success(), "stderr={}", String::from_utf8_lossy(&out.stderr));
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let value: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(value["clean_text"].as_str().unwrap(), "Email <Email_1> now");
+}
+
+#[test]
+fn policy_session_ttl_is_honored() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let blob = value["session_blob"].as_str().unwrap();
+    assert_eq!(session_blob_ttl_secs(blob), 3600);
+}
+
+#[test]
+fn cli_session_ttl_overrides_policy() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "clean",
+            &format!("--policy={}", path.display()),
+            "--session-ttl=1800",
+        ])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let blob = value["session_blob"].as_str().unwrap();
+    assert_eq!(session_blob_ttl_secs(blob), 1800);
+}
+
+#[test]
+fn broken_ner_model_dir_exits_policy_config() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    let missing_model = dir.path().join("missing-model");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{{2,}}\b'
+class = "email"
+
+[ner]
+model_dir = "{}"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            missing_model.display()
+        ),
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn column_rule_policy_exits_policy_config_in_cli_mode() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "column"
+column = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("column rules not supported in CLI mode"),
+        "stderr did not mention column rejection: {stderr}"
+    );
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "PolicyConfig");
+    assert_eq!(value["exit"], 2);
 }
 
 #[test]
@@ -474,8 +726,7 @@ fn t19_restore_custom_token_round_trip_ok() {
         s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
     });
 
-    let (code, stdout, stderr) =
-        restore_json(&blob, "Order <Custom:order_id_1> is shipped.");
+    let (code, stdout, stderr) = restore_json(&blob, "Order <Custom:order_id_1> is shipped.");
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(resp["text"].as_str().unwrap(), "Order 42 is shipped.");
@@ -511,8 +762,7 @@ fn t21_restore_wrapped_token_in_prose() {
         s.tokenize(&PiiClass::Email, "bob@example.com").unwrap();
     });
 
-    let (code, stdout, stderr) =
-        restore_json(&blob, "See <Email_1>. Reply <Email_2>");
+    let (code, stdout, stderr) = restore_json(&blob, "See <Email_1>. Reply <Email_2>");
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(
