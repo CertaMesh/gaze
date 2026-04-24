@@ -8,7 +8,7 @@ use serde_json::{Map, Value};
 use crate::locale::{LocaleChain, LocaleTag};
 use crate::redaction_log::ConflictTier;
 use crate::resolver::resolve_candidates;
-use crate::PiiClass;
+use crate::{DictionaryBundle, PiiClass};
 
 static GLOBAL_LOCALE: [LocaleTag; 1] = [LocaleTag::Global];
 
@@ -58,9 +58,6 @@ pub struct DetectContext<'a> {
     pub fields: &'a Map<String, Value>,
     pub degraded: Cell<bool>,
 }
-
-#[derive(Debug, Default)]
-pub struct DictionaryBundle;
 
 pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
@@ -113,7 +110,7 @@ mod tests {
                 class: PiiClass::Email,
             })
             .build();
-        let dictionaries = DictionaryBundle;
+        let dictionaries = DictionaryBundle::default();
         let fields = Map::new();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::Global],
@@ -185,7 +182,7 @@ mod tests {
                 locale: LocaleTag::DeDe,
             })
             .build();
-        let dictionaries = DictionaryBundle;
+        let dictionaries = DictionaryBundle::default();
         let fields = Map::new();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::EnUs, LocaleTag::Global],

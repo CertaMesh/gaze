@@ -5,12 +5,13 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{Action, LocaleTag, PiiClass};
+use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
     pub session: SessionPolicy,
     pub detectors: Vec<DetectorSpec>,
+    pub dictionaries: Vec<RulepackDict>,
     pub rules: Vec<RuleSpec>,
     pub ner: Option<NerPolicy>,
     pub rulepacks: RulepackPolicy,
@@ -34,13 +35,17 @@ pub enum SessionScope {
 pub struct DetectorSpec {
     pub kind: DetectorKind,
     pub name: String,
-    pub pattern: String,
+    pub pattern: Option<String>,
     pub class: PiiClass,
+    pub dictionary_name: Option<String>,
+    pub case_sensitive: bool,
+    pub token_family: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DetectorKind {
     Regex,
+    Dictionary,
     Unknown(String),
 }
 
@@ -77,6 +82,8 @@ pub enum PolicyError {
         #[source]
         source: regex::Error,
     },
+    #[error("invalid dictionary detector '{name}': {reason}")]
+    BadDictionary { name: String, reason: String },
     #[error("session.ttl_secs is required when session.scope = \"persistent\"")]
     MissingTtl,
     #[error("invalid session.ttl_secs: {0}")]
@@ -145,8 +152,16 @@ struct RawSessionPolicy {
 struct RawDetectorSpec {
     kind: String,
     name: String,
-    pattern: String,
+    pattern: Option<String>,
     class: String,
+    dictionary: Option<String>,
+    #[serde(default)]
+    terms: Vec<String>,
+    terms_file: Option<String>,
+    terms_from_context: Option<String>,
+    #[serde(default)]
+    case_sensitive: bool,
+    token_family: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -209,8 +224,13 @@ impl TryFrom<RawPolicy> for Policy {
         } = policy_tables;
 
         let mut detectors = Vec::with_capacity(custom_recognizers.len());
+        let mut dictionaries = Vec::new();
         for detector in custom_recognizers {
-            detectors.push(parse_detector(detector)?);
+            let (detector, dictionary) = parse_detector(detector)?;
+            if let Some(dictionary) = dictionary {
+                dictionaries.push(dictionary);
+            }
+            detectors.push(detector);
         }
         let rulepacks = raw_rulepacks
             .map(parse_rulepack_policy)
@@ -238,6 +258,7 @@ impl TryFrom<RawPolicy> for Policy {
         Ok(Self {
             session,
             detectors,
+            dictionaries,
             rules,
             ner,
             rulepacks,
@@ -283,21 +304,127 @@ fn parse_session(raw: RawSessionPolicy) -> Result<SessionPolicy, PolicyError> {
     }
 }
 
-fn parse_detector(raw: RawDetectorSpec) -> Result<DetectorSpec, PolicyError> {
-    regex::Regex::new(&raw.pattern).map_err(|source| PolicyError::BadRegex {
+fn parse_detector(
+    raw: RawDetectorSpec,
+) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
+    let class = parse_class(&raw.class)?;
+    match raw.kind.as_str() {
+        "regex" => parse_regex_detector(raw, class),
+        "dictionary" => parse_dictionary_detector(raw, class),
+        other => Ok((
+            DetectorSpec {
+                kind: DetectorKind::Unknown(other.to_string()),
+                name: raw.name,
+                pattern: raw.pattern,
+                class,
+                dictionary_name: None,
+                case_sensitive: raw.case_sensitive,
+                token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
+            },
+            None,
+        )),
+    }
+}
+
+fn parse_regex_detector(
+    raw: RawDetectorSpec,
+    class: PiiClass,
+) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
+    let pattern = raw.pattern.ok_or_else(|| PolicyError::BadDictionary {
+        name: raw.name.clone(),
+        reason: "regex recognizers require pattern".to_string(),
+    })?;
+    regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
         name: raw.name.clone(),
         source,
     })?;
 
-    Ok(DetectorSpec {
-        kind: match raw.kind.as_str() {
-            "regex" => DetectorKind::Regex,
-            other => DetectorKind::Unknown(other.to_string()),
+    Ok((
+        DetectorSpec {
+            kind: DetectorKind::Regex,
+            name: raw.name,
+            pattern: Some(pattern),
+            class,
+            dictionary_name: None,
+            case_sensitive: false,
+            token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
         },
-        name: raw.name,
-        pattern: raw.pattern,
-        class: parse_class(&raw.class)?,
-    })
+        None,
+    ))
+}
+
+fn parse_dictionary_detector(
+    raw: RawDetectorSpec,
+    class: PiiClass,
+) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
+    if raw.pattern.is_some() {
+        return Err(PolicyError::BadDictionary {
+            name: raw.name,
+            reason: "dictionary recognizers must not set pattern".to_string(),
+        });
+    }
+
+    let dictionary_name = raw
+        .terms_from_context
+        .clone()
+        .or(raw.dictionary.clone())
+        .unwrap_or_else(|| raw.name.clone());
+    let mut terms = raw.terms;
+    if let Some(path) = raw.terms_file {
+        let path = expand_home(path)?;
+        let file = fs::read_to_string(&path).map_err(PolicyError::Io)?;
+        terms.extend(
+            file.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(str::to_string),
+        );
+    }
+
+    let dictionary = if raw.terms_from_context.is_some() {
+        if !terms.is_empty() {
+            return Err(PolicyError::BadDictionary {
+                name: raw.name.clone(),
+                reason: "terms_from_context cannot be combined with terms or terms_file"
+                    .to_string(),
+            });
+        }
+        None
+    } else {
+        if terms.is_empty() {
+            return Err(PolicyError::BadDictionary {
+                name: raw.name.clone(),
+                reason: "dictionary recognizers require terms, terms_file, or terms_from_context"
+                    .to_string(),
+            });
+        }
+        if !raw.case_sensitive && terms.iter().any(|term| !term.is_ascii()) {
+            return Err(PolicyError::BadDictionary {
+                name: raw.name.clone(),
+                reason:
+                    "unicode dictionary insensitive matching unsupported in v0.4.0, use case_sensitive = true"
+                        .to_string(),
+            });
+        }
+        Some(RulepackDict {
+            name: dictionary_name.clone(),
+            terms,
+            case_sensitive: raw.case_sensitive,
+        })
+    };
+
+    Ok((
+        DetectorSpec {
+            kind: DetectorKind::Dictionary,
+            name: raw.name,
+            pattern: None,
+            class,
+            dictionary_name: Some(dictionary_name),
+            case_sensitive: raw.case_sensitive,
+            token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
+        },
+        dictionary,
+    ))
 }
 
 fn parse_rule(raw: RawRuleSpec) -> Result<RuleSpec, PolicyError> {
@@ -487,5 +614,43 @@ action = "preserve"
             Policy::load(&path),
             Err(PolicyError::TomlParse(_))
         ));
+    }
+
+    #[test]
+    fn loads_dictionary_custom_recognizer_terms() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("policy.toml");
+        fs::write(
+            &path,
+            r#"
+[session]
+scope = "ephemeral"
+
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "songs"
+class = "custom:song"
+terms = ["Song A"]
+case_sensitive = true
+
+[[rule]]
+kind = "class"
+class = "custom:song"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+        )
+        .unwrap();
+
+        let policy = Policy::load(&path).unwrap();
+        assert_eq!(policy.detectors[0].kind, DetectorKind::Dictionary);
+        assert_eq!(
+            policy.detectors[0].dictionary_name.as_deref(),
+            Some("songs")
+        );
+        assert_eq!(policy.dictionaries[0].terms, vec!["Song A"]);
     }
 }

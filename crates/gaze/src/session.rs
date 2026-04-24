@@ -320,7 +320,7 @@ impl Session {
         }
         // Authoritative counter state from the exporter. Overrides any
         // index we reconstructed from parseable token suffixes above so
-        // that format-preserving tokens (e.g. `email1@example.test`)
+        // that format-preserving tokens (e.g. `email1.<session>@gaze-fake.invalid`)
         // also round-trip safely.
         for (class, index) in payload.next_by_class {
             let mut next = session.next_by_class.entry(class).or_insert(0);

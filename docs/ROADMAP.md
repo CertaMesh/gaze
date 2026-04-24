@@ -35,8 +35,8 @@ alternatives live in `docs/research/gaze-first-principles-vision.md` and
 
 v0.3.0 delivers the first adopter-ready Gaze runtime: `gaze clean` and
 `gaze restore` CLI with two-pass restore (Pass 1 manifest lookup plus Pass 2
-hallucination trap), angle-bracket counter-family tokens (`<Email_1>`,
-`<Custom:order_id_1>`) with format-preserving bare emails, `policy.toml`
+hallucination trap), angle-bracket counter-family tokens (`<{session_hex}:Email_1>`,
+`<{session_hex}:Custom:order_id_1>`) with format-preserving bare emails, `policy.toml`
 configuration surface, SQLite redaction log, and the Laravel adapter
 (`gaze-laravel`) that pipes requests through the binary. The homebrew
 formula `Naoray/gaze/gaze` resolves to the real release artifact, and the
@@ -75,7 +75,8 @@ production. Next focus is v0.4 engine/corpus separation.
 (`gaze` / `gaze-recognizers` / `gaze-cli`). F2 `RecognizerRegistry` trait.
 F3 TOML rulepack schema. F4 locale infra (DACH + EN). F5 `.invalid`
 domain handling. F6 Dictionary detector. Typed `Context` envelope. Token
-grammar becomes session-scoped: `<{8-hex}:{Class}_{N}>`. Pass 2 regex
+grammar becomes session-scoped: `<{session_hex}:Email_1>` where
+`{session_hex}` is 8 lowercase hex chars per session. Pass 2 regex
 splits into a two-branch form (prefixed manifest-lookup + unprefixed trap
 for fail-closed). `SnapshotPayload` envelope byte bumps 1 → 2.
 **Status:** multi-review loop; Layer A implementation auto-fires on
