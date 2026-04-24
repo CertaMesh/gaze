@@ -1,15 +1,37 @@
 # Gaze
 
-**Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever.**
+**Reversible PII pseudonymization for agentic workflows.**
 
-Channel-agnostic redaction workspace for AI-facing production tooling.
+Gaze lets AI tools inspect logs, database samples, support messages, and production-adjacent data without exposing real personal data to the agent.
 
-"Pseudonymization" is the GDPR Art. 4(5) term for reversible substitution with tokens — that reversibility is the Gaze moat, not one-way redaction. See [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24) for the locked north star and rationale.
+It does not merely redact. It replaces PII with stable, reversible tokens, so the data owner can safely restore the original values later — while the agent only ever sees pseudonyms.
+
+**Clean in. Safe out. Restore when needed. No silent leaks.**
+
+## What Gaze is
+
+Gaze is a reversible PII pseudonymization runtime that lets AI agents work with production data without ever seeing the real personal data.
 
 The workspace has two crates:
 
 - `crates/gaze` — shared redaction core library and the standalone `gaze clean` / `gaze restore` CLI
 - `crates/debug-proxy` — MCP debug server for MySQL + Laravel logs
+
+## Project north star
+
+> **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**
+
+"Pseudonymization" is the GDPR Art. 4(5) term for reversible substitution with tokens — that reversibility is the Gaze moat, not one-way redaction. See [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24) for the locked north star and rationale.
+
+## Five Axes
+
+Every design, implementation, and review decision is evaluated against these five axes. Full rationale: [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+
+1. **Reliability (never leak).** Fail-closed always; defense in depth across regex, NER, dictionary, and optional neural safety net.
+2. **Reversibility.** Manifest-first restore; no one-way primitives in the core contract.
+3. **Agentic-first.** Prioritizes agent-workflow needs (tool-call JSON, streaming, multi-turn, tenant PII) over generic text handling.
+4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
+5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
 ## Install (v0.3.0)
 
@@ -28,16 +50,6 @@ mv gaze-aarch64-apple-darwin /usr/local/bin/gaze
 ```
 
 Linux and Intel macOS binaries are not published in v0.3.0; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release` in the meantime.
-
-## Five Axes
-
-Every design, implementation, and review decision is evaluated against these five axes. Full rationale: [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
-
-1. **Reliability (never leak).** Fail-closed always; defense in depth across regex, NER, dictionary, and optional neural safety net.
-2. **Reversibility.** Manifest-first restore; no one-way primitives in the core contract.
-3. **Agentic-first.** Prioritizes agent-workflow needs (tool-call JSON, streaming, multi-turn, tenant PII) over generic text handling.
-4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
-5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
 ## Workspace Layout
 
