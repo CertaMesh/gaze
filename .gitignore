@@ -4,3 +4,9 @@
 *.db
 *.db-journal
 .DS_Store
+
+# Tool/agent ephemera — never source
+/.claude/scheduled_tasks.lock
+/.claude/settings.local.json
+/agents/
+/done/
