@@ -1,5 +1,7 @@
 # CLAUDE.md — Gaze
 
+See [AGENTS.md](./AGENTS.md) for canonical project rules + the Gaze north star. This file adds only Claude-Code-specific addenda.
+
 Repo-level guidance for Claude Code sessions working in this project.
 
 ## Project north star
