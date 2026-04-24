@@ -388,6 +388,29 @@ fn cascade_llm_hallucination_still_trapped() {
     );
 }
 
+#[test]
+fn cascade_trap_boundary_crossing_not_exempted() {
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s.tokenize(&PiiClass::custom("name_ref"), "Foo").unwrap()]
+    });
+    assert_session_scoped_custom_token(&tokens[0]);
+
+    let text = format!("{}_7", tokens[0]);
+    let (code, stdout, stderr) = restore_json(&blob, &text);
+
+    assert_eq!(
+        code,
+        Some(3),
+        "expected exit 3, stdout={} stderr={}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr)
+    );
+    assert_eq!(
+        parse_stderr_variant(&stderr),
+        json!({ "error": "UnknownToken", "exit": 3, "token": "Foo_7" })
+    );
+}
+
 // -----------------------------------------------------------------------
 // 5. Adjacency corruption regression
 // -----------------------------------------------------------------------
