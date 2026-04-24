@@ -79,14 +79,28 @@ impl SqliteLogger {
             "#,
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
-        if let Err(err) = conn.execute(
-            "ALTER TABLE redaction_log ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'none'",
-            [],
-        ) {
-            let message = err.to_string();
-            if !message.contains("duplicate column name") {
-                return Err(crate::Error::Sqlite(message));
+        let has_decided_by = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(redaction_log)")
+                .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+            let columns = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+            let mut found = false;
+            for column in columns {
+                if column.map_err(|err| crate::Error::Sqlite(err.to_string()))? == "decided_by" {
+                    found = true;
+                    break;
+                }
             }
+            found
+        };
+        if !has_decided_by {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'none'",
+                [],
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         }
         Ok(Self {
             conn: Mutex::new(conn),

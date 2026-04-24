@@ -61,6 +61,10 @@ impl Pipeline {
         self
     }
 
+    /// Redacts using the default `[Global]` locale chain.
+    ///
+    /// Prefer `redact_with_context` when policy, CLI, or rulepack locale
+    /// defaults should constrain which recognizers run.
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
         let locale_chain = [crate::LocaleTag::Global];
         self.redact_with_context(session, raw, &locale_chain)
