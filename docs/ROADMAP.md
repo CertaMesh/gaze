@@ -31,32 +31,52 @@ alternatives live in `docs/research/gaze-first-principles-vision.md` and
 
 ---
 
-## Current state — v0.3.0 shipped 2026-04-24
+## Current state — v0.4.0-rc.1 shipped 2026-04-24
 
-v0.3.0 delivers the first adopter-ready Gaze runtime: `gaze clean` and
-`gaze restore` CLI with two-pass restore (Pass 1 manifest lookup plus Pass 2
-hallucination trap), angle-bracket counter-family tokens (`<{session_hex}:Email_1>`,
-`<{session_hex}:Custom:order_id_1>`) with format-preserving bare emails, `policy.toml`
-configuration surface, SQLite redaction log, and the Laravel adapter
-(`gaze-laravel`) that pipes requests through the binary. The homebrew
-formula `Naoray/gaze/gaze` resolves to the real release artifact, and the
-drift-gate fixture compile-errors if `PiiClass` grows without a matching
-grammar update.
+v0.4.0-rc.1 lands the engine/corpus separation planned for v0.4 Phase 1 and
+cuts over the detection path to recognizers. The workspace is now four
+crates (`gaze`, `gaze-recognizers`, `gaze-cli`, `debug-proxy`). Detection
+runs through `gaze::RecognizerRegistry` with a typed `DetectContext`; the
+legacy standalone `Detector` path is gone. The TOML rulepack schema
+(`[policy.rulepacks]`, `[[policy.custom_recognizers]]`) plus the 4-tier
+locale chain (CLI > policy > rulepack default > system default) with strict
+`LocaleTag::Other(_)` matching are live. Format-preserving emails now use
+`.invalid`, the Aho-Corasick dictionary recognizer ships for tenant PII,
+and the F7.5 byte-range-skip closes the Pass 1 → Pass 2 cascade false
+positive under strict restore mode. Audit entries carry `decided_by:
+ConflictTier` plus merge-loser rows. Full entry in
+[CHANGELOG.md](../CHANGELOG.md).
 
-Known spec-drift scheduled for the v0.3.1 patch (already landed on main as
-of 2026-04-24 — see `b70947d`):
+Shipped earlier on the v0.3 line and still live:
 
-- `[session]` policy.toml key now authoritative over `--session-ttl`
-- Broken `[ner] model_dir` exits `PolicyConfig` (exit code 2) instead of
-  silently degrading
-- `kind = "column"` policy rules rejected by `gaze clean` CLI load
+- `gaze clean` / `gaze restore` CLI with two-pass restore (manifest
+  lookup + hallucination trap), angle-bracket counter-family tokens
+  (`<{session_hex}:Email_1>`, `<{session_hex}:Custom:order_id_1>`),
+  format-preserving bare emails, SQLite redaction log, drift-gate fixture
+  that compile-errors if `PiiClass` grows without a matching grammar
+  update, Apple Silicon macOS binary + homebrew formula, `gaze-laravel`
+  adapter.
+- v0.3.1 spec-drift patches: `[session]` authoritative over
+  `--session-ttl`; broken `[ner] model_dir` exits `PolicyConfig`;
+  `kind = "column"` policy rules rejected by the CLI loader; NER BIO-prefix
+  `labels.json` resolved.
 
-Live binary + homebrew formula + adopter deployment (gaze-laravel) are
-production. Next focus is v0.4 engine/corpus separation.
+Known limits logged for the v0.4.1 patch (see
+[CHANGELOG.md](../CHANGELOG.md) "Known limits"):
+
+- `token.family` / `token.format` and `context.hotwords` / `boost` /
+  `window` are parsed but gated with `UnsupportedFieldInB1`.
+- Dictionary audit log carries `dictionary:{name}` only; per-term
+  traceability pending.
+- NER context-sensitivity gap on prompt boilerplate + RFC822 headers
+  (issue #24).
+
+Next focus is closing the v0.4.1 list plus the Tier 1 structured recognizer
+set.
 
 ---
 
-## v0.4 — engine/corpus split + tenant PII (target: weeks)
+## v0.4 — engine/corpus split + tenant PII (Phase 1 shipped in rc.1)
 
 ### Why
 
@@ -75,12 +95,16 @@ production. Next focus is v0.4 engine/corpus separation.
 (`gaze` / `gaze-recognizers` / `gaze-cli`). F2 `RecognizerRegistry` trait.
 F3 TOML rulepack schema. F4 locale infra (DACH + EN). F5 `.invalid`
 domain handling. F6 Dictionary detector. Typed `Context` envelope. Token
-grammar becomes session-scoped: `<{session_hex}:Email_1>` where
+grammar is session-scoped: `<{session_hex}:Email_1>` where
 `{session_hex}` is 8 lowercase hex chars per session. Pass 2 regex
 splits into a two-branch form (prefixed manifest-lookup + unprefixed trap
 for fail-closed). `SnapshotPayload` envelope byte bumps 1 → 2.
-**Status:** multi-review loop; Layer A implementation auto-fires on
-review clear.
+**Status:** shipped in v0.4.0-rc.1 — crate split, `RecognizerRegistry`
+(legacy `Detector` path removed), rulepack schema with closed
+validator/normalizer registry + `UnsupportedFieldInB1` gating, 4-tier
+locale chain, `.invalid` FPE emails, Aho-Corasick dictionary recognizer,
+typed `DetectContext` envelope via `--context-json`, F7.5 Pass 1 → Pass 2
+byte-range-skip. PRs #21, #22, #23, #25, #26.
 
 **Phase 2 — Engine.** Overlap resolver, context-aware enhancer,
 validator trait, in-house validator implementations (Luhn, IBAN MOD-97,

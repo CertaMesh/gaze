@@ -24,4 +24,15 @@ Verbatim user directive (2026-04-24): *"set a north star to be focused on never 
 
 All design, implementation, and review decisions in this repo must be evaluated against these axes. If a decision weakens any axis, call it out in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 
-Full rationale (including what the north star rejects and how drift is measured) lives in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24) and in MemPalace drawer `drawer_gaze_decisions_ba559e1cf1fbca5c1098b12f` (wing=gaze, room=decisions).
+Full rationale (including what the north star rejects and how drift is measured) lives in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+
+## v0.4 architecture primer
+
+As of v0.4.0-rc.1 the repo is split into four crates and uses a recognizer-native detection path. Future Claude sessions should keep the deltas below in mind before touching code.
+
+- **Crates:** `gaze` (core: pipeline, session, policy, registry, locale, rulepack), `gaze-recognizers` (regex/dictionary/NER backends + embedded rulepacks + locale bundles), `gaze-cli` (standalone `gaze` binary, the `map_policy_error` surface, `--locale`/`--context-json` flags), `debug-proxy` (MCP consumer). Always `cargo test --workspace`, never per-crate, unless you're narrowing a single failure.
+- **Detection is recognizer-native.** Every detector runs through `gaze::RecognizerRegistry` with a typed `DetectContext` envelope. The legacy standalone `Detector` path was removed. New detection features should land as a `Recognizer` impl in `gaze-recognizers`, not as a bespoke pipeline hook.
+- **Policy surface:** `[policy.rulepacks]` (bundled + path) + `[[policy.custom_recognizers]]`. Top-level `[[detector]]` is rejected. When editing `crates/gaze/src/policy.rs`, cross-check [docs/policy.md](docs/policy.md) and the `gaze-cli` integration suite in `crates/gaze-cli/tests/cli_pipe.rs`.
+- **Locale chain is 4-tier** (CLI > policy > rulepack default > system default) with strict `LocaleTag::Other(_)` matching. Recognizers gate on `locales = [...]`.
+- **Conflict resolution:** class-priority > rule-priority > score > span-length > recognizer-id with multi-overlap fixed point. Losers are logged with `decided_by: ConflictTier` in the redaction log.
+- **Rulepack fields parsed but gated** (v0.4.1-pending): `token.family`, `token.format`, `context.hotwords`, `context.boost`, `context.window`. If a design needs these, unblock them deliberately rather than editing around the `UnsupportedFieldInB1` guard.
