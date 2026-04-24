@@ -358,6 +358,54 @@ guidance — the EDPB framing applies to confidentiality of the *token map*,
 which in pipe mode is plaintext inside the blob and depends entirely on the
 host's AEAD envelope, not on the session signing key.
 
+### Caller contract — blob↔text pairing (scope isolation)
+
+**Tokens are session-local, not globally unique.** Counter-family shapes
+like `Email_1`, `Name_1`, `<Email_1>` (post-v0.3.0-rc.3 angle-bracket wrap)
+are counters reset on every `clean` invocation. Two independent `clean`
+calls legitimately emit identical token shapes for unrelated PII — Session
+A's `Email_1` maps to `alice@example.com` inside *A's* blob, and Session
+B's `Email_1` maps to `bob@example.com` inside *B's* blob. This is by
+design: per-request sessions are the rotation model (see §"Snapshot
+rotation"), and giving each session a private counter space is cheaper
+than a global counter that would require coordination across workers.
+
+**The caller contract, stated sharply:** every `restore` call MUST pair
+the blob returned by `clean` with text that originated from the *same*
+`clean` invocation. The tuple `(blob_i, cleanText_i)` is load-bearing;
+splitting it is undefined behaviour.
+
+Concretely, `restore(blob_A, cleanText_B)` — where `cleanText_B` was
+produced by a different `clean` call than `blob_A` — may, without warning:
+
+- Substitute A's PII into B's text wherever B happens to contain a shape
+  A's manifest also knows (e.g. both manifests have `Email_1`, and the
+  substitution silently cross-pollinates A's `alice@example.com` into B's
+  prose).
+- Leave B's tokens un-substituted when B's shapes don't appear in A's
+  manifest.
+- Exit `3` with `UnknownToken` when Pass 2 finds a B-shape that A's manifest
+  doesn't cover and the fail-closed validator trips.
+
+**The CLI does not detect blob/text mismatch.** The ed25519 signature
+proves the blob is internally consistent (see §"Blob format" for what the
+signature actually proves); it does not bind the blob to any particular
+cleanText. No text-side fingerprint is computed in v0.3.
+
+**Host responsibility.** Hosts are the authoritative binding layer. The
+Laravel wrapper (see `laravel.md` §"Session handling") keeps the blob on
+the `GazeSession` value object that travels alongside the `cleanText`
+through the queue/job/LLM round-trip. Any host writing a different
+wrapper MUST replicate the same 1:1 association — never pool cleanTexts
+across sessions, never cache blobs and match them against arbitrary LLM
+output, never let one request's blob restore another request's text.
+
+**v0.4 direction (non-binding note).** v0.4 Phase 1 adds a text-provenance
+fingerprint to the blob so `restore` can reject mismatched pairs at the
+library layer instead of relying purely on caller discipline. The v0.3
+contract stays callers-own-pairing; v0.4 hardens it in the library. No
+token-grammar break is planned for the harden step.
+
 ### Snapshot rotation
 
 For v0.3.0 pipe mode, every `clean` call produces a fresh session so
@@ -624,3 +672,4 @@ coverage of Name / Location / custom classes end-to-end.
 | 2026-04-23 | Ed25519 signing reframed: bit-flip-resistant, not tamper-evident | Verifying key is embedded in the blob; forgery is possible by any actor controlling the bytes. Real integrity is AEAD on the host. |
 | 2026-04-23 | `issued_at` in `SnapshotPayload` ship-blocks v0.3.0 (solo #4) | Adding it in v0.3.1 without a version-byte bump is impossible on v0.3.0 blobs; `BlobExpired` contract depends on it. |
 | 2026-04-23 | Windows not a target for v0.3                               | Library uses `libc::mlock`/`madvise` for key protection; v0.4+ scope.     |
+| 2026-04-24 | Blob↔text pairing = caller responsibility (v0.3 contract)   | Counter-family tokens are session-local; `restore(blob_A, cleanText_B)` is undefined behaviour. Library does not fingerprint text. v0.4 Phase 1 hardens via manifest+text provenance (no grammar break). Hybrid direction (v0.3 spec revision now, v0.4 library impl later) picked for solo #44. |
