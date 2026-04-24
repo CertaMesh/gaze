@@ -675,6 +675,52 @@ action = "preserve"
 }
 
 #[test]
+fn column_rule_policy_exits_policy_config_in_cli_mode() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 3600
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "column"
+column = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"Email alice@example.com now".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("column rules not supported in CLI mode"),
+        "stderr did not mention column rejection: {stderr}"
+    );
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "PolicyConfig");
+    assert_eq!(value["exit"], 2);
+}
+
+#[test]
 fn t19_restore_custom_token_round_trip_ok() {
     let blob = build_blob_with(|s| {
         s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();

@@ -79,6 +79,8 @@ pub enum PolicyError {
     NoDetectors,
     #[error("ner load error: {0}")]
     NerLoad(#[source] crate::ner::NerLoadError),
+    #[error("{0}")]
+    UnsupportedRuleKind(String),
 }
 
 impl Policy {
@@ -86,6 +88,20 @@ impl Policy {
         let raw = fs::read_to_string(path).map_err(PolicyError::Io)?;
         let raw: RawPolicy = toml::from_str(&raw).map_err(PolicyError::TomlParse)?;
         raw.try_into()
+    }
+
+    pub fn load_for_cli(path: &Path) -> Result<Policy, PolicyError> {
+        let policy = Self::load(path)?;
+        if policy
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, RuleSpec::Column { .. }))
+        {
+            return Err(PolicyError::UnsupportedRuleKind(
+                "column rules not supported in CLI mode".to_string(),
+            ));
+        }
+        Ok(policy)
     }
 }
 

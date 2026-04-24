@@ -139,10 +139,11 @@ action = "preserve"
 - **`kind = "class"`** — fires when a detection's class equals `class`. The
   most common rule shape.
 - **`kind = "column"`** — fires when the document being redacted is a
-  structured value and the current field name equals `column`. **From
-  `gaze clean` today, this never fires:** the CLI only accepts text on
-  stdin, so there is no field name. `column` rules are useful only when
-  driving the library directly with `RawDocument::Structured`.
+  structured value and the current field name equals `column`. Resolved in
+  v0.3.1: `gaze clean` rejects policies containing `column` rules with
+  `PolicyConfig`, because the CLI only accepts text on stdin and has no field
+  name. `column` rules are useful only when driving the library directly with
+  `RawDocument::Structured`.
 - **`kind = "default"`** — always fires. Place last as a catch-all. If
   omitted, unmatched detections fall through to `Preserve` automatically,
   but an explicit `default` makes the policy intent visible.
@@ -470,6 +471,7 @@ and is summarised here.
 | `{"error":"PolicyConfig","exit":2}`     | `NoRules`                  | 2    | Zero `[[rule]]` blocks. At least one is required.                            |
 | `{"error":"PolicyConfig","exit":2}`     | `BadTtl("unknown detector.kind …")` | 2 | `kind` was not `"regex"`. Surfaced from `Pipeline::from_policy`, not the parser. |
 | `{"error":"PolicyConfig","exit":2}`     | `NerLoad`                  | 2    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
+| `{"error":"PolicyConfig","exit":2,"detail":"column rules not supported in CLI mode"}` | `UnsupportedRuleKind` | 2 | `gaze clean` received a policy containing `kind = "column"`. Use library structured input for column rules. |
 
 ## See also
 
@@ -492,8 +494,6 @@ gaps land on the engineering board:
 2. **Resolved in v0.3.1: `[ner]` load failures exit `2` `PolicyConfig`.**
    `PolicyError::NerLoad` keeps missing or corrupt model bundles in the
    policy/configuration failure class.
-3. **`kind = "column"` rules never fire from `gaze clean`.** The CLI only
-   submits `RawDocument::Text`, so `Context::field_name` is always `None`
-   and `ColumnRule` cannot match. Either document this as library-only or
-   plumb a field-name hint through stdin (e.g. accept JSON `{field, text}`
-   on stdin under an opt-in flag).
+3. **Resolved in v0.3.1: `kind = "column"` rules are rejected in CLI mode.**
+   `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
+   detail string, avoiding silent no-op column rules for text stdin.

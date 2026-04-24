@@ -77,6 +77,7 @@ enum CliError {
     InputTooLarge,
     InvalidEncoding,
     PolicyConfig,
+    PolicyConfigDetail(&'static str),
     UnknownToken,
     InvalidSignature,
     InvalidBlobVersion,
@@ -90,7 +91,7 @@ impl CliError {
     fn exit_code(&self) -> u8 {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
-            Self::PolicyConfig => 2,
+            Self::PolicyConfig | Self::PolicyConfigDetail(_) => 2,
             Self::UnknownToken
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
@@ -106,7 +107,7 @@ impl CliError {
             Self::EmptyInput => "EmptyInput",
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
-            Self::PolicyConfig => "PolicyConfig",
+            Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::UnknownToken => "UnknownToken",
             Self::InvalidSignature => "InvalidSignature",
             Self::InvalidBlobVersion => "InvalidBlobVersion",
@@ -118,11 +119,19 @@ impl CliError {
     }
 
     fn emit_stderr(&self) {
-        eprintln!(
-            r#"{{"error":"{}","exit":{}}}"#,
-            self.variant_name(),
-            self.exit_code()
-        );
+        match self {
+            Self::PolicyConfigDetail(detail) => eprintln!(
+                r#"{{"error":"{}","exit":{},"detail":"{}"}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                detail
+            ),
+            _ => eprintln!(
+                r#"{{"error":"{}","exit":{}}}"#,
+                self.variant_name(),
+                self.exit_code()
+            ),
+        }
     }
 }
 
@@ -247,7 +256,7 @@ fn run_clean(
 
     let counter = Arc::new(CountingLogger::default());
     let loaded_policy = match policy {
-        Some(path) => Some(Policy::load(path).map_err(map_policy_error)?),
+        Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => None,
     };
 
@@ -329,6 +338,9 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
 fn map_policy_error(err: PolicyError) -> CliError {
     match err {
         PolicyError::Io(_) => CliError::PolicyOpen,
+        PolicyError::UnsupportedRuleKind(_) => {
+            CliError::PolicyConfigDetail("column rules not supported in CLI mode")
+        }
         _ => CliError::PolicyConfig,
     }
 }
