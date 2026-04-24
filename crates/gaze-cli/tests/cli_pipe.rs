@@ -543,6 +543,19 @@ fn rulepack_recognizer_is_gated_by_policy_locale() {
 }
 
 #[test]
+fn rulepack_recognizer_fr_fr_not_gated_by_en_us() {
+    let rulepack = de_email_rulepack("\"fr-FR\"").replace("kundennummer", "ticket");
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, Some("\"en-US\""));
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung ticket-123",
+    );
+
+    assert_eq!(v["clean_text"], "kennung ticket-123");
+    assert_eq!(v["stats"]["detections"], 0);
+}
+
+#[test]
 fn rulepack_dictionary_matcher_fails_closed_until_dictionary_runtime_lands() {
     let rulepack = r#"
 schema_version = "0.1.0"

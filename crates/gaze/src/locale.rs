@@ -98,13 +98,15 @@ impl LocaleChain {
         LocaleChain::from_tags(tags)
     }
 
+    /// Returns true when a recognizer can run under this active locale chain.
+    /// `Global` recognizers are universal; opaque `Other` tags must match by
+    /// exact canonical tag string.
     pub fn intersects(&self, recognizer_locales: &[LocaleTag]) -> bool {
         if recognizer_locales.is_empty() {
             return true;
         }
         recognizer_locales.iter().any(|recognizer_locale| {
             *recognizer_locale == LocaleTag::Global
-                || matches!(recognizer_locale, LocaleTag::Other(_))
                 || self.0.iter().any(|active| active == recognizer_locale)
         })
     }
@@ -212,10 +214,22 @@ mod tests {
     }
 
     #[test]
-    fn intersection_treats_global_and_unshipped_other_as_fallback() {
+    fn intersection_treats_global_as_universal() {
         let chain = LocaleChain::from_cli("fr-FR").unwrap();
         assert!(chain.intersects(&[LocaleTag::Global]));
         assert!(chain.intersects(&[LocaleTag::Other("fr-FR".to_string())]));
         assert!(!chain.intersects(&[LocaleTag::DeDe]));
+    }
+
+    #[test]
+    fn locale_other_does_not_match_unrelated_other() {
+        let chain = LocaleChain::from_cli("en-US").unwrap();
+        assert!(!chain.intersects(&[LocaleTag::Other("fr-FR".to_string())]));
+    }
+
+    #[test]
+    fn locale_other_matches_same_other_in_chain() {
+        let chain = LocaleChain::from_cli("zh-CN").unwrap();
+        assert!(chain.intersects(&[LocaleTag::Other("zh-CN".to_string())]));
     }
 }
