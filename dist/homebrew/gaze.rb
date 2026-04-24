@@ -1,21 +1,21 @@
 class Gaze < Formula
   desc "Channel-agnostic PII redaction CLI for AI pipelines"
   homepage "https://github.com/Naoray/gaze"
-  version "0.3.1"
+  version "0.4.0-rc.1"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/Naoray/gaze/releases/download/v0.3.1/gaze-aarch64-apple-darwin"
-      sha256 "20935b76cf0708c2c0324aae63394b9cfb4e4838f9e33339118a16c80bd022fd"
+      url "https://github.com/Naoray/gaze/releases/download/v0.4.0-rc.1/gaze-v0.4.0-rc.1-aarch64-apple-darwin.tar.gz"
+      sha256 "4ccdce9cccd3c9777fb6983de3d0c884568f7147a98cde01fafc298013df592b"
     end
   end
 
   def install
-    bin.install Dir["gaze-*"].first => "gaze"
+    bin.install "gaze"
   end
 
   test do
-    assert_match "gaze 0.3.1", shell_output("#{bin}/gaze --version")
+    assert_match "gaze 0.4.0-rc.1", shell_output("#{bin}/gaze --version")
   end
 end
