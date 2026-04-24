@@ -8,6 +8,7 @@ use debug_proxy::adapter::{
 use debug_proxy::mcp::errors::CANARY;
 use debug_proxy::policy::{build_pipeline, PolicyFile};
 use gaze::{CleanDocument, Scope, Session, Value};
+use regex::Regex;
 
 struct FakeDb;
 
@@ -138,7 +139,8 @@ async fn canary_never_leaks_and_pseudonyms_match_across_channels() {
         panic!("expected text row");
     };
 
-    assert!(db_token.starts_with('<') && db_token.ends_with(&format!(":Email_{}>", 1)));
+    let shape = Regex::new(r"^<[0-9a-f]{8}:Email_1>$").unwrap();
+    assert!(shape.is_match(&db_token));
     assert!(log_text.contains(&db_token));
     assert!(!log_text.contains(CANARY));
 }
