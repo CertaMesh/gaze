@@ -22,11 +22,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy,
-    PolicyError, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec,
-    Scope, SensitiveSnapshot, Session,
+    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, LocaleChain, LocaleTag, PiiClass,
+    Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger,
+    Result as GazeResult, RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
 };
-use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
+use gaze_recognizers::{NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind};
 
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
@@ -58,6 +58,9 @@ enum Cmd {
         /// Override the persistent session TTL in seconds.
         #[arg(long)]
         session_ttl: Option<u64>,
+        /// Active locale fallback chain, comma separated and priority ordered.
+        #[arg(long, value_delimiter = ',')]
+        locale: Vec<String>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -131,8 +134,9 @@ fn main() -> ExitCode {
             policy,
             format,
             session_ttl,
+            locale,
             max_bytes,
-        } => run_clean(policy.as_deref(), &format, session_ttl, max_bytes),
+        } => run_clean(policy.as_deref(), &format, session_ttl, &locale, max_bytes),
         Cmd::Restore {
             format,
             restore_mode,
@@ -194,6 +198,7 @@ fn run_clean(
     policy: Option<&std::path::Path>,
     format: &str,
     session_ttl: Option<u64>,
+    locale: &[String],
     max_bytes: u64,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
@@ -204,9 +209,22 @@ fn run_clean(
         Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => None,
     };
+    let loaded_rulepacks = match &loaded_policy {
+        Some(policy) => load_rulepacks(policy).map_err(map_pipeline_error)?,
+        None => Vec::new(),
+    };
+    let rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
+    let cli_locales = parse_cli_locales(locale)?;
+    let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
+        cli_locales.as_deref(),
+        loaded_policy
+            .as_ref()
+            .and_then(|policy| policy.locale.as_deref()),
+        Some(&rulepack_default_locales),
+    );
 
     let pipeline = match &loaded_policy {
-        Some(policy) => build_pipeline_from_policy(policy)
+        Some(policy) => build_pipeline_from_policy(policy, loaded_rulepacks)
             .map_err(map_pipeline_error)?
             .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None => {
@@ -225,7 +243,7 @@ fn run_clean(
     .map_err(|_| CliError::Pipeline)?;
 
     let clean_doc = pipeline
-        .redact(&session, RawDocument::Text(raw))
+        .redact_with_context(&session, RawDocument::Text(raw), locale_chain.as_slice())
         .map_err(|_| CliError::Pipeline)?;
 
     let clean_text = match clean_doc {
@@ -245,11 +263,22 @@ fn run_clean(
         session_blob,
         stats: Stats {
             detections: counter.detections.load(Ordering::Relaxed),
+            locale_chain: locale_chain.to_strings(),
         },
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+fn parse_cli_locales(raw: &[String]) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    raw.iter()
+        .map(|locale| LocaleTag::parse(locale).map_err(|_| CliError::PolicyConfig))
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 fn run_restore(
@@ -306,11 +335,12 @@ fn map_policy_error(err: PolicyError) -> CliError {
 fn map_pipeline_error(err: gaze::Error) -> CliError {
     match err {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
+        gaze::Error::Rulepack(_) => CliError::PolicyConfig,
         _ => CliError::Pipeline,
     }
 }
 
-fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
+fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> GazeResult<Pipeline> {
     let mut builder = Pipeline::builder();
 
     for detector in &policy.detectors {
@@ -326,6 +356,72 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
                 ))))
             }
         };
+    }
+
+    let mut rulepack_recognizers =
+        std::collections::BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
+    for rulepack in rulepacks {
+        for recognizer in rulepack.recognizers {
+            tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
+            if let Some((first_pack, _)) = rulepack_recognizers.get(&recognizer.id) {
+                return Err(gaze::Error::Rulepack(gaze::RulepackError::DuplicateId {
+                    id: recognizer.id,
+                    first_pack: first_pack.clone(),
+                    second_pack: rulepack.rulepack_id.clone(),
+                }));
+            }
+            rulepack_recognizers.insert(
+                recognizer.id.clone(),
+                (rulepack.rulepack_id.clone(), recognizer),
+            );
+        }
+    }
+    for (_, recognizer) in rulepack_recognizers
+        .into_values()
+        .filter(|(_, r)| r.enabled)
+    {
+        match recognizer.matcher {
+            RawMatch::Regex { pattern } => {
+                let exclusions = recognizer
+                    .context
+                    .as_ref()
+                    .map(|context| context.exclusions.clone())
+                    .unwrap_or_default();
+                let validator_kind = recognizer
+                    .validator
+                    .as_ref()
+                    .map(|validator| ValidatorKind::parse(&validator.kind))
+                    .transpose()?;
+                let normalizer_kind = recognizer
+                    .normalizer
+                    .as_ref()
+                    .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
+                    .transpose()?;
+                builder = builder.recognizer(RegexDetector::with_rulepack_fields(
+                    &pattern,
+                    recognizer.class,
+                    &recognizer.id,
+                    recognizer.locales,
+                    recognizer.scoring.base,
+                    recognizer.scoring.priority,
+                    recognizer.token.family.as_deref().unwrap_or("counter"),
+                    recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
+                    exclusions,
+                    validator_kind,
+                    normalizer_kind,
+                )?);
+            }
+            RawMatch::Dictionary { .. } => {
+                return Err(gaze::Error::Rulepack(
+                    gaze::RulepackError::UnsupportedMatcher("Dictionary".to_string()),
+                ))
+            }
+            RawMatch::Ner { .. } => {
+                return Err(gaze::Error::Rulepack(
+                    gaze::RulepackError::UnsupportedMatcher("Ner".to_string()),
+                ))
+            }
+        }
     }
 
     for rule in &policy.rules {
@@ -352,6 +448,34 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
     }
 
     builder.build()
+}
+
+fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
+    let mut rulepacks = Vec::new();
+    for bundled in &policy.rulepacks.bundled {
+        let contents = gaze_recognizers::embedded(bundled).ok_or_else(|| {
+            gaze::Error::Policy(PolicyError::BadTtl(format!(
+                "unknown bundled rulepack '{bundled}'"
+            )))
+        })?;
+        rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
+    }
+    for path in &policy.rulepacks.paths {
+        rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
+    }
+    Ok(rulepacks)
+}
+
+fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
+    let mut locales = Vec::new();
+    for rulepack in rulepacks {
+        for locale in &rulepack.default_locales {
+            if !locales.iter().any(|existing| existing == locale) {
+                locales.push(locale.clone());
+            }
+        }
+    }
+    locales
 }
 
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
@@ -532,4 +656,5 @@ struct CleanResponse {
 #[derive(Serialize)]
 struct Stats {
     detections: u64,
+    locale_chain: Vec<String>,
 }

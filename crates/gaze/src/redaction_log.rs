@@ -25,6 +25,19 @@ pub struct RedactionEntry {
     pub field_name: Option<String>,
     pub document_kind: DocumentKind,
     pub conflict_loser: bool,
+    pub decided_by: ConflictTier,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConflictTier {
+    None,
+    ClassPriority,
+    RulePriority,
+    Score,
+    SpanLength,
+    Validator,
+    RecognizerId,
+    Merged,
 }
 
 /// `RedactionEntry` must remain metadata-only.
@@ -39,6 +52,7 @@ pub struct RedactionEntry {
 ///     field_name: None,
 ///     document_kind: DocumentKind::Text,
 ///     conflict_loser: false,
+///     decided_by: gaze::ConflictTier::None,
 ///     raw: Some("alice@example.com".to_string()),
 /// };
 /// ```
@@ -59,21 +73,48 @@ impl SqliteLogger {
                 action TEXT NOT NULL,
                 field_name TEXT NULL,
                 document_kind TEXT NOT NULL,
-                conflict_loser INTEGER NOT NULL
+                conflict_loser INTEGER NOT NULL,
+                decided_by TEXT NOT NULL DEFAULT 'none'
             );
             "#,
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        let has_decided_by = {
+            let mut stmt = conn
+                .prepare("PRAGMA table_info(redaction_log)")
+                .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+            let columns = stmt
+                .query_map([], |row| row.get::<_, String>(1))
+                .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+            let mut found = false;
+            for column in columns {
+                if column.map_err(|err| crate::Error::Sqlite(err.to_string()))? == "decided_by" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        if !has_decided_by {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'none'",
+                [],
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
     }
 
     pub fn entries(&self) -> Result<Vec<RedactionEntry>> {
-        let conn = self.conn.lock().map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, class, action, field_name, document_kind, conflict_loser FROM redaction_log",
+                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by FROM redaction_log",
             )
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -85,6 +126,7 @@ impl SqliteLogger {
                     field_name: row.get(3)?,
                     document_kind: document_kind_from_db(&row.get::<_, String>(4)?)?,
                     conflict_loser: row.get::<_, i64>(5)? != 0,
+                    decided_by: conflict_tier_from_db(&row.get::<_, String>(6)?)?,
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -99,9 +141,12 @@ impl SqliteLogger {
 
 impl RedactionLogger for SqliteLogger {
     fn log(&self, entry: &RedactionEntry) -> Result<()> {
-        let conn = self.conn.lock().map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 entry.source,
                 pii_class_to_db(&entry.class),
@@ -109,11 +154,48 @@ impl RedactionLogger for SqliteLogger {
                 entry.field_name,
                 document_kind_to_db(&entry.document_kind),
                 if entry.conflict_loser { 1 } else { 0 },
+                conflict_tier_to_db(entry.decided_by),
             ],
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         Ok(())
     }
+}
+
+fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
+    match tier {
+        ConflictTier::None => "none",
+        ConflictTier::ClassPriority => "class_priority",
+        ConflictTier::RulePriority => "rule_priority",
+        ConflictTier::Score => "score",
+        ConflictTier::SpanLength => "span_length",
+        ConflictTier::Validator => "validator",
+        ConflictTier::RecognizerId => "recognizer_id",
+        ConflictTier::Merged => "merged",
+    }
+}
+
+fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusqlite::Error> {
+    Ok(match value {
+        "none" => ConflictTier::None,
+        "class_priority" => ConflictTier::ClassPriority,
+        "rule_priority" => ConflictTier::RulePriority,
+        "score" => ConflictTier::Score,
+        "span_length" => ConflictTier::SpanLength,
+        "validator" => ConflictTier::Validator,
+        "recognizer_id" => ConflictTier::RecognizerId,
+        "merged" => ConflictTier::Merged,
+        other => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                6,
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unknown conflict tier {other}"),
+                )),
+            ))
+        }
+    })
 }
 
 fn pii_class_to_db(class: &PiiClass) -> String {
