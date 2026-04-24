@@ -6,7 +6,7 @@ pub trait Detector: Send + Sync {
     fn detect(&self, input: &str) -> Vec<Detection>;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum PiiClass {
     Email,
     Name,

@@ -48,6 +48,33 @@ fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
     (clean_text, blob, detections)
 }
 
+fn clean_json_with_args(args: &[&str], input: &str) -> Value {
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .args(args)
+        .write_stdin(input.as_bytes().to_vec())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "clean failed: status={:?} stderr={}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    serde_json::from_slice(&out.stdout).expect("stdout is JSON")
+}
+
+fn clean_raw_with_args(args: &[&str], input: &str) -> std::process::Output {
+    Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .args(args)
+        .write_stdin(input.as_bytes().to_vec())
+        .output()
+        .unwrap()
+}
+
 /// Run `gaze restore` with the given request body. Returns (status_code, stdout, stderr).
 fn restore_raw(body: &[u8]) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     restore_raw_with_args(&[], body)
@@ -105,7 +132,7 @@ fn write_minimal_policy() -> (tempfile::TempDir, std::path::PathBuf) {
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -123,6 +150,72 @@ action = "preserve"
     )
     .unwrap();
     (dir, path)
+}
+
+fn write_policy_with_rulepack(
+    rulepack: &str,
+    locale_active: Option<&str>,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("rulepack.toml");
+    fs::write(&rulepack_path, rulepack).unwrap();
+    let path = dir.path().join("policy.toml");
+    let locale = locale_active
+        .map(|active| format!("\n[locale]\nactive = [{active}]\n"))
+        .unwrap_or_default();
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+{locale}
+[policy.rulepacks]
+bundled = []
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn de_email_rulepack(locales: &str) -> String {
+    format!(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "test-de"
+rulepack_version = "0.4.0"
+default_locales = ["de-DE"]
+
+[[recognizers]]
+id = "email.de"
+class = "Email"
+enabled = true
+locales = [{locales}]
+
+[recognizers.match]
+kind = "regex"
+pattern = 'kundennummer-[0-9]+'
+
+[recognizers.scoring]
+base = 0.42
+priority = 77
+
+[recognizers.token]
+"#
+    )
 }
 
 fn session_blob_ttl_secs(blob: &str) -> u64 {
@@ -408,6 +501,308 @@ fn cascade_trap_boundary_crossing_not_exempted() {
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "UnknownToken", "exit": 3, "token": "Foo_7" })
+    );
+}
+
+#[test]
+fn clean_echoes_locale_chain_from_cli() {
+    let v = clean_json_with_args(
+        &["--locale", "fr-FR,de-DE"],
+        "Reach alice@example.invalid today.",
+    );
+
+    assert_eq!(
+        v["stats"]["locale_chain"],
+        json!(["fr-FR", "de-DE", "global"])
+    );
+}
+
+#[test]
+fn rulepack_recognizer_is_gated_by_policy_locale() {
+    let (_dir, path) =
+        write_policy_with_rulepack(&de_email_rulepack("\"de-DE\""), Some("\"en-US\""));
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(v["clean_text"], "kennung kundennummer-123");
+    assert_eq!(v["stats"]["detections"], 0);
+
+    let (_dir, path) =
+        write_policy_with_rulepack(&de_email_rulepack("\"de-DE\""), Some("\"de-DE\""));
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("kennung <"));
+    assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_recognizer_fr_fr_not_gated_by_en_us() {
+    let rulepack = de_email_rulepack("\"fr-FR\"").replace("kundennummer", "ticket");
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, Some("\"en-US\""));
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung ticket-123",
+    );
+
+    assert_eq!(v["clean_text"], "kennung ticket-123");
+    assert_eq!(v["stats"]["detections"], 0);
+}
+
+#[test]
+fn rulepack_dictionary_matcher_fails_closed_until_dictionary_runtime_lands() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-dict"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.dict"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["kundennummer-123"]
+
+[recognizers.token]
+"#;
+    let (_dir, path) = write_policy_with_rulepack(rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_rejects_unknown_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"iban_mod97\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_rejects_unknown_normalizer_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonical\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_rejects_typo_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfx\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_accepts_email_rfc_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "pattern = 'kundennummer-[0-9]+'",
+        "pattern = '(?i)\\b[a-z0-9._%+\\-]+@example\\.invalid\\b'\n\n[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"email_canonical\"",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email Alice@Example.invalid",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("Email <"));
+    assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_context_exclusions_are_applied_at_detection_time() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-exclusions"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.exclusions"
+class = "Email"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '(?i)\b[a-z0-9._%+\-]+@example\.invalid\b'
+
+[recognizers.context]
+exclusions = ["example.invalid"]
+
+[recognizers.scoring]
+base = 0.88
+priority = 10
+
+[recognizers.token]
+"#;
+    let (_dir, path) = write_policy_with_rulepack(rulepack, None);
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email alice@example.invalid",
+    );
+
+    assert_eq!(v["clean_text"], "Email alice@example.invalid");
+    assert_eq!(v["stats"]["detections"], 0);
+}
+
+#[test]
+fn rulepack_only_policy_round_trips_without_custom_recognizers() {
+    let (_dir, path) = write_policy_with_rulepack(&de_email_rulepack("\"global\""), None);
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+    let blob = v["session_blob"].as_str().unwrap();
+
+    assert!(clean.starts_with("kennung <"));
+    assert!(clean.ends_with(":Email_1>"));
+
+    let (code, stdout, stderr) = restore_json(blob, clean);
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let restored: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(restored["text"], "kennung kundennummer-123");
+}
+
+#[test]
+fn duplicate_rulepack_recognizer_ids_fail_closed() {
+    let dir = tempdir().unwrap();
+    let first = dir.path().join("first.toml");
+    let second = dir.path().join("second.toml");
+    fs::write(&first, de_email_rulepack("\"global\"")).unwrap();
+    fs::write(
+        &second,
+        de_email_rulepack("\"global\"")
+            .replace("rulepack_id = \"test-de\"", "rulepack_id = \"test-de-2\""),
+    )
+    .unwrap();
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = []
+paths = ["{}", "{}"]
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            first.display(),
+            second.display()
+        ),
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", policy.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn legacy_detector_policy_surface_fails_loudly() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email alice@example.invalid",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
     );
 }
 
@@ -729,7 +1124,7 @@ fn policy_session_ttl_is_honored() {
 scope = "persistent"
 ttl_secs = 3600
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -774,7 +1169,7 @@ fn cli_session_ttl_overrides_policy() {
 scope = "persistent"
 ttl_secs = 3600
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -825,7 +1220,7 @@ fn broken_ner_model_dir_exits_policy_config() {
 scope = "persistent"
 ttl_secs = 3600
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{{2,}}\b'
@@ -872,7 +1267,7 @@ fn column_rule_policy_exits_policy_config_in_cli_mode() {
 scope = "persistent"
 ttl_secs = 3600
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -985,7 +1380,7 @@ scope = "persistent"
 ttl_secs = 86400
 bogus = true
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = ".+"
