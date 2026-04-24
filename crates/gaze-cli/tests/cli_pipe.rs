@@ -11,6 +11,7 @@ use std::time::Duration;
 use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use regex::Regex;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
@@ -79,6 +80,19 @@ fn restore_json_with_args(
 
 fn parse_stderr_variant(stderr: &[u8]) -> Value {
     serde_json::from_slice(stderr).expect("stderr is one-line JSON")
+}
+
+fn assert_session_scoped_custom_token(token: &str) {
+    let re = Regex::new(r"^<[0-9a-f]{8}:Custom:[a-z0-9_]+_\d+>$").unwrap();
+    assert!(re.is_match(token), "unexpected custom token shape: {token}");
+}
+
+fn restore_success_text(blob: &str, text: &str) -> String {
+    let (code, stdout, stderr) = restore_json(blob, text);
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    assert!(stderr.is_empty(), "expected empty stderr");
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    resp["text"].as_str().unwrap().to_string()
 }
 
 fn write_minimal_policy() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -257,8 +271,7 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
 fn t04b_tolerant_restore_reports_warning_and_preserves_text() {
     let (_, blob, _) = clean_ok("No PII here.");
     let text = "Your location_7 order arrives soon.";
-    let (code, stdout, stderr) =
-        restore_json_with_args(&["--restore-mode=tolerant"], &blob, text);
+    let (code, stdout, stderr) = restore_json_with_args(&["--restore-mode=tolerant"], &blob, text);
 
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
     assert!(stderr.is_empty(), "expected empty stderr");
@@ -282,6 +295,96 @@ fn t04c_tolerant_restore_omits_empty_warning_array() {
     assert!(
         resp.get("restore_warning").is_none(),
         "empty restore_warning must be omitted: {resp}"
+    );
+}
+
+#[test]
+fn cascade_restored_order_id_not_trapped() {
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s
+            .tokenize(&PiiClass::custom("order_ref"), "Order_42")
+            .unwrap()]
+    });
+    assert_session_scoped_custom_token(&tokens[0]);
+
+    let restored = restore_success_text(&blob, &format!("Reference {} is ready.", tokens[0]));
+
+    assert_eq!(restored, "Reference Order_42 is ready.");
+}
+
+#[test]
+fn cascade_restored_song_user_artist_tenant() {
+    let cases = [
+        ("song_ref", "Song_42"),
+        ("user_ref", "User_7"),
+        ("artist_ref", "Artist_1"),
+        ("tenant_ref", "Tenant_5"),
+    ];
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        cases
+            .iter()
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .collect()
+    });
+    for token in &tokens {
+        assert_session_scoped_custom_token(token);
+    }
+
+    let reply = format!(
+        "{} / {} / {} / {}",
+        tokens[0], tokens[1], tokens[2], tokens[3]
+    );
+    let restored = restore_success_text(&blob, &reply);
+
+    assert_eq!(restored, "Song_42 / User_7 / Artist_1 / Tenant_5");
+}
+
+#[test]
+fn cascade_restored_snake_case() {
+    let cases = [
+        ("order_raw", "order_id_7"),
+        ("tenant_raw", "tenant_5"),
+        ("class_raw", "class_1"),
+        ("song_title_raw", "song_title_3"),
+    ];
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        cases
+            .iter()
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .collect()
+    });
+    for token in &tokens {
+        assert_session_scoped_custom_token(token);
+    }
+
+    let reply = format!("{} {} {} {}", tokens[0], tokens[1], tokens[2], tokens[3]);
+    let restored = restore_success_text(&blob, &reply);
+
+    assert_eq!(restored, "order_id_7 tenant_5 class_1 song_title_3");
+}
+
+#[test]
+fn cascade_llm_hallucination_still_trapped() {
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s
+            .tokenize(&PiiClass::custom("order_ref"), "Order_42")
+            .unwrap()]
+    });
+    assert_session_scoped_custom_token(&tokens[0]);
+
+    let text = format!("Known {} and unknown <unknown:Email_99>.", tokens[0]);
+    let (code, stdout, stderr) = restore_json(&blob, &text);
+
+    assert_eq!(
+        code,
+        Some(3),
+        "expected exit 3, stdout={} stderr={}",
+        String::from_utf8_lossy(&stdout),
+        String::from_utf8_lossy(&stderr)
+    );
+    assert_eq!(
+        parse_stderr_variant(&stderr),
+        json!({ "error": "UnknownToken", "exit": 3, "token": "Email_99" })
     );
 }
 
@@ -783,9 +886,8 @@ action = "preserve"
 
 #[test]
 fn t19_restore_custom_token_round_trip_ok() {
-    let (blob, tokens) = build_blob_and_tokens(|s| {
-        vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]
-    });
+    let (blob, tokens) =
+        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]);
     let text = format!("Order {} is shipped.", tokens[0]);
 
     let (code, stdout, stderr) = restore_json(&blob, &text);
@@ -796,15 +898,11 @@ fn t19_restore_custom_token_round_trip_ok() {
 
 #[test]
 fn t20_restore_custom_hallucination_exits_3() {
-    let (blob, tokens) = build_blob_and_tokens(|s| {
-        vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]
-    });
+    let (blob, tokens) =
+        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]);
 
     let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
-    let (code, stdout, stderr) = restore_json(
-        &blob,
-        &text,
-    );
+    let (code, stdout, stderr) = restore_json(&blob, &text);
     assert_eq!(
         code,
         Some(3),

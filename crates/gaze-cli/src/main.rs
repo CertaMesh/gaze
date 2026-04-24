@@ -4,6 +4,7 @@
 //! `docs/roadmap/v0.3/laravel.md` for the host-side integration contract.
 
 use std::io::{self, Read};
+use std::ops::Range;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{
@@ -276,10 +277,15 @@ fn run_restore(
         })?;
 
     let pass1 = restore_pass1(&session, &request.text)?;
-    let restore_warning = restore_pass2_validate(&pass1, &session, restore_mode)?;
+    let restore_warning = restore_pass2_validate(
+        &pass1.text,
+        &pass1.substitution_spans,
+        &session,
+        restore_mode,
+    )?;
 
     let response = RestoreResponse {
-        text: pass1,
+        text: pass1.text,
         restore_warning,
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
@@ -359,10 +365,18 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
 /// `>` are explicit delimiters, and `\b` would miss `See <Email_1>.` because
 /// it does not fire across non-word characters. Empty session map is a no-op:
 /// `Regex::new("")` would match everywhere, so short-circuit.
-fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, CliError> {
+struct RestorePass1 {
+    text: String,
+    substitution_spans: Vec<Range<usize>>,
+}
+
+fn restore_pass1(session: &Session, text: &str) -> std::result::Result<RestorePass1, CliError> {
     let mut tokens = session.tokens();
     if tokens.is_empty() {
-        return Ok(text.to_string());
+        return Ok(RestorePass1 {
+            text: text.to_string(),
+            substitution_spans: Vec::new(),
+        });
     }
     tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
 
@@ -381,17 +395,23 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
     let re = Regex::new(&pattern).map_err(|_| CliError::Pipeline)?;
 
     let mut out = String::with_capacity(text.len());
+    let mut substitution_spans = Vec::new();
     let mut last = 0usize;
     for m in re.find_iter(text) {
         out.push_str(&text[last..m.start()]);
         let real = session
             .restore_strict(m.as_str())
             .map_err(|_| CliError::Pipeline)?;
+        let substitution_start = out.len();
         out.push_str(&real);
+        substitution_spans.push(substitution_start..out.len());
         last = m.end();
     }
     out.push_str(&text[last..]);
-    Ok(out)
+    Ok(RestorePass1 {
+        text: out,
+        substitution_spans,
+    })
 }
 
 /// Pass 2 — shape-validator over Pass-1 output.
@@ -401,41 +421,52 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
 /// `gaze::token_shape`, so the CLI no longer re-encodes token shapes locally.
 fn restore_pass2_validate(
     text: &str,
+    substitution_spans: &[Range<usize>],
     session: &Session,
     mode: RestoreMode,
 ) -> std::result::Result<Vec<RestoreWarning>, CliError> {
     let mut warnings = Vec::new();
-    for matched in gaze::token_shape::find_tokens(text) {
-        if gaze::token_shape::is_trap(matched) {
+    for matched in gaze::token_shape::pattern().find_iter(text) {
+        if is_inside_substitution_span(matched.start(), matched.end(), substitution_spans) {
+            continue;
+        }
+        let matched_text = matched.as_str();
+        if gaze::token_shape::is_trap(matched_text) {
             match mode {
                 RestoreMode::Strict => {
                     return Err(CliError::UnknownToken {
-                        token: matched.to_string(),
+                        token: matched_text.to_string(),
                     })
                 }
                 RestoreMode::Tolerant => warnings.push(RestoreWarning {
                     variant: "UnknownToken".to_string(),
-                    token: matched.to_string(),
+                    token: matched_text.to_string(),
                 }),
             }
             continue;
         }
-        if session.contains_token(matched) {
+        if session.contains_token(matched_text) {
             continue;
         }
         match mode {
             RestoreMode::Strict => {
                 return Err(CliError::UnknownToken {
-                    token: matched.to_string(),
+                    token: matched_text.to_string(),
                 })
             }
             RestoreMode::Tolerant => warnings.push(RestoreWarning {
                 variant: "UnknownToken".to_string(),
-                token: matched.to_string(),
+                token: matched_text.to_string(),
             }),
         }
     }
     Ok(warnings)
+}
+
+fn is_inside_substitution_span(start: usize, end: usize, spans: &[Range<usize>]) -> bool {
+    spans
+        .iter()
+        .any(|span| span.start <= start && end <= span.end)
 }
 
 #[derive(Deserialize)]
