@@ -5,10 +5,13 @@ build its detection-and-redaction pipeline. It declares which detectors run,
 which PII classes they emit, and what action the pipeline takes when each class
 is found.
 
-This document describes the schema as shipped in v0.4.0. The canonical
+This document describes the schema as shipped in v0.4.0-rc.1. The canonical
 parser lives at [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs);
-the CLI wiring is in [`crates/gaze-cli/src/main.rs`](../crates/gaze-cli/src/main.rs).
-For the full CLI contract — exit codes, stderr discipline, blob format — see
+the CLI wiring (argument parsing, context envelope assembly, policy-error
+mapping) is in [`crates/gaze-cli/src/main.rs`](../crates/gaze-cli/src/main.rs).
+Recognizer backends (regex, dictionary, NER) live in
+[`crates/gaze-recognizers`](../crates/gaze-recognizers). For the full CLI
+contract — exit codes, stderr discipline, blob format — see
 [`docs/roadmap/v0.3/cli.md`](roadmap/v0.3/cli.md).
 
 ## What `policy.toml` is for
@@ -407,7 +410,7 @@ kind = "default"
 action = "preserve"
 ```
 
-`Order ORD-123456 is queued.` → `Order <Custom:order_id_1> is queued.`
+`Order ORD-123456 is queued.` → `Order <{session_hex}:Custom:order_id_1> is queued.`
 
 ### Example C — Format-preserving emails for downstream parsers
 
@@ -499,7 +502,7 @@ through while `name = tokenize` swaps person names for restorable tokens.
 ## Troubleshooting
 
 Each `PolicyError` variant maps to one exit code via `gaze clean`. The
-mapping lives at [`main.rs::map_policy_error`](../crates/gaze/src/main.rs)
+mapping lives at [`gaze-cli/src/main.rs::map_policy_error`](../crates/gaze-cli/src/main.rs)
 and is summarised here.
 
 | Symptom (stderr variant)                | `PolicyError`              | Exit | Common cause                                                                 |
@@ -528,8 +531,8 @@ and is summarised here.
 
 ## Known spec drift
 
-Documented here so users get the truth, with corresponding solo todos so the
-gaps land on the engineering board:
+Documented here so users get the truth while the gaps land on the
+engineering board:
 
 1. **Resolved in v0.3.1: `policy.session` is honoured by `gaze clean`.**
    The CLI constructs sessions from `[session]`; `--session-ttl` is now only
@@ -540,3 +543,16 @@ gaps land on the engineering board:
 3. **Resolved in v0.3.1: `kind = "column"` rules are rejected in CLI mode.**
    `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
    detail string, avoiding silent no-op column rules for text stdin.
+4. **v0.4.0-rc.1 gated rulepack fields (runtime consumers pending v0.4.1).**
+   The rulepack schema parses `token.family`, `token.format`,
+   `context.hotwords`, `context.boost`, and `context.window` for
+   forward-compatible authoring, but the loader rejects any non-default value
+   with `RulepackError::UnsupportedFieldInB1`. Runtime consumers ship in
+   v0.4.1; until then, leave these fields unset or explicitly default.
+5. **v0.4.0-rc.1 dictionary audit granularity.** The redaction log carries
+   `dictionary:{name}` for dictionary hits; per-term `[#term_index]`
+   traceability is scheduled for v0.4.1.
+6. **v0.4.0-rc.1 NER context-sensitivity gap.** Default Davlan-HRL may
+   pass names embedded in prompt boilerplate or RFC822 email headers.
+   Workarounds (wrap with a dictionary recognizer, tighten locale gating
+   via `[ner] locale`) and roadmap in GitHub issue #24.
