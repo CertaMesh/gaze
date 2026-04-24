@@ -1,0 +1,48 @@
+# AGENTS.md — Gaze project agent context
+
+**All AI coding agents operating on this repo (Codex, Claude, Cursor, Gemini, etc.) should read this file at session start and apply the rules below.**
+
+This file is the canonical agent-context for Gaze. `CLAUDE.md` and `GEMINI.md` defer to it for shared rules and add only agent-specific addenda.
+
+## Project north star
+
+> **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**
+
+Verbatim user directive (2026-04-24): *"set a north star to be focused on never leaking any PII data and making this lib the best PII [pseudonymization] there is for agentic interaction with information"*.
+
+"Pseudonymization" is the GDPR Art. 4(5) term for reversible substitution with tokens — chosen over "redaction" (one-way, loses the restore moat), "obscuring" (vague), and "tokenization" (overloaded with payment industry usage).
+
+## The five axes
+
+Every design, implementation, and review decision MUST be evaluated against these axes.
+
+1. **Reliability (never leak).** Fail-closed always. Defense in depth (regex + NER + dictionary + optional neural safety net). Every known detection gap is a todo; every leak incident is a postmortem + fix pattern baked into skill/memory.
+2. **Reversibility.** Manifest-first restore. Format-preserving tokens stay restorable. No one-way primitives in the core contract. Anything that breaks restore round-trip is a design regression.
+3. **Agentic-first.** Decisions prioritize agent workflow needs over generic text handling — tool-call JSON embedding, streaming LLM, multi-turn sessions with evolving context, tenant-specific PII (songs, order IDs, artist names).
+4. **Trust (auditable + deterministic).** Rule-based detectors preferred over neural for precise classes. Neural is an addon (safety net, free-text NER), not the floor. Every token emission traceable to a rule or recognizer. Typed exceptions + closed error-variant set. No silent mismatches.
+5. **Adopter ergonomics.** Low-friction integration (Laravel adapter pattern, clear TOML policy, sane defaults). Framework adapters pave the 80% case; library API serves the 20% power case. Adopter can pick Gaze up in under a day without deep PII domain expertise.
+
+Full rationale, reframes of active decisions, what the north star rejects, and drift-measurement protocol live in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+
+## Universal rules (ALL agents)
+
+1. **Never weaken an axis without an explicit PR-body note.** If a change regresses reliability, reversibility, agentic fit, trust, or adopter ergonomics — say so in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
+2. **Never leak PII in examples, tests, or fixtures.** Use `alice@example.invalid` / `Dr. Schmidt` / `<Email_1>` — never real PII, even in docs.
+3. **Commit discipline:** `[agent]` prefix on every commit. Stage specific files by name. No `git add -A` or `git add .`. No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
+4. **Anvil worktree or fresh branch per task.** Don't edit the main working tree directly except for tiny prose/docs fixes the orchestrator explicitly approves.
+5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
+
+## Session memory
+
+Gaze uses MemPalace (MCP) for cross-session durable memory. At session start, search `mempalace_search wing=gaze` for relevant decisions before implementing. Locked-decisions drawers live under `room=decisions`; architecture findings under `room=architecture`.
+
+Key active drawers (as of 2026-04-24):
+
+- `drawer_gaze_decisions_ba559e1cf1fbca5c1098b12f` — north star (this doc's source of truth)
+- `session-2026-04-24-q7.1-relocked-Y` — v0.4 Phase 1 grammar lock (session-scoped tokens)
+- `session-2026-04-24-44-direction-locked` — #44 scope-isolation direction
+- `session-2026-04-24-orchestrate-dont-manage-prs` — PR-merge delegation rule
+
+## Source of truth
+
+This file is the canonical agent-context for Gaze. `CLAUDE.md` and `GEMINI.md` defer to it for shared rules and add only agent-specific addenda.

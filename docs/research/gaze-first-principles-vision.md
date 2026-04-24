@@ -4,6 +4,57 @@
 
 ---
 
+## North Star (locked 2026-04-24)
+
+> **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**
+
+Verbatim user directive (2026-04-24): *"for the project set a north star to be focused on never leaking any PII data and making this lib the best PII obscuring/<enter better word here> there is for agentic interaction with information"*. The placeholder resolves to **pseudonymization**.
+
+### Word choice
+
+- **"Pseudonymization"** — precise GDPR / EDPB Art. 4(5) term for reversible substitution with tokens. Chosen over:
+  - *Redaction* — implies one-way removal, loses the restore moat.
+  - *Obscuring* — too vague, loses legal/compliance resonance.
+  - *Tokenization* — narrower, shares airtime with payment-tokenization.
+- **"Runtime"** (not *library* or *tool*) — emphasizes Gaze sits in the request path as infrastructure, not as a utility called occasionally.
+
+### Five axes every decision MUST evaluate against
+
+1. **Reliability (never leak).** Fail-closed always. Defense in depth (regex + NER + dictionary + optional neural safety net). Every known detection gap = todo. Every leak incident = postmortem + fix pattern baked into skill/memory.
+2. **Reversibility.** Manifest-first restore (already locked). Format-preserving tokens stay restorable. No one-way primitives in the core contract. Anything that breaks restore round-trip is a design regression.
+3. **Agentic-first.** Decisions prioritize agent workflow needs over generic text handling: tool-call JSON embedding, streaming LLM, multi-turn sessions with evolving context, tenant-specific PII (songs, order IDs, artist names — the Dashboard adopter case). Generic redaction tools don't close these; Gaze does.
+4. **Trust (auditable + deterministic).** Rule-based detectors preferred over neural for precise classes. Neural is an addon (safety net, free-text NER), not the floor. Every token emission traceable to a rule/recognizer. Typed exceptions + closed error-variant set. No silent mismatches. Every leak has a root-causable decision path.
+5. **Adopter ergonomics.** Low-friction integration (Laravel adapter pattern, clear TOML policy, sane defaults). Framework adapters pave the 80% case; library API serves the 20% power case. Adopter can pick Gaze up in under a day without deep PII domain expertise.
+
+### North-star reframes active decisions
+
+- **v0.4 F6 Dictionary detector** — this IS north-star work. Tenant PII (songs, order IDs, artists) is what generic detectors miss. F6 elevates from "adopter feature request" to "core Gaze capability". Keep Phase 1 priority.
+- **v0.4.1 F8 OpenAI-filter Pass-3 safety net (#65)** — elevates from "nice-to-have" to "reliability axis #1 work". If cost-acceptable, this closes the "never leak" promise at the edge. Move up in priority if v0.4.1 has room.
+- **v0.4 Phase 5 Q2 CI sanity gate (#66)** — directly supports the reliability axis. Keep.
+- **Q7.1 = Y (session-scoped tokens)** — aligns with the trust axis (deterministic grammar beats fingerprint heuristic). Correct call.
+- **Markus's `gaze-laravel` adapter** — exemplifies the adopter-ergonomics axis. Pattern to replicate for Python, Node, Go adapters in v0.5+.
+
+### What the north star REJECTS
+
+- **Shipping partial-closure solutions as "done".** Every PII class must be fully round-trippable or explicitly flagged as "detection-only" (Phase 3 safety-net use only). No middle ground.
+- **Making detection-mode the primary value prop.** OpenAI shipped their privacy filter 2026-04-22 — free, open-source, good detection. Gaze does not compete on detection. Gaze's moat is the REVERSIBLE + AUDITABLE + AGENTIC stack.
+- **Generic "data scrubbing" positioning.** Gaze is for agent/LLM workflows specifically. Don't dilute to "general-purpose data masking" — that's a different product.
+- **Performance before correctness.** A 2× speedup that introduces a leak edge case is a regression. Correctness axes 1–4 always beat speed.
+
+### Measuring drift
+
+Every major phase completion (Phase 1, 2, …) does a north-star audit:
+
+- Does what shipped this phase strengthen one of the 5 axes?
+- Does anything shipped this phase weaken an axis?
+- Any items that now conflict with "never leak"?
+
+If an axis slipped → postmortem drawer + fix plan.
+
+Source of truth: MemPalace drawer `drawer_gaze_decisions_ba559e1cf1fbca5c1098b12f` (wing=gaze, room=decisions).
+
+---
+
 ## The Premise
 
 Input can take two forms: **structured** (database rows, JSON, CSV) or **unstructured** (logs, emails, free text).
