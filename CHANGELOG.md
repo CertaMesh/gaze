@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0-rc.3] — 2026-04-23
+## [0.3.0] — 2026-04-24
 
 ### Changed
 
@@ -111,7 +111,7 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0-rc.3...HEAD
-[0.3.0-rc.3]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.3
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/Naoray/gaze/releases/tag/v0.3.0
 [0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.1
