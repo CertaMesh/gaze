@@ -19,6 +19,9 @@ pub enum PiiClass {
     Custom(String),
 }
 
+pub(crate) const BUILTIN_CLASS_NAMES: &[&str] =
+    &["Email", "Name", "Location", "Organization"];
+
 impl PiiClass {
     pub fn custom(name: &str) -> Self {
         let mut normalized = String::new();
@@ -34,6 +37,7 @@ impl PiiClass {
                 pending_underscore = true;
             }
         }
+
         Self::Custom(normalized)
     }
 
@@ -41,6 +45,16 @@ impl PiiClass {
         match self {
             Self::Custom(name) => Some(name.as_str()),
             _ => None,
+        }
+    }
+
+    pub(crate) fn class_name(&self) -> String {
+        match self {
+            Self::Email => BUILTIN_CLASS_NAMES[0].to_string(),
+            Self::Name => BUILTIN_CLASS_NAMES[1].to_string(),
+            Self::Location => BUILTIN_CLASS_NAMES[2].to_string(),
+            Self::Organization => BUILTIN_CLASS_NAMES[3].to_string(),
+            Self::Custom(name) => format!("Custom:{name}"),
         }
     }
 }
@@ -90,5 +104,18 @@ impl Detector for RegexDetector {
                 source: self.source.clone(),
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PiiClass;
+
+    #[test]
+    fn custom_name_normalizes_without_reserved_rewrite() {
+        assert_eq!(
+            PiiClass::custom("email"),
+            PiiClass::Custom("email".to_string())
+        );
     }
 }

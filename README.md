@@ -2,19 +2,17 @@
 
 Channel-agnostic redaction workspace for AI-facing production tooling.
 
-`gaze` v0.2 is no longer a single-purpose debug proxy binary. The workspace now has three crates:
+The workspace now has two crates:
 
-- `crates/gaze` — shared redaction core library
+- `crates/gaze` — shared redaction core library (and, in v0.3, the standalone `gaze clean` / `gaze restore` CLI)
 - `crates/debug-proxy` — MCP debug server for MySQL + Laravel logs
-- `crates/ghostwriter` — deterministic sanitize/restore tool for LLM-facing customer text
 
 ## Workspace Layout
 
 ```text
 crates/
-  gaze/         core library
+  gaze/         core library + standalone CLI (v0.3)
   debug-proxy/  MCP debug server consumer
-  ghostwriter/  sanitize/restore consumer
 ```
 
 ## Crate Guide
@@ -30,13 +28,18 @@ Pure Rust library for:
 - redaction logging
 - pluggable sandbox trait shape for future action-side work
 
-What it does not do by itself:
+v0.3 adds a standalone CLI that consumes the library for LLM pipe-mode integration (Laravel wrapper ships out-of-tree via `gaze/laravel`). See `docs/roadmap/v0.3/cli.md` for the surface and `docs/roadmap/v0.3/laravel.md` for the host integration.
 
-- no standalone `gaze clean` / `gaze restore` CLI yet
-- no sandbox backend implementation yet
-- no direct application protocol
+#### CLI Example
 
-Those are consumer concerns.
+```bash
+echo "Email alice@example.com now" | gaze clean --policy=policy.toml
+# {"clean_text":"Email Email_1 now","session_blob":"<base64>","stats":{"detections":1}}
+```
+
+#### Policy Configuration
+
+`gaze clean --policy=<path>` loads a TOML policy that declares detectors, classes, and per-class actions. See [`docs/policy.md`](docs/policy.md) for the full schema reference and worked examples.
 
 #### Library Example
 
@@ -75,94 +78,7 @@ Required files:
 - `labels.json`
 - `SHA256SUMS`
 
-See [crates/gaze/testdata/ner/README.md](/Users/krishankonig/Workspace/bets/Gaze/crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](/Users/krishankonig/Workspace/bets/Gaze/docs/research/ner-library-evaluation.md).
-
-### `ghostwriter`
-
-Deterministic sanitize/restore wrapper around `gaze` for customer-facing LLM flows.
-
-Commands:
-
-```text
-ghostwriter sanitize
-ghostwriter restore
-```
-
-#### Sanitize Input
-
-```json
-{
-  "text": "Hallo Markus Müller, bitte antworten Sie an mueller.markus@icloud.com",
-  "context": {
-    "customer_name": "Markus Müller",
-    "customer_email": "mueller.markus@icloud.com",
-    "customer_phone": "+49 151 23456789",
-    "order_ids": ["SO-12345"],
-    "songs": ["Midnight City"],
-    "artists": ["M83"],
-    "locale": "de"
-  }
-}
-```
-
-Supported `context` fields:
-
-- `customer_name`
-- `customer_email`
-- `customer_phone`
-- `order_ids`
-- `songs`
-- `artists`
-- `locale`
-
-Notes:
-
-- known customer fields become semantic placeholders like `<CUSTOMER_NAME>`
-- indexed values become placeholders like `<ORDER_ID_1>` or `<SONG_1>`
-- regex email detection is always enabled
-- transformer NER is only attempted when `GAZE_NER_MODEL_DIR` is set
-- if no NER model directory is set, sanitize still succeeds
-
-#### Sanitize Usage
-
-```bash
-cargo run -p ghostwriter -- sanitize < sanitize.json
-```
-
-Pretty-print:
-
-```bash
-cargo run -p ghostwriter -- sanitize < sanitize.json | jq
-```
-
-#### Restore Usage
-
-```bash
-cargo run -p ghostwriter -- restore < restore.json
-```
-
-Restore input shape:
-
-```json
-{
-  "text": "Hallo <CUSTOMER_NAME>, wir senden an <CUSTOMER_EMAIL>.",
-  "session_blob": "opaque blob returned by sanitize"
-}
-```
-
-#### Example
-
-Sanitize:
-
-```bash
-printf '%s\n' '{"text":"Betreff: Rückfrage zu Bestellung SO-12345\n\nHallo Markus Müller,\n\nvielen Dank für Ihre Nachricht. Wir haben die Bestellung SO-12345 geprüft und den Versand der Dateien soeben erneut angestoßen.\n\nDie Unterlagen gehen wie gewünscht an mueller.markus@icloud.com. Falls Sie stattdessen die alternative Adresse markus.mueller@example.de verwenden möchten, geben Sie uns bitte kurz Bescheid.\n\nWenn noch etwas fehlt, erreichen wir Sie auch telefonisch unter +49 151 23456789.\n\nFreundliche Grüße\nAnna Becker\nKundensupport\n","context":{"customer_name":"Markus Müller","customer_email":"mueller.markus@icloud.com","customer_phone":"+49 151 23456789","order_ids":["SO-12345"],"locale":"de"}}' | cargo run -p ghostwriter -- sanitize | jq
-```
-
-Restore:
-
-```bash
-printf '%s\n' '{"text":"Betreff: Rückfrage zu Bestellung <ORDER_ID_1>\n\nHallo <CUSTOMER_NAME>,\n\nvielen Dank für Ihre Nachricht. Wir haben die Bestellung <ORDER_ID_1> geprüft und den Versand der Dateien soeben erneut angestoßen.\n\nDie Unterlagen gehen wie gewünscht an <CUSTOMER_EMAIL>. Falls Sie stattdessen die alternative Adresse <EMAIL_1> verwenden möchten, geben Sie uns bitte kurz Bescheid.\n\nWenn noch etwas fehlt, erreichen wir Sie auch telefonisch unter <CUSTOMER_PHONE>.\n\nFreundliche Grüße\nAnna Becker\nKundensupport\n","session_blob":"PASTE_SESSION_BLOB_HERE"}' | cargo run -p ghostwriter -- restore | jq
-```
+See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](docs/research/ner-library-evaluation.md).
 
 ### `debug-proxy`
 
@@ -229,8 +145,8 @@ cargo build --release
 ## Verification
 
 ```bash
-cargo test -p ghostwriter -p gaze -p debug-proxy
-cargo clippy -p ghostwriter -p gaze -p debug-proxy --all-targets --all-features -- -D warnings
+cargo test -p gaze -p debug-proxy
+cargo clippy -p gaze -p debug-proxy --all-targets --all-features -- -D warnings
 ```
 
 ## Status
@@ -239,12 +155,15 @@ Implemented for the v0.2 rewrite:
 
 - shared `gaze` core
 - `debug-proxy` consumer
-- `ghostwriter` consumer
 - core sandbox trait shape
 
-Deferred beyond v0.2:
+In progress for v0.3:
 
-- standalone `gaze clean` / `gaze restore` CLI
+- standalone `gaze clean` / `gaze restore` CLI (see `docs/roadmap/v0.3/cli.md`)
+- `policy.toml` loader → `Pipeline::from_policy(...)` helper
+
+Deferred beyond v0.3:
+
 - real sandbox backend implementations
 - k-anonymity / query-budget controls
 - full format-preserving fake generation
