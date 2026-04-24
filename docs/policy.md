@@ -100,12 +100,45 @@ pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
 class = "email"
 ```
 
-| Field     | Type   | Required | Notes                                                     |
-|-----------|--------|----------|-----------------------------------------------------------|
-| `kind`    | string | yes      | Today only `"regex"` is supported. Other values parse but fail at pipeline build with `PolicyConfig`. |
-| `name`    | string | yes      | Used as the `source` label on every `Detection` for debugging and conflict-loser logs. |
-| `pattern` | string | yes      | Compiled with the [`regex`](https://docs.rs/regex) crate at policy load. Bad patterns → `PolicyConfig`. |
-| `class`   | string | yes      | A class name (see [Classes](#classes)). Unknown classes → `PolicyConfig`. |
+| Field                | Type      | Required | Notes                                                     |
+|----------------------|-----------|----------|-----------------------------------------------------------|
+| `kind`               | string    | yes      | `"regex"` or `"dictionary"`. Other values parse but fail at pipeline build with `PolicyConfig`. |
+| `name`               | string    | yes      | Used as the recognizer id/source label for debugging and conflict-loser logs. |
+| `pattern`            | string    | regex    | Compiled with the [`regex`](https://docs.rs/regex) crate at policy load. Bad patterns → `PolicyConfig`. |
+| `class`              | string    | yes      | A class name (see [Classes](#classes)). Unknown classes → `PolicyConfig`. |
+| `terms`              | array     | dictionary | Inline dictionary terms. Use only with `kind = "dictionary"`. |
+| `terms_file`         | string    | dictionary | Newline-delimited dictionary terms. Blank lines and `#` comments are ignored. |
+| `terms_from_context` | string    | dictionary | Reads the named dictionary from `--context-json`; cannot be combined with `terms` or `terms_file`. |
+| `case_sensitive`     | boolean   | no       | Dictionary only. Defaults to `false`; non-ASCII insensitive dictionaries fail closed in v0.4.0. |
+| `token_family`       | string    | no       | Defaults to `"counter"`. |
+
+Dictionary recognizers are registered through the same recognizer registry as
+rulepack recognizers and are gated by the active locale chain when they come
+from a rulepack. The CLI passes the merged dictionary bundle from rulepacks,
+policy inline terms, and `--context-json` into the runtime `DetectContext`.
+
+```toml
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "songs"
+class = "custom:song"
+terms = ["Song A", "Song B"]
+
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_order_ids"
+class = "custom:order_id"
+terms_from_context = "order_ids"
+case_sensitive = true
+```
+
+`--context-json` can also supply dictionaries without a matching policy
+recognizer. In that mode, Gaze registers one dictionary recognizer per context
+dictionary and uses `class_map` for the class, falling back to `custom:<name>`
+when a mapping is absent. `fields` are threaded into `DetectContext` for
+recognizers; no built-in recognizer consumes them in v0.4.0. `class_map` is
+runtime metadata for dictionary recognizer construction, not a general class
+override mechanism. Broader `fields` consumers are deferred to v0.4.1.
 
 NER is **not** a detector kind. NER is configured via the top-level `[ner]`
 block (below) — when set, the pipeline appends a transformer NER detector

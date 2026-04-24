@@ -18,6 +18,20 @@ pub enum PiiClass {
 pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
 impl PiiClass {
+    pub fn from_policy_name(input: &str) -> Option<Self> {
+        match input {
+            "email" => Some(Self::Email),
+            "name" => Some(Self::Name),
+            "location" => Some(Self::Location),
+            "organization" => Some(Self::Organization),
+            custom if custom.starts_with("custom:") => {
+                let name = custom.trim_start_matches("custom:");
+                (!name.trim().is_empty()).then(|| Self::custom(name))
+            }
+            _ => None,
+        }
+    }
+
     pub fn builtin_variants() -> &'static [PiiClass] {
         const _EXHAUSTIVE: fn(&PiiClass) = |c| match c {
             PiiClass::Email

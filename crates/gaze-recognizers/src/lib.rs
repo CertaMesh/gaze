@@ -1,6 +1,8 @@
+mod dictionary;
 mod ner;
 mod regex;
 
+pub use dictionary::DictionaryRecognizer;
 pub use ner::{LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
 pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
 

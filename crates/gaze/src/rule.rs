@@ -10,12 +10,12 @@ pub enum Action {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct Context {
+pub struct RuleContext {
     pub field_name: Option<String>,
 }
 
 pub trait Rule: Send + Sync {
-    fn action(&self, class: &PiiClass, context: &Context) -> Option<Action>;
+    fn action(&self, class: &PiiClass, context: &RuleContext) -> Option<Action>;
 }
 
 pub struct ClassRule {
@@ -30,7 +30,7 @@ impl ClassRule {
 }
 
 impl Rule for ClassRule {
-    fn action(&self, class: &PiiClass, _context: &Context) -> Option<Action> {
+    fn action(&self, class: &PiiClass, _context: &RuleContext) -> Option<Action> {
         (self.class == *class).then_some(self.action)
     }
 }
@@ -50,7 +50,7 @@ impl ColumnRule {
 }
 
 impl Rule for ColumnRule {
-    fn action(&self, _class: &PiiClass, context: &Context) -> Option<Action> {
+    fn action(&self, _class: &PiiClass, context: &RuleContext) -> Option<Action> {
         (context.field_name.as_deref() == Some(self.field_name.as_str())).then_some(self.action)
     }
 }
@@ -66,7 +66,7 @@ impl DefaultRule {
 }
 
 impl Rule for DefaultRule {
-    fn action(&self, _class: &PiiClass, _context: &Context) -> Option<Action> {
+    fn action(&self, _class: &PiiClass, _context: &RuleContext) -> Option<Action> {
         Some(self.action)
     }
 }
