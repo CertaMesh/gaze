@@ -37,7 +37,7 @@ fn canary_never_leaks_through_structured_redaction() {
     };
 
     assert!(
-        token.starts_with("<Email_") && token.ends_with('>'),
+        token.starts_with('<') && token.ends_with(":Email_1>"),
         "unexpected token format: {token}"
     );
     assert_eq!(

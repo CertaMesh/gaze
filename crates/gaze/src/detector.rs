@@ -19,6 +19,16 @@ pub const BUILTIN_CLASS_NAMES: &[&str] =
     &["Email", "Name", "Location", "Organization"];
 
 impl PiiClass {
+    pub fn builtin_variants() -> &'static [PiiClass] {
+        const BUILTINS: &[PiiClass] = &[
+            PiiClass::Email,
+            PiiClass::Name,
+            PiiClass::Location,
+            PiiClass::Organization,
+        ];
+        BUILTINS
+    }
+
     pub fn custom(name: &str) -> Self {
         let mut normalized = String::new();
         let mut pending_underscore = false;

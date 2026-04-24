@@ -29,6 +29,8 @@ pub enum Error {
     BlobExpired { issued_at: u64, ttl_secs: u64 },
     #[error("snapshot decode failed: {0}")]
     SnapshotDecode(#[source] serde_json::Error),
+    #[error("invalid snapshot payload")]
+    InvalidSnapshotPayload,
     #[error("sqlite error: {0}")]
     Sqlite(String),
     #[error("policy error: {0}")]
@@ -483,7 +485,10 @@ mod tests {
             .unwrap();
 
         match clean {
-            CleanDocument::Text(text) => assert_eq!(text, "Reach <Email_1> today"),
+            CleanDocument::Text(text) => {
+                assert!(text.starts_with("Reach <"));
+                assert!(text.ends_with(":Email_1> today"));
+            }
             other => panic!("expected text output, got {other:?}"),
         }
     }

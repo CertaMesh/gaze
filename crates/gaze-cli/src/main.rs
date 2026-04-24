@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
@@ -62,6 +62,9 @@ enum Cmd {
         /// Output format. Only `json` is supported today.
         #[arg(long, default_value = "json")]
         format: String,
+        /// Unknown-token handling during restore.
+        #[arg(long, value_enum, default_value_t = RestoreMode::Strict)]
+        restore_mode: RestoreMode,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -79,7 +82,7 @@ enum CliError {
     InvalidEncoding,
     PolicyConfig,
     PolicyConfigDetail(&'static str),
-    UnknownToken,
+    UnknownToken { token: String },
     InvalidSignature,
     InvalidBlobVersion,
     BlobExpired,
@@ -93,7 +96,7 @@ impl CliError {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => 2,
-            Self::UnknownToken
+            Self::UnknownToken { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
             | Self::BlobExpired
@@ -109,7 +112,7 @@ impl CliError {
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
-            Self::UnknownToken => "UnknownToken",
+            Self::UnknownToken { .. } => "UnknownToken",
             Self::InvalidSignature => "InvalidSignature",
             Self::InvalidBlobVersion => "InvalidBlobVersion",
             Self::BlobExpired => "BlobExpired",
@@ -127,6 +130,16 @@ impl CliError {
                 self.exit_code(),
                 detail
             ),
+            Self::UnknownToken { token } => {
+                let token = serde_json::to_string(token)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"token":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    token
+                )
+            }
             _ => eprintln!(
                 r#"{{"error":"{}","exit":{}}}"#,
                 self.variant_name(),
@@ -193,7 +206,11 @@ fn main() -> ExitCode {
             session_ttl,
             max_bytes,
         } => run_clean(policy.as_deref(), &format, session_ttl, max_bytes),
-        Cmd::Restore { format, max_bytes } => run_restore(&format, max_bytes),
+        Cmd::Restore {
+            format,
+            restore_mode,
+            max_bytes,
+        } => run_restore(&format, restore_mode, max_bytes),
     };
 
     match result {
@@ -308,7 +325,17 @@ fn run_clean(
     Ok(())
 }
 
-fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError> {
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+enum RestoreMode {
+    Strict,
+    Tolerant,
+}
+
+fn run_restore(
+    format: &str,
+    restore_mode: RestoreMode,
+    max_bytes: u64,
+) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let stdin_bytes = read_stdin_bytes(max_bytes)?;
 
@@ -323,14 +350,18 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
         Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
             gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
             gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
+            gaze::Error::InvalidSnapshotPayload => CliError::InvalidBlobVersion,
             gaze::Error::BlobExpired { .. } => CliError::BlobExpired,
             _ => CliError::Pipeline,
         })?;
 
     let pass1 = restore_pass1(&session, &request.text)?;
-    restore_pass2_validate(&pass1)?;
+    let restore_warning = restore_pass2_validate(&pass1, &session, restore_mode)?;
 
-    let response = RestoreResponse { text: pass1 };
+    let response = RestoreResponse {
+        text: pass1,
+        restore_warning,
+    };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
@@ -446,11 +477,29 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
 /// Any remaining token-shaped substring means the LLM invented a token the
 /// session never emitted → `UnknownToken`. The canonical grammar lives in
 /// `gaze::token_shape`, so the CLI no longer re-encodes token shapes locally.
-fn restore_pass2_validate(text: &str) -> std::result::Result<(), CliError> {
-    if gaze::token_shape::contains_token(text) {
-        return Err(CliError::UnknownToken);
+fn restore_pass2_validate(
+    text: &str,
+    session: &Session,
+    mode: RestoreMode,
+) -> std::result::Result<Vec<RestoreWarning>, CliError> {
+    let mut warnings = Vec::new();
+    for matched in gaze::token_shape::find_tokens(text) {
+        if session.contains_token(matched) {
+            continue;
+        }
+        match mode {
+            RestoreMode::Strict => {
+                return Err(CliError::UnknownToken {
+                    token: matched.to_string(),
+                })
+            }
+            RestoreMode::Tolerant => warnings.push(RestoreWarning {
+                variant: "UnknownToken".to_string(),
+                token: matched.to_string(),
+            }),
+        }
     }
-    Ok(())
+    Ok(warnings)
 }
 
 #[derive(Deserialize)]
@@ -462,6 +511,14 @@ struct RestoreRequest {
 #[derive(Serialize)]
 struct RestoreResponse {
     text: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    restore_warning: Vec<RestoreWarning>,
+}
+
+#[derive(Serialize)]
+struct RestoreWarning {
+    variant: String,
+    token: String,
 }
 
 /// Stub pipeline used until the policy.toml loader (solo #3) lands.

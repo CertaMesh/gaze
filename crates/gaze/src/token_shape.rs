@@ -13,6 +13,14 @@ pub fn contains_token(s: &str) -> bool {
     pattern().is_match(s)
 }
 
+pub fn find_token(s: &str) -> Option<&str> {
+    pattern().find(s).map(|m| m.as_str())
+}
+
+pub fn find_tokens(s: &str) -> impl Iterator<Item = &str> {
+    pattern().find_iter(s).map(|m| m.as_str())
+}
+
 fn build_pattern() -> String {
     let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
     let builtin_lower_alt = BUILTIN_CLASS_NAMES
@@ -22,7 +30,7 @@ fn build_pattern() -> String {
         .join("|");
 
     format!(
-        r"<(?:{builtin_alt})_\d+>|<Custom:[a-z0-9_]*_\d+>|\b(?:{builtin_lower_alt})_\d+\b|\bcustom:[a-z0-9_]*_\d+\b|\bemail\d+@example\.test\b|<[A-Z][a-zA-Z]+_\d+>|<[a-z][a-z_]+_\d+>|\b[A-Z][a-zA-Z]+_\d+\b|\b[a-z][a-z_]+_\d+\b",
+        r"<[0-9a-f]{{8}}:(?:{builtin_alt})_\d+>|<[0-9a-f]{{8}}:Custom:[a-z0-9_]*_\d+>|\bemail\d+\.[0-9a-f]{{8}}@gaze-fake\.invalid\b|\b[0-9a-f]{{8}}:(?:{builtin_lower_alt})_\d+\b|\b[0-9a-f]{{8}}:custom:[a-z0-9_]*_\d+\b|<(?:{builtin_alt})_\d+>|<Custom:[a-z0-9_]*_\d+>|\b(?:{builtin_lower_alt})_\d+\b|\bcustom:[a-z0-9_]*_\d+\b|\bemail\d+@example\.test\b|\bemail\d+@gaze-fake\.invalid\b|<[A-Z][a-zA-Z0-9]+_\d+>|<[a-z][a-zA-Z0-9_]*_\d+>|\b[A-Z][a-zA-Z0-9]+_\d+\b|\b[a-z][a-zA-Z0-9_]*_\d+\b",
         builtin_alt = builtin_alt,
         builtin_lower_alt = builtin_lower_alt,
     )
@@ -65,13 +73,11 @@ mod tests {
 
     #[test]
     fn every_emitted_token_matches_shape_regex() {
-        for class in [
-            PiiClass::Email,
-            PiiClass::Name,
-            PiiClass::Location,
-            PiiClass::Organization,
-            PiiClass::custom("order_id"),
-        ] {
+        for class in PiiClass::builtin_variants()
+            .iter()
+            .cloned()
+            .chain(std::iter::once(PiiClass::custom("order_id")))
+        {
             assert!(contains_token(&tokenized_for(class.clone())));
             assert!(contains_token(&format_preserving_for(class)));
         }
@@ -79,15 +85,26 @@ mod tests {
 
     #[test]
     fn builtin_class_names_match_impl() {
-        let classes = [
-            PiiClass::Email,
-            PiiClass::Name,
-            PiiClass::Location,
-            PiiClass::Organization,
-        ];
-
-        for (class, expected) in classes.into_iter().zip(BUILTIN_CLASS_NAMES.iter()) {
+        for (class, expected) in PiiClass::builtin_variants()
+            .iter()
+            .zip(BUILTIN_CLASS_NAMES.iter())
+        {
             assert_eq!(class.class_name(), *expected);
+        }
+    }
+
+    #[test]
+    fn builtin_class_regex_superset() {
+        for class in PiiClass::builtin_variants() {
+            assert!(contains_token(&format!(
+                "<a7f3b8e2:{}_1>",
+                class.class_name()
+            )));
+            assert!(contains_token(&format!(
+                "a7f3b8e2:{}_1",
+                class.class_name().to_ascii_lowercase()
+            )));
+            assert!(contains_token(&format!("<{}_1>", class.class_name())));
         }
     }
 
@@ -96,8 +113,8 @@ mod tests {
         let builtin = tokenized_for(PiiClass::Email);
         let custom = tokenized_for(PiiClass::custom("email"));
 
-        assert_eq!(builtin, "<Email_1>");
-        assert_eq!(custom, "<Custom:email_1>");
+        assert!(builtin.ends_with(":Email_1>"));
+        assert!(custom.ends_with(":Custom:email_1>"));
         assert_ne!(builtin, custom);
         assert!(contains_token(&builtin));
         assert!(contains_token(&custom));
@@ -106,14 +123,14 @@ mod tests {
     #[test]
     fn empty_normalized_name_matches_current_shape() {
         let token = tokenized_for(PiiClass::custom("!!!"));
-        assert_eq!(token, "<Custom:_1>");
+        assert!(token.ends_with(":Custom:_1>"));
         assert!(contains_token(&token));
     }
 
     #[test]
     fn single_char_custom_name_matches_current_shape() {
         let token = tokenized_for(PiiClass::custom("x"));
-        assert_eq!(token, "<Custom:x_1>");
+        assert!(token.ends_with(":Custom:x_1>"));
         assert!(contains_token(&token));
     }
 

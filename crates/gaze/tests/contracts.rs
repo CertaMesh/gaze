@@ -75,9 +75,9 @@ fn normalization_runs_before_detection() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "<Email_1>");
+    assert!(text.starts_with('<') && text.ends_with(":Email_1>"));
     assert_eq!(
-        session.restore_strict("<Email_1>").expect("restore"),
+        session.restore_strict(&text).expect("restore"),
         "a\u{200D}lice＠example.com"
     );
 }
@@ -306,7 +306,7 @@ fn format_preserve_is_deterministic_and_restorable() {
     };
 
     assert_eq!(once, twice);
-    assert!(once.contains("@example.test"));
+    assert!(once.contains("@gaze-fake.invalid"));
     assert_eq!(
         session.restore_strict(&once).expect("restore"),
         "alice@example.com"
@@ -353,13 +353,16 @@ fn tokenize_assigns_indices_left_to_right() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "<Email_1> then <Email_2>");
+    let parts = text.split(" then ").collect::<Vec<_>>();
+    assert_eq!(parts.len(), 2);
+    assert!(parts[0].starts_with('<') && parts[0].ends_with(":Email_1>"));
+    assert!(parts[1].starts_with('<') && parts[1].ends_with(":Email_2>"));
     assert_eq!(
-        session.restore_strict("<Email_1>").expect("restore first"),
+        session.restore_strict(parts[0]).expect("restore first"),
         "first@example.com"
     );
     assert_eq!(
-        session.restore_strict("<Email_2>").expect("restore second"),
+        session.restore_strict(parts[1]).expect("restore second"),
         "second@example.com"
     );
 }
@@ -403,7 +406,9 @@ fn column_rule_uses_field_name_context() {
     };
 
     assert_eq!(fields["primary_email"], "[REDACTED]");
-    assert_eq!(fields["secondary_email"], "<Email_1>");
+    assert!(fields["secondary_email"]
+        .as_str()
+        .is_some_and(|value| value.starts_with('<') && value.ends_with(":Email_1>")));
 }
 
 #[test]

@@ -3,6 +3,7 @@ mod normalize;
 mod pipeline;
 mod policy;
 mod redaction_log;
+pub mod recognizer;
 mod rule;
 mod sandbox;
 mod session;

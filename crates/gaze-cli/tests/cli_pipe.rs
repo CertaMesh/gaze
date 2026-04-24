@@ -119,6 +119,19 @@ where
     BASE64.encode(snap.into_bytes())
 }
 
+fn build_blob_and_tokens<F>(configure: F) -> (String, Vec<String>)
+where
+    F: FnOnce(&Session) -> Vec<String>,
+{
+    let session = Session::new(Scope::Persistent {
+        ttl: Duration::from_secs(3600),
+    })
+    .unwrap();
+    let tokens = configure(&session);
+    let snap = session.export().unwrap();
+    (BASE64.encode(snap.into_bytes()), tokens)
+}
+
 // -----------------------------------------------------------------------
 // 1. Roundtrip
 // -----------------------------------------------------------------------
@@ -134,8 +147,8 @@ fn t01_roundtrip_email_tokenized_then_restored() {
         "raw email leaked"
     );
     assert!(
-        clean_text.contains("<Email_1>"),
-        "expected <Email_1> token: {clean_text}"
+        clean_text.contains(":Email_1>"),
+        "expected session-scoped Email_1 token: {clean_text}"
     );
 
     // LLM reply reuses the tokens.
@@ -197,7 +210,7 @@ fn t03_unknown_token_pascalcase_shape() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3 })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<Email_999>" })
     );
 }
 
@@ -222,7 +235,7 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3 })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "location_7" })
     );
 }
 
@@ -528,7 +541,9 @@ fn t16_clean_with_policy_tokenizes_email() {
         String::from_utf8_lossy(&out.stderr)
     );
     let value: Value = serde_json::from_slice(&out.stdout).unwrap();
-    assert_eq!(value["clean_text"].as_str().unwrap(), "Email <Email_1> now");
+    let clean_text = value["clean_text"].as_str().unwrap();
+    assert!(clean_text.starts_with("Email <"));
+    assert!(clean_text.ends_with(":Email_1> now"));
 }
 
 #[test]
@@ -722,11 +737,12 @@ action = "preserve"
 
 #[test]
 fn t19_restore_custom_token_round_trip_ok() {
-    let blob = build_blob_with(|s| {
-        s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]
     });
+    let text = format!("Order {} is shipped.", tokens[0]);
 
-    let (code, stdout, stderr) = restore_json(&blob, "Order <Custom:order_id_1> is shipped.");
+    let (code, stdout, stderr) = restore_json(&blob, &text);
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(resp["text"].as_str().unwrap(), "Order 42 is shipped.");
@@ -734,13 +750,14 @@ fn t19_restore_custom_token_round_trip_ok() {
 
 #[test]
 fn t20_restore_custom_hallucination_exits_3() {
-    let blob = build_blob_with(|s| {
-        s.tokenize(&PiiClass::custom("order_id"), "42").unwrap();
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]
     });
 
+    let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
     let (code, stdout, stderr) = restore_json(
         &blob,
-        "Order <Custom:order_id_1> and <Custom:fake_id_99> are shipped.",
+        &text,
     );
     assert_eq!(
         code,
@@ -751,18 +768,21 @@ fn t20_restore_custom_hallucination_exits_3() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3 })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<Custom:fake_id_99>" })
     );
 }
 
 #[test]
 fn t21_restore_wrapped_token_in_prose() {
-    let blob = build_blob_with(|s| {
-        s.tokenize(&PiiClass::Email, "alice@example.com").unwrap();
-        s.tokenize(&PiiClass::Email, "bob@example.com").unwrap();
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![
+            s.tokenize(&PiiClass::Email, "alice@example.com").unwrap(),
+            s.tokenize(&PiiClass::Email, "bob@example.com").unwrap(),
+        ]
     });
+    let text = format!("See {}. Reply {}", tokens[0], tokens[1]);
 
-    let (code, stdout, stderr) = restore_json(&blob, "See <Email_1>. Reply <Email_2>");
+    let (code, stdout, stderr) = restore_json(&blob, &text);
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(
