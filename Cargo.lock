@@ -1085,7 +1085,7 @@ dependencies = [
 
 [[package]]
 name = "gaze"
-version = "0.3.1"
+version = "0.4.0-rc.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1113,7 +1113,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.3.1"
+version = "0.4.0-rc.0"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -1129,7 +1129,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.3.1"
+version = "0.4.0-rc.0"
 dependencies = [
  "gaze",
  "hex",
