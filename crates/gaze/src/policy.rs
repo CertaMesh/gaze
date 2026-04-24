@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{Action, PiiClass};
+use crate::{Action, LocaleTag, PiiClass};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Policy {
@@ -14,6 +14,7 @@ pub struct Policy {
     pub rules: Vec<RuleSpec>,
     pub ner: Option<NerPolicy>,
     pub rulepacks: RulepackPolicy,
+    pub locale: Option<Vec<LocaleTag>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -123,6 +124,8 @@ struct RawPolicy {
     #[serde(default)]
     ner: Option<RawNerPolicy>,
     #[serde(default)]
+    locale: Option<RawLocalePolicy>,
+    #[serde(default)]
     policy: Option<RawPolicyTables>,
 }
 
@@ -147,6 +150,13 @@ struct RawDetectorSpec {
 struct RawNerPolicy {
     model_dir: Option<String>,
     locale: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawLocalePolicy {
+    #[serde(default)]
+    active: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -207,6 +217,7 @@ impl TryFrom<RawPolicy> for Policy {
         }
 
         let ner = raw.ner.map(parse_ner).transpose()?;
+        let locale = raw.locale.map(parse_locale_policy).transpose()?.flatten();
 
         Ok(Self {
             session,
@@ -214,6 +225,7 @@ impl TryFrom<RawPolicy> for Policy {
             rules,
             ner,
             rulepacks,
+            locale,
         })
     }
 }
@@ -300,6 +312,21 @@ fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
         model_dir: raw.model_dir.map(expand_home).transpose()?,
         locale: raw.locale,
     })
+}
+
+fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, PolicyError> {
+    if raw.active.is_empty() {
+        return Ok(None);
+    }
+    raw.active
+        .into_iter()
+        .map(|locale| {
+            LocaleTag::parse(&locale).map_err(|_| {
+                PolicyError::BadTtl(format!("unsupported locale tag '{locale}'"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 fn parse_rulepack_policy(raw: RawRulepackPolicy) -> Result<RulepackPolicy, PolicyError> {

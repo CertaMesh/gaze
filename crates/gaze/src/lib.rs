@@ -15,7 +15,7 @@ pub mod token_shape;
 mod types;
 
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
-pub use locale::{LocaleError, LocaleTag};
+pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{
     DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,

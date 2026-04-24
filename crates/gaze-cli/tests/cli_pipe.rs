@@ -48,6 +48,23 @@ fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
     (clean_text, blob, detections)
 }
 
+fn clean_json_with_args(args: &[&str], input: &str) -> Value {
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .args(args)
+        .write_stdin(input.as_bytes().to_vec())
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "clean failed: status={:?} stderr={}",
+        out.status,
+        String::from_utf8_lossy(&out.stderr)
+    );
+    serde_json::from_slice(&out.stdout).expect("stdout is JSON")
+}
+
 /// Run `gaze restore` with the given request body. Returns (status_code, stdout, stderr).
 fn restore_raw(body: &[u8]) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     restore_raw_with_args(&[], body)
@@ -408,6 +425,19 @@ fn cascade_trap_boundary_crossing_not_exempted() {
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "UnknownToken", "exit": 3, "token": "Foo_7" })
+    );
+}
+
+#[test]
+fn clean_echoes_locale_chain_from_cli() {
+    let v = clean_json_with_args(
+        &["--locale", "fr-FR,de-DE"],
+        "Reach alice@example.invalid today.",
+    );
+
+    assert_eq!(
+        v["stats"]["locale_chain"],
+        json!(["fr-FR", "de-DE", "global"])
     );
 }
 

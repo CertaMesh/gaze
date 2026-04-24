@@ -22,9 +22,9 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy,
-    PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger, Result as GazeResult,
-    RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
+    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, LocaleChain, LocaleTag, PiiClass,
+    Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger,
+    Result as GazeResult, RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
 };
 use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
 
@@ -58,6 +58,9 @@ enum Cmd {
         /// Override the persistent session TTL in seconds.
         #[arg(long)]
         session_ttl: Option<u64>,
+        /// Active locale fallback chain, comma separated and priority ordered.
+        #[arg(long, value_delimiter = ',')]
+        locale: Vec<String>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -131,8 +134,9 @@ fn main() -> ExitCode {
             policy,
             format,
             session_ttl,
+            locale,
             max_bytes,
-        } => run_clean(policy.as_deref(), &format, session_ttl, max_bytes),
+        } => run_clean(policy.as_deref(), &format, session_ttl, &locale, max_bytes),
         Cmd::Restore {
             format,
             restore_mode,
@@ -194,6 +198,7 @@ fn run_clean(
     policy: Option<&std::path::Path>,
     format: &str,
     session_ttl: Option<u64>,
+    locale: &[String],
     max_bytes: u64,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
@@ -204,6 +209,13 @@ fn run_clean(
         Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => None,
     };
+    let cli_locales = parse_cli_locales(locale)?;
+    let locale_chain = LocaleChain::merge_policy_and_cli(
+        loaded_policy
+            .as_ref()
+            .and_then(|policy| policy.locale.as_deref()),
+        cli_locales.as_deref(),
+    );
 
     let pipeline = match &loaded_policy {
         Some(policy) => build_pipeline_from_policy(policy)
@@ -245,11 +257,22 @@ fn run_clean(
         session_blob,
         stats: Stats {
             detections: counter.detections.load(Ordering::Relaxed),
+            locale_chain: locale_chain.to_strings(),
         },
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+fn parse_cli_locales(raw: &[String]) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    raw.iter()
+        .map(|locale| LocaleTag::parse(locale).map_err(|_| CliError::PolicyConfig))
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 fn run_restore(
@@ -565,4 +588,5 @@ struct CleanResponse {
 #[derive(Serialize)]
 struct Stats {
     detections: u64,
+    locale_chain: Vec<String>,
 }
