@@ -55,8 +55,8 @@ pub enum RawMatch {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContextSpec {
     pub hotwords: Vec<String>,
-    pub window: u16,
-    pub boost: f32,
+    pub window: Option<u16>,
+    pub boost: Option<f32>,
     pub exclusions: Vec<String>,
 }
 
@@ -78,8 +78,8 @@ pub struct ScoringSpec {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TokenSpec {
-    pub family: String,
-    pub format: String,
+    pub family: Option<String>,
+    pub format: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -109,6 +109,15 @@ pub enum RulepackError {
     UnknownLocale(String),
     #[error("unsupported matcher kind: {0}")]
     UnsupportedMatcher(String),
+    #[error("unsupported rulepack field '{field}' in B1; planned for {planned_version}")]
+    UnsupportedFieldInB1 {
+        field: String,
+        planned_version: &'static str,
+    },
+    #[error("unsupported validator kind: {kind}")]
+    UnsupportedValidator { kind: String },
+    #[error("unsupported normalizer kind: {kind}")]
+    UnsupportedNormalizer { kind: String },
     #[error("duplicate recognizer id '{id}' in rulepacks '{first_pack}' and '{second_pack}'")]
     DuplicateId {
         id: String,
@@ -165,6 +174,7 @@ struct RawRecognizerSpec {
     normalizer: Option<RawNormalizerSpec>,
     #[serde(default)]
     scoring: Option<RawScoringSpec>,
+    #[serde(default)]
     token: RawTokenSpec,
     #[serde(default)]
     source: Option<RawSourceSpec>,
@@ -176,9 +186,9 @@ struct RawContextSpec {
     #[serde(default)]
     hotwords: Vec<String>,
     #[serde(default)]
-    window: u16,
+    window: Option<u16>,
     #[serde(default)]
-    boost: f32,
+    boost: Option<f32>,
     #[serde(default)]
     exclusions: Vec<String>,
 }
@@ -204,11 +214,13 @@ struct RawScoringSpec {
     priority: i32,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTokenSpec {
-    family: String,
-    format: String,
+    #[serde(default)]
+    family: Option<String>,
+    #[serde(default)]
+    format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,6 +265,7 @@ fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
 ) -> Result<RecognizerSpec, RulepackError> {
+    reject_unshipped_fields(&raw)?;
     let locales = if raw.locales.is_empty() {
         default_locales.to_vec()
     } else {
@@ -297,6 +310,54 @@ fn parse_recognizer(
             license: source.license,
         }),
     })
+}
+
+fn reject_unshipped_fields(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
+    const PLANNED_VERSION: &str = "v0.4.1";
+
+    if raw
+        .token
+        .family
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Err(RulepackError::UnsupportedFieldInB1 {
+            field: "token.family".to_string(),
+            planned_version: PLANNED_VERSION,
+        });
+    }
+    if raw
+        .token
+        .format
+        .as_deref()
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Err(RulepackError::UnsupportedFieldInB1 {
+            field: "token.format".to_string(),
+            planned_version: PLANNED_VERSION,
+        });
+    }
+    if let Some(context) = &raw.context {
+        if !context.hotwords.is_empty() {
+            return Err(RulepackError::UnsupportedFieldInB1 {
+                field: "context.hotwords".to_string(),
+                planned_version: PLANNED_VERSION,
+            });
+        }
+        if context.boost.is_some() {
+            return Err(RulepackError::UnsupportedFieldInB1 {
+                field: "context.boost".to_string(),
+                planned_version: PLANNED_VERSION,
+            });
+        }
+        if context.window.is_some() {
+            return Err(RulepackError::UnsupportedFieldInB1 {
+                field: "context.window".to_string(),
+                planned_version: PLANNED_VERSION,
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn parse_class(input: &str) -> Result<PiiClass, RulepackError> {
@@ -359,9 +420,6 @@ kind = "regex"
 pattern = '''(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'''
 
 [recognizers.context]
-hotwords = ["email", "e-mail", "mail"]
-window = 12
-boost = 0.10
 exclusions = ["example.com"]
 
 [recognizers.validator]
@@ -375,8 +433,6 @@ base = 0.70
 priority = 90
 
 [recognizers.token]
-family = "email.counter"
-format = "Email_{n}"
 
 [recognizers.source]
 origin = "ported"
@@ -396,6 +452,68 @@ license = "Apache-2.0"
         assert_eq!(recognizer.class, PiiClass::Email);
         assert_eq!(recognizer.scoring.priority, 90);
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
+    }
+
+    #[test]
+    fn rulepack_rejects_unsupported_token_family() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "[recognizers.token]\nfamily = \"email.formatpreserve\"\n",
+        ))
+        .expect_err("token family is reserved for v0.4.1");
+
+        assert_unsupported_field(err, "token.family");
+    }
+
+    #[test]
+    fn rulepack_rejects_unsupported_token_format() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "[recognizers.token]\nformat = \"Customer_{n}\"\n",
+        ))
+        .expect_err("token format is reserved for v0.4.1");
+
+        assert_unsupported_field(err, "token.format");
+    }
+
+    #[test]
+    fn rulepack_rejects_unsupported_context_hotwords() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "[recognizers.context]\nhotwords = [\"foo\"]\n",
+        ))
+        .expect_err("context hotwords are reserved for v0.4.1");
+
+        assert_unsupported_field(err, "context.hotwords");
+    }
+
+    #[test]
+    fn rulepack_rejects_unsupported_context_boost() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "[recognizers.context]\nboost = 0.10\n",
+        ))
+        .expect_err("context boost is reserved for v0.4.1");
+
+        assert_unsupported_field(err, "context.boost");
+    }
+
+    #[test]
+    fn rulepack_rejects_unsupported_context_window() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "[recognizers.context]\nwindow = 12\n",
+        ))
+        .expect_err("context window is reserved for v0.4.1");
+
+        assert_unsupported_field(err, "context.window");
+    }
+
+    #[test]
+    fn rulepack_accepts_default_token_fields() {
+        let rulepack = Rulepack::parse(CORE).expect("reserved token/context fields are unset");
+        let recognizer = &rulepack.recognizers[0];
+
+        assert_eq!(recognizer.token.family, None);
+        assert_eq!(recognizer.token.format, None);
+        assert!(recognizer.context.as_ref().unwrap().hotwords.is_empty());
+        assert_eq!(recognizer.context.as_ref().unwrap().boost, None);
+        assert_eq!(recognizer.context.as_ref().unwrap().window, None);
     }
 
     #[test]
@@ -436,5 +554,37 @@ rulepack_version = "0.4.0"
             parse_class("custom:Order_ID").unwrap(),
             PiiClass::Custom("order_id".to_string())
         );
+    }
+
+    fn unsupported_field_rulepack(extra: &str) -> String {
+        format!(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "bad"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "bad.email"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = ".+"
+
+{extra}
+"#
+        )
+    }
+
+    fn assert_unsupported_field(err: RulepackError, field: &str) {
+        assert!(matches!(
+            err,
+            RulepackError::UnsupportedFieldInB1 {
+                field: ref actual,
+                planned_version: "v0.4.1",
+            } if actual == field
+        ));
     }
 }

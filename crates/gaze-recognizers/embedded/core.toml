@@ -14,10 +14,12 @@ kind = "regex"
 pattern = '''(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'''
 
 [recognizers.context]
-hotwords = ["email", "e-mail", "mail"]
-window = 12
-boost = 0.10
 exclusions = ["example.com"]
+
+# Reserved — not yet applied; see v0.4.1 roadmap.
+# hotwords = ["email", "e-mail", "mail"]
+# window = 12
+# boost = 0.10
 
 [recognizers.validator]
 kind = "email_rfc"
@@ -30,8 +32,9 @@ base = 0.70
 priority = 90
 
 [recognizers.token]
-family = "email.counter"
-format = "Email_{n}"
+# Reserved — not yet applied; see v0.4.1 roadmap.
+# family = "email.counter"
+# format = "Email_{n}"
 
 [recognizers.source]
 origin = "ported"

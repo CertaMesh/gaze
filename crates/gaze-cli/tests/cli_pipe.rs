@@ -214,8 +214,6 @@ base = 0.42
 priority = 77
 
 [recognizers.token]
-family = "email.counter"
-format = "Email_{{n}}"
 "#
     )
 }
@@ -562,8 +560,6 @@ kind = "dictionary"
 terms = ["kundennummer-123"]
 
 [recognizers.token]
-family = "email.counter"
-format = "Email_{n}"
 "#;
     let (_dir, path) = write_policy_with_rulepack(rulepack, None);
     let out = clean_raw_with_args(
@@ -604,8 +600,6 @@ base = 0.88
 priority = 10
 
 [recognizers.token]
-family = "email.counter"
-format = "Email_{n}"
 "#;
     let (_dir, path) = write_policy_with_rulepack(rulepack, None);
     let v = clean_json_with_args(
