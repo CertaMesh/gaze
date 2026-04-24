@@ -49,9 +49,9 @@ enum Cmd {
         /// Output format. Only `json` is supported today.
         #[arg(long, default_value = "json")]
         format: String,
-        /// Persistent session TTL in seconds. Default 24h — matches typical queue retention.
-        #[arg(long, default_value_t = 86_400)]
-        session_ttl: u64,
+        /// Override the persistent session TTL in seconds.
+        #[arg(long)]
+        session_ttl: Option<u64>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -160,7 +160,10 @@ fn main() -> ExitCode {
             // prints the crate version cleanly (required by the homebrew test
             // block).
             use clap::error::ErrorKind;
-            if matches!(err.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion) {
+            if matches!(
+                err.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) {
                 let _ = err.print();
                 return ExitCode::SUCCESS;
             }
@@ -236,22 +239,22 @@ fn require_json_format(format: &str) -> std::result::Result<(), CliError> {
 fn run_clean(
     policy: Option<&std::path::Path>,
     format: &str,
-    session_ttl: u64,
+    session_ttl: Option<u64>,
     max_bytes: u64,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let raw = read_stdin_text(max_bytes)?;
 
     let counter = Arc::new(CountingLogger::default());
-    let pipeline = match policy {
-        Some(path) => {
-            let policy = Policy::load(path).map_err(map_policy_error)?;
-            Pipeline::from_policy(&policy)
-                .map_err(map_pipeline_error)?
-                .with_redaction_logger(ArcLogger(
-                    Arc::clone(&counter) as Arc<dyn RedactionLogger>
-                ))
-        }
+    let loaded_policy = match policy {
+        Some(path) => Some(Policy::load(path).map_err(map_policy_error)?),
+        None => None,
+    };
+
+    let pipeline = match &loaded_policy {
+        Some(policy) => Pipeline::from_policy(policy)
+            .map_err(map_pipeline_error)?
+            .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None => {
             tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
             build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
@@ -259,9 +262,12 @@ fn run_clean(
         }
     };
 
-    let session = Session::new(Scope::Persistent {
-        ttl: Duration::from_secs(session_ttl),
-    })
+    let session = match &loaded_policy {
+        Some(policy) => Session::from_policy_with_ttl_override(policy, session_ttl),
+        None => Session::new(Scope::Persistent {
+            ttl: Duration::from_secs(session_ttl.unwrap_or(86_400)),
+        }),
+    }
     .map_err(|_| CliError::Pipeline)?;
 
     let clean_doc = pipeline

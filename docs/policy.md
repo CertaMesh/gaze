@@ -81,13 +81,9 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 | `scope`    | string   | yes                          | One of `"ephemeral"`, `"conversation"`, `"persistent"`. |
 | `ttl_secs` | integer  | yes if `scope = "persistent"`| Must be `> 0`. Zero is rejected.                |
 
-> **Caveat — `gaze clean` does not yet honour `policy.session`.** The CLI
-> currently constructs its session from `--session-ttl` (default 86 400 s)
-> using `Scope::Persistent`, regardless of what `[session]` says. The block
-> is parsed (and its presence is required) but the values are not yet routed
-> into `Session::new`. Tracked via solo todo (see "Known spec drift" below).
-> Until that lands, treat `[session]` as a forward-looking reservation:
-> declare it correctly so a future binary picks it up automatically.
+> Resolved in v0.3.1: `gaze clean` now constructs its session from
+> `[session]`. `--session-ttl` is an explicit CLI override for persistent
+> session TTL; when the flag is omitted, `ttl_secs` from policy is used.
 
 ### `[[detector]]`
 
@@ -298,9 +294,9 @@ exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
 - `scope = "persistent"` — the only scope `gaze clean` produces. Requires
   `ttl_secs > 0`.
 
-The `--session-ttl=<secs>` CLI flag (default `86400`) is the value `gaze
-clean` actually uses today. See the caveat in [`[session]`](#session)
-above.
+The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
+sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
+policy-less stub mode falls back to `86400`.
 
 TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
 ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
@@ -492,10 +488,9 @@ and is summarised here.
 Documented here so users get the truth, with corresponding solo todos so the
 gaps land on the engineering board:
 
-1. **`policy.session` is parsed but ignored by `gaze clean`.** The CLI
-   forces `Scope::Persistent { ttl: --session-ttl }` regardless of what the
-   policy declares. Fix: thread `policy.session` into `Session::new` and
-   document `--session-ttl` as an override, not the source of truth.
+1. **Resolved in v0.3.1: `policy.session` is honoured by `gaze clean`.**
+   The CLI constructs sessions from `[session]`; `--session-ttl` is now only
+   an explicit persistent-TTL override.
 2. **`[ner]` load failures exit `3` `Pipeline`, not `2` `PolicyConfig`.**
    Users editing `model_dir` get a runtime variant for what is morally a
    config error. Fix: map `Error::NerLoad` to `PolicyConfig` (or introduce a
