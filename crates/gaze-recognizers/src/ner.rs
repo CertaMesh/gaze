@@ -31,7 +31,7 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::detector::{Detection, Detector, PiiClass};
+use gaze::{Detection, Detector, PiiClass};
 
 /// Relative file names that must be present in a model directory.
 pub const MODEL_FILE: &str = "model.onnx";

@@ -128,7 +128,8 @@ fn make_ctx() -> ToolContext<FakeDb, FakeLogs> {
     .expect("policy");
     let policy = Arc::new(policy);
     let pipeline = build_pipeline(&policy).expect("pipeline");
-    let session = Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
+    let session =
+        Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
     ToolContext::with_policy(
         pipeline,
         session,
@@ -136,6 +137,13 @@ fn make_ctx() -> ToolContext<FakeDb, FakeLogs> {
         Arc::new(FakeDb),
         Some(Arc::new(FakeLogs)),
     )
+}
+
+fn email_token(value: &serde_json::Value, index: usize) -> String {
+    let token = value.as_str().expect("token string").to_string();
+    assert!(token.starts_with('<'));
+    assert!(token.ends_with(&format!(":Email_{index}>")));
+    token
 }
 
 #[tokio::test]
@@ -167,22 +175,30 @@ async fn db_count_returns_adapter_count() {
 #[tokio::test]
 async fn db_distinct_redacts_values_with_shared_session() {
     let ctx = make_ctx();
-    let values = ctx.db_distinct("users", "email", 10).await.expect("distinct");
+    let values = ctx
+        .db_distinct("users", "email", 10)
+        .await
+        .expect("distinct");
     assert_eq!(values.len(), 2);
-    assert_eq!(values[0], serde_json::Value::String("Email_1".to_string()));
-    assert_eq!(values[1], serde_json::Value::String("Email_2".to_string()));
+    let first = email_token(&values[0], 1);
+    let second = email_token(&values[1], 2);
+    assert_ne!(first, second);
 }
 
 #[tokio::test]
 async fn logs_search_and_context_redact_text() {
     let ctx = make_ctx();
-    let search = ctx.logs_search("integrity", None, 10).await.expect("search");
+    let search = ctx
+        .logs_search("integrity", None, 10)
+        .await
+        .expect("search");
     let context = ctx.logs_context("req-1").await.expect("context");
 
     assert_eq!(search.len(), 1);
     assert_eq!(context.len(), 1);
     assert!(!search[0].contains(CANARY));
     assert!(!context[0].contains(CANARY));
-    assert!(search[0].contains("Email_1"));
-    assert!(context[0].contains("Email_1"));
+    let marker = format!(":Email_{}>", 1);
+    assert!(search[0].contains('<') && search[0].contains(&marker));
+    assert!(context[0].contains('<') && context[0].contains(&marker));
 }

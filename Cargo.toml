@@ -1,6 +1,8 @@
 [workspace]
 members = [
-    "crates/debug-proxy",
     "crates/gaze",
+    "crates/gaze-recognizers",
+    "crates/gaze-cli",
+    "crates/debug-proxy",
 ]
 resolver = "2"

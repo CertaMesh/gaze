@@ -22,6 +22,7 @@ path = "src/main.rs"
 async-trait = "0.1"
 clap = { version = "4.5", features = ["derive"] }
 gaze = { path = "../gaze" }
+gaze-recognizers = { path = "../gaze-recognizers" }
 rmcp = { version = "0.2", features = ["transport-io"] }
 schemars = { version = "0.8", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }

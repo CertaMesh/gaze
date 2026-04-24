@@ -694,6 +694,7 @@ dependencies = [
  "async-trait",
  "clap",
  "gaze",
+ "gaze-recognizers",
  "rmcp",
  "schemars 0.8.22",
  "serde",
@@ -1084,18 +1085,15 @@ dependencies = [
 
 [[package]]
 name = "gaze"
-version = "0.3.1"
+version = "0.4.0-rc.0"
 dependencies = [
  "anyhow",
- "assert_cmd",
  "base64 0.22.1",
- "clap",
  "dashmap",
  "ed25519-dalek",
+ "gaze-recognizers",
  "hex",
  "libc",
- "ndarray 0.16.1",
- "ort",
  "rand 0.8.5",
  "regex",
  "rusqlite",
@@ -1105,13 +1103,47 @@ dependencies = [
  "sha2",
  "tempfile",
  "thiserror 1.0.69",
- "tokenizers",
  "tokio",
  "toml 0.8.23",
  "tracing",
  "trybuild",
  "unicode-normalization",
  "zeroize",
+]
+
+[[package]]
+name = "gaze-cli"
+version = "0.4.0-rc.0"
+dependencies = [
+ "assert_cmd",
+ "base64 0.22.1",
+ "clap",
+ "gaze",
+ "gaze-recognizers",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "gaze-recognizers"
+version = "0.4.0-rc.0"
+dependencies = [
+ "gaze",
+ "hex",
+ "ndarray 0.16.1",
+ "ort",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokenizers",
+ "tracing",
+ "unicode-normalization",
 ]
 
 [[package]]

@@ -14,15 +14,20 @@ use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+mod error;
+
 use clap::{Parser, Subcommand};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy, PolicyError,
-    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult, Scope,
-    SensitiveSnapshot, Session,
+    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy,
+    PolicyError, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec,
+    Scope, SensitiveSnapshot, Session,
 };
+use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
+
+use crate::error::{CliError, RestoreMode, RestoreWarning};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -61,78 +66,13 @@ enum Cmd {
         /// Output format. Only `json` is supported today.
         #[arg(long, default_value = "json")]
         format: String,
+        /// Unknown-token handling during restore.
+        #[arg(long, value_enum, default_value_t = RestoreMode::Strict)]
+        restore_mode: RestoreMode,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
     },
-}
-
-/// Structured CLI error. Each variant maps to an exit code; only the variant
-/// name reaches stderr so raw input or plaintext blob entries never leak into
-/// caller logs (see docs/roadmap/v0.3/cli.md "Stderr discipline").
-#[derive(Debug)]
-enum CliError {
-    StdinParse,
-    EmptyInput,
-    InputTooLarge,
-    InvalidEncoding,
-    PolicyConfig,
-    PolicyConfigDetail(&'static str),
-    UnknownToken,
-    InvalidSignature,
-    InvalidBlobVersion,
-    BlobExpired,
-    Pipeline,
-    Io,
-    PolicyOpen,
-}
-
-impl CliError {
-    fn exit_code(&self) -> u8 {
-        match self {
-            Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
-            Self::PolicyConfig | Self::PolicyConfigDetail(_) => 2,
-            Self::UnknownToken
-            | Self::InvalidSignature
-            | Self::InvalidBlobVersion
-            | Self::BlobExpired
-            | Self::Pipeline => 3,
-            Self::Io | Self::PolicyOpen => 4,
-        }
-    }
-
-    fn variant_name(&self) -> &'static str {
-        match self {
-            Self::StdinParse => "StdinParse",
-            Self::EmptyInput => "EmptyInput",
-            Self::InputTooLarge => "InputTooLarge",
-            Self::InvalidEncoding => "InvalidEncoding",
-            Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
-            Self::UnknownToken => "UnknownToken",
-            Self::InvalidSignature => "InvalidSignature",
-            Self::InvalidBlobVersion => "InvalidBlobVersion",
-            Self::BlobExpired => "BlobExpired",
-            Self::Pipeline => "Pipeline",
-            Self::Io => "Io",
-            Self::PolicyOpen => "PolicyOpen",
-        }
-    }
-
-    fn emit_stderr(&self) {
-        match self {
-            Self::PolicyConfigDetail(detail) => eprintln!(
-                r#"{{"error":"{}","exit":{},"detail":"{}"}}"#,
-                self.variant_name(),
-                self.exit_code(),
-                detail
-            ),
-            _ => eprintln!(
-                r#"{{"error":"{}","exit":{}}}"#,
-                self.variant_name(),
-                self.exit_code()
-            ),
-        }
-    }
 }
 
 /// Install a panic hook that prints a sanitized error line and exits 3.
@@ -192,7 +132,11 @@ fn main() -> ExitCode {
             session_ttl,
             max_bytes,
         } => run_clean(policy.as_deref(), &format, session_ttl, max_bytes),
-        Cmd::Restore { format, max_bytes } => run_restore(&format, max_bytes),
+        Cmd::Restore {
+            format,
+            restore_mode,
+            max_bytes,
+        } => run_restore(&format, restore_mode, max_bytes),
     };
 
     match result {
@@ -261,7 +205,7 @@ fn run_clean(
     };
 
     let pipeline = match &loaded_policy {
-        Some(policy) => Pipeline::from_policy(policy)
+        Some(policy) => build_pipeline_from_policy(policy)
             .map_err(map_pipeline_error)?
             .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None => {
@@ -307,7 +251,11 @@ fn run_clean(
     Ok(())
 }
 
-fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError> {
+fn run_restore(
+    format: &str,
+    restore_mode: RestoreMode,
+    max_bytes: u64,
+) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let stdin_bytes = read_stdin_bytes(max_bytes)?;
 
@@ -322,14 +270,18 @@ fn run_restore(format: &str, max_bytes: u64) -> std::result::Result<(), CliError
         Session::import(SensitiveSnapshot::from(blob_bytes)).map_err(|err| match err {
             gaze::Error::InvalidSnapshotSignature => CliError::InvalidSignature,
             gaze::Error::InvalidSnapshotVersion(_) => CliError::InvalidBlobVersion,
+            gaze::Error::InvalidSnapshotPayload => CliError::InvalidBlobVersion,
             gaze::Error::BlobExpired { .. } => CliError::BlobExpired,
             _ => CliError::Pipeline,
         })?;
 
     let pass1 = restore_pass1(&session, &request.text)?;
-    restore_pass2_validate(&pass1)?;
+    let restore_warning = restore_pass2_validate(&pass1, &session, restore_mode)?;
 
-    let response = RestoreResponse { text: pass1 };
+    let response = RestoreResponse {
+        text: pass1,
+        restore_warning,
+    };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
@@ -350,6 +302,50 @@ fn map_pipeline_error(err: gaze::Error) -> CliError {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
         _ => CliError::Pipeline,
     }
+}
+
+fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
+    let mut builder = Pipeline::builder();
+
+    for detector in &policy.detectors {
+        builder = match &detector.kind {
+            gaze::DetectorKind::Regex => builder.detector(RegexDetector::with_source(
+                &detector.pattern,
+                detector.class.clone(),
+                &detector.name,
+            )?),
+            gaze::DetectorKind::Unknown(kind) => {
+                return Err(gaze::Error::Policy(PolicyError::BadTtl(format!(
+                    "unknown detector.kind '{kind}'"
+                ))))
+            }
+        };
+    }
+
+    for rule in &policy.rules {
+        builder = match rule {
+            RuleSpec::Class { class, action } => {
+                builder.rule(ClassRule::new(class.clone(), *action))
+            }
+            RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
+            RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
+        };
+    }
+
+    if let Some(ner) = &policy.ner {
+        if let Some(path) = &ner.model_dir {
+            let detector = NerDetector::load_with_options(
+                path,
+                NerOptions {
+                    locale: ner.locale.clone(),
+                },
+            )
+            .map_err(|err| gaze::Error::Policy(PolicyError::NerLoad(err.to_string())))?;
+            builder = builder.detector(detector);
+        }
+    }
+
+    builder.build()
 }
 
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
@@ -403,11 +399,43 @@ fn restore_pass1(session: &Session, text: &str) -> std::result::Result<String, C
 /// Any remaining token-shaped substring means the LLM invented a token the
 /// session never emitted → `UnknownToken`. The canonical grammar lives in
 /// `gaze::token_shape`, so the CLI no longer re-encodes token shapes locally.
-fn restore_pass2_validate(text: &str) -> std::result::Result<(), CliError> {
-    if gaze::token_shape::contains_token(text) {
-        return Err(CliError::UnknownToken);
+fn restore_pass2_validate(
+    text: &str,
+    session: &Session,
+    mode: RestoreMode,
+) -> std::result::Result<Vec<RestoreWarning>, CliError> {
+    let mut warnings = Vec::new();
+    for matched in gaze::token_shape::find_tokens(text) {
+        if gaze::token_shape::is_trap(matched) {
+            match mode {
+                RestoreMode::Strict => {
+                    return Err(CliError::UnknownToken {
+                        token: matched.to_string(),
+                    })
+                }
+                RestoreMode::Tolerant => warnings.push(RestoreWarning {
+                    variant: "UnknownToken".to_string(),
+                    token: matched.to_string(),
+                }),
+            }
+            continue;
+        }
+        if session.contains_token(matched) {
+            continue;
+        }
+        match mode {
+            RestoreMode::Strict => {
+                return Err(CliError::UnknownToken {
+                    token: matched.to_string(),
+                })
+            }
+            RestoreMode::Tolerant => warnings.push(RestoreWarning {
+                variant: "UnknownToken".to_string(),
+                token: matched.to_string(),
+            }),
+        }
     }
-    Ok(())
+    Ok(warnings)
 }
 
 #[derive(Deserialize)]
@@ -419,6 +447,8 @@ struct RestoreRequest {
 #[derive(Serialize)]
 struct RestoreResponse {
     text: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    restore_warning: Vec<RestoreWarning>,
 }
 
 /// Stub pipeline used until the policy.toml loader (solo #3) lands.

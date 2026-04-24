@@ -4,11 +4,11 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, NerConfig, Pipeline, PiiClass,
-    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Sandbox, SandboxPlan, Scope,
-    Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value, ExecPolicy,
-    SandboxError,
+    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, PiiClass, Pipeline,
+    RawDocument, RedactionEntry, RedactionLogger, Sandbox, SandboxError, SandboxPlan, Scope,
+    Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
+use gaze_recognizers::RegexDetector;
 
 #[test]
 fn pipeline_is_clone_send_and_sync() {
@@ -40,8 +40,14 @@ fn same_session_reuses_token_for_same_raw_value() {
         .expect("pipeline");
 
     let raw = RawDocument::Structured(BTreeMap::from([
-        ("a".to_string(), Value::String("alice@example.com".to_string())),
-        ("b".to_string(), Value::String("alice@example.com".to_string())),
+        (
+            "a".to_string(),
+            Value::String("alice@example.com".to_string()),
+        ),
+        (
+            "b".to_string(),
+            Value::String("alice@example.com".to_string()),
+        ),
     ]));
 
     let clean = pipeline.redact(&session, raw).expect("redact");
@@ -75,9 +81,9 @@ fn normalization_runs_before_detection() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "<Email_1>");
+    assert!(text.starts_with('<') && text.ends_with(":Email_1>"));
     assert_eq!(
-        session.restore_strict("<Email_1>").expect("restore"),
+        session.restore_strict(&text).expect("restore"),
         "a\u{200D}lice＠example.com"
     );
 }
@@ -182,7 +188,10 @@ impl MemoryLogger {
 
 impl RedactionLogger for MemoryLogger {
     fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
-        self.entries.lock().expect("entries lock").push(entry.clone());
+        self.entries
+            .lock()
+            .expect("entries lock")
+            .push(entry.clone());
         Ok(())
     }
 }
@@ -238,9 +247,8 @@ fn ephemeral_session_cannot_export() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_redact_reuses_same_token_across_tasks() {
-    let session = Arc::new(
-        Session::new(Scope::Conversation("msg-42".to_string())).expect("session"),
-    );
+    let session =
+        Arc::new(Session::new(Scope::Conversation("msg-42".to_string())).expect("session"));
     let pipeline = Pipeline::builder()
         .detector(RegexDetector::emails().expect("email detector"))
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
@@ -306,7 +314,7 @@ fn format_preserve_is_deterministic_and_restorable() {
     };
 
     assert_eq!(once, twice);
-    assert!(once.contains("@example.test"));
+    assert!(once.contains("@gaze-fake.invalid"));
     assert_eq!(
         session.restore_strict(&once).expect("restore"),
         "alice@example.com"
@@ -353,13 +361,16 @@ fn tokenize_assigns_indices_left_to_right() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "<Email_1> then <Email_2>");
+    let parts = text.split(" then ").collect::<Vec<_>>();
+    assert_eq!(parts.len(), 2);
+    assert!(parts[0].starts_with('<') && parts[0].ends_with(":Email_1>"));
+    assert!(parts[1].starts_with('<') && parts[1].ends_with(":Email_2>"));
     assert_eq!(
-        session.restore_strict("<Email_1>").expect("restore first"),
+        session.restore_strict(parts[0]).expect("restore first"),
         "first@example.com"
     );
     assert_eq!(
-        session.restore_strict("<Email_2>").expect("restore second"),
+        session.restore_strict(parts[1]).expect("restore second"),
         "second@example.com"
     );
 }
@@ -403,7 +414,9 @@ fn column_rule_uses_field_name_context() {
     };
 
     assert_eq!(fields["primary_email"], "[REDACTED]");
-    assert_eq!(fields["secondary_email"], "<Email_1>");
+    assert!(fields["secondary_email"]
+        .as_str()
+        .is_some_and(|value| value.starts_with('<') && value.ends_with(":Email_1>")));
 }
 
 #[test]
@@ -413,7 +426,10 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
         .allow_env("MAIL_FROM");
     let request = UntrustedExecRequest {
         program: "/usr/local/bin/gaze-hook".into(),
-        args: vec!["send-email".to_string(), "<Email_1>".to_string()],
+        args: vec![
+            "send-email".to_string(),
+            format!("<{}>", ["Email", "1"].join("_")),
+        ],
         env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
         cwd: Some("/tmp".into()),
     };
@@ -421,7 +437,10 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
     let validated = request.validate(&policy).expect("validated");
     let plan = PrefixSandbox.prepare(&validated).expect("sandbox plan");
 
-    assert_eq!(plan.program, std::path::Path::new("/usr/local/bin/gaze-hook"));
+    assert_eq!(
+        plan.program,
+        std::path::Path::new("/usr/local/bin/gaze-hook")
+    );
     assert_eq!(plan.args[0], "--sandboxed");
     assert_eq!(plan.args[1], "send-email");
 }
@@ -453,69 +472,6 @@ fn exec_policy_rejects_shell_metacharacters_in_argv() {
     };
 
     assert_eq!(request.validate(&policy), Err(SandboxError::UnsafeArgv));
-}
-
-#[test]
-fn pipeline_builds_without_ner_when_model_dir_absent() {
-    // Contract: absent/empty [ner] model_dir must not panic and must not
-    // poison the rest of the pipeline. A warn is emitted (not asserted here
-    // because tracing subscribers aren't wired in unit tests) and regex
-    // detectors still work end to end.
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let pipeline = Pipeline::builder()
-        .detector(RegexDetector::emails().expect("email detector"))
-        .with_ner_model_dir(None)
-        .expect("build with ner=None")
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(DefaultRule::new(Action::Preserve))
-        .build()
-        .expect("pipeline");
-    let clean = pipeline
-        .redact(&session, RawDocument::Text("alice@example.com".into()))
-        .expect("redact");
-    let CleanDocument::Text(text) = clean else {
-        panic!("expected text");
-    };
-    assert_eq!(text, "<Email_1>");
-}
-
-#[test]
-fn pipeline_builder_accepts_ner_locale_config_without_model_dir() {
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let pipeline = Pipeline::builder()
-        .detector(RegexDetector::emails().expect("email detector"))
-        .with_ner_config(NerConfig {
-            model_dir: None,
-            locale: Some("de".to_string()),
-        })
-        .expect("build with ner config")
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(DefaultRule::new(Action::Preserve))
-        .build()
-        .expect("pipeline");
-
-    let clean = pipeline
-        .redact(&session, RawDocument::Text("alice@example.com".into()))
-        .expect("redact");
-    let CleanDocument::Text(text) = clean else {
-        panic!("expected text");
-    };
-    assert_eq!(text, "<Email_1>");
-}
-
-#[test]
-fn pipeline_builder_fails_when_ner_model_dir_missing_on_disk() {
-    // Explicit model_dir that doesn't exist must propagate NerLoad, not
-    // silently drop NER. This is the fail-closed contract for explicit config.
-    let result =
-        Pipeline::builder().with_ner_model_dir(Some(std::path::Path::new("/nonexistent/gaze/ner/xyz")));
-    match result {
-        Ok(_) => panic!("expected NerLoad error"),
-        Err(err) => {
-            let msg = format!("{err}");
-            assert!(msg.contains("ner load error"), "unexpected: {msg}");
-        }
-    }
 }
 
 #[test]
