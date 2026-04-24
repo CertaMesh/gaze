@@ -6,6 +6,7 @@ use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value as JsonValue;
 
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
@@ -267,13 +268,7 @@ impl Session {
             .verify(payload_bytes, &signature)
             .map_err(|_| Error::InvalidSnapshotSignature)?;
 
-        let payload: SnapshotPayload = serde_json::from_slice(payload_bytes).map_err(|err| {
-            if err.to_string().contains("session_hex must be") {
-                Error::InvalidSnapshotPayload
-            } else {
-                Error::SnapshotDecode(err)
-            }
-        })?;
+        let payload = decode_snapshot_payload(payload_bytes)?;
         validate_entry_prefixes(&payload)?;
         let session_hex = session_hex_bytes(&payload.session_hex)?;
         let scope = scope_from_snapshot(payload.scope);
@@ -463,7 +458,9 @@ where
     if is_session_hex(&value) {
         Ok(value)
     } else {
-        Err(serde::de::Error::custom("session_hex must be 8 lowercase hex chars"))
+        Err(serde::de::Error::custom(
+            "session_hex must be 8 lowercase hex chars",
+        ))
     }
 }
 
@@ -484,9 +481,22 @@ fn session_hex_bytes(value: &str) -> Result<[u8; 4]> {
         .map_err(|_| Error::InvalidSnapshotPayload)
 }
 
+fn decode_snapshot_payload(payload_bytes: &[u8]) -> Result<SnapshotPayload> {
+    let value: JsonValue = serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
+    let Some(session_hex) = value.get("session_hex").and_then(JsonValue::as_str) else {
+        return Err(Error::InvalidSnapshotPayload);
+    };
+    if !is_session_hex(session_hex) {
+        return Err(Error::InvalidSnapshotPayload);
+    }
+    serde_json::from_value(value).map_err(Error::SnapshotDecode)
+}
+
 fn validate_entry_prefixes(payload: &SnapshotPayload) -> Result<()> {
     for entry in &payload.entries {
-        if !entry_token_matches_session(&entry.token, &payload.session_hex) {
+        if !entry_token_matches_session(&entry.token, &payload.session_hex)
+            || !crate::token_shape::starts_with_session_prefix(&entry.token)
+        {
             return Err(Error::InvalidSnapshotPayload);
         }
     }

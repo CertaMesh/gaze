@@ -406,6 +406,20 @@ fn restore_pass2_validate(
 ) -> std::result::Result<Vec<RestoreWarning>, CliError> {
     let mut warnings = Vec::new();
     for matched in gaze::token_shape::find_tokens(text) {
+        if gaze::token_shape::is_trap(matched) {
+            match mode {
+                RestoreMode::Strict => {
+                    return Err(CliError::UnknownToken {
+                        token: matched.to_string(),
+                    })
+                }
+                RestoreMode::Tolerant => warnings.push(RestoreWarning {
+                    variant: "UnknownToken".to_string(),
+                    token: matched.to_string(),
+                }),
+            }
+            continue;
+        }
         if session.contains_token(matched) {
             continue;
         }

@@ -21,6 +21,40 @@ pub fn find_tokens(s: &str) -> impl Iterator<Item = &str> {
     pattern().find_iter(s).map(|m| m.as_str())
 }
 
+pub fn starts_with_session_prefix(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let is_lower_hex = |b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b);
+
+    if bytes.len() >= 10 && bytes[0] == b'<' && bytes[9] == b':' {
+        if bytes[1..9].iter().copied().all(is_lower_hex) {
+            return true;
+        }
+    }
+
+    if bytes.len() >= 15 && bytes.starts_with(b"email") {
+        let mut i = 5;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i > 5 && i + 9 < bytes.len() && bytes[i] == b'.' {
+            let hex_start = i + 1;
+            let hex_end = hex_start + 8;
+            if hex_end < bytes.len()
+                && bytes[hex_end] == b'@'
+                && bytes[hex_start..hex_end].iter().copied().all(is_lower_hex)
+            {
+                return true;
+            }
+        }
+    }
+
+    bytes.len() >= 9 && bytes[8] == b':' && bytes[0..8].iter().copied().all(is_lower_hex)
+}
+
+pub fn is_trap(match_text: &str) -> bool {
+    !starts_with_session_prefix(match_text)
+}
+
 fn build_pattern() -> String {
     let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
     let builtin_lower_alt = BUILTIN_CLASS_NAMES
@@ -176,6 +210,24 @@ mod tests {
         ] {
             assert!(contains_token(&shape), "shape should be trapped: {shape}");
         }
+    }
+
+    #[test]
+    fn session_prefix_scan_classifies_prefixed_forms() {
+        assert!(starts_with_session_prefix("<a7f3b8e2:Email_1>"));
+        assert!(starts_with_session_prefix(
+            "email1.a7f3b8e2@gaze-fake.invalid"
+        ));
+        assert!(starts_with_session_prefix("a7f3b8e2:name_1"));
+        assert!(!is_trap("<a7f3b8e2:Email_1>"));
+    }
+
+    #[test]
+    fn session_prefix_scan_rejects_trap_forms() {
+        assert!(is_trap(&format!("<{}>", ["Email", "1"].join("_"))));
+        assert!(is_trap("email1@example.test"));
+        assert!(is_trap("email1@gaze-fake.invalid"));
+        assert!(is_trap("<A7F3B8E2:Email_1>"));
     }
 
     #[test]

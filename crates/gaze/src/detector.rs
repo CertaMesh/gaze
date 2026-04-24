@@ -15,18 +15,23 @@ pub enum PiiClass {
     Custom(String),
 }
 
-pub const BUILTIN_CLASS_NAMES: &[&str] =
-    &["Email", "Name", "Location", "Organization"];
+pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
 impl PiiClass {
     pub fn builtin_variants() -> &'static [PiiClass] {
-        const BUILTINS: &[PiiClass] = &[
+        const _EXHAUSTIVE: fn(&PiiClass) = |c| match c {
+            PiiClass::Email
+            | PiiClass::Name
+            | PiiClass::Location
+            | PiiClass::Organization
+            | PiiClass::Custom(_) => (),
+        };
+        &[
             PiiClass::Email,
             PiiClass::Name,
             PiiClass::Location,
             PiiClass::Organization,
-        ];
-        BUILTINS
+        ]
     }
 
     pub fn custom(name: &str) -> Self {
