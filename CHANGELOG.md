@@ -7,16 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.1] - unreleased
+## [v0.3.1] — 2026-04-24
 
 ### Fixed
 
-- `gaze clean` now honors `[session]` from `policy.toml`; `--session-ttl`
-  is an explicit persistent-TTL override instead of the source of truth.
-- Broken `[ner] model_dir` configuration now exits as `PolicyConfig`
-  with exit code 2.
-- `gaze clean` now rejects `kind = "column"` rules during CLI policy load
-  instead of silently accepting rules that cannot fire for text stdin.
+- **NER silent no-op with BIO-prefixed labels.json.** `LabelMap::resolve`
+  now accepts both BIO-prefixed (`B-PER`, `B-LOC`) and bare (`PER`, `LOC`)
+  label keys. Previously, bundles shipping BIO-prefixed labels (the standard
+  Davlan/HuggingFace format) produced zero detections silently. Adopters on
+  aarch64-apple-darwin were particularly affected. (#19)
+- Spec-drift: `[session]` policy.toml key now authoritative over
+  `--session-ttl`. (#16)
+- Spec-drift: Broken `[ner] model_dir` exits `PolicyConfig` (exit code 2)
+  instead of silently degrading. (#16)
+- Spec-drift: `kind = "column"` policy rules rejected by `gaze clean` CLI
+  load. (#16)
+
+### Added
+
+- `tracing::info!("ner detector registered, N backends")` on NER bootstrap -
+  adopters can now confirm whether [ner] block is being picked up. (#19)
+- `tracing::warn!` on zero-overlap (NER inference ran but emitted 0 entities
+  for input class) - surfaces silent detection failures. (#19)
+
+### Changed
+
+- README hero copy + project north star documentation refresh. (#15)
+- Roadmap documentation for v0.4 / v0.4.1 / v0.5. (docs-only,
+  offsite-readable)
 
 ## [0.3.0] — 2026-04-24
 
@@ -128,7 +146,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.1...HEAD
+[v0.3.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Naoray/gaze/releases/tag/v0.3.0
 [0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
 [0.3.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.1
