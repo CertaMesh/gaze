@@ -7,6 +7,7 @@ pub mod recognizer;
 mod redaction_log;
 pub mod resolver;
 pub mod registry;
+pub mod rulepack;
 mod rule;
 mod sandbox;
 mod session;
@@ -22,6 +23,10 @@ pub use policy::{
 };
 pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
 pub use resolver::resolve_candidates;
+pub use rulepack::{
+    ContextSpec, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack, RulepackError,
+    RulepackSource, ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
+};
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,

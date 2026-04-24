@@ -8,6 +8,7 @@ use crate::normalize::normalize;
 use crate::policy::PolicyError;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Context, Rule};
+use crate::rulepack::RulepackError;
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
 
@@ -35,6 +36,8 @@ pub enum Error {
     Sqlite(String),
     #[error("policy error: {0}")]
     Policy(#[from] PolicyError),
+    #[error("rulepack error: {0}")]
+    Rulepack(#[from] RulepackError),
 }
 
 #[derive(Clone)]

@@ -1,0 +1,39 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-core"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.global"
+class = "Email"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'''
+
+[recognizers.context]
+hotwords = ["email", "e-mail", "mail"]
+window = 12
+boost = 0.10
+exclusions = ["example.com"]
+
+[recognizers.validator]
+kind = "email_rfc"
+
+[recognizers.normalizer]
+kind = "email_canonical"
+
+[recognizers.scoring]
+base = 0.70
+priority = 90
+
+[recognizers.token]
+family = "email.counter"
+format = "Email_{n}"
+
+[recognizers.source]
+origin = "ported"
+from = "presidio"
+license = "Apache-2.0"

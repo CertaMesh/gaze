@@ -13,6 +13,7 @@ pub struct Policy {
     pub detectors: Vec<DetectorSpec>,
     pub rules: Vec<RuleSpec>,
     pub ner: Option<NerPolicy>,
+    pub rulepacks: RulepackPolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +47,12 @@ pub enum DetectorKind {
 pub struct NerPolicy {
     pub model_dir: Option<PathBuf>,
     pub locale: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RulepackPolicy {
+    pub bundled: Vec<String>,
+    pub paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -115,6 +122,8 @@ struct RawPolicy {
     rules: Vec<RawRuleSpec>,
     #[serde(default)]
     ner: Option<RawNerPolicy>,
+    #[serde(default)]
+    policy: Option<RawPolicyTables>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -142,6 +151,22 @@ struct RawNerPolicy {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RawPolicyTables {
+    #[serde(default)]
+    rulepacks: Option<RawRulepackPolicy>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRulepackPolicy {
+    #[serde(default)]
+    bundled: Vec<String>,
+    #[serde(default)]
+    paths: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct RawRuleSpec {
     kind: String,
     class: Option<String>,
@@ -159,7 +184,17 @@ impl TryFrom<RawPolicy> for Policy {
         for detector in raw.detectors {
             detectors.push(parse_detector(detector)?);
         }
-        if detectors.is_empty() {
+        let rulepacks = raw
+            .policy
+            .and_then(|policy| policy.rulepacks)
+            .map(parse_rulepack_policy)
+            .transpose()?
+            .unwrap_or_else(|| RulepackPolicy {
+                bundled: vec!["core".to_string()],
+                paths: Vec::new(),
+            });
+
+        if detectors.is_empty() && rulepacks.bundled.is_empty() && rulepacks.paths.is_empty() {
             return Err(PolicyError::NoDetectors);
         }
 
@@ -178,6 +213,7 @@ impl TryFrom<RawPolicy> for Policy {
             detectors,
             rules,
             ner,
+            rulepacks,
         })
     }
 }
@@ -266,6 +302,13 @@ fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
     })
 }
 
+fn parse_rulepack_policy(raw: RawRulepackPolicy) -> Result<RulepackPolicy, PolicyError> {
+    Ok(RulepackPolicy {
+        bundled: raw.bundled,
+        paths: raw.paths.into_iter().map(expand_home).collect::<Result<_, _>>()?,
+    })
+}
+
 fn expand_home(path: String) -> Result<PathBuf, PolicyError> {
     if let Some(rest) = path.strip_prefix("~/") {
         let home = env::var("HOME")
@@ -277,13 +320,18 @@ fn expand_home(path: String) -> Result<PathBuf, PolicyError> {
 }
 
 fn parse_class(input: &str) -> Result<PiiClass, PolicyError> {
-    match input {
+    let lower = input.trim().to_ascii_lowercase();
+    match lower.as_str() {
         "email" => Ok(PiiClass::Email),
         "name" => Ok(PiiClass::Name),
         "location" => Ok(PiiClass::Location),
         "organization" => Ok(PiiClass::Organization),
         custom if custom.starts_with("custom:") => {
-            let name = custom.trim_start_matches("custom:");
+            let name = input
+                .trim()
+                .split_once(':')
+                .map(|(_, name)| name)
+                .unwrap_or_default();
             if name.trim().is_empty() {
                 return Err(PolicyError::UnknownClass(input.to_string()));
             }

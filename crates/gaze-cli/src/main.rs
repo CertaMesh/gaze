@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 
 use gaze::{
     Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy,
-    PolicyError, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec,
-    Scope, SensitiveSnapshot, Session,
+    PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger, Result as GazeResult,
+    RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
 };
 use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
 
@@ -306,6 +306,7 @@ fn map_policy_error(err: PolicyError) -> CliError {
 fn map_pipeline_error(err: gaze::Error) -> CliError {
     match err {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
+        gaze::Error::Rulepack(_) => CliError::PolicyConfig,
         _ => CliError::Pipeline,
     }
 }
@@ -326,6 +327,23 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
                 ))))
             }
         };
+    }
+
+    let mut rulepack_recognizers = std::collections::BTreeMap::new();
+    for rulepack in load_rulepacks(policy)? {
+        for recognizer in rulepack.recognizers {
+            tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
+            rulepack_recognizers.insert(recognizer.id.clone(), recognizer);
+        }
+    }
+    for recognizer in rulepack_recognizers.into_values().filter(|r| r.enabled) {
+        if let RawMatch::Regex { pattern } = recognizer.matcher {
+            builder = builder.detector(RegexDetector::with_source(
+                &pattern,
+                recognizer.class,
+                &recognizer.id,
+            )?);
+        }
     }
 
     for rule in &policy.rules {
@@ -352,6 +370,21 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
     }
 
     builder.build()
+}
+
+fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
+    let mut rulepacks = Vec::new();
+    for bundled in &policy.rulepacks.bundled {
+        let contents = gaze_recognizers::embedded(bundled)
+            .ok_or_else(|| gaze::Error::Policy(PolicyError::BadTtl(format!(
+                "unknown bundled rulepack '{bundled}'"
+            ))))?;
+        rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
+    }
+    for path in &policy.rulepacks.paths {
+        rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
+    }
+    Ok(rulepacks)
 }
 
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
