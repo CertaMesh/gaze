@@ -40,15 +40,56 @@ pub const CONFIG_FILE: &str = "config.json";
 pub const LABELS_FILE: &str = "labels.json";
 pub const CHECKSUMS_FILE: &str = "SHA256SUMS";
 
-/// Labels file format: `{ "PER": "Name", "LOC": "Location", ... }`.
-/// Values are matched against `PiiClass` variants by lowercase name,
-/// falling back to `PiiClass::custom(value)` if no built-in matches.
+/// Labels file format.
+///
+/// Accepts two equivalent shapes so adopters aren't silently blocked by a
+/// keying convention mismatch:
+///
+/// - **Bare entity keys** (preferred, short): `{ "PER": "Name", "LOC": "Location" }`.
+/// - **BIO-prefixed keys** (mirrors CoNLL / HuggingFace `id2label` shape):
+///   `{ "B-PER": "Name", "I-PER": "Name", "B-LOC": "Location", "I-LOC": "Location" }`.
+///
+/// Values are matched against `PiiClass` variants by lowercase name, falling
+/// back to `PiiClass::custom(value)` if no built-in matches. The sentinel
+/// value `"drop"` (or `"ignore"`, `""`) removes the entry entirely so the
+/// detector silently skips that label.
+///
+/// Lookup (`resolve`) tries the full BIO tag first, then the bare entity
+/// type. Mixing both key shapes in a single file is allowed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LabelMap(pub BTreeMap<String, PiiClass>);
 
 impl LabelMap {
     pub fn get(&self, conll_label: &str) -> Option<&PiiClass> {
         self.0.get(conll_label)
+    }
+
+    /// Resolve a CoNLL subword tag (e.g. `"B-PER"`, `"I-LOC"`, `"PER"`) to a
+    /// `PiiClass`. Accepts both BIO-prefixed labels.json entries and bare
+    /// entity-type entries; tries the full tag first, then the stripped
+    /// entity.
+    pub fn resolve(&self, tag: &str, entity: &str) -> Option<&PiiClass> {
+        self.0.get(tag).or_else(|| self.0.get(entity))
+    }
+
+    /// Number of retained mappings (after `"drop"`/`"ignore"` sentinels are
+    /// filtered out by the parser). Used by the NER bootstrap `tracing::info!`
+    /// so adopters can tell at a glance whether their labels.json is empty
+    /// or misaligned.
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Iterate the retained label keys. Used at load time to warn when
+    /// labels.json has zero overlap with the model's `id2label` vocab — a
+    /// silent-no-op symptom adopters otherwise only catch via missing
+    /// detections at runtime.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.keys().map(String::as_str)
     }
 }
 
@@ -243,7 +284,19 @@ impl NerDetector {
         let verified = Self::verify_artifacts(model_dir)?;
         let backend_kind = verified.backend_kind;
         let model_dir_path = verified.model_dir.clone();
+        let label_count = verified.labels.len();
+        let id2label_len = verified.id2label.len();
+        warn_on_label_vocab_mismatch(&verified.labels, &verified.id2label, model_dir);
         let backend = load_backend(verified)?;
+
+        tracing::info!(
+            backend = backend_kind.as_str(),
+            labels = label_count,
+            id2label_size = id2label_len,
+            locale = options.locale.as_deref().unwrap_or(""),
+            model_dir = %model_dir_path.display(),
+            "ner: detector registered"
+        );
 
         Ok(Self {
             model_dir: model_dir_path,
@@ -255,6 +308,10 @@ impl NerDetector {
 
     pub fn locale(&self) -> Option<&str> {
         self.locale.as_deref()
+    }
+
+    pub fn backend_kind(&self) -> NerBackendKind {
+        self.backend_kind
     }
 
     /// Label/offset reconstruction helper. Public for testing the BIO merge.
@@ -277,7 +334,7 @@ impl NerDetector {
                 i += 1;
                 continue;
             }
-            let Some(class) = labels.get(entity) else {
+            let Some(class) = labels.resolve(tag, entity) else {
                 i += 1;
                 continue;
             };
@@ -434,6 +491,35 @@ impl NerBackend for OrtBackend {
         .into_iter()
         .filter(|detection| detection.span.end <= input.len())
         .collect())
+    }
+}
+
+/// Emit a loud `tracing::warn!` at load time when `labels.json` contains no
+/// keys that can resolve any entity type produced by the model's `id2label`
+/// vocab. Historically this was the silent-no-op signature: load succeeds,
+/// every inference runs, but every subword lookup misses so zero detections
+/// are emitted. We now surface it explicitly so operators can diagnose
+/// misaligned label files without reading source.
+fn warn_on_label_vocab_mismatch(labels: &LabelMap, id2label: &[String], model_dir: &Path) {
+    let mut usable = 0usize;
+    for tag in id2label {
+        let (_, entity) = split_bio(tag);
+        if entity.is_empty() {
+            continue;
+        }
+        if labels.resolve(tag, entity).is_some() {
+            usable += 1;
+        }
+    }
+    if usable == 0 {
+        let sample_label: String = labels.keys().take(5).collect::<Vec<_>>().join(",");
+        let sample_id: String = id2label.iter().take(5).cloned().collect::<Vec<_>>().join(",");
+        tracing::warn!(
+            model_dir = %model_dir.display(),
+            label_keys = %sample_label,
+            id2label_sample = %sample_id,
+            "ner: labels.json has zero overlap with model id2label — detector will emit zero detections. Expected keys like 'PER'/'LOC' or 'B-PER'/'I-PER'."
+        );
     }
 }
 
@@ -830,6 +916,47 @@ mod tests {
         let tags = vec!["B-MISC"];
         let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
         assert!(out.is_empty());
+    }
+
+    /// Regression: adopters who follow `labels.example.json` ship labels.json
+    /// keyed by full BIO tags (`B-PER`, `I-PER`, …). Until v0.3.1 the
+    /// post-process only looked up the stripped entity (`PER`), so every
+    /// detection silently dropped — reported by Markus (lord-eagle) against
+    /// v0.3.0 aarch64-apple-darwin. Both shapes must emit detections.
+    #[test]
+    fn merge_bio_accepts_bio_prefixed_label_keys() {
+        let mut map = BTreeMap::new();
+        map.insert("B-PER".to_string(), PiiClass::Name);
+        map.insert("I-PER".to_string(), PiiClass::Name);
+        map.insert("B-LOC".to_string(), PiiClass::Location);
+        map.insert("I-LOC".to_string(), PiiClass::Location);
+        let labels = LabelMap(map);
+        let spans = vec![(0, 4), (5, 9), (10, 13), (14, 22), (23, 26), (27, 30), (31, 36), (37, 39), (40, 46)];
+        let tags = vec!["O", "O", "O", "B-PER", "O", "O", "O", "O", "B-LOC"];
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner/ort");
+        assert_eq!(out.len(), 2, "both Wolfgang + Berlin must emit: {out:?}");
+        assert_eq!(out[0].span, 14..22);
+        assert_eq!(out[0].class, PiiClass::Name);
+        assert_eq!(out[1].span, 40..46);
+        assert_eq!(out[1].class, PiiClass::Location);
+    }
+
+    /// Mixing both key shapes (bare entity + BIO-prefixed) in one labels.json
+    /// must keep working — we don't want adopters editing a mixed file to
+    /// discover a silent regression. BIO wins when both present.
+    #[test]
+    fn merge_bio_accepts_mixed_key_shapes() {
+        let mut map = BTreeMap::new();
+        map.insert("PER".to_string(), PiiClass::Name);
+        map.insert("B-LOC".to_string(), PiiClass::Location);
+        map.insert("I-LOC".to_string(), PiiClass::Location);
+        let labels = LabelMap(map);
+        let spans = vec![(0, 4), (5, 11)];
+        let tags = vec!["B-PER", "B-LOC"];
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner/ort");
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].class, PiiClass::Name);
+        assert_eq!(out[1].class, PiiClass::Location);
     }
 
     #[test]
