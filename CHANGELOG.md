@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PR #10 follow-up — `Custom:` namespace round-trip + hallucination
   tests.
+- **Homebrew formula SHA placeholders replaced** with the real
+  `gaze-aarch64-apple-darwin` digest
+  (`baa7edb79d84fea5d74377f82877c5069d861381a9f6012aa55af2264a8287f4`)
+  once the tag-triggered release workflow published the binary. Closes
+  the rc.1 "Known gaps" entry — `brew install Naoray/gaze/gaze` now
+  resolves without the cask fallback.
 
 ## [0.3.0-rc.2] — 2026-04-23
 

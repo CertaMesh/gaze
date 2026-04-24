@@ -2,16 +2,34 @@
 
 Channel-agnostic redaction workspace for AI-facing production tooling.
 
-The workspace now has two crates:
+The workspace has two crates:
 
-- `crates/gaze` — shared redaction core library (and, in v0.3, the standalone `gaze clean` / `gaze restore` CLI)
+- `crates/gaze` — shared redaction core library and the standalone `gaze clean` / `gaze restore` CLI
 - `crates/debug-proxy` — MCP debug server for MySQL + Laravel logs
+
+## Install (v0.3.0)
+
+Apple Silicon macOS via Homebrew (tap):
+
+```bash
+brew install Naoray/gaze/gaze
+```
+
+Direct binary download from the release assets:
+
+```bash
+curl -LO https://github.com/Naoray/gaze/releases/download/v0.3.0/gaze-aarch64-apple-darwin
+chmod +x gaze-aarch64-apple-darwin
+mv gaze-aarch64-apple-darwin /usr/local/bin/gaze
+```
+
+Linux and Intel macOS binaries are not published in v0.3.0; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release` in the meantime.
 
 ## Workspace Layout
 
 ```text
 crates/
-  gaze/         core library + standalone CLI (v0.3)
+  gaze/         core library + standalone CLI
   debug-proxy/  MCP debug server consumer
 ```
 
@@ -28,14 +46,16 @@ Pure Rust library for:
 - redaction logging
 - pluggable sandbox trait shape for future action-side work
 
-v0.3 adds a standalone CLI that consumes the library for LLM pipe-mode integration (Laravel wrapper ships out-of-tree via `gaze/laravel`). See `docs/roadmap/v0.3/cli.md` for the surface and `docs/roadmap/v0.3/laravel.md` for the host integration.
+The standalone CLI consumes the library for LLM pipe-mode integration (Laravel wrapper ships out-of-tree via `gaze/laravel`). See `docs/roadmap/v0.3/cli.md` for the surface and `docs/roadmap/v0.3/laravel.md` for the host integration.
 
 #### CLI Example
 
 ```bash
 echo "Email alice@example.com now" | gaze clean --policy=policy.toml
-# {"clean_text":"Email Email_1 now","session_blob":"<base64>","stats":{"detections":1}}
+# {"clean_text":"Email <Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
+
+Counter-family tokens (`<Email_N>`, `<Name_N>`, `<Location_N>`, `<Organization_N>`, `<Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1@example.test`) intentionally stay bare — the whole point is to look like a real email.
 
 #### Policy Configuration
 
@@ -151,18 +171,29 @@ cargo clippy -p gaze -p debug-proxy --all-targets --all-features -- -D warnings
 
 ## Status
 
-Implemented for the v0.2 rewrite:
+Shipped in v0.3.0 (2026-04-24):
 
-- shared `gaze` core
-- `debug-proxy` consumer
-- core sandbox trait shape
-
-In progress for v0.3:
-
+- shared `gaze` core library
+- `debug-proxy` MCP consumer
 - standalone `gaze clean` / `gaze restore` CLI (see `docs/roadmap/v0.3/cli.md`)
-- `policy.toml` loader → `Pipeline::from_policy(...)` helper
+- `policy.toml` loader + `Pipeline::from_policy(...)` helper
+- angle-bracket-wrapped counter tokens + `gaze::token_shape` grammar
+- two-pass restore (exact token match + shape-validator) with `UnknownToken` fail-closed signal
+- session TTL enforcement (`issued_at` on snapshot payload, `BlobExpired` exit bucket)
+- structured stderr JSON with stable exit buckets
+- Apple Silicon macOS binary + Homebrew tap formula
 
-Deferred beyond v0.3:
+v0.4 (in flight, plan under review — not imminent):
+
+- engine / corpus crate split
+- `RecognizerRegistry` trait for stackable detectors
+- full TOML rulepack schema
+- DACH + EN locale infrastructure
+- `.invalid` domain switch for format-preserving fakes
+- dictionary detector + typed `Context` envelope
+- text-provenance fingerprint (library-side blob↔text scope isolation)
+
+Deferred beyond v0.4:
 
 - real sandbox backend implementations
 - k-anonymity / query-budget controls

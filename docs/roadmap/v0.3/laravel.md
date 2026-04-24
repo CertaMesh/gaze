@@ -1,6 +1,6 @@
 # Gaze — Laravel Integration (v0.3 Pipe Mode)
 
-**Status:** Roadmap / targets Gaze v0.3 — pipe mode is not shipped in v0.1. This document describes the planned integration surface so the v0.1 anonymizer core can be designed to support it without rework.
+**Status:** Gaze CLI pipe mode shipped in v0.3.0 (2026-04-24). The Laravel wrapper package (`gaze/laravel`) is still roadmap — this document describes the intended host-side integration surface against the now-shipped CLI contract. Ghostwriter-style adapters can implement the same shell-out pattern in any host language today.
 
 ---
 
