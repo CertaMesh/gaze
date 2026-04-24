@@ -34,6 +34,7 @@ toml = "0.8"
 tracing = "0.1"
 
 [dev-dependencies]
+regex = "1"
 tempfile = "3"
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["mysql"] }
