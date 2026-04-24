@@ -1,13 +1,13 @@
 class Gaze < Formula
   desc "Channel-agnostic PII redaction CLI for AI pipelines"
   homepage "https://github.com/Naoray/gaze"
-  version "0.3.0"
+  version "0.3.1"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/Naoray/gaze/releases/download/v0.3.0/gaze-aarch64-apple-darwin"
-      sha256 "baa7edb79d84fea5d74377f82877c5069d861381a9f6012aa55af2264a8287f4"
+      url "https://github.com/Naoray/gaze/releases/download/v0.3.1/gaze-aarch64-apple-darwin"
+      sha256 "20935b76cf0708c2c0324aae63394b9cfb4e4838f9e33339118a16c80bd022fd"
     end
   end
 
@@ -16,6 +16,6 @@ class Gaze < Formula
   end
 
   test do
-    assert_match "gaze 0.3.0", shell_output("#{bin}/gaze --version")
+    assert_match "gaze 0.3.1", shell_output("#{bin}/gaze --version")
   end
 end
