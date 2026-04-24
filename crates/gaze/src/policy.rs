@@ -321,9 +321,8 @@ fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, P
     raw.active
         .into_iter()
         .map(|locale| {
-            LocaleTag::parse(&locale).map_err(|_| {
-                PolicyError::BadTtl(format!("unsupported locale tag '{locale}'"))
-            })
+            LocaleTag::parse(&locale)
+                .map_err(|_| PolicyError::BadTtl(format!("unsupported locale tag '{locale}'")))
         })
         .collect::<Result<Vec<_>, _>>()
         .map(Some)
@@ -332,7 +331,11 @@ fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, P
 fn parse_rulepack_policy(raw: RawRulepackPolicy) -> Result<RulepackPolicy, PolicyError> {
     Ok(RulepackPolicy {
         bundled: raw.bundled,
-        paths: raw.paths.into_iter().map(expand_home).collect::<Result<_, _>>()?,
+        paths: raw
+            .paths
+            .into_iter()
+            .map(expand_home)
+            .collect::<Result<_, _>>()?,
     })
 }
 

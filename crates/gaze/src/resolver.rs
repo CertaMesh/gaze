@@ -21,7 +21,7 @@ pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
 }
 
 fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
-        let mut index = 0;
+    let mut index = 0;
     while index < resolved.len() {
         if !overlaps(&resolved[index].span, &candidate.span) {
             index += 1;
@@ -80,10 +80,7 @@ fn append_unique(existing: &mut String, next: &str) {
 }
 
 fn should_replace_same_span_class(candidate: &Candidate, existing: &Candidate) -> bool {
-    candidate
-        .score
-        .total_cmp(&existing.score)
-        .is_gt()
+    candidate.score.total_cmp(&existing.score).is_gt()
         || (candidate.score == existing.score
             && class_priority(&candidate.class) > class_priority(&existing.class))
 }

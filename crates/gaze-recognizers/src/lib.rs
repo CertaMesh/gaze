@@ -25,6 +25,9 @@ mod tests {
 
         assert_eq!(rulepack.recognizers.len(), 1);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
-        assert!(matches!(rulepack.recognizers[0].matcher, RawMatch::Regex { .. }));
+        assert!(matches!(
+            rulepack.recognizers[0].matcher,
+            RawMatch::Regex { .. }
+        ));
     }
 }

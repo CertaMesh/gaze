@@ -34,7 +34,9 @@ pub struct RecognizerSpec {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields, rename_all = "snake_case")]
 pub enum RawMatch {
-    Regex { pattern: String },
+    Regex {
+        pattern: String,
+    },
     Dictionary {
         #[serde(default)]
         terms: Vec<String>,
@@ -45,7 +47,9 @@ pub enum RawMatch {
         #[serde(default)]
         case_sensitive: bool,
     },
-    Ner { model_ref: String },
+    Ner {
+        model_ref: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -109,7 +113,9 @@ impl Rulepack {
     pub fn load(source: RulepackSource) -> Result<Rulepack, RulepackError> {
         let raw = match source {
             RulepackSource::Embedded(contents) => contents.to_string(),
-            RulepackSource::Path(path) => std::fs::read_to_string(path).map_err(RulepackError::Io)?,
+            RulepackSource::Path(path) => {
+                std::fs::read_to_string(path).map_err(RulepackError::Io)?
+            }
         };
         Self::parse(&raw)
     }

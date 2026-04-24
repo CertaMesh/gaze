@@ -166,7 +166,10 @@ mod tests {
 
     #[test]
     fn rejects_invalid_locale_tags() {
-        assert_eq!(LocaleTag::parse("not a locale"), Err(LocaleError::Unsupported));
+        assert_eq!(
+            LocaleTag::parse("not a locale"),
+            Err(LocaleError::Unsupported)
+        );
         assert_eq!(LocaleTag::parse(""), Err(LocaleError::Unsupported));
     }
 

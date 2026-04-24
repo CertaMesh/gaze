@@ -120,7 +120,10 @@ impl Pipeline {
 
         let resolved = resolve_candidates(candidates.clone());
         let losers = conflict_losers(&candidates, &resolved);
-        let mut detections = resolved.into_iter().map(IndexedDetection::from).collect::<Vec<_>>();
+        let mut detections = resolved
+            .into_iter()
+            .map(IndexedDetection::from)
+            .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
                 loser,
@@ -521,8 +524,7 @@ mod tests {
 
         let pipeline = Pipeline::builder()
             .detector(EmailDetector(
-                regex::Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
-                    .unwrap(),
+                regex::Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b").unwrap(),
             ))
             .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
             .rule(DefaultRule::new(Action::Preserve))

@@ -398,10 +398,11 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
     let mut rulepacks = Vec::new();
     for bundled in &policy.rulepacks.bundled {
-        let contents = gaze_recognizers::embedded(bundled)
-            .ok_or_else(|| gaze::Error::Policy(PolicyError::BadTtl(format!(
+        let contents = gaze_recognizers::embedded(bundled).ok_or_else(|| {
+            gaze::Error::Policy(PolicyError::BadTtl(format!(
                 "unknown bundled rulepack '{bundled}'"
-            ))))?;
+            )))
+        })?;
         rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
     }
     for path in &policy.rulepacks.paths {
