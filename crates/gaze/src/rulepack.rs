@@ -107,6 +107,14 @@ pub enum RulepackError {
     UnknownClass(String),
     #[error("unknown locale: {0}")]
     UnknownLocale(String),
+    #[error("unsupported matcher kind: {0}")]
+    UnsupportedMatcher(String),
+    #[error("duplicate recognizer id '{id}' in rulepacks '{first_pack}' and '{second_pack}'")]
+    DuplicateId {
+        id: String,
+        first_pack: String,
+        second_pack: String,
+    },
 }
 
 impl Rulepack {

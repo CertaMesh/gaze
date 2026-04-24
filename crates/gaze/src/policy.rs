@@ -85,6 +85,10 @@ pub enum PolicyError {
     NoRules,
     #[error("policy must define at least one detector")]
     NoDetectors,
+    #[error(
+        "legacy [[detector]] is unsupported in v0.4; migrate to [[policy.custom_recognizers]]: {0}"
+    )]
+    LegacyDetectorUnsupported(&'static str),
     #[error("ner load error: {0}")]
     NerLoad(String),
     #[error("{0}")]
@@ -159,11 +163,13 @@ struct RawLocalePolicy {
     active: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPolicyTables {
     #[serde(default)]
     rulepacks: Option<RawRulepackPolicy>,
+    #[serde(default)]
+    custom_recognizers: Vec<RawDetectorSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -190,13 +196,23 @@ impl TryFrom<RawPolicy> for Policy {
     fn try_from(raw: RawPolicy) -> Result<Self, Self::Error> {
         let session = parse_session(raw.session)?;
 
-        let mut detectors = Vec::with_capacity(raw.detectors.len());
-        for detector in raw.detectors {
+        if !raw.detectors.is_empty() {
+            return Err(PolicyError::LegacyDetectorUnsupported(
+                "https://github.com/Naoray/gaze/blob/main/docs/policy.md#migrating-detector",
+            ));
+        }
+
+        let policy_tables = raw.policy.unwrap_or_default();
+        let RawPolicyTables {
+            rulepacks: raw_rulepacks,
+            custom_recognizers,
+        } = policy_tables;
+
+        let mut detectors = Vec::with_capacity(custom_recognizers.len());
+        for detector in custom_recognizers {
             detectors.push(parse_detector(detector)?);
         }
-        let rulepacks = raw
-            .policy
-            .and_then(|policy| policy.rulepacks)
+        let rulepacks = raw_rulepacks
             .map(parse_rulepack_policy)
             .transpose()?
             .unwrap_or_else(|| RulepackPolicy {
@@ -403,7 +419,7 @@ mod tests {
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -454,7 +470,7 @@ action = "preserve"
 scope = "ephemeral"
 bogus = true
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = ".+"

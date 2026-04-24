@@ -64,26 +64,38 @@ impl LocaleTag {
 }
 
 impl LocaleChain {
+    pub(crate) fn from_tags(mut tags: Vec<LocaleTag>) -> LocaleChain {
+        ensure_global(&mut tags);
+        LocaleChain(tags)
+    }
+
     pub fn from_cli(raw: &str) -> Result<LocaleChain, LocaleError> {
-        let mut tags = raw
+        let tags = raw
             .split(',')
             .map(LocaleTag::parse)
             .collect::<Result<Vec<_>, _>>()?;
-        ensure_global(&mut tags);
-        Ok(LocaleChain(tags))
+        Ok(LocaleChain::from_tags(tags))
     }
 
     pub fn merge_policy_and_cli(
         policy: Option<&[LocaleTag]>,
         cli: Option<&[LocaleTag]>,
     ) -> LocaleChain {
-        let mut tags = cli
+        Self::merge_cli_policy_rulepack_default(cli, policy, None)
+    }
+
+    pub fn merge_cli_policy_rulepack_default(
+        cli: Option<&[LocaleTag]>,
+        policy: Option<&[LocaleTag]>,
+        rulepack_defaults: Option<&[LocaleTag]>,
+    ) -> LocaleChain {
+        let tags = cli
             .filter(|tags| !tags.is_empty())
             .or_else(|| policy.filter(|tags| !tags.is_empty()))
+            .or_else(|| rulepack_defaults.filter(|tags| !tags.is_empty()))
             .map(|tags| tags.to_vec())
             .unwrap_or_else(|| vec![LocaleTag::Global]);
-        ensure_global(&mut tags);
-        LocaleChain(tags)
+        LocaleChain::from_tags(tags)
     }
 
     pub fn intersects(&self, recognizer_locales: &[LocaleTag]) -> bool {
@@ -184,6 +196,18 @@ mod tests {
         let policy = [LocaleTag::EnGb, LocaleTag::Global];
         let cli = [LocaleTag::DeDe];
         let chain = LocaleChain::merge_policy_and_cli(Some(&policy), Some(&cli));
+        assert_eq!(chain.to_strings(), vec!["de-DE", "global"]);
+    }
+
+    #[test]
+    fn merge_includes_rulepack_default_between_policy_and_system_default() {
+        let rulepack = [LocaleTag::EnUs];
+        let chain = LocaleChain::merge_cli_policy_rulepack_default(None, None, Some(&rulepack));
+        assert_eq!(chain.to_strings(), vec!["en-US", "global"]);
+
+        let policy = [LocaleTag::DeDe];
+        let chain =
+            LocaleChain::merge_cli_policy_rulepack_default(None, Some(&policy), Some(&rulepack));
         assert_eq!(chain.to_strings(), vec!["de-DE", "global"]);
     }
 

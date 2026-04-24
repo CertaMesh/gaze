@@ -21,7 +21,9 @@ pub use policy::{
     DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,
     SessionScope,
 };
-pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
+pub use redaction_log::{
+    ConflictTier, DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger,
+};
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,

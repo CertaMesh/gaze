@@ -6,9 +6,8 @@ use thiserror::Error;
 use crate::detector::{Detection, Detector};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
-use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
+use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry, RedactionLogger};
 use crate::registry::{Candidate, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry};
-use crate::resolver::resolve_candidates;
 use crate::rule::{Action, Context, Rule};
 use crate::rulepack::RulepackError;
 use crate::session::Session;
@@ -44,7 +43,6 @@ pub enum Error {
 
 #[derive(Clone)]
 pub struct Pipeline {
-    detectors: Vec<Arc<dyn Detector>>,
     registry: Arc<RecognizerRegistry>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -64,15 +62,30 @@ impl Pipeline {
     }
 
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
+        let locale_chain = [crate::LocaleTag::Global];
+        self.redact_with_context(session, raw, &locale_chain)
+    }
+
+    pub fn redact_with_context(
+        &self,
+        session: &Session,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<CleanDocument> {
         match raw {
-            RawDocument::Structured(fields) => {
-                redact_structured(self, session, fields, DocumentKind::Structured)
-            }
+            RawDocument::Structured(fields) => redact_structured(
+                self,
+                session,
+                fields,
+                DocumentKind::Structured,
+                locale_chain,
+            ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
                 session,
                 &text,
                 None,
                 DocumentKind::Text,
+                locale_chain,
             )?)),
         }
     }
@@ -83,43 +96,26 @@ impl Pipeline {
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
     ) -> Result<String> {
         let mut out = text.to_string();
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let mut candidates = self
-            .detectors
-            .iter()
-            .enumerate()
-            .flat_map(|(index, detector)| {
-                let score = 1.0 - ((index as f32) * 0.0001);
-                detector
-                    .detect(&normalized.text)
-                    .into_iter()
-                    .filter_map(move |detection| {
-                        translate_detection_to_candidate(detection, spans, score)
-                    })
-            })
-            .collect::<Vec<_>>();
-
         let dictionaries = DictionaryBundle;
         let fields = serde_json::Map::new();
-        let locale_chain = [crate::LocaleTag::Global];
         let ctx = DetectContext {
-            locale_chain: &locale_chain,
+            locale_chain,
             dictionaries: &dictionaries,
             fields: &fields,
             degraded: std::cell::Cell::new(false),
         };
-        candidates.extend(
-            self.registry
-                .detect_all(&normalized.text, &ctx)
-                .into_iter()
-                .filter_map(|candidate| translate_candidate(candidate, spans)),
-        );
-
-        let resolved = resolve_candidates(candidates.clone());
-        let losers = conflict_losers(&candidates, &resolved);
+        let resolved = self
+            .registry
+            .detect_all_resolved(&normalized.text, &ctx)
+            .into_iter()
+            .filter_map(|candidate| translate_candidate(candidate, spans))
+            .collect::<Vec<_>>();
+        let losers = merged_losers(&resolved);
         let mut detections = resolved
             .into_iter()
             .map(IndexedDetection::from)
@@ -186,6 +182,7 @@ impl Pipeline {
             field_name: field_name.map(str::to_string),
             document_kind,
             conflict_loser,
+            decided_by: detection.decided_by,
         };
 
         for logger in &self.redaction_loggers {
@@ -199,11 +196,11 @@ impl Pipeline {
 #[derive(Clone)]
 struct IndexedDetection {
     detection: Detection,
+    decided_by: ConflictTier,
 }
 
 #[derive(Default)]
 pub struct PipelineBuilder {
-    detectors: Vec<Arc<dyn Detector>>,
     recognizers: Vec<Arc<dyn Recognizer>>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -214,7 +211,8 @@ impl PipelineBuilder {
     where
         D: Detector + 'static,
     {
-        self.detectors.push(Arc::new(detector));
+        self.recognizers
+            .push(Arc::new(DetectorRecognizer::new(detector)));
         self
     }
 
@@ -248,7 +246,6 @@ impl PipelineBuilder {
             registry = registry.register_arc(recognizer);
         }
         Ok(Pipeline {
-            detectors: self.detectors,
             registry: Arc::new(registry.build()),
             redaction_loggers: self.redaction_loggers,
             rules: self.rules,
@@ -261,6 +258,7 @@ fn redact_structured(
     session: &Session,
     fields: BTreeMap<String, Value>,
     document_kind: DocumentKind,
+    locale_chain: &[crate::LocaleTag],
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
@@ -270,29 +268,13 @@ fn redact_structured(
                 &text,
                 Some(&key),
                 document_kind.clone(),
+                locale_chain,
             )?),
             Value::I64(value) => serde_json::Value::Number(value.into()),
         };
         clean.insert(key, value);
     }
     Ok(CleanDocument::Structured(clean))
-}
-
-fn translate_detection_to_candidate(
-    detection: Detection,
-    spans: &[(usize, usize)],
-    score: f32,
-) -> Option<Candidate> {
-    let source = detection.source;
-    translate_span(detection.span, spans).map(|span| Candidate {
-        span,
-        class: detection.class,
-        recognizer_id: source.clone(),
-        score,
-        canonical_form: None,
-        token_family: "counter".to_string(),
-        source,
-    })
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
@@ -312,21 +294,23 @@ fn translate_span(
     Some(start..end)
 }
 
-fn conflict_losers(candidates: &[Candidate], resolved: &[Candidate]) -> Vec<IndexedDetection> {
-    candidates
+fn merged_losers(resolved: &[Candidate]) -> Vec<IndexedDetection> {
+    resolved
         .iter()
-        .filter(|candidate| {
-            !resolved.iter().any(|winner| {
-                winner.span == candidate.span
-                    && winner.class == candidate.class
-                    && winner
-                        .source
-                        .split('+')
-                        .any(|source| source == candidate.source)
+        .flat_map(|winner| {
+            winner.merged_sources.iter().map(|source| IndexedDetection {
+                detection: Detection {
+                    span: winner.span.clone(),
+                    class: winner.class.clone(),
+                    source: source.clone(),
+                },
+                decided_by: if winner.decided_by == ConflictTier::Merged {
+                    ConflictTier::Merged
+                } else {
+                    winner.decided_by
+                },
             })
         })
-        .cloned()
-        .map(IndexedDetection::from)
         .collect()
 }
 
@@ -338,7 +322,61 @@ impl From<Candidate> for IndexedDetection {
                 class: candidate.class,
                 source: candidate.source,
             },
+            decided_by: candidate.decided_by,
         }
+    }
+}
+
+struct DetectorRecognizer<D> {
+    detector: D,
+    class: crate::PiiClass,
+}
+
+impl<D> DetectorRecognizer<D> {
+    fn new(detector: D) -> Self {
+        Self {
+            detector,
+            class: crate::PiiClass::Custom("__legacy_detector__".to_string()),
+        }
+    }
+}
+
+impl<D> Recognizer for DetectorRecognizer<D>
+where
+    D: Detector + Send + Sync + 'static,
+{
+    fn id(&self) -> &str {
+        "legacy-detector"
+    }
+
+    fn supported_class(&self) -> &crate::PiiClass {
+        &self.class
+    }
+
+    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+        self.detector
+            .detect(input)
+            .into_iter()
+            .map(|detection| {
+                let source = detection.source;
+                Candidate {
+                    span: detection.span,
+                    class: detection.class,
+                    recognizer_id: source.clone(),
+                    score: 1.0,
+                    priority: 0,
+                    canonical_form: None,
+                    token_family: "counter".to_string(),
+                    source,
+                    decided_by: ConflictTier::None,
+                    merged_sources: Vec::new(),
+                }
+            })
+            .collect()
+    }
+
+    fn token_family(&self) -> &str {
+        "counter"
     }
 }
 
@@ -456,6 +494,7 @@ mod tests {
         let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
         assert_eq!(winner.source, "ner/gliner", "longer span should win");
         assert_eq!(loser.source, "ner/bert", "shorter span should lose");
+        assert_eq!(loser.decided_by, ConflictTier::SpanLength);
     }
 
     #[test]

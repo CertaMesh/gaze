@@ -1,11 +1,12 @@
 use std::cell::Cell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 use std::sync::Arc;
 
 use serde_json::{Map, Value};
 
-use crate::locale::LocaleTag;
+use crate::locale::{LocaleChain, LocaleTag};
+use crate::redaction_log::ConflictTier;
 use crate::resolver::resolve_candidates;
 use crate::PiiClass;
 
@@ -43,9 +44,12 @@ pub struct Candidate {
     pub class: PiiClass,
     pub recognizer_id: String,
     pub score: f32,
+    pub priority: i32,
     pub canonical_form: Option<String>,
     pub token_family: String,
     pub source: String,
+    pub decided_by: ConflictTier,
+    pub merged_sources: Vec<String>,
 }
 
 pub struct DetectContext<'a> {
@@ -88,9 +92,12 @@ mod tests {
                 class: self.class.clone(),
                 recognizer_id: self.id().to_string(),
                 score: 1.0,
+                priority: 0,
                 canonical_form: Some("canonical".to_string()),
                 token_family: self.token_family().to_string(),
                 source: "test".to_string(),
+                decided_by: ConflictTier::None,
+                merged_sources: Vec::new(),
             }]
         }
 
@@ -133,6 +140,62 @@ mod tests {
 
         assert_eq!(recognizer.locales(), &[LocaleTag::Global]);
     }
+
+    #[test]
+    fn registry_filters_recognizers_by_locale_before_detection() {
+        struct LocaleRecognizer {
+            locale: LocaleTag,
+        }
+
+        impl Recognizer for LocaleRecognizer {
+            fn id(&self) -> &str {
+                "locale"
+            }
+
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Email
+            }
+
+            fn detect(&self, _input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+                vec![Candidate {
+                    span: 0..5,
+                    class: PiiClass::Email,
+                    recognizer_id: self.id().to_string(),
+                    score: 1.0,
+                    priority: 0,
+                    canonical_form: None,
+                    token_family: "counter".to_string(),
+                    source: self.id().to_string(),
+                    decided_by: ConflictTier::None,
+                    merged_sources: Vec::new(),
+                }]
+            }
+
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+
+            fn locales(&self) -> &[LocaleTag] {
+                std::slice::from_ref(&self.locale)
+            }
+        }
+
+        let registry = RecognizerRegistry::builder()
+            .register(LocaleRecognizer {
+                locale: LocaleTag::DeDe,
+            })
+            .build();
+        let dictionaries = DictionaryBundle;
+        let fields = Map::new();
+        let ctx = DetectContext {
+            locale_chain: &[LocaleTag::EnUs, LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: Cell::new(false),
+        };
+
+        assert!(registry.detect_all("input", &ctx).is_empty());
+    }
 }
 
 impl RecognizerRegistry {
@@ -143,12 +206,47 @@ impl RecognizerRegistry {
     pub fn detect_all(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
         self.entries
             .iter()
+            .filter(|recognizer| {
+                LocaleChain::from(ctx.locale_chain).intersects(recognizer.locales())
+            })
             .flat_map(|recognizer| recognizer.detect(input, ctx))
             .collect()
     }
 
     pub fn detect_all_resolved(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
-        resolve_candidates(self.detect_all(input, ctx))
+        let classes = self
+            .entries
+            .iter()
+            .map(|recognizer| recognizer.supported_class().clone())
+            .collect::<BTreeSet<_>>();
+        let mut candidates = Vec::new();
+
+        for class in classes {
+            for locale in ctx.locale_chain {
+                let locale_ctx = DetectContext {
+                    locale_chain: std::slice::from_ref(locale),
+                    dictionaries: ctx.dictionaries,
+                    fields: ctx.fields,
+                    degraded: Cell::new(ctx.degraded.get()),
+                };
+                let class_candidates = self
+                    .entries
+                    .iter()
+                    .filter(|recognizer| recognizer.supported_class() == &class)
+                    .filter(|recognizer| {
+                        LocaleChain::from(locale_ctx.locale_chain).intersects(recognizer.locales())
+                    })
+                    .flat_map(|recognizer| recognizer.detect(input, &locale_ctx))
+                    .filter(|candidate| candidate.score >= min_score(&class))
+                    .collect::<Vec<_>>();
+                if !class_candidates.is_empty() {
+                    candidates.extend(class_candidates);
+                    break;
+                }
+            }
+        }
+
+        resolve_candidates(candidates)
     }
 
     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
@@ -158,6 +256,20 @@ impl RecognizerRegistry {
     pub fn canonicalizers(&self) -> &HashMap<String, Arc<dyn Canonicalizer>> {
         &self.canonicalizers
     }
+}
+
+impl From<&[LocaleTag]> for LocaleChain {
+    fn from(tags: &[LocaleTag]) -> Self {
+        let mut owned = tags.to_vec();
+        if !owned.iter().any(|tag| *tag == LocaleTag::Global) {
+            owned.push(LocaleTag::Global);
+        }
+        LocaleChain::from_tags(owned)
+    }
+}
+
+fn min_score(_class: &PiiClass) -> f32 {
+    0.0
 }
 
 #[derive(Default)]

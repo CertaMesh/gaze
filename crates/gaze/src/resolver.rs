@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use crate::{Candidate, PiiClass};
+use crate::{Candidate, ConflictTier, PiiClass};
 
 pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
     candidates.sort_by(|a, b| {
@@ -8,6 +8,8 @@ pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
             .start
             .cmp(&b.span.start)
             .then_with(|| b.span.end.cmp(&a.span.end))
+            .then_with(|| class_priority(&b.class).cmp(&class_priority(&a.class)))
+            .then_with(|| b.priority.cmp(&a.priority))
             .then_with(|| b.score.total_cmp(&a.score))
             .then_with(|| a.recognizer_id.cmp(&b.recognizer_id))
     });
@@ -33,8 +35,18 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
                 merge_same_span_same_class(&mut resolved[index], candidate);
                 return;
             }
-            if should_replace_same_span_class(&candidate, &resolved[index]) {
+            if let Some(tier) = should_replace_same_span_class(&candidate, &resolved[index]) {
+                let mut candidate = candidate;
+                candidate.decided_by = tier;
+                candidate
+                    .merged_sources
+                    .push(resolved[index].source.clone());
                 resolved[index] = candidate;
+            } else {
+                if let Some(tier) = should_replace_same_span_class(&resolved[index], &candidate) {
+                    resolved[index].decided_by = tier;
+                }
+                resolved[index].merged_sources.push(candidate.source);
             }
             return;
         }
@@ -42,14 +54,36 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
         if contains(&resolved[index].span, &candidate.span)
             || contains(&candidate.span, &resolved[index].span)
         {
-            if should_replace_containment(&candidate, &resolved[index]) {
+            if let Some(tier) = should_replace_containment(&candidate, &resolved[index]) {
+                let mut candidate = candidate;
+                candidate.decided_by = tier;
+                candidate
+                    .merged_sources
+                    .push(resolved[index].source.clone());
                 resolved[index] = candidate;
+                remove_overlaps(resolved, index, tier);
+            } else {
+                if let Some(tier) = should_replace_containment(&resolved[index], &candidate) {
+                    resolved[index].decided_by = tier;
+                }
+                resolved[index].merged_sources.push(candidate.source);
             }
             return;
         }
 
-        if should_replace_partial_overlap(&candidate, &resolved[index]) {
+        if let Some(tier) = should_replace_partial_overlap(&candidate, &resolved[index]) {
+            let mut candidate = candidate;
+            candidate.decided_by = tier;
+            candidate
+                .merged_sources
+                .push(resolved[index].source.clone());
             resolved[index] = candidate;
+            remove_overlaps(resolved, index, tier);
+        } else {
+            if let Some(tier) = should_replace_partial_overlap(&resolved[index], &candidate) {
+                resolved[index].decided_by = tier;
+            }
+            resolved[index].merged_sources.push(candidate.source);
         }
         return;
     }
@@ -63,6 +97,8 @@ fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
     if existing.canonical_form.is_none() {
         existing.canonical_form = candidate.canonical_form;
     }
+    existing.decided_by = ConflictTier::Merged;
+    existing.merged_sources.push(candidate.source);
 }
 
 fn combine_confidence(left: f32, right: f32) -> f32 {
@@ -79,34 +115,98 @@ fn append_unique(existing: &mut String, next: &str) {
     existing.push_str(next);
 }
 
-fn should_replace_same_span_class(candidate: &Candidate, existing: &Candidate) -> bool {
-    candidate.score.total_cmp(&existing.score).is_gt()
-        || (candidate.score == existing.score
-            && class_priority(&candidate.class) > class_priority(&existing.class))
+fn should_replace_same_span_class(
+    candidate: &Candidate,
+    existing: &Candidate,
+) -> Option<ConflictTier> {
+    compare_by_spec(candidate, existing)
 }
 
-fn should_replace_containment(candidate: &Candidate, existing: &Candidate) -> bool {
+fn should_replace_containment(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
     if candidate.class == existing.class {
+        let candidate_validated = candidate.canonical_form.is_some();
+        let existing_validated = existing.canonical_form.is_some();
+        if candidate_validated != existing_validated {
+            return candidate_validated.then_some(ConflictTier::Validator);
+        }
+
+        if class_priority(&candidate.class) != class_priority(&existing.class) {
+            return (class_priority(&candidate.class) > class_priority(&existing.class))
+                .then_some(ConflictTier::ClassPriority);
+        }
+
+        if candidate.priority != existing.priority {
+            return (candidate.priority > existing.priority).then_some(ConflictTier::RulePriority);
+        }
+
+        if candidate.score != existing.score {
+            return candidate
+                .score
+                .total_cmp(&existing.score)
+                .is_gt()
+                .then_some(ConflictTier::Score);
+        }
+
         let candidate_len = candidate.span.end - candidate.span.start;
         let existing_len = existing.span.end - existing.span.start;
         if candidate_len != existing_len {
-            return candidate_len > existing_len;
+            return (candidate_len > existing_len).then_some(ConflictTier::SpanLength);
         }
+
+        return (candidate.recognizer_id < existing.recognizer_id)
+            .then_some(ConflictTier::RecognizerId);
     }
 
-    let candidate_validated = candidate.canonical_form.is_some();
-    let existing_validated = existing.canonical_form.is_some();
-    if candidate_validated != existing_validated {
-        return candidate_validated;
-    }
-
-    candidate.score.total_cmp(&existing.score).is_gt()
-        || (candidate.score == existing.score
-            && class_priority(&candidate.class) > class_priority(&existing.class))
+    compare_by_spec(candidate, existing)
 }
 
-fn should_replace_partial_overlap(candidate: &Candidate, existing: &Candidate) -> bool {
-    candidate.score.total_cmp(&existing.score).is_gt()
+fn should_replace_partial_overlap(
+    candidate: &Candidate,
+    existing: &Candidate,
+) -> Option<ConflictTier> {
+    compare_by_spec(candidate, existing)
+}
+
+fn compare_by_spec(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
+    if class_priority(&candidate.class) != class_priority(&existing.class) {
+        return (class_priority(&candidate.class) > class_priority(&existing.class))
+            .then_some(ConflictTier::ClassPriority);
+    }
+    if candidate.priority != existing.priority {
+        return (candidate.priority > existing.priority).then_some(ConflictTier::RulePriority);
+    }
+    if candidate.score != existing.score {
+        return candidate
+            .score
+            .total_cmp(&existing.score)
+            .is_gt()
+            .then_some(ConflictTier::Score);
+    }
+    let candidate_len = candidate.span.end - candidate.span.start;
+    let existing_len = existing.span.end - existing.span.start;
+    if candidate_len != existing_len {
+        return (candidate_len > existing_len).then_some(ConflictTier::SpanLength);
+    }
+    (candidate.recognizer_id < existing.recognizer_id).then_some(ConflictTier::RecognizerId)
+}
+
+fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
+    let winner_span = resolved[winner_index].span.clone();
+    let mut index = 0;
+    while index < resolved.len() {
+        if index != winner_index && overlaps(&resolved[index].span, &winner_span) {
+            let loser = resolved.remove(index);
+            let target = if index < winner_index {
+                winner_index - 1
+            } else {
+                winner_index
+            };
+            resolved[target].merged_sources.push(loser.source);
+            resolved[target].decided_by = tier;
+            continue;
+        }
+        index += 1;
+    }
 }
 
 fn class_priority(class: &PiiClass) -> u8 {
@@ -137,9 +237,12 @@ mod tests {
             class,
             recognizer_id: id.to_string(),
             score,
+            priority: 0,
             canonical_form: None,
             token_family: "counter".to_string(),
             source: id.to_string(),
+            decided_by: ConflictTier::None,
+            merged_sources: Vec::new(),
         }
     }
 
@@ -156,10 +259,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_span_different_class_uses_score_then_class_priority() {
+    fn exact_span_different_class_uses_class_priority_then_score() {
         let resolved = resolve_candidates(vec![
-            candidate(0..5, PiiClass::Name, 0.90, "ner"),
-            candidate(0..5, PiiClass::Email, 0.90, "regex"),
+            candidate(0..5, PiiClass::Name, 0.99, "ner"),
+            candidate(0..5, PiiClass::Email, 0.70, "regex"),
         ]);
 
         assert_eq!(resolved.len(), 1);
@@ -167,8 +270,21 @@ mod tests {
     }
 
     #[test]
-    fn containment_prefers_validator_backed_candidate() {
-        let mut validated = candidate(0..10, PiiClass::Name, 0.50, "validator");
+    fn rule_priority_beats_score_when_class_ties() {
+        let mut low_priority = candidate(0..5, PiiClass::Email, 0.99, "low");
+        low_priority.priority = 1;
+        let mut high_priority = candidate(0..5, PiiClass::Email, 0.70, "high");
+        high_priority.priority = 2;
+
+        let resolved = resolve_candidates(vec![low_priority, high_priority]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "high+low");
+    }
+
+    #[test]
+    fn same_class_containment_prefers_validator_backed_candidate() {
+        let mut validated = candidate(0..10, PiiClass::Email, 0.50, "validator");
         validated.canonical_form = Some("canonical".to_string());
         let resolved = resolve_candidates(vec![
             candidate(0..5, PiiClass::Email, 0.95, "regex"),
@@ -176,7 +292,7 @@ mod tests {
         ]);
 
         assert_eq!(resolved.len(), 1);
-        assert_eq!(resolved[0].class, PiiClass::Name);
+        assert_eq!(resolved[0].recognizer_id, "validator");
     }
 
     #[test]
@@ -187,6 +303,19 @@ mod tests {
         ]);
 
         assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].class, PiiClass::Email);
+    }
+
+    #[test]
+    fn multi_overlap_replacement_leaves_disjoint_set() {
+        let resolved = resolve_candidates(vec![
+            candidate(0..5, PiiClass::Location, 0.70, "a"),
+            candidate(3..8, PiiClass::Name, 0.70, "b"),
+            candidate(0..10, PiiClass::Email, 0.70, "c"),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 0..10);
         assert_eq!(resolved[0].class, PiiClass::Email);
     }
 }

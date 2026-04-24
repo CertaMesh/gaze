@@ -110,7 +110,8 @@ fn longest_span_wins_for_overlaps() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "reach [REDACTED]");
+    assert!(text.starts_with("reach <"));
+    assert!(text.ends_with(":Email_1>"));
 }
 
 #[test]
@@ -135,7 +136,8 @@ fn first_detector_wins_exact_length_tie() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "reach [REDACTED]");
+    assert!(text.starts_with("reach <"));
+    assert!(text.ends_with(":Email_1>"));
 }
 
 #[test]
@@ -166,7 +168,8 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text document");
     };
-    assert_eq!(text, "reach [REDACTED]");
+    assert!(text.starts_with("reach alice@<"));
+    assert!(text.ends_with(":Email_1>"));
 
     let entries = logger.entries();
     assert_eq!(entries.len(), 2);
@@ -487,6 +490,7 @@ fn sqlite_logger_persists_entries() {
             field_name: Some("email".to_string()),
             document_kind: gaze::DocumentKind::Structured,
             conflict_loser: false,
+            decided_by: gaze::ConflictTier::None,
         })
         .expect("log entry");
 

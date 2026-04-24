@@ -5,9 +5,9 @@ build its detection-and-redaction pipeline. It declares which detectors run,
 which PII classes they emit, and what action the pipeline takes when each class
 is found.
 
-This document describes the schema as shipped in v0.3.0. The canonical
+This document describes the schema as shipped in v0.4.0. The canonical
 parser lives at [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs);
-the CLI wiring is in [`crates/gaze/src/main.rs`](../crates/gaze/src/main.rs).
+the CLI wiring is in [`crates/gaze-cli/src/main.rs`](../crates/gaze-cli/src/main.rs).
 For the full CLI contract — exit codes, stderr discipline, blob format — see
 [`docs/roadmap/v0.3/cli.md`](roadmap/v0.3/cli.md).
 
@@ -20,7 +20,7 @@ and turned into a [`Pipeline`](../crates/gaze/src/pipeline.rs) via
 - **File cannot be opened** (missing path, permission denied) → exit `4`,
   stderr `{"error":"PolicyOpen","exit":4}`.
 - **File parses but is invalid** (unknown key, bad regex, unknown class,
-  unknown action, missing required field, no detectors, no rules) → exit `2`,
+  unknown action, missing required field, no recognizers/rulepacks, no rules) → exit `2`,
   stderr `{"error":"PolicyConfig","exit":2}`.
 
 If `--policy` is omitted, `gaze clean` falls back to a hard-coded stub pipeline
@@ -36,7 +36,7 @@ exercised before a policy is written; **production use requires `--policy`**.
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -65,8 +65,8 @@ This is the same fixture the CLI integration suite uses
 ## Schema reference
 
 All TOML tables use `deny_unknown_fields` — any key the parser does not
-recognise is a hard error. There is no `[policy]` wrapper table; the four
-top-level tables below are the entire surface.
+recognise is a hard error. v0.4 adds `[policy.rulepacks]` and
+`[[policy.custom_recognizers]]`; legacy top-level `[[detector]]` is rejected.
 
 ### `[session]`
 
@@ -85,13 +85,15 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 > `[session]`. `--session-ttl` is an explicit CLI override for persistent
 > session TTL; when the flag is omitted, `ttl_secs` from policy is used.
 
-### `[[detector]]`
+### `[[policy.custom_recognizers]]`
 
-One block per detector. **At least one detector is required** — an empty list
-is rejected with `PolicyConfig`.
+Optional custom recognizer blocks. If omitted, `[policy.rulepacks]` defaults to
+the bundled `core` rulepack. To disable bundled rulepacks, set
+`[policy.rulepacks] bundled = []`; a policy with neither bundled/path rulepacks
+nor custom recognizers is rejected with `PolicyConfig`.
 
 ```toml
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -108,6 +110,12 @@ class = "email"
 NER is **not** a detector kind. NER is configured via the top-level `[ner]`
 block (below) — when set, the pipeline appends a transformer NER detector
 alongside the regex detectors declared here.
+
+#### Migrating `[[detector]]`
+
+The legacy top-level `[[detector]]` table is no longer accepted in v0.4.
+Move each block to `[[policy.custom_recognizers]]` with the same fields. Gaze
+fails loudly with `PolicyConfig` instead of silently accepting both surfaces.
 
 ### `[[rule]]`
 
@@ -190,7 +198,7 @@ always maps to the same token within one session.
 Use `custom:<name>` to declare a project-specific class.
 
 ```toml
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "order_ids"
 pattern = '\bORD-\d{6}\b'
@@ -313,13 +321,13 @@ treat the TTL as bypassed for forward-compatibility.)
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
 class = "email"
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "phones_de"
 pattern = '\+49[ \-]?\d{2,4}[ \-]?\d{3,8}'
@@ -350,7 +358,7 @@ Input `Reach Alice at alice@example.com or +49 30 1234567` produces
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "order_ids"
 pattern = '\bORD-\d{6}\b'
@@ -378,7 +386,7 @@ When a downstream LLM or parser expects emails to look like emails, use
 scope = "persistent"
 ttl_secs = 86400
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
@@ -408,13 +416,13 @@ ttl_secs = 86400
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 locale = "de"
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
 pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
 class = "email"
 
-[[detector]]
+[[policy.custom_recognizers]]
 kind = "regex"
 name = "order_ids"
 pattern = '\bORD-\d{6}\b'
@@ -469,7 +477,7 @@ and is summarised here.
 | `{"error":"PolicyConfig","exit":2}`     | `BadRegex { name, … }`     | 2    | `pattern` failed to compile. Watch for unsupported PCRE features (lookaround, backrefs). |
 | `{"error":"PolicyConfig","exit":2}`     | `MissingTtl`               | 2    | `scope = "persistent"` but `ttl_secs` was omitted.                           |
 | `{"error":"PolicyConfig","exit":2}`     | `BadTtl(s)`                | 2    | `ttl_secs = 0`, an unknown `session.scope`, an unknown `rule.kind`, an unknown `rule.action`, a missing `column`, or `~/` expansion failed because `$HOME` is unset. (The variant name is historical — it covers more than just TTL.) |
-| `{"error":"PolicyConfig","exit":2}`     | `NoDetectors`              | 2    | Zero `[[detector]]` blocks. At least one is required.                        |
+| `{"error":"PolicyConfig","exit":2}`     | `NoDetectors`              | 2    | No bundled rulepacks, no rulepack paths, and zero `[[policy.custom_recognizers]]` blocks. |
 | `{"error":"PolicyConfig","exit":2}`     | `NoRules`                  | 2    | Zero `[[rule]]` blocks. At least one is required.                            |
 | `{"error":"PolicyConfig","exit":2}`     | `BadTtl("unknown detector.kind …")` | 2 | `kind` was not `"regex"`. Surfaced from `Pipeline::from_policy`, not the parser. |
 | `{"error":"PolicyConfig","exit":2}`     | `NerLoad`                  | 2    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
