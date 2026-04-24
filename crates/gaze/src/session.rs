@@ -8,7 +8,10 @@ use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Serialize};
 
 use crate::detector::PiiClass;
+use crate::policy::{Policy, SessionScope};
 use crate::{Error, Result};
+
+const DEFAULT_PERSISTENT_TTL_SECS: u64 = 86_400;
 
 #[derive(Debug, Clone)]
 pub enum Scope {
@@ -81,8 +84,34 @@ impl Session {
         })
     }
 
+    pub fn from_policy(policy: &Policy) -> Result<Self> {
+        Self::from_policy_with_ttl_override(policy, None)
+    }
+
+    pub fn from_policy_with_ttl_override(
+        policy: &Policy,
+        ttl_secs_override: Option<u64>,
+    ) -> Result<Self> {
+        let scope = match policy.session.scope {
+            SessionScope::Ephemeral => Scope::Ephemeral,
+            SessionScope::Conversation => Scope::Conversation("cli".to_string()),
+            SessionScope::Persistent => {
+                let ttl_secs = ttl_secs_override
+                    .or(policy.session.ttl_secs)
+                    .unwrap_or(DEFAULT_PERSISTENT_TTL_SECS);
+                Scope::Persistent {
+                    ttl: Duration::from_secs(ttl_secs),
+                }
+            }
+        };
+
+        Self::new(scope)
+    }
+
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| format!("<{}_{}>", class.class_name(), index))
+        self.intern_mapping(class, raw, |index| {
+            format!("<{}_{}>", class.class_name(), index)
+        })
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -388,7 +417,11 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
 }
 
 fn parse_token_index(token: &str) -> Option<usize> {
-    let suffix = token.rsplit_once('_')?.1.strip_suffix('>').unwrap_or(token.rsplit_once('_')?.1);
+    let suffix = token
+        .rsplit_once('_')?
+        .1
+        .strip_suffix('>')
+        .unwrap_or(token.rsplit_once('_')?.1);
     suffix.parse().ok()
 }
 

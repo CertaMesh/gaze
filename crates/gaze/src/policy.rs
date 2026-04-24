@@ -77,6 +77,10 @@ pub enum PolicyError {
     NoRules,
     #[error("policy must define at least one detector")]
     NoDetectors,
+    #[error("ner load error: {0}")]
+    NerLoad(#[source] crate::ner::NerLoadError),
+    #[error("{0}")]
+    UnsupportedRuleKind(String),
 }
 
 impl Policy {
@@ -84,6 +88,20 @@ impl Policy {
         let raw = fs::read_to_string(path).map_err(PolicyError::Io)?;
         let raw: RawPolicy = toml::from_str(&raw).map_err(PolicyError::TomlParse)?;
         raw.try_into()
+    }
+
+    pub fn load_for_cli(path: &Path) -> Result<Policy, PolicyError> {
+        let policy = Self::load(path)?;
+        if policy
+            .rules
+            .iter()
+            .any(|rule| matches!(rule, RuleSpec::Column { .. }))
+        {
+            return Err(PolicyError::UnsupportedRuleKind(
+                "column rules not supported in CLI mode".to_string(),
+            ));
+        }
+        Ok(policy)
     }
 }
 
@@ -169,7 +187,11 @@ fn parse_session(raw: RawSessionPolicy) -> Result<SessionPolicy, PolicyError> {
         "ephemeral" => SessionScope::Ephemeral,
         "conversation" => SessionScope::Conversation,
         "persistent" => SessionScope::Persistent,
-        other => return Err(PolicyError::BadTtl(format!("unknown session.scope '{other}'"))),
+        other => {
+            return Err(PolicyError::BadTtl(format!(
+                "unknown session.scope '{other}'"
+            )))
+        }
     };
 
     match scope {
@@ -278,7 +300,9 @@ fn parse_action(input: &str) -> Result<Action, PolicyError> {
         "format_preserve" => Ok(Action::FormatPreserve),
         "generalize" => Ok(Action::Generalize),
         "preserve" => Ok(Action::Preserve),
-        other => Err(PolicyError::BadTtl(format!("unknown rule.action '{other}'"))),
+        other => Err(PolicyError::BadTtl(format!(
+            "unknown rule.action '{other}'"
+        ))),
     }
 }
 
@@ -365,6 +389,9 @@ action = "preserve"
         )
         .unwrap();
 
-        assert!(matches!(Policy::load(&path), Err(PolicyError::TomlParse(_))));
+        assert!(matches!(
+            Policy::load(&path),
+            Err(PolicyError::TomlParse(_))
+        ));
     }
 }
