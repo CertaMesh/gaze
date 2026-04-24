@@ -5,7 +5,8 @@ use dashmap::DashMap;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
 use secrecy::{ExposeSecret, SecretBox};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Value as JsonValue;
 
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
@@ -58,6 +59,8 @@ enum SnapshotScope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct SnapshotPayload {
     scope: SnapshotScope,
+    #[serde(deserialize_with = "deserialize_session_hex")]
+    session_hex: String,
     entries: Vec<SnapshotEntry>,
     #[serde(default)]
     issued_at: u64,
@@ -67,6 +70,7 @@ struct SnapshotPayload {
 
 pub struct Session {
     scope: Scope,
+    session_hex: [u8; 4],
     next_by_class: DashMap<PiiClass, usize>,
     token_by_value: DashMap<TokenKey, String>,
     value_by_token: DashMap<String, String>,
@@ -77,6 +81,7 @@ impl Session {
     pub fn new(scope: Scope) -> Result<Self> {
         Ok(Self {
             scope,
+            session_hex: random_session_hex(),
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
@@ -110,16 +115,22 @@ impl Session {
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(class, raw, |index| {
-            format!("<{}_{}>", class.class_name(), index)
+            format!("<{}:{}_{}>", self.session_hex(), class.class_name(), index)
         })
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(class, raw, |index| match class {
-            PiiClass::Email => format!("email{index}@example.test"),
+            PiiClass::Email => format!("email{index}.{}@gaze-fake.invalid", self.session_hex()),
             // Lowercasing preserves the dedicated `custom:` sentinel namespace
             // for format-preserving fakes, so restore can detect them too.
-            _ => format!("{}_{}", class.class_name().to_ascii_lowercase(), index),
+            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
+            _ => format!(
+                "{}:{}_{}",
+                self.session_hex(),
+                class.class_name().to_ascii_lowercase(),
+                index
+            ),
         })
     }
 
@@ -166,6 +177,14 @@ impl Session {
             .collect()
     }
 
+    pub fn contains_token(&self, token: &str) -> bool {
+        self.value_by_token.contains_key(token)
+    }
+
+    pub fn session_hex(&self) -> String {
+        hex::encode(self.session_hex)
+    }
+
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)
@@ -193,6 +212,7 @@ impl Session {
 
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.scope),
+            session_hex: self.session_hex(),
             entries: self
                 .token_by_value
                 .iter()
@@ -215,7 +235,7 @@ impl Session {
         let verifying_key = signing_key.verifying_key();
 
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
-        snapshot.push(1);
+        snapshot.push(2);
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
@@ -228,7 +248,7 @@ impl Session {
             return Err(Error::InvalidSnapshotSignature);
         }
         let version = bytes[0];
-        if version != 1 {
+        if version != 2 {
             return Err(Error::InvalidSnapshotVersion(version));
         }
 
@@ -248,8 +268,9 @@ impl Session {
             .verify(payload_bytes, &signature)
             .map_err(|_| Error::InvalidSnapshotSignature)?;
 
-        let payload: SnapshotPayload =
-            serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
+        let payload = decode_snapshot_payload(payload_bytes)?;
+        validate_entry_prefixes(&payload)?;
+        let session_hex = session_hex_bytes(&payload.session_hex)?;
         let scope = scope_from_snapshot(payload.scope);
         let issued_at = payload.issued_at;
         if let Scope::Persistent { ttl } = &scope {
@@ -271,7 +292,14 @@ impl Session {
             }
         }
 
-        let session = Self::new(scope)?;
+        let session = Self {
+            scope,
+            session_hex,
+            next_by_class: DashMap::new(),
+            token_by_value: DashMap::new(),
+            value_by_token: DashMap::new(),
+            signing_key: SessionKey::generate()?,
+        };
         for entry in payload.entries {
             session.token_by_value.insert(
                 TokenKey {
@@ -416,7 +444,82 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
     }
 }
 
+fn random_session_hex() -> [u8; 4] {
+    let mut bytes = [0u8; 4];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes
+}
+
+fn deserialize_session_hex<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = String::deserialize(deserializer)?;
+    if is_session_hex(&value) {
+        Ok(value)
+    } else {
+        Err(serde::de::Error::custom(
+            "session_hex must be 8 lowercase hex chars",
+        ))
+    }
+}
+
+fn is_session_hex(value: &str) -> bool {
+    value.len() == 8
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn session_hex_bytes(value: &str) -> Result<[u8; 4]> {
+    if !is_session_hex(value) {
+        return Err(Error::InvalidSnapshotPayload);
+    }
+    let decoded = hex::decode(value).map_err(|_| Error::InvalidSnapshotPayload)?;
+    decoded
+        .try_into()
+        .map_err(|_| Error::InvalidSnapshotPayload)
+}
+
+fn decode_snapshot_payload(payload_bytes: &[u8]) -> Result<SnapshotPayload> {
+    let value: JsonValue = serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
+    let Some(session_hex) = value.get("session_hex").and_then(JsonValue::as_str) else {
+        return Err(Error::InvalidSnapshotPayload);
+    };
+    if !is_session_hex(session_hex) {
+        return Err(Error::InvalidSnapshotPayload);
+    }
+    serde_json::from_value(value).map_err(Error::SnapshotDecode)
+}
+
+fn validate_entry_prefixes(payload: &SnapshotPayload) -> Result<()> {
+    for entry in &payload.entries {
+        if !entry_token_matches_session(&entry.token, &payload.session_hex)
+            || !crate::token_shape::starts_with_session_prefix(&entry.token)
+        {
+            return Err(Error::InvalidSnapshotPayload);
+        }
+    }
+    Ok(())
+}
+
+fn entry_token_matches_session(token: &str, session_hex: &str) -> bool {
+    token.starts_with(&format!("<{session_hex}:"))
+        || token.starts_with(&format!("{session_hex}:"))
+        || (token.starts_with("email")
+            && token
+                .split_once('.')
+                .and_then(|(_, rest)| rest.strip_suffix("@gaze-fake.invalid"))
+                == Some(session_hex))
+}
+
 fn parse_token_index(token: &str) -> Option<usize> {
+    if let Some(local) = token
+        .strip_prefix("email")
+        .and_then(|rest| rest.split_once('.').map(|(index, _)| index))
+    {
+        return local.parse().ok();
+    }
     let suffix = token
         .rsplit_once('_')?
         .1
@@ -429,7 +532,7 @@ fn parse_token_index(token: &str) -> Option<usize> {
 mod tests {
     use super::*;
 
-    fn signed_snapshot(payload: SnapshotPayload) -> SensitiveSnapshot {
+    fn signed_snapshot_v03(payload: SnapshotPayload) -> SensitiveSnapshot {
         let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
         let key = SessionKey::generate().expect("session key");
         let signing_key = key.signing_key();
@@ -441,6 +544,12 @@ mod tests {
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
+        SensitiveSnapshot::from(snapshot)
+    }
+
+    fn signed_snapshot(payload: SnapshotPayload) -> SensitiveSnapshot {
+        let mut snapshot = signed_snapshot_v03(payload).into_bytes();
+        snapshot[0] = 2;
         SensitiveSnapshot::from(snapshot)
     }
 
@@ -465,12 +574,65 @@ mod tests {
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
             issued_at: now,
             next_by_class: Vec::new(),
         });
 
         assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_v03_envelope_byte() {
+        let snapshot = signed_snapshot_v03(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotVersion(1))
+        ));
+    }
+
+    #[test]
+    fn import_rejects_invalid_session_hex() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "A7F3B8E2".to_string(),
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotPayload)
+        ));
+    }
+
+    #[test]
+    fn import_rejects_manifest_entry_prefix_mismatch() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
+            entries: vec![SnapshotEntry {
+                class: PiiClass::Name,
+                raw: "Dr. Schmidt".to_string(),
+                token: "deadbeef:name_1".to_string(),
+            }],
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotPayload)
+        ));
     }
 
     #[test]
@@ -481,6 +643,7 @@ mod tests {
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
             scope: SnapshotScope::Persistent { ttl_secs: 10 },
+            session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
             issued_at: now.saturating_sub(11),
             next_by_class: Vec::new(),
@@ -499,6 +662,7 @@ mod tests {
     fn import_accepts_legacy_persistent_snapshot_without_issued_at() {
         let snapshot = signed_snapshot(SnapshotPayload {
             scope: SnapshotScope::Persistent { ttl_secs: 1 },
+            session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
             issued_at: 0,
             next_by_class: Vec::new(),
@@ -515,6 +679,7 @@ mod tests {
             .unwrap_or(0);
         let snapshot = signed_snapshot(SnapshotPayload {
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
             issued_at: now.saturating_add(61),
             next_by_class: Vec::new(),
@@ -546,8 +711,8 @@ mod tests {
                 .tokenize(&custom_class, &custom_value)
                 .expect("custom token");
 
-            assert_eq!(builtin_token, format!("<{}_1>", builtin.class_name()));
-            assert_eq!(custom_token, format!("<Custom:{name}_1>"));
+            assert!(builtin_token.ends_with(&format!(":{}_1>", builtin.class_name())));
+            assert!(custom_token.ends_with(&format!(":Custom:{name}_1>")));
             assert_ne!(builtin_token, custom_token);
             assert_eq!(
                 session.restore(&builtin_token).as_deref(),
@@ -573,8 +738,8 @@ mod tests {
             .tokenize(&second_class, "hello")
             .expect("second custom token");
 
-        assert_eq!(first_token, "<Custom:email_1>");
-        assert_eq!(second_token, "<Custom:custom_email_1>");
+        assert!(first_token.ends_with(":Custom:email_1>"));
+        assert!(second_token.ends_with(":Custom:custom_email_1>"));
         assert_ne!(first_token, second_token);
         assert_eq!(
             session.restore(&first_token).as_deref(),

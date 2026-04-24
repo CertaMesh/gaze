@@ -2,9 +2,10 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use gaze::{
-    Action, ClassRule as GazeClassRule, ColumnRule as GazeColumnRule, DefaultRule, NerConfig,
-    PiiClass, Pipeline, RegexDetector,
+    Action, ClassRule as GazeClassRule, ColumnRule as GazeColumnRule, DefaultRule, PiiClass,
+    Pipeline,
 };
+use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -90,12 +91,22 @@ impl PolicyFile {
 }
 
 pub fn build_pipeline(policy: &PolicyFile) -> Result<Pipeline, PolicyError> {
-    let mut builder = Pipeline::builder()
-        .detector(RegexDetector::emails()?)
-        .with_ner_config(NerConfig {
-            model_dir: policy.ner.model_dir.clone(),
-            locale: policy.ner.locale.clone(),
+    let mut builder = Pipeline::builder().detector(RegexDetector::emails()?);
+
+    if let Some(model_dir) = &policy.ner.model_dir {
+        let detector = NerDetector::load_with_options(
+            model_dir,
+            NerOptions {
+                locale: policy.ner.locale.clone(),
+            },
+        )
+        .map_err(|err| {
+            PolicyError::Pipeline(gaze::Error::Policy(gaze::PolicyError::NerLoad(
+                err.to_string(),
+            )))
         })?;
+        builder = builder.detector(detector);
+    }
 
     for rule in &policy.policy.database.column_rules {
         let action = parse_action(rule.action.as_deref().unwrap_or("tokenize"), &rule.column)?;

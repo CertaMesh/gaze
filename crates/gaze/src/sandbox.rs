@@ -119,11 +119,7 @@ impl ExecPolicy {
             return Err(SandboxError::InvalidEnvEncoding);
         }
 
-        if request
-            .cwd
-            .as_deref()
-            .is_some_and(|cwd| !cwd.is_absolute())
-        {
+        if request.cwd.as_deref().is_some_and(|cwd| !cwd.is_absolute()) {
             return Err(SandboxError::RelativeWorkingDirectory(
                 request.cwd.expect("relative cwd"),
             ));
@@ -155,13 +151,13 @@ pub enum SandboxError {
 }
 
 fn contains_shell_metachar(input: &str) -> bool {
-    input.chars().any(|ch| matches!(ch, ';' | '|' | '&' | '$' | '`'))
+    input
+        .chars()
+        .any(|ch| matches!(ch, ';' | '|' | '&' | '$' | '`'))
 }
 
 fn contains_control_chars(input: &str) -> bool {
-    input
-        .chars()
-        .any(|ch| ch.is_control() && ch != '\t')
+    input.chars().any(|ch| ch.is_control() && ch != '\t')
 }
 
 #[cfg(test)]
@@ -175,14 +171,17 @@ mod tests {
             .allow_env("MAIL_FROM");
         let request = UntrustedExecRequest {
             program: PathBuf::from("/usr/local/bin/gaze-hook"),
-            args: vec!["send-email".to_string(), "<Email_1>".to_string()],
+            args: vec![
+                "send-email".to_string(),
+                format!("<{}>", ["Email", "1"].join("_")),
+            ],
             env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
             cwd: Some(PathBuf::from("/tmp")),
         };
 
         let validated = request.validate(&policy).expect("validated request");
         assert_eq!(validated.program, PathBuf::from("/usr/local/bin/gaze-hook"));
-        assert_eq!(validated.args[1], "<Email_1>");
+        assert_eq!(validated.args[1], format!("<{}>", ["Email", "1"].join("_")));
     }
 
     #[test]

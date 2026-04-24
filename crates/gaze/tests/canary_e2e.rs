@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
-use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument, RegexDetector,
-    Scope, Session, Value,
-};
+use gaze::{Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument, Scope, Session, Value};
+use gaze_recognizers::RegexDetector;
 
 const CANARY: &str = "CANARY_EMAIL_DO_NOT_LEAK@test.local";
 
@@ -39,7 +37,7 @@ fn canary_never_leaks_through_structured_redaction() {
     };
 
     assert!(
-        token.starts_with("<Email_") && token.ends_with('>'),
+        token.starts_with('<') && token.ends_with(":Email_1>"),
         "unexpected token format: {token}"
     );
     assert_eq!(

@@ -78,7 +78,7 @@ pub enum PolicyError {
     #[error("policy must define at least one detector")]
     NoDetectors,
     #[error("ner load error: {0}")]
-    NerLoad(#[source] crate::ner::NerLoadError),
+    NerLoad(String),
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
