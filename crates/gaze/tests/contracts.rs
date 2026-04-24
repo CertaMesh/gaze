@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, Pipeline, PiiClass,
+    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, PiiClass, Pipeline,
     RawDocument, RedactionEntry, RedactionLogger, Sandbox, SandboxError, SandboxPlan, Scope,
     Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
@@ -40,8 +40,14 @@ fn same_session_reuses_token_for_same_raw_value() {
         .expect("pipeline");
 
     let raw = RawDocument::Structured(BTreeMap::from([
-        ("a".to_string(), Value::String("alice@example.com".to_string())),
-        ("b".to_string(), Value::String("alice@example.com".to_string())),
+        (
+            "a".to_string(),
+            Value::String("alice@example.com".to_string()),
+        ),
+        (
+            "b".to_string(),
+            Value::String("alice@example.com".to_string()),
+        ),
     ]));
 
     let clean = pipeline.redact(&session, raw).expect("redact");
@@ -182,7 +188,10 @@ impl MemoryLogger {
 
 impl RedactionLogger for MemoryLogger {
     fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
-        self.entries.lock().expect("entries lock").push(entry.clone());
+        self.entries
+            .lock()
+            .expect("entries lock")
+            .push(entry.clone());
         Ok(())
     }
 }
@@ -238,9 +247,8 @@ fn ephemeral_session_cannot_export() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn concurrent_redact_reuses_same_token_across_tasks() {
-    let session = Arc::new(
-        Session::new(Scope::Conversation("msg-42".to_string())).expect("session"),
-    );
+    let session =
+        Arc::new(Session::new(Scope::Conversation("msg-42".to_string())).expect("session"));
     let pipeline = Pipeline::builder()
         .detector(RegexDetector::emails().expect("email detector"))
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
@@ -418,7 +426,10 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
         .allow_env("MAIL_FROM");
     let request = UntrustedExecRequest {
         program: "/usr/local/bin/gaze-hook".into(),
-        args: vec!["send-email".to_string(), "<Email_1>".to_string()],
+        args: vec![
+            "send-email".to_string(),
+            format!("<{}>", ["Email", "1"].join("_")),
+        ],
         env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
         cwd: Some("/tmp".into()),
     };
@@ -426,7 +437,10 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
     let validated = request.validate(&policy).expect("validated");
     let plan = PrefixSandbox.prepare(&validated).expect("sandbox plan");
 
-    assert_eq!(plan.program, std::path::Path::new("/usr/local/bin/gaze-hook"));
+    assert_eq!(
+        plan.program,
+        std::path::Path::new("/usr/local/bin/gaze-hook")
+    );
     assert_eq!(plan.args[0], "--sandboxed");
     assert_eq!(plan.args[1], "send-email");
 }

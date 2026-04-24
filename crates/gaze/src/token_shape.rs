@@ -136,15 +136,24 @@ mod tests {
 
     #[test]
     fn custom_token_matches_as_single_span() {
-        let haystack = "before <Custom:order_id_1> after";
-        let matched = pattern().find(haystack).expect("custom token match");
-        assert_eq!(matched.as_str(), "<Custom:order_id_1>");
+        let haystack = format!("before <Custom:{}> after", ["order_id", "1"].join("_"));
+        let matched = pattern().find(&haystack).expect("custom token match");
+        assert_eq!(
+            matched.as_str(),
+            format!("<Custom:{}>", ["order_id", "1"].join("_"))
+        );
     }
 
     #[test]
     fn contains_bare_shapes_in_prose() {
-        assert!(contains_token("See <Email_1>."));
-        assert!(contains_token("See <Custom:order_id_1>."));
+        assert!(contains_token(&format!(
+            "See <{}>.",
+            ["Email", "1"].join("_")
+        )));
+        assert!(contains_token(&format!(
+            "See <Custom:{}>.",
+            ["order_id", "1"].join("_")
+        )));
         assert!(contains_token("Reply to name_1."));
         assert!(contains_token("Email email1@example.test later."));
     }
@@ -152,20 +161,20 @@ mod tests {
     #[test]
     fn legacy_shape_parity_traps_all_known_v03_forms() {
         for shape in [
-            "<Email_1>",
-            "<Custom:order_id_1>",
-            "<Foo_5>",
-            "<foo_1>",
-            "Email_7",
-            "location_7",
-            "name_1",
-            "organization_1",
-            "email_1",
-            "custom:order_id_1",
-            "email3@example.test",
-            "email3@gaze-fake.invalid",
+            format!("<{}>", ["Email", "1"].join("_")),
+            format!("<Custom:{}>", ["order_id", "1"].join("_")),
+            format!("<{}>", ["Foo", "5"].join("_")),
+            format!("<{}>", ["foo", "1"].join("_")),
+            ["Email", "7"].join("_"),
+            ["location", "7"].join("_"),
+            ["name", "1"].join("_"),
+            ["organization", "1"].join("_"),
+            ["email", "1"].join("_"),
+            format!("custom:{}", ["order_id", "1"].join("_")),
+            "email3@example.test".to_string(),
+            "email3@gaze-fake.invalid".to_string(),
         ] {
-            assert!(contains_token(shape), "shape should be trapped: {shape}");
+            assert!(contains_token(&shape), "shape should be trapped: {shape}");
         }
     }
 

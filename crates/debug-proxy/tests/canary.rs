@@ -24,13 +24,11 @@ impl DatabaseAdapter for FakeDb {
 
         Ok(TableSchema {
             table: "users".to_string(),
-            columns: vec![
-                ColumnSchema {
-                    name: "email".to_string(),
-                    ty: ColumnType::Text,
-                    nullable: false,
-                },
-            ],
+            columns: vec![ColumnSchema {
+                name: "email".to_string(),
+                ty: ColumnType::Text,
+                nullable: false,
+            }],
             primary_key: vec![],
         })
     }
@@ -119,8 +117,14 @@ async fn canary_never_leaks_and_pseudonyms_match_across_channels() {
     )
     .expect("policy");
     let pipeline = build_pipeline(&policy).expect("pipeline");
-    let session = Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
-    let ctx = ToolContext::new(pipeline, session, Arc::new(FakeDb), Some(Arc::new(FakeLogs)));
+    let session =
+        Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
+    let ctx = ToolContext::new(
+        pipeline,
+        session,
+        Arc::new(FakeDb),
+        Some(Arc::new(FakeLogs)),
+    );
 
     let db_rows = ctx.db_sample("users", 10).await.expect("db sample");
     let log_rows = ctx.log_tail(10).await.expect("log tail");
@@ -134,7 +138,7 @@ async fn canary_never_leaks_and_pseudonyms_match_across_channels() {
         panic!("expected text row");
     };
 
-    assert_eq!(db_token, "Email_1");
+    assert!(db_token.starts_with('<') && db_token.ends_with(&format!(":Email_{}>", 1)));
     assert!(log_text.contains(&db_token));
     assert!(!log_text.contains(CANARY));
 }
@@ -197,10 +201,24 @@ async fn adapter_errors_are_sanitized_through_pipeline() {
     )
     .expect("policy");
     let pipeline = build_pipeline(&policy).expect("pipeline");
-    let session = Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
-    let ctx = ToolContext::<BrokenDb, FakeLogs>::new(pipeline, session, Arc::new(BrokenDb), None);
+    let session =
+        Arc::new(Session::new(Scope::Conversation("req-1".to_string())).expect("session"));
+    let good_ctx = ToolContext::new(
+        pipeline,
+        Arc::clone(&session),
+        Arc::new(FakeDb),
+        Some(Arc::new(FakeLogs)),
+    );
 
+    let db_rows = good_ctx.db_sample("users", 10).await.expect("db sample");
+    let CleanDocument::Structured(fields) = &db_rows[0] else {
+        panic!("expected structured row");
+    };
+    let db_token = fields["email"].as_str().expect("token string").to_string();
+
+    let pipeline = build_pipeline(&policy).expect("pipeline");
+    let ctx = ToolContext::<BrokenDb, FakeLogs>::new(pipeline, session, Arc::new(BrokenDb), None);
     let err = ctx.db_sample("users", 10).await.unwrap_err().to_string();
     assert!(!err.contains(CANARY));
-    assert!(err.contains("Email_1"));
+    assert!(err.contains(&db_token));
 }
