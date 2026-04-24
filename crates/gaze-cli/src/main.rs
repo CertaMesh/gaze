@@ -19,10 +19,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy, PolicyError,
-    RawDocument, RedactionEntry, RedactionLogger, RegexDetector, Result as GazeResult, Scope,
-    SensitiveSnapshot, Session,
+    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, PiiClass, Pipeline, Policy,
+    PolicyError, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec,
+    Scope, SensitiveSnapshot, Session,
 };
+use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -261,7 +262,7 @@ fn run_clean(
     };
 
     let pipeline = match &loaded_policy {
-        Some(policy) => Pipeline::from_policy(policy)
+        Some(policy) => build_pipeline_from_policy(policy)
             .map_err(map_pipeline_error)?
             .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None => {
@@ -350,6 +351,48 @@ fn map_pipeline_error(err: gaze::Error) -> CliError {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
         _ => CliError::Pipeline,
     }
+}
+
+fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
+    let mut builder = Pipeline::builder();
+
+    for detector in &policy.detectors {
+        builder = match &detector.kind {
+            gaze::DetectorKind::Regex => builder.detector(RegexDetector::with_source(
+                &detector.pattern,
+                detector.class.clone(),
+                &detector.name,
+            )?),
+            gaze::DetectorKind::Unknown(kind) => {
+                return Err(gaze::Error::Policy(PolicyError::BadTtl(format!(
+                    "unknown detector.kind '{kind}'"
+                ))))
+            }
+        };
+    }
+
+    for rule in &policy.rules {
+        builder = match rule {
+            RuleSpec::Class { class, action } => builder.rule(ClassRule::new(class.clone(), *action)),
+            RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
+            RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
+        };
+    }
+
+    if let Some(ner) = &policy.ner {
+        if let Some(path) = &ner.model_dir {
+            let detector = NerDetector::load_with_options(
+                path,
+                NerOptions {
+                    locale: ner.locale.clone(),
+                },
+            )
+            .map_err(|err| gaze::Error::Policy(PolicyError::NerLoad(err.to_string())))?;
+            builder = builder.detector(detector);
+        }
+    }
+
+    builder.build()
 }
 
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.

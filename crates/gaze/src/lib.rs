@@ -1,5 +1,4 @@
 mod detector;
-mod ner;
 mod normalize;
 mod pipeline;
 mod policy;
@@ -10,9 +9,8 @@ mod session;
 pub mod token_shape;
 mod types;
 
-pub use detector::{Detection, Detector, PiiClass, RegexDetector};
-pub use ner::{LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
-pub use pipeline::{Error, NerConfig, Pipeline, PipelineBuilder, Result};
+pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
+pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{
     DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,
     SessionScope,

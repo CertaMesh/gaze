@@ -1,9 +1,7 @@
 use std::collections::BTreeMap;
 
-use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument, RegexDetector,
-    Scope, Session, Value,
-};
+use gaze::{Action, ClassRule, CleanDocument, DefaultRule, Pipeline, PiiClass, RawDocument, Scope, Session, Value};
+use gaze_recognizers::RegexDetector;
 
 const CANARY: &str = "CANARY_EMAIL_DO_NOT_LEAK@test.local";
 

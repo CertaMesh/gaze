@@ -1,19 +1,15 @@
 use std::collections::BTreeMap;
-use std::path::Path;
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector};
-use crate::ner::{NerDetector, NerOptions};
 use crate::normalize::normalize;
-use crate::policy::{DetectorKind, Policy, PolicyError, RuleSpec};
+use crate::policy::PolicyError;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
 use crate::rule::{Action, Context, Rule};
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
-use crate::{ClassRule, ColumnRule, DefaultRule, RegexDetector};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -35,8 +31,6 @@ pub enum Error {
     SnapshotDecode(#[source] serde_json::Error),
     #[error("sqlite error: {0}")]
     Sqlite(String),
-    #[error("ner load error: {0}")]
-    NerLoad(#[source] crate::ner::NerLoadError),
     #[error("policy error: {0}")]
     Policy(#[from] PolicyError),
 }
@@ -51,53 +45,6 @@ pub struct Pipeline {
 impl Pipeline {
     pub fn builder() -> PipelineBuilder {
         PipelineBuilder::default()
-    }
-
-    pub fn from_policy(policy: &Policy) -> Result<Pipeline> {
-        let mut builder = Pipeline::builder();
-
-        for detector in &policy.detectors {
-            builder = match &detector.kind {
-                DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                    &detector.pattern,
-                    detector.class.clone(),
-                    &detector.name,
-                )?),
-                DetectorKind::Unknown(kind) => {
-                    return Err(
-                        PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into(),
-                    )
-                }
-            };
-        }
-
-        for rule in &policy.rules {
-            builder = match rule {
-                RuleSpec::Class { class, action } => {
-                    builder.rule(ClassRule::new(class.clone(), *action))
-                }
-                RuleSpec::Column { column, action } => {
-                    builder.rule(ColumnRule::new(column, *action))
-                }
-                RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
-            };
-        }
-
-        if let Some(ner) = &policy.ner {
-            if ner.model_dir.is_some() {
-                builder = builder
-                    .with_ner_config(NerConfig {
-                        model_dir: ner.model_dir.clone(),
-                        locale: ner.locale.clone(),
-                    })
-                    .map_err(|err| match err {
-                        Error::NerLoad(source) => Error::Policy(PolicyError::NerLoad(source)),
-                        other => other,
-                    })?;
-            }
-        }
-
-        builder.build()
     }
 
     pub fn with_redaction_logger<L>(mut self, logger: L) -> Pipeline
@@ -229,12 +176,6 @@ pub struct PipelineBuilder {
     rules: Vec<Arc<dyn Rule>>,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct NerConfig {
-    pub model_dir: Option<PathBuf>,
-    pub locale: Option<String>,
-}
-
 impl PipelineBuilder {
     pub fn detector<D>(mut self, detector: D) -> Self
     where
@@ -258,55 +199,6 @@ impl PipelineBuilder {
     {
         self.redaction_loggers.push(Arc::new(logger));
         self
-    }
-
-    /// Wire up a transformer NER detector from a resolved model directory.
-    ///
-    /// **Additive / stackable.** Each call appends another `NerDetector` to
-    /// the pipeline. Stacking multiple backends (for example, a BERT-family
-    /// token classifier plus a GLiNER zero-shot extractor) is supported —
-    /// the span-conflict resolver picks winners across all detectors by
-    /// span length, then insertion order.
-    ///
-    /// Fail-closed defaults:
-    /// - `None` or empty path → NER is disabled for this call, a `tracing::warn!`
-    ///   is emitted, and the pipeline still builds with other detectors intact.
-    /// - `Some(path)` → `NerDetector::load` must succeed; any load error
-    ///   propagates as `Error::NerLoad` and the pipeline does NOT build.
-    ///
-    /// No runtime downloads. Caller resolves the model directory from
-    /// `[ner] model_dir` in `policy.toml` or the platform default under
-    /// `${XDG_DATA_HOME:-~/.local/share}/gaze/models/`.
-    pub fn with_ner_model_dir(self, model_dir: Option<&Path>) -> Result<Self> {
-        self.with_ner_config(NerConfig {
-            model_dir: model_dir.map(Path::to_path_buf),
-            locale: None,
-        })
-    }
-
-    /// Additive / stackable — see `with_ner_model_dir`. Call repeatedly to
-    /// stack backends with different locales or model artifacts.
-    pub fn with_ner_config(self, config: NerConfig) -> Result<Self> {
-        let NerConfig { model_dir, locale } = config;
-        match model_dir {
-            None => {
-                tracing::warn!(
-                    "ner: no [ner] model_dir configured; transformer NER disabled, regex + index detectors still run"
-                );
-                Ok(self)
-            }
-            Some(path) if path.as_os_str().is_empty() => {
-                tracing::warn!(
-                    "ner: [ner] model_dir is empty; transformer NER disabled, regex + index detectors still run"
-                );
-                Ok(self)
-            }
-            Some(path) => {
-                let detector = NerDetector::load_with_options(&path, NerOptions { locale })
-                    .map_err(Error::NerLoad)?;
-                Ok(self.detector(detector))
-            }
-        }
     }
 
     pub fn build(self) -> Result<Pipeline> {
@@ -412,18 +304,37 @@ fn build_context(field_name: Option<&str>) -> Context {
 mod tests {
     use super::*;
     use crate::detector::{Detection, PiiClass};
-    use crate::ner::test_support::detector_with_detections;
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
-    use std::fs;
     use std::sync::Mutex;
-    use tempfile::tempdir;
 
     /// Shared-handle test double: callers keep an `Arc<Mutex<Vec<_>>>` and
     /// clone it into the logger, letting the builder take ownership while
     /// the test retains read access.
     struct CapturingLogger {
         entries: Arc<Mutex<Vec<RedactionEntry>>>,
+    }
+
+    struct FixedDetector {
+        detections: Vec<Detection>,
+    }
+
+    impl Detector for FixedDetector {
+        fn detect(&self, _input: &str) -> Vec<Detection> {
+            self.detections.clone()
+        }
+    }
+
+    fn detector_with_detections(source: &str, detections: Vec<Detection>) -> FixedDetector {
+        FixedDetector {
+            detections: detections
+                .into_iter()
+                .map(|mut detection| {
+                    detection.source = source.to_string();
+                    detection
+                })
+                .collect(),
+        }
     }
 
     impl RedactionLogger for CapturingLogger {
@@ -448,8 +359,8 @@ mod tests {
             source: "ner/gliner".to_string(),
         };
 
-        let bert = detector_with_detections("ort", vec![short_detection]);
-        let gliner = detector_with_detections("gliner", vec![long_detection]);
+        let bert = detector_with_detections("ner/bert", vec![short_detection]);
+        let gliner = detector_with_detections("ner/gliner", vec![long_detection]);
 
         let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
 
@@ -503,8 +414,8 @@ mod tests {
             source: "ner/gliner".to_string(),
         };
 
-        let bert = detector_with_detections("ort", vec![alice]);
-        let gliner = detector_with_detections("gliner", vec![berlin]);
+        let bert = detector_with_detections("ner/bert", vec![alice]);
+        let gliner = detector_with_detections("ner/gliner", vec![berlin]);
 
         let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
 
@@ -537,36 +448,31 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_builds_from_policy_and_detects_email() {
-        let dir = tempdir().unwrap();
-        let path = dir.path().join("policy.toml");
-        fs::write(
-            &path,
-            r#"
-[session]
-scope = "persistent"
-ttl_secs = 86400
+    fn pipeline_builder_detects_email() {
+        struct EmailDetector(regex::Regex);
 
-[[detector]]
-kind = "regex"
-name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
-class = "email"
+        impl Detector for EmailDetector {
+            fn detect(&self, input: &str) -> Vec<Detection> {
+                self.0
+                    .find_iter(input)
+                    .map(|m| Detection {
+                        span: m.range(),
+                        class: PiiClass::Email,
+                        source: "regex".to_string(),
+                    })
+                    .collect()
+            }
+        }
 
-[[rule]]
-kind = "class"
-class = "email"
-action = "tokenize"
-
-[[rule]]
-kind = "default"
-action = "preserve"
-"#,
-        )
-        .unwrap();
-
-        let policy = Policy::load(&path).unwrap();
-        let pipeline = Pipeline::from_policy(&policy).unwrap();
+        let pipeline = Pipeline::builder()
+            .detector(EmailDetector(
+                regex::Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
+                    .unwrap(),
+            ))
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .unwrap();
         let session = Session::new(Scope::Ephemeral).unwrap();
 
         let clean = pipeline
