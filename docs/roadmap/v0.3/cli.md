@@ -6,10 +6,8 @@ host-side wrapper that shells out to this CLI.
 
 **Roadmap context.** This is the "pipe mode" row in
 `docs/research/gaze-first-principles-vision.md:47` (v0.3 — *"Pipe mode,
-format-preserving output"*) and the deferred-to-v0.3 scope of the v0.2 core
-engine design (`docs/superpowers/specs/2026-04-14-gaze-v02-core-engine-design.md:45`,
-which calls this CLI *"just a thin CLI consumer"*). Threat-model references
-below cite `docs/research/gaze-threat-model.md`.
+format-preserving output"*). Threat-model references below cite
+`docs/research/gaze-threat-model.md`.
 
 ---
 
