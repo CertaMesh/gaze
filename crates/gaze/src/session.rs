@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
@@ -57,6 +57,8 @@ struct SnapshotPayload {
     scope: SnapshotScope,
     entries: Vec<SnapshotEntry>,
     #[serde(default)]
+    issued_at: u64,
+    #[serde(default)]
     next_by_class: Vec<(PiiClass, usize)>,
 }
 
@@ -80,13 +82,15 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| format!("{}_{}", class_name(class), index))
+        self.intern_mapping(class, raw, |index| format!("<{}_{}>", class.class_name(), index))
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(class, raw, |index| match class {
             PiiClass::Email => format!("email{index}@example.test"),
-            _ => format!("{}_{}", class_name(class).to_ascii_lowercase(), index),
+            // Lowercasing preserves the dedicated `custom:` sentinel namespace
+            // for format-preserving fakes, so restore can detect them too.
+            _ => format!("{}_{}", class.class_name().to_ascii_lowercase(), index),
         })
     }
 
@@ -114,6 +118,25 @@ impl Session {
         }
     }
 
+    /// Enumerate every live token string emitted by this session.
+    ///
+    /// Intended for restore-side callers that need to build an exact-literal
+    /// alternation regex over the session map (Pass 1 of the two-pass restore
+    /// strategy in `docs/roadmap/v0.3/cli.md`): replacing token-shaped strings
+    /// via a class-shape regex alone is unsafe because it either (a) straddles
+    /// word boundaries into adjacent text, or (b) misses lowercase
+    /// FormatPreserve shapes like `location_1`. Feeding these exact strings
+    /// into `regex::escape` and sorting longest-first avoids both pitfalls.
+    ///
+    /// Returned order is unspecified — callers that rely on longest-first
+    /// matching must sort the returned vector themselves.
+    pub fn tokens(&self) -> Vec<String> {
+        self.value_by_token
+            .iter()
+            .map(|entry| entry.key().clone())
+            .collect()
+    }
+
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)
@@ -122,13 +145,22 @@ impl Session {
     }
 
     pub fn restore(&self, token: &str) -> Option<String> {
-        self.value_by_token.get(token).map(|value| value.value().clone())
+        self.value_by_token
+            .get(token)
+            .map(|value| value.value().clone())
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
         if matches!(self.scope, Scope::Ephemeral) {
             return Err(Error::ExportForbidden);
         }
+
+        // If the host clock is before the Unix epoch, preserve compatibility by
+        // exporting `issued_at = 0` rather than failing snapshot export.
+        let issued_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
 
         let payload = SnapshotPayload {
             scope: snapshot_scope(&self.scope),
@@ -146,6 +178,7 @@ impl Session {
                 .iter()
                 .map(|entry| (entry.key().clone(), *entry.value()))
                 .collect(),
+            issued_at,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let signing_key = self.signing_key.signing_key();
@@ -188,7 +221,28 @@ impl Session {
 
         let payload: SnapshotPayload =
             serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
-        let session = Self::new(scope_from_snapshot(payload.scope))?;
+        let scope = scope_from_snapshot(payload.scope);
+        let issued_at = payload.issued_at;
+        if let Scope::Persistent { ttl } = &scope {
+            let ttl_secs = ttl.as_secs();
+            if issued_at > 0 {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_secs())
+                    .unwrap_or(0);
+                if issued_at > now.saturating_add(60) {
+                    return Err(Error::InvalidSnapshotSignature);
+                }
+                if now.saturating_sub(issued_at) > ttl_secs {
+                    return Err(Error::BlobExpired {
+                        issued_at,
+                        ttl_secs,
+                    });
+                }
+            }
+        }
+
+        let session = Self::new(scope)?;
         for entry in payload.entries {
             session.token_by_value.insert(
                 TokenKey {
@@ -197,7 +251,9 @@ impl Session {
                 },
                 entry.token.clone(),
             );
-            session.value_by_token.insert(entry.token.clone(), entry.raw);
+            session
+                .value_by_token
+                .insert(entry.token.clone(), entry.raw);
             if let Some(index) = parse_token_index(&entry.token) {
                 let mut next = session.next_by_class.entry(entry.class).or_insert(0);
                 if *next < index {
@@ -311,34 +367,6 @@ fn advise_dontdump(_ptr: *const u8, _len: usize) {
     }
 }
 
-fn class_name(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "Email".to_string(),
-        PiiClass::Name => "Name".to_string(),
-        PiiClass::Location => "Location".to_string(),
-        PiiClass::Organization => "Organization".to_string(),
-        PiiClass::Custom(name) => custom_class_name(name),
-    }
-}
-
-fn custom_class_name(name: &str) -> String {
-    let mut out = String::new();
-    for segment in name.split('_').filter(|segment| !segment.is_empty()) {
-        let mut chars = segment.chars();
-        if let Some(first) = chars.next() {
-            out.push(first.to_ascii_uppercase());
-            for ch in chars {
-                out.push(ch.to_ascii_lowercase());
-            }
-        }
-    }
-    if out.is_empty() {
-        "Custom".to_string()
-    } else {
-        out
-    }
-}
-
 fn snapshot_scope(scope: &Scope) -> SnapshotScope {
     match scope {
         Scope::Ephemeral => SnapshotScope::Ephemeral,
@@ -360,12 +388,28 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
 }
 
 fn parse_token_index(token: &str) -> Option<usize> {
-    token.rsplit_once('_')?.1.parse().ok()
+    let suffix = token.rsplit_once('_')?.1.strip_suffix('>').unwrap_or(token.rsplit_once('_')?.1);
+    suffix.parse().ok()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn signed_snapshot(payload: SnapshotPayload) -> SensitiveSnapshot {
+        let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
+        let key = SessionKey::generate().expect("session key");
+        let signing_key = key.signing_key();
+        let signature = signing_key.sign(&payload_bytes);
+        let verifying_key = signing_key.verifying_key();
+
+        let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
+        snapshot.push(1);
+        snapshot.extend_from_slice(&verifying_key.to_bytes());
+        snapshot.extend_from_slice(&signature.to_bytes());
+        snapshot.extend_from_slice(&payload_bytes);
+        SensitiveSnapshot::from(snapshot)
+    }
 
     #[test]
     fn session_key_produces_valid_signatures() {
@@ -374,6 +418,135 @@ mod tests {
         let message = b"gaze";
         let signature = signing_key.sign(message);
 
-        assert!(signing_key.verifying_key().verify(message, &signature).is_ok());
+        assert!(signing_key
+            .verifying_key()
+            .verify(message, &signature)
+            .is_ok());
+    }
+
+    #[test]
+    fn import_accepts_persistent_snapshot_within_ttl() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            entries: Vec::new(),
+            issued_at: now,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_expired_persistent_snapshot() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 10 },
+            entries: Vec::new(),
+            issued_at: now.saturating_sub(11),
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::BlobExpired {
+                issued_at,
+                ttl_secs: 10,
+            }) if issued_at == now.saturating_sub(11)
+        ));
+    }
+
+    #[test]
+    fn import_accepts_legacy_persistent_snapshot_without_issued_at() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 1 },
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_forward_dated_persistent_snapshot() {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            entries: Vec::new(),
+            issued_at: now.saturating_add(61),
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotSignature)
+        ));
+    }
+
+    #[test]
+    fn tokenize_distinguishes_builtin_and_custom_class_names() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        for (builtin, name) in [
+            (PiiClass::Email, "email"),
+            (PiiClass::Name, "name"),
+            (PiiClass::Location, "location"),
+            (PiiClass::Organization, "organization"),
+        ] {
+            let builtin_value = format!("{name}-builtin");
+            let custom_value = format!("{name}-custom");
+
+            let builtin_token = session
+                .tokenize(&builtin, &builtin_value)
+                .expect("builtin token");
+            let custom_class = PiiClass::custom(name);
+            let custom_token = session
+                .tokenize(&custom_class, &custom_value)
+                .expect("custom token");
+
+            assert_eq!(builtin_token, format!("<{}_1>", builtin.class_name()));
+            assert_eq!(custom_token, format!("<Custom:{name}_1>"));
+            assert_ne!(builtin_token, custom_token);
+            assert_eq!(
+                session.restore(&builtin_token).as_deref(),
+                Some(builtin_value.as_str())
+            );
+            assert_eq!(
+                session.restore(&custom_token).as_deref(),
+                Some(custom_value.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn tokenize_distinguishes_custom_classes_with_matching_pascal_case() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let first_class = PiiClass::custom("email");
+        let second_class = PiiClass::custom("custom_email");
+
+        let first_token = session
+            .tokenize(&first_class, "alice@corp.com")
+            .expect("first custom token");
+        let second_token = session
+            .tokenize(&second_class, "hello")
+            .expect("second custom token");
+
+        assert_eq!(first_token, "<Custom:email_1>");
+        assert_eq!(second_token, "<Custom:custom_email_1>");
+        assert_ne!(first_token, second_token);
+        assert_eq!(
+            session.restore(&first_token).as_deref(),
+            Some("alice@corp.com")
+        );
+        assert_eq!(session.restore(&second_token).as_deref(), Some("hello"));
     }
 }

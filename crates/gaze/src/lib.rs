@@ -2,15 +2,21 @@ mod detector;
 mod ner;
 mod normalize;
 mod pipeline;
+mod policy;
 mod redaction_log;
 mod rule;
 mod sandbox;
 mod session;
+pub mod token_shape;
 mod types;
 
 pub use detector::{Detection, Detector, PiiClass, RegexDetector};
 pub use ner::{LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
 pub use pipeline::{Error, NerConfig, Pipeline, PipelineBuilder, Result};
+pub use policy::{
+    DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,
+    SessionScope,
+};
 pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
 pub use rule::{Action, ClassRule, ColumnRule, Context, DefaultRule, Rule};
 pub use sandbox::{

@@ -1,0 +1,508 @@
+# Policy — authoring `policy.toml`
+
+A `policy.toml` is the configuration file `gaze clean --policy=<path>` loads to
+build its detection-and-redaction pipeline. It declares which detectors run,
+which PII classes they emit, and what action the pipeline takes when each class
+is found.
+
+This document describes the schema as shipped in v0.3.0-rc.2. The canonical
+parser lives at [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs);
+the CLI wiring is in [`crates/gaze/src/main.rs`](../crates/gaze/src/main.rs).
+For the full CLI contract — exit codes, stderr discipline, blob format — see
+[`docs/roadmap/v0.3/cli.md`](roadmap/v0.3/cli.md).
+
+## What `policy.toml` is for
+
+`gaze clean` accepts `--policy=<path>`. The path is opened, parsed as TOML,
+and turned into a [`Pipeline`](../crates/gaze/src/pipeline.rs) via
+`Pipeline::from_policy`. Two failure modes:
+
+- **File cannot be opened** (missing path, permission denied) → exit `4`,
+  stderr `{"error":"PolicyOpen","exit":4}`.
+- **File parses but is invalid** (unknown key, bad regex, unknown class,
+  unknown action, missing required field, no detectors, no rules) → exit `2`,
+  stderr `{"error":"PolicyConfig","exit":2}`.
+
+If `--policy` is omitted, `gaze clean` falls back to a hard-coded stub pipeline
+(email regex + tokenize). The stub exists only so the CLI surface can be
+exercised before a policy is written; **production use requires `--policy`**.
+
+## Minimal working example
+
+`minimal.toml`:
+
+```toml
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+Run it:
+
+```console
+$ echo "Email alice@example.com now" | gaze clean --policy=minimal.toml
+{"clean_text":"Email Email_1 now","session_blob":"<base64>","stats":{"detections":1}}
+```
+
+This is the same fixture the CLI integration suite uses
+(`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
+
+## Schema reference
+
+All TOML tables use `deny_unknown_fields` — any key the parser does not
+recognise is a hard error. There is no `[policy]` wrapper table; the four
+top-level tables below are the entire surface.
+
+### `[session]`
+
+```toml
+[session]
+scope = "persistent"   # required
+ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
+```
+
+| Field      | Type     | Required                     | Notes                                           |
+|------------|----------|------------------------------|-------------------------------------------------|
+| `scope`    | string   | yes                          | One of `"ephemeral"`, `"conversation"`, `"persistent"`. |
+| `ttl_secs` | integer  | yes if `scope = "persistent"`| Must be `> 0`. Zero is rejected.                |
+
+> **Caveat — `gaze clean` does not yet honour `policy.session`.** The CLI
+> currently constructs its session from `--session-ttl` (default 86 400 s)
+> using `Scope::Persistent`, regardless of what `[session]` says. The block
+> is parsed (and its presence is required) but the values are not yet routed
+> into `Session::new`. Tracked via solo todo (see "Known spec drift" below).
+> Until that lands, treat `[session]` as a forward-looking reservation:
+> declare it correctly so a future binary picks it up automatically.
+
+### `[[detector]]`
+
+One block per detector. **At least one detector is required** — an empty list
+is rejected with `PolicyConfig`.
+
+```toml
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+```
+
+| Field     | Type   | Required | Notes                                                     |
+|-----------|--------|----------|-----------------------------------------------------------|
+| `kind`    | string | yes      | Today only `"regex"` is supported. Other values parse but fail at pipeline build with `PolicyConfig`. |
+| `name`    | string | yes      | Used as the `source` label on every `Detection` for debugging and conflict-loser logs. |
+| `pattern` | string | yes      | Compiled with the [`regex`](https://docs.rs/regex) crate at policy load. Bad patterns → `PolicyConfig`. |
+| `class`   | string | yes      | A class name (see [Classes](#classes)). Unknown classes → `PolicyConfig`. |
+
+NER is **not** a detector kind. NER is configured via the top-level `[ner]`
+block (below) — when set, the pipeline appends a transformer NER detector
+alongside the regex detectors declared here.
+
+### `[[rule]]`
+
+One block per rule. **At least one rule is required** — an empty list is
+rejected with `PolicyConfig`. Rules are evaluated in declaration order;
+the first rule whose match condition fires decides the action. If no rule
+matches, the pipeline falls back to `Action::Preserve`.
+
+```toml
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+| Field    | Type   | Required           | Notes                                            |
+|----------|--------|--------------------|--------------------------------------------------|
+| `kind`   | string | yes                | One of `"class"`, `"column"`, `"default"`.       |
+| `action` | string | yes                | One of `"tokenize"`, `"redact"`, `"format_preserve"`, `"generalize"`, `"preserve"`. |
+| `class`  | string | yes if `kind="class"` | Class name; same vocabulary as detector `class`. |
+| `column` | string | yes if `kind="column"` | Field name to match against the document context. |
+
+#### Rule kinds
+
+- **`kind = "class"`** — fires when a detection's class equals `class`. The
+  most common rule shape.
+- **`kind = "column"`** — fires when the document being redacted is a
+  structured value and the current field name equals `column`. **From
+  `gaze clean` today, this never fires:** the CLI only accepts text on
+  stdin, so there is no field name. `column` rules are useful only when
+  driving the library directly with `RawDocument::Structured`.
+- **`kind = "default"`** — always fires. Place last as a catch-all. If
+  omitted, unmatched detections fall through to `Preserve` automatically,
+  but an explicit `default` makes the policy intent visible.
+
+### `[ner]` (optional)
+
+```toml
+[ner]
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
+locale = "de"
+```
+
+| Field       | Type   | Required | Notes                                                          |
+|-------------|--------|----------|----------------------------------------------------------------|
+| `model_dir` | string | no       | Directory containing the ONNX model bundle. `~/` is expanded from `$HOME`. If absent, NER is silently disabled and the pipeline runs with regex detectors only (a `tracing::warn!` is logged). |
+| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`).          |
+
+If `model_dir` is set but the model fails to load (missing files, bad
+manifest), the pipeline build fails with `Error::NerLoad`, which the CLI
+maps to **exit `3` `Pipeline`** — not exit `2` `PolicyConfig`. Treat NER
+load errors as a runtime failure, not a config failure. See
+[README §"NER Model Runtime"](../README.md#ner-model-runtime) for the
+expected directory layout.
+
+## Classes
+
+`class` accepts a fixed vocabulary of built-in names plus a `custom:<name>`
+prefix for user-defined classes.
+
+### Built-ins
+
+| `class` value     | `PiiClass` variant       | Default token shape (`tokenize`) | Format-preserve shape    | Generalize shape   |
+|-------------------|--------------------------|----------------------------------|--------------------------|--------------------|
+| `"email"`         | `PiiClass::Email`        | `Email_1`, `Email_2`, …          | `email1@example.test`    | `[EMAIL]`          |
+| `"name"`          | `PiiClass::Name`         | `Name_1`, `Name_2`, …            | `name_1`, `name_2`, …    | `[NAME]`           |
+| `"location"`      | `PiiClass::Location`     | `Location_1`, …                  | `location_1`, …          | `[LOCATION]`       |
+| `"organization"`  | `PiiClass::Organization` | `Organization_1`, …              | `organization_1`, …      | `[ORGANIZATION]`   |
+
+Counters are per-class and per-session; the same raw value is interned so it
+always maps to the same token within one session.
+
+### Custom classes
+
+Use `custom:<name>` to declare a project-specific class.
+
+```toml
+[[detector]]
+kind = "regex"
+name = "order_ids"
+pattern = '\bORD-\d{6}\b'
+class = "custom:order_id"
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+```
+
+The `<name>` after `custom:` is normalised before use:
+
+- Lowercased.
+- Non-alphanumeric runs collapse to a single `_` separator.
+- Leading and trailing separators are dropped.
+
+So `"custom:Order ID"`, `"custom:order-id"`, and `"custom:order_id"` all
+produce the same internal class.
+
+Custom tokens carry a `Custom:` namespace prefix so they cannot collide with
+built-ins or with each other:
+
+| Policy `class`           | Normalised name | `tokenize` token       | `format_preserve` token | `generalize` token |
+|--------------------------|-----------------|------------------------|-------------------------|--------------------|
+| `"custom:order_id"`      | `order_id`      | `Custom:order_id_1`    | `custom:order_id_1`     | `[ORDER_ID]`       |
+| `"custom:tenant_slug"`   | `tenant_slug`   | `Custom:tenant_slug_1` | `custom:tenant_slug_1`  | `[TENANT_SLUG]`    |
+| `"custom:song"`          | `song`          | `Custom:song_1`        | `custom:song_1`         | `[SONG]`           |
+
+A class string of `"custom:"` (empty name) is rejected with `PolicyConfig`.
+
+`custom:email` and other names that mirror built-ins are safe to use — the
+`Custom:` prefix keeps them in their own counter family, so `custom:email`
+emits `Custom:email_1` while built-in email detections continue to emit
+`Email_1`.
+
+## Detectors
+
+### Regex (`kind = "regex"`)
+
+Pattern syntax follows the [Rust `regex` crate](https://docs.rs/regex). The
+crate intentionally **does not support look-ahead, look-behind, or
+back-references**, so patterns ported from PCRE / Python `re` may need
+rewriting.
+
+Common idioms:
+
+- Use `\b` word boundaries to avoid matching inside identifiers
+  (`\bORD-\d{6}\b`, not `ORD-\d{6}`).
+- Use `(?i)` at the start of a pattern for case-insensitive matching.
+- TOML literal strings (`'...'`) avoid double-escaping backslashes —
+  prefer them over basic strings (`"..."`) for regex patterns.
+
+The pattern is compiled at `Policy::load` time, so a malformed regex fails
+fast with `PolicyConfig` and never reaches `gaze clean`'s stdin read.
+
+Detection order matters when spans overlap: longer spans win first, then
+declaration order, then earlier start position (see
+[`pipeline.rs::select_winners`](../crates/gaze/src/pipeline.rs)). This is
+why the document above stresses "rules are evaluated in declaration order"
+— the same applies to detectors when they fight over the same bytes.
+
+### NER (`[ner]` block)
+
+NER is opt-in and stacks on top of regex detectors. The runtime expects a
+local ONNX model directory; no models are downloaded at runtime. See the
+[README NER Model Runtime](../README.md#ner-model-runtime) section for the
+required files and the canonical install path.
+
+When loaded, the NER detector emits `PiiClass::Name`, `PiiClass::Location`,
+and `PiiClass::Organization` for entities the model recognises. Map them to
+actions via `kind = "class"` rules — declare detector-side once via `[ner]`,
+then act on the classes the model produces.
+
+## Rule actions
+
+| `action` value      | What it does                                                                                                       |
+|---------------------|--------------------------------------------------------------------------------------------------------------------|
+| `"tokenize"`        | Replace the matched span with a counter-family token (`Email_1`, `Name_2`, `Custom:order_id_3`, …). Restorable via the session blob. |
+| `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
+| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1@example.test` for emails; `name_1`, `location_1`, `custom:order_id_1` for everything else). Restorable. |
+| `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
+| `"preserve"`        | Leave the matched span unchanged. The detection is still logged, but no replacement happens. |
+
+`Tokenize`, `FormatPreserve`, `Redact`, and `Generalize` all increment the
+`stats.detections` counter in `gaze clean`'s stdout. `Preserve` does not.
+
+There is no `"passthrough"` action — the closest equivalent is `"preserve"`.
+
+## Session scope and TTL
+
+`[session]` declares the session contract the policy expects. `gaze clean`
+exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
+`gaze restore` can rebuild the token↔value map later.
+
+- `scope = "ephemeral"` — *not usable from the CLI*. The library refuses to
+  export ephemeral sessions (`Error::ExportForbidden`); a CLI invocation
+  with this scope would be unable to emit `session_blob`.
+- `scope = "conversation"` — reserved for library callers that scope
+  sessions to a specific conversation id; the CLI does not surface this
+  today.
+- `scope = "persistent"` — the only scope `gaze clean` produces. Requires
+  `ttl_secs > 0`.
+
+The `--session-ttl=<secs>` CLI flag (default `86400`) is the value `gaze
+clean` actually uses today. See the caveat in [`[session]`](#session)
+above.
+
+TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
+ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The
+`issued_at` field landed in v0.3.0-rc.2 — older blobs predating the field
+treat the TTL as bypassed for forward-compatibility.)
+
+## Full worked examples
+
+### Example A — Tokenize emails, redact phone numbers
+
+```toml
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[detector]]
+kind = "regex"
+name = "phones_de"
+pattern = '\+49[ \-]?\d{2,4}[ \-]?\d{3,8}'
+class = "custom:phone_de"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:phone_de"
+action = "redact"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+Input `Reach Alice at alice@example.com or +49 30 1234567` produces
+`Reach Alice at Email_1 or [REDACTED]`.
+
+### Example B — Custom class for tenant order IDs
+
+```toml
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "order_ids"
+pattern = '\bORD-\d{6}\b'
+class = "custom:order_id"
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+`Order ORD-123456 is queued.` → `Order Custom:order_id_1 is queued.`
+
+### Example C — Format-preserving emails for downstream parsers
+
+When a downstream LLM or parser expects emails to look like emails, use
+`format_preserve` so the surface shape survives redaction.
+
+```toml
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "format_preserve"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+`Mail alice@example.com` → `Mail email1@example.test`. Restoration returns
+the real address.
+
+### Example D — Mixed regex + NER + custom class
+
+```toml
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[ner]
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
+locale = "de"
+
+[[detector]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[detector]]
+kind = "regex"
+name = "order_ids"
+pattern = '\bORD-\d{6}\b'
+class = "custom:order_id"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "location"
+action = "generalize"
+
+[[rule]]
+kind = "class"
+class = "organization"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "redact"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+NER provides `name`, `location`, `organization` detections; regex
+detectors provide `email` and `custom:order_id`. Each class maps to a
+different action. Note that `organization = preserve` lets brand names
+through while `name = tokenize` swaps person names for restorable tokens.
+
+## Troubleshooting
+
+Each `PolicyError` variant maps to one exit code via `gaze clean`. The
+mapping lives at [`main.rs::map_policy_error`](../crates/gaze/src/main.rs)
+and is summarised here.
+
+| Symptom (stderr variant)                | `PolicyError`              | Exit | Common cause                                                                 |
+|-----------------------------------------|----------------------------|------|------------------------------------------------------------------------------|
+| `{"error":"PolicyOpen","exit":4}`       | `Io`                       | 4    | `--policy` path does not exist, is unreadable, or points at a directory.     |
+| `{"error":"PolicyConfig","exit":2}`     | `TomlParse`                | 2    | TOML syntax error, or an unknown key (`deny_unknown_fields` is on everywhere). Re-check field spelling. |
+| `{"error":"PolicyConfig","exit":2}`     | `UnknownClass(s)`          | 2    | A `class` value not in `{email, name, location, organization}` and not prefixed `custom:`. Or `"custom:"` with an empty name. |
+| `{"error":"PolicyConfig","exit":2}`     | `BadRegex { name, … }`     | 2    | `pattern` failed to compile. Watch for unsupported PCRE features (lookaround, backrefs). |
+| `{"error":"PolicyConfig","exit":2}`     | `MissingTtl`               | 2    | `scope = "persistent"` but `ttl_secs` was omitted.                           |
+| `{"error":"PolicyConfig","exit":2}`     | `BadTtl(s)`                | 2    | `ttl_secs = 0`, an unknown `session.scope`, an unknown `rule.kind`, an unknown `rule.action`, a missing `column`, or `~/` expansion failed because `$HOME` is unset. (The variant name is historical — it covers more than just TTL.) |
+| `{"error":"PolicyConfig","exit":2}`     | `NoDetectors`              | 2    | Zero `[[detector]]` blocks. At least one is required.                        |
+| `{"error":"PolicyConfig","exit":2}`     | `NoRules`                  | 2    | Zero `[[rule]]` blocks. At least one is required.                            |
+| `{"error":"PolicyConfig","exit":2}`     | `BadTtl("unknown detector.kind …")` | 2 | `kind` was not `"regex"`. Surfaced from `Pipeline::from_policy`, not the parser. |
+| `{"error":"Pipeline","exit":3}`         | (NER load failure)         | 3    | `[ner] model_dir` resolves but the model bundle is missing or corrupt. Verify the install path against the README. |
+
+## See also
+
+- [`docs/roadmap/v0.3/cli.md`](roadmap/v0.3/cli.md) — full CLI contract
+  (subcommands, exit codes, stderr discipline, blob format).
+- [`docs/roadmap/v0.3/laravel.md`](roadmap/v0.3/laravel.md) — host-side
+  integration shape.
+- [`README.md`](../README.md) — install, build, NER model runtime.
+- [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs) — canonical
+  parser; the source of truth for every field on this page.
+
+## Known spec drift
+
+Documented here so users get the truth, with corresponding solo todos so the
+gaps land on the engineering board:
+
+1. **`policy.session` is parsed but ignored by `gaze clean`.** The CLI
+   forces `Scope::Persistent { ttl: --session-ttl }` regardless of what the
+   policy declares. Fix: thread `policy.session` into `Session::new` and
+   document `--session-ttl` as an override, not the source of truth.
+2. **`[ner]` load failures exit `3` `Pipeline`, not `2` `PolicyConfig`.**
+   Users editing `model_dir` get a runtime variant for what is morally a
+   config error. Fix: map `Error::NerLoad` to `PolicyConfig` (or introduce a
+   `NerConfig` variant) so failure mode lines up with where the user can
+   make the change.
+3. **`kind = "column"` rules never fire from `gaze clean`.** The CLI only
+   submits `RawDocument::Text`, so `Context::field_name` is always `None`
+   and `ColumnRule` cannot match. Either document this as library-only or
+   plumb a field-name hint through stdin (e.g. accept JSON `{field, text}`
+   on stdin under an opt-in flag).

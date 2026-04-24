@@ -75,9 +75,9 @@ fn normalization_runs_before_detection() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "Email_1");
+    assert_eq!(text, "<Email_1>");
     assert_eq!(
-        session.restore_strict("Email_1").expect("restore"),
+        session.restore_strict("<Email_1>").expect("restore"),
         "a\u{200D}lice＠example.com"
     );
 }
@@ -353,13 +353,13 @@ fn tokenize_assigns_indices_left_to_right() {
         panic!("expected text document");
     };
 
-    assert_eq!(text, "Email_1 then Email_2");
+    assert_eq!(text, "<Email_1> then <Email_2>");
     assert_eq!(
-        session.restore_strict("Email_1").expect("restore first"),
+        session.restore_strict("<Email_1>").expect("restore first"),
         "first@example.com"
     );
     assert_eq!(
-        session.restore_strict("Email_2").expect("restore second"),
+        session.restore_strict("<Email_2>").expect("restore second"),
         "second@example.com"
     );
 }
@@ -403,7 +403,7 @@ fn column_rule_uses_field_name_context() {
     };
 
     assert_eq!(fields["primary_email"], "[REDACTED]");
-    assert_eq!(fields["secondary_email"], "Email_1");
+    assert_eq!(fields["secondary_email"], "<Email_1>");
 }
 
 #[test]
@@ -413,7 +413,7 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
         .allow_env("MAIL_FROM");
     let request = UntrustedExecRequest {
         program: "/usr/local/bin/gaze-hook".into(),
-        args: vec!["send-email".to_string(), "Email_1".to_string()],
+        args: vec!["send-email".to_string(), "<Email_1>".to_string()],
         env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
         cwd: Some("/tmp".into()),
     };
@@ -476,7 +476,7 @@ fn pipeline_builds_without_ner_when_model_dir_absent() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text");
     };
-    assert_eq!(text, "Email_1");
+    assert_eq!(text, "<Email_1>");
 }
 
 #[test]
@@ -500,7 +500,7 @@ fn pipeline_builder_accepts_ner_locale_config_without_model_dir() {
     let CleanDocument::Text(text) = clean else {
         panic!("expected text");
     };
-    assert_eq!(text, "Email_1");
+    assert_eq!(text, "<Email_1>");
 }
 
 #[test]
