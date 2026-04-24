@@ -575,6 +575,81 @@ terms = ["kundennummer-123"]
 }
 
 #[test]
+fn rulepack_rejects_unknown_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"iban_mod97\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_rejects_unknown_normalizer_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonical\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_rejects_typo_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfx\"\n\n[recognizers.token]",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "kennung kundennummer-123",
+    );
+
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
+fn rulepack_accepts_email_rfc_validator_kind() {
+    let rulepack = de_email_rulepack("\"global\"").replace(
+        "pattern = 'kundennummer-[0-9]+'",
+        "pattern = '(?i)\\b[a-z0-9._%+\\-]+@example\\.invalid\\b'\n\n[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"email_canonical\"",
+    );
+    let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email Alice@Example.invalid",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("Email <"));
+    assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
 fn rulepack_context_exclusions_are_applied_at_detection_time() {
     let rulepack = r#"
 schema_version = "0.1.0"

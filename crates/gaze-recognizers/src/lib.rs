@@ -2,7 +2,7 @@ mod ner;
 mod regex;
 
 pub use ner::{LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
-pub use regex::RegexDetector;
+pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
 
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {

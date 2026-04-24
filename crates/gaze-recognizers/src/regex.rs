@@ -1,8 +1,40 @@
 use gaze::{
     Candidate, ConflictTier, DetectContext, Detection, Detector, Error, LocaleTag, PiiClass,
-    Recognizer, Result,
+    Recognizer, Result, RulepackError,
 };
 use regex::Regex;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ValidatorKind {
+    EmailRfc,
+}
+
+impl ValidatorKind {
+    pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
+        match s {
+            "email_rfc" => Ok(Self::EmailRfc),
+            other => Err(RulepackError::UnsupportedValidator {
+                kind: other.to_string(),
+            }),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NormalizerKind {
+    EmailCanonical,
+}
+
+impl NormalizerKind {
+    pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
+        match s {
+            "email_canonical" => Ok(Self::EmailCanonical),
+            other => Err(RulepackError::UnsupportedNormalizer {
+                kind: other.to_string(),
+            }),
+        }
+    }
+}
 
 pub struct RegexDetector {
     regex: Regex,
@@ -14,8 +46,8 @@ pub struct RegexDetector {
     token_family: String,
     token_format: String,
     exclusions: Vec<String>,
-    validator_kind: Option<String>,
-    normalizer_kind: Option<String>,
+    validator_kind: Option<ValidatorKind>,
+    normalizer_kind: Option<NormalizerKind>,
 }
 
 impl RegexDetector {
@@ -50,8 +82,8 @@ impl RegexDetector {
         token_family: &str,
         token_format: &str,
         exclusions: Vec<String>,
-        validator_kind: Option<String>,
-        normalizer_kind: Option<String>,
+        validator_kind: Option<ValidatorKind>,
+        normalizer_kind: Option<NormalizerKind>,
     ) -> Result<Self> {
         let regex = Regex::new(pattern).map_err(Error::InvalidRegex)?;
         Ok(Self {
@@ -139,10 +171,10 @@ impl RegexDetector {
     }
 
     fn canonical_form(&self, matched: &str) -> Option<String> {
-        match self.validator_kind.as_deref() {
-            Some("email_rfc") if is_basic_email(matched) => {
-                Some(match self.normalizer_kind.as_deref() {
-                    Some("email_canonical") => matched.to_ascii_lowercase(),
+        match self.validator_kind {
+            Some(ValidatorKind::EmailRfc) if is_basic_email(matched) => {
+                Some(match self.normalizer_kind {
+                    Some(NormalizerKind::EmailCanonical) => matched.to_ascii_lowercase(),
                     _ => matched.to_string(),
                 })
             }
@@ -157,4 +189,41 @@ fn is_basic_email(input: &str) -> bool {
         return false;
     };
     !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn email_rfc_validator_kind_populates_canonical_form() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r"(?i)\b[a-z0-9._%+\-]+@example\.invalid\b",
+            PiiClass::Email,
+            "email.test",
+            vec![LocaleTag::Global],
+            0.70,
+            0,
+            "counter",
+            "{Class}_{n}",
+            Vec::new(),
+            Some(ValidatorKind::EmailRfc),
+            Some(NormalizerKind::EmailCanonical),
+        )
+        .expect("regex detector");
+        let fields = serde_json::Map::new();
+        let dictionaries = gaze::DictionaryBundle;
+        let ctx = DetectContext {
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+        let detections = Recognizer::detect(&detector, "Email Alice@Example.invalid", &ctx);
+
+        assert_eq!(
+            detections[0].canonical_form.as_deref(),
+            Some("alice@example.invalid")
+        );
+    }
 }

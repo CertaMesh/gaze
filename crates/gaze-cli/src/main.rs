@@ -26,7 +26,7 @@ use gaze::{
     Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger,
     Result as GazeResult, RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
 };
-use gaze_recognizers::{NerDetector, NerOptions, RegexDetector};
+use gaze_recognizers::{NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind};
 
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
@@ -387,6 +387,16 @@ fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> Gaze
                     .as_ref()
                     .map(|context| context.exclusions.clone())
                     .unwrap_or_default();
+                let validator_kind = recognizer
+                    .validator
+                    .as_ref()
+                    .map(|validator| ValidatorKind::parse(&validator.kind))
+                    .transpose()?;
+                let normalizer_kind = recognizer
+                    .normalizer
+                    .as_ref()
+                    .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
+                    .transpose()?;
                 builder = builder.recognizer(RegexDetector::with_rulepack_fields(
                     &pattern,
                     recognizer.class,
@@ -397,8 +407,8 @@ fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> Gaze
                     recognizer.token.family.as_deref().unwrap_or("counter"),
                     recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
                     exclusions,
-                    recognizer.validator.map(|validator| validator.kind),
-                    recognizer.normalizer.map(|normalizer| normalizer.kind),
+                    validator_kind,
+                    normalizer_kind,
                 )?);
             }
             RawMatch::Dictionary { .. } => {
