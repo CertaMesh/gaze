@@ -5,6 +5,7 @@ mod pipeline;
 mod policy;
 pub mod recognizer;
 mod redaction_log;
+pub mod resolver;
 pub mod registry;
 mod rule;
 mod sandbox;
@@ -20,6 +21,7 @@ pub use policy::{
     SessionScope,
 };
 pub use redaction_log::{DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger};
+pub use resolver::resolve_candidates;
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,

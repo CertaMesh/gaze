@@ -6,6 +6,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use crate::locale::LocaleTag;
+use crate::resolver::resolve_candidates;
 use crate::PiiClass;
 
 static GLOBAL_LOCALE: [LocaleTag; 1] = [LocaleTag::Global];
@@ -118,6 +119,10 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].class, PiiClass::Email);
         assert_eq!(candidates[0].token_family, "counter");
+
+        let candidates = registry.detect_all_resolved("input", &ctx);
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].class, PiiClass::Email);
     }
 
     #[test]
@@ -140,6 +145,10 @@ impl RecognizerRegistry {
             .iter()
             .flat_map(|recognizer| recognizer.detect(input, ctx))
             .collect()
+    }
+
+    pub fn detect_all_resolved(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
+        resolve_candidates(self.detect_all(input, ctx))
     }
 
     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
