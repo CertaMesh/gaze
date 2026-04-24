@@ -483,9 +483,8 @@ fn cascade_llm_hallucination_still_trapped() {
 
 #[test]
 fn cascade_trap_boundary_crossing_not_exempted() {
-    let (blob, tokens) = build_blob_and_tokens(|s| {
-        vec![s.tokenize(&PiiClass::custom("name_ref"), "Foo").unwrap()]
-    });
+    let (blob, tokens) =
+        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("name_ref"), "Foo").unwrap()]);
     assert_session_scoped_custom_token(&tokens[0]);
 
     let text = format!("{}_7", tokens[0]);
@@ -556,34 +555,73 @@ fn rulepack_recognizer_fr_fr_not_gated_by_en_us() {
 }
 
 #[test]
-fn rulepack_dictionary_matcher_fails_closed_until_dictionary_runtime_lands() {
+fn rulepack_dictionary_matcher_detects_when_locale_matches() {
     let rulepack = r#"
 schema_version = "0.1.0"
 rulepack_id = "test-dict"
 rulepack_version = "0.4.0"
-default_locales = ["global"]
+default_locales = ["de-DE"]
 
 [[recognizers]]
-id = "email.dict"
+id = "email.de"
 class = "Email"
 enabled = true
+locales = ["de-DE"]
 
 [recognizers.match]
 kind = "dictionary"
-terms = ["kundennummer-123"]
+terms = ["Sonnenlied"]
 
 [recognizers.token]
 "#;
-    let (_dir, path) = write_policy_with_rulepack(rulepack, None);
-    let out = clean_raw_with_args(
+    let (_dir, path) = write_policy_with_rulepack(rulepack, Some("\"en-US\""));
+    let v = clean_json_with_args(
         &[&format!("--policy={}", path.display())],
-        "kennung kundennummer-123",
+        "track Sonnenlied",
     );
+    assert_eq!(v["clean_text"], "track Sonnenlied");
+    assert_eq!(v["stats"]["detections"], 0);
 
-    assert_eq!(out.status.code(), Some(2));
+    let (_dir, path) = write_policy_with_rulepack(rulepack, Some("\"de-DE\""));
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "track Sonnenlied",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(clean.starts_with("track <"));
+    assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+    assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+}
+
+#[test]
+fn context_json_standalone_dictionary_detects_without_policy_entry() {
+    let dir = tempdir().unwrap();
+    let context_path = dir.path().join("context.json");
+    fs::write(
+        &context_path,
+        r#"{
+          "dictionaries": {
+            "songs": { "terms": ["context-song-123"], "case_sensitive": true }
+          },
+          "class_map": { "songs": "custom:song" },
+          "fields": { "tenant": "demo" }
+        }"#,
+    )
+    .unwrap();
+
+    let v = clean_json_with_args(
+        &[&format!("--context-json={}", context_path.display())],
+        "track context-song-123",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(clean.starts_with("track <"));
+    assert!(clean.ends_with(":Custom:song_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+    assert_eq!(v["stats"]["context_source"], "cli");
     assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
+        v["stats"]["dictionaries_loaded"],
+        json!([{ "name": "songs", "term_count": 1, "source": "cli" }])
     );
 }
 

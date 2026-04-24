@@ -212,7 +212,7 @@ mod tests {
         )
         .expect("regex detector");
         let fields = serde_json::Map::new();
-        let dictionaries = gaze::DictionaryBundle;
+        let dictionaries = gaze::DictionaryBundle::default();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &dictionaries,

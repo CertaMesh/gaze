@@ -7,6 +7,7 @@ license = "Apache-2.0"
 description = "Built-in recognizers for Gaze"
 
 [dependencies]
+aho-corasick = "1"
 gaze = { path = "../gaze" }
 hex = "0.4"
 ndarray = "0.16"
@@ -21,4 +22,9 @@ tracing = "0.1"
 unicode-normalization = "0.1"
 
 [dev-dependencies]
+criterion = "0.5"
 tempfile = "3"
+
+[[bench]]
+name = "dictionary"
+harness = false

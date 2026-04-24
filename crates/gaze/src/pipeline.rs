@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use thiserror::Error;
 
@@ -7,11 +7,12 @@ use crate::detector::{Detection, Detector};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
 use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry, RedactionLogger};
-use crate::registry::{Candidate, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry};
-use crate::rule::{Action, Context, Rule};
+use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
+use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
 use crate::session::Session;
 use crate::types::{CleanDocument, RawDocument, Value};
+use crate::DictionaryBundle;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -76,13 +77,33 @@ impl Pipeline {
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<CleanDocument> {
+        let dictionaries = DictionaryBundle::default();
+        self.redact_with_detect_context(
+            session,
+            raw,
+            locale_chain,
+            &dictionaries,
+            empty_detect_fields(),
+        )
+    }
+
+    pub fn redact_with_detect_context(
+        &self,
+        session: &Session,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        detect_fields: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<CleanDocument> {
         match raw {
-            RawDocument::Structured(fields) => redact_structured(
+            RawDocument::Structured(structured_fields) => redact_structured(
                 self,
                 session,
-                fields,
+                structured_fields,
                 DocumentKind::Structured,
                 locale_chain,
+                dictionaries,
+                detect_fields,
             ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
                 session,
@@ -90,6 +111,8 @@ impl Pipeline {
                 None,
                 DocumentKind::Text,
                 locale_chain,
+                dictionaries,
+                detect_fields,
             )?)),
         }
     }
@@ -101,16 +124,16 @@ impl Pipeline {
         field_name: Option<&str>,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<String> {
         let mut out = text.to_string();
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let dictionaries = DictionaryBundle;
-        let fields = serde_json::Map::new();
         let ctx = DetectContext {
             locale_chain,
-            dictionaries: &dictionaries,
-            fields: &fields,
+            dictionaries,
+            fields,
             degraded: std::cell::Cell::new(false),
         };
         let resolved = self
@@ -164,7 +187,7 @@ impl Pipeline {
         Ok(out)
     }
 
-    fn action_for(&self, detection: &Detection, context: &Context) -> Action {
+    fn action_for(&self, detection: &Detection, context: &RuleContext) -> Action {
         self.rules
             .iter()
             .find_map(|rule| rule.action(&detection.class, context))
@@ -263,6 +286,8 @@ fn redact_structured(
     fields: BTreeMap<String, Value>,
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
+    dictionaries: &DictionaryBundle,
+    detect_fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
@@ -273,6 +298,8 @@ fn redact_structured(
                 Some(&key),
                 document_kind.clone(),
                 locale_chain,
+                dictionaries,
+                detect_fields,
             )?),
             Value::I64(value) => serde_json::Value::Number(value.into()),
         };
@@ -394,10 +421,15 @@ fn generalize_token(class: &crate::detector::PiiClass) -> String {
     }
 }
 
-fn build_context(field_name: Option<&str>) -> Context {
-    Context {
+fn build_context(field_name: Option<&str>) -> RuleContext {
+    RuleContext {
         field_name: field_name.map(str::to_string),
     }
+}
+
+fn empty_detect_fields() -> &'static serde_json::Map<String, serde_json::Value> {
+    static EMPTY_FIELDS: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
+    EMPTY_FIELDS.get_or_init(serde_json::Map::new)
 }
 
 #[cfg(test)]

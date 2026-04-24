@@ -40,9 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Counter-family tokens now wrap in angle brackets.** `<Email_1>`,
-  `<Name_1>`, `<Custom:order_id_1>`. Format-preserving email tokens
-  (`email1@example.test`) stay bare — angle brackets defeat the
+- **Counter-family tokens now wrap in angle brackets.** `<{session_hex}:Email_1>`,
+  `<{session_hex}:Name_1>`, `<{session_hex}:Custom:order_id_1>`. Format-preserving email tokens
+  (`email1.{session_hex}@gaze-fake.invalid`) stay bare — angle brackets defeat the
   format-preserving purpose.
 
 ### Added

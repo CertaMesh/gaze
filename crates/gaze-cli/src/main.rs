@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc,
+    Arc, OnceLock,
 };
 use std::time::Duration;
 
@@ -22,11 +22,14 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, ColumnRule, DefaultRule, DocumentKind, LocaleChain, LocaleTag, PiiClass,
-    Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry, RedactionLogger,
-    Result as GazeResult, RuleSpec, Rulepack, RulepackSource, Scope, SensitiveSnapshot, Session,
+    Action, ClassRule, ColumnRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind,
+    LocaleChain, LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch,
+    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict,
+    RulepackSource, Scope, SensitiveSnapshot, Session, TypedContext,
 };
-use gaze_recognizers::{NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze_recognizers::{
+    DictionaryRecognizer, NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind,
+};
 
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
@@ -64,6 +67,9 @@ enum Cmd {
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
+        /// Path to a typed Context JSON envelope. stdin remains raw text.
+        #[arg(long)]
+        context_json: Option<PathBuf>,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -136,7 +142,15 @@ fn main() -> ExitCode {
             session_ttl,
             locale,
             max_bytes,
-        } => run_clean(policy.as_deref(), &format, session_ttl, &locale, max_bytes),
+            context_json,
+        } => run_clean(
+            policy.as_deref(),
+            &format,
+            session_ttl,
+            &locale,
+            max_bytes,
+            context_json.as_deref(),
+        ),
         Cmd::Restore {
             format,
             restore_mode,
@@ -200,6 +214,7 @@ fn run_clean(
     session_ttl: Option<u64>,
     locale: &[String],
     max_bytes: u64,
+    context_json: Option<&std::path::Path>,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let raw = read_stdin_text(max_bytes)?;
@@ -213,6 +228,26 @@ fn run_clean(
         Some(policy) => load_rulepacks(policy).map_err(map_pipeline_error)?,
         None => Vec::new(),
     };
+    let context = context_json
+        .map(TypedContext::load)
+        .transpose()
+        .map_err(|_| CliError::PolicyConfig)?;
+    let context_bundle = context
+        .as_ref()
+        .map(DictionaryBundle::from_context)
+        .unwrap_or_default();
+    let rulepack_dictionaries =
+        dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;
+    let policy_bundle = loaded_policy
+        .as_ref()
+        .map(|policy| {
+            let mut dictionaries = policy.dictionaries.clone();
+            dictionaries.extend(rulepack_dictionaries);
+            DictionaryBundle::from_rulepack_terms(&dictionaries)
+        })
+        .unwrap_or_default();
+    let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
+    let dictionary_stats = dictionaries.stats();
     let rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
     let cli_locales = parse_cli_locales(locale)?;
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
@@ -224,9 +259,14 @@ fn run_clean(
     );
 
     let pipeline = match &loaded_policy {
-        Some(policy) => build_pipeline_from_policy(policy, loaded_rulepacks)
+        Some(policy) => build_pipeline_from_policy(policy, &loaded_rulepacks, context.as_ref())
             .map_err(map_pipeline_error)?
             .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
+        None if context.is_some() => build_context_pipeline(
+            context.as_ref().expect("checked context"),
+            Arc::clone(&counter) as Arc<dyn RedactionLogger>,
+        )
+        .map_err(|_| CliError::PolicyConfig)?,
         None => {
             tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
             build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
@@ -242,8 +282,18 @@ fn run_clean(
     }
     .map_err(|_| CliError::Pipeline)?;
 
+    let detect_fields = match &context {
+        Some(context) => &context.fields,
+        None => empty_fields(),
+    };
     let clean_doc = pipeline
-        .redact_with_context(&session, RawDocument::Text(raw), locale_chain.as_slice())
+        .redact_with_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            locale_chain.as_slice(),
+            &dictionaries,
+            detect_fields,
+        )
         .map_err(|_| CliError::Pipeline)?;
 
     let clean_text = match clean_doc {
@@ -264,6 +314,11 @@ fn run_clean(
         stats: Stats {
             detections: counter.detections.load(Ordering::Relaxed),
             locale_chain: locale_chain.to_strings(),
+            dictionaries_loaded: dictionary_stats
+                .into_iter()
+                .map(LoadedDictionaryStats::from)
+                .collect(),
+            context_source: context_json.map(|_| "cli".to_string()),
         },
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
@@ -340,16 +395,42 @@ fn map_pipeline_error(err: gaze::Error) -> CliError {
     }
 }
 
-fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> GazeResult<Pipeline> {
+fn build_pipeline_from_policy(
+    policy: &Policy,
+    rulepacks: &[Rulepack],
+    context: Option<&TypedContext>,
+) -> GazeResult<Pipeline> {
     let mut builder = Pipeline::builder();
+    let mut registered_dictionaries = std::collections::BTreeSet::<String>::new();
 
     for detector in &policy.detectors {
         builder = match &detector.kind {
             gaze::DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                &detector.pattern,
+                detector.pattern.as_deref().ok_or_else(|| {
+                    gaze::Error::Policy(PolicyError::BadDictionary {
+                        name: detector.name.clone(),
+                        reason: "regex recognizer missing pattern".to_string(),
+                    })
+                })?,
                 detector.class.clone(),
                 &detector.name,
             )?),
+            gaze::DetectorKind::Dictionary => {
+                let dictionary_name = detector.dictionary_name.as_deref().ok_or_else(|| {
+                    gaze::Error::Policy(PolicyError::BadDictionary {
+                        name: detector.name.clone(),
+                        reason: "dictionary recognizer missing dictionary name".to_string(),
+                    })
+                })?;
+                registered_dictionaries.insert(dictionary_name.to_string());
+                builder.recognizer(DictionaryRecognizer::new(
+                    format!("dict/{}", detector.name),
+                    detector.class.clone(),
+                    dictionary_name,
+                    detector.case_sensitive,
+                    detector.token_family.clone(),
+                ))
+            }
             gaze::DetectorKind::Unknown(kind) => {
                 return Err(gaze::Error::Policy(PolicyError::BadTtl(format!(
                     "unknown detector.kind '{kind}'"
@@ -361,18 +442,18 @@ fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> Gaze
     let mut rulepack_recognizers =
         std::collections::BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
     for rulepack in rulepacks {
-        for recognizer in rulepack.recognizers {
+        for recognizer in &rulepack.recognizers {
             tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
             if let Some((first_pack, _)) = rulepack_recognizers.get(&recognizer.id) {
                 return Err(gaze::Error::Rulepack(gaze::RulepackError::DuplicateId {
-                    id: recognizer.id,
+                    id: recognizer.id.clone(),
                     first_pack: first_pack.clone(),
                     second_pack: rulepack.rulepack_id.clone(),
                 }));
             }
             rulepack_recognizers.insert(
                 recognizer.id.clone(),
-                (rulepack.rulepack_id.clone(), recognizer),
+                (rulepack.rulepack_id.clone(), recognizer.clone()),
             );
         }
     }
@@ -411,16 +492,71 @@ fn build_pipeline_from_policy(policy: &Policy, rulepacks: Vec<Rulepack>) -> Gaze
                     normalizer_kind,
                 )?);
             }
-            RawMatch::Dictionary { .. } => {
-                return Err(gaze::Error::Rulepack(
-                    gaze::RulepackError::UnsupportedMatcher("Dictionary".to_string()),
-                ))
+            RawMatch::Dictionary {
+                terms,
+                terms_file,
+                terms_from_context,
+                case_sensitive,
+            } => {
+                let dictionary_name = terms_from_context
+                    .as_deref()
+                    .unwrap_or(recognizer.id.as_str())
+                    .to_string();
+                let dictionary_has_inline_terms = !terms.is_empty() || terms_file.is_some();
+                if !dictionary_has_inline_terms && terms_from_context.is_none() {
+                    return Err(gaze::Error::Policy(PolicyError::BadDictionary {
+                        name: recognizer.id.clone(),
+                        reason:
+                            "dictionary matcher requires terms, terms_file, or terms_from_context"
+                                .to_string(),
+                    }));
+                }
+                let id = recognizer.id;
+                let class = recognizer.class;
+                let token_family = recognizer
+                    .token
+                    .family
+                    .unwrap_or_else(|| "counter".to_string());
+                let locales = recognizer.locales;
+                let base_score = recognizer.scoring.base;
+                let priority = recognizer.scoring.priority;
+                registered_dictionaries.insert(dictionary_name.clone());
+                builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
+                    id,
+                    class,
+                    dictionary_name,
+                    case_sensitive,
+                    token_family,
+                    locales,
+                    base_score,
+                    priority,
+                ));
             }
             RawMatch::Ner { .. } => {
                 return Err(gaze::Error::Rulepack(
                     gaze::RulepackError::UnsupportedMatcher("Ner".to_string()),
                 ))
             }
+        }
+    }
+
+    if let Some(context) = context {
+        for name in context.dictionaries.keys() {
+            if registered_dictionaries.contains(name) {
+                continue;
+            }
+            let class = context
+                .class_map
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| PiiClass::custom(name));
+            builder = builder.recognizer(DictionaryRecognizer::new(
+                format!("context/{name}"),
+                class,
+                name,
+                context.dictionaries[name].case_sensitive,
+                "counter",
+            ));
         }
     }
 
@@ -466,6 +602,67 @@ fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
     Ok(rulepacks)
 }
 
+fn dictionary_terms_from_rulepacks(rulepacks: &[Rulepack]) -> GazeResult<Vec<RulepackDict>> {
+    let mut dictionaries = Vec::new();
+    for rulepack in rulepacks {
+        for recognizer in &rulepack.recognizers {
+            let RawMatch::Dictionary {
+                terms,
+                terms_file,
+                terms_from_context,
+                case_sensitive,
+            } = &recognizer.matcher
+            else {
+                continue;
+            };
+            if terms_from_context.is_some() {
+                continue;
+            }
+            let mut all_terms = terms.clone();
+            if let Some(path) = terms_file {
+                let file = std::fs::read_to_string(path).map_err(|err| {
+                    gaze::Error::Policy(PolicyError::BadDictionary {
+                        name: recognizer.id.clone(),
+                        reason: format!("failed to read terms_file: {err}"),
+                    })
+                })?;
+                all_terms.extend(
+                    file.lines()
+                        .map(str::trim)
+                        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                        .map(str::to_string),
+                );
+            }
+            if all_terms.is_empty() {
+                return Err(gaze::Error::Policy(PolicyError::BadDictionary {
+                    name: recognizer.id.clone(),
+                    reason: "dictionary matcher requires terms, terms_file, or terms_from_context"
+                        .to_string(),
+                }));
+            }
+            if !case_sensitive && all_terms.iter().any(|term| !term.is_ascii()) {
+                return Err(gaze::Error::Policy(PolicyError::BadDictionary {
+                    name: recognizer.id.clone(),
+                    reason:
+                        "unicode dictionary insensitive matching unsupported in v0.4.0, use case_sensitive = true"
+                            .to_string(),
+                }));
+            }
+            dictionaries.push(RulepackDict {
+                name: recognizer.id.clone(),
+                terms: all_terms,
+                case_sensitive: *case_sensitive,
+            });
+        }
+    }
+    Ok(dictionaries)
+}
+
+fn empty_fields() -> &'static serde_json::Map<String, serde_json::Value> {
+    static EMPTY_FIELDS: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
+    EMPTY_FIELDS.get_or_init(serde_json::Map::new)
+}
+
 fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
     let mut locales = Vec::new();
     for rulepack in rulepacks {
@@ -481,7 +678,7 @@ fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
 ///
 /// Sorts tokens longest-first so a format-preserved email like
-/// `email1@example.test` wins over a substring match like `<Email_1>`. Bare
+/// `email1.<session>@gaze-fake.invalid` wins over a substring match like `<Email_1>`. Bare
 /// format-preserving tokens stay wrapped in `\b` word boundaries so a token
 /// cannot be swallowed inside an adjacent identifier (the
 /// `hostName_1s-record` regression in `docs/roadmap/v0.3/cli.md` §"Test
@@ -618,6 +815,33 @@ fn build_stub_pipeline(logger: Arc<dyn RedactionLogger>) -> GazeResult<Pipeline>
         .build()
 }
 
+fn build_context_pipeline(
+    context: &TypedContext,
+    logger: Arc<dyn RedactionLogger>,
+) -> GazeResult<Pipeline> {
+    let mut builder = Pipeline::builder();
+    for name in context.dictionaries.keys() {
+        let class = context
+            .class_map
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| PiiClass::custom(name));
+        builder = builder
+            .recognizer(DictionaryRecognizer::new(
+                format!("context/{name}"),
+                class.clone(),
+                name,
+                context.dictionaries[name].case_sensitive,
+                "counter",
+            ))
+            .rule(ClassRule::new(class, Action::Tokenize));
+    }
+    builder
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(ArcLogger(logger))
+        .build()
+}
+
 #[derive(Default)]
 struct CountingLogger {
     detections: AtomicU64,
@@ -657,4 +881,28 @@ struct CleanResponse {
 struct Stats {
     detections: u64,
     locale_chain: Vec<String>,
+    dictionaries_loaded: Vec<LoadedDictionaryStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_source: Option<String>,
+}
+
+#[derive(Serialize)]
+struct LoadedDictionaryStats {
+    name: String,
+    term_count: usize,
+    source: String,
+}
+
+impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
+    fn from(stats: gaze::DictionaryStats) -> Self {
+        let source = match stats.source {
+            DictionarySource::Cli => "cli",
+            DictionarySource::Rulepack => "rulepack",
+        };
+        Self {
+            name: stats.name,
+            term_count: stats.term_count,
+            source: source.to_string(),
+        }
+    }
 }

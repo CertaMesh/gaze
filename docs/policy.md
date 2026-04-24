@@ -55,8 +55,8 @@ action = "preserve"
 Run it:
 
 ```console
-$ echo "Email alice@example.com now" | gaze clean --policy=minimal.toml
-{"clean_text":"Email <Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
+$ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
+{"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
 
 This is the same fixture the CLI integration suite uses
@@ -100,12 +100,45 @@ pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
 class = "email"
 ```
 
-| Field     | Type   | Required | Notes                                                     |
-|-----------|--------|----------|-----------------------------------------------------------|
-| `kind`    | string | yes      | Today only `"regex"` is supported. Other values parse but fail at pipeline build with `PolicyConfig`. |
-| `name`    | string | yes      | Used as the `source` label on every `Detection` for debugging and conflict-loser logs. |
-| `pattern` | string | yes      | Compiled with the [`regex`](https://docs.rs/regex) crate at policy load. Bad patterns → `PolicyConfig`. |
-| `class`   | string | yes      | A class name (see [Classes](#classes)). Unknown classes → `PolicyConfig`. |
+| Field                | Type      | Required | Notes                                                     |
+|----------------------|-----------|----------|-----------------------------------------------------------|
+| `kind`               | string    | yes      | `"regex"` or `"dictionary"`. Other values parse but fail at pipeline build with `PolicyConfig`. |
+| `name`               | string    | yes      | Used as the recognizer id/source label for debugging and conflict-loser logs. |
+| `pattern`            | string    | regex    | Compiled with the [`regex`](https://docs.rs/regex) crate at policy load. Bad patterns → `PolicyConfig`. |
+| `class`              | string    | yes      | A class name (see [Classes](#classes)). Unknown classes → `PolicyConfig`. |
+| `terms`              | array     | dictionary | Inline dictionary terms. Use only with `kind = "dictionary"`. |
+| `terms_file`         | string    | dictionary | Newline-delimited dictionary terms. Blank lines and `#` comments are ignored. |
+| `terms_from_context` | string    | dictionary | Reads the named dictionary from `--context-json`; cannot be combined with `terms` or `terms_file`. |
+| `case_sensitive`     | boolean   | no       | Dictionary only. Defaults to `false`; non-ASCII insensitive dictionaries fail closed in v0.4.0. |
+| `token_family`       | string    | no       | Defaults to `"counter"`. |
+
+Dictionary recognizers are registered through the same recognizer registry as
+rulepack recognizers and are gated by the active locale chain when they come
+from a rulepack. The CLI passes the merged dictionary bundle from rulepacks,
+policy inline terms, and `--context-json` into the runtime `DetectContext`.
+
+```toml
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "songs"
+class = "custom:song"
+terms = ["Song A", "Song B"]
+
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_order_ids"
+class = "custom:order_id"
+terms_from_context = "order_ids"
+case_sensitive = true
+```
+
+`--context-json` can also supply dictionaries without a matching policy
+recognizer. In that mode, Gaze registers one dictionary recognizer per context
+dictionary and uses `class_map` for the class, falling back to `custom:<name>`
+when a mapping is absent. `fields` are threaded into `DetectContext` for
+recognizers; no built-in recognizer consumes them in v0.4.0. `class_map` is
+runtime metadata for dictionary recognizer construction, not a general class
+override mechanism. Broader `fields` consumers are deferred to v0.4.1.
 
 NER is **not** a detector kind. NER is configured via the top-level `[ner]`
 block (below) — when set, the pipeline appends a transformer NER detector
@@ -183,10 +216,10 @@ prefix for user-defined classes.
 
 | `class` value     | `PiiClass` variant       | Default token shape (`tokenize`)     | Format-preserve shape    | Generalize shape   |
 |-------------------|--------------------------|--------------------------------------|--------------------------|--------------------|
-| `"email"`         | `PiiClass::Email`        | `<Email_1>`, `<Email_2>`, …          | `email1@example.test`    | `[EMAIL]`          |
-| `"name"`          | `PiiClass::Name`         | `<Name_1>`, `<Name_2>`, …            | `name_1`, `name_2`, …    | `[NAME]`           |
-| `"location"`      | `PiiClass::Location`     | `<Location_1>`, …                    | `location_1`, …          | `[LOCATION]`       |
-| `"organization"`  | `PiiClass::Organization` | `<Organization_1>`, …                | `organization_1`, …      | `[ORGANIZATION]`   |
+| `"email"`         | `PiiClass::Email`        | `<{session_hex}:Email_1>`, `<{session_hex}:Email_2>`, …          | `email1.{session_hex}@gaze-fake.invalid`    | `[EMAIL]`          |
+| `"name"`          | `PiiClass::Name`         | `<{session_hex}:Name_1>`, `<{session_hex}:Name_2>`, …            | `{session_hex}:name_1`, `{session_hex}:name_2`, …    | `[NAME]`           |
+| `"location"`      | `PiiClass::Location`     | `<{session_hex}:Location_1>`, …                    | `{session_hex}:location_1`, …          | `[LOCATION]`       |
+| `"organization"`  | `PiiClass::Organization` | `<{session_hex}:Organization_1>`, …                | `{session_hex}:organization_1`, …      | `[ORGANIZATION]`   |
 
 Counter-family `tokenize` shapes wrap in angle brackets as of v0.3.0 so the LLM cannot dissolve them into adjacent words. Format-preserve shapes stay bare — the whole point of format-preserve is to look like a real value of that type.
 
@@ -224,16 +257,16 @@ built-ins or with each other:
 
 | Policy `class`           | Normalised name | `tokenize` token         | `format_preserve` token | `generalize` token |
 |--------------------------|-----------------|--------------------------|-------------------------|--------------------|
-| `"custom:order_id"`      | `order_id`      | `<Custom:order_id_1>`    | `custom:order_id_1`     | `[ORDER_ID]`       |
-| `"custom:tenant_slug"`   | `tenant_slug`   | `<Custom:tenant_slug_1>` | `custom:tenant_slug_1`  | `[TENANT_SLUG]`    |
-| `"custom:song"`          | `song`          | `<Custom:song_1>`        | `custom:song_1`         | `[SONG]`           |
+| `"custom:order_id"`      | `order_id`      | `<{session_hex}:Custom:order_id_1>`    | `{session_hex}:custom:order_id_1`     | `[ORDER_ID]`       |
+| `"custom:tenant_slug"`   | `tenant_slug`   | `<{session_hex}:Custom:tenant_slug_1>` | `{session_hex}:custom:tenant_slug_1`  | `[TENANT_SLUG]`    |
+| `"custom:song"`          | `song`          | `<{session_hex}:Custom:song_1>`        | `{session_hex}:custom:song_1`         | `[SONG]`           |
 
 A class string of `"custom:"` (empty name) is rejected with `PolicyConfig`.
 
 `custom:email` and other names that mirror built-ins are safe to use — the
 `Custom:` prefix keeps them in their own counter family, so `custom:email`
-emits `<Custom:email_1>` while built-in email detections continue to emit
-`<Email_1>`.
+emits `<{session_hex}:Custom:email_1>` while built-in email detections continue to emit
+`<{session_hex}:Email_1>`.
 
 ## Detectors
 
@@ -277,9 +310,9 @@ then act on the classes the model produces.
 
 | `action` value      | What it does                                                                                                       |
 |---------------------|--------------------------------------------------------------------------------------------------------------------|
-| `"tokenize"`        | Replace the matched span with an angle-bracketed counter-family token (`<Email_1>`, `<Name_2>`, `<Custom:order_id_3>`, …). Restorable via the session blob. |
+| `"tokenize"`        | Replace the matched span with an angle-bracketed counter-family token (`<{session_hex}:Email_1>`, `<{session_hex}:Name_2>`, `<{session_hex}:Custom:order_id_3>`, …). Restorable via the session blob. |
 | `"redact"`          | Replace the matched span with the literal string `[REDACTED]`. Not restorable — the original value is dropped from the session map. |
-| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1@example.test` for emails; `name_1`, `location_1`, `custom:order_id_1` for everything else). Restorable. |
+| `"format_preserve"` | Replace with a fake value that preserves the surface shape (`email1.{session_hex}@gaze-fake.invalid` for emails; `{session_hex}:name_1`, `{session_hex}:location_1`, `{session_hex}:custom:order_id_1` for everything else). Restorable. |
 | `"generalize"`      | Replace with a bracketed class label: `[EMAIL]`, `[NAME]`, `[LOCATION]`, `[ORGANIZATION]`, or `[CUSTOM_NAME]` (uppercased custom name with underscores preserved). Restoration returns the label, not the original value. |
 | `"preserve"`        | Leave the matched span unchanged. The detection is still logged, but no replacement happens. |
 
@@ -348,8 +381,8 @@ kind = "default"
 action = "preserve"
 ```
 
-Input `Reach Alice at alice@example.com or +49 30 1234567` produces
-`Reach Alice at <Email_1> or [REDACTED]`.
+Input `Reach Alice at alice@example.invalid or +49 30 1234567` produces
+`Reach Alice at <{session_hex}:Email_1> or [REDACTED]`.
 
 ### Example B — Custom class for tenant order IDs
 
@@ -402,7 +435,7 @@ kind = "default"
 action = "preserve"
 ```
 
-`Mail alice@example.com` → `Mail email1@example.test`. Restoration returns
+`Mail alice@example.invalid` → `Mail email1.{session_hex}@gaze-fake.invalid`. Restoration returns
 the real address.
 
 ### Example D — Mixed regex + NER + custom class
