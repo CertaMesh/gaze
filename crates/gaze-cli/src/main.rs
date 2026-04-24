@@ -481,7 +481,7 @@ fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
 /// Pass 1 — exact-literal alternation built from `session.tokens()`.
 ///
 /// Sorts tokens longest-first so a format-preserved email like
-/// `email1@example.test` wins over a substring match like `<Email_1>`. Bare
+/// `email1.<session>@gaze-fake.invalid` wins over a substring match like `<Email_1>`. Bare
 /// format-preserving tokens stay wrapped in `\b` word boundaries so a token
 /// cannot be swallowed inside an adjacent identifier (the
 /// `hostName_1s-record` regression in `docs/roadmap/v0.3/cli.md` §"Test

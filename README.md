@@ -77,11 +77,11 @@ The standalone CLI consumes the library for LLM pipe-mode integration (Laravel w
 #### CLI Example
 
 ```bash
-echo "Email alice@example.com now" | gaze clean --policy=policy.toml
-# {"clean_text":"Email <Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
+echo "Email alice@example.invalid now" | gaze clean --policy=policy.toml
+# {"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
 
-Counter-family tokens (`<Email_N>`, `<Name_N>`, `<Location_N>`, `<Organization_N>`, `<Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1@example.test`) intentionally stay bare — the whole point is to look like a real email.
+Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{session_hex}:Location_N>`, `<{session_hex}:Organization_N>`, `<{session_hex}:Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1.{session_hex}@gaze-fake.invalid`) intentionally stay bare — the whole point is to look like a real email.
 
 #### Policy Configuration
 

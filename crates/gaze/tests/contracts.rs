@@ -433,7 +433,10 @@ fn exec_policy_validates_untrusted_input_before_sandbox_prepare() {
             "send-email".to_string(),
             format!("<{}>", ["Email", "1"].join("_")),
         ],
-        env: BTreeMap::from([("MAIL_FROM".to_string(), "bot@example.test".to_string())]),
+        env: BTreeMap::from([(
+            "MAIL_FROM".to_string(),
+            "bot@example.invalid".to_string(),
+        )]),
         cwd: Some("/tmp".into()),
     };
 
