@@ -1,6 +1,6 @@
 # Gaze — Standalone CLI (v0.3 Pipe Mode)
 
-**Status:** Spec / in-flight for v0.3. The `gaze` binary is being built in
+**Status:** Shipped in v0.3.0 (2026-04-24). The `gaze` binary lives in
 `crates/gaze` alongside the library. See [`laravel.md`](laravel.md) for the
 host-side wrapper that shells out to this CLI.
 
@@ -15,22 +15,23 @@ below cite `docs/research/gaze-threat-model.md`.
 
 ## Known pre-release gaps (v0.3.0)
 
-This spec describes the **intended v0.3.0 contract**. The following items are
-promised-but-stubbed and must land before the CLI leaves pre-release. Callers
-building against this document should treat them as blockers:
+> **Historical — all gaps closed in v0.3.0 (2026-04-24).** This table tracked the
+> pre-release blockers between the v0.3 spec and the shipping binary. Every row
+> below was resolved before v0.3.0 tagged. Kept here so readers cross-referencing
+> earlier commits can see what landed when.
 
 | Gap | Tracked by | Status |
 |---|---|---|
-| `--policy` argument accepted but ignored; `clean` uses a hardcoded stub pipeline (email-only) | solo #3 (policy.toml loader) | parallel work |
-| `issued_at` field on `SnapshotPayload` — missing today → `BlobExpired` cannot fire | solo #4 (library TTL enforcement) | **ship-blocks v0.3.0 payload format** |
-| `PiiClass::Custom("email")` collides with built-in `PiiClass::Email` — both produce `Email_N` | solo #5 (reserve built-in names) | library-side |
-| Library does not expose a placeholder-matching API — CLI's token grammar duplicates library internals | solo #6 (library placeholder API) | library-side |
-| `panic::set_hook`, `clap::try_parse` error routing, SIGPIPE documentation — stderr sanitisation is aspirational without these | this spec's §"Stderr discipline" | CLI-side, lands with impl |
-| CLI `CliError` enum has 4 variants (`StdinParse`, `PolicyConfig`, `Pipeline`, `Io`); spec lists 9 | follow-up commits on `gaze-v03-cli` branch | CLI-side, lands with `restore` impl |
+| `--policy` argument accepted but ignored; `clean` uses a hardcoded stub pipeline (email-only) | solo #3 (policy.toml loader) | ✅ shipped in v0.3.0-rc.1 (`Policy::load` + `Pipeline::from_policy`) |
+| `issued_at` field on `SnapshotPayload` — missing today → `BlobExpired` cannot fire | solo #4 (library TTL enforcement) | ✅ shipped in v0.3.0-rc.1 (`issued_at` on payload, `BlobExpired` exit bucket 3) |
+| `PiiClass::Custom("email")` collides with built-in `PiiClass::Email` — both produce `Email_N` | solo #5 (reserve built-in names) | ✅ shipped in v0.3.0-rc.1 (custom namespace fix — emits `Custom:{name}_N`) |
+| Library does not expose a placeholder-matching API — CLI's token grammar duplicates library internals | solo #6 (library placeholder API) | ✅ shipped in v0.3.0 final (`gaze::token_shape::pattern()` + `contains_token()`) |
+| `panic::set_hook`, `clap::try_parse` error routing, SIGPIPE documentation — stderr sanitisation is aspirational without these | this spec's §"Stderr discipline" | ✅ shipped in v0.3.0-rc.1 (panic hook + `Cli::try_parse` route through structured stderr) |
+| CLI `CliError` enum has 4 variants (`StdinParse`, `PolicyConfig`, `Pipeline`, `Io`); spec lists 9 | follow-up commits on `gaze-v03-cli` branch | ✅ shipped in v0.3.0-rc.1 (full typed `CliError` with `UnknownToken`, `Tamper`, `VersionByte`, `EmptyInput`, `InvalidEncoding`, `BlobExpired`, `MaxBytes`) |
 
-Laravel wrapper `laravel.md` was written against the *intended* contract;
-integrators reading both specs should assume the intended contract when
-planning but check the table above before enabling pipe mode in production.
+Laravel wrapper `laravel.md` targets this now-shipped contract. Integrators
+enabling pipe mode in production should pin against v0.3.0 and consult
+[`CHANGELOG.md`](../../../CHANGELOG.md) for the full shipped scope.
 
 ---
 
