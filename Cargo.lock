@@ -695,6 +695,7 @@ dependencies = [
  "clap",
  "gaze",
  "gaze-recognizers",
+ "regex",
  "rmcp",
  "schemars 0.8.22",
  "serde",
