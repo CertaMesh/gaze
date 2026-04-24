@@ -544,15 +544,11 @@ engineering board:
    `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
    detail string, avoiding silent no-op column rules for text stdin.
 4. **v0.4.0-rc.1 gated rulepack fields (runtime consumers pending v0.4.1).**
-   The rulepack schema parses these fields but rejects non-default values
-   with `RulepackError::UnsupportedFieldInB1`:
-   - `token.family` / `token.format` — counter-family is the only wired
-     family today.
-   - `context.hotwords` / `context.boost` / `context.window` — parsed and
-     threaded through `DetectContext` but not consumed by shipped
-     recognizers.
-   Keep them at defaults until the v0.4.1 consumers land; today any
-   non-default value exits `2` `PolicyConfig` at load time.
+   The rulepack schema parses `token.family`, `token.format`,
+   `context.hotwords`, `context.boost`, and `context.window` for
+   forward-compatible authoring, but the loader rejects any non-default value
+   with `RulepackError::UnsupportedFieldInB1`. Runtime consumers ship in
+   v0.4.1; until then, leave these fields unset or explicitly default.
 5. **v0.4.0-rc.1 dictionary audit granularity.** The redaction log carries
    `dictionary:{name}` for dictionary hits; per-term `[#term_index]`
    traceability is scheduled for v0.4.1.
