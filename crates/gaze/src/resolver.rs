@@ -89,15 +89,23 @@ fn should_replace_same_span_class(candidate: &Candidate, existing: &Candidate) -
 }
 
 fn should_replace_containment(candidate: &Candidate, existing: &Candidate) -> bool {
+    if candidate.class == existing.class {
+        let candidate_len = candidate.span.end - candidate.span.start;
+        let existing_len = existing.span.end - existing.span.start;
+        if candidate_len != existing_len {
+            return candidate_len > existing_len;
+        }
+    }
+
     let candidate_validated = candidate.canonical_form.is_some();
     let existing_validated = existing.canonical_form.is_some();
     if candidate_validated != existing_validated {
         return candidate_validated;
     }
 
-    class_priority(&candidate.class) > class_priority(&existing.class)
-        || (class_priority(&candidate.class) == class_priority(&existing.class)
-            && candidate.score.total_cmp(&existing.score).is_gt())
+    candidate.score.total_cmp(&existing.score).is_gt()
+        || (candidate.score == existing.score
+            && class_priority(&candidate.class) > class_priority(&existing.class))
 }
 
 fn should_replace_partial_overlap(candidate: &Candidate, existing: &Candidate) -> bool {

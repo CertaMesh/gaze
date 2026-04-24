@@ -7,6 +7,8 @@ use crate::detector::{Detection, Detector};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
 use crate::redaction_log::{DocumentKind, RedactionEntry, RedactionLogger};
+use crate::registry::{Candidate, DetectContext, DictionaryBundle, Recognizer, RecognizerRegistry};
+use crate::resolver::resolve_candidates;
 use crate::rule::{Action, Context, Rule};
 use crate::rulepack::RulepackError;
 use crate::session::Session;
@@ -43,6 +45,7 @@ pub enum Error {
 #[derive(Clone)]
 pub struct Pipeline {
     detectors: Vec<Arc<dyn Detector>>,
+    registry: Arc<RecognizerRegistry>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
 }
@@ -84,18 +87,40 @@ impl Pipeline {
         let mut out = text.to_string();
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let detections = self
+        let mut candidates = self
             .detectors
             .iter()
             .enumerate()
             .flat_map(|(index, detector)| {
+                let score = 1.0 - ((index as f32) * 0.0001);
                 detector
                     .detect(&normalized.text)
                     .into_iter()
-                    .filter_map(move |detection| translate_detection(detection, spans, index))
+                    .filter_map(move |detection| {
+                        translate_detection_to_candidate(detection, spans, score)
+                    })
             })
             .collect::<Vec<_>>();
-        let (mut detections, losers) = select_winners(detections);
+
+        let dictionaries = DictionaryBundle;
+        let fields = serde_json::Map::new();
+        let locale_chain = [crate::LocaleTag::Global];
+        let ctx = DetectContext {
+            locale_chain: &locale_chain,
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+        candidates.extend(
+            self.registry
+                .detect_all(&normalized.text, &ctx)
+                .into_iter()
+                .filter_map(|candidate| translate_candidate(candidate, spans)),
+        );
+
+        let resolved = resolve_candidates(candidates.clone());
+        let losers = conflict_losers(&candidates, &resolved);
+        let mut detections = resolved.into_iter().map(IndexedDetection::from).collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
                 loser,
@@ -171,12 +196,12 @@ impl Pipeline {
 #[derive(Clone)]
 struct IndexedDetection {
     detection: Detection,
-    detector_index: usize,
 }
 
 #[derive(Default)]
 pub struct PipelineBuilder {
     detectors: Vec<Arc<dyn Detector>>,
+    recognizers: Vec<Arc<dyn Recognizer>>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     rules: Vec<Arc<dyn Rule>>,
 }
@@ -187,6 +212,14 @@ impl PipelineBuilder {
         D: Detector + 'static,
     {
         self.detectors.push(Arc::new(detector));
+        self
+    }
+
+    pub fn recognizer<R>(mut self, recognizer: R) -> Self
+    where
+        R: Recognizer + 'static,
+    {
+        self.recognizers.push(Arc::new(recognizer));
         self
     }
 
@@ -207,8 +240,13 @@ impl PipelineBuilder {
     }
 
     pub fn build(self) -> Result<Pipeline> {
+        let mut registry = RecognizerRegistry::builder();
+        for recognizer in self.recognizers {
+            registry = registry.register_arc(recognizer);
+        }
         Ok(Pipeline {
             detectors: self.detectors,
+            registry: Arc::new(registry.build()),
             redaction_loggers: self.redaction_loggers,
             rules: self.rules,
         })
@@ -237,56 +275,68 @@ fn redact_structured(
     Ok(CleanDocument::Structured(clean))
 }
 
-fn translate_detection(
+fn translate_detection_to_candidate(
     detection: Detection,
     spans: &[(usize, usize)],
-    detector_index: usize,
-) -> Option<IndexedDetection> {
-    if detection.span.is_empty() || detection.span.end > spans.len() {
-        return None;
-    }
-
-    let start = spans[detection.span.start].0;
-    let end = spans[detection.span.end - 1].1;
-    Some(IndexedDetection {
-        detection: Detection {
-            span: start..end,
-            class: detection.class,
-            source: detection.source,
-        },
-        detector_index,
+    score: f32,
+) -> Option<Candidate> {
+    let source = detection.source;
+    translate_span(detection.span, spans).map(|span| Candidate {
+        span,
+        class: detection.class,
+        recognizer_id: source.clone(),
+        score,
+        canonical_form: None,
+        token_family: "counter".to_string(),
+        source,
     })
 }
 
-fn select_winners(
-    mut detections: Vec<IndexedDetection>,
-) -> (Vec<IndexedDetection>, Vec<IndexedDetection>) {
-    detections.sort_by(|a, b| {
-        let a_len = a.detection.span.end - a.detection.span.start;
-        let b_len = b.detection.span.end - b.detection.span.start;
-        b_len
-            .cmp(&a_len)
-            .then_with(|| a.detector_index.cmp(&b.detector_index))
-            .then_with(|| a.detection.span.start.cmp(&b.detection.span.start))
-    });
-
-    let mut winners = Vec::new();
-    let mut losers = Vec::new();
-    for detection in detections {
-        if winners.iter().any(|winner: &IndexedDetection| {
-            overlaps(&winner.detection.span, &detection.detection.span)
-        }) {
-            losers.push(detection);
-            continue;
-        }
-        winners.push(detection);
-    }
-
-    (winners, losers)
+fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
+    translate_span(candidate.span, spans).map(|span| Candidate { span, ..candidate })
 }
 
-fn overlaps(left: &std::ops::Range<usize>, right: &std::ops::Range<usize>) -> bool {
-    left.start < right.end && right.start < left.end
+fn translate_span(
+    span: std::ops::Range<usize>,
+    spans: &[(usize, usize)],
+) -> Option<std::ops::Range<usize>> {
+    if span.is_empty() || span.end > spans.len() {
+        return None;
+    }
+
+    let start = spans[span.start].0;
+    let end = spans[span.end - 1].1;
+    Some(start..end)
+}
+
+fn conflict_losers(candidates: &[Candidate], resolved: &[Candidate]) -> Vec<IndexedDetection> {
+    candidates
+        .iter()
+        .filter(|candidate| {
+            !resolved.iter().any(|winner| {
+                winner.span == candidate.span
+                    && winner.class == candidate.class
+                    && winner
+                        .source
+                        .split('+')
+                        .any(|source| source == candidate.source)
+            })
+        })
+        .cloned()
+        .map(IndexedDetection::from)
+        .collect()
+}
+
+impl From<Candidate> for IndexedDetection {
+    fn from(candidate: Candidate) -> Self {
+        Self {
+            detection: Detection {
+                span: candidate.span,
+                class: candidate.class,
+                source: candidate.source,
+            },
+        }
+    }
 }
 
 fn generalize_token(class: &crate::detector::PiiClass) -> String {

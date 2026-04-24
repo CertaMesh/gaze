@@ -361,7 +361,7 @@ fn build_pipeline_from_policy(policy: &Policy) -> GazeResult<Pipeline> {
     }
     for recognizer in rulepack_recognizers.into_values().filter(|r| r.enabled) {
         if let RawMatch::Regex { pattern } = recognizer.matcher {
-            builder = builder.detector(RegexDetector::with_source(
+            builder = builder.recognizer(RegexDetector::with_source(
                 &pattern,
                 recognizer.class,
                 &recognizer.id,

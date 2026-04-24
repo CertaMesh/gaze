@@ -1,4 +1,4 @@
-use gaze::{Detection, Detector, Error, PiiClass, Result};
+use gaze::{Candidate, DetectContext, Detection, Detector, Error, PiiClass, Recognizer, Result};
 use regex::Regex;
 
 pub struct RegexDetector {
@@ -39,5 +39,34 @@ impl Detector for RegexDetector {
                 source: self.source.clone(),
             })
             .collect()
+    }
+}
+
+impl Recognizer for RegexDetector {
+    fn id(&self) -> &str {
+        &self.source
+    }
+
+    fn supported_class(&self) -> &PiiClass {
+        &self.class
+    }
+
+    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+        self.regex
+            .find_iter(input)
+            .map(|m| Candidate {
+                span: m.range(),
+                class: self.class.clone(),
+                recognizer_id: self.source.clone(),
+                score: 0.70,
+                canonical_form: None,
+                token_family: self.token_family().to_string(),
+                source: self.source.clone(),
+            })
+            .collect()
+    }
+
+    fn token_family(&self) -> &str {
+        "counter"
     }
 }
