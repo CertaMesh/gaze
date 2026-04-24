@@ -49,9 +49,14 @@ fn clean_ok_with_args(args: &[&str], input: &str) -> (String, String, u64) {
 
 /// Run `gaze restore` with the given request body. Returns (status_code, stdout, stderr).
 fn restore_raw(body: &[u8]) -> (Option<i32>, Vec<u8>, Vec<u8>) {
+    restore_raw_with_args(&[], body)
+}
+
+fn restore_raw_with_args(args: &[&str], body: &[u8]) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .arg("restore")
+        .args(args)
         .write_stdin(body.to_vec())
         .output()
         .unwrap();
@@ -61,6 +66,15 @@ fn restore_raw(body: &[u8]) -> (Option<i32>, Vec<u8>, Vec<u8>) {
 fn restore_json(session_blob: &str, text: &str) -> (Option<i32>, Vec<u8>, Vec<u8>) {
     let body = json!({ "session_blob": session_blob, "text": text }).to_string();
     restore_raw(body.as_bytes())
+}
+
+fn restore_json_with_args(
+    args: &[&str],
+    session_blob: &str,
+    text: &str,
+) -> (Option<i32>, Vec<u8>, Vec<u8>) {
+    let body = json!({ "session_blob": session_blob, "text": text }).to_string();
+    restore_raw_with_args(args, body.as_bytes())
 }
 
 fn parse_stderr_variant(stderr: &[u8]) -> Value {
@@ -236,6 +250,38 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
     assert_eq!(
         parse_stderr_variant(&stderr),
         json!({ "error": "UnknownToken", "exit": 3, "token": "location_7" })
+    );
+}
+
+#[test]
+fn t04b_tolerant_restore_reports_warning_and_preserves_text() {
+    let (_, blob, _) = clean_ok("No PII here.");
+    let text = "Your location_7 order arrives soon.";
+    let (code, stdout, stderr) =
+        restore_json_with_args(&["--restore-mode=tolerant"], &blob, text);
+
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    assert!(stderr.is_empty(), "expected empty stderr");
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(resp["text"].as_str().unwrap(), text);
+    assert_eq!(
+        resp["restore_warning"],
+        json!([{ "variant": "UnknownToken", "token": "location_7" }])
+    );
+}
+
+#[test]
+fn t04c_tolerant_restore_omits_empty_warning_array() {
+    let (_, blob, _) = clean_ok("No PII here.");
+    let (code, stdout, stderr) =
+        restore_json_with_args(&["--restore-mode=tolerant"], &blob, "Plain reply.");
+
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(resp["text"].as_str().unwrap(), "Plain reply.");
+    assert!(
+        resp.get("restore_warning").is_none(),
+        "empty restore_warning must be omitted: {resp}"
     );
 }
 

@@ -267,8 +267,13 @@ impl Session {
             .verify(payload_bytes, &signature)
             .map_err(|_| Error::InvalidSnapshotSignature)?;
 
-        let payload: SnapshotPayload =
-            serde_json::from_slice(payload_bytes).map_err(Error::SnapshotDecode)?;
+        let payload: SnapshotPayload = serde_json::from_slice(payload_bytes).map_err(|err| {
+            if err.to_string().contains("session_hex must be") {
+                Error::InvalidSnapshotPayload
+            } else {
+                Error::SnapshotDecode(err)
+            }
+        })?;
         validate_entry_prefixes(&payload)?;
         let session_hex = session_hex_bytes(&payload.session_hex)?;
         let scope = scope_from_snapshot(payload.scope);
@@ -566,6 +571,58 @@ mod tests {
         });
 
         assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_rejects_v03_envelope_byte() {
+        let snapshot = signed_snapshot_v03(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotVersion(1))
+        ));
+    }
+
+    #[test]
+    fn import_rejects_invalid_session_hex() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "A7F3B8E2".to_string(),
+            entries: Vec::new(),
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotPayload)
+        ));
+    }
+
+    #[test]
+    fn import_rejects_manifest_entry_prefix_mismatch() {
+        let snapshot = signed_snapshot(SnapshotPayload {
+            scope: SnapshotScope::Persistent { ttl_secs: 300 },
+            session_hex: "a7f3b8e2".to_string(),
+            entries: vec![SnapshotEntry {
+                class: PiiClass::Name,
+                raw: "Dr. Schmidt".to_string(),
+                token: "deadbeef:name_1".to_string(),
+            }],
+            issued_at: 0,
+            next_by_class: Vec::new(),
+        });
+
+        assert!(matches!(
+            Session::import(snapshot),
+            Err(Error::InvalidSnapshotPayload)
+        ));
     }
 
     #[test]

@@ -150,6 +150,26 @@ mod tests {
     }
 
     #[test]
+    fn legacy_shape_parity_traps_all_known_v03_forms() {
+        for shape in [
+            "<Email_1>",
+            "<Custom:order_id_1>",
+            "<Foo_5>",
+            "<foo_1>",
+            "Email_7",
+            "location_7",
+            "name_1",
+            "organization_1",
+            "email_1",
+            "custom:order_id_1",
+            "email3@example.test",
+            "email3@gaze-fake.invalid",
+        ] {
+            assert!(contains_token(shape), "shape should be trapped: {shape}");
+        }
+    }
+
+    #[test]
     fn rejects_non_tokens() {
         assert!(!contains_token("See <Email_1bar>."));
         assert!(!contains_token("literal email@example.com address"));
