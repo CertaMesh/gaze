@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0-rc.1] - 2026-04-24
+
+### Added
+
+- **F3 Rulepack schema** - TOML-defined recognizer bundles with closed validator/normalizer kind registry. Fail-closed on unknown matchers (Dictionary now wired; NER deferred to v0.5).
+- **F4 Locale infrastructure** - 4-tier chain (CLI > policy > rulepack defaults > system default). Per-recognizer locale gating via `locales = [...]`. Strict opaque-tag matching.
+- **F2-full Resolver** - class-priority > rule-priority > score > span-length > recognizer-id with multi-overlap fixed-point iteration.
+- **F5 `.invalid` domain swap** - FPE email shape now uses `email{N}.{session_hex}@gaze-fake.invalid`. Legacy `example.test` Pass 2 trap arm retained for v0.3 manifest restore compatibility.
+- **F6 Dictionary detector** - Aho-Corasick-backed recognizer registered through the new Recognizer trait. Adopter-tunable via `[[policy.custom_recognizers]]` or `--context-json` (standalone).
+- **Typed Context envelope** - `--context-json` carries tenant fields/dictionaries/class_map through `DetectContext` into per-recognizer detection (no longer parsed-and-dropped).
+- **F7.5 Byte-range-skip** - Pass 1 substitution spans tracked; Pass 2 trap scan skips matches fully contained in spans. Closes Pass 1->Pass 2 cascade false-positive (adopter raw values matching trap arms no longer rejected in strict mode).
+- **Audit symmetry** - `RedactionEntry.decided_by` ConflictTier enum + merge-loser entries.
+- **Schema-drift gating** - `RulepackError::UnsupportedFieldInB1` rejects `token.family`, `token.format`, `context.hotwords`, `context.boost`, `context.window` if set to non-default until consumers ship in v0.4.1.
+
+### Changed
+
+- **Pipeline**: legacy `Detector` trait path removed. All detection routes through `RecognizerRegistry`.
+- **Policy surface**: legacy top-level `[[detector]]` rejected with `LegacyDetectorUnsupported` error; migrate to `[[policy.custom_recognizers]]`.
+- **Locale tag matching**: `LocaleTag::Other(_)` now strict-equals (no longer universal fallback).
+
+### Fixed
+
+- NER label-map BIO-prefix resolution (already shipped in v0.3.1; folded into rc series for completeness).
+- Cascade false-positive on adopter tenant identifiers (`Order_42`, `Song_42`, `User_7`) under strict mode (PR #22).
+
+### Known limits - please test in dogfood
+
+- **GH #24**: NER context-sensitivity gap - names in prompt boilerplate / RFC822 email headers may pass through default davlan-hrl. Workarounds + roadmap in issue #24.
+- **token.family / token.format**: parsed + gated; runtime consumers planned for v0.4.1.
+- **context.hotwords / boost / window**: parsed + gated; runtime consumers planned for v0.4.1.
+- **Per-term traceability** in dictionary detection log: `dictionary:{name}` only; `[#term_index]` extension planned for v0.4.1.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+
 ## [v0.3.1] — 2026-04-24
 
 ### Fixed
@@ -146,7 +180,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.4.0-rc.1...HEAD
+[0.4.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.4.0-rc.1
 [v0.3.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Naoray/gaze/releases/tag/v0.3.0
 [0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
