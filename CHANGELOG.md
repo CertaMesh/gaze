@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - unreleased
+
+### Fixed
+
+- `gaze clean` now honors `[session]` from `policy.toml`; `--session-ttl`
+  is an explicit persistent-TTL override instead of the source of truth.
+- Broken `[ner] model_dir` configuration now exits as `PolicyConfig`
+  with exit code 2.
+- `gaze clean` now rejects `kind = "column"` rules during CLI policy load
+  instead of silently accepting rules that cannot fire for text stdin.
+
 ## [0.3.0] — 2026-04-24
 
 ### Changed
