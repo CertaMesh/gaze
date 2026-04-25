@@ -7,15 +7,27 @@ use regex::Regex;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidatorKind {
     EmailRfc,
+    Luhn,
+    IbanMod97,
 }
 
 impl ValidatorKind {
     pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
         match s {
             "email_rfc" => Ok(Self::EmailRfc),
+            "luhn" => Ok(Self::Luhn),
+            "iban_mod97" => Ok(Self::IbanMod97),
             other => Err(RulepackError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
+        }
+    }
+
+    pub fn validates(self, input: &str) -> bool {
+        match self {
+            Self::EmailRfc => is_basic_email(input),
+            Self::Luhn => luhn_check(input),
+            Self::IbanMod97 => iban_mod97_check(input),
         }
     }
 }
@@ -23,15 +35,24 @@ impl ValidatorKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NormalizerKind {
     EmailCanonical,
+    IbanCanonical,
 }
 
 impl NormalizerKind {
     pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
         match s {
             "email_canonical" => Ok(Self::EmailCanonical),
+            "iban_canonical" => Ok(Self::IbanCanonical),
             other => Err(RulepackError::UnsupportedNormalizer {
                 kind: other.to_string(),
             }),
+        }
+    }
+
+    pub fn normalize(self, input: &str) -> String {
+        match self {
+            Self::EmailCanonical => input.to_ascii_lowercase(),
+            Self::IbanCanonical => iban_canonicalize(input),
         }
     }
 }
@@ -202,6 +223,73 @@ fn is_basic_email(input: &str) -> bool {
         return false;
     };
     !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+fn luhn_check(input: &str) -> bool {
+    let mut digits = Vec::new();
+    for byte in input.bytes() {
+        if byte.is_ascii_whitespace() {
+            continue;
+        }
+        if !byte.is_ascii_digit() {
+            return false;
+        }
+        digits.push(byte - b'0');
+    }
+    if digits.len() < 2 {
+        return false;
+    }
+
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, digit)| {
+            let mut value = u32::from(*digit);
+            if index % 2 == 1 {
+                value *= 2;
+                if value > 9 {
+                    value -= 9;
+                }
+            }
+            value
+        })
+        .sum();
+    sum.is_multiple_of(10)
+}
+
+fn iban_canonicalize(input: &str) -> String {
+    input
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn iban_mod97_check(input: &str) -> bool {
+    let canonical = iban_canonicalize(input);
+    if !(15..=34).contains(&canonical.len()) {
+        return false;
+    }
+    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+
+    let mut remainder = 0u32;
+    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
+        match ch {
+            '0'..='9' => {
+                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
+            }
+            'A'..='Z' => {
+                let value = u32::from(ch) - u32::from('A') + 10;
+                remainder = (remainder * 10 + value / 10) % 97;
+                remainder = (remainder * 10 + value % 10) % 97;
+            }
+            _ => return false,
+        }
+    }
+    remainder == 1
 }
 
 #[cfg(test)]
