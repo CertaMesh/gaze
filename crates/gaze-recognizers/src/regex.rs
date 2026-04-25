@@ -161,17 +161,23 @@ impl Recognizer for RegexDetector {
                 let matched = &input[span.clone()];
                 (!self.is_excluded(matched)).then_some((span, matched))
             })
-            .map(|(span, matched)| Candidate {
-                span,
-                class: self.class.clone(),
-                recognizer_id: self.source.clone(),
-                score: self.base_score,
-                priority: self.priority,
-                canonical_form: self.canonical_form(matched),
-                token_family: self.token_family().to_string(),
-                source: self.source.clone(),
-                decided_by: ConflictTier::None,
-                merged_sources: Vec::new(),
+            .filter_map(|(span, matched)| {
+                let canonical_form = self.canonical_form(matched);
+                if self.validator_kind.is_some() && canonical_form.is_none() {
+                    return None;
+                }
+                Some(Candidate {
+                    span,
+                    class: self.class.clone(),
+                    recognizer_id: self.source.clone(),
+                    score: self.base_score,
+                    priority: self.priority,
+                    canonical_form,
+                    token_family: self.token_family().to_string(),
+                    source: self.source.clone(),
+                    decided_by: ConflictTier::None,
+                    merged_sources: Vec::new(),
+                })
             })
             .collect()
     }
