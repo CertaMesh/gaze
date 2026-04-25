@@ -25,8 +25,9 @@ use serde::{Deserialize, Serialize};
 use gaze::{
     Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
     LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
-    RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
-    SensitiveSnapshot, Session, SessionScope, SqliteLogger, TypedContext, DEFAULT_NER_THRESHOLD,
+    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackPolicy,
+    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger,
+    TypedContext, DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
@@ -278,9 +279,16 @@ fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
         }
         None => None,
     };
-    let loaded_rulepacks = match &loaded_policy {
-        Some(policy) => load_rulepacks(policy).map_err(map_pipeline_error)?,
-        None => Vec::new(),
+    let cli_rulepack_policy = if loaded_policy.is_none() && has_rulepack_overrides(&options) {
+        Some(policy_for_rulepack_overrides(&clean_overrides))
+    } else {
+        None
+    };
+    let loaded_rulepacks = match (&loaded_policy, &cli_rulepack_policy) {
+        (Some(policy), _) | (None, Some(policy)) => {
+            load_rulepacks(policy).map_err(map_pipeline_error)?
+        }
+        (None, None) => Vec::new(),
     };
     let context = options
         .context_json
@@ -418,6 +426,31 @@ fn clean_overrides_from_options(
         rulepack_bundled,
         rulepack_paths: options.rulepack_paths.clone(),
     })
+}
+
+fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
+    !options.rulepack_bundled.is_empty() || !options.rulepack_paths.is_empty()
+}
+
+fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
+    let base = Policy {
+        session: SessionPolicy {
+            scope: SessionScope::Persistent,
+            ttl_secs: Some(86_400),
+        },
+        detectors: Vec::new(),
+        dictionaries: Vec::new(),
+        rules: vec![RuleSpec::Default {
+            action: Action::Preserve,
+        }],
+        ner: None,
+        rulepacks: RulepackPolicy {
+            bundled: Vec::new(),
+            paths: Vec::new(),
+        },
+        locale: None,
+    };
+    clean_overrides.apply_to(&base)
 }
 
 fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u64>) -> Scope {
