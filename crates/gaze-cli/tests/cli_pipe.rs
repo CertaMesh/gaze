@@ -709,6 +709,18 @@ fn t21h_pattern_template_falls_back_to_global_when_locale_not_loaded() {
 }
 
 #[test]
+fn t_cli_ner_threshold_out_of_range_fails_closed() {
+    let out = clean_raw_with_args(&["--ner-threshold", "1.5"], "Reach support.");
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
+#[test]
 fn context_json_standalone_dictionary_detects_without_policy_entry() {
     let dir = tempdir().unwrap();
     let context_path = dir.path().join("context.json");

@@ -24,6 +24,7 @@ pub fn build_pipeline(
     context: &Context,
     rulepacks: &[Rulepack],
     active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
 ) -> Result<Pipeline, BuildError> {
     let mut builder = Pipeline::builder();
     let mut registered_dictionaries = BTreeSet::<String>::new();
@@ -209,7 +210,7 @@ pub fn build_pipeline(
                 path,
                 NerOptions {
                     locale: ner.locale.clone(),
-                    threshold: ner.threshold,
+                    threshold: ner_threshold.unwrap_or(ner.threshold),
                 },
             )
             .map_err(|err| PolicyError::NerLoad(err.to_string()))?;
@@ -403,6 +404,7 @@ family = "email.header.name"
             &empty_context(),
             &[core, de, email_header],
             &active_locales,
+            None,
         )
         .expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
@@ -446,7 +448,13 @@ pattern_template = '''{unknown_placeholder}: (.+)'''
 
         let policy = policy();
         let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
-        let err = match build_pipeline(&policy, &empty_context(), &[rulepack], &active_locales) {
+        let err = match build_pipeline(
+            &policy,
+            &empty_context(),
+            &[rulepack],
+            &active_locales,
+            None,
+        ) {
             Ok(_) => panic!("unknown placeholder must fail"),
             Err(err) => err,
         };

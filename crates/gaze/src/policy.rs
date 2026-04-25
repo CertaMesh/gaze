@@ -7,6 +7,8 @@ use thiserror::Error;
 
 use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
+pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Policy {
     pub session: SessionPolicy,
@@ -456,7 +458,7 @@ fn parse_rule(raw: RawRuleSpec) -> Result<RuleSpec, PolicyError> {
 }
 
 fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
-    let threshold = raw.threshold.unwrap_or(0.3);
+    let threshold = raw.threshold.unwrap_or(DEFAULT_NER_THRESHOLD);
     if !(0.0..=1.0).contains(&threshold) {
         return Err(PolicyError::NerThresholdOutOfRange { value: threshold });
     }

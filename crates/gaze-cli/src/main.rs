@@ -25,7 +25,7 @@ use gaze::{
     Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
     LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
     RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
-    SensitiveSnapshot, Session, TypedContext,
+    SensitiveSnapshot, Session, TypedContext, DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
@@ -62,6 +62,9 @@ enum Cmd {
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
+        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        #[arg(long)]
+        ner_threshold: Option<f32>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -139,6 +142,7 @@ fn main() -> ExitCode {
             format,
             session_ttl,
             locale,
+            ner_threshold,
             max_bytes,
             context_json,
         } => run_clean(
@@ -146,6 +150,7 @@ fn main() -> ExitCode {
             &format,
             session_ttl,
             &locale,
+            ner_threshold,
             max_bytes,
             context_json.as_deref(),
         ),
@@ -211,10 +216,15 @@ fn run_clean(
     format: &str,
     session_ttl: Option<u64>,
     locale: &[String],
+    ner_threshold: Option<f32>,
     max_bytes: u64,
     context_json: Option<&std::path::Path>,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
+    let cli_ner_threshold = ner_threshold
+        .map(validate_ner_threshold)
+        .transpose()
+        .map_err(map_policy_error)?;
     let raw = read_stdin_text(max_bytes)?;
 
     let counter = Arc::new(CountingLogger::default());
@@ -255,13 +265,18 @@ fn run_clean(
             .and_then(|policy| policy.locale.as_deref()),
         Some(&rulepack_default_locales),
     );
+    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, loaded_policy.as_ref());
 
     let pipeline = match &loaded_policy {
-        Some(policy) => {
-            build_pipeline_from_policy(policy, &loaded_rulepacks, context.as_ref(), &locale_chain)
-                .map_err(map_pipeline_error)?
-                .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>))
-        }
+        Some(policy) => build_pipeline_from_policy(
+            policy,
+            &loaded_rulepacks,
+            context.as_ref(),
+            &locale_chain,
+            resolved_ner_threshold,
+        )
+        .map_err(map_pipeline_error)?
+        .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None if context.is_some() => build_context_pipeline(
             context.as_ref().expect("checked context"),
             Arc::clone(&counter) as Arc<dyn RedactionLogger>,
@@ -400,6 +415,7 @@ fn build_pipeline_from_policy(
     rulepacks: &[Rulepack],
     context: Option<&TypedContext>,
     locale_chain: &LocaleChain,
+    ner_threshold: f32,
 ) -> GazeResult<Pipeline> {
     let empty_context = TypedContext {
         dictionaries: std::collections::HashMap::new(),
@@ -411,12 +427,27 @@ fn build_pipeline_from_policy(
         context.unwrap_or(&empty_context),
         rulepacks,
         locale_chain,
+        Some(ner_threshold),
     )
     .map_err(|err| match err {
         gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
         gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
         gaze_assembly::BuildError::Pipeline(err) => err,
     })
+}
+
+fn validate_ner_threshold(threshold: f32) -> std::result::Result<f32, PolicyError> {
+    if (0.0..=1.0).contains(&threshold) {
+        Ok(threshold)
+    } else {
+        Err(PolicyError::NerThresholdOutOfRange { value: threshold })
+    }
+}
+
+fn resolve_ner_threshold(cli_threshold: Option<f32>, policy: Option<&Policy>) -> f32 {
+    cli_threshold
+        .or_else(|| policy.and_then(|policy| policy.ner.as_ref().map(|ner| ner.threshold)))
+        .unwrap_or(DEFAULT_NER_THRESHOLD)
 }
 
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
@@ -700,6 +731,52 @@ struct ArcLogger(Arc<dyn RedactionLogger>);
 impl RedactionLogger for ArcLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
         self.0.log(entry)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn policy_with_ner_threshold(threshold: f32) -> Policy {
+        Policy {
+            session: gaze::SessionPolicy {
+                scope: gaze::SessionScope::Persistent,
+                ttl_secs: Some(86_400),
+            },
+            detectors: Vec::new(),
+            dictionaries: Vec::new(),
+            rules: vec![gaze::RuleSpec::Default {
+                action: gaze::Action::Preserve,
+            }],
+            ner: Some(gaze::NerPolicy {
+                model_dir: None,
+                locale: None,
+                threshold,
+            }),
+            rulepacks: gaze::RulepackPolicy {
+                bundled: vec!["core".to_string()],
+                paths: Vec::new(),
+            },
+            locale: None,
+        }
+    }
+
+    #[test]
+    fn t_cli_ner_threshold_overrides_policy_value() {
+        let policy = policy_with_ner_threshold(0.5);
+
+        let threshold = resolve_ner_threshold(Some(0.3), Some(&policy));
+
+        assert_eq!(threshold, 0.3);
+    }
+
+    #[test]
+    fn cli_ner_threshold_uses_policy_then_default() {
+        let policy = policy_with_ner_threshold(0.5);
+
+        assert_eq!(resolve_ner_threshold(None, Some(&policy)), 0.5);
+        assert_eq!(resolve_ner_threshold(None, None), DEFAULT_NER_THRESHOLD);
     }
 }
 
