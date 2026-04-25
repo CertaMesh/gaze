@@ -251,6 +251,39 @@ bundled = ["core"]
 paths = ["./tenant-rulepack.toml"]
 ```
 
+Bundled rulepacks:
+
+| Bundle | Recognizers | Classes | Notes |
+|--------|-------------|---------|-------|
+| `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
+| `core-extended` | `phone.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:ip_address`, `custom:postal_code` | Opt-in Phase 1 bundle. Shape-only recognizers; no validators yet. |
+
+Opt into `core-extended` alongside `core`:
+
+```toml
+[policy.rulepacks]
+bundled = ["core", "core-extended"]
+```
+
+Or override the bundle list for one CLI run:
+
+```bash
+gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
+```
+
+`core-extended` Phase 1 recognizers are intentionally conservative:
+
+- `phone.structural` matches E.164-only `+\d{6,15}` numbers. National phone
+  patterns are not included.
+- `ip.v4` and `ip.v6` emit `custom:ip_address`.
+- `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
+- `postal.us` emits `custom:postal_code` only under active locale `en-US`.
+  Plain `en` does not activate `postal.us`.
+
+Phase 1 is shape-only. IBAN, credit-card, and national-phone recognizers need
+validator support and are planned for v0.4.3 with the `ValidatorKind`
+extension.
+
 Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 `[recognizers.match]` table. If two recognizers in the same rulepack emit the
 same `class`, at least one must explicitly list the other recognizer id in
