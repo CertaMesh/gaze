@@ -777,8 +777,8 @@ rulepack_version = "0.4.0"
     fn class_spelling_accepts_pascal_case_and_custom_names() {
         assert_eq!(parse_class("Email").unwrap(), PiiClass::Email);
         assert_eq!(
-            parse_class("custom:Order_ID").unwrap(),
-            PiiClass::Custom("order_id".to_string())
+            parse_class("custom:Class_Alpha").unwrap(),
+            PiiClass::Custom("class_alpha".to_string())
         );
     }
 

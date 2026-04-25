@@ -112,7 +112,7 @@ mod tests {
         for class in PiiClass::builtin_variants()
             .iter()
             .cloned()
-            .chain(std::iter::once(PiiClass::custom("order_id")))
+            .chain(std::iter::once(PiiClass::custom("class_alpha")))
         {
             assert!(contains_token(&tokenized_for(class.clone())));
             assert!(contains_token(&format_preserving_for(class)));
@@ -172,11 +172,11 @@ mod tests {
 
     #[test]
     fn custom_token_matches_as_single_span() {
-        let haystack = format!("before <Custom:{}> after", ["order_id", "1"].join("_"));
+        let haystack = format!("before <Custom:{}> after", ["class_alpha", "1"].join("_"));
         let matched = pattern().find(&haystack).expect("custom token match");
         assert_eq!(
             matched.as_str(),
-            format!("<Custom:{}>", ["order_id", "1"].join("_"))
+            format!("<Custom:{}>", ["class_alpha", "1"].join("_"))
         );
     }
 
@@ -188,7 +188,7 @@ mod tests {
         )));
         assert!(contains_token(&format!(
             "See <Custom:{}>.",
-            ["order_id", "1"].join("_")
+            ["class_alpha", "1"].join("_")
         )));
         assert!(contains_token("Reply to name_1."));
         assert!(contains_token("Email email1@example.test later."));
@@ -198,7 +198,7 @@ mod tests {
     fn legacy_shape_parity_traps_all_known_v03_forms() {
         for shape in [
             format!("<{}>", ["Email", "1"].join("_")),
-            format!("<Custom:{}>", ["order_id", "1"].join("_")),
+            format!("<Custom:{}>", ["class_alpha", "1"].join("_")),
             format!("<{}>", ["Foo", "5"].join("_")),
             format!("<{}>", ["foo", "1"].join("_")),
             ["Email", "7"].join("_"),
@@ -206,7 +206,7 @@ mod tests {
             ["name", "1"].join("_"),
             ["organization", "1"].join("_"),
             ["email", "1"].join("_"),
-            format!("custom:{}", ["order_id", "1"].join("_")),
+            format!("custom:{}", ["class_alpha", "1"].join("_")),
             "email3@example.test".to_string(),
             "email3@gaze-fake.invalid".to_string(),
         ] {
