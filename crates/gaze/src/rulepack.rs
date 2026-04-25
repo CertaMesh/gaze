@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -98,11 +99,11 @@ pub struct SourceSpec {
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocaleData {
-    pub email_headers: Option<LocaleEmailHeaders>,
+    pub buckets: HashMap<String, LocaleBucket>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LocaleEmailHeaders {
+pub struct LocaleBucket {
     pub names: Vec<String>,
 }
 
@@ -196,15 +197,14 @@ struct RawRulepack {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
 struct RawLocaleData {
-    #[serde(default)]
-    email_headers: Option<RawLocaleEmailHeaders>,
+    #[serde(flatten)]
+    buckets: HashMap<String, RawLocaleBucket>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RawLocaleEmailHeaders {
+struct RawLocaleBucket {
     names: Vec<String>,
 }
 
@@ -321,9 +321,18 @@ impl TryFrom<RawRulepack> for Rulepack {
 impl From<RawLocaleData> for LocaleData {
     fn from(raw: RawLocaleData) -> Self {
         Self {
-            email_headers: raw.email_headers.map(|headers| LocaleEmailHeaders {
-                names: headers.names,
-            }),
+            buckets: raw
+                .buckets
+                .into_iter()
+                .map(|(name, bucket)| {
+                    (
+                        name,
+                        LocaleBucket {
+                            names: bucket.names,
+                        },
+                    )
+                })
+                .collect(),
         }
     }
 }
@@ -547,7 +556,7 @@ license = "Apache-2.0"
         let header_names = &rulepack
             .locale
             .as_ref()
-            .and_then(|locale| locale.email_headers.as_ref())
+            .and_then(|locale| locale.buckets.get("email_headers"))
             .expect("email headers")
             .names;
         assert_eq!(
