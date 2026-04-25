@@ -111,9 +111,16 @@ Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 
 ### Class naming rules
 
-- Built-in class names (`Email`, `Name`, `Location`, `Organization`) are reserved.
+- Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the
+  top-level token grammar (`<Email_1>`). Custom classes always render with a
+  `Custom:` prefix (`<Custom:my_class_1>`), so a custom class named `"email"` is
+  unambiguous from the built-in class because it has a different token shape.
 - Custom classes use the `custom:<name>` policy spelling.
-- Custom class names are normalized to `[a-z0-9_]+` (other characters are collapsed to `_`).
+- Custom class names are normalized: characters outside `[a-z0-9_]` collapse to
+  `_` one run at a time. Adopters should pass non-empty alphanumeric names;
+  passing all-punctuation strings like `"!!!"` currently normalizes to an empty
+  stem and emits `<Custom:_1>`. Validate adopter input before passing it to
+  `PiiClass::custom` if this matters for your integration.
 - Two recognizers may share a class, provided they follow the rulepack composition contract (`cooperates_with` in rulepacks as of v0.4.1+).
 
 ### Choosing class names
