@@ -1135,6 +1135,57 @@ fn s1_invalid_bundled_rulepack_is_symmetric_between_cli_and_toml() {
 }
 
 #[test]
+fn s1_rulepack_bundled_garbage_no_policy_rejects() {
+    let (_invalid_dir, invalid_policy) = write_policy_with_bundled_id("garbage");
+
+    let cli_out = clean_raw_with_args(&["--rulepack-bundled=garbage"], "alice@example.invalid");
+    let toml_out = clean_raw_with_args(
+        &[&format!("--policy={}", invalid_policy.display())],
+        "alice@example.invalid",
+    );
+
+    assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s1_rulepack_path_missing_no_policy_rejects() {
+    let dir = tempdir().unwrap();
+    let missing_rulepack = dir.path().join("missing-rulepack.toml");
+    let policy = dir.path().join("policy.toml");
+    fs::write(
+        &policy,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = []
+paths = ["{}"]
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            missing_rulepack.display()
+        ),
+    )
+    .unwrap();
+
+    let cli_out = clean_raw_with_args(
+        &[&format!("--rulepack-path={}", missing_rulepack.display())],
+        "alice@example.invalid",
+    );
+    let toml_out = clean_raw_with_args(
+        &[&format!("--policy={}", policy.display())],
+        "alice@example.invalid",
+    );
+
+    assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
 fn s1_invalid_ner_locale_is_symmetric_between_cli_and_toml() {
     let (_valid_dir, valid_policy) = write_policy_with_ner_locale("en-US");
     let (_invalid_dir, invalid_policy) = write_policy_with_ner_locale("bad_locale_!");
