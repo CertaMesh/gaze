@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core-extended"
-rulepack_version = "0.4.2"
+rulepack_version = "0.4.3"
 default_locales = ["global"]
 
 [[recognizers]]
