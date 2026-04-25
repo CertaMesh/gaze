@@ -5,7 +5,7 @@ use gaze::{
     RawMatch, RuleSpec, Rulepack, RulepackError,
 };
 use gaze_recognizers::{
-    DictionaryRecognizer, NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind,
+    DictionaryRecognizer, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
 };
 use thiserror::Error;
 
@@ -202,14 +202,15 @@ pub fn build_pipeline(
 
     if let Some(ner) = &policy.ner {
         if let Some(path) = &ner.model_dir {
-            let detector = NerDetector::load_with_options(
+            let detector = NerRecognizer::load_with_options(
                 path,
                 NerOptions {
                     locale: ner.locale.clone(),
+                    threshold: ner.threshold,
                 },
             )
             .map_err(|err| PolicyError::NerLoad(err.to_string()))?;
-            builder = builder.detector(detector);
+            builder = builder.recognizer(detector);
         }
     }
 

@@ -98,6 +98,7 @@ pub fn build_pipeline(policy: &PolicyFile) -> Result<Pipeline, PolicyError> {
             model_dir,
             NerOptions {
                 locale: policy.ner.locale.clone(),
+                threshold: 0.3,
             },
         )
         .map_err(|err| {

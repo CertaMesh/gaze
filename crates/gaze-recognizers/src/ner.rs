@@ -25,13 +25,13 @@ use std::fmt;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use gaze::{Detection, Detector, PiiClass};
+use gaze::{Candidate, ConflictTier, DetectContext, Detection, Detector, PiiClass, Recognizer};
 
 /// Relative file names that must be present in a model directory.
 pub const MODEL_FILE: &str = "model.onnx";
@@ -93,9 +93,26 @@ impl LabelMap {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NerOptions {
     pub locale: Option<String>,
+    pub threshold: f32,
+}
+
+impl Default for NerOptions {
+    fn default() -> Self {
+        Self {
+            locale: None,
+            threshold: 0.3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NerSpanResult {
+    pub span: std::ops::Range<usize>,
+    pub class: PiiClass,
+    pub score: f32,
 }
 
 /// Driver-style enum for NER backends. Backends are swappable under a common
@@ -187,7 +204,7 @@ enum NerRuntimeError {
 /// id2label for BERT, entity-type list for GLiNER, etc.) — the trait stays
 /// shape-agnostic so new backends plug in without changing `NerDetector`.
 trait NerBackend: Send + Sync {
-    fn detect(&self, input: &str) -> Result<Vec<Detection>, NerRuntimeError>;
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError>;
 }
 
 /// NER detector backed by a pinned local model artifact set. Multiple
@@ -198,7 +215,8 @@ pub struct NerDetector {
     model_dir: PathBuf,
     backend_kind: NerBackendKind,
     locale: Option<String>,
-    backend: Box<dyn NerBackend>,
+    threshold: f32,
+    backend: Arc<dyn NerBackend>,
 }
 
 impl fmt::Debug for NerDetector {
@@ -207,8 +225,13 @@ impl fmt::Debug for NerDetector {
             .field("model_dir", &self.model_dir)
             .field("backend_kind", &self.backend_kind)
             .field("locale", &self.locale)
+            .field("threshold", &self.threshold)
             .finish_non_exhaustive()
     }
+}
+
+pub struct NerRecognizer {
+    detector: NerDetector,
 }
 
 /// Verified artifact handles. Produced by `verify_artifacts`, consumed by
@@ -294,6 +317,7 @@ impl NerDetector {
             labels = label_count,
             id2label_size = id2label_len,
             locale = options.locale.as_deref().unwrap_or(""),
+            threshold = options.threshold,
             model_dir = %model_dir_path.display(),
             "ner: detector registered"
         );
@@ -302,6 +326,7 @@ impl NerDetector {
             model_dir: model_dir_path,
             backend_kind,
             locale: options.locale,
+            threshold: options.threshold,
             backend,
         })
     }
@@ -325,6 +350,24 @@ impl NerDetector {
         subword_labels: &[&str],
         source: &str,
     ) -> Vec<Detection> {
+        let scores = vec![1.0; subword_labels.len()];
+        Self::merge_bio_span_results(labels, subword_spans, subword_labels, &scores, source)
+            .into_iter()
+            .map(|span| Detection {
+                span: span.span,
+                class: span.class,
+                source: source.to_string(),
+            })
+            .collect()
+    }
+
+    pub fn merge_bio_span_results(
+        labels: &LabelMap,
+        subword_spans: &[(usize, usize)],
+        subword_labels: &[&str],
+        subword_scores: &[f32],
+        _source: &str,
+    ) -> Vec<NerSpanResult> {
         let mut out = Vec::new();
         let mut i = 0usize;
         while i < subword_labels.len() {
@@ -343,6 +386,7 @@ impl NerDetector {
                 i += 1;
                 continue;
             }
+            let mut span_score = *subword_scores.get(i).unwrap_or(&0.0);
             let mut j = i + 1;
             while j < subword_labels.len() {
                 let (p2, e2) = split_bio(subword_labels[j]);
@@ -350,16 +394,17 @@ impl NerDetector {
                     let (s, e) = subword_spans[j];
                     if s != e {
                         end = e;
+                        span_score = span_score.min(*subword_scores.get(j).unwrap_or(&0.0));
                     }
                     j += 1;
                 } else {
                     break;
                 }
             }
-            out.push(Detection {
+            out.push(NerSpanResult {
                 span: start..end,
                 class: class.clone(),
-                source: source.to_string(),
+                score: span_score,
             });
             i = j;
         }
@@ -367,15 +412,69 @@ impl NerDetector {
     }
 }
 
+impl NerRecognizer {
+    pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        Ok(Self {
+            detector: NerDetector::load_with_options(model_dir, options)?,
+        })
+    }
+}
+
 impl Detector for NerDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
         match self.backend.detect(input) {
-            Ok(detections) => detections,
+            Ok(detections) => detections
+                .into_iter()
+                .map(|span| Detection {
+                    span: span.span,
+                    class: span.class,
+                    source: format!("ner/{}", self.backend_kind.as_str()),
+                })
+                .collect(),
             Err(err) => {
                 tracing::warn!(backend = self.backend_kind.as_str(), error = %err, "ner: backend detect failed");
                 Vec::new()
             }
         }
+    }
+}
+
+impl Recognizer for NerRecognizer {
+    fn id(&self) -> &str {
+        "ner"
+    }
+
+    fn supported_class(&self) -> &PiiClass {
+        &PiiClass::Name
+    }
+
+    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+        match self.detector.backend.detect(input) {
+            Ok(spans) => spans
+                .into_iter()
+                .filter(|span| span.score >= self.detector.threshold)
+                .map(|span| Candidate {
+                    span: span.span,
+                    class: span.class,
+                    recognizer_id: self.id().to_string(),
+                    score: span.score,
+                    priority: 0,
+                    canonical_form: None,
+                    token_family: self.token_family().to_string(),
+                    source: format!("ner/{}", self.detector.backend_kind.as_str()),
+                    decided_by: ConflictTier::None,
+                    merged_sources: Vec::new(),
+                })
+                .collect(),
+            Err(err) => {
+                tracing::warn!(backend = self.detector.backend_kind.as_str(), error = %err, "ner: backend detect failed");
+                Vec::new()
+            }
+        }
+    }
+
+    fn token_family(&self) -> &str {
+        "counter"
     }
 }
 
@@ -409,7 +508,7 @@ impl OrtBackend {
 }
 
 impl NerBackend for OrtBackend {
-    fn detect(&self, input: &str) -> Result<Vec<Detection>, NerRuntimeError> {
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         let labels = &self.labels;
         let id2label: &[String] = &self.id2label;
         let source = self.source.as_str();
@@ -465,6 +564,7 @@ impl NerBackend for OrtBackend {
 
         let num_labels = shape[2];
         let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
+        let mut subword_scores: Vec<f32> = Vec::with_capacity(seq_len);
         for pos in 0..seq_len {
             let base = pos * num_labels;
             let row = &flat[base..base + num_labels];
@@ -480,18 +580,31 @@ impl NerBackend for OrtBackend {
                     });
             let label = id2label.get(argmax).map(String::as_str).unwrap_or("O");
             subword_labels.push(label);
+            subword_scores.push(softmax_confidence(row, argmax));
         }
 
-        Ok(NerDetector::merge_bio_spans(
+        Ok(NerDetector::merge_bio_span_results(
             labels,
             offsets,
             &subword_labels,
+            &subword_scores,
             source,
         )
         .into_iter()
-        .filter(|detection| detection.span.end <= input.len())
+        .filter(|span| span.span.end <= input.len())
         .collect())
     }
+}
+
+fn softmax_confidence(row: &[f32], index: usize) -> f32 {
+    let max = row.iter().copied().fold(f32::NEG_INFINITY, f32::max);
+    let denom = row.iter().map(|value| (*value - max).exp()).sum::<f32>();
+    if denom == 0.0 {
+        return 0.0;
+    }
+    row.get(index)
+        .map(|value| (*value - max).exp() / denom)
+        .unwrap_or(0.0)
 }
 
 /// Emit a loud `tracing::warn!` at load time when `labels.json` contains no
@@ -523,9 +636,9 @@ fn warn_on_label_vocab_mismatch(labels: &LabelMap, id2label: &[String], model_di
     }
 }
 
-fn load_backend(verified: VerifiedArtifacts) -> Result<Box<dyn NerBackend>, NerLoadError> {
+fn load_backend(verified: VerifiedArtifacts) -> Result<Arc<dyn NerBackend>, NerLoadError> {
     match verified.backend_kind {
-        NerBackendKind::Ort => Ok(Box::new(OrtBackend::load(
+        NerBackendKind::Ort => Ok(Arc::new(OrtBackend::load(
             &verified.model_dir,
             verified.labels,
             verified.id2label,
@@ -679,11 +792,11 @@ pub(crate) mod test_support {
     use super::*;
 
     struct FixedBackend {
-        detections: Vec<Detection>,
+        detections: Vec<NerSpanResult>,
     }
 
     impl NerBackend for FixedBackend {
-        fn detect(&self, _input: &str) -> Result<Vec<Detection>, NerRuntimeError> {
+        fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
             Ok(self.detections.clone())
         }
     }
@@ -702,7 +815,17 @@ pub(crate) mod test_support {
             model_dir: PathBuf::from("/test/fake"),
             backend_kind: kind,
             locale: None,
-            backend: Box::new(FixedBackend { detections }),
+            threshold: 0.3,
+            backend: Arc::new(FixedBackend {
+                detections: detections
+                    .into_iter()
+                    .map(|detection| NerSpanResult {
+                        span: detection.span,
+                        class: detection.class,
+                        score: 1.0,
+                    })
+                    .collect(),
+            }),
         }
     }
 }
@@ -969,5 +1092,71 @@ mod tests {
         let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..5);
+    }
+
+    #[test]
+    fn merge_bio_spans_returns_min_confidence_with_one_low_token() {
+        let mut map = BTreeMap::new();
+        map.insert("PER".to_string(), PiiClass::Name);
+        let labels = LabelMap(map);
+        let spans = vec![(0, 4), (5, 10), (11, 16)];
+        let tags = vec!["B-PER", "I-PER", "I-PER"];
+        let scores = vec![0.91, 0.34, 0.88];
+
+        let out = NerDetector::merge_bio_span_results(&labels, &spans, &tags, &scores, "ner");
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].span, 0..16);
+        assert_eq!(out[0].score, 0.34);
+    }
+
+    #[test]
+    fn ner_recognizer_filters_below_threshold() {
+        struct FixedBackend {
+            spans: Vec<NerSpanResult>,
+        }
+
+        impl NerBackend for FixedBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Ok(self.spans.clone())
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(FixedBackend {
+                    spans: vec![
+                        NerSpanResult {
+                            span: 0..5,
+                            class: PiiClass::Name,
+                            score: 0.49,
+                        },
+                        NerSpanResult {
+                            span: 6..11,
+                            class: PiiClass::Name,
+                            score: 0.50,
+                        },
+                    ],
+                }),
+            },
+        };
+        let dictionaries = gaze::DictionaryBundle::default();
+        let fields = serde_json::Map::new();
+        let ctx = DetectContext {
+            locale_chain: &[gaze::LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+
+        let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].span, 6..11);
+        assert_eq!(candidates[0].score, 0.50);
     }
 }
