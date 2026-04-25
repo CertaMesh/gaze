@@ -396,7 +396,14 @@ fn clean_overrides_from_options(
         .map(SessionScope::parse)
         .transpose()
         .map_err(map_policy_error)?;
-    let ner_locale = options.ner_locale.map(ToString::to_string);
+    let ner_locale = options
+        .ner_locale
+        .map(|locale| {
+            gaze::validate_ner_locale(locale)
+                .map(|_| locale.to_string())
+                .map_err(map_policy_error)
+        })
+        .transpose()?;
     let rulepack_bundled = if options.rulepack_bundled.is_empty() {
         None
     } else {
@@ -534,17 +541,21 @@ fn resolve_ner_threshold(cli_threshold: Option<f32>, policy: Option<&Policy>) ->
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
     let mut rulepacks = Vec::new();
     for bundled in &policy.rulepacks.bundled {
-        let contents = gaze_recognizers::embedded(bundled).ok_or_else(|| {
-            gaze::Error::Policy(PolicyError::BundledRulepackUnknown {
-                value: bundled.clone(),
-            })
-        })?;
+        let contents = load_embedded_rulepack_contents(bundled)?;
         rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
     }
     for path in &policy.rulepacks.paths {
         rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
     }
     Ok(rulepacks)
+}
+
+fn load_embedded_rulepack_contents(id: &str) -> GazeResult<&'static str> {
+    gaze_recognizers::embedded(id).ok_or_else(|| {
+        gaze::Error::Policy(PolicyError::BundledRulepackUnknown {
+            value: id.to_string(),
+        })
+    })
 }
 
 fn dictionary_terms_from_rulepacks(rulepacks: &[Rulepack]) -> GazeResult<Vec<RulepackDict>> {

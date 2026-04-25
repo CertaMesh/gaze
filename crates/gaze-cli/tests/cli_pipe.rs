@@ -152,6 +152,117 @@ action = "preserve"
     (dir, path)
 }
 
+fn write_policy_with_session_scope(scope: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "{scope}"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "class_alpha"
+pattern = 'class-alpha-[0-9]+'
+class = "custom:class_alpha"
+
+[[rule]]
+kind = "class"
+class = "custom:class_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn write_policy_with_bundled_id(rulepack_id: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["{rulepack_id}"]
+
+[[rule]]
+kind = "class"
+class = "custom:class_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn write_policy_with_ner_locale(locale: &str) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[ner]
+locale = "{locale}"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "class_alpha"
+pattern = 'class-alpha-[0-9]+'
+class = "custom:class_alpha"
+
+[[rule]]
+kind = "class"
+class = "custom:class_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn assert_symmetric_policy_config(cli_out: std::process::Output, toml_out: std::process::Output) {
+    assert_eq!(cli_out.status.code(), Some(2));
+    assert_eq!(toml_out.status.code(), Some(2));
+    assert!(cli_out.stdout.is_empty(), "CLI stdout must stay empty");
+    assert!(toml_out.stdout.is_empty(), "TOML stdout must stay empty");
+    assert_eq!(
+        cli_out.stderr, toml_out.stderr,
+        "CLI and TOML policy errors must be byte-identical"
+    );
+    assert_eq!(
+        parse_stderr_variant(&cli_out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+}
+
 fn write_policy_with_rulepack(
     rulepack: &str,
     locale_active: Option<&str>,
@@ -879,6 +990,66 @@ fn t_cli_ner_threshold_out_of_range_fails_closed() {
         parse_stderr_variant(&out.stderr),
         json!({ "error": "PolicyConfig", "exit": 2 })
     );
+}
+
+#[test]
+fn s1_invalid_session_scope_is_symmetric_between_cli_and_toml() {
+    let (_valid_dir, valid_policy) = write_policy_with_session_scope("persistent");
+    let (_invalid_dir, invalid_policy) = write_policy_with_session_scope("forever");
+
+    let cli_out = clean_raw_with_args(
+        &[
+            &format!("--policy={}", valid_policy.display()),
+            "--session-scope=forever",
+        ],
+        "class-alpha-123",
+    );
+    let toml_out = clean_raw_with_args(
+        &[&format!("--policy={}", invalid_policy.display())],
+        "class-alpha-123",
+    );
+
+    assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s1_invalid_bundled_rulepack_is_symmetric_between_cli_and_toml() {
+    let (_valid_dir, valid_policy) = write_policy_with_bundled_id("core");
+    let (_invalid_dir, invalid_policy) = write_policy_with_bundled_id("garbage");
+
+    let cli_out = clean_raw_with_args(
+        &[
+            &format!("--policy={}", valid_policy.display()),
+            "--rulepack-bundled=garbage",
+        ],
+        "class-alpha-123",
+    );
+    let toml_out = clean_raw_with_args(
+        &[&format!("--policy={}", invalid_policy.display())],
+        "class-alpha-123",
+    );
+
+    assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s1_invalid_ner_locale_is_symmetric_between_cli_and_toml() {
+    let (_valid_dir, valid_policy) = write_policy_with_ner_locale("en-US");
+    let (_invalid_dir, invalid_policy) = write_policy_with_ner_locale("bad_locale_!");
+
+    let cli_out = clean_raw_with_args(
+        &[
+            &format!("--policy={}", valid_policy.display()),
+            "--ner-locale=bad_locale_!",
+        ],
+        "class-alpha-123",
+    );
+    let toml_out = clean_raw_with_args(
+        &[&format!("--policy={}", invalid_policy.display())],
+        "class-alpha-123",
+    );
+
+    assert_symmetric_policy_config(cli_out, toml_out);
 }
 
 #[test]
