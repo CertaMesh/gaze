@@ -1,0 +1,3 @@
+version: 1
+gate: symmetric_potemkin_gate
+mode: behavioral
