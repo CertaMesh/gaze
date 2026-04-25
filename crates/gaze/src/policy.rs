@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -31,6 +32,27 @@ pub enum SessionScope {
     Ephemeral,
     Conversation,
     Persistent,
+}
+
+impl SessionScope {
+    pub fn parse(value: &str) -> Result<Self, PolicyError> {
+        match value {
+            "ephemeral" => Ok(SessionScope::Ephemeral),
+            "conversation" => Ok(SessionScope::Conversation),
+            "persistent" => Ok(SessionScope::Persistent),
+            other => Err(PolicyError::SessionScopeUnknown {
+                value: other.to_string(),
+            }),
+        }
+    }
+}
+
+impl FromStr for SessionScope {
+    type Err = PolicyError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +125,12 @@ pub enum PolicyError {
     NerLoad(String),
     #[error("ner.threshold must be between 0.0 and 1.0 inclusive, got {value}")]
     NerThresholdOutOfRange { value: f32 },
+    #[error("session.scope must be one of ephemeral, conversation, persistent, got {value}")]
+    SessionScopeUnknown { value: String },
+    #[error("ner.locale must be a BCP47 locale tag, got {value}")]
+    NerLocaleUnsupported { value: String },
+    #[error("unknown bundled rulepack: {value}")]
+    BundledRulepackUnknown { value: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
@@ -275,16 +303,7 @@ impl TryFrom<RawPolicy> for Policy {
 }
 
 fn parse_session(raw: RawSessionPolicy) -> Result<SessionPolicy, PolicyError> {
-    let scope = match raw.scope.as_str() {
-        "ephemeral" => SessionScope::Ephemeral,
-        "conversation" => SessionScope::Conversation,
-        "persistent" => SessionScope::Persistent,
-        other => {
-            return Err(PolicyError::BadTtl(format!(
-                "unknown session.scope '{other}'"
-            )))
-        }
-    };
+    let scope = SessionScope::parse(&raw.scope)?;
 
     match scope {
         SessionScope::Persistent => match raw.ttl_secs {
@@ -462,11 +481,22 @@ fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
     if !(0.0..=1.0).contains(&threshold) {
         return Err(PolicyError::NerThresholdOutOfRange { value: threshold });
     }
+    if let Some(locale) = &raw.locale {
+        validate_ner_locale(locale)?;
+    }
     Ok(NerPolicy {
         model_dir: raw.model_dir.map(expand_home).transpose()?,
         locale: raw.locale,
         threshold,
     })
+}
+
+pub fn validate_ner_locale(locale: &str) -> Result<(), PolicyError> {
+    LocaleTag::parse(locale)
+        .map(|_| ())
+        .map_err(|_| PolicyError::NerLocaleUnsupported {
+            value: locale.to_string(),
+        })
 }
 
 fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, PolicyError> {
@@ -625,6 +655,47 @@ action = "preserve"
         assert!(matches!(
             Policy::try_from(raw),
             Err(PolicyError::NerThresholdOutOfRange { value }) if value == 1.1
+        ));
+    }
+
+    #[test]
+    fn accepts_bcp47_ner_locale_hints() {
+        for locale in ["de", "en-US", "pt-BR", "zh-Hant"] {
+            assert!(
+                validate_ner_locale(locale).is_ok(),
+                "NER locale hints should accept BCP47-shaped tag {locale}"
+            );
+        }
+
+        assert!(matches!(
+            validate_ner_locale("bad locale!"),
+            Err(PolicyError::NerLocaleUnsupported { value }) if value == "bad locale!"
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_session_scope_with_typed_error() {
+        let raw = r#"
+[session]
+scope = "forever"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let err = Policy::try_from(raw).unwrap_err();
+
+        assert!(matches!(
+            err,
+            PolicyError::SessionScopeUnknown { value } if value == "forever"
         ));
     }
 

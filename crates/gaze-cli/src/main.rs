@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+mod clean_overrides;
 mod error;
 
 use clap::{Parser, Subcommand};
@@ -24,11 +25,13 @@ use serde::{Deserialize, Serialize};
 use gaze::{
     Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
     LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
-    RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
-    SensitiveSnapshot, Session, SqliteLogger, TypedContext, DEFAULT_NER_THRESHOLD,
+    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict, RulepackPolicy,
+    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger,
+    TypedContext, DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
+use crate::clean_overrides::CleanOverrides;
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
 #[derive(Parser, Debug)]
@@ -47,6 +50,7 @@ struct Cli {
 const DEFAULT_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
     Clean {
@@ -59,12 +63,27 @@ enum Cmd {
         /// Override the persistent session TTL in seconds.
         #[arg(long)]
         session_ttl: Option<u64>,
+        /// Override policy [session].scope.
+        #[arg(long)]
+        session_scope: Option<String>,
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
         /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
         #[arg(long)]
         ner_threshold: Option<f32>,
+        /// Override policy [ner].model_dir.
+        #[arg(long)]
+        ner_model_dir: Option<PathBuf>,
+        /// Override policy [ner].locale.
+        #[arg(long)]
+        ner_locale: Option<String>,
+        /// Override policy.rulepacks.bundled. Comma-separated and repeatable.
+        #[arg(long, value_delimiter = ',')]
+        rulepack_bundled: Vec<String>,
+        /// Override policy.rulepacks.paths. Repeatable.
+        #[arg(long = "rulepack-path")]
+        rulepack_paths: Vec<PathBuf>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -144,8 +163,13 @@ fn main() -> ExitCode {
             policy,
             format,
             session_ttl,
+            session_scope,
             locale,
             ner_threshold,
+            ner_model_dir,
+            ner_locale,
+            rulepack_bundled,
+            rulepack_paths,
             max_bytes,
             context_json,
             audit_db,
@@ -153,8 +177,13 @@ fn main() -> ExitCode {
             policy: policy.as_deref(),
             format: &format,
             session_ttl,
+            session_scope: session_scope.as_deref(),
             locale: &locale,
             ner_threshold,
+            ner_model_dir,
+            ner_locale: ner_locale.as_deref(),
+            rulepack_bundled: &rulepack_bundled,
+            rulepack_paths,
             max_bytes,
             context_json: context_json.as_deref(),
             audit_db: audit_db.as_deref(),
@@ -220,8 +249,13 @@ struct CleanOptions<'a> {
     policy: Option<&'a std::path::Path>,
     format: &'a str,
     session_ttl: Option<u64>,
+    session_scope: Option<&'a str>,
     locale: &'a [String],
     ner_threshold: Option<f32>,
+    ner_model_dir: Option<PathBuf>,
+    ner_locale: Option<&'a str>,
+    rulepack_bundled: &'a [String],
+    rulepack_paths: Vec<PathBuf>,
     max_bytes: u64,
     context_json: Option<&'a std::path::Path>,
     audit_db: Option<&'a std::path::Path>,
@@ -234,16 +268,27 @@ fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
         .map(validate_ner_threshold)
         .transpose()
         .map_err(map_policy_error)?;
+    let clean_overrides = clean_overrides_from_options(&options)?;
     let raw = read_stdin_text(options.max_bytes)?;
 
     let counter = Arc::new(CountingLogger::new(options.audit_db).map_err(|_| CliError::Pipeline)?);
     let loaded_policy = match options.policy {
-        Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
+        Some(path) => {
+            let policy = Policy::load_for_cli(path).map_err(map_policy_error)?;
+            Some(clean_overrides.apply_to(&policy))
+        }
         None => None,
     };
-    let loaded_rulepacks = match &loaded_policy {
-        Some(policy) => load_rulepacks(policy).map_err(map_pipeline_error)?,
-        None => Vec::new(),
+    let cli_rulepack_policy = if loaded_policy.is_none() && has_rulepack_overrides(&options) {
+        Some(policy_for_rulepack_overrides(&clean_overrides))
+    } else {
+        None
+    };
+    let loaded_rulepacks = match (&loaded_policy, &cli_rulepack_policy) {
+        (Some(policy), _) | (None, Some(policy)) => {
+            load_rulepacks(policy).map_err(map_pipeline_error)?
+        }
+        (None, None) => Vec::new(),
     };
     let context = options
         .context_json
@@ -301,9 +346,10 @@ fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
 
     let session = match &loaded_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
-        None => Session::new(Scope::Persistent {
-            ttl: Duration::from_secs(options.session_ttl.unwrap_or(86_400)),
-        }),
+        None => Session::new(scope_for_cli_without_policy(
+            clean_overrides.session_scope.as_ref(),
+            options.session_ttl,
+        )),
     }
     .map_err(|_| CliError::Pipeline)?;
 
@@ -349,6 +395,72 @@ fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+fn clean_overrides_from_options(
+    options: &CleanOptions<'_>,
+) -> std::result::Result<CleanOverrides, CliError> {
+    let session_scope = options
+        .session_scope
+        .map(SessionScope::parse)
+        .transpose()
+        .map_err(map_policy_error)?;
+    let ner_locale = options
+        .ner_locale
+        .map(|locale| {
+            gaze::validate_ner_locale(locale)
+                .map(|_| locale.to_string())
+                .map_err(map_policy_error)
+        })
+        .transpose()?;
+    let rulepack_bundled = if options.rulepack_bundled.is_empty() {
+        None
+    } else {
+        Some(options.rulepack_bundled.to_vec())
+    };
+
+    Ok(CleanOverrides {
+        session_scope,
+        ner_model_dir: options.ner_model_dir.clone(),
+        ner_locale,
+        rulepack_bundled,
+        rulepack_paths: options.rulepack_paths.clone(),
+    })
+}
+
+fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
+    !options.rulepack_bundled.is_empty() || !options.rulepack_paths.is_empty()
+}
+
+fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
+    let base = Policy {
+        session: SessionPolicy {
+            scope: SessionScope::Persistent,
+            ttl_secs: Some(86_400),
+        },
+        detectors: Vec::new(),
+        dictionaries: Vec::new(),
+        rules: vec![RuleSpec::Default {
+            action: Action::Preserve,
+        }],
+        ner: None,
+        rulepacks: RulepackPolicy {
+            bundled: Vec::new(),
+            paths: Vec::new(),
+        },
+        locale: None,
+    };
+    clean_overrides.apply_to(&base)
+}
+
+fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u64>) -> Scope {
+    match scope.unwrap_or(&SessionScope::Persistent) {
+        SessionScope::Ephemeral => Scope::Ephemeral,
+        SessionScope::Conversation => Scope::Conversation("cli".to_string()),
+        SessionScope::Persistent => Scope::Persistent {
+            ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
+        },
+    }
 }
 
 fn parse_cli_locales(raw: &[String]) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
@@ -463,17 +575,21 @@ fn resolve_ner_threshold(cli_threshold: Option<f32>, policy: Option<&Policy>) ->
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
     let mut rulepacks = Vec::new();
     for bundled in &policy.rulepacks.bundled {
-        let contents = gaze_recognizers::embedded(bundled).ok_or_else(|| {
-            gaze::Error::Policy(PolicyError::BadTtl(format!(
-                "unknown bundled rulepack '{bundled}'"
-            )))
-        })?;
+        let contents = load_embedded_rulepack_contents(bundled)?;
         rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
     }
     for path in &policy.rulepacks.paths {
         rulepacks.push(Rulepack::load(RulepackSource::Path(path.clone()))?);
     }
     Ok(rulepacks)
+}
+
+fn load_embedded_rulepack_contents(id: &str) -> GazeResult<&'static str> {
+    gaze_recognizers::embedded(id).ok_or_else(|| {
+        gaze::Error::Policy(PolicyError::BundledRulepackUnknown {
+            value: id.to_string(),
+        })
+    })
 }
 
 fn dictionary_terms_from_rulepacks(rulepacks: &[Rulepack]) -> GazeResult<Vec<RulepackDict>> {
