@@ -25,10 +25,7 @@ fn main() -> Result<()> {
             println!("class_map_override_safety: scaffolded");
             Ok(())
         }
-        Command::RecognizerCompositionValidator => {
-            println!("recognizer_composition_validator: scaffolded");
-            Ok(())
-        }
+        Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
     }
 }
 
@@ -118,6 +115,19 @@ const SYMMETRIC_POTEMKIN_TESTS: &[BehavioralTest] = &[
     },
 ];
 
+const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
+    BehavioralTest {
+        package: "gaze",
+        test_target: None,
+        name: "rulepack::tests::rulepack_load_fails_when_two_name_recognizers_omit_cooperates_with",
+    },
+    BehavioralTest {
+        package: "gaze",
+        test_target: None,
+        name: "rulepack::tests::rulepack_load_accepts_same_class_pair_with_cooperates_with",
+    },
+];
+
 fn run_symmetric_potemkin_gate() -> Result<()> {
     println!(
         "symmetric_potemkin_gate: checking {} behavioral tests",
@@ -130,6 +140,21 @@ fn run_symmetric_potemkin_gate() -> Result<()> {
         run_behavioral_test(*test)?;
     }
     println!("symmetric_potemkin_gate: passed");
+    Ok(())
+}
+
+fn run_recognizer_composition_validator_gate() -> Result<()> {
+    println!(
+        "recognizer_composition_validator: checking {} behavioral tests",
+        RECOGNIZER_COMPOSITION_VALIDATOR_TESTS.len()
+    );
+    for test in RECOGNIZER_COMPOSITION_VALIDATOR_TESTS {
+        ensure_test_exists(*test)?;
+    }
+    for test in RECOGNIZER_COMPOSITION_VALIDATOR_TESTS {
+        run_behavioral_test(*test)?;
+    }
+    println!("recognizer_composition_validator: passed");
     Ok(())
 }
 

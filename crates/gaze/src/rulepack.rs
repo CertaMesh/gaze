@@ -21,6 +21,7 @@ pub struct Rulepack {
 pub struct RecognizerSpec {
     pub id: String,
     pub class: PiiClass,
+    pub cooperates_with: Vec<String>,
     pub enabled: bool,
     pub locales: Vec<LocaleTag>,
     pub matcher: RawMatch,
@@ -153,6 +154,14 @@ pub enum RulepackError {
         new_class: PiiClass,
         uncovered_rule: String,
     },
+    #[error(
+        "same-class recognizers '{recognizer_a}' and '{recognizer_b}' both emit {class:?} but neither declares cooperates_with"
+    )]
+    SameClassWithoutCooperation {
+        class: PiiClass,
+        recognizer_a: String,
+        recognizer_b: String,
+    },
 }
 
 impl Rulepack {
@@ -204,6 +213,8 @@ struct RawLocaleEmailHeaders {
 struct RawRecognizerSpec {
     id: String,
     class: String,
+    #[serde(default)]
+    cooperates_with: Vec<String>,
     #[serde(default = "default_true")]
     enabled: bool,
     #[serde(default)]
@@ -294,6 +305,7 @@ impl TryFrom<RawRulepack> for Rulepack {
             .into_iter()
             .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
+        recognizer_composition_validator(&recognizers)?;
 
         Ok(Self {
             schema_version: raw.schema_version,
@@ -331,6 +343,7 @@ fn parse_recognizer(
     Ok(RecognizerSpec {
         id: raw.id,
         class: parse_class(&raw.class)?,
+        cooperates_with: raw.cooperates_with,
         enabled: raw.enabled,
         locales,
         matcher: raw.matcher,
@@ -413,6 +426,29 @@ fn reject_unshipped_fields(raw: &RawRecognizerSpec) -> Result<(), RulepackError>
             return Err(RulepackError::UnsupportedField {
                 field: "context.window".to_string(),
                 planned_version: PLANNED_VERSION,
+            });
+        }
+    }
+    Ok(())
+}
+
+pub fn recognizer_composition_validator(
+    recognizers: &[RecognizerSpec],
+) -> Result<(), RulepackError> {
+    for (index, first) in recognizers.iter().enumerate() {
+        for second in recognizers.iter().skip(index + 1) {
+            if first.class != second.class {
+                continue;
+            }
+            if first.cooperates_with.iter().any(|id| id == &second.id)
+                || second.cooperates_with.iter().any(|id| id == &first.id)
+            {
+                continue;
+            }
+            return Err(RulepackError::SameClassWithoutCooperation {
+                class: first.class.clone(),
+                recognizer_a: first.id.clone(),
+                recognizer_b: second.id.clone(),
             });
         }
     }
@@ -626,6 +662,84 @@ kind = "regex"
             err,
             RulepackError::RegexPatternChoice { id } if id == "bad.email"
         ));
+    }
+
+    #[test]
+    fn rulepack_load_fails_when_two_name_recognizers_omit_cooperates_with() {
+        let err = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-composition"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "From: ([A-Z][a-z]+)"
+
+[[recognizers]]
+id = "salutation.name"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "Dear ([A-Z][a-z]+)"
+"#,
+        )
+        .expect_err("same-class recognizers must explicitly cooperate");
+
+        assert!(matches!(
+            err,
+            RulepackError::SameClassWithoutCooperation {
+                class: PiiClass::Name,
+                recognizer_a,
+                recognizer_b,
+            } if recognizer_a == "email.header.name" && recognizer_b == "salutation.name"
+        ));
+    }
+
+    #[test]
+    fn rulepack_load_accepts_same_class_pair_with_cooperates_with() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "cooperating-composition"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+cooperates_with = ["salutation.name"]
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "From: ([A-Z][a-z]+)"
+
+[[recognizers]]
+id = "salutation.name"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "Dear ([A-Z][a-z]+)"
+"#,
+        )
+        .expect("cooperates_with unblocks same-class recognizers");
+
+        assert_eq!(rulepack.recognizers.len(), 2);
+        assert_eq!(
+            rulepack.recognizers[0].cooperates_with,
+            vec!["salutation.name"]
+        );
     }
 
     #[test]

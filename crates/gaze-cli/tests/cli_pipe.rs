@@ -15,7 +15,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
-use gaze::{PiiClass, Scope, Session};
+use gaze::{PiiClass, Scope, Session, SqliteLogger};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
@@ -755,6 +755,83 @@ fn t21f_prompt_preamble_threshold_03_pipeline_end_to_end() {
 
     let restored = restore_success_text(v["session_blob"].as_str().unwrap(), clean);
     assert_eq!(restored, input);
+}
+
+#[test]
+fn t22_audit_log_per_term_traceability() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("rulepack.toml");
+    fs::write(
+        &rulepack_path,
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "audit-dict"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "audit_terms"
+class = "custom:term"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["foo", "bar", "baz"]
+case_sensitive = true
+
+[recognizers.token]
+"#,
+    )
+    .unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = []
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "custom:term"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let v = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        "foo bar baz",
+    );
+
+    assert_eq!(v["stats"]["detections"], 3);
+    let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
+    let entries = logger.entries().expect("audit entries");
+    assert_eq!(entries.len(), 3);
+    for (index, entry) in entries.iter().enumerate() {
+        let source_shape = Regex::new(&format!(r"^dictionary:[a-z_]+\[#{}\]$", index)).unwrap();
+        assert!(
+            source_shape.is_match(&entry.source),
+            "unexpected audit source: {}",
+            entry.source
+        );
+    }
 }
 
 #[test]
