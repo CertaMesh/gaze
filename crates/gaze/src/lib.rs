@@ -40,7 +40,7 @@ pub use registry::{
 pub use resolver::resolve_candidates;
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
-    recognizer_composition_validator, ContextSpec, LocaleData, LocaleEmailHeaders, NormalizerSpec,
+    recognizer_composition_validator, ContextSpec, LocaleBucket, LocaleData, NormalizerSpec,
     RawMatch, RecognizerSpec, Rulepack, RulepackError, RulepackSource, ScoringSpec, SourceSpec,
     TokenSpec, ValidatorSpec,
 };
