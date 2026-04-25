@@ -1119,6 +1119,146 @@ action = "preserve"
 }
 
 #[test]
+fn s4_audit_query_and_export_return_filtered_metadata_rows() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--class",
+            "email",
+            "--action",
+            "tokenize",
+            "--document-kind",
+            "text",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    assert!(stdout.starts_with("class\tsource\taction\tdocument_kind\tdecided_by\n"));
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.starts_with("email\tregex\ttokenize\ttext\t")),
+        "unexpected query stdout: {stdout}"
+    );
+
+    let export_path = dir.path().join("audit.jsonl");
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--output",
+            export_path.to_str().unwrap(),
+            "--source",
+            "regex",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert!(export.stdout.is_empty());
+    let rows = fs::read_to_string(export_path).unwrap();
+    let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
+    assert_eq!(row["class"], "email");
+    assert_eq!(row["source"], "regex");
+    assert_eq!(row["action"], "tokenize");
+    assert_eq!(row["document_kind"], "text");
+    assert!(row.get("decided_by").is_some());
+}
+
+#[test]
+fn s4_audit_export_does_not_return_raw_pii() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let raw_input =
+        "Hello Dr. Schmidt, your phone is +4915550112233 and email alice@example.invalid";
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        raw_input,
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert_no_raw_audit_pii(&export.stdout);
+}
+
+fn assert_no_raw_audit_pii(bytes: &[u8]) {
+    for raw in [
+        b"Dr. Schmidt".as_slice(),
+        b"+4915550112233".as_slice(),
+        b"alice@example.invalid".as_slice(),
+    ] {
+        assert!(
+            !bytes.windows(raw.len()).any(|window| window == raw),
+            "FAIL: raw PII '{}' found in audit output",
+            String::from_utf8_lossy(raw)
+        );
+    }
+}
+
+#[test]
 fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
     let (_dir, path) =
         write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
