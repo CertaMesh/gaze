@@ -743,11 +743,9 @@ fn t21f_prompt_preamble_threshold_03_pipeline_end_to_end() {
     let clean = v["clean_text"].as_str().unwrap();
 
     assert!(
-        Regex::new(
-            r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$"
-        )
-        .unwrap()
-        .is_match(clean),
+        Regex::new(r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$")
+            .unwrap()
+            .is_match(clean),
         "unexpected clean text: {clean}"
     );
     assert_eq!(v["stats"]["detections"], 1);
