@@ -573,6 +573,46 @@ mod tests {
     }
 
     #[test]
+    fn pattern_template_preserves_regex_quantifiers() {
+        let pattern = lower_pattern_template(
+            "email.header.name",
+            r"^(?:{locale_email_headers}): ([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})$",
+            &["From".to_string()],
+        )
+        .expect("lowered pattern");
+
+        assert!(pattern.contains(r"{0,3}"));
+        let regex = regex::Regex::new(&pattern).expect("compiled regex");
+        let captures = regex
+            .captures("From: Alice Example")
+            .expect("email header captures");
+        assert_eq!(captures.get(1).map(|m| m.as_str()), Some("Alice Example"));
+    }
+
+    #[test]
+    fn locale_email_headers_placeholder_is_non_capturing() {
+        let pattern = lower_pattern_template(
+            "email.header.name",
+            r#"^(?:{locale_email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>"#,
+            &["Von".to_string()],
+        )
+        .expect("lowered pattern");
+        let regex = regex::Regex::new(&pattern).expect("compiled regex");
+
+        let quoted = regex
+            .captures(r#"Von: "Doe, Jane" <jane@example.invalid>"#)
+            .expect("quoted capture");
+        assert_eq!(quoted.get(1).map(|m| m.as_str()), Some("Doe, Jane"));
+        assert!(quoted.get(2).is_none());
+
+        let bare = regex
+            .captures("Von: Alice Example <alice@example.invalid>")
+            .expect("bare capture");
+        assert!(bare.get(1).is_none());
+        assert_eq!(bare.get(2).map(|m| m.as_str()), Some("Alice Example"));
+    }
+
+    #[test]
     fn pattern_template_unknown_placeholder_fails_closed() {
         let rulepack = Rulepack::parse(
             r#"
