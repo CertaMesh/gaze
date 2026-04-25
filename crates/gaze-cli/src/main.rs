@@ -17,6 +17,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 mod clean_overrides;
 mod error;
+mod logger;
 
 use clap::{Parser, Subcommand};
 use regex::Regex;
@@ -108,23 +109,8 @@ enum Cmd {
     },
 }
 
-/// Install a panic hook that prints a sanitized error line and exits 3.
-/// Without this, a panic in `ort`, `regex`, or any other dep would leak a raw
-/// backtrace to stderr whenever `RUST_BACKTRACE` is set — violating the
-/// stderr discipline in docs/roadmap/v0.3/cli.md §"Stderr discipline".
-fn install_panic_hook() {
-    std::panic::set_hook(Box::new(|_info| {
-        eprintln!(r#"{{"error":"Pipeline","exit":3}}"#);
-        // Force exit 3 so the host wrapper sees the documented code instead
-        // of Rust's default 101. The hook runs BEFORE the runtime unwinds,
-        // so `process::exit` here is the only way to guarantee both the
-        // sanitized stderr line AND the contracted exit code.
-        std::process::exit(3);
-    }));
-}
-
 fn main() -> ExitCode {
-    install_panic_hook();
+    logger::install_panic_hook();
 
     // Test-only panic trigger. Lets the integration suite prove the panic
     // hook sanitizes stderr under `RUST_BACKTRACE=1`. Gated by an env var
