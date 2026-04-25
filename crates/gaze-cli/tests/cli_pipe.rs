@@ -218,41 +218,11 @@ priority = 77
     )
 }
 
-fn email_header_rulepack() -> String {
-    r#"
-schema_version = "0.1.0"
-rulepack_id = "email-header"
-rulepack_version = "0.4.1"
-default_locales = ["global"]
-
-[[recognizers]]
-id = "email.header.name"
-class = "Name"
-enabled = true
-locales = ["global"]
-
-[recognizers.match]
-kind = "regex"
-pattern_template = '''(?m)^{locale_email_headers}:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+<[^>]+>'''
-capture_groups = [2]
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-family = "email.header.name"
-"#
-    .to_string()
-}
-
-fn write_policy_with_email_header_rulepack(
+fn write_policy_with_bundled_rulepacks(
     bundled_rulepacks: &[&str],
     locale_active: &str,
 ) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
-    let rulepack_path = dir.path().join("email-header.toml");
-    fs::write(&rulepack_path, email_header_rulepack()).unwrap();
     let path = dir.path().join("policy.toml");
     let bundled = bundled_rulepacks
         .iter()
@@ -272,7 +242,60 @@ active = ["{locale_active}"]
 
 [policy.rulepacks]
 bundled = [{bundled}]
-paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn write_policy_with_test_ner(
+    bundled_rulepacks: &[&str],
+    locale_active: &str,
+    ner_locale: &str,
+    threshold: f32,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let model_dir = dir.path().join("__gaze_test_fixed_ner");
+    fs::create_dir(&model_dir).unwrap();
+    let path = dir.path().join("policy.toml");
+    let bundled = bundled_rulepacks
+        .iter()
+        .map(|rulepack| format!("\"{rulepack}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["{locale_active}"]
+
+[ner]
+model_dir = "{}"
+locale = "{ner_locale}"
+threshold = {threshold}
+
+[policy.rulepacks]
+bundled = [{bundled}]
 
 [[rule]]
 kind = "class"
@@ -288,7 +311,7 @@ action = "tokenize"
 kind = "default"
 action = "preserve"
 "#,
-            rulepack_path.display()
+            model_dir.display()
         ),
     )
     .unwrap();
@@ -493,7 +516,7 @@ fn cascade_restored_song_user_artist_tenant() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
             .collect()
     });
     for token in &tokens {
@@ -520,7 +543,7 @@ fn cascade_restored_snake_case() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
             .collect()
     });
     for token in &tokens {
@@ -672,9 +695,72 @@ terms = ["Sonnenlied"]
 }
 
 #[test]
+fn t21a_email_header_does_not_fire_on_inline_titlecase() {
+    let (_dir, path) = write_policy_with_bundled_rulepacks(&["core"], "en-US");
+    let input = "I love using Microsoft Word and React Components in New York";
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+
+    assert_eq!(v["clean_text"], input);
+    assert_eq!(v["stats"]["detections"], 0);
+}
+
+#[test]
+fn t21c_email_header_rejects_body_from_without_bracket() {
+    let (_dir, path) = write_policy_with_bundled_rulepacks(&["core"], "en-US");
+    let input = "From: React Component for context.\n";
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+
+    assert_eq!(v["clean_text"], input);
+    assert_eq!(v["stats"]["detections"], 0);
+}
+
+#[test]
+fn t21e_email_header_de_locale() {
+    let (_dir, path) =
+        write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
+    let input = "Von: Alice Example <alice@example.invalid>";
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^Von: <[0-9a-f]{8}:Name_\d+> <<[0-9a-f]{8}:Email_\d+>>$")
+            .unwrap()
+            .is_match(clean)
+    );
+    assert_eq!(v["stats"]["detections"], 2);
+    assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+
+    let restored = restore_success_text(v["session_blob"].as_str().unwrap(), clean);
+    assert_eq!(restored, input);
+}
+
+#[test]
+fn t21f_prompt_preamble_threshold_03_pipeline_end_to_end() {
+    let (_dir, path) =
+        write_policy_with_test_ner(&["core", "locale-de", "locale-en"], "de-DE", "de", 0.3);
+    let input = "Du antwortest als Artistfy-Support an Alice Example.";
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(
+            r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$"
+        )
+        .unwrap()
+        .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(v["stats"]["detections"], 1);
+    assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+
+    let restored = restore_success_text(v["session_blob"].as_str().unwrap(), clean);
+    assert_eq!(restored, input);
+}
+
+#[test]
 fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
     let (_dir, path) =
-        write_policy_with_email_header_rulepack(&["core", "locale-de", "locale-en"], "de-DE");
+        write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
     let v = clean_json_with_args(
         &[&format!("--policy={}", path.display())],
         "Von: Alice Example <alice@example.invalid>",
@@ -692,7 +778,7 @@ fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
 
 #[test]
 fn t21h_pattern_template_falls_back_to_global_when_locale_not_loaded() {
-    let (_dir, path) = write_policy_with_email_header_rulepack(&["core"], "fr-FR");
+    let (_dir, path) = write_policy_with_bundled_rulepacks(&["core"], "fr-FR");
     let v = clean_json_with_args(
         &[&format!("--policy={}", path.display())],
         "From: Alice Example <alice@example.invalid>",

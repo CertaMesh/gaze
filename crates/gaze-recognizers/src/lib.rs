@@ -28,10 +28,15 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 1);
+        assert_eq!(rulepack.recognizers.len(), 2);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
+        assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert!(matches!(
             rulepack.recognizers[0].matcher,
+            RawMatch::Regex { .. }
+        ));
+        assert!(matches!(
+            rulepack.recognizers[1].matcher,
             RawMatch::Regex { .. }
         ));
     }
