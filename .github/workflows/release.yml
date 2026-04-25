@@ -34,11 +34,20 @@ jobs:
           cp target/${{ matrix.target }}/release/gaze dist/${{ matrix.artifact }}
           chmod +x dist/${{ matrix.artifact }}
           (cd dist && shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: smoke
       - name: Smoke artifact
         shell: bash
         run: |
           set -euo pipefail
-          bin="dist/${{ matrix.artifact }}"
+          bin="smoke/${{ matrix.artifact }}"
+          chmod +x "$bin"
 
           "$bin" --version
           "$bin" clean --help | grep -q -- '--session-scope'
@@ -75,10 +84,6 @@ jobs:
           extended_json="$(printf 'host 192.0.2.1' | "$bin" clean --policy="$policy")"
           extended_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$extended_json")"
           grep -q 'Custom:ip_address' <<< "$extended_text" || (echo "smoke failed: core-extended did not tokenize IP fixture"; exit 1)
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          path: dist/*
 
   release:
     needs: build
