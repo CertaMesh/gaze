@@ -146,16 +146,12 @@ where
     }
 
     pub async fn db_schema(&self, table: &str) -> Result<TableSchemaOut, ProxyError> {
-        let schema = self
-            .db
-            .schema(table)
-            .await
-            .map_err(|err| {
-                ProxyError::SanitizedAdapter(
-                    self.sanitize_adapter_error(err)
-                        .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
-                )
-            })?;
+        let schema = self.db.schema(table).await.map_err(|err| {
+            ProxyError::SanitizedAdapter(
+                self.sanitize_adapter_error(err)
+                    .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
+            )
+        })?;
 
         Ok(TableSchemaOut {
             table: schema.table,
@@ -173,16 +169,26 @@ where
         })
     }
 
-    pub async fn db_sample(&self, table: &str, limit: usize) -> Result<Vec<CleanDocument>, ProxyError> {
+    pub async fn db_sample(
+        &self,
+        table: &str,
+        limit: usize,
+    ) -> Result<Vec<CleanDocument>, ProxyError> {
         let rows = match self.db.sample(table, limit).await {
             Ok(rows) => rows,
             Err(err) => {
-                return Err(ProxyError::SanitizedAdapter(self.sanitize_adapter_error(err)?))
+                return Err(ProxyError::SanitizedAdapter(
+                    self.sanitize_adapter_error(err)?,
+                ))
             }
         };
 
         rows.into_iter()
-            .map(|row| self.pipeline.redact(&self.session, RawDocument::Structured(row)).map_err(ProxyError::from))
+            .map(|row| {
+                self.pipeline
+                    .redact(&self.session, RawDocument::Structured(row))
+                    .map_err(ProxyError::from)
+            })
             .collect()
     }
 
@@ -201,16 +207,15 @@ where
         column: &str,
         limit: usize,
     ) -> Result<Vec<serde_json::Value>, ProxyError> {
-        let values = self
-            .db
-            .distinct(table, column, limit)
-            .await
-            .map_err(|err| {
-                ProxyError::SanitizedAdapter(
-                    self.sanitize_adapter_error(err)
-                        .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
-                )
-            })?;
+        let values =
+            self.db
+                .distinct(table, column, limit)
+                .await
+                .map_err(|err| {
+                    ProxyError::SanitizedAdapter(self.sanitize_adapter_error(err).unwrap_or_else(
+                        |redaction_err| format!("redaction failed: {redaction_err}"),
+                    ))
+                })?;
 
         values
             .into_iter()
@@ -219,18 +224,26 @@ where
     }
 
     pub async fn log_tail(&self, limit: usize) -> Result<Vec<CleanDocument>, ProxyError> {
-        let logs = self.logs.as_ref().ok_or_else(|| {
-            ProxyError::SanitizedAdapter("log adapter unavailable".to_string())
-        })?;
+        let logs = self
+            .logs
+            .as_ref()
+            .ok_or_else(|| ProxyError::SanitizedAdapter("log adapter unavailable".to_string()))?;
         let lines = match logs.tail(limit).await {
             Ok(lines) => lines,
             Err(err) => {
-                return Err(ProxyError::SanitizedAdapter(self.sanitize_adapter_error(err)?))
+                return Err(ProxyError::SanitizedAdapter(
+                    self.sanitize_adapter_error(err)?,
+                ))
             }
         };
 
-        lines.into_iter()
-            .map(|line| self.pipeline.redact(&self.session, RawDocument::Text(line)).map_err(ProxyError::from))
+        lines
+            .into_iter()
+            .map(|line| {
+                self.pipeline
+                    .redact(&self.session, RawDocument::Text(line))
+                    .map_err(ProxyError::from)
+            })
             .collect()
     }
 
@@ -240,35 +253,37 @@ where
         level: Option<&str>,
         limit: usize,
     ) -> Result<Vec<String>, ProxyError> {
-        let logs = self.logs.as_ref().ok_or_else(|| {
-            ProxyError::SanitizedAdapter("log adapter unavailable".to_string())
+        let logs = self
+            .logs
+            .as_ref()
+            .ok_or_else(|| ProxyError::SanitizedAdapter("log adapter unavailable".to_string()))?;
+        let lines = logs.search(pattern, level, limit).await.map_err(|err| {
+            ProxyError::SanitizedAdapter(
+                self.sanitize_adapter_error(err)
+                    .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
+            )
         })?;
-        let lines = logs
-            .search(pattern, level, limit)
-            .await
-            .map_err(|err| {
-                ProxyError::SanitizedAdapter(
-                    self.sanitize_adapter_error(err)
-                        .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
-                )
-            })?;
-        lines.into_iter().map(|line| self.redact_text(line)).collect()
+        lines
+            .into_iter()
+            .map(|line| self.redact_text(line))
+            .collect()
     }
 
     pub async fn logs_context(&self, request_id: &str) -> Result<Vec<String>, ProxyError> {
-        let logs = self.logs.as_ref().ok_or_else(|| {
-            ProxyError::SanitizedAdapter("log adapter unavailable".to_string())
+        let logs = self
+            .logs
+            .as_ref()
+            .ok_or_else(|| ProxyError::SanitizedAdapter("log adapter unavailable".to_string()))?;
+        let lines = logs.context(request_id).await.map_err(|err| {
+            ProxyError::SanitizedAdapter(
+                self.sanitize_adapter_error(err)
+                    .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
+            )
         })?;
-        let lines = logs
-            .context(request_id)
-            .await
-            .map_err(|err| {
-                ProxyError::SanitizedAdapter(
-                    self.sanitize_adapter_error(err)
-                        .unwrap_or_else(|redaction_err| format!("redaction failed: {redaction_err}")),
-                )
-            })?;
-        lines.into_iter().map(|line| self.redact_text(line)).collect()
+        lines
+            .into_iter()
+            .map(|line| self.redact_text(line))
+            .collect()
     }
 
     pub fn session(&self) -> &Session {
@@ -281,7 +296,10 @@ where
     }
 
     fn redact_text(&self, line: String) -> Result<String, ProxyError> {
-        match self.pipeline.redact(&self.session, RawDocument::Text(line))? {
+        match self
+            .pipeline
+            .redact(&self.session, RawDocument::Text(line))?
+        {
             CleanDocument::Text(text) => Ok(text),
             CleanDocument::Structured(_) => Err(ProxyError::SanitizedAdapter(
                 "unexpected structured log output".to_string(),
@@ -291,7 +309,10 @@ where
 
     fn redact_value(&self, column: &str, value: Value) -> Result<serde_json::Value, ProxyError> {
         let row = BTreeMap::from([(column.to_string(), value)]);
-        match self.pipeline.redact(&self.session, RawDocument::Structured(row))? {
+        match self
+            .pipeline
+            .redact(&self.session, RawDocument::Structured(row))?
+        {
             CleanDocument::Structured(fields) => Ok(fields
                 .get(column)
                 .cloned()

@@ -25,10 +25,12 @@ pub fn starts_with_session_prefix(s: &str) -> bool {
     let bytes = s.as_bytes();
     let is_lower_hex = |b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b);
 
-    if bytes.len() >= 10 && bytes[0] == b'<' && bytes[9] == b':' {
-        if bytes[1..9].iter().copied().all(is_lower_hex) {
-            return true;
-        }
+    if bytes.len() >= 10
+        && bytes[0] == b'<'
+        && bytes[9] == b':'
+        && bytes[1..9].iter().copied().all(is_lower_hex)
+    {
+        return true;
     }
 
     if bytes.len() >= 15 && bytes.starts_with(b"email") {

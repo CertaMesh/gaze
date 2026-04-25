@@ -31,12 +31,13 @@ pub fn build_pipeline(
     for detector in &policy.detectors {
         builder = match &detector.kind {
             DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                detector.pattern.as_deref().ok_or_else(|| {
-                    PolicyError::BadDictionary {
+                detector
+                    .pattern
+                    .as_deref()
+                    .ok_or_else(|| PolicyError::BadDictionary {
                         name: detector.name.clone(),
                         reason: "regex recognizer missing pattern".to_string(),
-                    }
-                })?,
+                    })?,
                 detector.class.clone(),
                 &detector.name,
             )?),
@@ -194,7 +195,9 @@ pub fn build_pipeline(
 
     for rule in &policy.rules {
         builder = match rule {
-            RuleSpec::Class { class, action } => builder.rule(ClassRule::new(class.clone(), *action)),
+            RuleSpec::Class { class, action } => {
+                builder.rule(ClassRule::new(class.clone(), *action))
+            }
             RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
             RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
         };
@@ -274,8 +277,7 @@ fn merged_locale_email_headers(rulepacks: &[Rulepack]) -> Vec<String> {
         .iter()
         .filter_map(|rulepack| rulepack.locale.as_ref())
         .filter_map(|locale| locale.email_headers.as_ref())
-        .filter(|headers| !headers.names.is_empty())
-        .last()
+        .rfind(|headers| !headers.names.is_empty())
         .map(|headers| headers.names.clone())
         .unwrap_or_else(|| {
             vec![
@@ -371,7 +373,10 @@ family = "email.header.name"
             .expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
         let clean = pipeline
-            .redact(&session, RawDocument::Text("Von: Dana Weber <user@example.invalid>".into()))
+            .redact(
+                &session,
+                RawDocument::Text("Von: Dana Weber <user@example.invalid>".into()),
+            )
             .expect("redact");
 
         let CleanDocument::Text(text) = clean else {

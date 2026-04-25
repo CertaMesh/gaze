@@ -490,7 +490,11 @@ struct OrtBackend {
 }
 
 impl OrtBackend {
-    fn load(model_dir: &Path, labels: LabelMap, id2label: Vec<String>) -> Result<Self, NerLoadError> {
+    fn load(
+        model_dir: &Path,
+        labels: LabelMap,
+        id2label: Vec<String>,
+    ) -> Result<Self, NerLoadError> {
         let tokenizer = tokenizers::Tokenizer::from_file(model_dir.join(TOKENIZER_FILE))
             .map_err(|err| NerLoadError::Tokenizer(err.to_string()))?;
         let session = ort::session::Session::builder()
@@ -626,7 +630,12 @@ fn warn_on_label_vocab_mismatch(labels: &LabelMap, id2label: &[String], model_di
     }
     if usable == 0 {
         let sample_label: String = labels.keys().take(5).collect::<Vec<_>>().join(",");
-        let sample_id: String = id2label.iter().take(5).cloned().collect::<Vec<_>>().join(",");
+        let sample_id: String = id2label
+            .iter()
+            .take(5)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(",");
         tracing::warn!(
             model_dir = %model_dir.display(),
             label_keys = %sample_label,
@@ -726,8 +735,8 @@ fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
         path: path.to_path_buf(),
         source,
     })?;
-    let raw: BTreeMap<String, String> = serde_json::from_slice(&bytes)
-        .map_err(|err| NerLoadError::LabelsParse(err.to_string()))?;
+    let raw: BTreeMap<String, String> =
+        serde_json::from_slice(&bytes).map_err(|err| NerLoadError::LabelsParse(err.to_string()))?;
     let mut map = BTreeMap::new();
     for (key, value) in raw {
         let class = match value.to_ascii_lowercase().as_str() {
@@ -765,8 +774,8 @@ fn parse_config(path: &Path) -> Result<ConfigFile, NerLoadError> {
 fn config_to_id2label(
     id2label: Option<BTreeMap<String, String>>,
 ) -> Result<Vec<String>, NerLoadError> {
-    let map =
-        id2label.ok_or_else(|| NerLoadError::ConfigParse("config.json missing id2label".to_string()))?;
+    let map = id2label
+        .ok_or_else(|| NerLoadError::ConfigParse("config.json missing id2label".to_string()))?;
     let mut pairs: Vec<(usize, String)> = map
         .into_iter()
         .map(|(key, value)| {
@@ -996,7 +1005,10 @@ mod tests {
     #[test]
     fn malformed_checksums_fail_closed() {
         let dir = tempdir().unwrap();
-        write(&dir.path().join(CHECKSUMS_FILE), b"not-a-hash  model.onnx\n");
+        write(
+            &dir.path().join(CHECKSUMS_FILE),
+            b"not-a-hash  model.onnx\n",
+        );
         let err = NerDetector::verify_artifacts(dir.path()).unwrap_err();
         assert!(
             matches!(err, NerLoadError::ChecksumsMalformed { .. }),
@@ -1054,7 +1066,17 @@ mod tests {
         map.insert("B-LOC".to_string(), PiiClass::Location);
         map.insert("I-LOC".to_string(), PiiClass::Location);
         let labels = LabelMap(map);
-        let spans = vec![(0, 4), (5, 9), (10, 13), (14, 22), (23, 26), (27, 30), (31, 36), (37, 39), (40, 46)];
+        let spans = vec![
+            (0, 4),
+            (5, 9),
+            (10, 13),
+            (14, 22),
+            (23, 26),
+            (27, 30),
+            (31, 36),
+            (37, 39),
+            (40, 46),
+        ];
         let tags = vec!["O", "O", "O", "B-PER", "O", "O", "O", "O", "B-LOC"];
         let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner/ort");
         assert_eq!(out.len(), 2, "both Wolfgang + Berlin must emit: {out:?}");

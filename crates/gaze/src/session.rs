@@ -123,7 +123,12 @@ impl Session {
         self.tokenize_with_family(DEFAULT_COUNTER_FAMILY, class, raw)
     }
 
-    pub fn tokenize_with_family(&self, family: &str, class: &PiiClass, raw: &str) -> Result<String> {
+    pub fn tokenize_with_family(
+        &self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+    ) -> Result<String> {
         self.intern_mapping(Some(family), class, raw, |index| {
             format!("<{}:{}_{}>", self.session_hex(), class.class_name(), index)
         })

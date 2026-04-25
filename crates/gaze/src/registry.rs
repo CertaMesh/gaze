@@ -258,7 +258,7 @@ impl RecognizerRegistry {
 impl From<&[LocaleTag]> for LocaleChain {
     fn from(tags: &[LocaleTag]) -> Self {
         let mut owned = tags.to_vec();
-        if !owned.iter().any(|tag| *tag == LocaleTag::Global) {
+        if !owned.contains(&LocaleTag::Global) {
             owned.push(LocaleTag::Global);
         }
         LocaleChain::from_tags(owned)

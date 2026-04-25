@@ -117,6 +117,7 @@ impl Pipeline {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn redact_text(
         &self,
         session: &Session,
