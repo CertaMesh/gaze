@@ -352,6 +352,74 @@ fn phase2_validators_drop_failing_candidates_and_iban_canonicalizes() {
 }
 
 #[test]
+fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
+    let rulepack = core_extended();
+    let input = "Bank IBAN: DE89 3704 0044 0532 0130 00";
+
+    assert_eq!(
+        detect_recognizer(&rulepack, "iban.structural", input, LocaleTag::DeDe),
+        vec!["DE89 3704 0044 0532 0130 00".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer_canonical_forms(&rulepack, "iban.structural", input, LocaleTag::DeDe),
+        vec![Some("DE89370400440532013000".to_string())]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+    assert_custom_token(&clean, "iban");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn phase2_formatted_card_with_spaces_tokenizes_and_round_trips() {
+    let rulepack = core_extended();
+    let input = "Card: 4111 1111 1111 1111";
+
+    assert_eq!(
+        detect_recognizer(&rulepack, "card.structural", input, LocaleTag::EnUs),
+        vec!["4111 1111 1111 1111".to_string()]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_custom_token(&clean, "credit_card");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn phase2_formatted_card_with_hyphens_tokenizes_and_round_trips() {
+    let rulepack = core_extended();
+    let input = "Card: 4111-1111-1111-1111";
+
+    assert_eq!(
+        detect_recognizer(&rulepack, "card.structural", input, LocaleTag::EnUs),
+        vec!["4111-1111-1111-1111".to_string()]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_custom_token(&clean, "credit_card");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn phase2_formatted_card_failing_luhn_drops() {
+    let rulepack = core_extended();
+    let input = "Card: 4111 1111 1111 1112";
+
+    assert!(detect_recognizer(&rulepack, "card.structural", input, LocaleTag::EnUs).is_empty());
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_eq!(clean, input);
+}
+
+#[test]
 fn phase2_iban_and_cards_are_universal_and_solo_classes() {
     let rulepack = core_extended();
     let iban = rulepack
