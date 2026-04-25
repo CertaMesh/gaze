@@ -144,6 +144,15 @@ pub enum RulepackError {
     RegexPatternChoice { id: String },
     #[error("unknown pattern_template placeholder '{placeholder}' in recognizer '{id}'")]
     UnknownPatternTemplatePlaceholder { id: String, placeholder: String },
+    #[error(
+        "context class_map override for dictionary '{dict}' changes {old_class:?} to {new_class:?}, but {uncovered_rule}"
+    )]
+    ClassMapOverrideClash {
+        dict: String,
+        old_class: PiiClass,
+        new_class: PiiClass,
+        uncovered_rule: String,
+    },
 }
 
 impl Rulepack {

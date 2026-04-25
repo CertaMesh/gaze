@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use gaze::{
-    ClassRule, ColumnRule, Context, DefaultRule, DetectorKind, LocaleChain, PiiClass, Pipeline,
-    PolicyError, RawMatch, RuleSpec, Rulepack, RulepackError,
+    Action, ClassRule, ColumnRule, Context, DefaultRule, DetectorKind, LocaleChain, PiiClass,
+    Pipeline, PolicyError, RawMatch, RuleSpec, Rulepack, RulepackError,
 };
 use gaze_recognizers::{
     DictionaryRecognizer, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -51,9 +51,11 @@ pub fn build_pipeline(
                     }
                 })?;
                 registered_dictionaries.insert(dictionary_name.to_string());
+                let class =
+                    class_for_dictionary(policy, context, dictionary_name, detector.class.clone())?;
                 builder.recognizer(DictionaryRecognizer::new(
                     format!("dict/{}", detector.name),
-                    detector.class.clone(),
+                    class,
                     dictionary_name,
                     detector.case_sensitive,
                     detector.token_family.clone(),
@@ -150,7 +152,6 @@ pub fn build_pipeline(
                     .into());
                 }
                 let id = recognizer.id;
-                let class = recognizer.class;
                 let token_family = recognizer
                     .token
                     .family
@@ -159,6 +160,8 @@ pub fn build_pipeline(
                 let base_score = recognizer.scoring.base;
                 let priority = recognizer.scoring.priority;
                 registered_dictionaries.insert(dictionary_name.clone());
+                let class =
+                    class_for_dictionary(policy, context, &dictionary_name, recognizer.class)?;
                 builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
                     id,
                     class,
@@ -180,11 +183,7 @@ pub fn build_pipeline(
         if registered_dictionaries.contains(name) {
             continue;
         }
-        let class = context
-            .class_map
-            .get(name)
-            .cloned()
-            .unwrap_or_else(|| PiiClass::custom(name));
+        let class = class_for_dictionary(policy, context, name, PiiClass::custom(name))?;
         builder = builder.recognizer(DictionaryRecognizer::new(
             format!("context/{name}"),
             class,
@@ -219,6 +218,53 @@ pub fn build_pipeline(
     }
 
     Ok(builder.build()?)
+}
+
+fn class_for_dictionary(
+    policy: &gaze::Policy,
+    context: &Context,
+    dictionary_name: &str,
+    original_class: PiiClass,
+) -> Result<PiiClass, RulepackError> {
+    let Some(override_class) = context.class_map.get(dictionary_name) else {
+        return Ok(original_class);
+    };
+    if override_class == &original_class {
+        return Ok(original_class);
+    }
+    if class_has_tokenize_or_stricter_action(&policy.rules, override_class) {
+        Ok(override_class.clone())
+    } else {
+        Err(RulepackError::ClassMapOverrideClash {
+            dict: dictionary_name.to_string(),
+            old_class: original_class,
+            new_class: override_class.clone(),
+            uncovered_rule: format!(
+                "no tokenize-or-stricter action rule covers {:?}",
+                override_class
+            ),
+        })
+    }
+}
+
+fn class_has_tokenize_or_stricter_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
+    for rule in rules {
+        let action = match rule {
+            RuleSpec::Class {
+                class: rule_class,
+                action,
+            } if rule_class == class => Some(action),
+            RuleSpec::Default { action } => Some(action),
+            _ => None,
+        };
+        if let Some(action) = action {
+            return matches!(
+                action,
+                Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize
+            );
+        }
+    }
+    false
 }
 
 fn lower_regex_pattern(
@@ -357,6 +403,117 @@ mod tests {
             class_map: std::collections::HashMap::new(),
             fields: serde_json::Map::new(),
         }
+    }
+
+    fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
+        gaze::Policy {
+            session: SessionPolicy {
+                scope: SessionScope::Ephemeral,
+                ttl_secs: None,
+            },
+            detectors: vec![gaze::DetectorSpec {
+                kind: DetectorKind::Dictionary,
+                name: "alpha".to_string(),
+                pattern: None,
+                class: PiiClass::custom("foo"),
+                dictionary_name: Some("dict_alpha".to_string()),
+                case_sensitive: true,
+                token_family: "counter".to_string(),
+            }],
+            dictionaries: Vec::new(),
+            rules,
+            ner: None,
+            rulepacks: gaze::RulepackPolicy {
+                bundled: Vec::new(),
+                paths: Vec::new(),
+            },
+            locale: Some(vec![LocaleTag::Global]),
+        }
+    }
+
+    fn context_with_alpha_override() -> Context {
+        Context {
+            dictionaries: std::collections::HashMap::from([(
+                "dict_alpha".to_string(),
+                gaze::ContextDictionary {
+                    terms: vec!["context-song-123".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: std::collections::HashMap::from([(
+                "dict_alpha".to_string(),
+                PiiClass::custom("bar"),
+            )]),
+            fields: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn t20_context_class_map_overrides_policy_dict_class() {
+        let policy = policy_with_registered_dictionary(vec![
+            RuleSpec::Class {
+                class: PiiClass::custom("bar"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ]);
+        let context = context_with_alpha_override();
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline =
+            build_pipeline(&policy, &context, &[], &active_locales, None).expect("pipeline");
+        let dictionaries = gaze::DictionaryBundle::from_context(&context);
+        let fields = serde_json::Map::new();
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact_with_detect_context(
+                &session,
+                RawDocument::Text("track context-song-123".to_string()),
+                active_locales.as_slice(),
+                &dictionaries,
+                &fields,
+            )
+            .expect("redact");
+
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        assert!(regex::Regex::new(r"^track <[0-9a-f]{8}:Custom:bar_\d+>$")
+            .unwrap()
+            .is_match(&text));
+    }
+
+    #[test]
+    fn t20a_class_map_override_fails_closed_when_action_rule_uncovered() {
+        let policy = policy_with_registered_dictionary(vec![
+            RuleSpec::Class {
+                class: PiiClass::custom("foo"),
+                action: Action::Tokenize,
+            },
+            RuleSpec::Default {
+                action: Action::Preserve,
+            },
+        ]);
+        let context = context_with_alpha_override();
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+        let err = match build_pipeline(&policy, &context, &[], &active_locales, None) {
+            Ok(_) => panic!("uncovered class_map override must fail closed"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(
+            err,
+            BuildError::Rulepack(RulepackError::ClassMapOverrideClash {
+                dict,
+                old_class,
+                new_class,
+                ..
+            }) if dict == "dict_alpha"
+                && old_class == PiiClass::custom("foo")
+                && new_class == PiiClass::custom("bar")
+        ));
     }
 
     #[test]
