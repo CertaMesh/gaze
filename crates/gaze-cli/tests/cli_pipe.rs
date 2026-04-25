@@ -12,10 +12,14 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use regex::Regex;
+use rusqlite::Connection;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
-use gaze::{PiiClass, Scope, Session, SqliteLogger};
+use gaze::{
+    build_audit_query_sql, AuditFilter, PiiClass, Scope, Session, SqliteLogger,
+    AUDIT_RESTRICTED_COLUMNS,
+};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
@@ -1114,6 +1118,262 @@ action = "preserve"
             source_shape.is_match(&entry.source),
             "unexpected audit source: {}",
             entry.source
+        );
+    }
+}
+
+#[test]
+fn s4_audit_query_and_export_return_filtered_metadata_rows() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--class",
+            "email",
+            "--action",
+            "tokenize",
+            "--document-kind",
+            "text",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    assert!(stdout.starts_with(
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\n"
+    ));
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t")),
+        "unexpected query stdout: {stdout}"
+    );
+
+    let export_path = dir.path().join("audit.jsonl");
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--output",
+            export_path.to_str().unwrap(),
+            "--source",
+            "regex",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert!(export.stdout.is_empty());
+    let rows = fs::read_to_string(export_path).unwrap();
+    let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
+    assert_eq!(row["class"], "email");
+    assert_eq!(row["source"], "regex");
+    assert_eq!(row["action"], "tokenize");
+    assert_eq!(row["field_name"], Value::Null);
+    assert_eq!(row["document_kind"], "text");
+    assert_eq!(row["conflict_loser"], false);
+    assert!(row.get("decided_by").is_some());
+}
+
+#[test]
+fn s4_audit_export_does_not_return_raw_pii() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let raw_input =
+        "Hello Dr. Schmidt, your phone is +4915550112233 and email alice@example.invalid";
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        raw_input,
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert_no_raw_audit_pii(&export.stdout);
+}
+
+#[test]
+fn s4_audit_extra_column_not_leaked() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    {
+        let conn = Connection::open(&audit_path).unwrap();
+        conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+            .unwrap();
+        conn.execute(
+            "UPDATE redaction_log SET raw_value = ?",
+            ["Dr. Schmidt's secret SSN: 999-99-9999"],
+        )
+        .unwrap();
+    }
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let needle = b"Dr. Schmidt's secret SSN";
+    assert!(
+        !query
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit query output"
+    );
+    assert!(
+        !export
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit export output"
+    );
+}
+
+#[test]
+fn s4_audit_query_columns_are_restricted() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+        .unwrap();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true);
+    assert!(
+        values.is_empty(),
+        "default audit filter should not bind query values"
+    );
+    let stmt = conn.prepare(&sql).unwrap();
+    let column_names: Vec<String> = stmt
+        .column_names()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| column.to_string())
+        .collect();
+
+    assert_eq!(
+        column_names, expected,
+        "audit query SQL must return exactly AUDIT_RESTRICTED_COLUMNS"
+    );
+}
+
+fn assert_no_raw_audit_pii(bytes: &[u8]) {
+    for raw in [
+        b"Dr. Schmidt".as_slice(),
+        b"+4915550112233".as_slice(),
+        b"alice@example.invalid".as_slice(),
+    ] {
+        assert!(
+            !bytes.windows(raw.len()).any(|window| window == raw),
+            "FAIL: raw PII '{}' found in audit output",
+            String::from_utf8_lossy(raw)
         );
     }
 }
