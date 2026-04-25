@@ -461,7 +461,7 @@ fn cascade_restored_song_user_artist_tenant() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
             .collect()
     });
     for token in &tokens {
@@ -488,7 +488,7 @@ fn cascade_restored_snake_case() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(*class), raw).unwrap())
+            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
             .collect()
     });
     for token in &tokens {

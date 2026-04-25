@@ -793,52 +793,6 @@ fn config_to_id2label(
     Ok(out)
 }
 
-/// Test-only helpers for stacking multiple `NerDetector` instances with
-/// in-memory fake backends. Lets pipeline tests verify Layer-1 stackability
-/// without real ONNX artifacts.
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::*;
-
-    struct FixedBackend {
-        detections: Vec<NerSpanResult>,
-    }
-
-    impl NerBackend for FixedBackend {
-        fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
-            Ok(self.detections.clone())
-        }
-    }
-
-    /// Build a `NerDetector` that emits a fixed detection set, bypassing the
-    /// SHA256-pinned artifact contract. For tests only.
-    pub(crate) fn detector_with_detections(
-        source: &str,
-        detections: Vec<Detection>,
-    ) -> NerDetector {
-        let kind = match source {
-            "gliner" => NerBackendKind::Gliner,
-            _ => NerBackendKind::Ort,
-        };
-        NerDetector {
-            model_dir: PathBuf::from("/test/fake"),
-            backend_kind: kind,
-            locale: None,
-            threshold: 0.3,
-            backend: Arc::new(FixedBackend {
-                detections: detections
-                    .into_iter()
-                    .map(|detection| NerSpanResult {
-                        span: detection.span,
-                        class: detection.class,
-                        score: 1.0,
-                    })
-                    .collect(),
-            }),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
