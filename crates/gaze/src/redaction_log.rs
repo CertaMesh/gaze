@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 
 use crate::detector::PiiClass;
 use crate::rule::Action;
@@ -27,6 +27,27 @@ pub struct RedactionEntry {
     pub conflict_loser: bool,
     pub decided_by: ConflictTier,
 }
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AuditFilter {
+    pub class: Option<String>,
+    pub source: Option<String>,
+    pub action: Option<String>,
+    pub document_kind: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditLogRow {
+    pub class: String,
+    pub source: String,
+    pub action: String,
+    pub document_kind: String,
+    pub decided_by: String,
+}
+
+#[allow(dead_code)]
+pub const AUDIT_RESTRICTED_COLUMNS: &[&str] =
+    &["class", "source", "action", "document_kind", "decided_by"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConflictTier {
@@ -137,6 +158,32 @@ impl SqliteLogger {
         }
         Ok(entries)
     }
+
+    pub fn query(path: &Path, filter: &AuditFilter) -> Result<Vec<AuditLogRow>> {
+        let conn = Connection::open(path).map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        let has_decided_by = table_has_column(&conn, "decided_by")?;
+        let (sql, values) = build_audit_query_sql(filter, has_decided_by);
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        let rows = stmt
+            .query_map(params_from_iter(values.iter()), |row| {
+                Ok(AuditLogRow {
+                    class: row.get(0)?,
+                    source: row.get(1)?,
+                    action: row.get(2)?,
+                    document_kind: row.get(3)?,
+                    decided_by: row.get(4)?,
+                })
+            })
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row.map_err(|err| crate::Error::Sqlite(err.to_string()))?);
+        }
+        Ok(entries)
+    }
 }
 
 impl RedactionLogger for SqliteLogger {
@@ -173,6 +220,59 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
     }
+}
+
+/// Audit reads are defense-in-depth restricted to metadata columns that are
+/// safe to display. Do not switch this path to `SELECT *`; future schema
+/// additions may include restore material or other sensitive payloads.
+pub fn build_audit_query_sql(filter: &AuditFilter, has_decided_by: bool) -> (String, Vec<String>) {
+    let decided_by_column = if has_decided_by {
+        "decided_by"
+    } else {
+        "'none' AS decided_by"
+    };
+    let mut sql = format!(
+        "SELECT class, source, action, document_kind, {decided_by_column} FROM redaction_log"
+    );
+    let mut predicates = Vec::new();
+    let mut values = Vec::new();
+    if let Some(class) = &filter.class {
+        predicates.push("class = ?");
+        values.push(class.clone());
+    }
+    if let Some(source) = &filter.source {
+        predicates.push("source = ?");
+        values.push(source.clone());
+    }
+    if let Some(action) = &filter.action {
+        predicates.push("action = ?");
+        values.push(action.clone());
+    }
+    if let Some(document_kind) = &filter.document_kind {
+        predicates.push("document_kind = ?");
+        values.push(document_kind.clone());
+    }
+    if !predicates.is_empty() {
+        sql.push_str(" WHERE ");
+        sql.push_str(&predicates.join(" AND "));
+    }
+    sql.push_str(" ORDER BY rowid");
+    (sql, values)
+}
+
+fn table_has_column(conn: &Connection, name: &str) -> Result<bool> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(redaction_log)")
+        .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+    let columns = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+    for column in columns {
+        if column.map_err(|err| crate::Error::Sqlite(err.to_string()))? == name {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusqlite::Error> {
