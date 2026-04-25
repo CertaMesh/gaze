@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- v0.4.2 P3.S4 release CI now publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-22.04` runner, alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts.
+- Release artifact smoke now executes the packaged binary for `--version`, `alice@example.invalid` clean/restore reversibility, S1 runtime knob help flags (`--session-scope`, NER, and rulepack surfaces), and `core-extended` bundled rulepack loading with neutral non-real fixture data.
 - v0.4.1 Bundle P1 foundation: `gaze-assembly` library entrypoint, `xtask` scaffold, and the `symmetric_potemkin_gate` workflow.
 - `token.family` now threads from recognizers into session snapshot entries while preserving the existing emitted token grammar.
 - Locale-aware regex `pattern_template` lowering for `{locale_email_headers}` with English and German defaults.

@@ -53,7 +53,15 @@ tar -xzf gaze-v0.4.0-rc.1-aarch64-apple-darwin.tar.gz
 mv gaze /usr/local/bin/gaze
 ```
 
-Linux and Intel macOS binaries are not published in v0.4.0-rc.1; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release -p gaze-cli` in the meantime.
+Linux x86_64 release asset pattern for v0.4.2 release candidates and later:
+
+```bash
+curl -L -o gaze https://github.com/Naoray/gaze/releases/download/v0.4.2-rc.1/gaze-x86_64-unknown-linux-gnu
+chmod +x gaze
+mv gaze /usr/local/bin/gaze
+```
+
+Intel macOS binaries are not published in v0.4.0-rc.1; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release -p gaze-cli` in the meantime.
 
 ## Workspace Layout
 

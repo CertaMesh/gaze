@@ -1,7 +1,11 @@
+#[cfg(target_os = "macos")]
 use std::env;
+#[cfg(target_os = "macos")]
 use std::path::PathBuf;
+#[cfg(target_os = "macos")]
 use std::process::Command;
 
+#[cfg(target_os = "macos")]
 fn main() {
     let Ok(target) = env::var("TARGET") else {
         return;
@@ -15,6 +19,10 @@ fn main() {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+fn main() {}
+
+#[cfg(target_os = "macos")]
 fn clang_runtime_dir() -> Option<PathBuf> {
     let output = Command::new("xcrun")
         .args(["clang", "--print-resource-dir"])
