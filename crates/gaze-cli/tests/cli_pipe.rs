@@ -12,6 +12,7 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use regex::Regex;
+use rusqlite::Connection;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
@@ -1246,6 +1247,78 @@ fn s4_audit_export_does_not_return_raw_pii() {
         String::from_utf8_lossy(&export.stderr)
     );
     assert_no_raw_audit_pii(&export.stdout);
+}
+
+#[test]
+fn s4_audit_extra_column_not_leaked() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    {
+        let conn = Connection::open(&audit_path).unwrap();
+        conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+            .unwrap();
+        conn.execute(
+            "UPDATE redaction_log SET raw_value = ?",
+            ["Dr. Schmidt's secret SSN: 999-99-9999"],
+        )
+        .unwrap();
+    }
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let needle = b"Dr. Schmidt's secret SSN";
+    assert!(
+        !query
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit query output"
+    );
+    assert!(
+        !export
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit export output"
+    );
 }
 
 fn assert_no_raw_audit_pii(bytes: &[u8]) {
