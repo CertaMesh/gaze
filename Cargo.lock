@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "gaze"
-version = "0.4.0-rc.1"
+version = "0.4.1"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -1195,13 +1195,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaze-assembly"
+version = "0.4.1"
+dependencies = [
+ "gaze",
+ "gaze-recognizers",
+ "regex",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "gaze-cli"
-version = "0.4.0-rc.1"
+version = "0.4.1"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
  "clap",
  "gaze",
+ "gaze-assembly",
  "gaze-recognizers",
  "regex",
  "serde",
@@ -1212,7 +1225,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.4.0-rc.1"
+version = "0.4.1"
 dependencies = [
  "aho-corasick",
  "criterion",
@@ -4570,6 +4583,14 @@ checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
 dependencies = [
  "libc",
  "rustix",
+]
+
+[[package]]
+name = "xtask"
+version = "0.0.1"
+dependencies = [
+ "anyhow",
+ "clap",
 ]
 
 [[package]]

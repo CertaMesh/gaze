@@ -1,6 +1,6 @@
 [package]
 name = "gaze-cli"
-version = "0.4.0-rc.1"
+version = "0.4.1"
 edition = "2021"
 rust-version = "1.89"
 license = "Apache-2.0"
@@ -14,6 +14,7 @@ path = "src/main.rs"
 base64 = "0.22"
 clap = { version = "4", features = ["derive"] }
 gaze = { path = "../gaze" }
+gaze-assembly = { path = "../gaze-assembly" }
 gaze-recognizers = { path = "../gaze-recognizers" }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

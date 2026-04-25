@@ -127,7 +127,7 @@ impl fmt::Display for LocaleTag {
 }
 
 fn ensure_global(tags: &mut Vec<LocaleTag>) {
-    if !tags.iter().any(|tag| *tag == LocaleTag::Global) {
+    if !tags.contains(&LocaleTag::Global) {
         tags.push(LocaleTag::Global);
     }
 }

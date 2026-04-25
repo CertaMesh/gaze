@@ -126,7 +126,10 @@ impl DebugProxyServer {
         }
     }
 
-    #[tool(name = "db.tables", description = "List tables visible through the debug proxy.")]
+    #[tool(
+        name = "db.tables",
+        description = "List tables visible through the debug proxy."
+    )]
     async fn db_tables(&self) -> Result<CallToolResult, ErrorData> {
         to_result(
             self.ctx
@@ -136,7 +139,10 @@ impl DebugProxyServer {
         )
     }
 
-    #[tool(name = "db.schema", description = "Describe one table's schema and policy classes.")]
+    #[tool(
+        name = "db.schema",
+        description = "Describe one table's schema and policy classes."
+    )]
     async fn db_schema(
         &self,
         Parameters(args): Parameters<DbSchemaArgs>,
@@ -144,7 +150,10 @@ impl DebugProxyServer {
         to_result(self.ctx.db_schema(&args.table).await)
     }
 
-    #[tool(name = "db.sample", description = "Return redacted sample rows from a table.")]
+    #[tool(
+        name = "db.sample",
+        description = "Return redacted sample rows from a table."
+    )]
     async fn db_sample(
         &self,
         Parameters(args): Parameters<DbSampleArgs>,
@@ -170,7 +179,10 @@ impl DebugProxyServer {
         )
     }
 
-    #[tool(name = "db.distinct", description = "Return redacted distinct values from one column.")]
+    #[tool(
+        name = "db.distinct",
+        description = "Return redacted distinct values from one column."
+    )]
     async fn db_distinct(
         &self,
         Parameters(args): Parameters<DbDistinctArgs>,
@@ -187,7 +199,10 @@ impl DebugProxyServer {
         )
     }
 
-    #[tool(name = "logs.search", description = "Search the configured Laravel log.")]
+    #[tool(
+        name = "logs.search",
+        description = "Search the configured Laravel log."
+    )]
     async fn logs_search(
         &self,
         Parameters(args): Parameters<LogsSearchArgs>,
@@ -219,7 +234,10 @@ impl DebugProxyServer {
         )
     }
 
-    #[tool(name = "logs.context", description = "Return log lines for one request id.")]
+    #[tool(
+        name = "logs.context",
+        description = "Return log lines for one request id."
+    )]
     async fn logs_context(
         &self,
         Parameters(args): Parameters<LogsContextArgs>,
@@ -244,11 +262,9 @@ pub async fn run(policy_path: &Path) -> Result<(), ServerError> {
         remote_host: prepared.connection.remote_host.clone(),
         remote_port: prepared.connection.remote_port,
     })?;
-    let db = Arc::new(MysqlAdapter::connect(&serve::mysql_url(
-        &prepared.connection,
-        &prepared.password,
-    ))
-    .await?);
+    let db = Arc::new(
+        MysqlAdapter::connect(&serve::mysql_url(&prepared.connection, &prepared.password)).await?,
+    );
     let logs = prepared
         .policy
         .policy
@@ -256,7 +272,9 @@ pub async fn run(policy_path: &Path) -> Result<(), ServerError> {
         .as_ref()
         .and_then(|logs| logs.path.clone())
         .map(|path| Arc::new(LaravelLogAdapter::new(path)));
-    let session = Arc::new(Session::new(Scope::Conversation("debug-proxy-stdio".to_string()))?);
+    let session = Arc::new(Session::new(Scope::Conversation(
+        "debug-proxy-stdio".to_string(),
+    ))?);
     let ctx = Arc::new(ToolContext::with_policy(
         prepared.pipeline,
         session,
@@ -276,11 +294,13 @@ pub async fn run(policy_path: &Path) -> Result<(), ServerError> {
     Ok(())
 }
 
-fn to_result<T: Serialize>(result: Result<T, crate::adapter::ProxyError>) -> Result<CallToolResult, ErrorData> {
+fn to_result<T: Serialize>(
+    result: Result<T, crate::adapter::ProxyError>,
+) -> Result<CallToolResult, ErrorData> {
     match result {
         Ok(value) => {
-            let json =
-                serde_json::to_string(&value).map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
+            let json = serde_json::to_string(&value)
+                .map_err(|err| ErrorData::internal_error(err.to_string(), None))?;
             Ok(CallToolResult::success(vec![Content::text(json)]))
         }
         Err(err) => Err(ErrorData::internal_error(err.to_string(), None)),
@@ -290,7 +310,9 @@ fn to_result<T: Serialize>(result: Result<T, crate::adapter::ProxyError>) -> Res
 fn clean_document_to_text(document: gaze::CleanDocument) -> String {
     match document {
         gaze::CleanDocument::Text(text) => text,
-        gaze::CleanDocument::Structured(fields) => serde_json::to_string(&fields).unwrap_or_default(),
+        gaze::CleanDocument::Structured(fields) => {
+            serde_json::to_string(&fields).unwrap_or_default()
+        }
     }
 }
 

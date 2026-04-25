@@ -1,0 +1,15 @@
+[package]
+name = "gaze-assembly"
+version = "0.4.1"
+edition = "2021"
+rust-version = "1.89"
+license = "Apache-2.0"
+description = "Policy-to-pipeline assembly for Gaze"
+
+[dependencies]
+gaze = { path = "../gaze" }
+gaze-recognizers = { path = "../gaze-recognizers" }
+regex = "1"
+serde_json = "1"
+thiserror = "1"
+tracing = "0.1"

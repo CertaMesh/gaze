@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- v0.4.1 Bundle P1 foundation: `gaze-assembly` library entrypoint, `xtask` scaffold, and the `symmetric_potemkin_gate` workflow.
+- `token.family` now threads from recognizers into session snapshot entries while preserving the existing emitted token grammar.
+- Locale-aware regex `pattern_template` lowering for `{locale_email_headers}` with English and German defaults.
+- `capture_groups = [...]` regex span narrowing with first-non-empty semantics.
+- `NerRecognizer` public export plus `[ner] threshold` policy knob using min-aggregated span confidence.
+
+### Changed
+
+- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.1`.
+- Snapshot envelope version bumped from 2 to 3; v0.4.1 imports v2 snapshots with default `counter` family, while v0.4.0 rejects v3 snapshots instead of silently collapsing family metadata.
+
+### Fixed
+
+- Markus adopter dogfood gap closed at the foundation layer: locale-aware email-header schema supports `Von:` / `An:` plus English defaults for the upcoming header recognizer.
+- `[ner] threshold` knob un-deferred from v0.4.2 so adopters can tune the NER confidence floor for prompt-preamble PII.
+
 ## [0.4.0-rc.1] - 2026-04-24
 
 ### Added

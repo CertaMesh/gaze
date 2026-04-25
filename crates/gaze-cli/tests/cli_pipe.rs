@@ -218,6 +218,83 @@ priority = 77
     )
 }
 
+fn email_header_rulepack() -> String {
+    r#"
+schema_version = "0.1.0"
+rulepack_id = "email-header"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?m)^{locale_email_headers}:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+<[^>]+>'''
+capture_groups = [2]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+family = "email.header.name"
+"#
+    .to_string()
+}
+
+fn write_policy_with_email_header_rulepack(
+    bundled_rulepacks: &[&str],
+    locale_active: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("email-header.toml");
+    fs::write(&rulepack_path, email_header_rulepack()).unwrap();
+    let path = dir.path().join("policy.toml");
+    let bundled = bundled_rulepacks
+        .iter()
+        .map(|rulepack| format!("\"{rulepack}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["{locale_active}"]
+
+[policy.rulepacks]
+bundled = [{bundled}]
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
 fn session_blob_ttl_secs(blob: &str) -> u64 {
     let raw = BASE64.decode(blob.as_bytes()).unwrap();
     let payload: Value = serde_json::from_slice(&raw[97..]).unwrap();
@@ -592,6 +669,55 @@ terms = ["Sonnenlied"]
     assert!(clean.ends_with(":Email_1>"));
     assert_eq!(v["stats"]["detections"], 1);
     assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+}
+
+#[test]
+fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
+    let (_dir, path) =
+        write_policy_with_email_header_rulepack(&["core", "locale-de", "locale-en"], "de-DE");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Von: Alice Example <alice@example.invalid>",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^Von: <[0-9a-f]{8}:Name_\d+> <<[0-9a-f]{8}:Email_\d+>>$")
+            .unwrap()
+            .is_match(clean)
+    );
+    assert_eq!(v["stats"]["detections"], 2);
+    assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+}
+
+#[test]
+fn t21h_pattern_template_falls_back_to_global_when_locale_not_loaded() {
+    let (_dir, path) = write_policy_with_email_header_rulepack(&["core"], "fr-FR");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "From: Alice Example <alice@example.invalid>",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^From: <[0-9a-f]{8}:Name_\d+> <<[0-9a-f]{8}:Email_\d+>>$")
+            .unwrap()
+            .is_match(clean)
+    );
+    assert_eq!(v["stats"]["detections"], 2);
+    assert_eq!(v["stats"]["locale_chain"], json!(["fr-FR", "global"]));
+}
+
+#[test]
+fn t_cli_ner_threshold_out_of_range_fails_closed() {
+    let out = clean_raw_with_args(&["--ner-threshold", "1.5"], "Reach support.");
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
 }
 
 #[test]

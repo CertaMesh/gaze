@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use crate::policy::{build_pipeline, ConnectionConfig, PolicyError, PolicyFile};
 pub use crate::mcp::server::ServerError;
+use crate::policy::{build_pipeline, ConnectionConfig, PolicyError, PolicyFile};
 
 pub struct PreparedServe {
     pub policy: PolicyFile,

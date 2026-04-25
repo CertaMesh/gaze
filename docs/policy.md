@@ -198,12 +198,14 @@ action = "preserve"
 [ner]
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 locale = "de"
+threshold = 0.3
 ```
 
 | Field       | Type   | Required | Notes                                                          |
 |-------------|--------|----------|----------------------------------------------------------------|
 | `model_dir` | string | no       | Directory containing the ONNX model bundle. `~/` is expanded from `$HOME`. If absent, NER is silently disabled and the pipeline runs with regex detectors only (a `tracing::warn!` is logged). |
 | `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`).          |
+| `threshold` | float  | no       | Confidence floor in the inclusive range `0.0..=1.0`. Defaults to `0.3`. `gaze clean --ner-threshold=<float>` overrides this value for one invocation. |
 
 If `model_dir` is set but the model fails to load (missing files, bad
 manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
@@ -342,6 +344,10 @@ exports a `SensitiveSnapshot` (the `session_blob` field of stdout) so that
 The `--session-ttl=<secs>` CLI flag overrides the policy TTL for persistent
 sessions. If the flag is omitted, `gaze clean` uses `[session].ttl_secs`;
 policy-less stub mode falls back to `86400`.
+
+The `--ner-threshold=<float>` CLI flag overrides `[ner].threshold` for one
+`gaze clean` invocation. Precedence is CLI flag, then policy TOML, then the
+default `0.3`. Values outside `0.0..=1.0` fail closed as `PolicyConfig`.
 
 TTL enforcement on `gaze restore`: when the imported snapshot's `issued_at +
 ttl_secs` has passed, restore fails with **exit `3` `BlobExpired`**. (The

@@ -16,7 +16,7 @@ mod session;
 pub mod token_shape;
 mod types;
 
-pub use context::{Context as TypedContext, ContextDictionary, ContextError, RawContext};
+pub use context::{Context, Context as TypedContext, ContextDictionary, ContextError, RawContext};
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
 pub use dictionaries::{
     DictionaryBundle, DictionaryEntry, DictionaryLoadError, DictionarySource, DictionaryStats,
@@ -25,8 +25,8 @@ pub use dictionaries::{
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{
-    DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,
-    SessionScope,
+    DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, RulepackPolicy,
+    SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,
 };
 pub use redaction_log::{
     ConflictTier, DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger,
@@ -38,8 +38,8 @@ pub use registry::{
 pub use resolver::resolve_candidates;
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
-    ContextSpec, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack, RulepackError, RulepackSource,
-    ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
+    ContextSpec, LocaleData, LocaleEmailHeaders, NormalizerSpec, RawMatch, RecognizerSpec,
+    Rulepack, RulepackError, RulepackSource, ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
 };
 pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,

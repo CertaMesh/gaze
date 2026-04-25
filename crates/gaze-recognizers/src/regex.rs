@@ -44,7 +44,7 @@ pub struct RegexDetector {
     base_score: f32,
     priority: i32,
     token_family: String,
-    token_format: String,
+    capture_groups: Option<Vec<u32>>,
     exclusions: Vec<String>,
     validator_kind: Option<ValidatorKind>,
     normalizer_kind: Option<NormalizerKind>,
@@ -64,7 +64,7 @@ impl RegexDetector {
             0.70,
             0,
             "counter",
-            "{Class}_{n}",
+            None,
             Vec::new(),
             None,
             None,
@@ -80,7 +80,7 @@ impl RegexDetector {
         base_score: f32,
         priority: i32,
         token_family: &str,
-        token_format: &str,
+        capture_groups: Option<Vec<u32>>,
         exclusions: Vec<String>,
         validator_kind: Option<ValidatorKind>,
         normalizer_kind: Option<NormalizerKind>,
@@ -94,7 +94,7 @@ impl RegexDetector {
             base_score,
             priority,
             token_family: token_family.to_string(),
-            token_format: token_format.to_string(),
+            capture_groups,
             exclusions,
             validator_kind,
             normalizer_kind,
@@ -107,18 +107,15 @@ impl RegexDetector {
             PiiClass::Email,
         )
     }
-
-    pub fn token_format(&self) -> &str {
-        &self.token_format
-    }
 }
 
 impl Detector for RegexDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
         self.regex
-            .find_iter(input)
-            .map(|m| Detection {
-                span: m.range(),
+            .captures_iter(input)
+            .filter_map(|caps| self.span_from_captures(&caps))
+            .map(|span| Detection {
+                span,
                 class: self.class.clone(),
                 source: self.source.clone(),
             })
@@ -137,15 +134,19 @@ impl Recognizer for RegexDetector {
 
     fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
         self.regex
-            .find_iter(input)
-            .filter(|m| !self.is_excluded(m.as_str()))
-            .map(|m| Candidate {
-                span: m.range(),
+            .captures_iter(input)
+            .filter_map(|caps| {
+                let span = self.span_from_captures(&caps)?;
+                let matched = &input[span.clone()];
+                (!self.is_excluded(matched)).then_some((span, matched))
+            })
+            .map(|(span, matched)| Candidate {
+                span,
                 class: self.class.clone(),
                 recognizer_id: self.source.clone(),
                 score: self.base_score,
                 priority: self.priority,
-                canonical_form: self.canonical_form(m.as_str()),
+                canonical_form: self.canonical_form(matched),
                 token_family: self.token_family().to_string(),
                 source: self.source.clone(),
                 decided_by: ConflictTier::None,
@@ -182,6 +183,18 @@ impl RegexDetector {
             None => None,
         }
     }
+
+    fn span_from_captures(&self, caps: &regex::Captures<'_>) -> Option<std::ops::Range<usize>> {
+        if let Some(groups) = &self.capture_groups {
+            groups
+                .iter()
+                .filter_map(|group| caps.get(*group as usize))
+                .find(|m| !m.as_str().is_empty())
+                .map(|m| m.range())
+        } else {
+            caps.get(0).map(|m| m.range())
+        }
+    }
 }
 
 fn is_basic_email(input: &str) -> bool {
@@ -205,7 +218,7 @@ mod tests {
             0.70,
             0,
             "counter",
-            "{Class}_{n}",
+            None,
             Vec::new(),
             Some(ValidatorKind::EmailRfc),
             Some(NormalizerKind::EmailCanonical),
@@ -225,5 +238,41 @@ mod tests {
             detections[0].canonical_form.as_deref(),
             Some("alice@example.invalid")
         );
+    }
+
+    #[test]
+    fn regex_recognizer_uses_first_non_empty_capture_group() {
+        let detector = RegexDetector::with_rulepack_fields(
+            r#"(?m)^From:\s+(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))\s+<[^>]+>"#,
+            PiiClass::Name,
+            "email.header.name",
+            vec![LocaleTag::Global],
+            0.90,
+            0,
+            "email.header.name",
+            Some(vec![1, 2]),
+            Vec::new(),
+            None,
+            None,
+        )
+        .expect("regex detector");
+        let fields = serde_json::Map::new();
+        let dictionaries = gaze::DictionaryBundle::default();
+        let ctx = DetectContext {
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+        let input =
+            "From: Dana Weber <user@example.invalid>\nFrom: \"Prof. Weber\" <other@example.invalid>";
+
+        let candidates = Recognizer::detect(&detector, input, &ctx);
+        let matched = candidates
+            .iter()
+            .map(|candidate| &input[candidate.span.clone()])
+            .collect::<Vec<_>>();
+
+        assert_eq!(matched, vec!["Dana Weber", "Prof. Weber"]);
     }
 }

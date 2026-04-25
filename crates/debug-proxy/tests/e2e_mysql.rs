@@ -11,10 +11,7 @@ async fn boot() -> Option<(MysqlAdapter, testcontainers::ContainerAsync<Mysql>)>
         Ok(container) => container,
         Err(_) => return None,
     };
-    let port = container
-        .get_host_port_ipv4(3306)
-        .await
-        .ok()?;
+    let port = container.get_host_port_ipv4(3306).await.ok()?;
     let url = format!("mysql://root@127.0.0.1:{port}/test");
     let adapter = MysqlAdapter::connect(&url).await.ok()?;
 

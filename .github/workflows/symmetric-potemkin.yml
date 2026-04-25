@@ -1,0 +1,14 @@
+name: symmetric-potemkin
+
+on:
+  pull_request:
+
+jobs:
+  symmetric-potemkin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run symmetric_potemkin_gate
+        run: cargo run -p xtask -- symmetric-potemkin

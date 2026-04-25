@@ -98,6 +98,7 @@ pub fn build_pipeline(policy: &PolicyFile) -> Result<Pipeline, PolicyError> {
             model_dir,
             NerOptions {
                 locale: policy.ner.locale.clone(),
+                threshold: 0.3,
             },
         )
         .map_err(|err| {
@@ -118,9 +119,11 @@ pub fn build_pipeline(policy: &PolicyFile) -> Result<Pipeline, PolicyError> {
 
     if let Some(logs) = &policy.policy.logs {
         for (index, pattern) in logs.strip_patterns.iter().enumerate() {
-            builder = builder.detector(
-                RegexDetector::with_source(pattern, gaze::PiiClass::custom("log_strip"), &format!("log-strip-{index}"))?,
-            );
+            builder = builder.detector(RegexDetector::with_source(
+                pattern,
+                gaze::PiiClass::custom("log_strip"),
+                &format!("log-strip-{index}"),
+            )?);
         }
     }
 

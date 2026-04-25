@@ -7,7 +7,9 @@ use thiserror::Error;
 
 use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Policy {
     pub session: SessionPolicy,
     pub detectors: Vec<DetectorSpec>,
@@ -49,10 +51,11 @@ pub enum DetectorKind {
     Unknown(String),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NerPolicy {
     pub model_dir: Option<PathBuf>,
     pub locale: Option<String>,
+    pub threshold: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,6 +101,8 @@ pub enum PolicyError {
     LegacyDetectorUnsupported(&'static str),
     #[error("ner load error: {0}")]
     NerLoad(String),
+    #[error("ner.threshold must be between 0.0 and 1.0 inclusive, got {value}")]
+    NerThresholdOutOfRange { value: f32 },
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
@@ -169,6 +174,8 @@ struct RawDetectorSpec {
 struct RawNerPolicy {
     model_dir: Option<String>,
     locale: Option<String>,
+    #[serde(default)]
+    threshold: Option<f32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -451,9 +458,14 @@ fn parse_rule(raw: RawRuleSpec) -> Result<RuleSpec, PolicyError> {
 }
 
 fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
+    let threshold = raw.threshold.unwrap_or(DEFAULT_NER_THRESHOLD);
+    if !(0.0..=1.0).contains(&threshold) {
+        return Err(PolicyError::NerThresholdOutOfRange { value: threshold });
+    }
     Ok(NerPolicy {
         model_dir: raw.model_dir.map(expand_home).transpose()?,
         locale: raw.locale,
+        threshold,
     })
 }
 
@@ -555,6 +567,7 @@ class = "email"
 [ner]
 model_dir = "~/.cache/gaze/model"
 locale = "de"
+threshold = 0.4
 
 [[rule]]
 kind = "class"
@@ -580,10 +593,39 @@ action = "preserve"
         assert_eq!(policy.session.ttl_secs, Some(86400));
         assert_eq!(policy.detectors.len(), 1);
         assert_eq!(policy.rules.len(), 2);
+        let ner = policy.ner.unwrap();
         assert_eq!(
-            policy.ner.unwrap().model_dir,
+            ner.model_dir,
             Some(PathBuf::from("/tmp/gaze-home/.cache/gaze/model"))
         );
+        assert_eq!(ner.threshold, 0.4);
+    }
+
+    #[test]
+    fn rejects_ner_threshold_out_of_range() {
+        let raw = r#"
+[session]
+scope = "ephemeral"
+
+[ner]
+threshold = 1.1
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+        let raw: RawPolicy = toml::from_str(raw).expect("raw policy");
+
+        assert!(matches!(
+            Policy::try_from(raw),
+            Err(PolicyError::NerThresholdOutOfRange { value }) if value == 1.1
+        ));
     }
 
     #[test]
