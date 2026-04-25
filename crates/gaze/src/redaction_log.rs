@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use rusqlite::{params, params_from_iter, Connection};
+use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 
 use crate::detector::PiiClass;
 use crate::rule::Action;
@@ -160,7 +160,7 @@ impl SqliteLogger {
     }
 
     pub fn query(path: &Path, filter: &AuditFilter) -> Result<Vec<AuditLogRow>> {
-        let conn = Connection::open(path).map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        let conn = open_audit_query_connection(path)?;
         let has_decided_by = table_has_column(&conn, "decided_by")?;
         let (sql, values) = build_audit_query_sql(filter, has_decided_by);
         let mut stmt = conn
@@ -258,6 +258,14 @@ pub fn build_audit_query_sql(filter: &AuditFilter, has_decided_by: bool) -> (Str
     }
     sql.push_str(" ORDER BY rowid");
     (sql, values)
+}
+
+fn open_audit_query_connection(path: &Path) -> Result<Connection> {
+    Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|err| crate::Error::Sqlite(err.to_string()))
 }
 
 fn table_has_column(conn: &Connection, name: &str) -> Result<bool> {
@@ -380,4 +388,38 @@ fn document_kind_from_db(value: &str) -> std::result::Result<DocumentKind, rusql
             ))
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn s4_audit_query_db_is_readonly() {
+        let temp_db = tempfile::NamedTempFile::new().unwrap();
+        {
+            let logger = SqliteLogger::new(temp_db.path()).unwrap();
+            logger
+                .log(&RedactionEntry {
+                    source: "regex".to_string(),
+                    class: PiiClass::Email,
+                    action: Action::Tokenize,
+                    field_name: None,
+                    document_kind: DocumentKind::Text,
+                    conflict_loser: false,
+                    decided_by: ConflictTier::None,
+                })
+                .unwrap();
+        }
+
+        let conn = open_audit_query_connection(temp_db.path()).unwrap();
+        let err = conn
+            .execute(
+                "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by) VALUES ('regex', 'email', 'tokenize', NULL, 'text', 0, 'none')",
+                [],
+            )
+            .expect_err("audit query connection must reject writes");
+
+        assert_eq!(err.sqlite_error_code(), Some(rusqlite::ErrorCode::ReadOnly));
+    }
 }
