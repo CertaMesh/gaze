@@ -32,3 +32,7 @@ tempfile = "3"
 [[bench]]
 name = "dictionary"
 harness = false
+
+[[bench]]
+name = "restore_pass2"
+harness = false
