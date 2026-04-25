@@ -74,6 +74,51 @@ recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
 define the auditable contract; changing them requires changing the policy or
 rulepack document itself.
 
+## Configuration surfaces - three-surfaces parity table
+
+This table audits every current `policy.toml` field accepted by
+[`Policy::load`](../crates/gaze/src/policy.rs). Runtime knobs are scalar,
+enum, or path values that can reasonably vary for one `gaze clean` execution;
+they must have a CLI flag, TOML field, and documented default or required
+state. Policy-document fields define recognizers, rules, dictionaries, or
+rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
+
+| Policy field | Type | CLI flag | TOML | Default | Class |
+|---|---|---|---|---|---|
+| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob |
+| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob |
+| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob |
+| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob |
+| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob |
+| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob |
+| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when `[policy.rulepacks]` is omitted | runtime knob |
+| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob |
+| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document |
+| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document |
+| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document |
+| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document |
+| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document |
+| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document |
+| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document |
+| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document |
+| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document |
+| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document |
+| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document |
+| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document |
+| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document |
+| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document |
+| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document |
+| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document |
+| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document |
+| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface |
+
+Runtime-knob verification is covered by the CLI integration suite:
+`s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the
+complete flag set, while focused tests cover symmetric failure and observed
+behavior for session scope, session TTL, NER threshold/model/locale, active
+locale, bundled rulepacks, and rulepack paths. The audit found no runtime
+policy field missing a CLI flag.
+
 ## Classes
 
 A `class` identifies what kind of PII a recognizer detects. Every recognizer
