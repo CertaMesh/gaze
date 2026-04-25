@@ -17,6 +17,9 @@ jobs:
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: gaze-aarch64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: gaze-x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +34,47 @@ jobs:
           cp target/${{ matrix.target }}/release/gaze dist/${{ matrix.artifact }}
           chmod +x dist/${{ matrix.artifact }}
           (cd dist && shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256)
+      - name: Smoke artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="dist/${{ matrix.artifact }}"
+
+          "$bin" --version
+          "$bin" clean --help | grep -q -- '--session-scope'
+          "$bin" clean --help | grep -q -- '--ner-model-dir'
+          "$bin" clean --help | grep -q -- '--ner-locale'
+          "$bin" clean --help | grep -q -- '--rulepack-bundled'
+          "$bin" clean --help | grep -q -- '--rulepack-path'
+
+          clean_json="$(printf 'alice@example.invalid' | "$bin" clean)"
+          clean_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$clean_json")"
+          grep -q '<' <<< "$clean_text" || (echo "smoke failed: no token in output"; exit 1)
+          restore_request="$(python3 -c 'import json,sys; v=json.load(sys.stdin); print(json.dumps({"session_blob": v["session_blob"], "text": v["clean_text"]}))' <<< "$clean_json")"
+          restored_json="$(printf '%s' "$restore_request" | "$bin" restore)"
+          python3 -c 'import json,sys; assert json.load(sys.stdin)["text"] == "alice@example.invalid"' <<< "$restored_json"
+
+          policy="$(mktemp)"
+          cat > "$policy" <<'POLICY'
+          [session]
+          scope = "persistent"
+          ttl_secs = 86400
+
+          [policy.rulepacks]
+          bundled = ["core", "core-extended"]
+
+          [[rule]]
+          kind = "class"
+          class = "custom:ip_address"
+          action = "tokenize"
+
+          [[rule]]
+          kind = "default"
+          action = "preserve"
+          POLICY
+          extended_json="$(printf 'host 192.0.2.1' | "$bin" clean --policy="$policy")"
+          extended_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$extended_json")"
+          grep -q 'Custom:ip_address' <<< "$extended_text" || (echo "smoke failed: core-extended did not tokenize IP fixture"; exit 1)
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
