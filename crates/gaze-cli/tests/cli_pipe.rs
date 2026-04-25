@@ -359,6 +359,13 @@ fn assert_symmetric_policy_config(cli_out: std::process::Output, toml_out: std::
     );
 }
 
+fn normalize_session_hex(text: &str) -> String {
+    Regex::new(r"<[0-9a-f]{8}:")
+        .unwrap()
+        .replace_all(text, "<SESSION:")
+        .to_string()
+}
+
 fn write_policy_with_rulepack(
     rulepack: &str,
     locale_active: Option<&str>,
@@ -458,6 +465,61 @@ action = "tokenize"
 [[rule]]
 kind = "class"
 class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn write_policy_with_core_extended_rulepacks(
+    bundled_rulepacks: &[&str],
+    locale_active: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    let bundled = bundled_rulepacks
+        .iter()
+        .map(|rulepack| format!("\"{rulepack}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["{locale_active}"]
+
+[policy.rulepacks]
+bundled = [{bundled}]
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:phone"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:ip_address"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:postal_code"
 action = "tokenize"
 
 [[rule]]
@@ -1274,6 +1336,142 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
         "unexpected clean text: {clean}"
     );
     assert_eq!(with_locale_pack["stats"]["detections"], 2);
+}
+
+#[test]
+fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
+    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103-1234";
+    let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
+    let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
+    let core_clean = core_only["clean_text"].as_str().unwrap();
+    assert!(core_clean.contains(":Email_1>"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:phone"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:ip_address"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:postal_code"), "{core_clean}");
+    assert_eq!(core_only["stats"]["detections"], 1);
+
+    let (_extended_dir, extended_policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+    let extended =
+        clean_json_with_args(&[&format!("--policy={}", extended_policy.display())], input);
+    let extended_clean = extended["clean_text"].as_str().unwrap();
+    assert!(extended_clean.contains(":Email_1>"), "{extended_clean}");
+    assert!(
+        extended_clean.contains(":Custom:phone_1>"),
+        "{extended_clean}"
+    );
+    assert!(
+        extended_clean.contains(":Custom:ip_address_1>"),
+        "{extended_clean}"
+    );
+    assert!(
+        extended_clean.contains(":Custom:postal_code_1>"),
+        "{extended_clean}"
+    );
+    assert_eq!(extended["stats"]["detections"], 4);
+    assert_eq!(
+        restore_success_text(extended["session_blob"].as_str().unwrap(), extended_clean),
+        input
+    );
+}
+
+#[test]
+fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() {
+    let input = "phone +4915112345678 host 192.168.1.1 zip 94103";
+    let (_toml_dir, toml_policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+    let toml = clean_json_with_args(&[&format!("--policy={}", toml_policy.display())], input);
+
+    let (_cli_dir, cli_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
+    let cli = clean_json_with_args(
+        &[
+            &format!("--policy={}", cli_policy.display()),
+            "--rulepack-bundled=core,core-extended",
+        ],
+        input,
+    );
+
+    assert_eq!(
+        normalize_session_hex(toml["clean_text"].as_str().unwrap()),
+        normalize_session_hex(cli["clean_text"].as_str().unwrap())
+    );
+    assert_eq!(toml["stats"]["detections"], cli["stats"]["detections"]);
+
+    let (_valid_dir, valid_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
+    let (_invalid_dir, invalid_policy) =
+        write_policy_with_core_extended_rulepacks(&["garbage"], "en-US");
+    let cli_out = clean_raw_with_args(
+        &[
+            &format!("--policy={}", valid_policy.display()),
+            "--rulepack-bundled=garbage",
+        ],
+        input,
+    );
+    let toml_out = clean_raw_with_args(&[&format!("--policy={}", invalid_policy.display())], input);
+    assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+
+    let us = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en-US"],
+        "ZIP 94103-1234",
+    );
+    let us_clean = us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^ZIP <[0-9a-f]{8}:Custom:postal_code_1>$")
+            .unwrap()
+            .is_match(us_clean),
+        "unexpected en-US clean text: {us_clean}"
+    );
+
+    let de = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
+        "Berlin 10115",
+    );
+    let de_clean = de["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Berlin <[0-9a-f]{8}:Custom:postal_code_1>$")
+            .unwrap()
+            .is_match(de_clean),
+        "unexpected de-DE clean text: {de_clean}"
+    );
+
+    let plain_en = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en"],
+        "ZIP 94103",
+    );
+    assert_eq!(plain_en["clean_text"], "ZIP 94103");
+    assert_eq!(plain_en["stats"]["detections"], 0);
+
+    let de_zip4 = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
+        "ZIP 94103-1234",
+    );
+    let de_zip4_clean = de_zip4["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^ZIP <[0-9a-f]{8}:Custom:postal_code_1>-1234$")
+            .unwrap()
+            .is_match(de_zip4_clean),
+        "de-DE must not apply postal.us full ZIP+4 shape: {de_zip4_clean}"
+    );
+}
+
+#[test]
+fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "de-DE");
+    let input = "Subscriber_0001234567 Order_0815 0123-456789 0815 12345";
+    let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(!clean.contains("Custom:phone"), "{clean}");
+    assert!(clean.contains("Subscriber_0001234567"), "{clean}");
+    assert!(clean.contains("Order_0815"), "{clean}");
+    assert!(clean.contains("0123-456789"), "{clean}");
 }
 
 #[test]
