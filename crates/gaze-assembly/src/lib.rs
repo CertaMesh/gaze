@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use gaze::{
-    ClassRule, ColumnRule, Context, DefaultRule, DetectorKind, PiiClass, Pipeline, PolicyError,
-    RawMatch, RuleSpec, Rulepack, RulepackError,
+    ClassRule, ColumnRule, Context, DefaultRule, DetectorKind, LocaleChain, PiiClass, Pipeline,
+    PolicyError, RawMatch, RuleSpec, Rulepack, RulepackError,
 };
 use gaze_recognizers::{
     DictionaryRecognizer, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -23,10 +23,11 @@ pub fn build_pipeline(
     policy: &gaze::Policy,
     context: &Context,
     rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
 ) -> Result<Pipeline, BuildError> {
     let mut builder = Pipeline::builder();
     let mut registered_dictionaries = BTreeSet::<String>::new();
-    let locale_headers = merged_locale_email_headers(rulepacks);
+    let locale_headers = merged_locale_email_headers(rulepacks, active_locales);
 
     for detector in &policy.detectors {
         builder = match &detector.kind {
@@ -271,23 +272,49 @@ fn lower_pattern_template(
     Ok(lowered)
 }
 
-fn merged_locale_email_headers(rulepacks: &[Rulepack]) -> Vec<String> {
-    rulepacks
-        .iter()
-        .filter_map(|rulepack| rulepack.locale.as_ref())
-        .filter_map(|locale| locale.email_headers.as_ref())
-        .rfind(|headers| !headers.names.is_empty())
-        .map(|headers| headers.names.clone())
-        .unwrap_or_else(|| {
-            vec![
-                "From".to_string(),
-                "To".to_string(),
-                "Cc".to_string(),
-                "Bcc".to_string(),
-                "Reply-To".to_string(),
-                "Sender".to_string(),
-            ]
-        })
+fn merged_locale_email_headers(
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for active_locale in active_locales.as_slice() {
+        for rulepack in rulepacks {
+            if !rulepack.default_locales.contains(active_locale) {
+                continue;
+            }
+            let Some(headers) = rulepack
+                .locale
+                .as_ref()
+                .and_then(|locale| locale.email_headers.as_ref())
+            else {
+                continue;
+            };
+            for name in &headers.names {
+                if seen.insert(name.clone()) {
+                    names.push(name.clone());
+                }
+            }
+        }
+    }
+
+    if names.is_empty() {
+        default_email_headers()
+    } else {
+        names
+    }
+}
+
+fn default_email_headers() -> Vec<String> {
+    vec![
+        "From".to_string(),
+        "To".to_string(),
+        "Cc".to_string(),
+        "Bcc".to_string(),
+        "Reply-To".to_string(),
+        "Sender".to_string(),
+    ]
 }
 
 #[cfg(test)]
@@ -368,8 +395,16 @@ family = "email.header.name"
 "#,
         )
         .expect("email header rulepack");
-        let pipeline = build_pipeline(&policy(), &empty_context(), &[core, de, email_header])
-            .expect("pipeline");
+        let policy = policy();
+        let active_locales =
+            LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), Some(&[LocaleTag::DeDe]));
+        let pipeline = build_pipeline(
+            &policy,
+            &empty_context(),
+            &[core, de, email_header],
+            &active_locales,
+        )
+        .expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
         let clean = pipeline
             .redact(
@@ -409,7 +444,9 @@ pattern_template = '''{unknown_placeholder}: (.+)'''
         )
         .expect("parse");
 
-        let err = match build_pipeline(&policy(), &empty_context(), &[rulepack]) {
+        let policy = policy();
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let err = match build_pipeline(&policy, &empty_context(), &[rulepack], &active_locales) {
             Ok(_) => panic!("unknown placeholder must fail"),
             Err(err) => err,
         };

@@ -257,9 +257,11 @@ fn run_clean(
     );
 
     let pipeline = match &loaded_policy {
-        Some(policy) => build_pipeline_from_policy(policy, &loaded_rulepacks, context.as_ref())
-            .map_err(map_pipeline_error)?
-            .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
+        Some(policy) => {
+            build_pipeline_from_policy(policy, &loaded_rulepacks, context.as_ref(), &locale_chain)
+                .map_err(map_pipeline_error)?
+                .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>))
+        }
         None if context.is_some() => build_context_pipeline(
             context.as_ref().expect("checked context"),
             Arc::clone(&counter) as Arc<dyn RedactionLogger>,
@@ -397,19 +399,24 @@ fn build_pipeline_from_policy(
     policy: &Policy,
     rulepacks: &[Rulepack],
     context: Option<&TypedContext>,
+    locale_chain: &LocaleChain,
 ) -> GazeResult<Pipeline> {
     let empty_context = TypedContext {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
         fields: serde_json::Map::new(),
     };
-    gaze_assembly::build_pipeline(policy, context.unwrap_or(&empty_context), rulepacks).map_err(
-        |err| match err {
-            gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
-            gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
-            gaze_assembly::BuildError::Pipeline(err) => err,
-        },
+    gaze_assembly::build_pipeline(
+        policy,
+        context.unwrap_or(&empty_context),
+        rulepacks,
+        locale_chain,
     )
+    .map_err(|err| match err {
+        gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
+        gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
+        gaze_assembly::BuildError::Pipeline(err) => err,
+    })
 }
 
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
