@@ -553,7 +553,7 @@ engineering board:
    The rulepack schema parses `token.family`, `token.format`,
    `context.hotwords`, `context.boost`, and `context.window` for
    forward-compatible authoring, but the loader rejects any non-default value
-   with `RulepackError::UnsupportedFieldInB1`. Runtime consumers ship in
+   with `RulepackError::UnsupportedField`. Runtime consumers ship in
    v0.4.1; until then, leave these fields unset or explicitly default.
 5. **v0.4.0-rc.1 dictionary audit granularity.** The redaction log carries
    `dictionary:{name}` for dictionary hits; per-term `[#term_index]`

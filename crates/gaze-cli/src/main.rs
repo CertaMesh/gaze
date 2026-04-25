@@ -751,6 +751,8 @@ impl RedactionLogger for ArcLogger {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Instant;
+
     use super::*;
 
     fn policy_with_ner_threshold(threshold: f32) -> Policy {
@@ -793,51 +795,6 @@ mod tests {
         assert_eq!(resolve_ner_threshold(None, Some(&policy)), 0.5);
         assert_eq!(resolve_ner_threshold(None, None), DEFAULT_NER_THRESHOLD);
     }
-}
-
-#[derive(Serialize)]
-struct CleanResponse {
-    clean_text: String,
-    session_blob: String,
-    stats: Stats,
-}
-
-#[derive(Serialize)]
-struct Stats {
-    detections: u64,
-    locale_chain: Vec<String>,
-    dictionaries_loaded: Vec<LoadedDictionaryStats>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    context_source: Option<String>,
-}
-
-#[derive(Serialize)]
-struct LoadedDictionaryStats {
-    name: String,
-    term_count: usize,
-    source: String,
-}
-
-impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
-    fn from(stats: gaze::DictionaryStats) -> Self {
-        let source = match stats.source {
-            DictionarySource::Cli => "cli",
-            DictionarySource::Rulepack => "rulepack",
-        };
-        Self {
-            name: stats.name,
-            term_count: stats.term_count,
-            source: source.to_string(),
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::time::Instant;
-
-    use super::*;
-
     fn empty_session() -> Session {
         Session::new(Scope::Ephemeral).expect("session")
     }
@@ -874,7 +831,7 @@ mod tests {
     fn pass2_cursor_scan_handles_token_shaped_text_inside_substituted_span() {
         let session = empty_session();
         let text = "Order_42";
-        let spans = [0..text.len()];
+        let spans = std::iter::once(0..text.len()).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
         assert!(is_inside_substitution_span(
@@ -893,7 +850,7 @@ mod tests {
     fn pass2_cursor_scan_traps_adjacent_hallucinated_tokens_outside_substituted_span() {
         let session = empty_session();
         let text = "Alice_1<Email_999>";
-        let spans = [0..7];
+        let spans = std::iter::once(0..7).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
         assert!(is_inside_substitution_span(0, 7, &spans, &mut cursor));
@@ -919,7 +876,7 @@ mod tests {
     fn pass2_cursor_scan_tolerant_mode_reports_first_unknown_token() {
         let session = empty_session();
         let text = "Alice_1 <Email_999> <Name_100>";
-        let spans = [0..7];
+        let spans = std::iter::once(0..7).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
         assert!(is_inside_substitution_span(0, 7, &spans, &mut cursor));
@@ -933,5 +890,42 @@ mod tests {
 
         assert_eq!(warnings[0].variant, "UnknownToken");
         assert_eq!(warnings[0].token, "<Email_999>");
+    }
+}
+
+#[derive(Serialize)]
+struct CleanResponse {
+    clean_text: String,
+    session_blob: String,
+    stats: Stats,
+}
+
+#[derive(Serialize)]
+struct Stats {
+    detections: u64,
+    locale_chain: Vec<String>,
+    dictionaries_loaded: Vec<LoadedDictionaryStats>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    context_source: Option<String>,
+}
+
+#[derive(Serialize)]
+struct LoadedDictionaryStats {
+    name: String,
+    term_count: usize,
+    source: String,
+}
+
+impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
+    fn from(stats: gaze::DictionaryStats) -> Self {
+        let source = match stats.source {
+            DictionarySource::Cli => "cli",
+            DictionarySource::Rulepack => "rulepack",
+        };
+        Self {
+            name: stats.name,
+            term_count: stats.term_count,
+            source: source.to_string(),
+        }
     }
 }

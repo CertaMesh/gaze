@@ -232,7 +232,7 @@ Shipped 2026-04-24 (see [CHANGELOG.md](CHANGELOG.md) for the full entry):
 
 Known limits to surface during dogfooding (tracked for v0.4.1):
 
-- `token.family` / `token.format` and `context.hotwords` / `boost` / `window` are parsed only for schema validation in v0.4.0-rc.1; non-default values fail closed with `RulepackError::UnsupportedFieldInB1` until runtime consumers ship in v0.4.1.
+- `token.family` / `token.format` and `context.hotwords` / `boost` / `window` are parsed only for schema validation in v0.4.0-rc.1; non-default values fail closed with `RulepackError::UnsupportedField` until runtime consumers ship in v0.4.1.
 - Dictionary audit log carries `dictionary:{name}`; per-term `[#term_index]` is v0.4.1.
 - NER context-sensitivity gap on prompt boilerplate / RFC822 email headers — workarounds + roadmap in issue #24.
 
