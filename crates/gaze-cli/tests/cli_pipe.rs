@@ -248,6 +248,102 @@ action = "preserve"
     (dir, path)
 }
 
+fn write_policy_with_ner_model_dir(
+    policy_model_dir: &std::path::Path,
+    locale_active: &str,
+    ner_locale: &str,
+    threshold: f32,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["{locale_active}"]
+
+[ner]
+model_dir = "{}"
+locale = "{ner_locale}"
+threshold = {threshold}
+
+[policy.rulepacks]
+bundled = ["core"]
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            policy_model_dir.display()
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
+fn class_alpha_rulepack() -> String {
+    r#"
+schema_version = "0.1.0"
+rulepack_id = "class-alpha"
+rulepack_version = "0.4.2"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "class-alpha.regex"
+class = "custom:class_alpha"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = 'class-alpha-[0-9]+'
+
+[recognizers.scoring]
+base = 0.42
+priority = 77
+
+[recognizers.token]
+"#
+    .to_string()
+}
+
+fn write_policy_for_class_alpha_rulepack() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core"]
+
+[[rule]]
+kind = "class"
+class = "custom:class_alpha"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    (dir, path)
+}
+
 fn assert_symmetric_policy_config(cli_out: std::process::Output, toml_out: std::process::Output) {
     assert_eq!(cli_out.status.code(), Some(2));
     assert_eq!(toml_out.status.code(), Some(2));
@@ -433,6 +529,12 @@ fn session_blob_ttl_secs(blob: &str) -> u64 {
     let raw = BASE64.decode(blob.as_bytes()).unwrap();
     let payload: Value = serde_json::from_slice(&raw[97..]).unwrap();
     payload["scope"]["Persistent"]["ttl_secs"].as_u64().unwrap()
+}
+
+fn session_blob_scope(blob: &str) -> Value {
+    let raw = BASE64.decode(blob.as_bytes()).unwrap();
+    let payload: Value = serde_json::from_slice(&raw[97..]).unwrap();
+    payload["scope"].clone()
 }
 
 /// Build a session blob by hand via the library. Used where the stub CLI
@@ -1050,6 +1152,173 @@ fn s1_invalid_ner_locale_is_symmetric_between_cli_and_toml() {
     );
 
     assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s1_session_scope_override_changes_observed_session_semantics() {
+    let (_dir, policy) = write_policy_with_session_scope("persistent");
+    let persistent = clean_json_with_args(
+        &[&format!("--policy={}", policy.display())],
+        "class-alpha-123",
+    );
+    assert_eq!(
+        session_blob_scope(persistent["session_blob"].as_str().unwrap()),
+        json!({ "Persistent": { "ttl_secs": 86400 } })
+    );
+
+    let conversation = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy.display()),
+            "--session-scope=conversation",
+        ],
+        "class-alpha-123",
+    );
+    assert_eq!(
+        session_blob_scope(conversation["session_blob"].as_str().unwrap()),
+        json!({ "Conversation": "cli" })
+    );
+
+    let ephemeral = clean_raw_with_args(
+        &[
+            &format!("--policy={}", policy.display()),
+            "--session-scope=ephemeral",
+        ],
+        "class-alpha-123",
+    );
+    assert_eq!(
+        ephemeral.status.code(),
+        Some(3),
+        "ephemeral sessions must retain export-forbidden semantics"
+    );
+    assert_eq!(
+        parse_stderr_variant(&ephemeral.stderr),
+        json!({ "error": "Pipeline", "exit": 3 })
+    );
+}
+
+#[test]
+fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
+    let (_dir, policy) = write_policy_with_bundled_rulepacks(&["core"], "de-DE");
+    let input = "Von: Alice Example <alice@example.invalid>";
+
+    let without_locale_pack =
+        clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+    let baseline_clean = without_locale_pack["clean_text"].as_str().unwrap();
+    assert!(baseline_clean.starts_with("Von: Alice Example <<"));
+    assert!(baseline_clean.ends_with(":Email_1>>"));
+    assert_eq!(without_locale_pack["stats"]["detections"], 1);
+
+    let with_locale_pack = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy.display()),
+            "--rulepack-bundled=core,locale-de,locale-en",
+        ],
+        input,
+    );
+    let clean = with_locale_pack["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Von: <[0-9a-f]{8}:Name_\d+> <<[0-9a-f]{8}:Email_\d+>>$")
+            .unwrap()
+            .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(with_locale_pack["stats"]["detections"], 2);
+}
+
+#[test]
+fn s1_rulepack_path_override_loads_fixture_rulepack_and_round_trips() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let (_policy_dir, policy) = write_policy_for_class_alpha_rulepack();
+    let input = "ticket class-alpha-123";
+
+    let without_path = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+    assert_eq!(without_path["clean_text"], input);
+    assert_eq!(without_path["stats"]["detections"], 0);
+
+    let with_path = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy.display()),
+            &format!("--rulepack-path={}", rulepack_path.display()),
+        ],
+        input,
+    );
+    let clean = with_path["clean_text"].as_str().unwrap();
+    assert!(clean.starts_with("ticket <"));
+    assert!(clean.ends_with(":Custom:class_alpha_1>"));
+    assert_eq!(with_path["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(with_path["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+}
+
+#[test]
+fn s1_ner_model_dir_and_locale_override_toml_and_detect_with_test_backend() {
+    let model_dir_holder = tempdir().unwrap();
+    let good_model_dir = model_dir_holder.path().join("__gaze_test_fixed_ner");
+    fs::create_dir(&good_model_dir).unwrap();
+    let missing_model_dir = model_dir_holder.path().join("missing-model");
+    let (_policy_dir, policy) =
+        write_policy_with_ner_model_dir(&missing_model_dir, "de-DE", "en-US", 0.3);
+    let input = "Du antwortest als Support an Alice Example.";
+
+    let out = clean_raw_with_args(&[&format!("--policy={}", policy.display())], input);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
+
+    let value = clean_json_with_args(
+        &[
+            &format!("--policy={}", policy.display()),
+            &format!("--ner-model-dir={}", good_model_dir.display()),
+            "--ner-locale=de",
+        ],
+        input,
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Du antwortest als Support an <[0-9a-f]{8}:Name_\d+>\.$")
+            .unwrap()
+            .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(value["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+}
+
+#[test]
+fn s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged() {
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", "--help"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let help = String::from_utf8(out.stdout).unwrap();
+    for flag in [
+        "--session-scope",
+        "--ner-model-dir",
+        "--ner-locale",
+        "--rulepack-bundled",
+        "--rulepack-path",
+        "--session-ttl",
+        "--ner-threshold",
+        "--locale",
+    ] {
+        assert!(help.contains(flag), "missing CLI flag in help: {flag}");
+    }
+
+    assert!(gaze_recognizers::embedded("core").is_some());
+    assert!(gaze_recognizers::embedded("locale-de").is_some());
+    assert!(gaze_recognizers::embedded("locale-en").is_some());
+    assert!(gaze_recognizers::embedded("class_alpha").is_none());
 }
 
 #[test]
