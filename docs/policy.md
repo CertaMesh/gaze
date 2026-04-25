@@ -302,7 +302,7 @@ Bundled rulepacks:
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
-| `core-extended` | `phone.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:ip_address`, `custom:postal_code` | Opt-in Phase 1 bundle. Shape-only recognizers; no validators yet. |
+| `core-extended` | `phone.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:ip_address`, `custom:postal_code` | Opt-in Phase 1 bundle. Shape-only recognizers. |
 
 Opt into `core-extended` alongside `core`:
 
@@ -326,9 +326,9 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
 
-Phase 1 is shape-only. IBAN, credit-card, and national-phone recognizers need
-validator support and are planned for v0.4.3 with the `ValidatorKind`
-extension.
+Phase 1 is shape-only. v0.4.3 adds validator and normalizer primitives for
+rulepack authors, but the bundled `core-extended` recognizer list does not add
+IBAN or credit-card recognizers until the follow-on bundle update.
 
 Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 `[recognizers.match]` table. If two recognizers in the same rulepack emit the
@@ -350,6 +350,53 @@ capture_groups = [1]
 Missing cooperation fails rulepack load with
 `RulepackError::SameClassWithoutCooperation`. The check is strict by design:
 there is no line-anchor heuristic or implicit overlap analysis.
+
+#### Built-in validators
+
+Regex rulepack recognizers may include an optional `[recognizers.validator]`
+table. Validators are deterministic, closed-registry names. Unknown validator
+strings fail policy load with `RulepackError::UnsupportedValidator`.
+
+```toml
+[recognizers.validator]
+kind = "luhn"
+```
+
+| Kind | Applies to | Behavior |
+|------|------------|----------|
+| `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
+| `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
+| `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check. Input is canonicalized as uppercase with ASCII whitespace removed before validation. |
+
+Validator-backed regex candidates fail closed: a regex match whose validator
+returns false emits no detection. This is intentionally stricter than emitting
+an unvalidated candidate because shape-only false positives are a PII-leak risk
+for agent workflows.
+
+S1 adds validator names to rulepack TOML only. Three-surfaces parity is not
+applicable because validators are recognizer policy data, not runtime knobs:
+there is no CLI flag or default runtime surface for swapping validator
+semantics per invocation. `cooperates_with` parity is also not applicable in S1
+because no bundled recognizers are added; cooperation tests belong to bundle
+composition changes.
+
+#### Built-in normalizers
+
+Regex rulepack recognizers may include an optional `[recognizers.normalizer]`
+table. Normalizers affect canonical form used for validated candidate identity;
+restore still uses the original matched bytes from the session manifest.
+Unknown normalizer strings fail policy load with
+`RulepackError::UnsupportedNormalizer`.
+
+```toml
+[recognizers.normalizer]
+kind = "iban_canonical"
+```
+
+| Kind | Behavior |
+|------|----------|
+| `email_canonical` | Lowercase ASCII email candidates. |
+| `iban_canonical` | Remove ASCII whitespace and uppercase letters. |
 
 Rulepack locale metadata can define adopter-specific vocabulary buckets under
 `[locale.<bucket>]`. Bucket tables are intentionally open by name; each bucket

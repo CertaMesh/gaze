@@ -370,6 +370,14 @@ fn write_policy_with_rulepack(
     rulepack: &str,
     locale_active: Option<&str>,
 ) -> (tempfile::TempDir, std::path::PathBuf) {
+    write_policy_with_rulepack_and_class(rulepack, locale_active, "email")
+}
+
+fn write_policy_with_rulepack_and_class(
+    rulepack: &str,
+    locale_active: Option<&str>,
+    class: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
     let rulepack_path = dir.path().join("rulepack.toml");
     fs::write(&rulepack_path, rulepack).unwrap();
@@ -391,7 +399,7 @@ paths = ["{}"]
 
 [[rule]]
 kind = "class"
-class = "email"
+class = "{class}"
 action = "tokenize"
 
 [[rule]]
@@ -1608,7 +1616,7 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
 fn rulepack_rejects_unknown_validator_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"iban_mod97\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"iban_modxx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
@@ -1627,7 +1635,7 @@ fn rulepack_rejects_unknown_validator_kind() {
 fn rulepack_rejects_unknown_normalizer_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonical\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonicalx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
@@ -1676,6 +1684,89 @@ fn rulepack_accepts_email_rfc_validator_kind() {
 
     assert!(clean.starts_with("Email <"));
     assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_accepts_luhn_validator_kind() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-luhn"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "card.test"
+class = "custom:credit_card_or_iban"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '\b\d{16}\b'
+
+[recognizers.validator]
+kind = "luhn"
+
+[recognizers.scoring]
+base = 0.90
+priority = 77
+
+[recognizers.token]
+"#;
+    let (_dir, path) =
+        write_policy_with_rulepack_and_class(rulepack, None, "custom:credit_card_or_iban");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Card 4111111111111111",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("Card <"));
+    assert!(clean.ends_with(":Custom:credit_card_or_iban_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_accepts_iban_mod97_validator_and_iban_canonical_normalizer() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-iban"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "iban.test"
+class = "custom:credit_card_or_iban"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b'
+
+[recognizers.validator]
+kind = "iban_mod97"
+
+[recognizers.normalizer]
+kind = "iban_canonical"
+
+[recognizers.scoring]
+base = 0.90
+priority = 77
+
+[recognizers.token]
+"#;
+    let (_dir, path) =
+        write_policy_with_rulepack_and_class(rulepack, None, "custom:credit_card_or_iban");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "IBAN GB82WEST12345698765432",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("IBAN <"));
+    assert!(clean.ends_with(":Custom:credit_card_or_iban_1>"));
     assert_eq!(v["stats"]["detections"], 1);
 }
 
