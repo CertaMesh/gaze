@@ -1,6 +1,7 @@
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use serde::Deserialize;
 use thiserror::Error;
@@ -31,6 +32,27 @@ pub enum SessionScope {
     Ephemeral,
     Conversation,
     Persistent,
+}
+
+impl SessionScope {
+    pub fn parse(value: &str) -> Result<Self, PolicyError> {
+        match value {
+            "ephemeral" => Ok(SessionScope::Ephemeral),
+            "conversation" => Ok(SessionScope::Conversation),
+            "persistent" => Ok(SessionScope::Persistent),
+            other => Err(PolicyError::SessionScopeUnknown {
+                value: other.to_string(),
+            }),
+        }
+    }
+}
+
+impl FromStr for SessionScope {
+    type Err = PolicyError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Self::parse(value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -103,6 +125,10 @@ pub enum PolicyError {
     NerLoad(String),
     #[error("ner.threshold must be between 0.0 and 1.0 inclusive, got {value}")]
     NerThresholdOutOfRange { value: f32 },
+    #[error("session.scope must be one of ephemeral, conversation, persistent, got {value}")]
+    SessionScopeUnknown { value: String },
+    #[error("unknown bundled rulepack: {value}")]
+    BundledRulepackUnknown { value: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
@@ -275,16 +301,7 @@ impl TryFrom<RawPolicy> for Policy {
 }
 
 fn parse_session(raw: RawSessionPolicy) -> Result<SessionPolicy, PolicyError> {
-    let scope = match raw.scope.as_str() {
-        "ephemeral" => SessionScope::Ephemeral,
-        "conversation" => SessionScope::Conversation,
-        "persistent" => SessionScope::Persistent,
-        other => {
-            return Err(PolicyError::BadTtl(format!(
-                "unknown session.scope '{other}'"
-            )))
-        }
-    };
+    let scope = SessionScope::parse(&raw.scope)?;
 
     match scope {
         SessionScope::Persistent => match raw.ttl_secs {
@@ -625,6 +642,32 @@ action = "preserve"
         assert!(matches!(
             Policy::try_from(raw),
             Err(PolicyError::NerThresholdOutOfRange { value }) if value == 1.1
+        ));
+    }
+
+    #[test]
+    fn rejects_unknown_session_scope_with_typed_error() {
+        let raw = r#"
+[session]
+scope = "forever"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let err = Policy::try_from(raw).unwrap_err();
+
+        assert!(matches!(
+            err,
+            PolicyError::SessionScopeUnknown { value } if value == "forever"
         ));
     }
 
