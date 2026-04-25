@@ -1217,6 +1217,7 @@ dependencies = [
  "gaze-assembly",
  "gaze-recognizers",
  "regex",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
