@@ -659,6 +659,21 @@ action = "preserve"
     }
 
     #[test]
+    fn accepts_bcp47_ner_locale_hints() {
+        for locale in ["de", "en-US", "pt-BR", "zh-Hant"] {
+            assert!(
+                validate_ner_locale(locale).is_ok(),
+                "NER locale hints should accept BCP47-shaped tag {locale}"
+            );
+        }
+
+        assert!(matches!(
+            validate_ner_locale("bad locale!"),
+            Err(PolicyError::NerLocaleUnsupported { value }) if value == "bad locale!"
+        ));
+    }
+
+    #[test]
     fn rejects_unknown_session_scope_with_typed_error() {
         let raw = r#"
 [session]
