@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Strict rulepack composition validation: same-class recognizer pairs now require explicit `cooperates_with` declarations.
 - `Context::fields_typed() -> ContextFieldsRef<'_>` borrowed accessor for context-field consumers.
 - `gaze clean --audit-db=<path>` persists the metadata-only SQLite redaction log for pipe-mode invocations.
+- `gaze clean` now exposes three-surfaces CLI overrides for existing policy runtime knobs: `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path`.
 
 ### Changed
 
