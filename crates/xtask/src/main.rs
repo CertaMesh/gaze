@@ -3,6 +3,8 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod no_tenant_knowledge;
+
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -15,6 +17,7 @@ enum Command {
     SymmetricPotemkin,
     ClassMapOverrideSafety,
     RecognizerCompositionValidator,
+    NoTenantKnowledge,
 }
 
 fn main() -> Result<()> {
@@ -26,6 +29,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
+        Command::NoTenantKnowledge => no_tenant_knowledge::run(),
     }
 }
 
