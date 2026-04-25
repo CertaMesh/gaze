@@ -61,6 +61,8 @@ chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
+The Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
+
 Intel macOS binaries are not published in v0.4.0-rc.1; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release -p gaze-cli` in the meantime.
 
 ## Workspace Layout
