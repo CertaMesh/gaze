@@ -302,7 +302,7 @@ Bundled rulepacks:
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
-| `core-extended` | `phone.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:ip_address`, `custom:postal_code` | Opt-in Phase 1 bundle. Shape-only recognizers. |
+| `core-extended` | `phone.structural`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Phase 1 shape recognizers plus Phase 2 validator-backed IBAN and credit-card recognizers. |
 
 Opt into `core-extended` alongside `core`:
 
@@ -317,18 +317,25 @@ Or override the bundle list for one CLI run:
 gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 ```
 
-`core-extended` Phase 1 recognizers are intentionally conservative:
+`core-extended` recognizers are intentionally conservative:
 
 - `phone.structural` matches E.164-only `+\d{6,15}` numbers. National phone
   patterns are not included.
+- `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
+  pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
+- `card.structural` emits `custom:credit_card` only for 13- to 19-digit
+  candidates that pass `luhn`.
 - `ip.v4` and `ip.v6` emit `custom:ip_address`.
 - `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
 
-Phase 1 is shape-only. v0.4.3 adds validator and normalizer primitives for
-rulepack authors, but the bundled `core-extended` recognizer list does not add
-IBAN or credit-card recognizers until the follow-on bundle update.
+IBAN and credit-card recognizers are universal (`global`) because their
+validation rules are format-level checks, not national locale gates. They are
+also solo recognizers in their classes, so they do not need `cooperates_with`
+rows. Tenant numeric IDs such as `Subscriber_0001234567` and `Order_0815`
+are explicit negative fixtures for those recognizers; broad numeric shapes must
+not become credit-card detections without a passing validator.
 
 Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 `[recognizers.match]` table. If two recognizers in the same rulepack emit the
