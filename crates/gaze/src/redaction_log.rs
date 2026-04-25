@@ -38,16 +38,25 @@ pub struct AuditFilter {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditLogRow {
-    pub class: String,
     pub source: String,
+    pub class: String,
     pub action: String,
+    pub field_name: Option<String>,
     pub document_kind: String,
+    pub conflict_loser: bool,
     pub decided_by: String,
 }
 
 #[allow(dead_code)]
-pub const AUDIT_RESTRICTED_COLUMNS: &[&str] =
-    &["class", "source", "action", "document_kind", "decided_by"];
+pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
+    "source",
+    "class",
+    "action",
+    "field_name",
+    "document_kind",
+    "conflict_loser",
+    "decided_by",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConflictTier {
@@ -169,11 +178,13 @@ impl SqliteLogger {
         let rows = stmt
             .query_map(params_from_iter(values.iter()), |row| {
                 Ok(AuditLogRow {
-                    class: row.get(0)?,
-                    source: row.get(1)?,
+                    source: row.get(0)?,
+                    class: row.get(1)?,
                     action: row.get(2)?,
-                    document_kind: row.get(3)?,
-                    decided_by: row.get(4)?,
+                    field_name: row.get(3)?,
+                    document_kind: row.get(4)?,
+                    conflict_loser: row.get::<_, i64>(5)? != 0,
+                    decided_by: row.get(6)?,
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -232,7 +243,7 @@ pub fn build_audit_query_sql(filter: &AuditFilter, has_decided_by: bool) -> (Str
         "'none' AS decided_by"
     };
     let mut sql = format!(
-        "SELECT class, source, action, document_kind, {decided_by_column} FROM redaction_log"
+        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();

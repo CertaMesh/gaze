@@ -28,8 +28,14 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}",
-            row.class, row.source, row.action, row.document_kind, row.decided_by
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            row.source,
+            row.class,
+            row.action,
+            row.field_name.as_deref().unwrap_or(""),
+            row.document_kind,
+            row.conflict_loser,
+            row.decided_by
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -75,20 +81,24 @@ fn write_jsonl(
 
 #[derive(Serialize)]
 struct JsonlRow {
-    class: String,
     source: String,
+    class: String,
     action: String,
+    field_name: Option<String>,
     document_kind: String,
+    conflict_loser: bool,
     decided_by: String,
 }
 
 impl From<AuditLogRow> for JsonlRow {
     fn from(row: AuditLogRow) -> Self {
         Self {
-            class: row.class,
             source: row.source,
+            class: row.class,
             action: row.action,
+            field_name: row.field_name,
             document_kind: row.document_kind,
+            conflict_loser: row.conflict_loser,
             decided_by: row.decided_by,
         }
     }

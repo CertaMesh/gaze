@@ -1155,11 +1155,13 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
         String::from_utf8_lossy(&query.stderr)
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
-    assert!(stdout.starts_with("class\tsource\taction\tdocument_kind\tdecided_by\n"));
+    assert!(stdout.starts_with(
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\n"
+    ));
     assert!(
         stdout
             .lines()
-            .any(|line| line.starts_with("email\tregex\ttokenize\ttext\t")),
+            .any(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t")),
         "unexpected query stdout: {stdout}"
     );
 
@@ -1191,7 +1193,9 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     assert_eq!(row["class"], "email");
     assert_eq!(row["source"], "regex");
     assert_eq!(row["action"], "tokenize");
+    assert_eq!(row["field_name"], Value::Null);
     assert_eq!(row["document_kind"], "text");
+    assert_eq!(row["conflict_loser"], false);
     assert!(row.get("decided_by").is_some());
 }
 

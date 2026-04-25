@@ -52,7 +52,9 @@ fn current_schema_fixture_is_queryable() {
     assert_eq!(row["class"], "email");
     assert_eq!(row["source"], "email.global");
     assert_eq!(row["action"], "tokenize");
+    assert_eq!(row["field_name"], Value::Null);
     assert_eq!(row["document_kind"], "text");
+    assert_eq!(row["conflict_loser"], false);
     assert_eq!(row["decided_by"], "recognizer_id");
 }
 
@@ -97,8 +99,12 @@ fn legacy_schema_without_decided_by_is_queryable() {
         String::from_utf8_lossy(&output.stderr)
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
-    assert!(stdout.contains("class\tsource\taction\tdocument_kind\tdecided_by\n"));
-    assert!(stdout.contains("custom:term\tdictionary:audit_terms[#0]\ttokenize\ttext\tnone"));
+    assert!(stdout.contains(
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\n"
+    ));
+    assert!(
+        stdout.contains("dictionary:audit_terms[#0]\tcustom:term\ttokenize\t\ttext\tfalse\tnone")
+    );
 }
 
 #[test]
@@ -130,12 +136,13 @@ fn assert_restricted_sql(sql: &str) {
         !lower.contains("select *"),
         "audit SQL must never SELECT *: {sql}"
     );
-    for sensitive in ["field_name", "conflict_loser", "raw", "value", "token"] {
+    for sensitive in ["raw", "value", "token"] {
         assert!(
             !lower.contains(sensitive),
             "audit SQL must not read sensitive column '{sensitive}': {sql}"
         );
     }
-    assert!(lower.starts_with("select class, source, action, document_kind, "));
+    assert!(lower
+        .starts_with("select source, class, action, field_name, document_kind, conflict_loser, "));
     assert!(lower.contains(" from redaction_log"));
 }
