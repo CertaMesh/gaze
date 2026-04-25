@@ -1608,7 +1608,7 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
 fn rulepack_rejects_unknown_validator_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"iban_mod97\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"iban_modxx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
@@ -1627,7 +1627,7 @@ fn rulepack_rejects_unknown_validator_kind() {
 fn rulepack_rejects_unknown_normalizer_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonical\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonicalx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
