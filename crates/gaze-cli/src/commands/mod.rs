@@ -77,6 +77,57 @@ enum Cmd {
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
     },
+    /// Query or export redaction-log metadata without reading raw PII payloads.
+    Audit {
+        #[command(subcommand)]
+        command: AuditCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum AuditCmd {
+    /// Print filtered audit metadata rows as tab-separated values.
+    Query {
+        /// SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: PathBuf,
+        /// Filter by PII class, such as `email`, `name`, or `custom:term`.
+        #[arg(long = "class")]
+        pii_class: Option<String>,
+        /// Filter by source recognizer name.
+        #[arg(long)]
+        source: Option<String>,
+        /// Filter by action, such as `tokenize`, `redact`, or `preserve`.
+        #[arg(long)]
+        action: Option<String>,
+        /// Filter by document kind, such as `text` or `structured`.
+        #[arg(long)]
+        document_kind: Option<String>,
+    },
+    /// Export filtered audit metadata rows.
+    Export {
+        /// SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: PathBuf,
+        /// Export format.
+        #[arg(long, value_enum, default_value = "jsonl")]
+        format: audit::ExportFormat,
+        /// Optional output file. Defaults to stdout.
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// Filter by PII class, such as `email`, `name`, or `custom:term`.
+        #[arg(long = "class")]
+        pii_class: Option<String>,
+        /// Filter by source recognizer name.
+        #[arg(long)]
+        source: Option<String>,
+        /// Filter by action, such as `tokenize`, `redact`, or `preserve`.
+        #[arg(long)]
+        action: Option<String>,
+        /// Filter by document kind, such as `text` or `structured`.
+        #[arg(long)]
+        document_kind: Option<String>,
+    },
 }
 
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
@@ -119,5 +170,39 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             restore_mode,
             max_bytes,
         }),
+        Cmd::Audit { command } => match command {
+            AuditCmd::Query {
+                audit_db,
+                pii_class,
+                source,
+                action,
+                document_kind,
+            } => audit::query(audit::Args {
+                audit_db,
+                class: pii_class,
+                source,
+                action,
+                document_kind,
+            }),
+            AuditCmd::Export {
+                audit_db,
+                format,
+                output,
+                pii_class,
+                source,
+                action,
+                document_kind,
+            } => audit::export(
+                audit::Args {
+                    audit_db,
+                    class: pii_class,
+                    source,
+                    action,
+                    document_kind,
+                },
+                format,
+                output,
+            ),
+        },
     }
 }
