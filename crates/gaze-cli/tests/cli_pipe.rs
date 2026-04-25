@@ -707,7 +707,7 @@ fn t21a_email_header_does_not_fire_on_inline_titlecase() {
 #[test]
 fn t21c_email_header_rejects_body_from_without_bracket() {
     let (_dir, path) = write_policy_with_bundled_rulepacks(&["core"], "en-US");
-    let input = "\nReply from From: React Component for context.\n";
+    let input = "From: React Component for context.\n";
     let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
 
     assert_eq!(v["clean_text"], input);
