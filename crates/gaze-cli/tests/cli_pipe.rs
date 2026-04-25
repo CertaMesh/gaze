@@ -1712,6 +1712,33 @@ fn s2_core_extended_default_surface_does_not_load_phase2_recognizers() {
 }
 
 #[test]
+fn s2_cli_bundled_smoke_emits_formatted_phase2_tokens() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core,core-extended"],
+        "IBAN DE89 3704 0044 0532 0130 00 card 4111 1111 1111 1111",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(clean.contains("Custom:iban"), "{clean}");
+    assert!(clean.contains("Custom:credit_card"), "{clean}");
+    assert!(!clean.contains("3704 0044"), "{clean}");
+    assert!(!clean.contains("4111 1111"), "{clean}");
+    assert_eq!(value["stats"]["detections"], 2);
+}
+
+#[test]
+fn s2_cli_bundled_smoke_drops_luhn_failing_formatted_cc() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core,core-extended"],
+        "Card 4111 1111 1111 1112",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(!clean.contains("Custom:credit_card"), "{clean}");
+    assert_eq!(value["stats"]["detections"], 0);
+}
+
+#[test]
 fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
     let (_dir, policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
