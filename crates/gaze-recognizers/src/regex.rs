@@ -194,11 +194,11 @@ impl RegexDetector {
 
     fn canonical_form(&self, matched: &str) -> Option<String> {
         match self.validator_kind {
-            Some(ValidatorKind::EmailRfc) if is_basic_email(matched) => {
-                Some(match self.normalizer_kind {
-                    Some(NormalizerKind::EmailCanonical) => matched.to_ascii_lowercase(),
-                    _ => matched.to_string(),
-                })
+            Some(validator_kind) if validator_kind.validates(matched) => {
+                Some(self.normalizer_kind.map_or_else(
+                    || matched.to_string(),
+                    |normalizer| normalizer.normalize(matched),
+                ))
             }
             Some(_) => None,
             None => None,
