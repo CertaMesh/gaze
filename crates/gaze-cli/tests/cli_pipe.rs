@@ -535,6 +535,16 @@ class = "custom:postal_code"
 action = "tokenize"
 
 [[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
+action = "tokenize"
+
+[[rule]]
 kind = "default"
 action = "preserve"
 "#
@@ -1611,7 +1621,7 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
 
 #[test]
 fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
-    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103-1234";
+    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
     let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
     let core_clean = core_only["clean_text"].as_str().unwrap();
@@ -1619,6 +1629,8 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
     assert!(!core_clean.contains("Custom:phone"), "{core_clean}");
     assert!(!core_clean.contains("Custom:ip_address"), "{core_clean}");
     assert!(!core_clean.contains("Custom:postal_code"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:iban"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:credit_card"), "{core_clean}");
     assert_eq!(core_only["stats"]["detections"], 1);
 
     let (_extended_dir, extended_policy) =
@@ -1639,7 +1651,15 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
         extended_clean.contains(":Custom:postal_code_1>"),
         "{extended_clean}"
     );
-    assert_eq!(extended["stats"]["detections"], 4);
+    assert!(
+        extended_clean.contains(":Custom:iban_1>"),
+        "{extended_clean}"
+    );
+    assert!(
+        extended_clean.contains(":Custom:credit_card_1>"),
+        "{extended_clean}"
+    );
+    assert_eq!(extended["stats"]["detections"], 6);
     assert_eq!(
         restore_success_text(extended["session_blob"].as_str().unwrap(), extended_clean),
         input
@@ -1648,7 +1668,7 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
 
 #[test]
 fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() {
-    let input = "phone +4915112345678 host 192.168.1.1 zip 94103";
+    let input = "phone +4915112345678 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_toml_dir, toml_policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
     let toml = clean_json_with_args(&[&format!("--policy={}", toml_policy.display())], input);
@@ -1680,6 +1700,15 @@ fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() 
     );
     let toml_out = clean_raw_with_args(&[&format!("--policy={}", invalid_policy.display())], input);
     assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s2_core_extended_default_surface_does_not_load_phase2_recognizers() {
+    let input = "IBAN GB82WEST12345698765432 card 4111111111111111";
+    let default = clean_json_with_args(&[], input);
+
+    assert_eq!(default["clean_text"], input);
+    assert_eq!(default["stats"]["detections"], 0);
 }
 
 #[test]
@@ -1740,9 +1769,67 @@ fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
     let clean = value["clean_text"].as_str().unwrap();
 
     assert!(!clean.contains("Custom:phone"), "{clean}");
+    assert!(!clean.contains("Custom:iban"), "{clean}");
+    assert!(!clean.contains("Custom:credit_card"), "{clean}");
     assert!(clean.contains("Subscriber_0001234567"), "{clean}");
     assert!(clean.contains("Order_0815"), "{clean}");
     assert!(clean.contains("0123-456789"), "{clean}");
+}
+
+#[test]
+fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+
+    for (input, class) in [
+        ("Card 4111111111111111", "credit_card"),
+        ("Card 5555555555554444", "credit_card"),
+        ("Card 378282246310005", "credit_card"),
+        ("IBAN GB82WEST12345698765432", "iban"),
+        ("IBAN DE89370400440532013000", "iban"),
+        ("IBAN FR1420041010050500013M02606", "iban"),
+        ("IBAN BE68539007547034", "iban"),
+        ("IBAN NL91ABNA0417164300", "iban"),
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(
+            Regex::new(&format!(r"^.+<[0-9a-f]{{8}}:Custom:{class}_1>$"))
+                .unwrap()
+                .is_match(clean),
+            "unexpected clean text for {input}: {clean}"
+        );
+        assert_eq!(value["stats"]["detections"], 1, "{input}");
+        assert_eq!(
+            restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+            input
+        );
+    }
+
+    for input in [
+        "Card 4111111111111112",
+        "Card 5555555555554445",
+        "Card 378282246310006",
+        "IBAN GB99WEST12345698765432",
+        "IBAN DE99370400440532013000",
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert_eq!(clean, input, "{input}");
+        assert_eq!(value["stats"]["detections"], 0, "{input}");
+    }
+
+    for input in [
+        "Subscriber_0001234567",
+        "Order_0815",
+        "0815 12345",
+        "Customer_42",
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(!clean.contains("Custom:iban"), "{input}: {clean}");
+        assert!(!clean.contains("Custom:credit_card"), "{input}: {clean}");
+    }
 }
 
 #[test]
