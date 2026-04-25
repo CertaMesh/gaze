@@ -16,7 +16,10 @@ use rusqlite::Connection;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
-use gaze::{PiiClass, Scope, Session, SqliteLogger};
+use gaze::{
+    build_audit_query_sql, AuditFilter, PiiClass, Scope, Session, SqliteLogger,
+    AUDIT_RESTRICTED_COLUMNS,
+};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
@@ -1318,6 +1321,46 @@ fn s4_audit_extra_column_not_leaked() {
             .windows(needle.len())
             .any(|window| window == needle),
         "FAIL: extra column raw_value leaked in audit export output"
+    );
+}
+
+#[test]
+fn s4_audit_query_columns_are_restricted() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+        .unwrap();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true);
+    assert!(
+        values.is_empty(),
+        "default audit filter should not bind query values"
+    );
+    let stmt = conn.prepare(&sql).unwrap();
+    let column_names: Vec<String> = stmt
+        .column_names()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| column.to_string())
+        .collect();
+
+    assert_eq!(
+        column_names, expected,
+        "audit query SQL must return exactly AUDIT_RESTRICTED_COLUMNS"
     );
 }
 
