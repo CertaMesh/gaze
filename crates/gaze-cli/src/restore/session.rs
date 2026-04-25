@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn pass2_cursor_scan_handles_token_shaped_text_inside_substituted_span() {
         let session = empty_session();
-        let text = "Order_42";
+        let text = "tenant_class_a";
         let spans = std::iter::once(0..text.len()).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
