@@ -804,7 +804,10 @@ fn cascade_restored_song_user_artist_tenant() {
     );
     let restored = restore_success_text(&blob, &reply);
 
-    assert_eq!(restored, "tenant_class_b / tenant_class_c / Artist_1 / Tenant_5");
+    assert_eq!(
+        restored,
+        "tenant_class_b / tenant_class_c / Artist_1 / Tenant_5"
+    );
 }
 
 #[test]
@@ -2318,8 +2321,9 @@ action = "preserve"
 
 #[test]
 fn t19_restore_custom_token_round_trip_ok() {
-    let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]);
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
+    });
     let text = format!("Order {} is shipped.", tokens[0]);
 
     let (code, stdout, stderr) = restore_json(&blob, &text);
@@ -2330,8 +2334,9 @@ fn t19_restore_custom_token_round_trip_ok() {
 
 #[test]
 fn t20_restore_custom_hallucination_exits_3() {
-    let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]);
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
+    });
 
     let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
     let (code, stdout, stderr) = restore_json(&blob, &text);
