@@ -121,9 +121,9 @@ mod tests {
     fn recognizer_detects_dictionary_hits_from_context_bundle() {
         let ctx = TypedContext {
             dictionaries: HashMap::from([(
-                "order_ids".to_string(),
+                "dict_alpha".to_string(),
                 ContextDictionary {
-                    terms: vec!["ORD-12345".to_string()],
+                    terms: vec!["AAA-12345".to_string()],
                     case_sensitive: true,
                 },
             )]),
@@ -139,17 +139,17 @@ mod tests {
             degraded: Cell::new(false),
         };
         let recognizer = DictionaryRecognizer::new(
-            "dict/order_ids",
-            PiiClass::Custom("order_id".to_string()),
-            "order_ids",
+            "dict/dict_alpha",
+            PiiClass::Custom("class_alpha".to_string()),
+            "dict_alpha",
             true,
             "counter",
         );
 
-        let hits = recognizer.detect("Customer bought ORD-12345", &detect_context);
+        let hits = recognizer.detect("Customer bought AAA-12345", &detect_context);
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 16..25);
-        assert_eq!(hits[0].class, PiiClass::Custom("order_id".to_string()));
+        assert_eq!(hits[0].class, PiiClass::Custom("class_alpha".to_string()));
     }
 
     #[test]
