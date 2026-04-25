@@ -31,6 +31,31 @@ pub struct Context {
     pub fields: Map<String, Value>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct ContextFieldsRef<'a>(&'a Map<String, Value>);
+
+impl<'a> ContextFieldsRef<'a> {
+    pub fn as_map(&self) -> &'a Map<String, Value> {
+        self.0
+    }
+
+    pub fn get(&self, key: &str) -> Option<&'a Value> {
+        self.0.get(key)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&'a String, &'a Value)> + 'a {
+        self.0.iter()
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContextDictionary {
     pub terms: Vec<String>,
@@ -58,6 +83,10 @@ impl Context {
         let raw = fs::read_to_string(path).map_err(ContextError::Io)?;
         let raw = serde_json::from_str::<RawContext>(&raw).map_err(ContextError::Json)?;
         Self::try_from(raw)
+    }
+
+    pub fn fields_typed(&self) -> ContextFieldsRef<'_> {
+        ContextFieldsRef(&self.fields)
     }
 }
 
@@ -154,5 +183,45 @@ mod tests {
             Context::try_from(raw),
             Err(ContextError::UnicodeInsensitiveDictionaryUnsupported { .. })
         ));
+    }
+
+    #[test]
+    fn context_fields_ref_iter_matches_underlying_map() {
+        let raw = serde_json::from_str::<RawContext>(
+            r#"{
+              "dictionaries": {},
+              "class_map": {},
+              "fields": { "tenant": "demo", "region": "eu" }
+            }"#,
+        )
+        .expect("raw context");
+        let ctx = Context::try_from(raw).expect("context");
+
+        let typed = ctx.fields_typed();
+        let from_ref = typed.iter().collect::<Vec<_>>();
+        let from_map = ctx.fields.iter().collect::<Vec<_>>();
+
+        assert_eq!(from_ref, from_map);
+        assert_eq!(typed.len(), ctx.fields.len());
+        assert_eq!(
+            typed.get("tenant"),
+            Some(&Value::String("demo".to_string()))
+        );
+        assert!(!typed.is_empty());
+    }
+
+    #[test]
+    fn context_fields_ref_borrows_without_clone() {
+        let raw = serde_json::from_str::<RawContext>(
+            r#"{
+              "dictionaries": {},
+              "class_map": {},
+              "fields": { "tenant": "demo" }
+            }"#,
+        )
+        .expect("raw context");
+        let ctx = Context::try_from(raw).expect("context");
+
+        assert!(std::ptr::eq(ctx.fields_typed().as_map(), &ctx.fields));
     }
 }

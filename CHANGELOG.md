@@ -15,11 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `capture_groups = [...]` regex span narrowing with first-non-empty semantics.
 - `NerRecognizer` public export plus `[ner] threshold` policy knob using min-aggregated span confidence.
 - Core `email.header.name` recognizer for RFC822-style header display names, including German `Von:` / `An:` forms.
+- Strict rulepack composition validation: same-class recognizer pairs now require explicit `cooperates_with` declarations.
+- `Context::fields_typed() -> ContextFieldsRef<'_>` borrowed accessor for context-field consumers.
+- `gaze clean --audit-db=<path>` persists the metadata-only SQLite redaction log for pipe-mode invocations.
 
 ### Changed
 
 - Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.1`.
 - Snapshot envelope version bumped from 2 to 3; v0.4.1 imports v2 snapshots with default `counter` family, while v0.4.0 rejects v3 snapshots instead of silently collapsing family metadata.
+- Dictionary recognizer audit sources now include per-term traceability as `dictionary:{name}[#term_index]`.
 
 ### Fixed
 

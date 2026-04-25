@@ -108,6 +108,10 @@ Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{s
 
 `gaze clean --policy=<path>` loads a TOML policy that declares recognizer bundles (`[policy.rulepacks]`), custom recognizers (`[[policy.custom_recognizers]]`), per-class rules, the locale chain, and optional NER bootstrap. See [`docs/policy.md`](docs/policy.md) for the full schema reference and worked examples, including the `[[detector]]` → `[[policy.custom_recognizers]]` migration.
 
+Use `--audit-db=<path>` to persist the metadata-only SQLite redaction log for a
+clean invocation. Dictionary sources include the matched term index as
+`dictionary:{name}[#term_index]`.
+
 #### Library Example
 
 ```rust
@@ -232,8 +236,8 @@ Shipped 2026-04-24 (see [CHANGELOG.md](CHANGELOG.md) for the full entry):
 
 Known limits to surface during dogfooding (tracked for v0.4.1):
 
-- `token.family` / `token.format` and `context.hotwords` / `boost` / `window` are parsed only for schema validation in v0.4.0-rc.1; non-default values fail closed with `RulepackError::UnsupportedField` until runtime consumers ship in v0.4.1.
-- Dictionary audit log carries `dictionary:{name}`; per-term `[#term_index]` is v0.4.1.
+- `token.format` and `context.hotwords` / `boost` / `window` are still parsed only for schema validation in v0.4.1; non-default values fail closed with `RulepackError::UnsupportedFieldInB1`.
+- Same-class rulepack recognizer pairs require explicit `cooperates_with = ["other.id"]`; missing cooperation fails closed with `RulepackError::SameClassWithoutCooperation`.
 - NER context-sensitivity gap on prompt boilerplate / RFC822 email headers — workarounds + roadmap in issue #24.
 
 Deferred beyond v0.4:

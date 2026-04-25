@@ -62,6 +62,11 @@ $ echo "Email alice@example.invalid now" | gaze clean --policy=minimal.toml
 {"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
 ```
 
+Add `--audit-db=redaction.sqlite` to persist the metadata-only SQLite
+redaction log for the invocation. Dictionary rows use
+`dictionary:{name}[#term_index]` source labels so an operator can trace which
+configured term fired without storing raw PII.
+
 This is the same fixture the CLI integration suite uses
 (`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
 
@@ -87,6 +92,38 @@ ttl_secs = 86400       # required when scope = "persistent"; optional otherwise
 > Resolved in v0.3.1: `gaze clean` now constructs its session from
 > `[session]`. `--session-ttl` is an explicit CLI override for persistent
 > session TTL; when the flag is omitted, `ttl_secs` from policy is used.
+
+### `[policy.rulepacks]`
+
+Rulepacks declare reusable recognizers outside the host policy file. The CLI
+loads bundled rulepacks by name and custom rulepack TOML files by path.
+
+```toml
+[policy.rulepacks]
+bundled = ["core"]
+paths = ["./tenant-rulepack.toml"]
+```
+
+Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
+`[recognizers.match]` table. If two recognizers in the same rulepack emit the
+same `class`, at least one must explicitly list the other recognizer id in
+`cooperates_with`.
+
+```toml
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+cooperates_with = ["salutation.name"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?m)^From:\s+([A-Z][a-z]+)\s+<[^>]+>'''
+capture_groups = [1]
+```
+
+Missing cooperation fails rulepack load with
+`RulepackError::SameClassWithoutCooperation`. The check is strict by design:
+there is no line-anchor heuristic or implicit overlap analysis.
 
 ### `[[policy.custom_recognizers]]`
 
@@ -139,9 +176,10 @@ case_sensitive = true
 recognizer. In that mode, Gaze registers one dictionary recognizer per context
 dictionary and uses `class_map` for the class, falling back to `custom:<name>`
 when a mapping is absent. `fields` are threaded into `DetectContext` for
-recognizers; no built-in recognizer consumes them in v0.4.0. `class_map` is
+recognizers and are available to library users through the borrowed
+`Context::fields_typed() -> ContextFieldsRef<'_>` accessor. `class_map` is
 runtime metadata for dictionary recognizer construction, not a general class
-override mechanism. Broader `fields` consumers are deferred to v0.4.1.
+override mechanism.
 
 NER is **not** a detector kind. NER is configured via the top-level `[ner]`
 block (below) — when set, the pipeline appends a transformer NER detector
@@ -549,15 +587,14 @@ engineering board:
 3. **Resolved in v0.3.1: `kind = "column"` rules are rejected in CLI mode.**
    `gaze clean` now fails policy load with exit `2` `PolicyConfig` and a
    detail string, avoiding silent no-op column rules for text stdin.
-4. **v0.4.0-rc.1 gated rulepack fields (runtime consumers pending v0.4.1).**
-   The rulepack schema parses `token.family`, `token.format`,
-   `context.hotwords`, `context.boost`, and `context.window` for
-   forward-compatible authoring, but the loader rejects any non-default value
-   with `RulepackError::UnsupportedField`. Runtime consumers ship in
-   v0.4.1; until then, leave these fields unset or explicitly default.
-5. **v0.4.0-rc.1 dictionary audit granularity.** The redaction log carries
-   `dictionary:{name}` for dictionary hits; per-term `[#term_index]`
-   traceability is scheduled for v0.4.1.
+4. **v0.4.1 still gates `token.format` and context scoring hints.**
+   The rulepack schema parses `token.format`, `context.hotwords`,
+   `context.boost`, and `context.window` for forward-compatible authoring, but
+   the loader rejects any non-default value with
+   `RulepackError::UnsupportedFieldInB1`.
+5. **v0.4.1 dictionary audit granularity is per term.** Dictionary redaction
+   sources use `dictionary:{name}[#term_index]`, where `term_index` is the
+   term's position in the loaded dictionary.
 6. **v0.4.0-rc.1 NER context-sensitivity gap.** Default Davlan-HRL may
    pass names embedded in prompt boilerplate or RFC822 email headers.
    Workarounds (wrap with a dictionary recognizer, tighten locale gating

@@ -25,7 +25,7 @@ use gaze::{
     Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
     LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
     RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
-    SensitiveSnapshot, Session, TypedContext, DEFAULT_NER_THRESHOLD,
+    SensitiveSnapshot, Session, SqliteLogger, TypedContext, DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
@@ -71,6 +71,9 @@ enum Cmd {
         /// Path to a typed Context JSON envelope. stdin remains raw text.
         #[arg(long)]
         context_json: Option<PathBuf>,
+        /// Optional SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -145,15 +148,17 @@ fn main() -> ExitCode {
             ner_threshold,
             max_bytes,
             context_json,
-        } => run_clean(
-            policy.as_deref(),
-            &format,
+            audit_db,
+        } => run_clean(CleanOptions {
+            policy: policy.as_deref(),
+            format: &format,
             session_ttl,
-            &locale,
+            locale: &locale,
             ner_threshold,
             max_bytes,
-            context_json.as_deref(),
-        ),
+            context_json: context_json.as_deref(),
+            audit_db: audit_db.as_deref(),
+        }),
         Cmd::Restore {
             format,
             restore_mode,
@@ -211,24 +216,28 @@ fn require_json_format(format: &str) -> std::result::Result<(), CliError> {
     }
 }
 
-fn run_clean(
-    policy: Option<&std::path::Path>,
-    format: &str,
+struct CleanOptions<'a> {
+    policy: Option<&'a std::path::Path>,
+    format: &'a str,
     session_ttl: Option<u64>,
-    locale: &[String],
+    locale: &'a [String],
     ner_threshold: Option<f32>,
     max_bytes: u64,
-    context_json: Option<&std::path::Path>,
-) -> std::result::Result<(), CliError> {
-    require_json_format(format)?;
-    let cli_ner_threshold = ner_threshold
+    context_json: Option<&'a std::path::Path>,
+    audit_db: Option<&'a std::path::Path>,
+}
+
+fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
+    require_json_format(options.format)?;
+    let cli_ner_threshold = options
+        .ner_threshold
         .map(validate_ner_threshold)
         .transpose()
         .map_err(map_policy_error)?;
-    let raw = read_stdin_text(max_bytes)?;
+    let raw = read_stdin_text(options.max_bytes)?;
 
-    let counter = Arc::new(CountingLogger::default());
-    let loaded_policy = match policy {
+    let counter = Arc::new(CountingLogger::new(options.audit_db).map_err(|_| CliError::Pipeline)?);
+    let loaded_policy = match options.policy {
         Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => None,
     };
@@ -236,7 +245,8 @@ fn run_clean(
         Some(policy) => load_rulepacks(policy).map_err(map_pipeline_error)?,
         None => Vec::new(),
     };
-    let context = context_json
+    let context = options
+        .context_json
         .map(TypedContext::load)
         .transpose()
         .map_err(|_| CliError::PolicyConfig)?;
@@ -257,7 +267,7 @@ fn run_clean(
     let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
     let dictionary_stats = dictionaries.stats();
     let rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
-    let cli_locales = parse_cli_locales(locale)?;
+    let cli_locales = parse_cli_locales(options.locale)?;
     let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
         cli_locales.as_deref(),
         loaded_policy
@@ -290,9 +300,9 @@ fn run_clean(
     };
 
     let session = match &loaded_policy {
-        Some(policy) => Session::from_policy_with_ttl_override(policy, session_ttl),
+        Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
         None => Session::new(Scope::Persistent {
-            ttl: Duration::from_secs(session_ttl.unwrap_or(86_400)),
+            ttl: Duration::from_secs(options.session_ttl.unwrap_or(86_400)),
         }),
     }
     .map_err(|_| CliError::Pipeline)?;
@@ -333,7 +343,7 @@ fn run_clean(
                 .into_iter()
                 .map(LoadedDictionaryStats::from)
                 .collect(),
-            context_source: context_json.map(|_| "cli".to_string()),
+            context_source: options.context_json.map(|_| "cli".to_string()),
         },
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
@@ -721,13 +731,25 @@ fn build_context_pipeline(
         .build()
 }
 
-#[derive(Default)]
 struct CountingLogger {
     detections: AtomicU64,
+    audit: Option<SqliteLogger>,
+}
+
+impl CountingLogger {
+    fn new(audit_db: Option<&std::path::Path>) -> GazeResult<Self> {
+        Ok(Self {
+            detections: AtomicU64::new(0),
+            audit: audit_db.map(SqliteLogger::new).transpose()?,
+        })
+    }
 }
 
 impl RedactionLogger for CountingLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
+        if let Some(audit) = &self.audit {
+            audit.log(entry)?;
+        }
         if !entry.conflict_loser
             && entry.document_kind == DocumentKind::Text
             && entry.action != gaze::Action::Preserve
