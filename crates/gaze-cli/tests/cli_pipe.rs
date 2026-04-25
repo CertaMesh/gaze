@@ -218,41 +218,11 @@ priority = 77
     )
 }
 
-fn email_header_rulepack() -> String {
-    r#"
-schema_version = "0.1.0"
-rulepack_id = "email-header"
-rulepack_version = "0.4.1"
-default_locales = ["global"]
-
-[[recognizers]]
-id = "email.header.name"
-class = "Name"
-enabled = true
-locales = ["global"]
-
-[recognizers.match]
-kind = "regex"
-pattern_template = '''(?m)^{locale_email_headers}:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+<[^>]+>'''
-capture_groups = [2]
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-family = "email.header.name"
-"#
-    .to_string()
-}
-
-fn write_policy_with_email_header_rulepack(
+fn write_policy_with_bundled_rulepacks(
     bundled_rulepacks: &[&str],
     locale_active: &str,
 ) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
-    let rulepack_path = dir.path().join("email-header.toml");
-    fs::write(&rulepack_path, email_header_rulepack()).unwrap();
     let path = dir.path().join("policy.toml");
     let bundled = bundled_rulepacks
         .iter()
@@ -272,7 +242,6 @@ active = ["{locale_active}"]
 
 [policy.rulepacks]
 bundled = [{bundled}]
-paths = ["{}"]
 
 [[rule]]
 kind = "class"
@@ -287,9 +256,7 @@ action = "tokenize"
 [[rule]]
 kind = "default"
 action = "preserve"
-"#,
-            rulepack_path.display()
-        ),
+"#),
     )
     .unwrap();
     (dir, path)
@@ -674,7 +641,7 @@ terms = ["Sonnenlied"]
 #[test]
 fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
     let (_dir, path) =
-        write_policy_with_email_header_rulepack(&["core", "locale-de", "locale-en"], "de-DE");
+        write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
     let v = clean_json_with_args(
         &[&format!("--policy={}", path.display())],
         "Von: Alice Example <alice@example.invalid>",
@@ -692,7 +659,7 @@ fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
 
 #[test]
 fn t21h_pattern_template_falls_back_to_global_when_locale_not_loaded() {
-    let (_dir, path) = write_policy_with_email_header_rulepack(&["core"], "fr-FR");
+    let (_dir, path) = write_policy_with_bundled_rulepacks(&["core"], "fr-FR");
     let v = clean_json_with_args(
         &[&format!("--policy={}", path.display())],
         "From: Alice Example <alice@example.invalid>",

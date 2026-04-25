@@ -43,3 +43,18 @@ priority = 90
 origin = "ported"
 from = "presidio"
 license = "Apache-2.0"
+
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?m)^(?:{locale_email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>'''
+capture_groups = [1, 2]
+
+[recognizers.scoring]
+base = 0.85
+priority = 100
