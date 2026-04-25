@@ -234,7 +234,7 @@ fn is_basic_email(input: &str) -> bool {
 fn luhn_check(input: &str) -> bool {
     let mut digits = Vec::new();
     for byte in input.bytes() {
-        if byte.is_ascii_whitespace() {
+        if byte.is_ascii_whitespace() || byte == b'-' {
             continue;
         }
         if !byte.is_ascii_digit() {
@@ -242,7 +242,7 @@ fn luhn_check(input: &str) -> bool {
         }
         digits.push(byte - b'0');
     }
-    if digits.len() < 2 {
+    if !(13..=19).contains(&digits.len()) {
         return false;
     }
 
