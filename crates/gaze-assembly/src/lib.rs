@@ -121,7 +121,6 @@ pub fn build_pipeline(
                     recognizer.scoring.base,
                     recognizer.scoring.priority,
                     recognizer.token.family.as_deref().unwrap_or("counter"),
-                    recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
                     capture_groups,
                     exclusions,
                     validator_kind,

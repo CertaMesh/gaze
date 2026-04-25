@@ -44,7 +44,6 @@ pub struct RegexDetector {
     base_score: f32,
     priority: i32,
     token_family: String,
-    token_format: String,
     capture_groups: Option<Vec<u32>>,
     exclusions: Vec<String>,
     validator_kind: Option<ValidatorKind>,
@@ -65,7 +64,6 @@ impl RegexDetector {
             0.70,
             0,
             "counter",
-            "{Class}_{n}",
             None,
             Vec::new(),
             None,
@@ -82,7 +80,6 @@ impl RegexDetector {
         base_score: f32,
         priority: i32,
         token_family: &str,
-        token_format: &str,
         capture_groups: Option<Vec<u32>>,
         exclusions: Vec<String>,
         validator_kind: Option<ValidatorKind>,
@@ -97,7 +94,6 @@ impl RegexDetector {
             base_score,
             priority,
             token_family: token_family.to_string(),
-            token_format: token_format.to_string(),
             capture_groups,
             exclusions,
             validator_kind,
@@ -110,10 +106,6 @@ impl RegexDetector {
             r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b",
             PiiClass::Email,
         )
-    }
-
-    pub fn token_format(&self) -> &str {
-        &self.token_format
     }
 }
 
@@ -226,7 +218,6 @@ mod tests {
             0.70,
             0,
             "counter",
-            "{Class}_{n}",
             None,
             Vec::new(),
             Some(ValidatorKind::EmailRfc),
@@ -259,7 +250,6 @@ mod tests {
             0.90,
             0,
             "email.header.name",
-            "{Class}_{n}",
             Some(vec![1, 2]),
             Vec::new(),
             None,
