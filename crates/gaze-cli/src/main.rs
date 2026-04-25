@@ -462,7 +462,16 @@ fn build_pipeline_from_policy(
         .filter(|(_, r)| r.enabled)
     {
         match recognizer.matcher {
-            RawMatch::Regex { pattern } => {
+            RawMatch::Regex {
+                pattern,
+                pattern_template,
+                capture_groups,
+            } => {
+                let pattern = pattern.or(pattern_template).ok_or_else(|| {
+                    gaze::Error::Rulepack(gaze::RulepackError::RegexPatternChoice {
+                        id: recognizer.id.clone(),
+                    })
+                })?;
                 let exclusions = recognizer
                     .context
                     .as_ref()
@@ -487,6 +496,7 @@ fn build_pipeline_from_policy(
                     recognizer.scoring.priority,
                     recognizer.token.family.as_deref().unwrap_or("counter"),
                     recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
+                    capture_groups,
                     exclusions,
                     validator_kind,
                     normalizer_kind,

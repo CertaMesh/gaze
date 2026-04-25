@@ -35,7 +35,12 @@ pub struct RecognizerSpec {
 #[serde(tag = "kind", deny_unknown_fields, rename_all = "snake_case")]
 pub enum RawMatch {
     Regex {
-        pattern: String,
+        #[serde(default)]
+        pattern: Option<String>,
+        #[serde(default)]
+        pattern_template: Option<String>,
+        #[serde(default)]
+        capture_groups: Option<Vec<u32>>,
     },
     Dictionary {
         #[serde(default)]
@@ -124,6 +129,10 @@ pub enum RulepackError {
         first_pack: String,
         second_pack: String,
     },
+    #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
+    RegexPatternChoice { id: String },
+    #[error("unknown pattern_template placeholder '{placeholder}' in recognizer '{id}'")]
+    UnknownPatternTemplatePlaceholder { id: String, placeholder: String },
 }
 
 impl Rulepack {
@@ -266,6 +275,7 @@ fn parse_recognizer(
     default_locales: &[LocaleTag],
 ) -> Result<RecognizerSpec, RulepackError> {
     reject_unshipped_fields(&raw)?;
+    validate_matcher(&raw)?;
     let locales = if raw.locales.is_empty() {
         default_locales.to_vec()
     } else {
@@ -312,20 +322,23 @@ fn parse_recognizer(
     })
 }
 
+fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
+    if let RawMatch::Regex {
+        pattern,
+        pattern_template,
+        ..
+    } = &raw.matcher
+    {
+        if pattern.is_some() == pattern_template.is_some() {
+            return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+        }
+    }
+    Ok(())
+}
+
 fn reject_unshipped_fields(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
     const PLANNED_VERSION: &str = "v0.4.1";
 
-    if raw
-        .token
-        .family
-        .as_deref()
-        .is_some_and(|value| !value.is_empty())
-    {
-        return Err(RulepackError::UnsupportedFieldInB1 {
-            field: "token.family".to_string(),
-            planned_version: PLANNED_VERSION,
-        });
-    }
     if raw
         .token
         .format
@@ -455,13 +468,16 @@ license = "Apache-2.0"
     }
 
     #[test]
-    fn rulepack_rejects_unsupported_token_family() {
-        let err = Rulepack::parse(&unsupported_field_rulepack(
+    fn rulepack_accepts_token_family() {
+        let rulepack = Rulepack::parse(&unsupported_field_rulepack(
             "[recognizers.token]\nfamily = \"email.formatpreserve\"\n",
         ))
-        .expect_err("token family is reserved for v0.4.1");
+        .expect("token family is active in v0.4.1");
 
-        assert_unsupported_field(err, "token.family");
+        assert_eq!(
+            rulepack.recognizers[0].token.family.as_deref(),
+            Some("email.formatpreserve")
+        );
     }
 
     #[test]
@@ -514,6 +530,43 @@ license = "Apache-2.0"
         assert!(recognizer.context.as_ref().unwrap().hotwords.is_empty());
         assert_eq!(recognizer.context.as_ref().unwrap().boost, None);
         assert_eq!(recognizer.context.as_ref().unwrap().window, None);
+    }
+
+    #[test]
+    fn pattern_template_with_pattern_both_present_fails_closed() {
+        let err = Rulepack::parse(&unsupported_field_rulepack(
+            "pattern_template = \"{locale_email_headers}: (.+)\"\n",
+        ))
+        .expect_err("pattern and pattern_template are mutually exclusive");
+
+        assert!(matches!(
+            err,
+            RulepackError::RegexPatternChoice { id } if id == "bad.email"
+        ));
+    }
+
+    #[test]
+    fn regex_pattern_or_template_is_required() {
+        let raw = r#"
+schema_version = "0.1.0"
+rulepack_id = "bad"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "bad.email"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+"#;
+        let err = Rulepack::parse(raw).expect_err("regex pattern is required");
+
+        assert!(matches!(
+            err,
+            RulepackError::RegexPatternChoice { id } if id == "bad.email"
+        ));
     }
 
     #[test]
