@@ -1,0 +1,89 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-core-extended"
+rulepack_version = "0.4.2"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "phone.structural"
+class = "custom:phone"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\+\d{6,15}\b'''
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "ip.v4"
+class = "custom:ip_address"
+cooperates_with = ["ip.v6"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b'''
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "ip.v6"
+class = "custom:ip_address"
+cooperates_with = ["ip.v4"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)(?:^|[^0-9a-f:])((?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:|(?:[0-9a-f]{1,4}:){1,6}:[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,5}(?::[0-9a-f]{1,4}){1,2}|(?:[0-9a-f]{1,4}:){1,4}(?::[0-9a-f]{1,4}){1,3}|(?:[0-9a-f]{1,4}:){1,3}(?::[0-9a-f]{1,4}){1,4}|(?:[0-9a-f]{1,4}:){1,2}(?::[0-9a-f]{1,4}){1,5}|[0-9a-f]{1,4}:(?:(?::[0-9a-f]{1,4}){1,6})|::(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4}|::)(?:$|[^0-9a-f:])'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "postal.de"
+class = "custom:postal_code"
+cooperates_with = ["postal.us"]
+enabled = true
+locales = ["de-DE"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b\d{5}\b'''
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
+
+[[recognizers]]
+id = "postal.us"
+class = "custom:postal_code"
+cooperates_with = ["postal.de"]
+enabled = true
+locales = ["en-US"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b\d{5}(-\d{4})?\b'''
+
+[recognizers.scoring]
+base = 0.70
+priority = 70
+
+[recognizers.token]
