@@ -28,8 +28,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?:^|[^A-Za-z0-9_.])((?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d))(?:$|[^A-Za-z0-9_.])'''
-capture_groups = [1]
+pattern = '''\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b'''
 
 [recognizers.scoring]
 base = 0.70
