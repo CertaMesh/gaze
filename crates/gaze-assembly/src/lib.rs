@@ -1,3 +1,12 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use gaze::{
+    ClassRule, ColumnRule, Context, DefaultRule, DetectorKind, PiiClass, Pipeline, PolicyError,
+    RawMatch, RuleSpec, Rulepack, RulepackError,
+};
+use gaze_recognizers::{
+    DictionaryRecognizer, NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -11,9 +20,400 @@ pub enum BuildError {
 }
 
 pub fn build_pipeline(
-    _policy: &gaze::Policy,
-    _context: &gaze::TypedContext,
-    _rulepacks: &[gaze::Rulepack],
-) -> Result<gaze::Pipeline, BuildError> {
-    gaze::Pipeline::builder().build().map_err(BuildError::from)
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+) -> Result<Pipeline, BuildError> {
+    let mut builder = Pipeline::builder();
+    let mut registered_dictionaries = BTreeSet::<String>::new();
+    let locale_headers = merged_locale_email_headers(rulepacks);
+
+    for detector in &policy.detectors {
+        builder = match &detector.kind {
+            DetectorKind::Regex => builder.detector(RegexDetector::with_source(
+                detector.pattern.as_deref().ok_or_else(|| {
+                    PolicyError::BadDictionary {
+                        name: detector.name.clone(),
+                        reason: "regex recognizer missing pattern".to_string(),
+                    }
+                })?,
+                detector.class.clone(),
+                &detector.name,
+            )?),
+            DetectorKind::Dictionary => {
+                let dictionary_name = detector.dictionary_name.as_deref().ok_or_else(|| {
+                    PolicyError::BadDictionary {
+                        name: detector.name.clone(),
+                        reason: "dictionary recognizer missing dictionary name".to_string(),
+                    }
+                })?;
+                registered_dictionaries.insert(dictionary_name.to_string());
+                builder.recognizer(DictionaryRecognizer::new(
+                    format!("dict/{}", detector.name),
+                    detector.class.clone(),
+                    dictionary_name,
+                    detector.case_sensitive,
+                    detector.token_family.clone(),
+                ))
+            }
+            DetectorKind::Unknown(kind) => {
+                return Err(PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into())
+            }
+        };
+    }
+
+    let mut rulepack_recognizers = BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
+    for rulepack in rulepacks {
+        for recognizer in &rulepack.recognizers {
+            tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
+            if let Some((first_pack, _)) = rulepack_recognizers.get(&recognizer.id) {
+                return Err(RulepackError::DuplicateId {
+                    id: recognizer.id.clone(),
+                    first_pack: first_pack.clone(),
+                    second_pack: rulepack.rulepack_id.clone(),
+                }
+                .into());
+            }
+            rulepack_recognizers.insert(
+                recognizer.id.clone(),
+                (rulepack.rulepack_id.clone(), recognizer.clone()),
+            );
+        }
+    }
+
+    for (_, recognizer) in rulepack_recognizers
+        .into_values()
+        .filter(|(_, recognizer)| recognizer.enabled)
+    {
+        match recognizer.matcher {
+            RawMatch::Regex {
+                pattern,
+                pattern_template,
+                capture_groups,
+            } => {
+                let pattern = lower_regex_pattern(
+                    &recognizer.id,
+                    pattern,
+                    pattern_template,
+                    &locale_headers,
+                )?;
+                let exclusions = recognizer
+                    .context
+                    .as_ref()
+                    .map(|context| context.exclusions.clone())
+                    .unwrap_or_default();
+                let validator_kind = recognizer
+                    .validator
+                    .as_ref()
+                    .map(|validator| ValidatorKind::parse(&validator.kind))
+                    .transpose()?;
+                let normalizer_kind = recognizer
+                    .normalizer
+                    .as_ref()
+                    .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
+                    .transpose()?;
+                builder = builder.recognizer(RegexDetector::with_rulepack_fields(
+                    &pattern,
+                    recognizer.class,
+                    &recognizer.id,
+                    recognizer.locales,
+                    recognizer.scoring.base,
+                    recognizer.scoring.priority,
+                    recognizer.token.family.as_deref().unwrap_or("counter"),
+                    recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
+                    capture_groups,
+                    exclusions,
+                    validator_kind,
+                    normalizer_kind,
+                )?);
+            }
+            RawMatch::Dictionary {
+                terms,
+                terms_file,
+                terms_from_context,
+                case_sensitive,
+            } => {
+                let dictionary_name = terms_from_context
+                    .as_deref()
+                    .unwrap_or(recognizer.id.as_str())
+                    .to_string();
+                let dictionary_has_inline_terms = !terms.is_empty() || terms_file.is_some();
+                if !dictionary_has_inline_terms && terms_from_context.is_none() {
+                    return Err(PolicyError::BadDictionary {
+                        name: recognizer.id.clone(),
+                        reason:
+                            "dictionary matcher requires terms, terms_file, or terms_from_context"
+                                .to_string(),
+                    }
+                    .into());
+                }
+                let id = recognizer.id;
+                let class = recognizer.class;
+                let token_family = recognizer
+                    .token
+                    .family
+                    .unwrap_or_else(|| "counter".to_string());
+                let locales = recognizer.locales;
+                let base_score = recognizer.scoring.base;
+                let priority = recognizer.scoring.priority;
+                registered_dictionaries.insert(dictionary_name.clone());
+                builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
+                    id,
+                    class,
+                    dictionary_name,
+                    case_sensitive,
+                    token_family,
+                    locales,
+                    base_score,
+                    priority,
+                ));
+            }
+            RawMatch::Ner { .. } => {
+                return Err(RulepackError::UnsupportedMatcher("Ner".to_string()).into())
+            }
+        }
+    }
+
+    for name in context.dictionaries.keys() {
+        if registered_dictionaries.contains(name) {
+            continue;
+        }
+        let class = context
+            .class_map
+            .get(name)
+            .cloned()
+            .unwrap_or_else(|| PiiClass::custom(name));
+        builder = builder.recognizer(DictionaryRecognizer::new(
+            format!("context/{name}"),
+            class,
+            name,
+            context.dictionaries[name].case_sensitive,
+            "counter",
+        ));
+    }
+
+    for rule in &policy.rules {
+        builder = match rule {
+            RuleSpec::Class { class, action } => builder.rule(ClassRule::new(class.clone(), *action)),
+            RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
+            RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
+        };
+    }
+
+    if let Some(ner) = &policy.ner {
+        if let Some(path) = &ner.model_dir {
+            let detector = NerDetector::load_with_options(
+                path,
+                NerOptions {
+                    locale: ner.locale.clone(),
+                },
+            )
+            .map_err(|err| PolicyError::NerLoad(err.to_string()))?;
+            builder = builder.detector(detector);
+        }
+    }
+
+    Ok(builder.build()?)
+}
+
+fn lower_regex_pattern(
+    id: &str,
+    pattern: Option<String>,
+    pattern_template: Option<String>,
+    locale_headers: &[String],
+) -> Result<String, RulepackError> {
+    match (pattern, pattern_template) {
+        (Some(pattern), None) => Ok(pattern),
+        (None, Some(template)) => lower_pattern_template(id, &template, locale_headers),
+        _ => Err(RulepackError::RegexPatternChoice { id: id.to_string() }),
+    }
+}
+
+fn lower_pattern_template(
+    id: &str,
+    template: &str,
+    locale_headers: &[String],
+) -> Result<String, RulepackError> {
+    let mut lowered = String::with_capacity(template.len());
+    let mut rest = template;
+    while let Some(start) = rest.find('{') {
+        lowered.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        let Some(end) = after.find('}') else {
+            return Err(RulepackError::UnknownPatternTemplatePlaceholder {
+                id: id.to_string(),
+                placeholder: after.to_string(),
+            });
+        };
+        let placeholder = &after[..end];
+        match placeholder {
+            "locale_email_headers" => lowered.push_str(&format!(
+                "({})",
+                locale_headers
+                    .iter()
+                    .map(|name| regex::escape(name))
+                    .collect::<Vec<_>>()
+                    .join("|")
+            )),
+            other => {
+                return Err(RulepackError::UnknownPatternTemplatePlaceholder {
+                    id: id.to_string(),
+                    placeholder: other.to_string(),
+                })
+            }
+        }
+        rest = &after[end + 1..];
+    }
+    lowered.push_str(rest);
+    Ok(lowered)
+}
+
+fn merged_locale_email_headers(rulepacks: &[Rulepack]) -> Vec<String> {
+    rulepacks
+        .iter()
+        .filter_map(|rulepack| rulepack.locale.as_ref())
+        .filter_map(|locale| locale.email_headers.as_ref())
+        .filter(|headers| !headers.names.is_empty())
+        .last()
+        .map(|headers| headers.names.clone())
+        .unwrap_or_else(|| {
+            vec![
+                "From".to_string(),
+                "To".to_string(),
+                "Cc".to_string(),
+                "Bcc".to_string(),
+                "Reply-To".to_string(),
+                "Sender".to_string(),
+            ]
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaze::{
+        Action, CleanDocument, LocaleTag, RawDocument, Scope, Session, SessionPolicy, SessionScope,
+    };
+
+    fn policy() -> gaze::Policy {
+        gaze::Policy {
+            session: SessionPolicy {
+                scope: SessionScope::Ephemeral,
+                ttl_secs: None,
+            },
+            detectors: Vec::new(),
+            dictionaries: Vec::new(),
+            rules: vec![
+                RuleSpec::Class {
+                    class: PiiClass::Name,
+                    action: Action::Tokenize,
+                },
+                RuleSpec::Default {
+                    action: Action::Preserve,
+                },
+            ],
+            ner: None,
+            rulepacks: gaze::RulepackPolicy {
+                bundled: Vec::new(),
+                paths: Vec::new(),
+            },
+            locale: Some(vec![LocaleTag::DeDe]),
+        }
+    }
+
+    fn empty_context() -> Context {
+        Context {
+            dictionaries: std::collections::HashMap::new(),
+            class_map: std::collections::HashMap::new(),
+            fields: serde_json::Map::new(),
+        }
+    }
+
+    #[test]
+    fn pattern_template_lowers_correctly_under_locale_chain_de() {
+        let core = Rulepack::load(gaze::RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").expect("core"),
+        ))
+        .expect("core");
+        let de = Rulepack::load(gaze::RulepackSource::Embedded(
+            gaze_recognizers::embedded("locale-de").expect("locale-de"),
+        ))
+        .expect("de");
+        let email_header = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "email-header"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "email.header.name"
+class = "Name"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?m)^{locale_email_headers}:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+<[^>]+>'''
+capture_groups = [2]
+
+[recognizers.scoring]
+base = 0.90
+priority = 100
+
+[recognizers.token]
+family = "email.header.name"
+"#,
+        )
+        .expect("email header rulepack");
+        let pipeline = build_pipeline(&policy(), &empty_context(), &[core, de, email_header])
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(&session, RawDocument::Text("Von: Dana Weber <user@example.invalid>".into()))
+            .expect("redact");
+
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        assert!(regex::Regex::new(
+            r"^Von: <[0-9a-f]{8}:Name_\d+> <[a-z0-9._%+\-]+@example\.invalid>$"
+        )
+        .unwrap()
+        .is_match(&text));
+    }
+
+    #[test]
+    fn pattern_template_unknown_placeholder_fails_closed() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-template"
+rulepack_version = "0.4.1"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "bad.template"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''{unknown_placeholder}: (.+)'''
+"#,
+        )
+        .expect("parse");
+
+        let err = match build_pipeline(&policy(), &empty_context(), &[rulepack]) {
+            Ok(_) => panic!("unknown placeholder must fail"),
+            Err(err) => err,
+        };
+        assert!(matches!(
+            err,
+            BuildError::Rulepack(RulepackError::UnknownPatternTemplatePlaceholder {
+                placeholder,
+                ..
+            }) if placeholder == "unknown_placeholder"
+        ));
+    }
 }

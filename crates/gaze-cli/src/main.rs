@@ -22,14 +22,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, ColumnRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind,
-    LocaleChain, LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch,
-    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict,
-    RulepackSource, Scope, SensitiveSnapshot, Session, TypedContext,
+    Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
+    LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
+    RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
+    SensitiveSnapshot, Session, TypedContext,
 };
-use gaze_recognizers::{
-    DictionaryRecognizer, NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind,
-};
+use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
@@ -400,200 +398,18 @@ fn build_pipeline_from_policy(
     rulepacks: &[Rulepack],
     context: Option<&TypedContext>,
 ) -> GazeResult<Pipeline> {
-    let mut builder = Pipeline::builder();
-    let mut registered_dictionaries = std::collections::BTreeSet::<String>::new();
-
-    for detector in &policy.detectors {
-        builder = match &detector.kind {
-            gaze::DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                detector.pattern.as_deref().ok_or_else(|| {
-                    gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: detector.name.clone(),
-                        reason: "regex recognizer missing pattern".to_string(),
-                    })
-                })?,
-                detector.class.clone(),
-                &detector.name,
-            )?),
-            gaze::DetectorKind::Dictionary => {
-                let dictionary_name = detector.dictionary_name.as_deref().ok_or_else(|| {
-                    gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: detector.name.clone(),
-                        reason: "dictionary recognizer missing dictionary name".to_string(),
-                    })
-                })?;
-                registered_dictionaries.insert(dictionary_name.to_string());
-                builder.recognizer(DictionaryRecognizer::new(
-                    format!("dict/{}", detector.name),
-                    detector.class.clone(),
-                    dictionary_name,
-                    detector.case_sensitive,
-                    detector.token_family.clone(),
-                ))
-            }
-            gaze::DetectorKind::Unknown(kind) => {
-                return Err(gaze::Error::Policy(PolicyError::BadTtl(format!(
-                    "unknown detector.kind '{kind}'"
-                ))))
-            }
-        };
-    }
-
-    let mut rulepack_recognizers =
-        std::collections::BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
-    for rulepack in rulepacks {
-        for recognizer in &rulepack.recognizers {
-            tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
-            if let Some((first_pack, _)) = rulepack_recognizers.get(&recognizer.id) {
-                return Err(gaze::Error::Rulepack(gaze::RulepackError::DuplicateId {
-                    id: recognizer.id.clone(),
-                    first_pack: first_pack.clone(),
-                    second_pack: rulepack.rulepack_id.clone(),
-                }));
-            }
-            rulepack_recognizers.insert(
-                recognizer.id.clone(),
-                (rulepack.rulepack_id.clone(), recognizer.clone()),
-            );
-        }
-    }
-    for (_, recognizer) in rulepack_recognizers
-        .into_values()
-        .filter(|(_, r)| r.enabled)
-    {
-        match recognizer.matcher {
-            RawMatch::Regex {
-                pattern,
-                pattern_template,
-                capture_groups,
-            } => {
-                let pattern = pattern.or(pattern_template).ok_or_else(|| {
-                    gaze::Error::Rulepack(gaze::RulepackError::RegexPatternChoice {
-                        id: recognizer.id.clone(),
-                    })
-                })?;
-                let exclusions = recognizer
-                    .context
-                    .as_ref()
-                    .map(|context| context.exclusions.clone())
-                    .unwrap_or_default();
-                let validator_kind = recognizer
-                    .validator
-                    .as_ref()
-                    .map(|validator| ValidatorKind::parse(&validator.kind))
-                    .transpose()?;
-                let normalizer_kind = recognizer
-                    .normalizer
-                    .as_ref()
-                    .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
-                    .transpose()?;
-                builder = builder.recognizer(RegexDetector::with_rulepack_fields(
-                    &pattern,
-                    recognizer.class,
-                    &recognizer.id,
-                    recognizer.locales,
-                    recognizer.scoring.base,
-                    recognizer.scoring.priority,
-                    recognizer.token.family.as_deref().unwrap_or("counter"),
-                    recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
-                    capture_groups,
-                    exclusions,
-                    validator_kind,
-                    normalizer_kind,
-                )?);
-            }
-            RawMatch::Dictionary {
-                terms,
-                terms_file,
-                terms_from_context,
-                case_sensitive,
-            } => {
-                let dictionary_name = terms_from_context
-                    .as_deref()
-                    .unwrap_or(recognizer.id.as_str())
-                    .to_string();
-                let dictionary_has_inline_terms = !terms.is_empty() || terms_file.is_some();
-                if !dictionary_has_inline_terms && terms_from_context.is_none() {
-                    return Err(gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: recognizer.id.clone(),
-                        reason:
-                            "dictionary matcher requires terms, terms_file, or terms_from_context"
-                                .to_string(),
-                    }));
-                }
-                let id = recognizer.id;
-                let class = recognizer.class;
-                let token_family = recognizer
-                    .token
-                    .family
-                    .unwrap_or_else(|| "counter".to_string());
-                let locales = recognizer.locales;
-                let base_score = recognizer.scoring.base;
-                let priority = recognizer.scoring.priority;
-                registered_dictionaries.insert(dictionary_name.clone());
-                builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
-                    id,
-                    class,
-                    dictionary_name,
-                    case_sensitive,
-                    token_family,
-                    locales,
-                    base_score,
-                    priority,
-                ));
-            }
-            RawMatch::Ner { .. } => {
-                return Err(gaze::Error::Rulepack(
-                    gaze::RulepackError::UnsupportedMatcher("Ner".to_string()),
-                ))
-            }
-        }
-    }
-
-    if let Some(context) = context {
-        for name in context.dictionaries.keys() {
-            if registered_dictionaries.contains(name) {
-                continue;
-            }
-            let class = context
-                .class_map
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| PiiClass::custom(name));
-            builder = builder.recognizer(DictionaryRecognizer::new(
-                format!("context/{name}"),
-                class,
-                name,
-                context.dictionaries[name].case_sensitive,
-                "counter",
-            ));
-        }
-    }
-
-    for rule in &policy.rules {
-        builder = match rule {
-            RuleSpec::Class { class, action } => {
-                builder.rule(ClassRule::new(class.clone(), *action))
-            }
-            RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
-            RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
-        };
-    }
-
-    if let Some(ner) = &policy.ner {
-        if let Some(path) = &ner.model_dir {
-            let detector = NerDetector::load_with_options(
-                path,
-                NerOptions {
-                    locale: ner.locale.clone(),
-                },
-            )
-            .map_err(|err| gaze::Error::Policy(PolicyError::NerLoad(err.to_string())))?;
-            builder = builder.detector(detector);
-        }
-    }
-
-    builder.build()
+    let empty_context = TypedContext {
+        dictionaries: std::collections::HashMap::new(),
+        class_map: std::collections::HashMap::new(),
+        fields: serde_json::Map::new(),
+    };
+    gaze_assembly::build_pipeline(policy, context.unwrap_or(&empty_context), rulepacks).map_err(
+        |err| match err {
+            gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
+            gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
+            gaze_assembly::BuildError::Pipeline(err) => err,
+        },
+    )
 }
 
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {

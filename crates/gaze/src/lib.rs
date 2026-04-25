@@ -25,8 +25,8 @@ pub use dictionaries::{
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{
-    DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, SessionPolicy,
-    SessionScope,
+    DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec, RulepackPolicy,
+    SessionPolicy, SessionScope,
 };
 pub use redaction_log::{
     ConflictTier, DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger,

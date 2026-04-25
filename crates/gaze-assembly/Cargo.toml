@@ -10,4 +10,6 @@ description = "Policy-to-pipeline assembly for Gaze"
 gaze = { path = "../gaze" }
 gaze-recognizers = { path = "../gaze-recognizers" }
 regex = "1"
+serde_json = "1"
 thiserror = "1"
+tracing = "0.1"

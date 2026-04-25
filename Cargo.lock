@@ -1201,7 +1201,9 @@ dependencies = [
  "gaze",
  "gaze-recognizers",
  "regex",
+ "serde_json",
  "thiserror 1.0.69",
+ "tracing",
 ]
 
 [[package]]
