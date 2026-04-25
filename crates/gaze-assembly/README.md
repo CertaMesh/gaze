@@ -112,11 +112,13 @@ runtime context together.
 
 Rulepack regex recognizers may use supported pattern-template placeholders.
 `gaze-assembly` lowers those placeholders after the active locale chain is
-known. For example, `{locale_email_headers}` lowers from the loaded rulepack
-locale metadata, falling back to the default English header list when no
-loaded locale metadata matches.
+known. Generic placeholders use `{locale.<bucket>}` and lower from loaded
+rulepack locale metadata such as `[locale.salutations] names = [...]`.
+`{locale_email_headers}` remains a v0.4.2 compatibility alias for
+`{locale.email_headers}` and is deprecated for removal in the v0.5 cycle.
 
-Unknown placeholders fail closed with `RulepackError`.
+Unknown placeholders fail closed with `RulepackError`; unknown locale buckets
+fail closed with `PolicyError::UnknownLocaleBucket`.
 
 ## What belongs here
 

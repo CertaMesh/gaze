@@ -96,12 +96,8 @@ pub fn build_pipeline(
                 pattern_template,
                 capture_groups,
             } => {
-                let pattern = lower_regex_pattern(
-                    &recognizer.id,
-                    pattern,
-                    pattern_template,
-                    &locale_vocab,
-                )?;
+                let pattern =
+                    lower_regex_pattern(&recognizer.id, pattern, pattern_template, &locale_vocab)?;
                 let exclusions = recognizer
                     .context
                     .as_ref()
