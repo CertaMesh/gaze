@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gaze clean --audit-db=<path>` persists the metadata-only SQLite redaction log for pipe-mode invocations.
 - `gaze clean` now exposes three-surfaces CLI overrides for existing policy runtime knobs: `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path`.
 - Opt-in `core-extended` bundled rulepack with Phase 1 shape-only recognizers for E.164 phone numbers, IPv4/IPv6 addresses, and `de-DE`/`en-US` postal codes.
+- v0.5 design doc for open-key `PiiClass` and decision-deferred crate-shape Option B sketch.
 
 ### Changed
 
