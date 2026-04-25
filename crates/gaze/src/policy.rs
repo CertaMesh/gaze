@@ -127,6 +127,8 @@ pub enum PolicyError {
     NerThresholdOutOfRange { value: f32 },
     #[error("session.scope must be one of ephemeral, conversation, persistent, got {value}")]
     SessionScopeUnknown { value: String },
+    #[error("ner.locale must be a BCP47 locale tag, got {value}")]
+    NerLocaleUnsupported { value: String },
     #[error("unknown bundled rulepack: {value}")]
     BundledRulepackUnknown { value: String },
     #[error("{0}")]
@@ -479,11 +481,22 @@ fn parse_ner(raw: RawNerPolicy) -> Result<NerPolicy, PolicyError> {
     if !(0.0..=1.0).contains(&threshold) {
         return Err(PolicyError::NerThresholdOutOfRange { value: threshold });
     }
+    if let Some(locale) = &raw.locale {
+        validate_ner_locale(locale)?;
+    }
     Ok(NerPolicy {
         model_dir: raw.model_dir.map(expand_home).transpose()?,
         locale: raw.locale,
         threshold,
     })
+}
+
+pub fn validate_ner_locale(locale: &str) -> Result<(), PolicyError> {
+    LocaleTag::parse(locale)
+        .map(|_| ())
+        .map_err(|_| PolicyError::NerLocaleUnsupported {
+            value: locale.to_string(),
+        })
 }
 
 fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, PolicyError> {
