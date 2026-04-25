@@ -96,7 +96,7 @@ const SYMMETRIC_POTEMKIN_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
         package: "gaze-cli",
         test_target: None,
-        name: "tests::t_cli_ner_threshold_overrides_policy_value",
+        name: "pipeline::run::tests::t_cli_ner_threshold_overrides_policy_value",
     },
     BehavioralTest {
         package: "gaze-cli",
