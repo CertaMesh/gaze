@@ -30,6 +30,50 @@ If `--policy` is omitted, `gaze clean` falls back to a hard-coded stub pipeline
 (email regex + tokenize). The stub exists only so the CLI surface can be
 exercised before a policy is written; **production use requires `--policy`**.
 
+## CLI overrides for runtime knobs
+
+`policy.toml` is the durable source of truth. `gaze clean` also exposes
+runtime-only overrides for knobs operators commonly vary between invocations.
+Resolution is always:
+
+```text
+CLI flag > policy.toml > Gaze default
+```
+
+| Policy field | CLI flag | Notes |
+|--------------|----------|-------|
+| `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `Pipeline` if a session blob would be required. |
+| `[session].ttl_secs` | `--session-ttl <SECONDS>` | Existing override for persistent session TTL. |
+| `[ner].model_dir` | `--ner-model-dir <PATH>` | Overrides the NER model directory. If neither CLI nor TOML sets a model directory, no NER detector is registered. |
+| `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. Invalid tags fail closed with `PolicyConfig`. |
+| `[ner].threshold` | `--ner-threshold <FLOAT>` | Existing override for NER confidence threshold; must be `0.0..=1.0`. |
+| `[locale].active` | `--locale <BCP47,...>` | Existing override for the active locale fallback chain. |
+| `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run. |
+| `[policy.rulepacks].paths` | `--rulepack-path <PATH>` | Repeatable. Replaces TOML rulepack paths for the current run. |
+
+Example:
+
+```sh
+gaze clean \
+  --policy=policy.toml \
+  --session-scope=conversation \
+  --ner-model-dir="$HOME/.local/share/gaze/models/davlan-mbert-ner-hrl" \
+  --ner-locale=de \
+  --rulepack-bundled=core,locale-de \
+  --rulepack-path=./workspace-rulepack.toml
+```
+
+If `policy.toml` sets `[session].scope = "persistent"` and the command passes
+`--session-scope=conversation`, the exported `session_blob` records a
+conversation-scoped session. If neither source mentions `[ner].model_dir`, Gaze
+keeps NER disabled rather than registering a placeholder detector.
+
+Policy-document fields have no CLI override by design. Examples include
+recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
+(`[[rule]]`), rulepack internals, and policy-document metadata. Those fields
+define the auditable contract; changing them requires changing the policy or
+rulepack document itself.
+
 ## Classes
 
 A `class` identifies what kind of PII a recognizer detects. Every recognizer
