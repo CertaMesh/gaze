@@ -12,6 +12,7 @@ pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {
         "core" => Some(include_str!("../embedded/core.toml")),
+        "core-extended" => Some(include_str!("../embedded/core-extended.toml")),
         "locale-de" => Some(include_str!("../embedded/locale-de.toml")),
         "locale-en" => Some(include_str!("../embedded/locale-en.toml")),
         _ => None,
@@ -39,5 +40,23 @@ mod tests {
             rulepack.recognizers[1].matcher,
             RawMatch::Regex { .. }
         ));
+    }
+
+    #[test]
+    fn embedded_core_extended_rulepack_parses_and_contains_phase1_recognizers() {
+        let core_extended = embedded("core-extended").expect("core-extended rulepack");
+        let rulepack =
+            Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
+
+        assert_eq!(rulepack.recognizers.len(), 5);
+        assert_eq!(rulepack.recognizers[0].id, "phone.structural");
+        assert_eq!(rulepack.recognizers[1].id, "ip.v4");
+        assert_eq!(rulepack.recognizers[2].id, "ip.v6");
+        assert_eq!(rulepack.recognizers[3].id, "postal.de");
+        assert_eq!(rulepack.recognizers[4].id, "postal.us");
+        assert!(rulepack
+            .recognizers
+            .iter()
+            .all(|recognizer| matches!(recognizer.matcher, RawMatch::Regex { .. })));
     }
 }
