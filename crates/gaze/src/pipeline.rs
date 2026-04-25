@@ -167,7 +167,11 @@ impl Pipeline {
             self.log_entry(&detection, field_name, document_kind.clone(), action, false)?;
 
             let replacement = match action {
-                Action::Tokenize => Some(session.tokenize(&detection.detection.class, &raw)?),
+                Action::Tokenize => Some(session.tokenize_with_family(
+                    &detection.family,
+                    &detection.detection.class,
+                    &raw,
+                )?),
                 Action::Redact => Some("[REDACTED]".to_string()),
                 Action::FormatPreserve => {
                     Some(session.format_preserving_fake(&detection.detection.class, &raw)?)
@@ -224,6 +228,7 @@ impl Pipeline {
 struct IndexedDetection {
     detection: Detection,
     decided_by: ConflictTier,
+    family: String,
 }
 
 #[derive(Default)]
@@ -340,6 +345,7 @@ fn merged_losers(resolved: &[Candidate]) -> Vec<IndexedDetection> {
                 } else {
                     winner.decided_by
                 },
+                family: winner.token_family.clone(),
             })
         })
         .collect()
@@ -354,6 +360,7 @@ impl From<Candidate> for IndexedDetection {
                 source: candidate.source,
             },
             decided_by: candidate.decided_by,
+            family: candidate.token_family,
         }
     }
 }
@@ -621,5 +628,81 @@ mod tests {
             }
             other => panic!("expected text output, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn t21d_token_family_threads_from_recognizer_to_session() {
+        struct FamilyRecognizer;
+
+        impl Recognizer for FamilyRecognizer {
+            fn id(&self) -> &str {
+                "name.alpha"
+            }
+
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Name
+            }
+
+            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+                let Some(start) = input.find("Dr. Schmidt") else {
+                    return Vec::new();
+                };
+                let end = start + "Dr. Schmidt".len();
+                vec![Candidate {
+                    span: start..end,
+                    class: PiiClass::Name,
+                    recognizer_id: self.id().to_string(),
+                    score: 1.0,
+                    priority: 0,
+                    canonical_form: None,
+                    token_family: self.token_family().to_string(),
+                    source: self.id().to_string(),
+                    decided_by: ConflictTier::None,
+                    merged_sources: Vec::new(),
+                }]
+            }
+
+            fn token_family(&self) -> &str {
+                "alpha"
+            }
+        }
+
+        let pipeline = Pipeline::builder()
+            .recognizer(FamilyRecognizer)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let clean = pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Assigned to Dr. Schmidt".to_string()),
+            )
+            .expect("redact");
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        let token = text
+            .strip_prefix("Assigned to ")
+            .expect("token prefix")
+            .to_string();
+        assert!(regex::Regex::new(r"^<[0-9a-f]{8}:Name_\d+>$")
+            .unwrap()
+            .is_match(&token));
+
+        let beta = session
+            .tokenize_with_family("beta", &PiiClass::Name, "Dr. Schmidt")
+            .expect("beta token");
+        assert_ne!(token, beta);
+        assert_eq!(
+            session
+                .tokenize_with_family("alpha", &PiiClass::Name, "Dr. Schmidt")
+                .expect("alpha token"),
+            token
+        );
+        assert_eq!(session.restore(&token).as_deref(), Some("Dr. Schmidt"));
+        assert_eq!(session.restore(&beta).as_deref(), Some("Dr. Schmidt"));
     }
 }

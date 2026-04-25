@@ -13,6 +13,9 @@ use crate::policy::{Policy, SessionScope};
 use crate::{Error, Result};
 
 const DEFAULT_PERSISTENT_TTL_SECS: u64 = 86_400;
+const DEFAULT_COUNTER_FAMILY: &str = "counter";
+const SNAPSHOT_VERSION_V2: u8 = 2;
+const SNAPSHOT_VERSION_V3: u8 = 3;
 
 #[derive(Debug, Clone)]
 pub enum Scope {
@@ -38,6 +41,7 @@ impl From<Vec<u8>> for SensitiveSnapshot {
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
 struct TokenKey {
+    family: String,
     class: PiiClass,
     raw: String,
 }
@@ -47,6 +51,8 @@ struct SnapshotEntry {
     class: PiiClass,
     raw: String,
     token: String,
+    #[serde(default = "default_counter_family")]
+    family: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,13 +120,17 @@ impl Session {
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| {
+        self.tokenize_with_family(DEFAULT_COUNTER_FAMILY, class, raw)
+    }
+
+    pub fn tokenize_with_family(&self, family: &str, class: &PiiClass, raw: &str) -> Result<String> {
+        self.intern_mapping(Some(family), class, raw, |index| {
             format!("<{}:{}_{}>", self.session_hex(), class.class_name(), index)
         })
     }
 
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
-        self.intern_mapping(class, raw, |index| match class {
+        self.intern_mapping(None, class, raw, |index| match class {
             PiiClass::Email => format!("email{index}.{}@gaze-fake.invalid", self.session_hex()),
             // Lowercasing preserves the dedicated `custom:` sentinel namespace
             // for format-preserving fakes, so restore can detect them too.
@@ -134,11 +144,19 @@ impl Session {
         })
     }
 
-    fn intern_mapping<F>(&self, class: &PiiClass, raw: &str, build: F) -> Result<String>
+    fn intern_mapping<F>(
+        &self,
+        family: Option<&str>,
+        class: &PiiClass,
+        raw: &str,
+        build: F,
+    ) -> Result<String>
     where
         F: FnOnce(usize) -> String,
     {
+        let family_key = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
         let key = TokenKey {
+            family: family_key.to_string(),
             class: class.clone(),
             raw: raw.to_string(),
         };
@@ -217,6 +235,7 @@ impl Session {
                 .token_by_value
                 .iter()
                 .map(|entry| SnapshotEntry {
+                    family: entry.key().family.clone(),
                     class: entry.key().class.clone(),
                     raw: entry.key().raw.clone(),
                     token: entry.value().clone(),
@@ -235,7 +254,7 @@ impl Session {
         let verifying_key = signing_key.verifying_key();
 
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
-        snapshot.push(2);
+        snapshot.push(SNAPSHOT_VERSION_V3);
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
@@ -248,7 +267,7 @@ impl Session {
             return Err(Error::InvalidSnapshotSignature);
         }
         let version = bytes[0];
-        if version != 2 {
+        if version != SNAPSHOT_VERSION_V2 && version != SNAPSHOT_VERSION_V3 {
             return Err(Error::InvalidSnapshotVersion(version));
         }
 
@@ -303,6 +322,7 @@ impl Session {
         for entry in payload.entries {
             session.token_by_value.insert(
                 TokenKey {
+                    family: entry.family,
                     class: entry.class.clone(),
                     raw: entry.raw.clone(),
                 },
@@ -330,6 +350,10 @@ impl Session {
         }
         Ok(session)
     }
+}
+
+fn default_counter_family() -> String {
+    DEFAULT_COUNTER_FAMILY.to_string()
 }
 
 struct SessionKey {
@@ -534,23 +558,45 @@ mod tests {
 
     fn signed_snapshot_v03(payload: SnapshotPayload) -> SensitiveSnapshot {
         let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
+        signed_snapshot_bytes(1, &payload_bytes)
+    }
+
+    fn signed_snapshot_bytes(version: u8, payload_bytes: &[u8]) -> SensitiveSnapshot {
         let key = SessionKey::generate().expect("session key");
         let signing_key = key.signing_key();
-        let signature = signing_key.sign(&payload_bytes);
+        let signature = signing_key.sign(payload_bytes);
         let verifying_key = signing_key.verifying_key();
 
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
-        snapshot.push(1);
+        snapshot.push(version);
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
-        snapshot.extend_from_slice(&payload_bytes);
+        snapshot.extend_from_slice(payload_bytes);
+        SensitiveSnapshot::from(snapshot)
+    }
+
+    fn signed_snapshot_v2(payload: SnapshotPayload) -> SensitiveSnapshot {
+        let mut snapshot = signed_snapshot_v03(payload).into_bytes();
+        snapshot[0] = SNAPSHOT_VERSION_V2;
         SensitiveSnapshot::from(snapshot)
     }
 
     fn signed_snapshot(payload: SnapshotPayload) -> SensitiveSnapshot {
         let mut snapshot = signed_snapshot_v03(payload).into_bytes();
-        snapshot[0] = 2;
+        snapshot[0] = SNAPSHOT_VERSION_V3;
         SensitiveSnapshot::from(snapshot)
+    }
+
+    fn legacy_v0_4_0_accepts_only_v2(snapshot: &SensitiveSnapshot) -> Result<()> {
+        let bytes = &snapshot.0;
+        if bytes.len() < 97 {
+            return Err(Error::InvalidSnapshotSignature);
+        }
+        let version = bytes[0];
+        if version != SNAPSHOT_VERSION_V2 {
+            return Err(Error::InvalidSnapshotVersion(version));
+        }
+        Ok(())
     }
 
     #[test]
@@ -621,6 +667,7 @@ mod tests {
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: vec![SnapshotEntry {
+                family: DEFAULT_COUNTER_FAMILY.to_string(),
                 class: PiiClass::Name,
                 raw: "Dr. Schmidt".to_string(),
                 token: "deadbeef:name_1".to_string(),
@@ -660,7 +707,7 @@ mod tests {
 
     #[test]
     fn import_accepts_legacy_persistent_snapshot_without_issued_at() {
-        let snapshot = signed_snapshot(SnapshotPayload {
+        let snapshot = signed_snapshot_v2(SnapshotPayload {
             scope: SnapshotScope::Persistent { ttl_secs: 1 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
@@ -669,6 +716,47 @@ mod tests {
         });
 
         assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
+    fn import_v0_4_0_snapshot_version_2_succeeds_with_default_family() {
+        let payload = serde_json::json!({
+            "scope": { "Persistent": { "ttl_secs": 300 } },
+            "session_hex": "a7f3b8e2",
+            "entries": [{
+                "class": "Name",
+                "raw": "Dr. Schmidt",
+                "token": "<a7f3b8e2:Name_1>"
+            }],
+            "issued_at": 0,
+            "next_by_class": [["Name", 1]]
+        });
+        let payload_bytes = serde_json::to_vec(&payload).expect("payload");
+        let snapshot = signed_snapshot_bytes(SNAPSHOT_VERSION_V2, &payload_bytes);
+
+        let session = Session::import(snapshot).expect("import v2 snapshot");
+        assert_eq!(
+            session.restore("<a7f3b8e2:Name_1>").as_deref(),
+            Some("Dr. Schmidt")
+        );
+        let next = session
+            .tokenize_with_family("alpha", &PiiClass::Name, "Prof. Weber")
+            .expect("next token");
+        assert_eq!(next, "<a7f3b8e2:Name_2>");
+    }
+
+    #[test]
+    fn v0_4_0_rejects_v0_4_1_snapshot_version_3_cleanly() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let _ = session
+            .tokenize_with_family("alpha", &PiiClass::Name, "Dr. Schmidt")
+            .expect("token");
+        let snapshot = session.export().expect("snapshot");
+
+        assert!(matches!(
+            legacy_v0_4_0_accepts_only_v2(&snapshot),
+            Err(Error::InvalidSnapshotVersion(3))
+        ));
     }
 
     #[test]
@@ -746,5 +834,39 @@ mod tests {
             Some("alice@corp.com")
         );
         assert_eq!(session.restore(&second_token).as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let alpha = session
+            .tokenize_with_family("alpha", &PiiClass::Name, "Dr. Schmidt")
+            .expect("alpha token");
+        let beta = session
+            .tokenize_with_family("beta", &PiiClass::Name, "Dr. Schmidt")
+            .expect("beta token");
+
+        assert_ne!(alpha, beta);
+        assert!(alpha.ends_with(":Name_1>"));
+        assert!(beta.ends_with(":Name_2>"));
+
+        let snapshot = session.export().expect("snapshot");
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V3);
+        let imported = Session::import(snapshot).expect("import");
+
+        assert_eq!(imported.restore(&alpha).as_deref(), Some("Dr. Schmidt"));
+        assert_eq!(imported.restore(&beta).as_deref(), Some("Dr. Schmidt"));
+        assert_eq!(
+            imported
+                .tokenize_with_family("alpha", &PiiClass::Name, "Dr. Schmidt")
+                .expect("alpha stable"),
+            alpha
+        );
+        assert_eq!(
+            imported
+                .tokenize_with_family("beta", &PiiClass::Name, "Dr. Schmidt")
+                .expect("beta stable"),
+            beta
+        );
     }
 }
