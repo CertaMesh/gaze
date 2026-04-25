@@ -383,9 +383,7 @@ fn merged_locale_vocab(
                 let bucket_values = buckets
                     .entry(bucket_name.clone())
                     .or_insert_with(Vec::<String>::new);
-                let bucket_seen = seen
-                    .entry(bucket_name.clone())
-                    .or_insert_with(BTreeSet::<String>::new);
+                let bucket_seen = seen.entry(bucket_name.clone()).or_default();
                 for name in &bucket.names {
                     if bucket_seen.insert(name.clone()) {
                         bucket_values.push(name.clone());
