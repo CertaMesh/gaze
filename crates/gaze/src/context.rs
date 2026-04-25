@@ -135,19 +135,19 @@ mod tests {
         let raw = serde_json::from_str::<RawContext>(
             r#"{
               "dictionaries": {
-                "order_ids": { "terms": ["ORD-12345"], "case_sensitive": true }
+                "dict_alpha": { "terms": ["AAA-12345"], "case_sensitive": true }
               },
-              "class_map": { "order_ids": "custom:order_id" },
+              "class_map": { "dict_alpha": "custom:class_alpha" },
               "fields": { "tenant": "demo" }
             }"#,
         )
         .expect("raw context");
 
         let ctx = Context::try_from(raw).expect("context");
-        assert_eq!(ctx.dictionaries["order_ids"].terms, vec!["ORD-12345"]);
+        assert_eq!(ctx.dictionaries["dict_alpha"].terms, vec!["AAA-12345"]);
         assert_eq!(
-            ctx.class_map["order_ids"],
-            PiiClass::Custom("order_id".to_string())
+            ctx.class_map["dict_alpha"],
+            PiiClass::Custom("class_alpha".to_string())
         );
         assert_eq!(ctx.fields["tenant"], Value::String("demo".to_string()));
     }
