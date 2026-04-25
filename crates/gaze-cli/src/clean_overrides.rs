@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use gaze::{NerPolicy, Policy, RulepackPolicy, SessionScope, DEFAULT_NER_THRESHOLD};
 
 #[derive(Debug, Clone, Default)]
-#[allow(dead_code)]
 pub struct CleanOverrides {
     pub session_scope: Option<SessionScope>,
     pub ner_model_dir: Option<PathBuf>,
@@ -13,7 +12,6 @@ pub struct CleanOverrides {
 }
 
 impl CleanOverrides {
-    #[allow(dead_code)]
     pub fn apply_to(&self, policy: &Policy) -> Policy {
         let mut resolved = policy.clone();
         resolved.session.scope = self
