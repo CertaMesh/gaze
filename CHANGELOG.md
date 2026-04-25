@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Dictionary recognizer audit sources now include per-term traceability as `dictionary:{name}[#term_index]`.
 - v0.4.2 fixture sweep renamed tenant-pattern test and benchmark strings to neutral placeholders, with `CONTRIBUTING.md` documenting tenant class naming policy.
 - `{locale_email_headers}` remains supported as a v0.4.2 compatibility alias for `{locale.email_headers}` and is deprecated for removal in the v0.5 cycle.
+- Split the NER recognizer implementation into focused `ner/` submodules without changing public exports or runtime behavior. (#116)
 
 ### Fixed
 
