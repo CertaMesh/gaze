@@ -1,0 +1,127 @@
+use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use gaze::{Detection, Detector};
+
+use super::backend::{load_backend, NerBackend};
+use super::decode;
+use super::error::NerLoadError;
+use super::loader::warn_on_label_vocab_mismatch;
+use super::types::{LabelMap, NerBackendKind, NerOptions, NerSpanResult};
+
+/// NER detector backed by a pinned local model artifact set. Multiple
+/// `NerDetector` instances with different backends may be stacked in the
+/// same `Pipeline`; span-conflict resolution picks winners across detectors.
+pub struct NerDetector {
+    #[allow(dead_code)]
+    pub(crate) model_dir: PathBuf,
+    pub(crate) backend_kind: NerBackendKind,
+    pub(crate) locale: Option<String>,
+    pub(crate) threshold: f32,
+    pub(crate) backend: Arc<dyn NerBackend>,
+}
+
+impl fmt::Debug for NerDetector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NerDetector")
+            .field("model_dir", &self.model_dir)
+            .field("backend_kind", &self.backend_kind)
+            .field("locale", &self.locale)
+            .field("threshold", &self.threshold)
+            .finish_non_exhaustive()
+    }
+}
+
+impl NerDetector {
+    /// Full load: verify artifacts, initialize the configured backend.
+    /// Fails closed on any load error.
+    pub fn load(model_dir: &Path) -> Result<Self, NerLoadError> {
+        Self::load_with_options(model_dir, NerOptions::default())
+    }
+
+    pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        let verified = Self::verify_artifacts(model_dir)?;
+        let backend_kind = verified.backend_kind;
+        let model_dir_path = verified.model_dir.clone();
+        let label_count = verified.labels.len();
+        let id2label_len = verified.id2label.len();
+        warn_on_label_vocab_mismatch(&verified.labels, &verified.id2label, model_dir);
+        let backend = load_backend(verified)?;
+
+        tracing::info!(
+            backend = backend_kind.as_str(),
+            labels = label_count,
+            id2label_size = id2label_len,
+            locale = options.locale.as_deref().unwrap_or(""),
+            threshold = options.threshold,
+            model_dir = %model_dir_path.display(),
+            "ner: detector registered"
+        );
+
+        Ok(Self {
+            model_dir: model_dir_path,
+            backend_kind,
+            locale: options.locale,
+            threshold: options.threshold,
+            backend,
+        })
+    }
+
+    pub fn locale(&self) -> Option<&str> {
+        self.locale.as_deref()
+    }
+
+    pub fn backend_kind(&self) -> NerBackendKind {
+        self.backend_kind
+    }
+
+    /// Label/offset reconstruction helper. Public for testing the BIO merge.
+    /// `subword_spans` are byte ranges against the tokenizer input string,
+    /// `subword_labels` are CoNLL-style labels per subword (e.g. `O`, `B-PER`,
+    /// `I-PER`). Returns merged detections, dropping labels absent from the
+    /// label map and subword spans overlapping special tokens (empty ranges).
+    pub fn merge_bio_spans(
+        labels: &LabelMap,
+        subword_spans: &[(usize, usize)],
+        subword_labels: &[&str],
+        source: &str,
+    ) -> Vec<Detection> {
+        decode::merge_bio_spans(labels, subword_spans, subword_labels, source)
+    }
+
+    pub fn merge_bio_span_results(
+        labels: &LabelMap,
+        subword_spans: &[(usize, usize)],
+        subword_labels: &[&str],
+        subword_scores: &[f32],
+        source: &str,
+    ) -> Vec<NerSpanResult> {
+        decode::merge_bio_span_results(
+            labels,
+            subword_spans,
+            subword_labels,
+            subword_scores,
+            source,
+        )
+    }
+}
+
+impl Detector for NerDetector {
+    fn detect(&self, input: &str) -> Vec<Detection> {
+        match self.backend.detect(input) {
+            Ok(detections) => detections
+                .into_iter()
+                .map(|span| Detection {
+                    span: span.span,
+                    class: span.class,
+                    source: format!("ner/{}", self.backend_kind.as_str()),
+                })
+                .collect(),
+            Err(err) => {
+                tracing::warn!(backend = self.backend_kind.as_str(), error = %err, "ner: backend detect failed");
+                Vec::new()
+            }
+        }
+    }
+}
