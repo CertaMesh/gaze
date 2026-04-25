@@ -256,7 +256,8 @@ action = "tokenize"
 [[rule]]
 kind = "default"
 action = "preserve"
-"#),
+"#
+        ),
     )
     .unwrap();
     (dir, path)
@@ -663,10 +664,7 @@ fn t21e_email_header_de_locale() {
     let (_dir, path) =
         write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
     let input = "Von: Alice Example <alice@example.invalid>";
-    let v = clean_json_with_args(
-        &[&format!("--policy={}", path.display())],
-        input,
-    );
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
     let clean = v["clean_text"].as_str().unwrap();
 
     assert!(

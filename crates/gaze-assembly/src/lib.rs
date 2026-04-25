@@ -331,9 +331,10 @@ fn is_template_placeholder(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-        && value.bytes().next().is_some_and(|byte| {
-            byte.is_ascii_alphabetic() || byte == b'_'
-        })
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
 }
 
 fn merged_locale_email_headers(
