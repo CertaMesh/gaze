@@ -264,9 +264,10 @@ This is the same fixture the CLI integration suite uses
 
 ## Schema reference
 
-All TOML tables use `deny_unknown_fields` — any key the parser does not
-recognise is a hard error. v0.4 adds `[policy.rulepacks]` and
-`[[policy.custom_recognizers]]`; legacy top-level `[[detector]]` is rejected.
+TOML tables use closed schemas unless explicitly documented otherwise — any key
+the parser does not recognise is a hard error. v0.4 adds
+`[policy.rulepacks]` and `[[policy.custom_recognizers]]`; legacy top-level
+`[[detector]]` is rejected.
 
 ### `[session]`
 
@@ -349,6 +350,32 @@ capture_groups = [1]
 Missing cooperation fails rulepack load with
 `RulepackError::SameClassWithoutCooperation`. The check is strict by design:
 there is no line-anchor heuristic or implicit overlap analysis.
+
+Rulepack locale metadata can define adopter-specific vocabulary buckets under
+`[locale.<bucket>]`. Bucket tables are intentionally open by name; each bucket
+contains `names = [...]`. Regex `pattern_template` values may reference those
+buckets with `{locale.<bucket>}`. Assembly lowers the placeholder after the
+active locale chain is known.
+
+```toml
+[locale.salutations]
+names = ["Dr", "Mx"]
+
+[[recognizers]]
+id = "salutation.name"
+class = "Name"
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?m)^(?:{locale.salutations}):\s+([A-Z][a-z]+)$'''
+capture_groups = [1]
+```
+
+If a template references an unknown locale bucket, assembly fails closed with
+`PolicyError::UnknownLocaleBucket`. The legacy `{locale_email_headers}`
+placeholder remains a v0.4.2 compatibility alias for
+`{locale.email_headers}`; prefer the generic syntax in new rulepacks. The alias
+is deprecated for removal in the v0.5 cycle.
 
 ### `[[policy.custom_recognizers]]`
 
