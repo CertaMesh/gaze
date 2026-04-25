@@ -30,6 +30,109 @@ If `--policy` is omitted, `gaze clean` falls back to a hard-coded stub pipeline
 (email regex + tokenize). The stub exists only so the CLI surface can be
 exercised before a policy is written; **production use requires `--policy`**.
 
+## Classes
+
+A `class` identifies what kind of PII a recognizer detects. Every recognizer
+(regex, dictionary, NER) emits one class per match. Rules then act on classes.
+
+### Built-in classes
+
+Gaze ships four built-in classes:
+
+| Class          | Description                              | Example token                    |
+|----------------|------------------------------------------|----------------------------------|
+| `Email`        | Email addresses                          | `<{session_hex}:Email_1>`        |
+| `Name`         | Personal names                           | `<{session_hex}:Name_1>`         |
+| `Location`     | Geographic locations (cities, addresses) | `<{session_hex}:Location_1>`     |
+| `Organization` | Company / org names                      | `<{session_hex}:Organization_1>` |
+
+Policy files spell built-ins case-insensitively as `"email"`, `"name"`,
+`"location"`, and `"organization"`. Their token grammar is
+`<{session_hex}:{Class}_{n}>` for the default `tokenize` action.
+
+### Adding your own classes (no code changes required)
+
+Adopters can define new classes purely via `policy.toml` — Gaze does not need
+to be rebuilt or modified. Use `custom:<name>` to declare a project-specific
+class.
+
+#### Pattern 1 — domain-specific regex class
+
+```toml
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "phone_us"
+pattern = '\b\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b'
+class = "custom:phone"
+
+[[rule]]
+kind = "class"
+class = "custom:phone"
+action = "tokenize"
+```
+
+Output tokens carry the `Custom:` namespace prefix to disambiguate from
+built-ins:
+
+```text
+Input:  "Call 555-010-0100 to confirm."
+Output: "Call <{session_hex}:Custom:phone_1> to confirm."
+```
+
+#### Pattern 2 — tenant-specific dictionary class
+
+```toml
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_orders"
+terms_from_context = "orders"
+class = "custom:order_id"
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+```
+
+Then pass tenant data via `--context-json`:
+
+```json
+{
+  "dictionaries": {
+    "orders": { "terms": ["ORD-12345", "ORD-99999"], "case_sensitive": true }
+  }
+}
+```
+
+```text
+Input:  "Reference ORD-12345 is shipped."
+Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
+```
+
+### Class naming rules
+
+- Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the
+  top-level token grammar (`<Email_1>`). Custom classes always render with a
+  `Custom:` prefix (`<Custom:my_class_1>`), so a custom class named `"email"` is
+  unambiguous from the built-in class because it has a different token shape.
+- Custom classes use the `custom:<name>` policy spelling.
+- Custom class names are normalized: characters outside `[a-z0-9_]` collapse to
+  `_` one run at a time. Adopters should pass non-empty alphanumeric names;
+  passing all-punctuation strings like `"!!!"` currently normalizes to an empty
+  stem and emits `<Custom:_1>`. Validate adopter input before passing it to
+  `PiiClass::custom` if this matters for your integration.
+- Two recognizers may share a class, provided they follow the rulepack composition contract (`cooperates_with` in rulepacks as of v0.4.1+).
+
+### Choosing class names
+
+For tenant-specific classes (orders, songs, users, customer IDs), pick a stable
+lowercase identifier. The class name appears in redaction-log entries as
+`custom:<name>`, so audit-friendly names help debugging.
+
+For universal categories (phone numbers, IBAN, IP addresses), check whether a
+current or planned core rulepack already covers the class before defining your
+own.
+
 ## Minimal working example
 
 `minimal.toml`:
@@ -249,67 +352,6 @@ If `model_dir` is set but the model fails to load (missing files, bad
 manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
 NER load errors as policy configuration failures: verify the install path
 against [README §"NER Model Runtime"](../README.md#ner-model-runtime).
-
-## Classes
-
-`class` accepts a fixed vocabulary of built-in names plus a `custom:<name>`
-prefix for user-defined classes.
-
-### Built-ins
-
-| `class` value     | `PiiClass` variant       | Default token shape (`tokenize`)     | Format-preserve shape    | Generalize shape   |
-|-------------------|--------------------------|--------------------------------------|--------------------------|--------------------|
-| `"email"`         | `PiiClass::Email`        | `<{session_hex}:Email_1>`, `<{session_hex}:Email_2>`, …          | `email1.{session_hex}@gaze-fake.invalid`    | `[EMAIL]`          |
-| `"name"`          | `PiiClass::Name`         | `<{session_hex}:Name_1>`, `<{session_hex}:Name_2>`, …            | `{session_hex}:name_1`, `{session_hex}:name_2`, …    | `[NAME]`           |
-| `"location"`      | `PiiClass::Location`     | `<{session_hex}:Location_1>`, …                    | `{session_hex}:location_1`, …          | `[LOCATION]`       |
-| `"organization"`  | `PiiClass::Organization` | `<{session_hex}:Organization_1>`, …                | `{session_hex}:organization_1`, …      | `[ORGANIZATION]`   |
-
-Counter-family `tokenize` shapes wrap in angle brackets as of v0.3.0 so the LLM cannot dissolve them into adjacent words. Format-preserve shapes stay bare — the whole point of format-preserve is to look like a real value of that type.
-
-Counters are per-class and per-session; the same raw value is interned so it
-always maps to the same token within one session.
-
-### Custom classes
-
-Use `custom:<name>` to declare a project-specific class.
-
-```toml
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "order_ids"
-pattern = '\bORD-\d{6}\b'
-class = "custom:order_id"
-
-[[rule]]
-kind = "class"
-class = "custom:order_id"
-action = "tokenize"
-```
-
-The `<name>` after `custom:` is normalised before use:
-
-- Lowercased.
-- Non-alphanumeric runs collapse to a single `_` separator.
-- Leading and trailing separators are dropped.
-
-So `"custom:Order ID"`, `"custom:order-id"`, and `"custom:order_id"` all
-produce the same internal class.
-
-Custom tokens carry a `Custom:` namespace prefix so they cannot collide with
-built-ins or with each other:
-
-| Policy `class`           | Normalised name | `tokenize` token         | `format_preserve` token | `generalize` token |
-|--------------------------|-----------------|--------------------------|-------------------------|--------------------|
-| `"custom:order_id"`      | `order_id`      | `<{session_hex}:Custom:order_id_1>`    | `{session_hex}:custom:order_id_1`     | `[ORDER_ID]`       |
-| `"custom:tenant_slug"`   | `tenant_slug`   | `<{session_hex}:Custom:tenant_slug_1>` | `{session_hex}:custom:tenant_slug_1`  | `[TENANT_SLUG]`    |
-| `"custom:song"`          | `song`          | `<{session_hex}:Custom:song_1>`        | `{session_hex}:custom:song_1`         | `[SONG]`           |
-
-A class string of `"custom:"` (empty name) is rejected with `PolicyConfig`.
-
-`custom:email` and other names that mirror built-ins are safe to use — the
-`Custom:` prefix keeps them in their own counter family, so `custom:email`
-emits `<{session_hex}:Custom:email_1>` while built-in email detections continue to emit
-`<{session_hex}:Email_1>`.
 
 ## Detectors
 
