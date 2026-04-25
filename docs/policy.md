@@ -83,34 +83,34 @@ they must have a CLI flag, TOML field, and documented default or required
 state. Policy-document fields define recognizers, rules, dictionaries, or
 rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
 
-| Policy field | Type | CLI flag | TOML | Default | Class |
-|---|---|---|---|---|---|
-| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob |
-| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob |
-| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob |
-| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob |
-| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob |
-| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob |
-| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when `[policy.rulepacks]` is omitted | runtime knob |
-| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob |
-| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document |
-| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document |
-| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document |
-| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document |
-| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document |
-| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document |
-| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document |
-| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document |
-| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document |
-| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document |
-| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document |
-| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document |
-| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document |
-| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document |
-| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document |
-| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document |
-| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document |
-| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface |
+| Policy field | Type | CLI flag | TOML | Default | Class | Rationale |
+|---|---|---|---|---|---|---|
+| `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob | CLI/TOML/default parity required for per-run session behavior. |
+| `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob | CLI/TOML/default parity required for per-run session lifetime. |
+| `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob | CLI/TOML/default parity required for per-run NER backend selection. |
+| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. |
+| `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
+| `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
+| `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when `[policy.rulepacks]` is omitted | runtime knob | CLI/TOML/default parity required for per-run bundled rulepack selection. |
+| `Policy.rulepacks.paths` | path list | `--rulepack-path` | `[policy.rulepacks].paths` | Empty | runtime knob | CLI/TOML/default parity required for per-run external rulepack selection. |
+| `Policy.detectors` | recognizer list | none | `[[policy.custom_recognizers]]` | Empty when custom recognizers are omitted | policy document | Recognizer definitions are TOML-only structural policy; drawer `e8b5c041` boundary; bulk authoring is better in TOML. |
+| `Policy.detectors[].kind` | enum | none | `[[policy.custom_recognizers]].kind` | Required | policy document | Recognizer type is part of TOML-only recognizer definition; drawer `e8b5c041` boundary, not a per-run CLI knob. |
+| `Policy.detectors[].name` | string | none | `[[policy.custom_recognizers]].name` | Required | policy document | Recognizer identity is audit-relevant structural policy; drawer `e8b5c041` boundary keeps it in TOML. |
+| `Policy.detectors[].pattern` | regex string | none | `[[policy.custom_recognizers]].pattern` | Required for regex recognizers | policy document | Regex authoring needs reviewable TOML structure; drawer `e8b5c041` boundary, not shell-flag input. |
+| `Policy.detectors[].class` | class string | none | `[[policy.custom_recognizers]].class` | Required | policy document | Class mapping is recognizer policy data; drawer `e8b5c041` boundary keeps auditable mappings in TOML. |
+| `Policy.detectors[].dictionary_name` | string | none | `[[policy.custom_recognizers]].dictionary` or `.terms_from_context` | Recognizer name | policy document | Dictionary binding is adopter-defined recognizer policy; drawers `e8b5c041` and `eac549ae`, TOML-only. |
+| `Policy.detectors[].case_sensitive` | bool | none | `[[policy.custom_recognizers]].case_sensitive` | `false` | policy document | Per-recognizer dictionary behavior belongs with the recognizer definition; drawer `e8b5c041`, not a runtime knob. |
+| `Policy.detectors[].token_family` | string | none | `[[policy.custom_recognizers]].token_family` | `"counter"` | policy document | Token-family choice is part of restorable recognizer policy; drawer `e8b5c041`, TOML-only for auditability. |
+| `Policy.dictionaries` | dictionary list | none | `[[policy.custom_recognizers]].terms`, `.terms_file`, `.terms_from_context` | Empty unless dictionary recognizers define terms | policy document | Term-list authoring is adopter-defined policy data; drawer `eac549ae`; bulk authoring belongs in TOML or files. |
+| `Policy.dictionaries[].terms` | string list | none | `[[policy.custom_recognizers]].terms` | Required for inline dictionary recognizers without `terms_file` or `terms_from_context` | policy document | Inline terms are adopter-defined dictionary data; drawer `eac549ae`; TOML is safer than CLI list entry. |
+| `Policy.dictionaries[].terms_file` | path | none | `[[policy.custom_recognizers]].terms_file` | Absent | policy document | Dictionary file references are policy data; drawer `eac549ae`; TOML keeps reviewable data-source provenance. |
+| `Policy.dictionaries[].terms_from_context` | string | none | `[[policy.custom_recognizers]].terms_from_context` | Absent | policy document | Context dictionary binding is adopter-defined policy; drawer `eac549ae`, not a global runtime flag. |
+| `Policy.rules` | rule list | none | `[[rule]]` | At least one rule required | policy document | Class and column action mapping is TOML-only structural policy; bulk authoring is better in TOML. |
+| `Policy.rules[].kind` | enum | none | `[[rule]].kind` | Required | policy document | Rule kind selects structural policy shape (`class` or `column`); TOML-only to preserve auditability. |
+| `Policy.rules[].action` | enum | none | `[[rule]].action` | Required | policy document | Rule action is policy contract data, not a per-run override; TOML keeps restore behavior auditable. |
+| `Policy.rules[].class` | class string | none | `[[rule]].class` | Required for `kind = "class"` | policy document | Class rule mapping (`[[rule]] class = "...", action = "..."`) is TOML-only structural data. |
+| `Policy.rules[].column` | string | none | `[[rule]].column` | Required for `kind = "column"`; rejected by CLI mode | policy document | Column rules require file-shaped policy context and are rejected by CLI mode, so no CLI flag is exposed. |
+| `Policy.detectors` legacy surface | recognizer list | none | `[[detector]]` | Unsupported in v0.4; migrate to `[[policy.custom_recognizers]]` | explicitly deferred: retired compatibility surface | Retired compatibility surface remains documented only to explain migration; no CLI flag should revive it. |
 
 Runtime-knob verification is covered by the CLI integration suite:
 `s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged` checks the
