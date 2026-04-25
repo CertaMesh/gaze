@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-04-25
+
 ### Added
 
-- v0.4.2 P3.S4 release CI now publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-22.04` runner, alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts.
+- **S4 Linux release artifact:** release CI now publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-22.04` runner, alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts.
 - Release artifact smoke now executes the packaged binary for `--version`, `alice@example.invalid` clean/restore reversibility, S1 runtime knob help flags (`--session-scope`, NER, and rulepack surfaces), and `core-extended` bundled rulepack loading with neutral non-real fixture data.
 - v0.4.1 Bundle P1 foundation: `gaze-assembly` library entrypoint, `xtask` scaffold, and the `symmetric_potemkin_gate` workflow.
 - `token.family` now threads from recognizers into session snapshot entries while preserving the existing emitted token grammar.
@@ -20,21 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Strict rulepack composition validation: same-class recognizer pairs now require explicit `cooperates_with` declarations.
 - `Context::fields_typed() -> ContextFieldsRef<'_>` borrowed accessor for context-field consumers.
 - `gaze clean --audit-db=<path>` persists the metadata-only SQLite redaction log for pipe-mode invocations.
-- `gaze clean` now exposes three-surfaces CLI overrides for existing policy runtime knobs: `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path`.
-- Opt-in `core-extended` bundled rulepack with Phase 1 shape-only recognizers for E.164 phone numbers, IPv4/IPv6 addresses, and `de-DE`/`en-US` postal codes.
-- v0.5 design doc for open-key `PiiClass` and decision-deferred crate-shape Option B sketch.
-- Three-surfaces parity audit table for every `policy.toml` field, classifying runtime knobs with CLI/TOML/default coverage and policy-document fields that intentionally remain TOML-only.
-- Rulepack locale `pattern_template` placeholders now support generic `{locale.<bucket>}` expansion from adopter-defined `[locale.<bucket>] names = [...]` tables.
+- **S1 three-surfaces backfill:** `gaze clean` now exposes CLI overrides for existing policy runtime knobs: `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path`.
+- **S2 core-extended rulepack:** opt-in bundled rulepack with Phase 1 shape-only recognizers for E.164 phone numbers, IPv4/IPv6 addresses, and `de-DE`/`en-US` postal codes.
+- **S5 v0.5 design:** design doc for open-key `PiiClass` and decision-deferred crate-shape Option B sketch.
+- **P3.5 #100 parity audit:** three-surfaces parity audit table for every `policy.toml` field, classifying runtime knobs with CLI/TOML/default coverage and policy-document fields that intentionally remain TOML-only.
+- **P3.5 #114 generic placeholder vocab:** rulepack locale `pattern_template` placeholders now support generic `{locale.<bucket>}` expansion from adopter-defined `[locale.<bucket>] names = [...]` tables.
 
 ### Changed
 
-- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.1`.
-- Split `gaze-cli/src/main.rs` into focused `commands`, `pipeline`, `restore`, `io`, `error`, and `logger` modules with responsibility-based names and no CLI behavior change.
+- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.2`.
+- **P3.5 #115 CLI split:** split `gaze-cli/src/main.rs` into focused `commands`, `pipeline`, `restore`, `io`, `error`, and `logger` modules with responsibility-based names and no CLI behavior change.
 - Snapshot envelope version bumped from 2 to 3; v0.4.1 imports v2 snapshots with default `counter` family, while v0.4.0 rejects v3 snapshots instead of silently collapsing family metadata.
 - Dictionary recognizer audit sources now include per-term traceability as `dictionary:{name}[#term_index]`.
-- v0.4.2 fixture sweep renamed tenant-pattern test and benchmark strings to neutral placeholders, with `CONTRIBUTING.md` documenting tenant class naming policy.
+- **S3 fixture sweep:** renamed tenant-pattern test and benchmark strings to neutral placeholders, with `CONTRIBUTING.md` documenting tenant class naming policy.
 - `{locale_email_headers}` remains supported as a v0.4.2 compatibility alias for `{locale.email_headers}` and is deprecated for removal in the v0.5 cycle.
-- Split the NER recognizer implementation into focused `ner/` submodules without changing public exports or runtime behavior. (#116)
+- **P3.5 #116 NER split:** split the NER recognizer implementation into focused `ner/` submodules without changing public exports or runtime behavior.
 
 ### Fixed
 
@@ -215,7 +217,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.4.0-rc.1...HEAD
+[Unreleased]: https://github.com/Naoray/gaze/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/Naoray/gaze/compare/v0.4.0-rc.1...v0.4.2
 [0.4.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.4.0-rc.1
 [v0.3.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Naoray/gaze/releases/tag/v0.3.0
