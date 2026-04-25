@@ -1181,4 +1181,63 @@ mod tests {
         assert_eq!(candidates[0].span, 6..11);
         assert_eq!(candidates[0].score, 0.50);
     }
+
+    #[test]
+    fn t21f_prompt_preamble_threshold_03() {
+        struct FixedBackend {
+            spans: Vec<NerSpanResult>,
+        }
+
+        impl NerBackend for FixedBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Ok(self.spans.clone())
+            }
+        }
+
+        let input = "Du antwortest als Artistfy-Support an Alice Example.";
+        let name_start = input.find("Alice Example").expect("name span start");
+        let name_end = name_start + "Alice Example".len();
+        let dictionaries = gaze::DictionaryBundle::default();
+        let fields = serde_json::Map::new();
+        let ctx = DetectContext {
+            locale_chain: &[gaze::LocaleTag::DeDe, gaze::LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+        let backend = Arc::new(FixedBackend {
+            spans: vec![NerSpanResult {
+                span: name_start..name_end,
+                class: PiiClass::Name,
+                score: 0.40,
+            }],
+        });
+        let default_threshold = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                locale: Some("de".to_string()),
+                threshold: 0.3,
+                backend: backend.clone(),
+            },
+        };
+        let stricter_threshold = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                locale: Some("de".to_string()),
+                threshold: 0.5,
+                backend,
+            },
+        };
+
+        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx);
+        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx);
+
+        assert_eq!(default_candidates.len(), 1);
+        assert_eq!(default_candidates[0].span, name_start..name_end);
+        assert_eq!(&input[default_candidates[0].span.clone()], "Alice Example");
+        assert_eq!(default_candidates[0].score, 0.40);
+        assert!(stricter_candidates.is_empty());
+    }
 }
