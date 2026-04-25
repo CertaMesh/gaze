@@ -24,7 +24,7 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
     (
         DictionaryRecognizer::new(
             "dict/orders",
-            PiiClass::Custom("order_id".to_string()),
+            PiiClass::Custom("class_alpha".to_string()),
             "orders",
             true,
             "counter",
