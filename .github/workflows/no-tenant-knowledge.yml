@@ -1,0 +1,17 @@
+name: no-tenant-knowledge
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  no-tenant-knowledge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run no_tenant_knowledge gate
+        run: cargo run -p xtask -- no-tenant-knowledge
