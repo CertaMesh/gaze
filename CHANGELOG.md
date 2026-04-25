@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Locale-aware regex `pattern_template` lowering for `{locale_email_headers}` with English and German defaults.
 - `capture_groups = [...]` regex span narrowing with first-non-empty semantics.
 - `NerRecognizer` public export plus `[ner] threshold` policy knob using min-aggregated span confidence.
+- Core `email.header.name` recognizer for RFC822-style header display names, including German `Von:` / `An:` forms.
 
 ### Changed
 
@@ -22,8 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Markus adopter dogfood gap closed at the foundation layer: locale-aware email-header schema supports `Von:` / `An:` plus English defaults for the upcoming header recognizer.
+- Markus adopter dogfood gap closed: locale-aware email-header recognizer (`Von:` / `An:` plus English defaults) tokenizes header display names and restores them round-trip. See GH #24.
 - `[ner] threshold` knob un-deferred from v0.4.2 so adopters can tune the NER confidence floor for prompt-preamble PII.
+- Template lowering now preserves regex quantifiers such as `{0,3}` and keeps locale-header alternation non-capturing, so capture-group span narrowing remains stable.
 
 ## [0.4.0-rc.1] - 2026-04-24
 

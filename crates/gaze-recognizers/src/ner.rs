@@ -414,10 +414,50 @@ impl NerDetector {
 
 impl NerRecognizer {
     pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        #[cfg(feature = "test-support")]
+        if let Some(recognizer) = load_test_support_recognizer(model_dir, &options) {
+            return Ok(recognizer);
+        }
+
         Ok(Self {
             detector: NerDetector::load_with_options(model_dir, options)?,
         })
     }
+}
+
+#[cfg(feature = "test-support")]
+struct TestSupportBackend;
+
+#[cfg(feature = "test-support")]
+impl NerBackend for TestSupportBackend {
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        Ok(input
+            .find("Alice Example")
+            .map(|start| NerSpanResult {
+                span: start..start + "Alice Example".len(),
+                class: PiiClass::Name,
+                score: 0.40,
+            })
+            .into_iter()
+            .collect())
+    }
+}
+
+#[cfg(feature = "test-support")]
+fn load_test_support_recognizer(model_dir: &Path, options: &NerOptions) -> Option<NerRecognizer> {
+    if model_dir.file_name().and_then(|name| name.to_str()) != Some("__gaze_test_fixed_ner") {
+        return None;
+    }
+
+    Some(NerRecognizer {
+        detector: NerDetector {
+            model_dir: model_dir.to_path_buf(),
+            backend_kind: NerBackendKind::Ort,
+            locale: options.locale.clone(),
+            threshold: options.threshold,
+            backend: Arc::new(TestSupportBackend),
+        },
+    })
 }
 
 impl Detector for NerDetector {
@@ -793,52 +833,6 @@ fn config_to_id2label(
     Ok(out)
 }
 
-/// Test-only helpers for stacking multiple `NerDetector` instances with
-/// in-memory fake backends. Lets pipeline tests verify Layer-1 stackability
-/// without real ONNX artifacts.
-#[cfg(test)]
-pub(crate) mod test_support {
-    use super::*;
-
-    struct FixedBackend {
-        detections: Vec<NerSpanResult>,
-    }
-
-    impl NerBackend for FixedBackend {
-        fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
-            Ok(self.detections.clone())
-        }
-    }
-
-    /// Build a `NerDetector` that emits a fixed detection set, bypassing the
-    /// SHA256-pinned artifact contract. For tests only.
-    pub(crate) fn detector_with_detections(
-        source: &str,
-        detections: Vec<Detection>,
-    ) -> NerDetector {
-        let kind = match source {
-            "gliner" => NerBackendKind::Gliner,
-            _ => NerBackendKind::Ort,
-        };
-        NerDetector {
-            model_dir: PathBuf::from("/test/fake"),
-            backend_kind: kind,
-            locale: None,
-            threshold: 0.3,
-            backend: Arc::new(FixedBackend {
-                detections: detections
-                    .into_iter()
-                    .map(|detection| NerSpanResult {
-                        span: detection.span,
-                        class: detection.class,
-                        score: 1.0,
-                    })
-                    .collect(),
-            }),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1180,5 +1174,64 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, 6..11);
         assert_eq!(candidates[0].score, 0.50);
+    }
+
+    #[test]
+    fn t21f_threshold_filtering_unit() {
+        struct FixedBackend {
+            spans: Vec<NerSpanResult>,
+        }
+
+        impl NerBackend for FixedBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Ok(self.spans.clone())
+            }
+        }
+
+        let input = "Du antwortest als Artistfy-Support an Alice Example.";
+        let name_start = input.find("Alice Example").expect("name span start");
+        let name_end = name_start + "Alice Example".len();
+        let dictionaries = gaze::DictionaryBundle::default();
+        let fields = serde_json::Map::new();
+        let ctx = DetectContext {
+            locale_chain: &[gaze::LocaleTag::DeDe, gaze::LocaleTag::Global],
+            dictionaries: &dictionaries,
+            fields: &fields,
+            degraded: std::cell::Cell::new(false),
+        };
+        let backend = Arc::new(FixedBackend {
+            spans: vec![NerSpanResult {
+                span: name_start..name_end,
+                class: PiiClass::Name,
+                score: 0.40,
+            }],
+        });
+        let default_threshold = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                locale: Some("de".to_string()),
+                threshold: 0.3,
+                backend: backend.clone(),
+            },
+        };
+        let stricter_threshold = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                locale: Some("de".to_string()),
+                threshold: 0.5,
+                backend,
+            },
+        };
+
+        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx);
+        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx);
+
+        assert_eq!(default_candidates.len(), 1);
+        assert_eq!(default_candidates[0].span, name_start..name_end);
+        assert_eq!(&input[default_candidates[0].span.clone()], "Alice Example");
+        assert_eq!(default_candidates[0].score, 0.40);
+        assert!(stricter_candidates.is_empty());
     }
 }

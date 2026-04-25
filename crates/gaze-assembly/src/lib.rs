@@ -297,9 +297,16 @@ fn lower_pattern_template(
             });
         };
         let placeholder = &after[..end];
+        if !is_template_placeholder(placeholder) {
+            lowered.push('{');
+            lowered.push_str(placeholder);
+            lowered.push('}');
+            rest = &after[end + 1..];
+            continue;
+        }
         match placeholder {
             "locale_email_headers" => lowered.push_str(&format!(
-                "({})",
+                "(?:{})",
                 locale_headers
                     .iter()
                     .map(|name| regex::escape(name))
@@ -317,6 +324,17 @@ fn lower_pattern_template(
     }
     lowered.push_str(rest);
     Ok(lowered)
+}
+
+fn is_template_placeholder(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        && value
+            .bytes()
+            .next()
+            .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
 }
 
 fn merged_locale_email_headers(
@@ -526,40 +544,13 @@ mod tests {
             gaze_recognizers::embedded("locale-de").expect("locale-de"),
         ))
         .expect("de");
-        let email_header = Rulepack::parse(
-            r#"
-schema_version = "0.1.0"
-rulepack_id = "email-header"
-rulepack_version = "0.4.1"
-default_locales = ["global"]
-
-[[recognizers]]
-id = "email.header.name"
-class = "Name"
-enabled = true
-locales = ["global"]
-
-[recognizers.match]
-kind = "regex"
-pattern_template = '''(?m)^{locale_email_headers}:\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\s+<[^>]+>'''
-capture_groups = [2]
-
-[recognizers.scoring]
-base = 0.90
-priority = 100
-
-[recognizers.token]
-family = "email.header.name"
-"#,
-        )
-        .expect("email header rulepack");
         let policy = policy();
         let active_locales =
             LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), Some(&[LocaleTag::DeDe]));
         let pipeline = build_pipeline(
             &policy,
             &empty_context(),
-            &[core, de, email_header],
+            &[core, de],
             &active_locales,
             None,
         )
@@ -580,6 +571,46 @@ family = "email.header.name"
         )
         .unwrap()
         .is_match(&text));
+    }
+
+    #[test]
+    fn pattern_template_preserves_regex_quantifiers() {
+        let pattern = lower_pattern_template(
+            "email.header.name",
+            r"^(?:{locale_email_headers}): ([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3})$",
+            &["From".to_string()],
+        )
+        .expect("lowered pattern");
+
+        assert!(pattern.contains(r"{0,3}"));
+        let regex = regex::Regex::new(&pattern).expect("compiled regex");
+        let captures = regex
+            .captures("From: Alice Example")
+            .expect("email header captures");
+        assert_eq!(captures.get(1).map(|m| m.as_str()), Some("Alice Example"));
+    }
+
+    #[test]
+    fn locale_email_headers_placeholder_is_non_capturing() {
+        let pattern = lower_pattern_template(
+            "email.header.name",
+            r#"^(?:{locale_email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>"#,
+            &["Von".to_string()],
+        )
+        .expect("lowered pattern");
+        let regex = regex::Regex::new(&pattern).expect("compiled regex");
+
+        let quoted = regex
+            .captures(r#"Von: "Doe, Jane" <jane@example.invalid>"#)
+            .expect("quoted capture");
+        assert_eq!(quoted.get(1).map(|m| m.as_str()), Some("Doe, Jane"));
+        assert!(quoted.get(2).is_none());
+
+        let bare = regex
+            .captures("Von: Alice Example <alice@example.invalid>")
+            .expect("bare capture");
+        assert!(bare.get(1).is_none());
+        assert_eq!(bare.get(2).map(|m| m.as_str()), Some("Alice Example"));
     }
 
     #[test]
