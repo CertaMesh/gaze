@@ -25,7 +25,7 @@ use gaze::{
     Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
     LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
     RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
-    SensitiveSnapshot, Session, TypedContext, DEFAULT_NER_THRESHOLD,
+    SensitiveSnapshot, Session, SqliteLogger, TypedContext, DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
@@ -71,6 +71,9 @@ enum Cmd {
         /// Path to a typed Context JSON envelope. stdin remains raw text.
         #[arg(long)]
         context_json: Option<PathBuf>,
+        /// Optional SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -145,6 +148,7 @@ fn main() -> ExitCode {
             ner_threshold,
             max_bytes,
             context_json,
+            audit_db,
         } => run_clean(
             policy.as_deref(),
             &format,
@@ -153,6 +157,7 @@ fn main() -> ExitCode {
             ner_threshold,
             max_bytes,
             context_json.as_deref(),
+            audit_db.as_deref(),
         ),
         Cmd::Restore {
             format,
@@ -219,6 +224,7 @@ fn run_clean(
     ner_threshold: Option<f32>,
     max_bytes: u64,
     context_json: Option<&std::path::Path>,
+    audit_db: Option<&std::path::Path>,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let cli_ner_threshold = ner_threshold
@@ -227,7 +233,7 @@ fn run_clean(
         .map_err(map_policy_error)?;
     let raw = read_stdin_text(max_bytes)?;
 
-    let counter = Arc::new(CountingLogger::default());
+    let counter = Arc::new(CountingLogger::new(audit_db).map_err(|_| CliError::Pipeline)?);
     let loaded_policy = match policy {
         Some(path) => Some(Policy::load_for_cli(path).map_err(map_policy_error)?),
         None => None,
@@ -721,13 +727,25 @@ fn build_context_pipeline(
         .build()
 }
 
-#[derive(Default)]
 struct CountingLogger {
     detections: AtomicU64,
+    audit: Option<SqliteLogger>,
+}
+
+impl CountingLogger {
+    fn new(audit_db: Option<&std::path::Path>) -> GazeResult<Self> {
+        Ok(Self {
+            detections: AtomicU64::new(0),
+            audit: audit_db.map(SqliteLogger::new).transpose()?,
+        })
+    }
 }
 
 impl RedactionLogger for CountingLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
+        if let Some(audit) = &self.audit {
+            audit.log(entry)?;
+        }
         if !entry.conflict_loser
             && entry.document_kind == DocumentKind::Text
             && entry.action != gaze::Action::Preserve

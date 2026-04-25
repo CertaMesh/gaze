@@ -87,7 +87,11 @@ impl Recognizer for DictionaryRecognizer {
                 priority: self.priority,
                 canonical_form: Some(input[m.start()..m.end()].to_string()),
                 token_family: self.token_family.clone(),
-                source: format!("dictionary:{}", self.dictionary_name),
+                source: format!(
+                    "dictionary:{}[#{}]",
+                    self.dictionary_name,
+                    m.pattern().as_usize()
+                ),
                 decided_by: ConflictTier::None,
                 merged_sources: Vec::new(),
             })
@@ -183,5 +187,57 @@ mod tests {
         let registry = RecognizerRegistry::builder().register(recognizer).build();
         let hits = registry.detect_all("Listening to bohemian rhapsody", &detect_context);
         assert!(hits.is_empty());
+    }
+
+    #[test]
+    fn dictionary_recognizer_emits_per_term_source() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "songs".to_string(),
+                ContextDictionary {
+                    terms: vec![
+                        "alpha-one".to_string(),
+                        "bravo-two".to_string(),
+                        "charlie-three".to_string(),
+                    ],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = DictionaryBundle::from_context(&ctx);
+        let fields = Map::new();
+        let detect_context = DetectContext {
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &bundle,
+            fields: &fields,
+            degraded: Cell::new(false),
+        };
+        let recognizer = DictionaryRecognizer::new(
+            "dict/songs",
+            PiiClass::Custom("song".to_string()),
+            "songs",
+            true,
+            "counter",
+        );
+
+        let hits = recognizer.detect(
+            "first alpha-one, second bravo-two, third charlie-three",
+            &detect_context,
+        );
+
+        assert_eq!(hits.len(), 3);
+        let source_shape = regex::Regex::new(r"^dictionary:[a-z_]+\[#\d+\]$").unwrap();
+        for hit in &hits {
+            assert!(
+                source_shape.is_match(&hit.source),
+                "unexpected source shape: {}",
+                hit.source
+            );
+        }
+        assert_eq!(hits[0].source, "dictionary:songs[#0]");
+        assert_eq!(hits[1].source, "dictionary:songs[#1]");
+        assert_eq!(hits[2].source, "dictionary:songs[#2]");
     }
 }
