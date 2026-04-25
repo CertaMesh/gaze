@@ -6,6 +6,16 @@ use std::{
 
 const PRODUCTION_CRATES: &[&str] = &["gaze", "gaze-recognizers", "gaze-assembly", "gaze-cli"];
 const ALLOW_MARKER: &str = "// allow(tenant-fixture)";
+// Denylist literals split via concat!() so this source file does not contain
+// the contiguous strings the gate scans for. This is meta-Potemkin avoidance:
+// the gate's own implementation must not appear to violate its own discipline,
+// even though crates/xtask/ is excluded from the gate's scan scope per plan S3.
+const DENYLIST: &[&str] = &[
+    concat!("ord", "er_id"),
+    concat!("Ord", "er_42"),
+    concat!("Son", "g_42"),
+    concat!("Use", "r_7"),
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TenantKnowledgeError {
@@ -99,17 +109,10 @@ fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
 }
 
 fn denylist_pattern(line: &str) -> Option<&'static str> {
-    if line.contains("order_id") {
-        Some("order_id")
-    } else if line.contains("Order_42") {
-        Some("Order_42")
-    } else if line.contains("Song_42") {
-        Some("Song_42")
-    } else if line.contains("User_7") {
-        Some("User_7")
-    } else {
-        None
-    }
+    DENYLIST
+        .iter()
+        .copied()
+        .find(|pattern| line.contains(pattern))
 }
 
 fn io_error(path: &Path, error: io::Error) -> TenantKnowledgeError {
