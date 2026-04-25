@@ -49,6 +49,7 @@ struct Cli {
 const DEFAULT_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Subcommand, Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
     Clean {

@@ -51,7 +51,7 @@ impl CleanOverrides {
                 .or(Some(policy.rulepacks.bundled.clone()))
                 .unwrap_or_else(|| vec!["core".to_string()]),
             paths: if self.rulepack_paths.is_empty() {
-                Some(policy.rulepacks.paths.clone()).unwrap_or_default()
+                policy.rulepacks.paths.clone()
             } else {
                 self.rulepack_paths.clone()
             },
