@@ -27,7 +27,8 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\b[A-Z]{2}\d{2}[A-Z0-9]{1,30}\b'''
+# Allows internal whitespace; iban_canonical normalizer strips before mod-97 validation.
+pattern = '''\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b'''
 
 [recognizers.validator]
 kind = "iban_mod97"
@@ -49,7 +50,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\b\d{13,19}\b'''
+pattern = '''\b\d(?:[\s-]?\d){12,18}\b'''
 
 [recognizers.validator]
 kind = "luhn"
