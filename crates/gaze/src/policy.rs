@@ -131,6 +131,8 @@ pub enum PolicyError {
     NerLocaleUnsupported { value: String },
     #[error("unknown bundled rulepack: {value}")]
     BundledRulepackUnknown { value: String },
+    #[error("unknown locale bucket: {name}")]
+    UnknownLocaleBucket { name: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
