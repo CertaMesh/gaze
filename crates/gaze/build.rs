@@ -25,7 +25,9 @@ fn clang_runtime_dir() -> Option<PathBuf> {
     }
 
     let resource_dir = String::from_utf8(output.stdout).ok()?;
-    let candidate = PathBuf::from(resource_dir.trim()).join("lib").join("darwin");
+    let candidate = PathBuf::from(resource_dir.trim())
+        .join("lib")
+        .join("darwin");
     if candidate.join("libclang_rt.osx.a").is_file() {
         Some(candidate)
     } else {

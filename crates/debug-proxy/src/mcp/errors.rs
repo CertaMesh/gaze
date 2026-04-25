@@ -16,10 +16,7 @@ impl ErrorSanitizer {
         let CleanDocument::Text(text) = clean else {
             unreachable!("text input must produce text output");
         };
-        assert!(
-            !text.contains(CANARY),
-            "canary survived error sanitization"
-        );
+        assert!(!text.contains(CANARY), "canary survived error sanitization");
         Ok(text)
     }
 }

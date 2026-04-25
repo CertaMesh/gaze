@@ -3,7 +3,10 @@ mod ner;
 mod regex;
 
 pub use dictionary::DictionaryRecognizer;
-pub use ner::{LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, VerifiedArtifacts};
+pub use ner::{
+    LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
+    VerifiedArtifacts,
+};
 pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
 
 pub fn embedded(name: &str) -> Option<&'static str> {

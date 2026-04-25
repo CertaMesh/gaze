@@ -22,14 +22,12 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use gaze::{
-    Action, ClassRule, ColumnRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind,
-    LocaleChain, LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch,
-    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackDict,
-    RulepackSource, Scope, SensitiveSnapshot, Session, TypedContext,
+    Action, ClassRule, DefaultRule, DictionaryBundle, DictionarySource, DocumentKind, LocaleChain,
+    LocaleTag, PiiClass, Pipeline, Policy, PolicyError, RawDocument, RawMatch, RedactionEntry,
+    RedactionLogger, Result as GazeResult, Rulepack, RulepackDict, RulepackSource, Scope,
+    SensitiveSnapshot, Session, TypedContext, DEFAULT_NER_THRESHOLD,
 };
-use gaze_recognizers::{
-    DictionaryRecognizer, NerDetector, NerOptions, NormalizerKind, RegexDetector, ValidatorKind,
-};
+use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
 use crate::error::{CliError, RestoreMode, RestoreWarning};
 
@@ -64,6 +62,9 @@ enum Cmd {
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
+        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        #[arg(long)]
+        ner_threshold: Option<f32>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -141,6 +142,7 @@ fn main() -> ExitCode {
             format,
             session_ttl,
             locale,
+            ner_threshold,
             max_bytes,
             context_json,
         } => run_clean(
@@ -148,6 +150,7 @@ fn main() -> ExitCode {
             &format,
             session_ttl,
             &locale,
+            ner_threshold,
             max_bytes,
             context_json.as_deref(),
         ),
@@ -213,10 +216,15 @@ fn run_clean(
     format: &str,
     session_ttl: Option<u64>,
     locale: &[String],
+    ner_threshold: Option<f32>,
     max_bytes: u64,
     context_json: Option<&std::path::Path>,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
+    let cli_ner_threshold = ner_threshold
+        .map(validate_ner_threshold)
+        .transpose()
+        .map_err(map_policy_error)?;
     let raw = read_stdin_text(max_bytes)?;
 
     let counter = Arc::new(CountingLogger::default());
@@ -257,11 +265,18 @@ fn run_clean(
             .and_then(|policy| policy.locale.as_deref()),
         Some(&rulepack_default_locales),
     );
+    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, loaded_policy.as_ref());
 
     let pipeline = match &loaded_policy {
-        Some(policy) => build_pipeline_from_policy(policy, &loaded_rulepacks, context.as_ref())
-            .map_err(map_pipeline_error)?
-            .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
+        Some(policy) => build_pipeline_from_policy(
+            policy,
+            &loaded_rulepacks,
+            context.as_ref(),
+            &locale_chain,
+            resolved_ner_threshold,
+        )
+        .map_err(map_pipeline_error)?
+        .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None if context.is_some() => build_context_pipeline(
             context.as_ref().expect("checked context"),
             Arc::clone(&counter) as Arc<dyn RedactionLogger>,
@@ -399,191 +414,40 @@ fn build_pipeline_from_policy(
     policy: &Policy,
     rulepacks: &[Rulepack],
     context: Option<&TypedContext>,
+    locale_chain: &LocaleChain,
+    ner_threshold: f32,
 ) -> GazeResult<Pipeline> {
-    let mut builder = Pipeline::builder();
-    let mut registered_dictionaries = std::collections::BTreeSet::<String>::new();
+    let empty_context = TypedContext {
+        dictionaries: std::collections::HashMap::new(),
+        class_map: std::collections::HashMap::new(),
+        fields: serde_json::Map::new(),
+    };
+    gaze_assembly::build_pipeline(
+        policy,
+        context.unwrap_or(&empty_context),
+        rulepacks,
+        locale_chain,
+        Some(ner_threshold),
+    )
+    .map_err(|err| match err {
+        gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
+        gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
+        gaze_assembly::BuildError::Pipeline(err) => err,
+    })
+}
 
-    for detector in &policy.detectors {
-        builder = match &detector.kind {
-            gaze::DetectorKind::Regex => builder.detector(RegexDetector::with_source(
-                detector.pattern.as_deref().ok_or_else(|| {
-                    gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: detector.name.clone(),
-                        reason: "regex recognizer missing pattern".to_string(),
-                    })
-                })?,
-                detector.class.clone(),
-                &detector.name,
-            )?),
-            gaze::DetectorKind::Dictionary => {
-                let dictionary_name = detector.dictionary_name.as_deref().ok_or_else(|| {
-                    gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: detector.name.clone(),
-                        reason: "dictionary recognizer missing dictionary name".to_string(),
-                    })
-                })?;
-                registered_dictionaries.insert(dictionary_name.to_string());
-                builder.recognizer(DictionaryRecognizer::new(
-                    format!("dict/{}", detector.name),
-                    detector.class.clone(),
-                    dictionary_name,
-                    detector.case_sensitive,
-                    detector.token_family.clone(),
-                ))
-            }
-            gaze::DetectorKind::Unknown(kind) => {
-                return Err(gaze::Error::Policy(PolicyError::BadTtl(format!(
-                    "unknown detector.kind '{kind}'"
-                ))))
-            }
-        };
+fn validate_ner_threshold(threshold: f32) -> std::result::Result<f32, PolicyError> {
+    if (0.0..=1.0).contains(&threshold) {
+        Ok(threshold)
+    } else {
+        Err(PolicyError::NerThresholdOutOfRange { value: threshold })
     }
+}
 
-    let mut rulepack_recognizers =
-        std::collections::BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
-    for rulepack in rulepacks {
-        for recognizer in &rulepack.recognizers {
-            tracing::info!(recognizer_id = %recognizer.id, "loaded rulepack recognizer");
-            if let Some((first_pack, _)) = rulepack_recognizers.get(&recognizer.id) {
-                return Err(gaze::Error::Rulepack(gaze::RulepackError::DuplicateId {
-                    id: recognizer.id.clone(),
-                    first_pack: first_pack.clone(),
-                    second_pack: rulepack.rulepack_id.clone(),
-                }));
-            }
-            rulepack_recognizers.insert(
-                recognizer.id.clone(),
-                (rulepack.rulepack_id.clone(), recognizer.clone()),
-            );
-        }
-    }
-    for (_, recognizer) in rulepack_recognizers
-        .into_values()
-        .filter(|(_, r)| r.enabled)
-    {
-        match recognizer.matcher {
-            RawMatch::Regex { pattern } => {
-                let exclusions = recognizer
-                    .context
-                    .as_ref()
-                    .map(|context| context.exclusions.clone())
-                    .unwrap_or_default();
-                let validator_kind = recognizer
-                    .validator
-                    .as_ref()
-                    .map(|validator| ValidatorKind::parse(&validator.kind))
-                    .transpose()?;
-                let normalizer_kind = recognizer
-                    .normalizer
-                    .as_ref()
-                    .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
-                    .transpose()?;
-                builder = builder.recognizer(RegexDetector::with_rulepack_fields(
-                    &pattern,
-                    recognizer.class,
-                    &recognizer.id,
-                    recognizer.locales,
-                    recognizer.scoring.base,
-                    recognizer.scoring.priority,
-                    recognizer.token.family.as_deref().unwrap_or("counter"),
-                    recognizer.token.format.as_deref().unwrap_or("{Class}_{n}"),
-                    exclusions,
-                    validator_kind,
-                    normalizer_kind,
-                )?);
-            }
-            RawMatch::Dictionary {
-                terms,
-                terms_file,
-                terms_from_context,
-                case_sensitive,
-            } => {
-                let dictionary_name = terms_from_context
-                    .as_deref()
-                    .unwrap_or(recognizer.id.as_str())
-                    .to_string();
-                let dictionary_has_inline_terms = !terms.is_empty() || terms_file.is_some();
-                if !dictionary_has_inline_terms && terms_from_context.is_none() {
-                    return Err(gaze::Error::Policy(PolicyError::BadDictionary {
-                        name: recognizer.id.clone(),
-                        reason:
-                            "dictionary matcher requires terms, terms_file, or terms_from_context"
-                                .to_string(),
-                    }));
-                }
-                let id = recognizer.id;
-                let class = recognizer.class;
-                let token_family = recognizer
-                    .token
-                    .family
-                    .unwrap_or_else(|| "counter".to_string());
-                let locales = recognizer.locales;
-                let base_score = recognizer.scoring.base;
-                let priority = recognizer.scoring.priority;
-                registered_dictionaries.insert(dictionary_name.clone());
-                builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
-                    id,
-                    class,
-                    dictionary_name,
-                    case_sensitive,
-                    token_family,
-                    locales,
-                    base_score,
-                    priority,
-                ));
-            }
-            RawMatch::Ner { .. } => {
-                return Err(gaze::Error::Rulepack(
-                    gaze::RulepackError::UnsupportedMatcher("Ner".to_string()),
-                ))
-            }
-        }
-    }
-
-    if let Some(context) = context {
-        for name in context.dictionaries.keys() {
-            if registered_dictionaries.contains(name) {
-                continue;
-            }
-            let class = context
-                .class_map
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| PiiClass::custom(name));
-            builder = builder.recognizer(DictionaryRecognizer::new(
-                format!("context/{name}"),
-                class,
-                name,
-                context.dictionaries[name].case_sensitive,
-                "counter",
-            ));
-        }
-    }
-
-    for rule in &policy.rules {
-        builder = match rule {
-            RuleSpec::Class { class, action } => {
-                builder.rule(ClassRule::new(class.clone(), *action))
-            }
-            RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
-            RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
-        };
-    }
-
-    if let Some(ner) = &policy.ner {
-        if let Some(path) = &ner.model_dir {
-            let detector = NerDetector::load_with_options(
-                path,
-                NerOptions {
-                    locale: ner.locale.clone(),
-                },
-            )
-            .map_err(|err| gaze::Error::Policy(PolicyError::NerLoad(err.to_string())))?;
-            builder = builder.detector(detector);
-        }
-    }
-
-    builder.build()
+fn resolve_ner_threshold(cli_threshold: Option<f32>, policy: Option<&Policy>) -> f32 {
+    cli_threshold
+        .or_else(|| policy.and_then(|policy| policy.ner.as_ref().map(|ner| ner.threshold)))
+        .unwrap_or(DEFAULT_NER_THRESHOLD)
 }
 
 fn load_rulepacks(policy: &Policy) -> GazeResult<Vec<Rulepack>> {
@@ -867,6 +731,52 @@ struct ArcLogger(Arc<dyn RedactionLogger>);
 impl RedactionLogger for ArcLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
         self.0.log(entry)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn policy_with_ner_threshold(threshold: f32) -> Policy {
+        Policy {
+            session: gaze::SessionPolicy {
+                scope: gaze::SessionScope::Persistent,
+                ttl_secs: Some(86_400),
+            },
+            detectors: Vec::new(),
+            dictionaries: Vec::new(),
+            rules: vec![gaze::RuleSpec::Default {
+                action: gaze::Action::Preserve,
+            }],
+            ner: Some(gaze::NerPolicy {
+                model_dir: None,
+                locale: None,
+                threshold,
+            }),
+            rulepacks: gaze::RulepackPolicy {
+                bundled: vec!["core".to_string()],
+                paths: Vec::new(),
+            },
+            locale: None,
+        }
+    }
+
+    #[test]
+    fn t_cli_ner_threshold_overrides_policy_value() {
+        let policy = policy_with_ner_threshold(0.5);
+
+        let threshold = resolve_ner_threshold(Some(0.3), Some(&policy));
+
+        assert_eq!(threshold, 0.3);
+    }
+
+    #[test]
+    fn cli_ner_threshold_uses_policy_then_default() {
+        let policy = policy_with_ner_threshold(0.5);
+
+        assert_eq!(resolve_ner_threshold(None, Some(&policy)), 0.5);
+        assert_eq!(resolve_ner_threshold(None, None), DEFAULT_NER_THRESHOLD);
     }
 }
 
