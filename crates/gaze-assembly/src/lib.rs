@@ -642,6 +642,118 @@ mod tests {
     }
 
     #[test]
+    fn locale_email_headers_legacy_alias_matches_bucket_syntax() {
+        let locale_vocab = std::collections::HashMap::from([(
+            "email_headers".to_string(),
+            vec!["From".to_string(), "Reply-To".to_string()],
+        )]);
+
+        let legacy = lower_pattern_template(
+            "email.header.name",
+            r"^(?:{locale_email_headers}):\s+(.+)$",
+            &locale_vocab,
+        )
+        .expect("legacy placeholder");
+        let bucket = lower_pattern_template(
+            "email.header.name",
+            r"^(?:{locale.email_headers}):\s+(.+)$",
+            &locale_vocab,
+        )
+        .expect("bucket placeholder");
+
+        assert_eq!(legacy, bucket);
+    }
+
+    #[test]
+    fn locale_bucket_placeholder_lowers_neutral_bucket() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "neutral-template"
+rulepack_version = "0.4.2"
+default_locales = ["global"]
+
+[locale.salutations]
+names = ["Mx", "Dr"]
+
+[[recognizers]]
+id = "neutral.salutation.name"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?m)^(?:{locale.salutations}):\s+([A-Z][a-z]+)$'''
+capture_groups = [1]
+"#,
+        )
+        .expect("parse");
+
+        let policy = policy();
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let pipeline = build_pipeline(
+            &policy,
+            &empty_context(),
+            &[rulepack],
+            &active_locales,
+            None,
+        )
+        .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(&session, RawDocument::Text("Mx: Schmidt".to_string()))
+            .expect("redact");
+
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        assert!(regex::Regex::new(r"^Mx: <[0-9a-f]{8}:Name_\d+>$")
+            .unwrap()
+            .is_match(&text));
+    }
+
+    #[test]
+    fn locale_bucket_placeholder_unknown_bucket_fails_closed() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-locale-bucket"
+rulepack_version = "0.4.2"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "bad.locale.bucket"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''{locale.missing_bucket}: (.+)'''
+"#,
+        )
+        .expect("parse");
+
+        let policy = policy();
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+        let err = match build_pipeline(
+            &policy,
+            &empty_context(),
+            &[rulepack],
+            &active_locales,
+            None,
+        ) {
+            Ok(_) => panic!("unknown locale bucket must fail"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(
+            err,
+            BuildError::Policy(PolicyError::UnknownLocaleBucket { name })
+                if name == "missing_bucket"
+        ));
+    }
+
+    #[test]
     fn pattern_template_unknown_placeholder_fails_closed() {
         let rulepack = Rulepack::parse(
             r#"
