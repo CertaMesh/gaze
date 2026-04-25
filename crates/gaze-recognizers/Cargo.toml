@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Built-in recognizers for Gaze"
 
+[features]
+default = []
+test-support = []
+
 [dependencies]
 aho-corasick = "1"
 gaze = { path = "../gaze" }

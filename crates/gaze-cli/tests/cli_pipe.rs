@@ -263,6 +263,61 @@ action = "preserve"
     (dir, path)
 }
 
+fn write_policy_with_test_ner(
+    bundled_rulepacks: &[&str],
+    locale_active: &str,
+    ner_locale: &str,
+    threshold: f32,
+) -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let model_dir = dir.path().join("__gaze_test_fixed_ner");
+    fs::create_dir(&model_dir).unwrap();
+    let path = dir.path().join("policy.toml");
+    let bundled = bundled_rulepacks
+        .iter()
+        .map(|rulepack| format!("\"{rulepack}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    fs::write(
+        &path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["{locale_active}"]
+
+[ner]
+model_dir = "{}"
+locale = "{ner_locale}"
+threshold = {threshold}
+
+[policy.rulepacks]
+bundled = [{bundled}]
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            model_dir.display()
+        ),
+    )
+    .unwrap();
+    (dir, path)
+}
+
 fn session_blob_ttl_secs(blob: &str) -> u64 {
     let raw = BASE64.decode(blob.as_bytes()).unwrap();
     let payload: Value = serde_json::from_slice(&raw[97..]).unwrap();
@@ -673,6 +728,29 @@ fn t21e_email_header_de_locale() {
             .is_match(clean)
     );
     assert_eq!(v["stats"]["detections"], 2);
+    assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
+
+    let restored = restore_success_text(v["session_blob"].as_str().unwrap(), clean);
+    assert_eq!(restored, input);
+}
+
+#[test]
+fn t21f_prompt_preamble_threshold_03_pipeline_end_to_end() {
+    let (_dir, path) =
+        write_policy_with_test_ner(&["core", "locale-de", "locale-en"], "de-DE", "de", 0.3);
+    let input = "Du antwortest als Artistfy-Support an Alice Example.";
+    let v = clean_json_with_args(&[&format!("--policy={}", path.display())], input);
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(
+            r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$"
+        )
+        .unwrap()
+        .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(v["stats"]["detections"], 1);
     assert_eq!(v["stats"]["locale_chain"], json!(["de-DE", "global"]));
 
     let restored = restore_success_text(v["session_blob"].as_str().unwrap(), clean);

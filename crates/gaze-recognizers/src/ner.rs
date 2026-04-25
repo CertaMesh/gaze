@@ -414,10 +414,50 @@ impl NerDetector {
 
 impl NerRecognizer {
     pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
+        #[cfg(feature = "test-support")]
+        if let Some(recognizer) = load_test_support_recognizer(model_dir, &options) {
+            return Ok(recognizer);
+        }
+
         Ok(Self {
             detector: NerDetector::load_with_options(model_dir, options)?,
         })
     }
+}
+
+#[cfg(feature = "test-support")]
+struct TestSupportBackend;
+
+#[cfg(feature = "test-support")]
+impl NerBackend for TestSupportBackend {
+    fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        Ok(input
+            .find("Alice Example")
+            .map(|start| NerSpanResult {
+                span: start..start + "Alice Example".len(),
+                class: PiiClass::Name,
+                score: 0.40,
+            })
+            .into_iter()
+            .collect())
+    }
+}
+
+#[cfg(feature = "test-support")]
+fn load_test_support_recognizer(model_dir: &Path, options: &NerOptions) -> Option<NerRecognizer> {
+    if model_dir.file_name().and_then(|name| name.to_str()) != Some("__gaze_test_fixed_ner") {
+        return None;
+    }
+
+    Some(NerRecognizer {
+        detector: NerDetector {
+            model_dir: model_dir.to_path_buf(),
+            backend_kind: NerBackendKind::Ort,
+            locale: options.locale.clone(),
+            threshold: options.threshold,
+            backend: Arc::new(TestSupportBackend),
+        },
+    })
 }
 
 impl Detector for NerDetector {
@@ -1137,7 +1177,7 @@ mod tests {
     }
 
     #[test]
-    fn t21f_prompt_preamble_threshold_03() {
+    fn t21f_threshold_filtering_unit() {
         struct FixedBackend {
             spans: Vec<NerSpanResult>,
         }
