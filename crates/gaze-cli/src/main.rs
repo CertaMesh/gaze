@@ -3,7 +3,6 @@
 //! See `docs/roadmap/v0.3/cli.md` for the design spec and
 //! `docs/roadmap/v0.3/laravel.md` for the host-side integration contract.
 
-use std::io::{self, Read};
 use std::ops::Range;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -17,6 +16,7 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 mod clean_overrides;
 mod error;
+mod io;
 mod logger;
 
 use clap::{Parser, Subcommand};
@@ -34,6 +34,7 @@ use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::error::{CliError, RestoreMode, RestoreWarning};
+use crate::io::{read_stdin_bytes, read_stdin_text, require_json_format, DEFAULT_MAX_BYTES};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -45,10 +46,6 @@ struct Cli {
     #[command(subcommand)]
     cmd: Cmd,
 }
-
-/// Default max-bytes cap for stdin. Keeps a runaway or attacker-controlled
-/// upstream from OOM'ing the worker. Override with `--max-bytes`.
-const DEFAULT_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 #[derive(Subcommand, Debug)]
 #[allow(clippy::large_enum_variant)]
@@ -187,47 +184,6 @@ fn main() -> ExitCode {
             err.emit_stderr();
             ExitCode::from(err.exit_code())
         }
-    }
-}
-
-/// Read stdin up to `max_bytes + 1` and return the bytes.
-///
-/// Reading one extra byte past the cap lets us distinguish "input exactly
-/// at the limit" from "input exceeds the limit" without a second probe.
-fn read_stdin_bytes(max_bytes: u64) -> std::result::Result<Vec<u8>, CliError> {
-    let mut buf = Vec::new();
-    let limit = max_bytes.saturating_add(1);
-    io::stdin()
-        .take(limit)
-        .read_to_end(&mut buf)
-        .map_err(|_| CliError::Io)?;
-    if buf.len() as u64 > max_bytes {
-        return Err(CliError::InputTooLarge);
-    }
-    Ok(buf)
-}
-
-/// Read stdin as UTF-8 text, enforcing the size cap. Distinguishes:
-///   - 0 bytes              → `EmptyInput`     (exit 1)
-///   - > max_bytes           → `InputTooLarge` (exit 1)
-///   - non-UTF-8             → `InvalidEncoding` (exit 1)
-///   - IO / OS error         → `Io`            (exit 4)
-///
-/// `clean` calls this; `restore` uses the bytes path directly since the
-/// restore stdin is JSON and serde_json does its own UTF-8 validation.
-fn read_stdin_text(max_bytes: u64) -> std::result::Result<String, CliError> {
-    let bytes = read_stdin_bytes(max_bytes)?;
-    if bytes.is_empty() {
-        return Err(CliError::EmptyInput);
-    }
-    String::from_utf8(bytes).map_err(|_| CliError::InvalidEncoding)
-}
-
-fn require_json_format(format: &str) -> std::result::Result<(), CliError> {
-    if format == "json" {
-        Ok(())
-    } else {
-        Err(CliError::PolicyConfig)
     }
 }
 
