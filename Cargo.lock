@@ -1167,7 +1167,7 @@ dependencies = [
 
 [[package]]
 name = "gaze"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "aho-corasick",
  "anyhow",
@@ -1196,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-assembly"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "gaze",
  "gaze-recognizers",
@@ -1208,7 +1208,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -1226,7 +1226,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "aho-corasick",
  "criterion",
