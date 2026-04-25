@@ -13,6 +13,7 @@ pub struct Rulepack {
     pub rulepack_id: String,
     pub rulepack_version: String,
     pub default_locales: Vec<LocaleTag>,
+    pub locale: Option<LocaleData>,
     pub recognizers: Vec<RecognizerSpec>,
 }
 
@@ -94,6 +95,16 @@ pub struct SourceSpec {
     pub license: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LocaleData {
+    pub email_headers: Option<LocaleEmailHeaders>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocaleEmailHeaders {
+    pub names: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RulepackSource {
     Embedded(&'static str),
@@ -161,7 +172,22 @@ struct RawRulepack {
     #[serde(default)]
     default_locales: Vec<String>,
     #[serde(default)]
+    locale: Option<RawLocaleData>,
+    #[serde(default)]
     recognizers: Vec<RawRecognizerSpec>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawLocaleData {
+    #[serde(default)]
+    email_headers: Option<RawLocaleEmailHeaders>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawLocaleEmailHeaders {
+    names: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -265,8 +291,19 @@ impl TryFrom<RawRulepack> for Rulepack {
             rulepack_id: raw.rulepack_id,
             rulepack_version: raw.rulepack_version,
             default_locales,
+            locale: raw.locale.map(LocaleData::from),
             recognizers,
         })
+    }
+}
+
+impl From<RawLocaleData> for LocaleData {
+    fn from(raw: RawLocaleData) -> Self {
+        Self {
+            email_headers: raw.email_headers.map(|headers| LocaleEmailHeaders {
+                names: headers.names,
+            }),
+        }
     }
 }
 
@@ -422,6 +459,9 @@ rulepack_id = "gaze-core"
 rulepack_version = "0.4.0"
 default_locales = ["global"]
 
+[locale.email_headers]
+names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
+
 [[recognizers]]
 id = "email.global"
 class = "Email"
@@ -459,6 +499,16 @@ license = "Apache-2.0"
 
         assert_eq!(rulepack.rulepack_id, "gaze-core");
         assert_eq!(rulepack.default_locales, vec![LocaleTag::Global]);
+        let header_names = &rulepack
+            .locale
+            .as_ref()
+            .and_then(|locale| locale.email_headers.as_ref())
+            .expect("email headers")
+            .names;
+        assert_eq!(
+            header_names,
+            &vec!["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
+        );
         assert_eq!(rulepack.recognizers.len(), 1);
         let recognizer = &rulepack.recognizers[0];
         assert_eq!(recognizer.id, "email.global");
