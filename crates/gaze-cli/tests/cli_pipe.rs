@@ -767,24 +767,24 @@ fn t04c_tolerant_restore_omits_empty_warning_array() {
 }
 
 #[test]
-fn cascade_restored_order_id_not_trapped() {
+fn cascade_restored_class_alpha_not_trapped() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![s
-            .tokenize(&PiiClass::custom("order_ref"), "Order_42")
+            .tokenize(&PiiClass::custom("order_ref"), "tenant_class_a")
             .unwrap()]
     });
     assert_session_scoped_custom_token(&tokens[0]);
 
     let restored = restore_success_text(&blob, &format!("Reference {} is ready.", tokens[0]));
 
-    assert_eq!(restored, "Reference Order_42 is ready.");
+    assert_eq!(restored, "Reference tenant_class_a is ready.");
 }
 
 #[test]
 fn cascade_restored_song_user_artist_tenant() {
     let cases = [
-        ("song_ref", "Song_42"),
-        ("user_ref", "User_7"),
+        ("song_ref", "tenant_class_b"),
+        ("user_ref", "tenant_class_c"),
         ("artist_ref", "Artist_1"),
         ("tenant_ref", "Tenant_5"),
     ];
@@ -804,13 +804,13 @@ fn cascade_restored_song_user_artist_tenant() {
     );
     let restored = restore_success_text(&blob, &reply);
 
-    assert_eq!(restored, "Song_42 / User_7 / Artist_1 / Tenant_5");
+    assert_eq!(restored, "tenant_class_b / tenant_class_c / Artist_1 / Tenant_5");
 }
 
 #[test]
 fn cascade_restored_snake_case() {
     let cases = [
-        ("order_raw", "order_id_7"),
+        ("order_raw", "class_alpha_7"),
         ("tenant_raw", "tenant_5"),
         ("class_raw", "class_1"),
         ("song_title_raw", "song_title_3"),
@@ -828,14 +828,14 @@ fn cascade_restored_snake_case() {
     let reply = format!("{} {} {} {}", tokens[0], tokens[1], tokens[2], tokens[3]);
     let restored = restore_success_text(&blob, &reply);
 
-    assert_eq!(restored, "order_id_7 tenant_5 class_1 song_title_3");
+    assert_eq!(restored, "class_alpha_7 tenant_5 class_1 song_title_3");
 }
 
 #[test]
 fn cascade_llm_hallucination_still_trapped() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![s
-            .tokenize(&PiiClass::custom("order_ref"), "Order_42")
+            .tokenize(&PiiClass::custom("order_ref"), "tenant_class_a")
             .unwrap()]
     });
     assert_session_scoped_custom_token(&tokens[0]);
@@ -2319,7 +2319,7 @@ action = "preserve"
 #[test]
 fn t19_restore_custom_token_round_trip_ok() {
     let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]);
+        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]);
     let text = format!("Order {} is shipped.", tokens[0]);
 
     let (code, stdout, stderr) = restore_json(&blob, &text);
@@ -2331,7 +2331,7 @@ fn t19_restore_custom_token_round_trip_ok() {
 #[test]
 fn t20_restore_custom_hallucination_exits_3() {
     let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("order_id"), "42").unwrap()]);
+        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]);
 
     let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
     let (code, stdout, stderr) = restore_json(&blob, &text);

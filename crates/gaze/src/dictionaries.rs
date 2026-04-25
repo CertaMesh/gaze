@@ -165,23 +165,23 @@ mod tests {
     fn context_bundle_builds_automata_per_request() {
         let ctx = Context {
             dictionaries: HashMap::from([(
-                "order_ids".to_string(),
+                "dict_alpha".to_string(),
                 ContextDictionary {
-                    terms: vec!["ORD-12345".to_string()],
+                    terms: vec!["AAA-12345".to_string()],
                     case_sensitive: true,
                 },
             )]),
             class_map: HashMap::from([(
-                "order_ids".to_string(),
-                PiiClass::Custom("order_id".to_string()),
+                "dict_alpha".to_string(),
+                PiiClass::Custom("class_alpha".to_string()),
             )]),
             fields: Map::new(),
         };
 
         let bundle = DictionaryBundle::from_context(&ctx);
-        let entry = bundle.get("order_ids").expect("entry");
-        assert!(entry.automaton().find("ORD-12345").is_some());
-        assert!(entry.automaton().find("ord-12345").is_none());
+        let entry = bundle.get("dict_alpha").expect("entry");
+        assert!(entry.automaton().find("AAA-12345").is_some());
+        assert!(entry.automaton().find("aaa-12345").is_none());
     }
 
     #[test]
