@@ -65,7 +65,7 @@ Known limits logged for the v0.4.1 patch (see
 [CHANGELOG.md](../CHANGELOG.md) "Known limits"):
 
 - `token.family` / `token.format` and `context.hotwords` / `boost` /
-  `window` are parsed but gated with `UnsupportedFieldInB1`.
+  `window` are parsed but gated with `UnsupportedField`.
 - Dictionary audit log carries `dictionary:{name}` only; per-term
   traceability pending.
 - NER context-sensitivity gap on prompt boilerplate + RFC822 headers
@@ -101,7 +101,7 @@ splits into a two-branch form (prefixed manifest-lookup + unprefixed trap
 for fail-closed). `SnapshotPayload` envelope byte bumps 1 → 2.
 **Status:** shipped in v0.4.0-rc.1 — crate split, `RecognizerRegistry`
 (legacy `Detector` path removed), rulepack schema with closed
-validator/normalizer registry + `UnsupportedFieldInB1` gating, 4-tier
+validator/normalizer registry + `UnsupportedField` gating, 4-tier
 locale chain, `.invalid` FPE emails, Aho-Corasick dictionary recognizer,
 typed `DetectContext` envelope via `--context-json`, F7.5 Pass 1 → Pass 2
 byte-range-skip. PRs #21, #22, #23, #25, #26.

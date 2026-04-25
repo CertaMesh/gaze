@@ -126,7 +126,7 @@ pub enum RulepackError {
     #[error("unsupported matcher kind: {0}")]
     UnsupportedMatcher(String),
     #[error("unsupported rulepack field '{field}' in B1; planned for {planned_version}")]
-    UnsupportedFieldInB1 {
+    UnsupportedField {
         field: String,
         planned_version: &'static str,
     },
@@ -391,26 +391,26 @@ fn reject_unshipped_fields(raw: &RawRecognizerSpec) -> Result<(), RulepackError>
         .as_deref()
         .is_some_and(|value| !value.is_empty())
     {
-        return Err(RulepackError::UnsupportedFieldInB1 {
+        return Err(RulepackError::UnsupportedField {
             field: "token.format".to_string(),
             planned_version: PLANNED_VERSION,
         });
     }
     if let Some(context) = &raw.context {
         if !context.hotwords.is_empty() {
-            return Err(RulepackError::UnsupportedFieldInB1 {
+            return Err(RulepackError::UnsupportedField {
                 field: "context.hotwords".to_string(),
                 planned_version: PLANNED_VERSION,
             });
         }
         if context.boost.is_some() {
-            return Err(RulepackError::UnsupportedFieldInB1 {
+            return Err(RulepackError::UnsupportedField {
                 field: "context.boost".to_string(),
                 planned_version: PLANNED_VERSION,
             });
         }
         if context.window.is_some() {
-            return Err(RulepackError::UnsupportedFieldInB1 {
+            return Err(RulepackError::UnsupportedField {
                 field: "context.window".to_string(),
                 planned_version: PLANNED_VERSION,
             });
@@ -693,7 +693,7 @@ pattern = ".+"
     fn assert_unsupported_field(err: RulepackError, field: &str) {
         assert!(matches!(
             err,
-            RulepackError::UnsupportedFieldInB1 {
+            RulepackError::UnsupportedField {
                 field: ref actual,
                 planned_version: "v0.4.1",
             } if actual == field
