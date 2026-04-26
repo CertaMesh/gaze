@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "bundle": "core",
+  "rulepack_version": "0.4.5",
+  "fixtures_sha256": "688b6313f178d62993aa714ee993adda9e4f1ad8f913fedff0100b1d2f294679",
+  "entries": [
+    {
+      "recognizer_id": "email.global",
+      "class": "Email",
+      "byte_span": {
+        "start": 132,
+        "len": 22
+      },
+      "family": "session_builtin_counter",
+      "token_shape": "<session:Email_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "email.global",
+      "class": "Email",
+      "byte_span": {
+        "start": 170,
+        "len": 25
+      },
+      "family": "session_builtin_counter",
+      "token_shape": "<session:Email_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "email.global",
+      "class": "Email",
+      "byte_span": {
+        "start": 1363,
+        "len": 23
+      },
+      "family": "session_builtin_counter",
+      "token_shape": "<session:Email_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "email.header.name",
+      "class": "Name",
+      "byte_span": {
+        "start": 119,
+        "len": 11
+      },
+      "family": "session_builtin_counter",
+      "token_shape": "<session:Name_{N}>",
+      "count": 1
+    }
+  ],
+  "stats": {
+    "detections": 4,
+    "classes": {
+      "Email": 3,
+      "Name": 1
+    }
+  }
+}
