@@ -77,6 +77,7 @@ struct SnapshotPayload {
 pub struct Session {
     scope: Scope,
     session_hex: [u8; 4],
+    audit_session_id: String,
     next_by_class: DashMap<PiiClass, usize>,
     token_by_value: DashMap<TokenKey, String>,
     value_by_token: DashMap<String, String>,
@@ -88,6 +89,7 @@ impl Session {
         Ok(Self {
             scope,
             session_hex: random_session_hex(),
+            audit_session_id: new_audit_session_id(),
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
@@ -208,6 +210,10 @@ impl Session {
         hex::encode(self.session_hex)
     }
 
+    pub fn audit_session_id(&self) -> &str {
+        &self.audit_session_id
+    }
+
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)
@@ -319,6 +325,7 @@ impl Session {
         let session = Self {
             scope,
             session_hex,
+            audit_session_id: new_audit_session_id(),
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
@@ -359,6 +366,42 @@ impl Session {
 
 fn default_counter_family() -> String {
     DEFAULT_COUNTER_FAMILY.to_string()
+}
+
+fn new_audit_session_id() -> String {
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(0xffff_ffff_ffff) as u64)
+        .unwrap_or(0);
+    let mut bytes = [0_u8; 16];
+    rand::thread_rng().fill_bytes(&mut bytes[6..]);
+    bytes[0] = (millis >> 40) as u8;
+    bytes[1] = (millis >> 32) as u8;
+    bytes[2] = (millis >> 24) as u8;
+    bytes[3] = (millis >> 16) as u8;
+    bytes[4] = (millis >> 8) as u8;
+    bytes[5] = millis as u8;
+    bytes[6] = (bytes[6] & 0x0f) | 0x70;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        bytes[0],
+        bytes[1],
+        bytes[2],
+        bytes[3],
+        bytes[4],
+        bytes[5],
+        bytes[6],
+        bytes[7],
+        bytes[8],
+        bytes[9],
+        bytes[10],
+        bytes[11],
+        bytes[12],
+        bytes[13],
+        bytes[14],
+        bytes[15],
+    )
 }
 
 struct SessionKey {

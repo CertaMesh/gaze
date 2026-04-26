@@ -109,6 +109,9 @@ enum AuditCmd {
         /// Include rows created at or before this ISO 8601 timestamp.
         #[arg(long = "to")]
         to_iso8601: Option<String>,
+        /// Filter by opaque audit session id.
+        #[arg(long = "session")]
+        session_id: Option<String>,
     },
     /// Export filtered audit metadata rows.
     Export {
@@ -139,6 +142,9 @@ enum AuditCmd {
         /// Include rows created at or before this ISO 8601 timestamp.
         #[arg(long = "to")]
         to_iso8601: Option<String>,
+        /// Filter by opaque audit session id.
+        #[arg(long = "session")]
+        session_id: Option<String>,
     },
 }
 
@@ -191,6 +197,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 document_kind,
                 from_iso8601,
                 to_iso8601,
+                session_id,
             } => audit::query(audit::Args {
                 audit_db,
                 class: pii_class,
@@ -199,6 +206,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 document_kind,
                 from_iso8601,
                 to_iso8601,
+                session_id,
             }),
             AuditCmd::Export {
                 audit_db,
@@ -210,6 +218,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 document_kind,
                 from_iso8601,
                 to_iso8601,
+                session_id,
             } => audit::export(
                 audit::Args {
                     audit_db,
@@ -219,6 +228,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     document_kind,
                     from_iso8601,
                     to_iso8601,
+                    session_id,
                 },
                 format,
                 output,
