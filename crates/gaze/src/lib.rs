@@ -21,8 +21,8 @@ pub use context::{
 };
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
 pub use dictionaries::{
-    dictionary_bundle_from_context, DictionaryBundle, DictionaryEntry, DictionaryLoadError,
-    DictionarySource, DictionaryStats, RulepackDict,
+    dictionary_bundle_from_context, DictionaryBundle, DictionaryBundleExt, DictionaryEntry,
+    DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};

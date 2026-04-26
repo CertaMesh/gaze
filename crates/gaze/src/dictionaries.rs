@@ -15,6 +15,16 @@ pub enum DictionaryLoadError {
     UnicodeInsensitiveUnsupported { name: String },
 }
 
+pub trait DictionaryBundleExt {
+    fn from_context(ctx: &Context) -> Self;
+}
+
+impl DictionaryBundleExt for DictionaryBundle {
+    fn from_context(ctx: &Context) -> Self {
+        dictionary_bundle_from_context(ctx)
+    }
+}
+
 pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
     let entries = ctx.dictionaries.iter().map(|(name, dictionary)| {
         (
@@ -75,5 +85,26 @@ mod tests {
         let merged = DictionaryBundle::merge(a, b);
         let entry = merged.get("songs").expect("entry");
         assert_eq!(entry.terms(), &["Song B".to_string()]);
+    }
+
+    #[test]
+    fn extension_trait_restores_from_context_constructor() {
+        let ctx = Context {
+            dictionaries: HashMap::from([(
+                "dict_alpha".to_string(),
+                ContextDictionary {
+                    terms: vec!["AAA-12345".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::from([(
+                "dict_alpha".to_string(),
+                PiiClass::Custom("class_alpha".to_string()),
+            )]),
+            fields: Map::new(),
+        };
+
+        let bundle = DictionaryBundle::from_context(&ctx);
+        assert!(bundle.get("dict_alpha").is_some());
     }
 }
