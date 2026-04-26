@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use gaze::{
     Action, ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline,
@@ -8,8 +8,11 @@ use gaze_recognizers::{NerOptions, NerRecognizer};
 
 mod detector_wiring;
 mod error;
+mod locale;
+mod template;
 
 pub use error::BuildError;
+pub(crate) use locale::merged_locale_vocab;
 
 pub fn build_pipeline(
     policy: &gaze::Policy,
@@ -117,142 +120,10 @@ fn class_has_tokenize_or_stricter_action(rules: &[RuleSpec], class: &PiiClass) -
     false
 }
 
-fn lower_regex_pattern(
-    id: &str,
-    pattern: Option<String>,
-    pattern_template: Option<String>,
-    locale_vocab: &HashMap<String, Vec<String>>,
-) -> Result<String, BuildError> {
-    match (pattern, pattern_template) {
-        (Some(pattern), None) => Ok(pattern),
-        (None, Some(template)) => lower_pattern_template(id, &template, locale_vocab),
-        _ => Err(RulepackError::RegexPatternChoice { id: id.to_string() }.into()),
-    }
-}
-
-fn lower_pattern_template(
-    id: &str,
-    template: &str,
-    locale_vocab: &HashMap<String, Vec<String>>,
-) -> Result<String, BuildError> {
-    let mut lowered = String::with_capacity(template.len());
-    let mut rest = template;
-    while let Some(start) = rest.find('{') {
-        lowered.push_str(&rest[..start]);
-        let after = &rest[start + 1..];
-        let Some(end) = after.find('}') else {
-            return Err(RulepackError::UnknownPatternTemplatePlaceholder {
-                id: id.to_string(),
-                placeholder: after.to_string(),
-            }
-            .into());
-        };
-        let placeholder = &after[..end];
-        if !is_template_placeholder(placeholder) {
-            lowered.push('{');
-            lowered.push_str(placeholder);
-            lowered.push('}');
-            rest = &after[end + 1..];
-            continue;
-        }
-        if let Some(bucket_name) = locale_bucket_name(placeholder) {
-            let Some(names) = locale_vocab.get(bucket_name) else {
-                return Err(PolicyError::UnknownLocaleBucket {
-                    name: bucket_name.to_string(),
-                }
-                .into());
-            };
-            lowered.push_str(&format!(
-                "(?:{})",
-                names
-                    .iter()
-                    .map(|name| regex::escape(name))
-                    .collect::<Vec<_>>()
-                    .join("|")
-            ));
-        } else {
-            return Err(RulepackError::UnknownPatternTemplatePlaceholder {
-                id: id.to_string(),
-                placeholder: placeholder.to_string(),
-            }
-            .into());
-        }
-        rest = &after[end + 1..];
-    }
-    lowered.push_str(rest);
-    Ok(lowered)
-}
-
-fn is_template_placeholder(value: &str) -> bool {
-    is_legacy_template_placeholder(value) || locale_bucket_name(value).is_some()
-}
-
-fn is_legacy_template_placeholder(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
-        && value
-            .bytes()
-            .next()
-            .is_some_and(|byte| byte.is_ascii_alphabetic() || byte == b'_')
-}
-
-fn locale_bucket_name(placeholder: &str) -> Option<&str> {
-    const LEGACY_EMAIL_HEADERS_ALIAS: &str = "locale_email_headers";
-    const LEGACY_EMAIL_HEADERS_BUCKET: &str = "email_headers";
-
-    if placeholder == LEGACY_EMAIL_HEADERS_ALIAS {
-        return Some(LEGACY_EMAIL_HEADERS_BUCKET);
-    }
-
-    let bucket_name = placeholder.strip_prefix("locale.")?;
-    if !bucket_name.is_empty()
-        && bucket_name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
-    {
-        Some(bucket_name)
-    } else {
-        None
-    }
-}
-
-fn merged_locale_vocab(
-    rulepacks: &[Rulepack],
-    active_locales: &LocaleChain,
-) -> HashMap<String, Vec<String>> {
-    let mut buckets = HashMap::new();
-    let mut seen = HashMap::<String, BTreeSet<String>>::new();
-
-    for active_locale in active_locales.as_slice() {
-        for rulepack in rulepacks {
-            if !rulepack.default_locales.contains(active_locale) {
-                continue;
-            }
-            let Some(locale) = rulepack.locale.as_ref() else {
-                continue;
-            };
-            for (bucket_name, bucket) in &locale.buckets {
-                let bucket_values = buckets
-                    .entry(bucket_name.clone())
-                    .or_insert_with(Vec::<String>::new);
-                let bucket_seen = seen.entry(bucket_name.clone()).or_default();
-                for name in &bucket.names {
-                    if bucket_seen.insert(name.clone()) {
-                        bucket_values.push(name.clone());
-                    }
-                }
-            }
-        }
-    }
-
-    buckets
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::template::lower_pattern_template;
     use gaze::{
         Action, CleanDocument, DetectorKind, LocaleTag, RawDocument, Scope, Session, SessionPolicy,
         SessionScope,

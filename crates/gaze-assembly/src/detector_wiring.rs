@@ -6,7 +6,7 @@ use gaze::{
 };
 use gaze_recognizers::{DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind};
 
-use crate::{class_for_dictionary, lower_regex_pattern, BuildError};
+use crate::{class_for_dictionary, template::lower_regex_pattern, BuildError};
 
 pub(crate) fn register_policy_detectors(
     mut builder: PipelineBuilder,
