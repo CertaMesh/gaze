@@ -39,19 +39,15 @@ Every design, implementation, and review decision is evaluated against these fiv
 
 v0.4.4 is the current stable release.
 
-Apple Silicon macOS via Homebrew (tap):
-
-```bash
-brew install Naoray/gaze/gaze
-```
-
-Apple Silicon binary download from the release assets:
+Apple Silicon macOS via release asset:
 
 ```bash
 curl -L -o gaze https://github.com/Naoray/gaze/releases/download/v0.4.4/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
+
+The Homebrew formula exists in `dist/homebrew/gaze.rb`, but the public `naoray/tap` formula is not published yet.
 
 Linux x86_64 binary download from the release assets:
 
@@ -64,6 +60,47 @@ mv gaze /usr/local/bin/gaze
 The Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
 
 Intel macOS binaries are not published; build from source with `cargo build --release -p gaze-cli`.
+
+## Requirements
+
+### Pre-built binaries
+
+| Platform | Status | Notes |
+|---|---|---|
+| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/Naoray/gaze/releases). Homebrew formula exists in `dist/homebrew/gaze.rb`, but is not published in `naoray/tap` yet. |
+| **Linux x86_64 (glibc)** | ✅ Supported | **Requires glibc 2.39+** (Ubuntu 24.04, Debian 13, RHEL 10, or newer). The bundled ONNX Runtime needs C23 symbols (`__isoc23_strtoll` etc.) introduced in glibc 2.39. Older distributions: build from source. |
+| **Linux aarch64 / musl** | ❌ Not shipped | Adopter-driven; [open an issue](https://github.com/Naoray/gaze/issues/new) if needed. |
+| **macOS x86_64 (Intel)** | ❌ Not shipped | Apple Silicon focus. Build from source if needed. |
+| **Windows** | ❌ Not shipped | Linux/WSL2 recommended. |
+
+### Build from source
+
+All platforms supported via `cargo`:
+
+- **Rust:** 1.89+ (workspace MSRV pinned in crate `Cargo.toml` files)
+- **C toolchain:** required for native dependencies (ort/ONNX Runtime, tokenizers)
+- **Optional features:**
+  - `phone-parser` (default-on for `gaze-recognizers` and therefore `gaze-cli`): pulls `phonenumber` crate for parser-backed E.164 phone validation. Disable with `--no-default-features` for raw recognizer-library use without phone deps.
+
+```bash
+git clone https://github.com/Naoray/gaze
+cd gaze
+cargo build --release -p gaze-cli
+./target/release/gaze --version
+```
+
+### Library integration
+
+```bash
+cargo add gaze
+cargo add gaze-recognizers --features phone-parser
+```
+
+### Runtime
+
+- No external services required (all detection runs locally)
+- Network access NOT used at runtime (audited per [docs/research/v0.4.4-phonenumber-audit.md](docs/research/v0.4.4-phonenumber-audit.md))
+- SQLite for audit logs (optional, opt-in via `--audit-db <path>`)
 
 ## Workspace Layout
 
