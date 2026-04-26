@@ -179,7 +179,7 @@ fn t20b_rulepack_context_dict_override_fails_closed_when_uncovered() {
         r#"
 schema_version = "0.1.0"
 rulepack_id = "tenant-rulepack"
-rulepack_version = "0.4.5"
+rulepack_version = "0.4.6"
 default_locales = ["global"]
 
 [[recognizers]]
