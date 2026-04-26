@@ -1,0 +1,42 @@
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_extern_crate.rs:1:1
+   |
+LL | extern crate gaze_audit;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_extern_crate.rs:1:1-1:25
+   = note: resolved DefId: DefId(20:0 ~ gaze_audit[f6e3])
+   = note: resolved item: gaze_audit
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: extern crate item
+   = note: `#[deny(gaze_module_isolation)]` on by default
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_extern_crate.rs:4:13
+   |
+LL |     let _ = gaze_audit::SqliteLogger::new();
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_extern_crate.rs:4:13-4:42
+   = note: resolved DefId: DefId(20:13 ~ gaze_audit[f6e3]::{impl#1}::new)
+   = note: resolved item: gaze_audit::SqliteLogger::new
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: expression path
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_extern_crate.rs:4:13
+   |
+LL |     let _ = gaze_audit::SqliteLogger::new();
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_extern_crate.rs:4:13-4:37
+   = note: resolved DefId: DefId(20:3 ~ gaze_audit[f6e3]::SqliteLogger)
+   = note: resolved item: gaze_audit::SqliteLogger
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+
+error: aborting due to 3 previous errors
+

@@ -1,0 +1,16 @@
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/type_generic_arg.rs:2:19
+   |
+LL |     let _: Option<gaze_audit::AuditLogRow> = None;
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/type_generic_arg.rs:2:19-2:42
+   = note: resolved DefId: DefId(20:7 ~ gaze_audit[f6e3]::AuditLogRow)
+   = note: resolved item: gaze_audit::AuditLogRow
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+   = note: `#[deny(gaze_module_isolation)]` on by default
+
+error: aborting due to 1 previous error
+
