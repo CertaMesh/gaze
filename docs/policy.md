@@ -272,6 +272,13 @@ redaction log for the invocation. Dictionary rows use
 `dictionary:{name}[#term_index]` source labels so an operator can trace which
 configured term fired without storing raw PII.
 
+Rust adopters should import the concrete SQLite sink from
+`gaze_audit::SqliteLogger`. For v0.5 only, `gaze` exposes an `audit` feature
+shim (`audit = ["dep:gaze-audit"]`) that re-exports the old
+`gaze::SqliteLogger` and audit query symbols for migration. New integrations
+should depend on `gaze-audit` directly; the shim is temporary and scheduled to
+drop in v0.6.
+
 This is the same fixture the CLI integration suite uses
 (`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
 
