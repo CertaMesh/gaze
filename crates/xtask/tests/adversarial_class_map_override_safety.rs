@@ -1,58 +1,91 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Output};
 
-fn xtask_main() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/main.rs")
+const RENAMED_TEST: &str = "t20a_class_map_override_fails_closed_when_action_rule_uncovered";
+const RENAMED_TEST_DISABLED: &str =
+    "t20a_class_map_override_fails_closed_when_action_rule_uncovered_disabled";
+
+fn workspace_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("xtask crate parent")
+        .parent()
+        .expect("workspace root")
+        .to_path_buf()
+}
+
+fn run_gate(root: &Path) -> Output {
+    Command::new("cargo")
+        .args(["run", "-p", "xtask", "--", "class-map-override-safety"])
+        .current_dir(root)
+        .output()
+        .expect("run class-map-override-safety gate")
+}
+
+fn output_text(output: &Output) -> String {
+    format!(
+        "stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
 }
 
 #[test]
-fn class_map_override_safety_gate_keeps_manual_attestation_contract() {
-    let source = fs::read_to_string(xtask_main()).expect("read xtask main");
-
+fn class_map_override_safety_gate_passes_on_baseline() {
+    let output = run_gate(&workspace_root());
     assert!(
-        source.contains("Command::ClassMapOverrideSafety => run_class_map_override_safety_gate()"),
-        "class-map override safety command must dispatch to the behavioral gate"
-    );
-    assert!(
-        !source.contains("class_map_override_safety: scaffolded"),
-        "class-map override safety command must not regress to a scaffold"
-    );
-    assert!(
-        source.contains("Adversarial self-test: reviewer manually renames one of the listed"),
-        "manual reviewer-attestation guard must stay documented in source"
-    );
-    assert!(
-        source.contains("gaze_architecture_12b32d53"),
-        "source comment must retain the meta-Potemkin drawer reference"
+        output.status.success(),
+        "gate must pass on baseline; {}",
+        output_text(&output)
     );
 }
 
 #[test]
-fn class_map_override_safety_gate_lists_both_behavioral_tests() {
-    let source = fs::read_to_string(xtask_main()).expect("read xtask main");
+fn class_map_override_safety_gate_fails_when_required_test_is_missing() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let fixture_root = temp.path().join("gaze-class-map-override-adversarial");
+    let add_status = Command::new("git")
+        .args(["worktree", "add", "--detach"])
+        .arg(&fixture_root)
+        .arg("HEAD")
+        .current_dir(workspace_root())
+        .status()
+        .expect("create adversarial worktree");
+    assert!(add_status.success(), "git worktree add must succeed");
 
-    for expected in [
-        "tests::t20_context_class_map_overrides_policy_dict_class",
-        "tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered",
-    ] {
-        assert!(
-            source.contains(expected),
-            "class-map override safety gate must list behavioral test {expected}"
-        );
-    }
-}
-
-#[test]
-fn class_map_override_safety_cross_cutting_rationale_is_build_time_only() {
-    // Round-trip: N/A because this is a build-time gate and emits no tokens.
-    // Three-surfaces: N/A because there is no runtime policy, CLI, or API knob.
-    // cooperates_with: N/A because this gate does not define a recognizer.
-    // No-tenant-knowledge: this file uses synthetic test names only.
-    // CLI shipping smoke: N/A for recognizer paths; the smoke is `cargo run -p xtask`.
-    let source = fs::read_to_string(xtask_main()).expect("read xtask main");
-
+    let assembly = fixture_root.join("crates/gaze-assembly/src/lib.rs");
+    let source = fs::read_to_string(&assembly).expect("read gaze-assembly lib");
     assert!(
-        source.contains("fn run_class_map_override_safety_gate()"),
-        "build-time xtask gate must remain the only runtime surface"
+        source.contains(RENAMED_TEST),
+        "fixture must contain required test before mutation"
+    );
+    fs::write(
+        &assembly,
+        source.replacen(RENAMED_TEST, RENAMED_TEST_DISABLED, 1),
+    )
+    .expect("rename required test in fixture");
+
+    let output = run_gate(&fixture_root);
+    let remove_status = Command::new("git")
+        .args(["worktree", "remove", "--force"])
+        .arg(&fixture_root)
+        .current_dir(workspace_root())
+        .status()
+        .expect("remove adversarial worktree");
+    assert!(remove_status.success(), "git worktree remove must succeed");
+
+    let text = output_text(&output);
+    assert!(
+        !output.status.success(),
+        "gate must fail when a required test is missing; {text}"
+    );
+    assert!(
+        text.contains("missing behavioral test"),
+        "gate failure must identify the list-phase miss; {text}"
+    );
+    assert!(
+        text.contains("tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered"),
+        "gate failure must name the missing behavioral test; {text}"
     );
 }
