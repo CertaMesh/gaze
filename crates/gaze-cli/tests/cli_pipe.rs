@@ -2126,10 +2126,77 @@ fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
 }
 
 #[test]
+fn s2_core_extended_national_phone_shipping_smoke() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+
+    let no_policy_us = clean_json_with_args(
+        &["--rulepack-bundled=core-extended"],
+        // United States: NANPA reserved 555-0100 through 555-0199 fictional/test range.
+        "Phone +1 555 0100",
+    );
+    let no_policy_us_clean = no_policy_us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(no_policy_us_clean),
+        "unexpected no-policy US national phone clean text: {no_policy_us_clean}"
+    );
+    let no_policy_order = clean_json_with_args(&["--rulepack-bundled=core-extended"], "Order_0815");
+    assert_eq!(no_policy_order["clean_text"], "Order_0815");
+    assert_eq!(no_policy_order["stats"]["detections"], 0);
+
+    let us = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en-US"],
+        // United States: NANPA reserved 555-0100 through 555-0199 fictional/test range.
+        "Phone +1 555 0100",
+    );
+    let us_clean = us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(us_clean),
+        "unexpected US national phone clean text: {us_clean}"
+    );
+    assert_eq!(us["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(us["session_blob"].as_str().unwrap(), us_clean),
+        "Phone +1 555 0100"
+    );
+
+    let de = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
+        // Germany: synthetic non-reachable fixture, not a real number.
+        "Phone +49 30 0000 0000",
+    );
+    let de_clean = de["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(de_clean),
+        "unexpected DE national phone clean text: {de_clean}"
+    );
+    assert_eq!(de["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(de["session_blob"].as_str().unwrap(), de_clean),
+        "Phone +49 30 0000 0000"
+    );
+
+    let de_under_en = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en-US"],
+        // Germany: synthetic non-reachable fixture, not a real number.
+        "Phone +49 30 0000 0000",
+    );
+    assert_eq!(de_under_en["clean_text"], "Phone +49 30 0000 0000");
+    assert_eq!(de_under_en["stats"]["detections"], 0);
+}
+
+#[test]
 fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
     let (_dir, policy) =
-        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "de-DE");
-    let input = "Subscriber_0001234567 Order_0815 0123-456789 0815 12345";
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+    let input =
+        "Subscriber_0001234567 Order_0815 0123-456789 0815 12345 SO-12345-67890 ORDR-9876543210";
     let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
     let clean = value["clean_text"].as_str().unwrap();
 

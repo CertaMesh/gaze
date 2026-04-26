@@ -177,7 +177,7 @@ Output tokens carry the `Custom:` namespace prefix to disambiguate from
 built-ins:
 
 ```text
-Input:  "Call 555-010-0100 to confirm."
+Input:  "Call +1 555 0100 to confirm."
 Output: "Call <{session_hex}:Custom:phone_1> to confirm."
 ```
 
@@ -336,9 +336,10 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
   `custom:phone` only when the match passes `e164_phone`. Regex-passing but
   unassigned values such as `+99999999` do not emit detections.
 - `phone.national.de` and `phone.national.us` match parser-backed national
-  phone shapes and emit `custom:phone` under the bundled default locale chain.
-  These recognizers cooperate with `phone.structural` so the rulepack can carry
-  multiple phone recognizers without fail-closed same-class rejection.
+  phone shapes and emit `custom:phone` under the bundled default locale chain
+  (`en-US`, `de-DE`, `de-AT`, `de-CH`, then `global`). These recognizers
+  cooperate with `phone.structural` so the rulepack can carry multiple phone
+  recognizers without fail-closed same-class rejection.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
@@ -347,6 +348,12 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 - `postal.de` emits `custom:postal_code` only under active locale `de-DE`.
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
+
+The DE/US national phone validators are behind the `phone-parser` crate feature.
+Default builds enable it. Builds with `--no-default-features` reject
+`e164_phone_national_de` and `e164_phone_national_us` as
+`RulepackError::UnsupportedValidator`, which fails closed instead of silently
+loading regex-only phone recognizers.
 
 US phone fixtures use NANPA 555-0100 through 555-0199, reserved for
 fictional/test use by the North American Numbering Plan Administration's
