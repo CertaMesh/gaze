@@ -689,6 +689,7 @@ dependencies = [
  "base64 0.22.1",
  "dashmap",
  "ed25519-dalek",
+ "gaze-audit",
  "gaze-recognizers",
  "gaze-types",
  "hex",
@@ -723,6 +724,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaze-audit"
+version = "0.4.6"
+dependencies = [
+ "gaze-types",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "gaze-cli"
 version = "0.4.6"
 dependencies = [
@@ -732,6 +746,7 @@ dependencies = [
  "clap",
  "gaze",
  "gaze-assembly",
+ "gaze-audit",
  "gaze-recognizers",
  "regex",
  "rusqlite",
