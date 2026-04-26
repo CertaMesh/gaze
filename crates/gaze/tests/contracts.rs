@@ -534,10 +534,12 @@ fn sqlite_logger_migrates_legacy_tables_and_purges_by_created_at() {
             document_kind: gaze::DocumentKind::Text,
             conflict_loser: false,
             decided_by: gaze::ConflictTier::None,
+            created_at: 1_767_225_600_000,
+            session_id: None,
         })
         .expect("log entry");
 
-    assert_eq!(logger.count_before("2100-01-01T00:00:00Z").unwrap(), 1);
-    assert_eq!(logger.purge_before("2100-01-01T00:00:00Z").unwrap(), 1);
+    assert_eq!(logger.count_before(4_102_444_800_000).unwrap(), 1);
+    assert_eq!(logger.purge_before(4_102_444_800_000).unwrap(), 1);
     assert_eq!(logger.entries().unwrap().len(), 0);
 }
