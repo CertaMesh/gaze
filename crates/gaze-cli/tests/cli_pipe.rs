@@ -1716,6 +1716,31 @@ fn t23_audit_purge_counts_deletes_and_restore_still_round_trips() {
     assert_eq!(total_after_dry_run, 2);
     drop(conn);
 
+    let count = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("audit")
+        .arg("purge")
+        .arg(format!("--audit-db={}", audit_path.display()))
+        .arg("--before=2026-02-01T00:00:00Z")
+        .arg("--count")
+        .output()
+        .unwrap();
+    assert!(
+        count.status.success(),
+        "--count failed: {}",
+        String::from_utf8_lossy(&count.stderr)
+    );
+    assert!(count.stderr.is_empty());
+    let count_json: Value = serde_json::from_slice(&count.stdout).unwrap();
+    assert_eq!(count_json, dry_run_json);
+
+    let conn = Connection::open(&audit_path).unwrap();
+    let total_after_count: i64 = conn
+        .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(total_after_count, 2);
+    drop(conn);
+
     let purge = Command::cargo_bin("gaze")
         .unwrap()
         .arg("audit")
@@ -1777,22 +1802,33 @@ fn assert_audit_db_has_no_raw_fixture_values(path: &std::path::Path) {
 fn t23_audit_purge_rejects_non_iso8601_before_with_quoted_input() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("audit.sqlite");
-    let out = Command::cargo_bin("gaze")
-        .unwrap()
-        .arg("audit")
-        .arg("purge")
-        .arg(format!("--audit-db={}", audit_path.display()))
-        .arg("--before=not-iso8601")
-        .output()
-        .unwrap();
+    for invalid in [
+        "not-iso8601",
+        "2026-02-31T00:00:00Z",
+        "2025-04-31T00:00:00Z",
+        "2026-13-01T00:00:00Z",
+        "2026-02-01t00:00:00Z",
+        "2026-02-01T00:00:00+01:00",
+        "",
+    ] {
+        let out = Command::cargo_bin("gaze")
+            .unwrap()
+            .arg("audit")
+            .arg("purge")
+            .arg(format!("--audit-db={}", audit_path.display()))
+            .arg(format!("--before={invalid}"))
+            .output()
+            .unwrap();
 
-    assert_eq!(out.status.code(), Some(2));
-    assert!(out.stdout.is_empty());
-    let stderr = parse_stderr_variant(&out.stderr);
-    assert_eq!(
-        stderr,
-        json!({ "error": "AuditPurgeIso8601", "exit": 2, "input": "not-iso8601" })
-    );
+        assert_eq!(out.status.code(), Some(2), "invalid input: {invalid}");
+        assert!(out.stdout.is_empty());
+        let stderr = parse_stderr_variant(&out.stderr);
+        assert_eq!(
+            stderr,
+            json!({ "error": "AuditPurgeIso8601", "exit": 2, "input": invalid }),
+            "invalid input: {invalid}"
+        );
+    }
 }
 
 #[test]

@@ -155,7 +155,7 @@ enum AuditCmd {
         #[arg(long)]
         before: String,
         /// Count matching rows without deleting them.
-        #[arg(long)]
+        #[arg(long, alias = "count")]
         dry_run: bool,
     },
 }
