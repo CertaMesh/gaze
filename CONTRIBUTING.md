@@ -18,6 +18,7 @@ Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-r
 
 - US/NA fixtures: NANPA "555" exchanges (`+1-555-01xx` etc.), reserved for fictional use under [NANPA reservation 555-01xx](https://nationalnanpa.com/).
 - UK fixtures: Ofcom drama-reserved ranges (`+44-7700-900xxx`), per [Ofcom drama numbers guidance](https://www.ofcom.org.uk/phones-and-broadband/phone-numbers/numbers-for-drama).
+- DE fixtures: synthetic non-reachable mobile shapes the `phonenumber` parser still accepts as valid E.164 (e.g. `+49 1555 0112233`-style values used in v0.4.4 S3a / v0.4.5 S2 phone-recognizer tests). The `1555` mobile prefix mirrors the NANPA 555 carve-out — non-reachable but parseable. Cite the v0.4.5 S2 phonenumber-region tests rather than introducing real-looking BNetzA-assigned ranges.
 - Other locales: synthesize a non-reachable shape (e.g. exchange code `0` or out-of-band country code) and add a fixture comment noting the synthetic origin.
 
 Rationale: drawer `gaze_decisions_e1ab6dc0`. Real reachable numbers in test
@@ -25,4 +26,29 @@ fixtures risk inadvertent leakage into adopter telemetry, public CI logs, and
 crate metadata. The `phonenumber` parser-backed `E164Phone` validator
 (v0.4.4 S3a) accepts the NANPA 555 reservation and Ofcom drama ranges as valid
 E.164, so positive-path tests continue to exercise the validator without using
-real numbers.
+real numbers. v0.4.5 S2 (PR #58) adds parser-backed national phone recognizers
+for DE and US that follow the same synthetic-only fixture posture.
+
+## PR-checks ritual
+
+Before opening or pushing to a PR, run the workspace test suite plus all
+behavioral xtask gates:
+
+```bash
+cargo fmt --all
+cargo clippy --workspace --all-targets --all-features -- -D warnings
+cargo test --workspace
+cargo run -p xtask -- symmetric-potemkin
+cargo run -p xtask -- class-map-override-safety
+cargo run -p xtask -- recognizer-composition-validator
+cargo run -p xtask -- no-tenant-knowledge
+cargo run -p xtask -- audit-metadata-only
+```
+
+The `audit-metadata-only` gate (added v0.4.5 S3) is a syn-based AST walker that
+fails closed when restore-path code imports audit metadata symbols. Known
+limitations and the v0.5 dylint pivot are documented in
+[`docs/architecture/xtask.md`](docs/architecture/xtask.md).
+
+CI runs the equivalents of these gates on every PR. Running them locally
+before pushing prevents the "I forgot to run xtask" round-trip.
