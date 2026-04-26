@@ -1,8 +1,7 @@
 //! End-to-end integration tests for the `gaze` pipe-mode CLI.
 //!
 //! Drives the compiled bin via `assert_cmd` and asserts the wire contract
-//! in `docs/roadmap/v0.3/cli.md` §"Test strategy". Each test maps 1:1 to a
-//! numbered item in that section.
+//! covered by the consolidated roadmap's shipped CLI history.
 
 use std::fs;
 use std::thread::sleep;
