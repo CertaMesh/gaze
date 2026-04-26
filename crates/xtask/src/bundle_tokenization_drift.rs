@@ -83,7 +83,7 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     if args.verify_ack {
-        println!("bundle-tokenization-drift: verify-ack found no snapshot diff");
+        verify_ack(&root)?;
     }
     println!("bundle-tokenization-drift: passed");
     Ok(())
@@ -531,4 +531,166 @@ fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())
+}
+
+fn verify_ack(root: &Path) -> Result<()> {
+    let changed_snapshots = changed_snapshot_files(root)?;
+    if changed_snapshots.is_empty() {
+        println!("bundle-tokenization-drift: verify-ack found no snapshot diff");
+        return Ok(());
+    }
+
+    let bundles = changed_snapshots
+        .iter()
+        .map(|path| {
+            path.strip_prefix("crates/xtask/snapshots/")
+                .unwrap_or(path)
+                .trim_end_matches("-no-policy.json")
+                .to_string()
+        })
+        .collect::<BTreeSet<_>>();
+
+    let mut missing = Vec::new();
+    if !diff_contains_drift_ack(root)? {
+        missing.push("missing added/changed `// drift-ack:` source or test comment".to_string());
+    }
+    let changelog_missing = changelog_missing_bundles(root, &bundles)?;
+    if !changelog_missing.is_empty() {
+        missing.push(format!(
+            "missing CHANGELOG.md [Unreleased] ### Changed `[bundle-tokenization-drift]` line for bundle(s): {}",
+            changelog_missing.into_iter().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if !missing.is_empty() {
+        bail!(
+            "bundle-tokenization-drift: --verify-ack rejected snapshot changes: {}\nchanged snapshots:\n{}",
+            missing.join("; "),
+            changed_snapshots.into_iter().collect::<Vec<_>>().join("\n")
+        );
+    }
+
+    println!(
+        "bundle-tokenization-drift: verify-ack accepted snapshot diff for {}",
+        bundles.into_iter().collect::<Vec<_>>().join(", ")
+    );
+    Ok(())
+}
+
+fn changed_snapshot_files(root: &Path) -> Result<BTreeSet<String>> {
+    let mut files = BTreeSet::new();
+    for args in [
+        vec!["diff", "--name-only", "--", "crates/xtask/snapshots"],
+        vec![
+            "diff",
+            "--cached",
+            "--name-only",
+            "--",
+            "crates/xtask/snapshots",
+        ],
+    ] {
+        collect_changed_snapshot_files(root, &args, &mut files)?;
+    }
+    if git_ref_exists(root, "origin/main")? {
+        collect_changed_snapshot_files(
+            root,
+            &[
+                "diff",
+                "--name-only",
+                "origin/main...HEAD",
+                "--",
+                "crates/xtask/snapshots",
+            ],
+            &mut files,
+        )?;
+    }
+    Ok(files)
+}
+
+fn collect_changed_snapshot_files(
+    root: &Path,
+    args: &[&str],
+    files: &mut BTreeSet<String>,
+) -> Result<()> {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("failed to run git {}", args.join(" ")))?;
+    if !output.status.success() {
+        bail!(
+            "git {} failed:\n{}",
+            args.join(" "),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    for line in String::from_utf8(output.stdout)?.lines() {
+        if line.starts_with("crates/xtask/snapshots/") && line.ends_with("-no-policy.json") {
+            files.insert(line.to_string());
+        }
+    }
+    Ok(())
+}
+
+fn diff_contains_drift_ack(root: &Path) -> Result<bool> {
+    let mut diffs = Vec::new();
+    for args in [
+        vec!["diff", "-U0"],
+        vec!["diff", "--cached", "-U0"],
+        vec!["diff", "-U0", "origin/main...HEAD"],
+    ] {
+        if args.contains(&"origin/main...HEAD") && !git_ref_exists(root, "origin/main")? {
+            continue;
+        }
+        let output = Command::new("git")
+            .args(&args)
+            .current_dir(root)
+            .output()
+            .with_context(|| format!("failed to run git {}", args.join(" ")))?;
+        if !output.status.success() {
+            bail!(
+                "git {} failed:\n{}",
+                args.join(" "),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        diffs.push(String::from_utf8(output.stdout)?);
+    }
+    Ok(diffs.iter().any(|diff| {
+        diff.lines().any(|line| {
+            line.starts_with('+') && !line.starts_with("+++") && line.contains("// drift-ack:")
+        })
+    }))
+}
+
+fn changelog_missing_bundles(root: &Path, bundles: &BTreeSet<String>) -> Result<BTreeSet<String>> {
+    let changelog = fs::read_to_string(root.join("CHANGELOG.md"))
+        .context("failed to read CHANGELOG.md for --verify-ack")?;
+    let unreleased = section_between(&changelog, "## [Unreleased]", "\n## ")
+        .ok_or_else(|| anyhow!("CHANGELOG.md is missing [Unreleased] section"))?;
+    let changed = section_between(unreleased, "### Changed", "\n### ").unwrap_or("");
+    Ok(bundles
+        .iter()
+        .filter(|bundle| {
+            !changed
+                .lines()
+                .any(|line| line.contains("[bundle-tokenization-drift]") && line.contains(*bundle))
+        })
+        .cloned()
+        .collect())
+}
+
+fn section_between<'a>(text: &'a str, start_marker: &str, next_marker: &str) -> Option<&'a str> {
+    let start = text.find(start_marker)? + start_marker.len();
+    let rest = &text[start..];
+    let end = rest.find(next_marker).unwrap_or(rest.len());
+    Some(&rest[..end])
+}
+
+fn git_ref_exists(root: &Path, name: &str) -> Result<bool> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--verify", "--quiet", name])
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("failed to check git ref {name}"))?;
+    Ok(output.status.success())
 }
