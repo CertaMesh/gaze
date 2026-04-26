@@ -1,13 +1,15 @@
 [package]
 name = "gaze-recognizers"
-version = "0.4.2"
+version = "0.4.4"
 edition = "2021"
 rust-version = "1.89"
 license = "Apache-2.0"
 description = "Built-in recognizers for Gaze"
 
 [features]
-default = []
+# phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
+default = ["phone-parser"]
+phone-parser = ["dep:phonenumber"]
 test-support = []
 
 [dependencies]
@@ -16,6 +18,7 @@ gaze = { path = "../gaze" }
 hex = "0.4"
 ndarray = "0.16"
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
+phonenumber = { version = "0.3.9", default-features = false, optional = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

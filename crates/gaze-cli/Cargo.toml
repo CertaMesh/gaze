@@ -1,6 +1,6 @@
 [package]
 name = "gaze-cli"
-version = "0.4.2"
+version = "0.4.4"
 edition = "2021"
 rust-version = "1.89"
 license = "Apache-2.0"
@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 gaze = { path = "../gaze" }
 gaze-assembly = { path = "../gaze-assembly" }
@@ -25,5 +26,6 @@ tracing = "0.1"
 assert_cmd = "2"
 base64 = "0.22"
 gaze-recognizers = { path = "../gaze-recognizers", features = ["test-support"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
 serde_json = "1"
 tempfile = "3"

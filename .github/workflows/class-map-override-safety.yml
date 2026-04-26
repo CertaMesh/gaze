@@ -1,0 +1,12 @@
+name: class-map-override-safety
+
+on: [pull_request, push]
+
+jobs:
+  class-map-override-safety:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with: { toolchain: stable }
+      - run: cargo run -p xtask -- class-map-override-safety
