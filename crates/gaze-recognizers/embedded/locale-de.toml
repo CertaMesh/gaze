@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-locale-de"
-rulepack_version = "0.4.0"
+rulepack_version = "0.4.5"
 default_locales = ["de-DE", "de-AT", "de-CH"]
 
 # Phase 2 ports DACH structured recognizers.
