@@ -132,9 +132,27 @@ const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
 /// Adversarial self-test: reviewer manually renames one of the listed
 /// tests on a throwaway branch and verifies xtask exits non-zero.
 /// Codifies meta-Potemkin guard per drawer gaze_architecture_12b32d53.
-const CLASS_MAP_OVERRIDE_SAFETY_TESTS: &[&str] = &[
-    "tests::t20_context_class_map_overrides_policy_dict_class",
-    "tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered",
+const CLASS_MAP_OVERRIDE_SAFETY_TESTS: &[BehavioralTest] = &[
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20_context_class_map_overrides_policy_dict_class",
+    },
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered",
+    },
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20b_rulepack_context_dict_override_fails_closed_when_uncovered",
+    },
+    BehavioralTest {
+        package: "gaze-cli",
+        test_target: Some("cli_pipe"),
+        name: "context_json_standalone_dictionary_detects_without_policy_entry",
+    },
 ];
 
 fn run_symmetric_potemkin_gate() -> Result<()> {
@@ -157,25 +175,14 @@ fn run_class_map_override_safety_gate() -> Result<()> {
         "class_map_override_safety: checking {} behavioral tests",
         CLASS_MAP_OVERRIDE_SAFETY_TESTS.len()
     );
-    for name in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
-        ensure_test_exists(class_map_override_safety_test(name))?;
+    for test in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
+        ensure_test_exists(*test)?;
     }
-    for name in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
-        run_behavioral_test(
-            "class_map_override_safety",
-            class_map_override_safety_test(name),
-        )?;
+    for test in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
+        run_behavioral_test("class_map_override_safety", *test)?;
     }
     println!("class_map_override_safety: passed");
     Ok(())
-}
-
-fn class_map_override_safety_test(name: &'static str) -> BehavioralTest {
-    BehavioralTest {
-        package: "gaze-assembly",
-        test_target: None,
-        name,
-    }
 }
 
 fn run_recognizer_composition_validator_gate() -> Result<()> {

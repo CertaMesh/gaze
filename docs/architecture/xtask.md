@@ -18,7 +18,7 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | Gate | Command | Current behavior |
 |------|---------|------------------|
 | `SymmetricPotemkin` | `cargo run -p xtask -- symmetric-potemkin` | Lists and runs the behavioral tests in `SYMMETRIC_POTEMKIN_TESTS`. The gate fails if any named test is missing or fails. |
-| `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Scaffolded placeholder that prints `class_map_override_safety: scaffolded` and exits successfully. The related class-map behavioral tests currently run under `SymmetricPotemkin`. |
+| `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Lists and runs the behavioral tests in `CLASS_MAP_OVERRIDE_SAFETY_TESTS`. The gate fails if any named test is missing or fails. |
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Lists and runs the behavioral tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
 
 ## Recursive-Potemkin discipline
@@ -58,10 +58,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::SymmetricPotemkin => run_symmetric_potemkin_gate(),
-        Command::ClassMapOverrideSafety => {
-            println!("class_map_override_safety: scaffolded");
-            Ok(())
-        }
+        Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NewBehaviorGate => run_new_behavior_gate(),
     }

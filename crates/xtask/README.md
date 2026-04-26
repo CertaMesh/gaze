@@ -23,7 +23,7 @@ Clap converts enum variants to kebab-case command names.
 | Gate | Command | Behavior |
 |------|---------|----------|
 | `SymmetricPotemkin` | `symmetric-potemkin` | Checks that every named behavioral test in `SYMMETRIC_POTEMKIN_TESTS` exists, then runs each exact test. |
-| `ClassMapOverrideSafety` | `class-map-override-safety` | Scaffolded placeholder. It prints `class_map_override_safety: scaffolded` and exits successfully. |
+| `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. |
 | `RecognizerCompositionValidator` | `recognizer-composition-validator` | Checks that every named behavioral test in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS` exists, then runs each exact test. |
 
 The implementation lives in [`src/main.rs`](src/main.rs). The broader gate
@@ -44,9 +44,6 @@ Each gate exits non-zero when:
 - a protected test has been renamed or removed
 - a protected test fails
 - the underlying `cargo test` command cannot be started
-
-The current `class-map-override-safety` command is a placeholder and should not
-be treated as proof until it runs named behavioral tests.
 
 ## Adding a gate
 
