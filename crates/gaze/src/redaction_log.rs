@@ -28,6 +28,7 @@ pub struct RedactionEntry {
     pub conflict_loser: bool,
     pub decided_by: ConflictTier,
     pub created_at: i64,
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -38,6 +39,7 @@ pub struct AuditFilter {
     pub document_kind: Option<String>,
     pub from_epoch_ms: Option<i64>,
     pub to_epoch_ms: Option<i64>,
+    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +52,7 @@ pub struct AuditLogRow {
     pub conflict_loser: bool,
     pub decided_by: String,
     pub created_at: Option<i64>,
+    pub session_id: Option<String>,
 }
 
 #[allow(dead_code)]
@@ -62,6 +65,7 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "conflict_loser",
     "decided_by",
     "created_at",
+    "session_id",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +101,7 @@ pub(crate) fn current_epoch_ms() -> i64 {
 ///     conflict_loser: false,
 ///     decided_by: gaze::ConflictTier::None,
 ///     created_at: 0,
+///     session_id: None,
 ///     raw: Some("alice@example.com".to_string()),
 /// };
 /// ```
@@ -119,7 +124,8 @@ impl SqliteLogger {
                 document_kind TEXT NOT NULL,
                 conflict_loser INTEGER NOT NULL,
                 decided_by TEXT NOT NULL DEFAULT 'none',
-                created_at INTEGER NULL
+                created_at INTEGER NULL,
+                session_id TEXT NULL
             );
             "#,
         )
@@ -151,6 +157,13 @@ impl SqliteLogger {
             )
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         }
+        if !columns.iter().any(|column| column == "session_id") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN session_id TEXT NULL",
+                [],
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -163,7 +176,7 @@ impl SqliteLogger {
             .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at FROM redaction_log",
+                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id FROM redaction_log",
             )
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -177,6 +190,7 @@ impl SqliteLogger {
                     conflict_loser: row.get::<_, i64>(5)? != 0,
                     decided_by: conflict_tier_from_db(&row.get::<_, String>(6)?)?,
                     created_at: row.get::<_, Option<i64>>(7)?.unwrap_or(0),
+                    session_id: row.get(8)?,
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -192,7 +206,9 @@ impl SqliteLogger {
         let conn = open_audit_query_connection(path)?;
         let has_decided_by = table_has_column(&conn, "decided_by")?;
         let has_created_at = table_has_column(&conn, "created_at")?;
-        let (sql, values) = build_audit_query_sql(filter, has_decided_by, has_created_at);
+        let has_session_id = table_has_column(&conn, "session_id")?;
+        let (sql, values) =
+            build_audit_query_sql(filter, has_decided_by, has_created_at, has_session_id);
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -207,6 +223,7 @@ impl SqliteLogger {
                     conflict_loser: row.get::<_, i64>(5)? != 0,
                     decided_by: row.get(6)?,
                     created_at: row.get(7)?,
+                    session_id: row.get(8)?,
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -226,7 +243,7 @@ impl RedactionLogger for SqliteLogger {
             .lock()
             .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 entry.source,
                 pii_class_to_db(&entry.class),
@@ -236,6 +253,7 @@ impl RedactionLogger for SqliteLogger {
                 if entry.conflict_loser { 1 } else { 0 },
                 conflict_tier_to_db(entry.decided_by),
                 entry.created_at,
+                entry.session_id,
             ],
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -263,6 +281,7 @@ pub fn build_audit_query_sql(
     filter: &AuditFilter,
     has_decided_by: bool,
     has_created_at: bool,
+    has_session_id: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -274,8 +293,13 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS created_at"
     };
+    let session_id_column = if has_session_id {
+        "session_id"
+    } else {
+        "NULL AS session_id"
+    };
     let mut sql = format!(
-        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column} FROM redaction_log"
+        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -310,6 +334,14 @@ pub fn build_audit_query_sql(
             predicates.push("NULL <= ?");
         }
         values.push(Value::Integer(to_epoch_ms));
+    }
+    if let Some(session_id) = &filter.session_id {
+        if has_session_id {
+            predicates.push("session_id = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(session_id.clone()));
     }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");
@@ -468,6 +500,7 @@ mod tests {
                     conflict_loser: false,
                     decided_by: ConflictTier::None,
                     created_at: 0,
+                    session_id: None,
                 })
                 .unwrap();
         }

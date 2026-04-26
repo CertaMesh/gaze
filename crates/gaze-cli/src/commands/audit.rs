@@ -17,6 +17,7 @@ pub(crate) struct Args {
     pub(crate) document_kind: Option<String>,
     pub(crate) from_iso8601: Option<String>,
     pub(crate) to_iso8601: Option<String>,
+    pub(crate) session_id: Option<String>,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -31,7 +32,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
@@ -41,7 +42,8 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.decided_by,
             row.created_at
                 .map(|created_at| created_at.to_string())
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            row.session_id.unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -71,6 +73,7 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         document_kind: args.document_kind.clone(),
         from_epoch_ms,
         to_epoch_ms,
+        session_id: args.session_id.clone(),
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -115,6 +118,7 @@ struct JsonlRow {
     conflict_loser: bool,
     decided_by: String,
     created_at: Option<i64>,
+    session_id: Option<String>,
 }
 
 impl From<AuditLogRow> for JsonlRow {
@@ -128,6 +132,7 @@ impl From<AuditLogRow> for JsonlRow {
             conflict_loser: row.conflict_loser,
             decided_by: row.decided_by,
             created_at: row.created_at,
+            session_id: row.session_id,
         }
     }
 }

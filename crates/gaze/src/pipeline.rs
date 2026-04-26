@@ -150,6 +150,7 @@ impl Pipeline {
             .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
+                session,
                 loser,
                 field_name,
                 document_kind.clone(),
@@ -165,7 +166,14 @@ impl Pipeline {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
-            self.log_entry(&detection, field_name, document_kind.clone(), action, false)?;
+            self.log_entry(
+                session,
+                &detection,
+                field_name,
+                document_kind.clone(),
+                action,
+                false,
+            )?;
 
             let replacement = match action {
                 Action::Tokenize => Some(session.tokenize_with_family(
@@ -201,6 +209,7 @@ impl Pipeline {
 
     fn log_entry(
         &self,
+        session: &Session,
         detection: &IndexedDetection,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -216,6 +225,7 @@ impl Pipeline {
             conflict_loser,
             decided_by: detection.decided_by,
             created_at: crate::redaction_log::current_epoch_ms(),
+            session_id: Some(session.audit_session_id().to_string()),
         };
 
         for logger in &self.redaction_loggers {
