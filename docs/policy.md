@@ -333,8 +333,8 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 `core-extended` recognizers are intentionally conservative:
 
 - `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
-  `custom:phone` only when the match passes `e164_phone`. National phone
-  patterns are not included. Regex-passing but unassigned values such as
+  `custom:phone` only when the match passes `e164_phone`. Locale-specific
+  dial strings are not included. Regex-passing but unassigned values such as
   `+99999999` do not emit detections.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
