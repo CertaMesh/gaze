@@ -1,14 +1,14 @@
 use std::collections::BTreeSet;
 
 use gaze::{
-    Action, ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline,
-    PolicyError, RuleSpec, Rulepack, RulepackError,
+    ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, Pipeline, RuleSpec, Rulepack,
 };
-use gaze_recognizers::{NerOptions, NerRecognizer};
 
+mod class_map;
 mod detector_wiring;
 mod error;
 mod locale;
+mod ner;
 mod template;
 
 pub use error::BuildError;
@@ -56,68 +56,9 @@ pub fn build_pipeline(
         };
     }
 
-    if let Some(ner) = &policy.ner {
-        if let Some(path) = &ner.model_dir {
-            let detector = NerRecognizer::load_with_options(
-                path,
-                NerOptions {
-                    locale: ner.locale.clone(),
-                    threshold: ner_threshold.unwrap_or(ner.threshold),
-                },
-            )
-            .map_err(|err| PolicyError::NerLoad(err.to_string()))?;
-            builder = builder.recognizer(detector);
-        }
-    }
+    builder = ner::register_ner(builder, policy, ner_threshold)?;
 
     Ok(builder.build()?)
-}
-
-fn class_for_dictionary(
-    policy: &gaze::Policy,
-    context: &Context,
-    dictionary_name: &str,
-    original_class: PiiClass,
-) -> Result<PiiClass, RulepackError> {
-    let Some(override_class) = context.class_map.get(dictionary_name) else {
-        return Ok(original_class);
-    };
-    if override_class == &original_class {
-        return Ok(original_class);
-    }
-    if class_has_tokenize_or_stricter_action(&policy.rules, override_class) {
-        Ok(override_class.clone())
-    } else {
-        Err(RulepackError::ClassMapOverrideClash {
-            dict: dictionary_name.to_string(),
-            old_class: original_class,
-            new_class: override_class.clone(),
-            uncovered_rule: format!(
-                "no tokenize-or-stricter action rule covers {:?}",
-                override_class
-            ),
-        })
-    }
-}
-
-fn class_has_tokenize_or_stricter_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
-    for rule in rules {
-        let action = match rule {
-            RuleSpec::Class {
-                class: rule_class,
-                action,
-            } if rule_class == class => Some(action),
-            RuleSpec::Default { action } => Some(action),
-            _ => None,
-        };
-        if let Some(action) = action {
-            return matches!(
-                action,
-                Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize
-            );
-        }
-    }
-    false
 }
 
 #[cfg(test)]
@@ -125,8 +66,8 @@ mod tests {
     use super::*;
     use crate::template::lower_pattern_template;
     use gaze::{
-        Action, CleanDocument, DetectorKind, LocaleTag, RawDocument, Scope, Session, SessionPolicy,
-        SessionScope,
+        Action, CleanDocument, DetectorKind, LocaleTag, PiiClass, PolicyError, RawDocument,
+        RulepackError, Scope, Session, SessionPolicy, SessionScope,
     };
 
     fn policy() -> gaze::Policy {
