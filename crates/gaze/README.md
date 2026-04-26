@@ -12,7 +12,7 @@ separate crate and plug into the core `Recognizer` surface.
 
 ```toml
 [dependencies]
-gaze = "0.4.1"
+gaze = "0.4.4"
 ```
 
 When developing inside the workspace, use the path dependency:
@@ -37,7 +37,7 @@ The public surface is re-exported from [`src/lib.rs`](src/lib.rs).
 | Rules and classes | `PiiClass`, `BUILTIN_CLASS_NAMES`, `Action`, `ClassRule`, `ColumnRule`, `DefaultRule`, `Rule`, `RuleContext` |
 | Documents | `RawDocument`, `CleanDocument`, `Value` |
 | Context dictionaries | `Context`, `TypedContext`, `RawContext`, `ContextDictionary`, `ContextFieldsRef`, `DictionaryBundle`, `DictionaryEntry`, `DictionarySource`, `RulepackDict` |
-| Audit logging | `RedactionLogger`, `RedactionEntry`, `SqliteLogger`, `ConflictTier`, `DocumentKind` |
+| Audit logging | `RedactionLogger`, `RedactionEntry` (carries `created_at` epoch ms since v0.4.4), `SqliteLogger`, `ConflictTier`, `DocumentKind` |
 | Sandbox contracts | `Sandbox`, `SandboxPlan`, `ExecPolicy`, `UntrustedExecRequest`, `ValidatedExecRequest`, `SandboxError` |
 
 ## Minimal library flow
@@ -110,6 +110,30 @@ context dictionaries. Use `PipelineBuilder::recognizer` for the modern path.
 
 Use `PipelineBuilder::detector` only for simple detector implementations that
 emit `Detection` values without the full recognizer metadata.
+
+## Validators and bundled rulepacks (v0.4.2+)
+
+Validators and normalizers are closed enums declared in `gaze-recognizers`. The
+core crate parses validator names from rulepack TOML and dispatches into those
+enums; unknown names fail closed at rulepack load time with
+`RulepackError::UnsupportedValidator` or `RulepackError::UnsupportedNormalizer`.
+
+The rulepack schema currently accepts:
+
+- validators: `email_rfc`, `e164_phone` (gated behind `phone-parser` feature),
+  `luhn`, `iban_mod97`
+- normalizers: `email_canonical`, `iban_canonical`
+
+The shipped bundled rulepacks are `core` (always-on email + email-header
+recognizers) and `core-extended` (opt-in shape-only phone, IPv4/IPv6, postal
+codes plus validator-backed IBAN and credit card).
+
+## Audit schema v2 (v0.4.4)
+
+`RedactionEntry` carries a `created_at: i64` epoch-millisecond timestamp.
+`SqliteLogger` opens with an `ALTER TABLE` migration so legacy v0.4.3 audit
+databases without `created_at` remain queryable through a NULL default. Time
+filtering is exposed through the CLI; see `crates/gaze-cli/README.md`.
 
 ## What belongs here
 
