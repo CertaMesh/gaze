@@ -4,7 +4,6 @@ members = [
     "crates/gaze-assembly",
     "crates/gaze-recognizers",
     "crates/gaze-cli",
-    "crates/debug-proxy",
     "crates/xtask",
 ]
 resolver = "2"
