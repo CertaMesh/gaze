@@ -1,3 +1,4 @@
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
@@ -254,27 +255,466 @@ fn reject_forbidden_use_imports(path: &Path, file: &syn::File) -> Result<()> {
 
 fn walk_items(items: &[syn::Item], path: &Path) -> Result<()> {
     for item in items {
-        if let syn::Item::Use(item_use) = item {
-            let mut imported = Vec::new();
-            collect_use_tree_names(&item_use.tree, &mut imported);
-            if let Some(symbol) = RESTORE_AUDIT_FORBIDDEN_SYMBOLS
-                .iter()
-                .find(|symbol| imported.iter().any(|name| name == **symbol))
-            {
-                bail!(
-                    "audit metadata import in restore path: {} imports {}",
-                    path.display(),
-                    symbol
-                );
+        match item {
+            syn::Item::Use(item_use) => check_use(item_use, path)?,
+            syn::Item::ExternCrate(extern_crate) => {
+                if matches!(extern_crate.ident.to_string().as_str(), "gaze" | "gaze_cli") {
+                    bail!(
+                        "audit metadata import in restore path: {} imports {}",
+                        path.display(),
+                        RESTORE_AUDIT_RENAMED_ROOT_MARKER
+                    );
+                }
             }
-        }
-        if let syn::Item::Mod(item_mod) = item {
-            if let Some((_, items)) = &item_mod.content {
-                walk_items(items, path)?;
+            syn::Item::Mod(item_mod) => {
+                if let Some((_, items)) = &item_mod.content {
+                    walk_items(items, path)?;
+                }
             }
+            syn::Item::Fn(item_fn) => walk_block_stmts(&item_fn.block, path)?,
+            syn::Item::Impl(item_impl) => {
+                for item in &item_impl.items {
+                    match item {
+                        syn::ImplItem::Const(item_const) => walk_expr(&item_const.expr, path)?,
+                        syn::ImplItem::Fn(item_fn) => walk_block_stmts(&item_fn.block, path)?,
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Trait(item_trait) => {
+                for item in &item_trait.items {
+                    match item {
+                        syn::TraitItem::Const(item_const) => {
+                            if let Some((_, expr)) = &item_const.default {
+                                walk_expr(expr, path)?;
+                            }
+                        }
+                        syn::TraitItem::Fn(item_fn) => {
+                            if let Some(block) = &item_fn.default {
+                                walk_block_stmts(block, path)?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Const(item_const) => walk_expr(&item_const.expr, path)?,
+            syn::Item::Static(item_static) => walk_expr(&item_static.expr, path)?,
+            _ => {}
         }
     }
     Ok(())
+}
+
+fn walk_block_stmts(block: &syn::Block, path: &Path) -> Result<()> {
+    for stmt in &block.stmts {
+        match stmt {
+            syn::Stmt::Item(item) => walk_items(std::slice::from_ref(item), path)?,
+            syn::Stmt::Local(local) => {
+                if let Some(init) = &local.init {
+                    walk_expr(&init.expr, path)?;
+                }
+            }
+            syn::Stmt::Expr(expr, _) => walk_expr(expr, path)?,
+            syn::Stmt::Macro(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn walk_expr(expr: &syn::Expr, path: &Path) -> Result<()> {
+    match expr {
+        syn::Expr::Array(expr) => {
+            for item in &expr.elems {
+                walk_expr(item, path)?;
+            }
+        }
+        syn::Expr::Assign(expr) => {
+            walk_expr(&expr.left, path)?;
+            walk_expr(&expr.right, path)?;
+        }
+        syn::Expr::Async(expr) => walk_block_stmts(&expr.block, path)?,
+        syn::Expr::Await(expr) => walk_expr(&expr.base, path)?,
+        syn::Expr::Binary(expr) => {
+            walk_expr(&expr.left, path)?;
+            walk_expr(&expr.right, path)?;
+        }
+        syn::Expr::Block(expr) => walk_block_stmts(&expr.block, path)?,
+        syn::Expr::Break(expr) => {
+            if let Some(value) = &expr.expr {
+                walk_expr(value, path)?;
+            }
+        }
+        syn::Expr::Call(expr) => {
+            walk_expr(&expr.func, path)?;
+            for arg in &expr.args {
+                walk_expr(arg, path)?;
+            }
+        }
+        syn::Expr::Cast(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::Closure(expr) => walk_expr(&expr.body, path)?,
+        syn::Expr::Const(expr) => walk_block_stmts(&expr.block, path)?,
+        syn::Expr::Field(expr) => walk_expr(&expr.base, path)?,
+        syn::Expr::ForLoop(expr) => {
+            walk_expr(&expr.expr, path)?;
+            walk_block_stmts(&expr.body, path)?;
+        }
+        syn::Expr::Group(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::If(expr) => {
+            walk_expr(&expr.cond, path)?;
+            walk_block_stmts(&expr.then_branch, path)?;
+            if let Some((_, else_branch)) = &expr.else_branch {
+                walk_expr(else_branch, path)?;
+            }
+        }
+        syn::Expr::Index(expr) => {
+            walk_expr(&expr.expr, path)?;
+            walk_expr(&expr.index, path)?;
+        }
+        syn::Expr::Let(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::Loop(expr) => walk_block_stmts(&expr.body, path)?,
+        syn::Expr::Macro(_) => {}
+        syn::Expr::Match(expr) => {
+            walk_expr(&expr.expr, path)?;
+            for arm in &expr.arms {
+                if let Some((_, guard)) = &arm.guard {
+                    walk_expr(guard, path)?;
+                }
+                walk_expr(&arm.body, path)?;
+            }
+        }
+        syn::Expr::MethodCall(expr) => {
+            walk_expr(&expr.receiver, path)?;
+            for arg in &expr.args {
+                walk_expr(arg, path)?;
+            }
+        }
+        syn::Expr::Paren(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::Range(expr) => {
+            if let Some(start) = &expr.start {
+                walk_expr(start, path)?;
+            }
+            if let Some(end) = &expr.end {
+                walk_expr(end, path)?;
+            }
+        }
+        syn::Expr::Reference(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::Repeat(expr) => {
+            walk_expr(&expr.expr, path)?;
+            walk_expr(&expr.len, path)?;
+        }
+        syn::Expr::Return(expr) => {
+            if let Some(value) = &expr.expr {
+                walk_expr(value, path)?;
+            }
+        }
+        syn::Expr::Struct(expr) => {
+            for field in &expr.fields {
+                walk_expr(&field.expr, path)?;
+            }
+            if let Some(rest) = &expr.rest {
+                walk_expr(rest, path)?;
+            }
+        }
+        syn::Expr::Try(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::TryBlock(expr) => walk_block_stmts(&expr.block, path)?,
+        syn::Expr::Tuple(expr) => {
+            for item in &expr.elems {
+                walk_expr(item, path)?;
+            }
+        }
+        syn::Expr::Unary(expr) => walk_expr(&expr.expr, path)?,
+        syn::Expr::Unsafe(expr) => walk_block_stmts(&expr.block, path)?,
+        syn::Expr::While(expr) => {
+            walk_expr(&expr.cond, path)?;
+            walk_block_stmts(&expr.body, path)?;
+        }
+        syn::Expr::Yield(expr) => {
+            if let Some(value) = &expr.expr {
+                walk_expr(value, path)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn check_use(item_use: &syn::ItemUse, path: &Path) -> Result<()> {
+    let mut imported = Vec::new();
+    collect_use_tree_names(&item_use.tree, &mut imported);
+    if let Some(symbol) = RESTORE_AUDIT_FORBIDDEN_SYMBOLS
+        .iter()
+        .find(|symbol| imported.iter().any(|name| name == **symbol))
+    {
+        bail!(
+            "audit metadata import in restore path: {} imports {}",
+            path.display(),
+            symbol
+        );
+    }
+    Ok(())
+}
+
+fn collect_external_mod_files(path: &Path, items: &[syn::Item]) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for item in items {
+        match item {
+            syn::Item::Mod(item_mod) => {
+                if let Some((_, items)) = &item_mod.content {
+                    files.extend(collect_external_mod_files(path, items)?);
+                } else {
+                    files.extend(resolve_external_mod_files(path, item_mod));
+                }
+            }
+            syn::Item::Fn(item_fn) => {
+                files.extend(collect_external_mod_files_in_block(path, &item_fn.block)?);
+            }
+            syn::Item::Impl(item_impl) => {
+                for item in &item_impl.items {
+                    match item {
+                        syn::ImplItem::Const(item_const) => {
+                            files.extend(collect_external_mod_files_in_expr(
+                                path,
+                                &item_const.expr,
+                            )?);
+                        }
+                        syn::ImplItem::Fn(item_fn) => {
+                            files
+                                .extend(collect_external_mod_files_in_block(path, &item_fn.block)?);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Trait(item_trait) => {
+                for item in &item_trait.items {
+                    match item {
+                        syn::TraitItem::Const(item_const) => {
+                            if let Some((_, expr)) = &item_const.default {
+                                files.extend(collect_external_mod_files_in_expr(path, expr)?);
+                            }
+                        }
+                        syn::TraitItem::Fn(item_fn) => {
+                            if let Some(block) = &item_fn.default {
+                                files.extend(collect_external_mod_files_in_block(path, block)?);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            syn::Item::Const(item_const) => {
+                files.extend(collect_external_mod_files_in_expr(path, &item_const.expr)?);
+            }
+            syn::Item::Static(item_static) => {
+                files.extend(collect_external_mod_files_in_expr(path, &item_static.expr)?);
+            }
+            _ => {}
+        }
+    }
+    Ok(files)
+}
+
+fn collect_external_mod_files_in_block(path: &Path, block: &syn::Block) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for stmt in &block.stmts {
+        match stmt {
+            syn::Stmt::Item(item) => {
+                files.extend(collect_external_mod_files(
+                    path,
+                    std::slice::from_ref(item),
+                )?);
+            }
+            syn::Stmt::Local(local) => {
+                if let Some(init) = &local.init {
+                    files.extend(collect_external_mod_files_in_expr(path, &init.expr)?);
+                }
+            }
+            syn::Stmt::Expr(expr, _) => {
+                files.extend(collect_external_mod_files_in_expr(path, expr)?);
+            }
+            syn::Stmt::Macro(_) => {}
+        }
+    }
+    Ok(files)
+}
+
+fn collect_external_mod_files_in_expr(path: &Path, expr: &syn::Expr) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    match expr {
+        syn::Expr::Array(expr) => {
+            for item in &expr.elems {
+                files.extend(collect_external_mod_files_in_expr(path, item)?);
+            }
+        }
+        syn::Expr::Assign(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.left)?);
+            files.extend(collect_external_mod_files_in_expr(path, &expr.right)?);
+        }
+        syn::Expr::Async(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.block)?)
+        }
+        syn::Expr::Await(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.base)?)
+        }
+        syn::Expr::Binary(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.left)?);
+            files.extend(collect_external_mod_files_in_expr(path, &expr.right)?);
+        }
+        syn::Expr::Block(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.block)?)
+        }
+        syn::Expr::Break(expr) => {
+            if let Some(value) = &expr.expr {
+                files.extend(collect_external_mod_files_in_expr(path, value)?);
+            }
+        }
+        syn::Expr::Call(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.func)?);
+            for arg in &expr.args {
+                files.extend(collect_external_mod_files_in_expr(path, arg)?);
+            }
+        }
+        syn::Expr::Cast(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?)
+        }
+        syn::Expr::Closure(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.body)?)
+        }
+        syn::Expr::Const(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.block)?)
+        }
+        syn::Expr::Field(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.base)?)
+        }
+        syn::Expr::ForLoop(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?);
+            files.extend(collect_external_mod_files_in_block(path, &expr.body)?);
+        }
+        syn::Expr::Group(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?)
+        }
+        syn::Expr::If(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.cond)?);
+            files.extend(collect_external_mod_files_in_block(
+                path,
+                &expr.then_branch,
+            )?);
+            if let Some((_, else_branch)) = &expr.else_branch {
+                files.extend(collect_external_mod_files_in_expr(path, else_branch)?);
+            }
+        }
+        syn::Expr::Index(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?);
+            files.extend(collect_external_mod_files_in_expr(path, &expr.index)?);
+        }
+        syn::Expr::Let(expr) => files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?),
+        syn::Expr::Loop(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.body)?)
+        }
+        syn::Expr::Macro(_) => {}
+        syn::Expr::Match(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?);
+            for arm in &expr.arms {
+                if let Some((_, guard)) = &arm.guard {
+                    files.extend(collect_external_mod_files_in_expr(path, guard)?);
+                }
+                files.extend(collect_external_mod_files_in_expr(path, &arm.body)?);
+            }
+        }
+        syn::Expr::MethodCall(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.receiver)?);
+            for arg in &expr.args {
+                files.extend(collect_external_mod_files_in_expr(path, arg)?);
+            }
+        }
+        syn::Expr::Paren(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?)
+        }
+        syn::Expr::Range(expr) => {
+            if let Some(start) = &expr.start {
+                files.extend(collect_external_mod_files_in_expr(path, start)?);
+            }
+            if let Some(end) = &expr.end {
+                files.extend(collect_external_mod_files_in_expr(path, end)?);
+            }
+        }
+        syn::Expr::Reference(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?)
+        }
+        syn::Expr::Repeat(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?);
+            files.extend(collect_external_mod_files_in_expr(path, &expr.len)?);
+        }
+        syn::Expr::Return(expr) => {
+            if let Some(value) = &expr.expr {
+                files.extend(collect_external_mod_files_in_expr(path, value)?);
+            }
+        }
+        syn::Expr::Struct(expr) => {
+            for field in &expr.fields {
+                files.extend(collect_external_mod_files_in_expr(path, &field.expr)?);
+            }
+            if let Some(rest) = &expr.rest {
+                files.extend(collect_external_mod_files_in_expr(path, rest)?);
+            }
+        }
+        syn::Expr::Try(expr) => files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?),
+        syn::Expr::TryBlock(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.block)?)
+        }
+        syn::Expr::Tuple(expr) => {
+            for item in &expr.elems {
+                files.extend(collect_external_mod_files_in_expr(path, item)?);
+            }
+        }
+        syn::Expr::Unary(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.expr)?)
+        }
+        syn::Expr::Unsafe(expr) => {
+            files.extend(collect_external_mod_files_in_block(path, &expr.block)?)
+        }
+        syn::Expr::While(expr) => {
+            files.extend(collect_external_mod_files_in_expr(path, &expr.cond)?);
+            files.extend(collect_external_mod_files_in_block(path, &expr.body)?);
+        }
+        syn::Expr::Yield(expr) => {
+            if let Some(value) = &expr.expr {
+                files.extend(collect_external_mod_files_in_expr(path, value)?);
+            }
+        }
+        _ => {}
+    }
+    Ok(files)
+}
+
+fn resolve_external_mod_files(path: &Path, item_mod: &syn::ItemMod) -> Vec<PathBuf> {
+    let dir = path.parent().unwrap_or_else(|| Path::new("."));
+    if let Some(path_attr) = item_mod.attrs.iter().find_map(path_attribute_value) {
+        return vec![dir.join(path_attr)];
+    }
+
+    let name = item_mod.ident.to_string();
+    vec![
+        dir.join(format!("{name}.rs")),
+        dir.join(name).join("mod.rs"),
+    ]
+}
+
+fn path_attribute_value(attr: &syn::Attribute) -> Option<String> {
+    if !attr.path().is_ident("path") {
+        return None;
+    }
+    let syn::Meta::NameValue(value) = &attr.meta else {
+        return None;
+    };
+    let syn::Expr::Lit(expr_lit) = &value.value else {
+        return None;
+    };
+    let syn::Lit::Str(path) = &expr_lit.lit else {
+        return None;
+    };
+    Some(path.value())
 }
 
 fn collect_use_tree_names(tree: &syn::UseTree, names: &mut Vec<String>) {
@@ -340,15 +780,38 @@ fn use_tree_root(ident: &syn::Ident) -> UseTreeRoot {
 }
 
 fn restore_files(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut queue = VecDeque::new();
+    let mut seen = HashSet::new();
     let mut files = Vec::new();
     let cli_restore = root.join("crates/gaze-cli/src/restore");
     if cli_restore.exists() {
-        collect_rs_files(&cli_restore, &mut files)?;
+        collect_rs_files(&cli_restore, &mut queue)?;
     }
     let core_restore = root.join("crates/gaze/src/restore.rs");
     if core_restore.exists() {
-        files.push(core_restore);
+        queue.push_back(core_restore);
     }
+
+    while let Some(path) = queue.pop_front() {
+        let canonical = path
+            .canonicalize()
+            .with_context(|| format!("failed to canonicalize {}", path.display()))?;
+        if !seen.insert(canonical.clone()) {
+            continue;
+        }
+
+        let source = fs::read_to_string(&canonical)
+            .with_context(|| format!("failed to read {}", canonical.display()))?;
+        let parsed = syn::parse_file(&source)
+            .with_context(|| format!("failed to parse {}", canonical.display()))?;
+        for external_mod in collect_external_mod_files(&canonical, &parsed.items)? {
+            if external_mod.exists() {
+                queue.push_back(external_mod);
+            }
+        }
+        files.push(canonical);
+    }
+
     if files.is_empty() {
         bail!("audit_metadata_only found no restore files to scan");
     }
@@ -356,14 +819,14 @@ fn restore_files(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+fn collect_rs_files(dir: &Path, files: &mut VecDeque<PathBuf>) -> Result<()> {
     for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
         let entry = entry.with_context(|| format!("failed to read entry in {}", dir.display()))?;
         let path = entry.path();
         if path.is_dir() {
             collect_rs_files(&path, files)?;
         } else if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
-            files.push(path);
+            files.push_back(path);
         }
     }
     Ok(())
