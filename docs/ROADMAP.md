@@ -226,8 +226,8 @@ When you pick up a roadmap item:
 1. Read the existing spec files at `docs/roadmap/v0.3/cli.md`, this
    `docs/ROADMAP.md`, and `docs/research/gaze-first-principles-vision.md`
    for current context.
-2. Check open GitHub issues on the relevant repo (`Naoray/gaze`,
-   `Naoray/gaze-laravel`) for acceptance criteria and status updates.
+2. Check open GitHub issues on the relevant repo (`piinuts/gaze`,
+   `piinuts/gaze-laravel`) for acceptance criteria and status updates.
 3. Follow brainstorm → plan → multi-review → dispatch impl before
    touching code on non-trivial features.
 4. **Never re-open locked decisions** documented in this roadmap's
@@ -259,5 +259,5 @@ execution state.
 - **v0.3 spec archive:** `docs/roadmap/v0.3/cli.md`,
   `docs/roadmap/v0.3/laravel.md`
 - **Project rules:** `AGENTS.md`, `CLAUDE.md`
-- **Adopter repo:** `Naoray/gaze-laravel` (see its issue tracker for
+- **Adopter repo:** `piinuts/gaze-laravel` (see its issue tracker for
   adopter signals feeding this roadmap).

@@ -282,10 +282,10 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/Naoray/gaze/compare/v0.4.2...HEAD
-[0.4.2]: https://github.com/Naoray/gaze/compare/v0.4.0-rc.1...v0.4.2
-[0.4.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.4.0-rc.1
-[v0.3.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.1
-[0.3.0]: https://github.com/Naoray/gaze/releases/tag/v0.3.0
-[0.3.0-rc.2]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.2
-[0.3.0-rc.1]: https://github.com/Naoray/gaze/releases/tag/v0.3.0-rc.1
+[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/piinuts/gaze/compare/v0.4.0-rc.1...v0.4.2
+[0.4.0-rc.1]: https://github.com/piinuts/gaze/releases/tag/v0.4.0-rc.1
+[v0.3.1]: https://github.com/piinuts/gaze/releases/tag/v0.3.1
+[0.3.0]: https://github.com/piinuts/gaze/releases/tag/v0.3.0
+[0.3.0-rc.2]: https://github.com/piinuts/gaze/releases/tag/v0.3.0-rc.2
+[0.3.0-rc.1]: https://github.com/piinuts/gaze/releases/tag/v0.3.0-rc.1
