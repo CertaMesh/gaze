@@ -2250,6 +2250,25 @@ fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() 
 }
 
 #[test]
+fn s4_cli_bundled_core_extended_round_trips_broadened_de_area_code_phone() {
+    let input = "Phone +49 40 0000 0000";
+    let value = clean_json_with_args(&["--rulepack-bundled", "core-extended"], input);
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(clean),
+        "unexpected DE clean text: {clean}"
+    );
+    assert_eq!(value["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+}
+
+#[test]
 fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
     let (_dir, policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");

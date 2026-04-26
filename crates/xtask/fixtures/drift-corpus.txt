@@ -4,7 +4,7 @@
 From: "Dr. Schmidt" <alice@example.invalid>
 Contact email bob.audit@example.invalid for updates.
 
-US reserved phone +1 555 0100 routes nowhere.
+DE broadened synthetic phone +49 40 0000 0000 routes nowhere.
 DE synthetic phone +49 30 0000 0000 routes nowhere.
 Extended IBAN sample GB82WEST12345698765432 is synthetic.
 Test card 4111 1111 1111 1111 is a Luhn fixture.
