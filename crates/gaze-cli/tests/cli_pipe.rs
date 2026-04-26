@@ -1170,7 +1170,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\n"
     ));
     assert!(
         stdout
@@ -1211,6 +1211,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     assert_eq!(row["document_kind"], "text");
     assert_eq!(row["conflict_loser"], false);
     assert!(row.get("decided_by").is_some());
+    assert!(row.get("session_id").is_some());
 }
 
 #[test]
@@ -1256,7 +1257,7 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
         .expect("expected email audit row in bounded time range");
     let created_at = row
         .split('\t')
-        .next_back()
+        .nth(7)
         .expect("created_at column")
         .parse::<i64>()
         .expect("created_at is epoch milliseconds");
@@ -1288,6 +1289,127 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
 }
 
 #[test]
+fn s1_audit_cli_smoke_filters_session_without_leaking_raw_or_other_session() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let raw_a = "Email alice@example.invalid";
+    let raw_b = "Email bob@example.invalid";
+
+    for raw in [raw_a, raw_b] {
+        let clean = clean_raw_with_args(&[&format!("--audit-db={}", audit_path.display())], raw);
+        assert!(
+            clean.status.success(),
+            "clean failed: {}",
+            String::from_utf8_lossy(&clean.stderr)
+        );
+    }
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert_no_raw_audit_pii(&export.stdout);
+    assert!(!export
+        .stdout
+        .windows(b"bob@example.invalid".len())
+        .any(|window| window == b"bob@example.invalid"));
+    let rows: Vec<Value> = String::from_utf8(export.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let session_a = rows[0]["session_id"].as_str().unwrap().to_string();
+    let session_b = rows[1]["session_id"].as_str().unwrap().to_string();
+    assert_ne!(session_a, session_b);
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--session",
+            &session_a,
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+    assert!(
+        !query
+            .stdout
+            .windows(session_b.len())
+            .any(|window| window == session_b.as_bytes()),
+        "non-matching session id leaked in filtered output"
+    );
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    assert!(stdout.contains(&session_a), "filtered output: {stdout}");
+    assert_eq!(stdout.lines().count(), 2, "filtered output: {stdout}");
+}
+
+#[test]
+fn t_audit_session_id_is_opaque_not_session_hex() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_json_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    let clean_text = clean["clean_text"].as_str().unwrap();
+    let token = clean_text
+        .split_whitespace()
+        .find(|part| part.starts_with('<'))
+        .expect("tokenized email");
+    let token_session_hex = token
+        .trim_start_matches('<')
+        .split(':')
+        .next()
+        .expect("token prefix");
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    let row: Value = serde_json::from_slice(&export.stdout).unwrap();
+    let audit_session_id = row["session_id"].as_str().unwrap();
+    assert_ne!(audit_session_id, token_session_hex);
+    assert_eq!(audit_session_id.len(), 36);
+    assert_eq!(&audit_session_id[14..15], "7");
+}
+
+#[test]
 fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("audit.sqlite");
@@ -1316,6 +1438,48 @@ fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
             format!("invalid audit ISO 8601 timestamp: {:?}", "invalid-date")
         );
     }
+}
+
+#[test]
+fn s1_policy_audit_defaults_are_not_supported() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.audit]
+session = "0196758d-5f00-7a8a-9a4c-6b1347a1f0d2"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Email alice@example.invalid",
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+    let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(stderr["error"], "PolicyConfig");
 }
 
 #[test]
@@ -1457,7 +1621,7 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true, true);
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true, true, true);
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"
