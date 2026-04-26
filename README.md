@@ -20,7 +20,7 @@ The workspace has five crates:
 - `crates/gaze-cli` — the `gaze clean` / `gaze restore` binary adopters invoke from language adapters.
 - `crates/xtask` — internal repository gate runner.
 
-External consumer: [piinuts/glance](https://github.com/PIInuts/glance), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
+External consumer: [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
 
 ## Project north star
 
@@ -232,7 +232,7 @@ See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and
 
 ### External MCP Consumer
 
-The former in-tree `debug-proxy` MCP consumer now lives in [piinuts/glance](https://github.com/PIInuts/glance). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
+The former in-tree `debug-proxy` MCP consumer now lives in [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
 
 ## Build
 

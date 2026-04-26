@@ -48,7 +48,7 @@
 **Goal (v0.5 action side):** Trick Gaze into executing unauthorized actions; exfiltrate data via action side-effects (send email to attacker-controlled address using legitimate Token).
 
 **Mitigations (in scope for v0.2):**
-- Policy-level allowlists for tables/columns in external MCP consumers such as [piinuts/glance](https://github.com/PIInuts/glance), formerly the in-tree `debug-proxy`.
+- Policy-level allowlists for tables/columns in external MCP consumers such as [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens), formerly the in-tree `debug-proxy`.
 - Query budgets + k-anonymity thresholds (open issues #1, #2 — deferred to v0.3, documented here as known gap).
 - Filter translation validated: agent-supplied tokens go through `session.restore()` with **fail-closed** semantics on unknown tokens (action-phase; read-phase may warn + pass through).
 - All detector output goes through pipeline; no raw PII path bypasses redaction.
