@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod ci_feature_matrix;
 mod fixture_citation;
 mod no_tenant_knowledge;
 
@@ -24,6 +25,7 @@ enum Command {
     NoTenantKnowledge,
     FixtureCitationLint,
     AuditMetadataOnly,
+    CiFeatureMatrix,
 }
 
 fn main() -> Result<()> {
@@ -35,6 +37,7 @@ fn main() -> Result<()> {
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
+        Command::CiFeatureMatrix => ci_feature_matrix::run(),
     }
 }
 
