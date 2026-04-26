@@ -30,8 +30,9 @@ imported in restore paths" via syn-based AST scanning. As of v0.4.5 round-3,
 the gate covers:
 
 - File-scope `Item::Use` (top-level + nested inline `mod { ... }`)
-- Function body / impl method body / trait default method body `use` statements
-- Const/static initializer block-expression `use` statements
+- Function body / impl method body `use` statements
+- Trait default-method body `use` statements (covered by walker; behavioral test added in this round: `audit_metadata_only_fails_on_trait_default_method_body_use`)
+- Const/static initializer block-expression `use` statements (covered by walker; behavioral test added in this round: `audit_metadata_only_fails_on_const_block_initializer_use`)
 - `Item::ExternCrate { gaze | gaze_cli }` (with or without alias)
 - Glob imports `use gaze::*;` / `use gaze_cli::*;` / `use crate::*;` (expand to all denylist symbols)
 - Aliased crate `use gaze as <ident>;` (synthetic `__renamed_gaze_root__` marker)
@@ -43,10 +44,15 @@ Known limitations (v0.4.5 — accepted-risk; covered by code review):
 1. **Macro-emitted use statements.** `macro_rules! pull_audit { () => { use gaze::RedactionEntry; }; } pull_audit!();` — the gate does not expand macros. Code review must catch macros that emit forbidden imports. Future: see `docs/research/v0.5-dylint-audit-gate.md` (todo #181).
 2. **`use super::*;` re-export chains.** A submodule glob-importing from a `super` that re-exports audit symbols would bypass the gate. Currently no such re-exports exist, but no defense in depth.
 3. **Indirect references via name-resolution edge cases** (for example, `extern crate alloc as gaze;`). Rare and would be obvious in code review.
+4. **Fully-qualified path references without `use` statement.** A restore module can reference an audit symbol via fully-qualified path WITHOUT importing it: `let _ = std::marker::PhantomData::<gaze::RedactionEntry>;` or `let _ = gaze::current_epoch_ms();` or `fn x(_: gaze::AuditFilter)`. The walker scans `Item::Use` and `Item::ExternCrate` and recursively walks block statements for nested `use`, but does NOT inspect `syn::Path` references in type positions, expression positions, function signatures, return types, struct fields, or generic args. Closing this requires walking `syn::Path` references via `syn::visit::Visit` (which is essentially recreating rustc's name resolver — see todo #181 v0.5 dylint pivot for the architectural answer).
+5. **`include!("...")` macro inlining sibling files.** `include!("../external_inc.rs")` at module scope inlines a sibling file's source into the current module. The walker hits `Item::Macro` and falls through; the included file may live outside the scanned restore tree. Distinct from `macro_rules!` emission (limitation #1) — `include!` doesn't emit, it inlines. The reviewer skimming for `macro_rules!` definitions would miss this class.
+6. **`let-else` diverge block use statements.** `let Some(_x) = predicate else { use gaze::RedactionEntry; ... };` — the `else { ... }` block is `Local::init.diverge` in the syn AST. The walker walks `local.init.expr` but not the diverge block. Stable Rust since 1.65.
 
 Architectural roadmap: todo #181 schedules a v0.5 rewrite using
 rustc-resolver-based lint (likely `dylint`). That replaces the syn-walker
 entirely and eliminates this class of recursive-Potemkin risk.
+
+**Naming caveat:** the gate is named `audit_metadata_only` to match its goal ("only non-audit metadata may live in restore"), but its actual enforcement is narrower: "no audit symbols imported via `use` or `extern crate` in restore". Adopters should NOT trust the name alone — read the limitations above. The v0.5 dylint pivot (#181) closes this gap by switching to rustc-resolver-based enforcement.
 
 ## Recursive-Potemkin discipline
 
