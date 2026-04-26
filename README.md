@@ -50,7 +50,9 @@ chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
-The Homebrew formula exists in `dist/homebrew/gaze.rb`, but the public `piinuts/tap` formula is not published yet.
+Homebrew is repo-local for now. The formula source exists at `dist/homebrew/gaze.rb`, but no public `piinuts/tap` or `piinuts/homebrew-tap` formula is published yet, and this repository is private. Maintainers can smoke the formula by staging it into a scratch local tap; direct `brew install piinuts/tap/gaze` is not supported yet.
+
+Public `brew install piinuts/tap/gaze` documentation should wait until a public tap exists and the release process publishes to it.
 
 Linux x86_64 binary download from the release assets:
 
@@ -70,7 +72,7 @@ Intel macOS binaries are not published; build from source with `cargo build --re
 
 | Platform | Status | Notes |
 |---|---|---|
-| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/piinuts/gaze/releases). Homebrew formula exists in `dist/homebrew/gaze.rb`, but is not published in `piinuts/tap` yet. |
+| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/piinuts/gaze/releases). Homebrew is repo-local at `dist/homebrew/gaze.rb`; no public tap is published yet. |
 | **Linux x86_64 (glibc)** | ✅ Supported | **Requires glibc 2.39+** (Ubuntu 24.04, Debian 13, RHEL 10, or newer). The bundled ONNX Runtime needs C23 symbols (`__isoc23_strtoll` etc.) introduced in glibc 2.39. Older distributions: build from source. |
 | **Linux aarch64 / musl** | ❌ Not shipped | Adopter-driven; [open an issue](https://github.com/piinuts/gaze/issues/new) if needed. |
 | **macOS x86_64 (Intel)** | ❌ Not shipped | Apple Silicon focus. Build from source if needed. |
@@ -159,6 +161,8 @@ echo '{"text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>"}' | 
 ```
 
 Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{session_hex}:Location_N>`, `<{session_hex}:Organization_N>`, `<{session_hex}:Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1.{session_hex}@gaze-fake.invalid`) intentionally stay bare — the whole point is to look like a real email.
+
+Default bundled-rulepack tokenization is a contract surface. The no-policy baselines for bundled outputs live in `crates/xtask/snapshots/`, and intentional drift requires a `[bundle-tokenization-drift]` `CHANGELOG.md` `[Unreleased]` Changed entry alongside a source ACK. See `ROADMAP.md` Now/Next/Later for the live stability context behind these gates.
 
 #### Audit Query and Export (v0.4.3+)
 

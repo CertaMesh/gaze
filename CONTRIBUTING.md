@@ -12,6 +12,26 @@ The `order_id` denylist is intentionally broad — it catches `Order_42`, `order
 
 Round-trip, three-surfaces, and recognizer-composition cross-cutting rows are N/A for this structural gate: it emits no tokens, adds no runtime knobs, and does not compose recognizers. The no-tenant-knowledge row is enforced by CI so production code must pass post-merge.
 
+## Fixture citations in production code
+
+Production Rust code in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`
+MUST NOT introduce hardcoded fixture-shaped PII literals unless the line or
+immediately preceding line cites the behavioral test that owns the fixture:
+
+```rust
+// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)
+const FIXTURE_EMAIL: &str = "alice@example.invalid";
+```
+
+The `cargo run -p xtask -- fixture-citation-lint` gate verifies two things:
+the production literal has a `fixture-cited(...)` marker, and
+`cargo test --workspace -- --list` contains the cited fully qualified test name
+exactly. Suffix-only matches and path-only markers do not pass.
+
+Known limitation: this gate proves the cited test exists, not that the test body
+still asserts that exact fixture literal. Reviewers must still check that the
+citation points at a meaningful behavioral assertion.
+
 ## Phone-number fixtures
 
 Test and benchmark fixtures that contain phone numbers MUST use synthetic, non-reachable values from documented reservation ranges:
@@ -42,6 +62,7 @@ cargo run -p xtask -- symmetric-potemkin
 cargo run -p xtask -- class-map-override-safety
 cargo run -p xtask -- recognizer-composition-validator
 cargo run -p xtask -- no-tenant-knowledge
+cargo run -p xtask -- fixture-citation-lint
 cargo run -p xtask -- audit-metadata-only
 ```
 
