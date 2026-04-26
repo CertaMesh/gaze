@@ -1,19 +1,8 @@
-use thiserror::Error;
-
 use crate::context::Context;
 pub use gaze_types::{
-    DictionaryBundle, DictionaryEntry, DictionarySource, DictionaryStats, RulepackDict,
+    DictionaryBundle, DictionaryEntry, DictionaryLoadError, DictionarySource, DictionaryStats,
+    RulepackDict,
 };
-
-#[derive(Debug, Error)]
-pub enum DictionaryLoadError {
-    #[error("dictionary '{name}' has no terms")]
-    Empty { name: String },
-    #[error(
-        "unicode dictionary insensitive matching unsupported in v0.4.0, use case_sensitive = true"
-    )]
-    UnicodeInsensitiveUnsupported { name: String },
-}
 
 pub trait DictionaryBundleExt {
     fn from_context(ctx: &Context) -> Self;
@@ -30,10 +19,12 @@ pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
         (
             name.clone(),
             DictionaryEntry::new(
+                name,
                 dictionary.terms.clone(),
                 dictionary.case_sensitive,
                 DictionarySource::Cli,
-            ),
+            )
+            .expect("Context validates dictionary terms before bundle construction"),
         )
     });
     DictionaryBundle::from_entries(entries)

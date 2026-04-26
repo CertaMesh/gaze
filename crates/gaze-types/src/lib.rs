@@ -425,16 +425,41 @@ pub struct RulepackDict {
     pub case_sensitive: bool,
 }
 
+/// Error raised when constructing invalid dictionary entries.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DictionaryLoadError {
+    /// Dictionary has no terms.
+    Empty { name: String },
+    /// ASCII-only case-insensitive matching cannot safely cover this entry.
+    UnicodeInsensitiveUnsupported { name: String },
+}
+
+impl fmt::Display for DictionaryLoadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Empty { name } => write!(f, "dictionary '{name}' has no terms"),
+            Self::UnicodeInsensitiveUnsupported { name } => write!(
+                f,
+                "dictionary '{name}' uses unicode terms with case-insensitive matching, unsupported in v0.4.0; use case_sensitive = true"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for DictionaryLoadError {}
+
 impl DictionaryBundle {
     /// Builds a bundle from rulepack dictionaries.
     pub fn from_rulepack_terms(terms: &[RulepackDict]) -> Self {
         let mut entries = HashMap::with_capacity(terms.len());
         for dictionary in terms {
             let entry = DictionaryEntry::new(
+                &dictionary.name,
                 dictionary.terms.clone(),
                 dictionary.case_sensitive,
                 DictionarySource::Rulepack,
-            );
+            )
+            .expect("Policy validates dictionary terms before bundle construction");
             entries.insert(dictionary.name.clone(), entry);
         }
         Self { entries }
@@ -476,13 +501,28 @@ impl DictionaryBundle {
 }
 
 impl DictionaryEntry {
-    /// Creates a value-only dictionary entry.
-    pub fn new(terms: Vec<String>, case_sensitive: bool, source: DictionarySource) -> Self {
-        Self {
+    /// Creates a validated value-only dictionary entry.
+    pub fn new(
+        name: &str,
+        terms: Vec<String>,
+        case_sensitive: bool,
+        source: DictionarySource,
+    ) -> Result<Self, DictionaryLoadError> {
+        if terms.is_empty() {
+            return Err(DictionaryLoadError::Empty {
+                name: name.to_string(),
+            });
+        }
+        if !case_sensitive && terms.iter().any(|term| !term.is_ascii()) {
+            return Err(DictionaryLoadError::UnicodeInsensitiveUnsupported {
+                name: name.to_string(),
+            });
+        }
+        Ok(Self {
             terms,
             case_sensitive,
             source,
-        }
+        })
     }
 
     /// Returns whether matching is case-sensitive.
@@ -493,6 +533,35 @@ impl DictionaryEntry {
     /// Returns configured dictionary terms.
     pub fn terms(&self) -> &[String] {
         &self.terms
+    }
+}
+
+#[cfg(test)]
+mod dictionary_tests {
+    use super::*;
+
+    #[test]
+    fn dictionary_entry_rejects_empty_terms() {
+        let err = DictionaryEntry::new("empty", Vec::new(), true, DictionarySource::Cli)
+            .expect_err("empty dictionaries must fail closed");
+
+        assert!(matches!(err, DictionaryLoadError::Empty { name } if name == "empty"));
+    }
+
+    #[test]
+    fn dictionary_entry_rejects_non_ascii_case_insensitive_terms() {
+        let err = DictionaryEntry::new(
+            "songs",
+            vec!["Beyonce".to_string(), "Caf\u{00e9}".to_string()],
+            false,
+            DictionarySource::Cli,
+        )
+        .expect_err("unicode case-insensitive dictionaries must fail closed");
+
+        assert!(matches!(
+            err,
+            DictionaryLoadError::UnicodeInsensitiveUnsupported { name } if name == "songs"
+        ));
     }
 }
 
