@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod fixture_citation;
 mod no_tenant_knowledge;
 
 #[derive(Debug, Parser)]
@@ -21,6 +22,7 @@ enum Command {
     ClassMapOverrideSafety,
     RecognizerCompositionValidator,
     NoTenantKnowledge,
+    FixtureCitationLint,
     AuditMetadataOnly,
 }
 
@@ -31,6 +33,7 @@ fn main() -> Result<()> {
         Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
+        Command::FixtureCitationLint => fixture_citation::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
     }
 }
