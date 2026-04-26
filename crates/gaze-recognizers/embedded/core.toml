@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core"
-rulepack_version = "0.4.0"
+rulepack_version = "0.4.5"
 default_locales = ["global"]
 
 [locale.email_headers]
