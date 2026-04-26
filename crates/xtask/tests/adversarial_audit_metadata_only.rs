@@ -90,6 +90,73 @@ fn audit_metadata_only_fails_on_gaze_renamed_crate_alias() {
 }
 
 #[test]
+fn audit_metadata_only_fails_on_function_body_use() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "pub fn restore() {\n    use gaze::RedactionEntry;\n}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "RedactionEntry");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_impl_method_body_use() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "struct Foo;\n\nimpl Foo {\n    fn run(&self) {\n        use gaze::RedactionEntry;\n    }\n}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "RedactionEntry");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_extern_crate_alias() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(restore_dir.join("mod.rs"), "extern crate gaze as g;\n").unwrap();
+
+    assert_gate_rejects(dir.path(), "__renamed_gaze_root__");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_plain_extern_crate() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(restore_dir.join("mod.rs"), "extern crate gaze;\n").unwrap();
+
+    assert_gate_rejects(dir.path(), "__renamed_gaze_root__");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_path_attribute_external_module() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "#[path = \"../external.rs\"]\nmod _path_escape;\n",
+    )
+    .unwrap();
+    fs::write(
+        restore_dir.join("../external.rs"),
+        "use gaze::RedactionEntry;\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "RedactionEntry");
+}
+
+#[test]
 fn audit_metadata_only_fails_for_each_forbidden_audit_symbol() {
     for symbol in [
         "redaction_log",
