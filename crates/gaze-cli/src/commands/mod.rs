@@ -77,7 +77,7 @@ enum Cmd {
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
     },
-    /// Query or export redaction-log metadata without reading raw PII payloads.
+    /// Query, export, or maintain redaction-log metadata without reading raw PII payloads.
     Audit {
         #[command(subcommand)]
         command: AuditCmd,
@@ -145,6 +145,18 @@ enum AuditCmd {
         /// Filter by opaque audit session id.
         #[arg(long = "session")]
         session_id: Option<String>,
+    },
+    /// Purge audit metadata rows older than an ISO 8601 UTC timestamp.
+    Purge {
+        /// SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: PathBuf,
+        /// Purge rows where created_at is before this ISO 8601 UTC timestamp.
+        #[arg(long)]
+        before: String,
+        /// Count matching rows without deleting them.
+        #[arg(long, alias = "count")]
+        dry_run: bool,
     },
 }
 
@@ -233,6 +245,15 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 format,
                 output,
             ),
+            AuditCmd::Purge {
+                audit_db,
+                before,
+                dry_run,
+            } => audit::purge(audit::PurgeArgs {
+                audit_db,
+                before,
+                dry_run,
+            }),
         },
     }
 }
