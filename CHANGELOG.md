@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [bundle-tokenization-drift] Baseline snapshot contract added for `core` and `core-extended` no-policy bundled tokenization output; future snapshot drift must carry an explicit source ACK and this Changed-section marker.
+
 ## [0.4.5] - 2026-04-26
 
 ### Added

@@ -1,0 +1,28 @@
+# bundle-tokenization-drift corpus
+# All positive PII fixture values are synthetic, non-reachable, and unique.
+
+From: "Dr. Schmidt" <alice@example.invalid>
+Contact email bob.audit@example.invalid for updates.
+
+US reserved phone +1 555 0100 routes nowhere.
+DE synthetic phone +49 30 0000 0000 routes nowhere.
+Extended IBAN sample GB82WEST12345698765432 is synthetic.
+Test card 4111 1111 1111 1111 is a Luhn fixture.
+Documentation IP 192.0.2.44 is reserved for examples.
+IPv6 documentation host 2001:db8:85a3::8a2e:370:7334 is reserved.
+US postal fixture 94103-1234 is synthetic in this corpus.
+DE postal fixture 10115 is synthetic in this corpus.
+
+# Tenant-shaped negatives that must not tokenize.
+Order_42 remains tenant metadata.
+Subscriber_12345 remains tenant metadata.
+Customer_98765432101 remains tenant metadata.
+Release version 1.2.3 remains software metadata.
+Bare counter ID54321X appears in a non-postal context.
+Long tenant numeric 1234567890123 remains an identifier.
+URL fragment https://example.invalid/orders#id12345 remains a URL fragment.
+Timestamp 2026-04-26T15:30:45Z remains event metadata.
+Sequential digit run 000111222333 remains event metadata.
+ULID-like ID 01ARZ3NDEKTSV4RRFFQ69G5FAV remains tenant metadata.
+Cross-locale postal shape DE-under-US D80331 and US-under-DE U10001 are documented negatives.
+Email local-part embedded numerics user123@example.invalid should tokenize only as email.
