@@ -764,6 +764,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaze-types"
+version = "0.4.6"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
