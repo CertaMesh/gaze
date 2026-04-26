@@ -1,3 +1,5 @@
+#[cfg(not(feature = "phone-parser"))]
+use gaze::RulepackError;
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, PiiClass, Pipeline, RawDocument, Scope, Session,
 };
@@ -98,6 +100,21 @@ fn iban_mod97_accepts_spec_examples_and_rejects_check_digit_mutants() {
     }
 }
 
+#[cfg(not(feature = "phone-parser"))]
+#[test]
+fn e164_phone_fails_closed_when_phone_parser_feature_disabled() {
+    let result = ValidatorKind::parse("e164_phone");
+
+    assert!(
+        matches!(
+            result,
+            Err(RulepackError::UnsupportedValidator { ref kind }) if kind == "e164_phone"
+        ),
+        "feature-disabled build MUST reject e164_phone with UnsupportedValidator (axis-1 fail-closed); got: {result:?}"
+    );
+}
+
+#[cfg(feature = "phone-parser")]
 #[test]
 fn e164_phone_accepts_assigned_international_number_and_rejects_unassigned_prefix() {
     assert!(ValidatorKind::E164Phone.validates("+4915550112233"));
@@ -116,6 +133,7 @@ fn iban_canonical_is_uppercase_whitespace_free_and_idempotent() {
     );
 }
 
+#[cfg(feature = "phone-parser")]
 #[test]
 fn s3a_e164_phone_passing_candidate_emits_detection_and_round_trips() {
     let pipeline = custom_validator_pipeline(
@@ -133,6 +151,7 @@ fn s3a_e164_phone_passing_candidate_emits_detection_and_round_trips() {
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
+#[cfg(feature = "phone-parser")]
 #[test]
 fn s3a_e164_phone_unassigned_candidate_emits_no_detection() {
     let pipeline = custom_validator_pipeline(
