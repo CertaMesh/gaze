@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+use chrono::DateTime;
 use clap::ValueEnum;
 use gaze::{AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
 use serde::Serialize;
@@ -14,6 +15,8 @@ pub(crate) struct Args {
     pub(crate) source: Option<String>,
     pub(crate) action: Option<String>,
     pub(crate) document_kind: Option<String>,
+    pub(crate) from_iso8601: Option<String>,
+    pub(crate) to_iso8601: Option<String>,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -28,14 +31,17 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
             row.field_name.as_deref().unwrap_or(""),
             row.document_kind,
             row.conflict_loser,
-            row.decided_by
+            row.decided_by,
+            row.created_at
+                .map(|created_at| created_at.to_string())
+                .unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -54,13 +60,33 @@ pub(crate) fn export(
 }
 
 fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
+    // Keep CLI flag parse rejection identical to any future TOML audit-filter
+    // default surface: invalid timestamps are PolicyConfig/exit 2, never clap.
+    let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
+    let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
     let filter = AuditFilter {
         class: args.class.clone(),
         source: args.source.clone(),
         action: args.action.clone(),
         document_kind: args.document_kind.clone(),
+        from_epoch_ms,
+        to_epoch_ms,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
+}
+
+fn parse_iso8601_epoch_ms(value: Option<&str>) -> std::result::Result<Option<i64>, CliError> {
+    value
+        .map(|value| {
+            DateTime::parse_from_rfc3339(value)
+                .map(|datetime| datetime.timestamp_millis())
+                .map_err(|_| {
+                    CliError::PolicyConfigDetail(format!(
+                        "invalid audit ISO 8601 timestamp: {value:?}"
+                    ))
+                })
+        })
+        .transpose()
 }
 
 fn write_jsonl(
@@ -88,6 +114,7 @@ struct JsonlRow {
     document_kind: String,
     conflict_loser: bool,
     decided_by: String,
+    created_at: Option<i64>,
 }
 
 impl From<AuditLogRow> for JsonlRow {
@@ -100,6 +127,7 @@ impl From<AuditLogRow> for JsonlRow {
             document_kind: row.document_kind,
             conflict_loser: row.conflict_loser,
             decided_by: row.decided_by,
+            created_at: row.created_at,
         }
     }
 }
