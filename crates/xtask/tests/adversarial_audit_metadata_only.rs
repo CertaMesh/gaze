@@ -48,6 +48,48 @@ fn audit_metadata_only_fails_when_restore_imports_multiline_redaction_entry() {
 }
 
 #[test]
+fn audit_metadata_only_fails_on_nested_module_redaction_entry() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "mod _restore_probe {\n    use gaze::{ RedactionEntry };\n}\n\npub fn restore() {}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "RedactionEntry");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_gaze_glob_import() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "use gaze::*;\n\npub fn restore() {}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "redaction_log");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_gaze_renamed_crate_alias() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "use gaze as g;\n\npub fn restore() {}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "__renamed_gaze_root__");
+}
+
+#[test]
 fn audit_metadata_only_fails_for_each_forbidden_audit_symbol() {
     for symbol in [
         "redaction_log",
