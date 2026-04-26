@@ -1,0 +1,17 @@
+name: bundle-tokenization-drift
+
+on: [pull_request, push]
+
+jobs:
+  bundle-tokenization-drift:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run bundle tokenization drift gate
+        run: cargo run -p xtask -- bundle-tokenization-drift
+      - name: Verify bundle tokenization drift ACK
+        run: cargo run -p xtask -- bundle-tokenization-drift --verify-ack

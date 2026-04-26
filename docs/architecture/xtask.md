@@ -10,6 +10,7 @@ $ cargo run -p xtask -- symmetric-potemkin
 $ cargo run -p xtask -- class-map-override-safety
 $ cargo run -p xtask -- recognizer-composition-validator
 $ cargo run -p xtask -- no-tenant-knowledge
+$ cargo run -p xtask -- bundle-tokenization-drift
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -22,6 +23,24 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Activated in v0.4.4. Lists and runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. An adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`. |
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Lists and runs the behavioral tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
 | `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Added in v0.4.3. Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
+| `BundleTokenizationDrift` | `cargo run -p xtask -- bundle-tokenization-drift` | Added in v0.4.6. Discovers recognizer-bearing bundled rulepacks from `crates/gaze-recognizers/embedded/*.toml`, runs the real `gaze clean --rulepack-bundled <bundle> --audit-db <tmp>` path against `crates/xtask/fixtures/drift-corpus.txt`, restores emitted tokens to infer byte spans, and compares canonical no-policy tokenization metadata to `crates/xtask/snapshots/<bundle>-no-policy.json`. Snapshots exclude raw values, `session_blob`, and audit `created_at`. `--verify-ack` fails closed when snapshot changes lack both a `// drift-ack:` source/test comment and a `[bundle-tokenization-drift]` line in the `[Unreleased]` `### Changed` section of `CHANGELOG.md`. |
+
+## bundle-tokenization-drift adversarial self-test
+
+Run the clean gate first:
+
+```console
+$ cargo run -p xtask -- bundle-tokenization-drift
+```
+
+Then rehearse failure on a throwaway branch or detached worktree:
+
+1. Temporarily rename an enabled recognizer id in `crates/gaze-recognizers/embedded/core-extended.toml`, for example `id = "ip.v4"` to `id = "ip.v4.drift"`.
+2. Run `cargo run -p xtask -- bundle-tokenization-drift`.
+3. Confirm the gate exits non-zero and names `core-extended`, the old/new recognizer id, `custom:ip_address`, and the changed count.
+4. Revert the TOML edit.
+
+To intentionally update snapshots, run `cargo run -p xtask -- bundle-tokenization-drift --regenerate-baseline`, add or update a nearby `// drift-ack:` source/test comment, and add a `[bundle-tokenization-drift]` line naming each changed bundle under `[Unreleased]` `### Changed` in `CHANGELOG.md`. Then run `cargo run -p xtask -- bundle-tokenization-drift --verify-ack`.
 
 ## audit_metadata_only — known limitations (v0.4.5)
 
