@@ -1,6 +1,6 @@
 use assert_cmd::Command;
 use gaze::{build_audit_query_sql, AuditFilter};
-use rusqlite::Connection;
+use rusqlite::{types::Value as SqlValue, Connection};
 use serde_json::Value;
 use tempfile::tempdir;
 
@@ -114,20 +114,37 @@ fn audit_sql_uses_restricted_column_set() {
         source: Some("email.global".to_string()),
         action: Some("tokenize".to_string()),
         document_kind: Some("text".to_string()),
+        from_epoch_ms: Some(1_700_000_000_000),
+        to_epoch_ms: Some(1_700_000_010_000),
     };
     let (current_sql, values) = build_audit_query_sql(&filter, true, true);
     assert_eq!(
         values,
-        ["email", "email.global", "tokenize", "text"]
-            .into_iter()
-            .map(String::from)
-            .collect::<Vec<_>>()
+        [
+            SqlValue::Text("email".to_string()),
+            SqlValue::Text("email.global".to_string()),
+            SqlValue::Text("tokenize".to_string()),
+            SqlValue::Text("text".to_string()),
+            SqlValue::Integer(1_700_000_000_000),
+            SqlValue::Integer(1_700_000_010_000),
+        ]
+        .into_iter()
+        .collect::<Vec<_>>()
     );
     assert_restricted_sql(&current_sql);
+    assert!(current_sql.contains("(created_at IS NULL OR created_at >= ?)"));
+    assert!(current_sql.contains("(created_at IS NULL OR created_at <= ?)"));
 
-    let (legacy_sql, _) = build_audit_query_sql(&AuditFilter::default(), false, false);
+    let legacy_filter = AuditFilter {
+        from_epoch_ms: Some(1_700_000_000_000),
+        to_epoch_ms: Some(1_700_000_010_000),
+        ..AuditFilter::default()
+    };
+    let (legacy_sql, legacy_values) = build_audit_query_sql(&legacy_filter, false, false);
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
+    assert!(legacy_sql.contains("NULL AS created_at"));
+    assert!(legacy_values.is_empty());
 }
 
 fn assert_restricted_sql(sql: &str) {

@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{params, params_from_iter, Connection, OpenFlags};
+use rusqlite::{params, params_from_iter, types::Value, Connection, OpenFlags};
 
 use crate::detector::PiiClass;
 use crate::rule::Action;
@@ -36,6 +36,8 @@ pub struct AuditFilter {
     pub source: Option<String>,
     pub action: Option<String>,
     pub document_kind: Option<String>,
+    pub from_epoch_ms: Option<i64>,
+    pub to_epoch_ms: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -261,7 +263,7 @@ pub fn build_audit_query_sql(
     filter: &AuditFilter,
     has_decided_by: bool,
     has_created_at: bool,
-) -> (String, Vec<String>) {
+) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
     } else {
@@ -279,19 +281,29 @@ pub fn build_audit_query_sql(
     let mut values = Vec::new();
     if let Some(class) = &filter.class {
         predicates.push("class = ?");
-        values.push(class.clone());
+        values.push(Value::Text(class.clone()));
     }
     if let Some(source) = &filter.source {
         predicates.push("source = ?");
-        values.push(source.clone());
+        values.push(Value::Text(source.clone()));
     }
     if let Some(action) = &filter.action {
         predicates.push("action = ?");
-        values.push(action.clone());
+        values.push(Value::Text(action.clone()));
     }
     if let Some(document_kind) = &filter.document_kind {
         predicates.push("document_kind = ?");
-        values.push(document_kind.clone());
+        values.push(Value::Text(document_kind.clone()));
+    }
+    if has_created_at {
+        if let Some(from_epoch_ms) = filter.from_epoch_ms {
+            predicates.push("(created_at IS NULL OR created_at >= ?)");
+            values.push(Value::Integer(from_epoch_ms));
+        }
+        if let Some(to_epoch_ms) = filter.to_epoch_ms {
+            predicates.push("(created_at IS NULL OR created_at <= ?)");
+            values.push(Value::Integer(to_epoch_ms));
+        }
     }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");
