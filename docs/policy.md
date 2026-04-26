@@ -177,7 +177,7 @@ Output tokens carry the `Custom:` namespace prefix to disambiguate from
 built-ins:
 
 ```text
-Input:  "Call 555-010-0100 to confirm."
+Input:  "Call +1 555 0100 to confirm."
 Output: "Call <{session_hex}:Custom:phone_1> to confirm."
 ```
 
@@ -315,7 +315,7 @@ Bundled rulepacks:
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
-| `core-extended` | `phone.structural`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Validator-backed E.164 phone, IBAN, and credit-card recognizers plus structural IP/postal recognizers. |
+| `core-extended` | `phone.structural`, `phone.national.de`, `phone.national.us`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Validator-backed E.164, DE national, US national phone, IBAN, and credit-card recognizers plus structural IP/postal recognizers. |
 
 Opt into `core-extended` alongside `core`:
 
@@ -333,9 +333,13 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 `core-extended` recognizers are intentionally conservative:
 
 - `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
-  `custom:phone` only when the match passes `e164_phone`. Locale-specific
-  dial strings are not included. Regex-passing but unassigned values such as
-  `+99999999` do not emit detections.
+  `custom:phone` only when the match passes `e164_phone`. Regex-passing but
+  unassigned values such as `+99999999` do not emit detections.
+- `phone.national.de` and `phone.national.us` match parser-backed national
+  phone shapes and emit `custom:phone` under the bundled default locale chain
+  (`en-US`, `de-DE`, `de-AT`, `de-CH`, then `global`). These recognizers
+  cooperate with `phone.structural` so the rulepack can carry multiple phone
+  recognizers without fail-closed same-class rejection.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
@@ -345,10 +349,19 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
 
-Phone, IBAN, and credit-card recognizers are universal (`global`) because their
-validation rules are format-level checks, not locale gates in Gaze policy. They
-are also solo recognizers in their classes, so they do not need
-`cooperates_with` rows. Tenant numeric IDs such as `Subscriber_0001234567` and
+The DE/US national phone validators are behind the `phone-parser` crate feature.
+Default builds enable it. Builds with `--no-default-features` reject
+`e164_phone_national_de` and `e164_phone_national_us` as
+`RulepackError::UnsupportedValidator`, which fails closed instead of silently
+loading regex-only phone recognizers.
+
+US phone fixtures use NANPA 555-0100 through 555-0199, reserved for
+fictional/test use by the North American Numbering Plan Administration's
+555-LINE Number Reservation
+(`https://nationalnanpa.com/number_resource_info/555_numbers.html`). Germany
+does not have an equivalent official fictional phone range; DE fixtures use a
+synthetic-non-reachable policy: literals are chosen to be parser-valid but
+non-routable. Tenant numeric IDs such as `Subscriber_0001234567` and
 `Order_0815` are explicit negative fixtures for those recognizers; broad
 numeric shapes must not become phone or credit-card detections without a
 passing validator.
@@ -388,7 +401,9 @@ kind = "luhn"
 | Kind | Applies to | Behavior |
 |------|------------|----------|
 | `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
-| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core-extended` uses it with `phone.structural` so assigned international numbers such as `+4915550112233` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
+| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core-extended` uses it with `phone.structural` so parser-valid international fixtures such as `+4915100000000` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
+| `e164_phone_national_de` | German national or international phone candidates | Parser-backed DE validation with synthetic-non-reachable fixture allowance because Germany has no NANPA 555-01XX equivalent. |
+| `e164_phone_national_us` | US national or international phone candidates | Parser-backed US validation with NANPA 555-0100 through 555-0199 fixture allowance. |
 | `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
 | `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check. Input is canonicalized as uppercase with ASCII whitespace removed before validation. |
 
@@ -689,7 +704,7 @@ kind = "default"
 action = "preserve"
 ```
 
-Input `Reach Alice at alice@example.invalid or +49 30 1234567` produces
+Input `Reach Alice at alice@example.invalid or +49 30 0000 0000` produces
 `Reach Alice at <{session_hex}:Email_1> or [REDACTED]`.
 
 ### Example B — Custom class for tenant order IDs

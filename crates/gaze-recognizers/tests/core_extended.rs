@@ -1,3 +1,5 @@
+#![cfg(feature = "phone-parser")]
+
 use std::cell::Cell;
 
 use gaze::{
@@ -174,10 +176,34 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(
             &rulepack,
             "phone.structural",
-            "Phone +4915550112233",
+            // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+            // literals chosen for parser-valid + non-routable.
+            "Phone +4915100000000",
             LocaleTag::DeDe
         ),
-        vec!["+4915550112233".to_string()]
+        vec!["+4915100000000".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "phone.national.de",
+            // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+            // literals chosen for parser-valid + non-routable.
+            "Phone +49 30 0000 0000",
+            LocaleTag::DeDe
+        ),
+        vec!["+49 30 0000 0000".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "phone.national.us",
+            // Source: NANPA 555-LINE Number Reservation.
+            // https://nationalnanpa.com/number_resource_info/555_numbers.html
+            "Phone +1 555 0100",
+            LocaleTag::EnUs
+        ),
+        vec!["+1 555 0100".to_string()]
     );
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
@@ -513,7 +539,9 @@ fn core_and_core_extended_compose_without_counter_collision() {
     let clean = clean_text(
         &pipeline,
         &session,
-        "Contact alice@example.invalid or +4915550112233",
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        "Contact alice@example.invalid or +4915100000000",
         LocaleTag::EnUs,
     );
 
@@ -566,7 +594,9 @@ fn core_and_core_extended_compose_with_phase2_without_counter_collision() {
 
     let pipeline = builder.build().expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let input = "Email alice@example.invalid phone +4915550112233 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
+    // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+    // literals chosen for parser-valid + non-routable.
+    let input = "Email alice@example.invalid phone +4915100000000 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
 
     assert!(clean.contains(":Email_1>"), "{clean}");
@@ -584,7 +614,12 @@ fn every_phase1_recognizer_round_trips_through_restore() {
     let pipeline = pipeline_from_rulepack(&rulepack);
 
     for (input, locale) in [
-        ("Call +4915550112233", LocaleTag::DeDe),
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        ("Call +49 30 0000 0000", LocaleTag::DeDe),
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        ("Call +1 555 0100", LocaleTag::EnUs),
         ("Host 192.168.1.1", LocaleTag::EnUs),
         ("Loopback ::1", LocaleTag::EnUs),
         ("Host 2001:db8::1", LocaleTag::EnUs),
@@ -646,6 +681,33 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         .unwrap();
     assert_eq!(ip_v4.cooperates_with, vec!["ip.v6"]);
     assert_eq!(ip_v6.cooperates_with, vec!["ip.v4"]);
+    let phone_structural = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.structural")
+        .unwrap();
+    let phone_de = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.national.de")
+        .unwrap();
+    let phone_us = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.national.us")
+        .unwrap();
+    assert_eq!(
+        phone_structural.cooperates_with,
+        vec!["phone.national.de", "phone.national.us"]
+    );
+    assert_eq!(
+        phone_de.cooperates_with,
+        vec!["phone.structural", "phone.national.us"]
+    );
+    assert_eq!(
+        phone_us.cooperates_with,
+        vec!["phone.structural", "phone.national.de"]
+    );
 
     let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");
     Rulepack::parse(&one_side_removed).expect("one-sided cooperation remains valid");

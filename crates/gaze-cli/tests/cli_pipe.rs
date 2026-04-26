@@ -1486,8 +1486,10 @@ action = "preserve"
 fn s4_audit_export_does_not_return_raw_pii() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("audit.sqlite");
+    // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+    // literals chosen for parser-valid + non-routable.
     let raw_input =
-        "Hello Dr. Schmidt, your phone is +4915550112233 and email alice@example.invalid";
+        "Hello Dr. Schmidt, your phone is +4915100000000 and email alice@example.invalid";
 
     let clean = clean_raw_with_args(
         &[&format!("--audit-db={}", audit_path.display())],
@@ -1646,7 +1648,7 @@ fn s4_audit_query_columns_are_restricted() {
 fn assert_no_raw_audit_pii(bytes: &[u8]) {
     for raw in [
         b"Dr. Schmidt".as_slice(),
-        b"+4915550112233".as_slice(),
+        b"+4915100000000".as_slice(),
         b"alice@example.invalid".as_slice(),
     ] {
         assert!(
@@ -1890,7 +1892,9 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
 
 #[test]
 fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
-    let input = "Email alice@example.invalid phone +4915550112233 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
+    // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+    // literals chosen for parser-valid + non-routable.
+    let input = "Email alice@example.invalid phone +4915100000000 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
     let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
     let core_clean = core_only["clean_text"].as_str().unwrap();
@@ -1937,7 +1941,9 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
 
 #[test]
 fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() {
-    let input = "phone +4915550112233 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
+    // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+    // literals chosen for parser-valid + non-routable.
+    let input = "phone +4915100000000 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_toml_dir, toml_policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
     let toml = clean_json_with_args(&[&format!("--policy={}", toml_policy.display())], input);
@@ -2022,17 +2028,52 @@ fn s3a_cli_bundled_core_extended_rejects_unassigned_e164_phone() {
 fn s3a_cli_bundled_core_extended_tokenizes_valid_e164_phone() {
     let value = clean_json_with_args(
         &["--rulepack-bundled", "core-extended"],
-        "+4915550112233 is real",
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        "+4915100000000 is valid-format",
     );
     let clean = value["clean_text"].as_str().unwrap();
 
     assert!(
-        Regex::new(r"^<[0-9a-f]{8}:Custom:phone_1> is real$")
+        Regex::new(r"^<[0-9a-f]{8}:Custom:phone_1> is valid-format$")
             .unwrap()
             .is_match(clean),
         "unexpected clean text: {clean}"
     );
     assert_eq!(value["stats"]["detections"], 1);
+}
+
+#[test]
+fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() {
+    let de = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        "Phone +49 30 0000 0000",
+    );
+    let de_clean = de["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(de_clean),
+        "unexpected DE clean text: {de_clean}"
+    );
+    assert_eq!(de["stats"]["detections"], 1);
+
+    let us = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        "Phone +1 555 0100",
+    );
+    let us_clean = us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(us_clean),
+        "unexpected US clean text: {us_clean}"
+    );
+    assert_eq!(us["stats"]["detections"], 1);
 }
 
 #[test]
@@ -2085,10 +2126,81 @@ fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
 }
 
 #[test]
+fn s2_core_extended_national_phone_shipping_smoke() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+
+    let no_policy_us = clean_json_with_args(
+        &["--rulepack-bundled=core-extended"],
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        "Phone +1 555 0100",
+    );
+    let no_policy_us_clean = no_policy_us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(no_policy_us_clean),
+        "unexpected no-policy US national phone clean text: {no_policy_us_clean}"
+    );
+    let no_policy_order = clean_json_with_args(&["--rulepack-bundled=core-extended"], "Order_0815");
+    assert_eq!(no_policy_order["clean_text"], "Order_0815");
+    assert_eq!(no_policy_order["stats"]["detections"], 0);
+
+    let us = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en-US"],
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        "Phone +1 555 0100",
+    );
+    let us_clean = us["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(us_clean),
+        "unexpected US national phone clean text: {us_clean}"
+    );
+    assert_eq!(us["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(us["session_blob"].as_str().unwrap(), us_clean),
+        "Phone +1 555 0100"
+    );
+
+    let de = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        "Phone +49 30 0000 0000",
+    );
+    let de_clean = de["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(de_clean),
+        "unexpected DE national phone clean text: {de_clean}"
+    );
+    assert_eq!(de["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(de["session_blob"].as_str().unwrap(), de_clean),
+        "Phone +49 30 0000 0000"
+    );
+
+    let de_under_en = clean_json_with_args(
+        &[&format!("--policy={}", policy.display()), "--locale=en-US"],
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
+        "Phone +49 30 0000 0000",
+    );
+    assert_eq!(de_under_en["clean_text"], "Phone +49 30 0000 0000");
+    assert_eq!(de_under_en["stats"]["detections"], 0);
+}
+
+#[test]
 fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
     let (_dir, policy) =
-        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "de-DE");
-    let input = "Subscriber_0001234567 Order_0815 0123-456789 0815 12345";
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+    let input =
+        "Subscriber_0001234567 Order_0815 0123-456789 0815 12345 SO-12345-67890 ORDR-9876543210";
     let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
     let clean = value["clean_text"].as_str().unwrap();
 
