@@ -549,6 +549,71 @@ mod tests {
     }
 
     #[test]
+    fn t20b_rulepack_context_dict_override_fails_closed_when_uncovered() {
+        let policy = gaze::Policy {
+            session: SessionPolicy {
+                scope: SessionScope::Ephemeral,
+                ttl_secs: None,
+            },
+            detectors: Vec::new(),
+            dictionaries: Vec::new(),
+            rules: vec![
+                RuleSpec::Class {
+                    class: PiiClass::custom("foo"),
+                    action: Action::Tokenize,
+                },
+                RuleSpec::Default {
+                    action: Action::Preserve,
+                },
+            ],
+            ner: None,
+            rulepacks: gaze::RulepackPolicy {
+                bundled: Vec::new(),
+                paths: Vec::new(),
+            },
+            locale: Some(vec![LocaleTag::Global]),
+        };
+        let context = context_with_alpha_override();
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "tenant-rulepack"
+rulepack_version = "0.4.5"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "tenant.alpha"
+class = "custom:foo"
+enabled = true
+
+[recognizers.match]
+kind = "dictionary"
+terms_from_context = "dict_alpha"
+case_sensitive = true
+"#,
+        )
+        .expect("rulepack");
+        let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+        let err = match build_pipeline(&policy, &context, &[rulepack], &active_locales, None) {
+            Ok(_) => panic!("rulepack context dictionary override must fail closed"),
+            Err(err) => err,
+        };
+
+        assert!(matches!(
+            err,
+            BuildError::Rulepack(RulepackError::ClassMapOverrideClash {
+                dict,
+                old_class,
+                new_class,
+                ..
+            }) if dict == "dict_alpha"
+                && old_class == PiiClass::custom("foo")
+                && new_class == PiiClass::custom("bar")
+        ));
+    }
+
+    #[test]
     fn pattern_template_lowers_correctly_under_locale_chain_de() {
         let core = Rulepack::load(gaze::RulepackSource::Embedded(
             gaze_recognizers::embedded("core").expect("core"),

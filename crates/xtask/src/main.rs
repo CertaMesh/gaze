@@ -21,10 +21,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::SymmetricPotemkin => run_symmetric_potemkin_gate(),
-        Command::ClassMapOverrideSafety => {
-            println!("class_map_override_safety: scaffolded");
-            Ok(())
-        }
+        Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
     }
 }
@@ -128,6 +125,29 @@ const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
     },
 ];
 
+const CLASS_MAP_OVERRIDE_SAFETY_TESTS: &[BehavioralTest] = &[
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20_context_class_map_overrides_policy_dict_class",
+    },
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered",
+    },
+    BehavioralTest {
+        package: "gaze-assembly",
+        test_target: None,
+        name: "tests::t20b_rulepack_context_dict_override_fails_closed_when_uncovered",
+    },
+    BehavioralTest {
+        package: "gaze-cli",
+        test_target: Some("cli_pipe"),
+        name: "context_json_standalone_dictionary_detects_without_policy_entry",
+    },
+];
+
 fn run_symmetric_potemkin_gate() -> Result<()> {
     println!(
         "symmetric_potemkin_gate: checking {} behavioral tests",
@@ -140,6 +160,21 @@ fn run_symmetric_potemkin_gate() -> Result<()> {
         run_behavioral_test(*test)?;
     }
     println!("symmetric_potemkin_gate: passed");
+    Ok(())
+}
+
+fn run_class_map_override_safety_gate() -> Result<()> {
+    println!(
+        "class_map_override_safety: checking {} behavioral tests",
+        CLASS_MAP_OVERRIDE_SAFETY_TESTS.len()
+    );
+    for test in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
+        ensure_test_exists(*test)?;
+    }
+    for test in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
+        run_behavioral_test(*test)?;
+    }
+    println!("class_map_override_safety: passed");
     Ok(())
 }
 
@@ -180,7 +215,7 @@ fn ensure_test_exists(test: BehavioralTest) -> Result<()> {
 }
 
 fn run_behavioral_test(test: BehavioralTest) -> Result<()> {
-    println!("symmetric_potemkin_gate: running {}", describe(test));
+    println!("behavioral_test: running {}", describe(test));
     let status = cargo_test_command(test, Some(test.name))
         .arg("--")
         .arg("--exact")
