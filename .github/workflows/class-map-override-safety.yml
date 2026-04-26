@@ -4,7 +4,7 @@ on: [pull_request, push]
 
 jobs:
   class-map-override-safety:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
