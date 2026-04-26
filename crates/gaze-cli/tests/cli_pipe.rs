@@ -1739,6 +1739,34 @@ fn s2_cli_bundled_smoke_drops_luhn_failing_formatted_cc() {
 }
 
 #[test]
+fn s3a_cli_bundled_core_extended_rejects_unassigned_e164_phone() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        "+99999999 is fake",
+    );
+
+    assert_eq!(value["clean_text"], "+99999999 is fake");
+    assert_eq!(value["stats"]["detections"], 0);
+}
+
+#[test]
+fn s3a_cli_bundled_core_extended_tokenizes_valid_e164_phone() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        "+4915550112233 is real",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^<[0-9a-f]{8}:Custom:phone_1> is real$")
+            .unwrap()
+            .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(value["stats"]["detections"], 1);
+}
+
+#[test]
 fn s2_core_extended_cli_locale_gating_and_plain_en_negative() {
     let (_dir, policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");

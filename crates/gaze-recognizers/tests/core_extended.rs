@@ -174,10 +174,10 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(
             &rulepack,
             "phone.structural",
-            "Phone +4915112345678",
+            "Phone +4915550112233",
             LocaleTag::DeDe
         ),
-        vec!["+4915112345678".to_string()]
+        vec!["+4915550112233".to_string()]
     );
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
@@ -210,6 +210,7 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "2026-04-25",
         "0815 12345",
         "0123-456789",
+        "+99999999",
         "Subscriber_0001234567",
         "Order_0815",
     ] {
@@ -512,7 +513,7 @@ fn core_and_core_extended_compose_without_counter_collision() {
     let clean = clean_text(
         &pipeline,
         &session,
-        "Contact alice@example.invalid or +4915112345678",
+        "Contact alice@example.invalid or +4915550112233",
         LocaleTag::EnUs,
     );
 
