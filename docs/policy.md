@@ -74,6 +74,19 @@ recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
 define the auditable contract; changing them requires changing the policy or
 rulepack document itself.
 
+## Bundled rulepack version drift
+
+Bundled rulepacks in
+[`crates/gaze-recognizers/embedded`](../crates/gaze-recognizers/embedded) are
+release artifacts. Their `rulepack_version` tracks the `gaze-recognizers` crate
+version unless a deliberate desync rule is documented before the release ships.
+
+A deliberate desync rule must name the affected bundled rulepack IDs, explain
+why the rulepack contract differs from the crate release, and state when the
+versions converge again. Undocumented drift is a release defect because it
+weakens the audit trail for which recognizer contract shipped with a given
+crate.
+
 ## Configuration surfaces - three-surfaces parity table
 
 This table audits every current `policy.toml` field accepted by
