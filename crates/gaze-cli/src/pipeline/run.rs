@@ -10,9 +10,9 @@ use base64::Engine;
 use serde::Serialize;
 
 use gaze::{
-    Action, DictionaryBundle, DictionarySource, DocumentKind, LocaleTag, Policy, RawDocument,
-    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, RulepackPolicy, Scope,
-    SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger, TypedContext,
+    Action, DictionaryBundle, DictionarySource, DocumentKind, LocaleTag, PiiClass, Policy,
+    RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, RulepackPolicy,
+    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger, TypedContext,
 };
 
 use crate::clean_overrides::CleanOverrides;
@@ -64,6 +64,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     } else {
         None
     };
+    let effective_policy = loaded_policy.as_ref().or(cli_rulepack_policy.as_ref());
     let loaded_rulepacks = match (&loaded_policy, &cli_rulepack_policy) {
         (Some(policy), _) | (None, Some(policy)) => {
             load_rulepacks(policy).map_err(map_pipeline_error)?
@@ -81,9 +82,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         .unwrap_or_default();
     let rulepack_dictionaries =
         dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;
-    let active_policy = loaded_policy.as_ref().or(cli_rulepack_policy.as_ref());
-    let policy_bundle = active_policy
-        .as_ref()
+    let policy_bundle = effective_policy
         .map(|policy| {
             let mut dictionaries = policy.dictionaries.clone();
             dictionaries.extend(rulepack_dictionaries);
@@ -96,12 +95,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let cli_locales = parse_cli_locales(options.locale)?;
     let locale_chain = gaze::LocaleChain::merge_cli_policy_rulepack_default(
         cli_locales.as_deref(),
-        active_policy.and_then(|policy| policy.locale.as_deref()),
+        effective_policy.and_then(|policy| policy.locale.as_deref()),
         Some(&rulepack_default_locales),
     );
-    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, active_policy);
+    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, effective_policy);
 
-    let pipeline = match active_policy {
+    let pipeline = match effective_policy {
         Some(policy) => build_pipeline_from_policy(
             policy,
             &loaded_rulepacks,
@@ -123,7 +122,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         }
     };
 
-    let session = match active_policy {
+    let session = match effective_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
         None => Session::new(scope_for_cli_without_policy(
             clean_overrides.session_scope.as_ref(),
@@ -212,6 +211,10 @@ fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
 }
 
 fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
+    let mut rules = class_rules_for_bundled_overrides(clean_overrides);
+    rules.push(RuleSpec::Default {
+        action: Action::Preserve,
+    });
     let base = Policy {
         session: SessionPolicy {
             scope: SessionScope::Persistent,
@@ -219,9 +222,7 @@ fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
         },
         detectors: Vec::new(),
         dictionaries: Vec::new(),
-        rules: vec![RuleSpec::Default {
-            action: Action::Tokenize,
-        }],
+        rules,
         ner: None,
         rulepacks: RulepackPolicy {
             bundled: Vec::new(),
@@ -230,6 +231,45 @@ fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
         locale: None,
     };
     clean_overrides.apply_to(&base)
+}
+
+fn class_rules_for_bundled_overrides(clean_overrides: &CleanOverrides) -> Vec<RuleSpec> {
+    let Some(bundled) = &clean_overrides.rulepack_bundled else {
+        return Vec::new();
+    };
+    let mut classes = Vec::<PiiClass>::new();
+    for bundle in bundled {
+        match bundle.as_str() {
+            "core" => {
+                push_class_once(&mut classes, PiiClass::Email);
+                push_class_once(&mut classes, PiiClass::Name);
+            }
+            "core-extended" => {
+                push_class_once(&mut classes, PiiClass::custom("phone"));
+                push_class_once(&mut classes, PiiClass::custom("ip_address"));
+                push_class_once(&mut classes, PiiClass::custom("postal_code"));
+                push_class_once(&mut classes, PiiClass::custom("iban"));
+                push_class_once(&mut classes, PiiClass::custom("credit_card"));
+            }
+            "locale-de" | "locale-en" => {
+                push_class_once(&mut classes, PiiClass::Name);
+            }
+            _ => {}
+        }
+    }
+    classes
+        .into_iter()
+        .map(|class| RuleSpec::Class {
+            class,
+            action: Action::Tokenize,
+        })
+        .collect()
+}
+
+fn push_class_once(classes: &mut Vec<PiiClass>, class: PiiClass) {
+    if !classes.iter().any(|existing| existing == &class) {
+        classes.push(class);
+    }
 }
 
 fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u64>) -> Scope {
