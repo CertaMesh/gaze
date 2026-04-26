@@ -187,8 +187,8 @@ impl Session {
     ///
     /// Intended for restore-side callers that need to build an exact-literal
     /// alternation regex over the session map (Pass 1 of the two-pass restore
-    /// strategy in `docs/roadmap/v0.3/cli.md`): replacing token-shaped strings
-    /// via a class-shape regex alone is unsafe because it either (a) straddles
+    /// strategy documented in `ROADMAP.md`): replacing token-shaped strings via
+    /// a class-shape regex alone is unsafe because it either (a) straddles
     /// word boundaries into adjacent text, or (b) misses lowercase
     /// FormatPreserve shapes like `location_1`. Feeding these exact strings
     /// into `regex::escape` and sorting longest-first avoids both pitfalls.

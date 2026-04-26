@@ -12,8 +12,8 @@ use crate::error::{CliError, RestoreMode, RestoreWarning};
 /// `email1.<session>@gaze-fake.invalid` wins over a substring match like `<Email_1>`. Bare
 /// format-preserving tokens stay wrapped in `\b` word boundaries so a token
 /// cannot be swallowed inside an adjacent identifier (the
-/// `hostName_1s-record` regression in `docs/roadmap/v0.3/cli.md` §"Test
-/// strategy" #5). Wrapped counter tokens intentionally skip `\b`: `<` and
+/// `hostName_1s-record` regression described in the consolidated roadmap.
+/// Wrapped counter tokens intentionally skip `\b`: `<` and
 /// `>` are explicit delimiters, and `\b` would miss `See <Email_1>.` because
 /// it does not fire across non-word characters. Empty session map is a no-op:
 /// `Regex::new("")` would match everywhere, so short-circuit.
