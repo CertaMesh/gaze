@@ -8,6 +8,14 @@ pub trait RedactionLogger: Send + Sync {
     fn log(&self, entry: &RedactionEntry) -> Result<()>;
 }
 
+#[cfg(feature = "audit")]
+impl RedactionLogger for gaze_audit::SqliteLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<()> {
+        gaze_audit::SqliteLogger::log(self, entry)
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))
+    }
+}
+
 pub(crate) fn current_epoch_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
