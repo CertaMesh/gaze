@@ -1,0 +1,19 @@
+name: fixture-citation-lint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  fixture-citation-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Run fixture citation lint gate
+        run: cargo run -p xtask -- fixture-citation-lint
