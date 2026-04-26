@@ -160,6 +160,8 @@ echo '{"text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>"}' | 
 
 Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{session_hex}:Location_N>`, `<{session_hex}:Organization_N>`, `<{session_hex}:Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1.{session_hex}@gaze-fake.invalid`) intentionally stay bare — the whole point is to look like a real email.
 
+Default bundled-rulepack tokenization is a contract surface. The no-policy baselines for bundled outputs live in `crates/xtask/snapshots/`, and intentional drift requires a `[bundle-tokenization-drift]` `CHANGELOG.md` `[Unreleased]` Changed entry alongside a source ACK. See `ROADMAP.md` Now/Next/Later for the live stability context behind these gates.
+
 #### Audit Query and Export (v0.4.3+)
 
 When `gaze clean --audit-db <path>` is enabled, the metadata-only redaction log is queryable from the CLI:
