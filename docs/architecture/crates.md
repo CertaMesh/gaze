@@ -8,12 +8,11 @@ The root [`Cargo.toml`](../../Cargo.toml) is the workspace source of truth.
 
 | Crate | Role | Key types / entry points | Depends on | Depended on by | When to use |
 |-------|------|--------------------------|------------|----------------|-------------|
-| [`gaze`](../../crates/gaze) | Core reversible pseudonymization library. Owns policies, sessions, token restore, locale chains, rulepacks, registries, and redaction logging. | `Pipeline`, `PipelineBuilder`, `Session`, `Policy`, `RecognizerRegistry`, `LocaleChain`, `Rulepack`, `PiiClass`, `Action`, `RawDocument`, `CleanDocument`, `SensitiveSnapshot`. | External crates only. `gaze-recognizers` is a dev-dependency for tests. | `gaze-assembly`, `gaze-recognizers`, `gaze-cli`, `debug-proxy`. | Use from adapters or applications that want to construct pipelines directly and keep control over recognizer registration, session lifetime, restore, and audit behavior. |
+| [`gaze`](../../crates/gaze) | Core reversible pseudonymization library. Owns policies, sessions, token restore, locale chains, rulepacks, registries, and redaction logging. | `Pipeline`, `PipelineBuilder`, `Session`, `Policy`, `RecognizerRegistry`, `LocaleChain`, `Rulepack`, `PiiClass`, `Action`, `RawDocument`, `CleanDocument`, `SensitiveSnapshot`. | External crates only. `gaze-recognizers` is a dev-dependency for tests. | `gaze-assembly`, `gaze-recognizers`, `gaze-cli`, and external consumers such as [piinuts/glance](https://github.com/PIInuts/glance). | Use from adapters or applications that want to construct pipelines directly and keep control over recognizer registration, session lifetime, restore, and audit behavior. |
 | [`gaze-assembly`](../../crates/gaze-assembly) | Policy-to-pipeline builder. Converts loaded policy, context, rulepacks, active locales, and NER threshold into a core `Pipeline`. | `build_pipeline(policy, context, rulepacks, active_locales, ner_threshold)`, `BuildError`. | `gaze`, `gaze-recognizers`. | `gaze-cli`. | Use when you want the same policy/rulepack assembly path as the CLI without copying CLI code. This crate exists so `gaze` does not depend on built-in recognizers. |
-| [`gaze-recognizers`](../../crates/gaze-recognizers) | Built-in recognizer backends and embedded rulepacks. | `RegexDetector`, `DictionaryRecognizer`, `NerRecognizer`, `NerDetector`, `NerOptions`, `NormalizerKind`, `ValidatorKind`, `embedded(name)`. | `gaze` plus backend dependencies such as `regex`, `aho-corasick`, `ort`, and `tokenizers`. | `gaze-assembly`, `gaze-cli`, `debug-proxy`; `gaze` tests use it as a dev-dependency. | Use when an adopter wants the shipped regex, dictionary, or ONNX NER recognizers instead of implementing `gaze::Recognizer` directly. |
+| [`gaze-recognizers`](../../crates/gaze-recognizers) | Built-in recognizer backends and embedded rulepacks. | `RegexDetector`, `DictionaryRecognizer`, `NerRecognizer`, `NerDetector`, `NerOptions`, `NormalizerKind`, `ValidatorKind`, `embedded(name)`. | `gaze` plus backend dependencies such as `regex`, `aho-corasick`, `ort`, and `tokenizers`. | `gaze-assembly`, `gaze-cli`, and external consumers such as [piinuts/glance](https://github.com/PIInuts/glance); `gaze` tests use it as a dev-dependency. | Use when an adopter wants the shipped regex, dictionary, or ONNX NER recognizers instead of implementing `gaze::Recognizer` directly. |
 | [`gaze-cli`](../../crates/gaze-cli) | Published `gaze` binary for pipe-mode integrations. | Binary `gaze`; subcommands `clean` and `restore`; flags such as `--policy`, `--locale`, `--context-json`, `--audit-db`, `--restore-mode`. | `gaze`, `gaze-assembly`, `gaze-recognizers`. | External host adapters and shell integrations. | Use from language adapters or scripts that need a stable process boundary rather than linking Rust. |
 | [`xtask`](../../crates/xtask) | Internal gate runner. Not published. | Binary `xtask`; gates `symmetric-potemkin`, `class-map-override-safety` (active since v0.4.4), `recognizer-composition-validator`, `no-tenant-knowledge` (added v0.4.3). | `anyhow`, `clap`; shells out to `cargo test` or scans production source. | CI and maintainers. | Use when adding or verifying regression gates that must run real behavioral tests. |
-| [`debug-proxy`](../../crates/debug-proxy) | Internal MCP consumer for debugging MySQL and Laravel-log data through Gaze. | Library modules `adapter`, `cli`, `mcp`, `policy`; binary `debug-proxy` with `init`, `check`, `serve`. | `gaze`, `gaze-recognizers`, `rmcp`, `sqlx`, `tokio`, `toml`. | Operators running the debug MCP server. | Use to expose allowlisted DB/log tools to an MCP client while routing sampled data through Gaze pseudonymization. |
 
 ## Dependency direction
 
@@ -29,7 +28,6 @@ gaze
           |
        gaze-cli
 
-gaze + gaze-recognizers -> debug-proxy
 xtask -> cargo test subprocesses
 ```
 
@@ -51,7 +49,6 @@ Published crates:
 Internal crates:
 
 - `xtask`
-- `debug-proxy`
 
 Internal crates can depend on the published crates, but published crates should
 not grow dependencies on internal tooling. If a feature needs to be reusable by
@@ -81,5 +78,7 @@ context-file loading, audit database path handling, or restore-mode handling.
 Put code in `xtask` when it is a repository gate. Gates must prove behavior by
 running named tests; see [xtask](xtask.md).
 
-Put code in `debug-proxy` when it is specific to the MCP debug consumer,
-database/log adapters, or its policy wrapper.
+The MCP debug consumer formerly housed in `debug-proxy` now lives in
+[piinuts/glance](https://github.com/PIInuts/glance). Keep consumer-specific
+database/log adapter work there unless the change belongs in Gaze's reusable
+runtime, recognizers, assembly layer, CLI, or gates.
