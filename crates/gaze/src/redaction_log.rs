@@ -38,7 +38,7 @@ pub(crate) fn current_epoch_ms() -> i64 {
 ///     decided_by: gaze::ConflictTier::None,
 ///     created_at: 0,
 ///     session_id: None,
-///     // fixture-cited(crates/gaze/tests/contracts.rs:raw_document_is_not_serializable)
+///     // fixture-cited(crates/gaze/src/pipeline.rs:pipeline::tests::pipeline_builder_detects_email)
 ///     raw: Some("alice@example.invalid".to_string()),
 /// };
 /// ```
