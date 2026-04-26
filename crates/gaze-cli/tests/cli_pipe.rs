@@ -1214,6 +1214,108 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
 }
 
 #[test]
+fn s2_audit_cli_smoke_filters_created_at_range() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "1970-01-01T00:00:00Z",
+            "--to",
+            "2999-12-31T23:59:59Z",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    let row = stdout
+        .lines()
+        .find(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t"))
+        .expect("expected email audit row in bounded time range");
+    let created_at = row
+        .split('\t')
+        .next_back()
+        .expect("created_at column")
+        .parse::<i64>()
+        .expect("created_at is epoch milliseconds");
+    assert!(created_at > 0, "expected positive created_at: {row}");
+
+    let future = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "2999-12-31T23:59:59Z",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        future.status.success(),
+        "future audit query failed: {}",
+        String::from_utf8_lossy(&future.stderr)
+    );
+    let future_stdout = String::from_utf8(future.stdout).unwrap();
+    assert_eq!(
+        future_stdout.lines().count(),
+        1,
+        "future lower bound should return only the header: {future_stdout}"
+    );
+}
+
+#[test]
+fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    for subcommand in ["query", "export"] {
+        let mut command = Command::cargo_bin("gaze").unwrap();
+        command.args([
+            "audit",
+            subcommand,
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "invalid-date",
+        ]);
+        if subcommand == "export" {
+            command.args(["--format", "jsonl"]);
+        }
+        let output = command.output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let stderr: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(stderr["error"], "PolicyConfig");
+        assert_eq!(stderr["exit"], 2);
+        assert_eq!(stderr["detail"], "invalid audit ISO 8601 timestamp");
+    }
+}
+
+#[test]
 fn s4_audit_export_does_not_return_raw_pii() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("audit.sqlite");

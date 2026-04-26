@@ -5,9 +5,9 @@ use serde_json::Value;
 use tempfile::tempdir;
 
 #[test]
-fn current_schema_fixture_is_queryable() {
+fn v0_4_3_shape_without_created_at_is_queryable_and_time_filters_pass_through() {
     let dir = tempdir().unwrap();
-    let audit_path = dir.path().join("current.sqlite");
+    let audit_path = dir.path().join("v0.4.3.sqlite");
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute_batch(
         r#"
@@ -39,6 +39,10 @@ fn current_schema_fixture_is_queryable() {
             "jsonl",
             "--class",
             "email",
+            "--from",
+            "2099-01-01T00:00:00Z",
+            "--to",
+            "2099-01-02T00:00:00Z",
         ])
         .output()
         .unwrap();
@@ -56,6 +60,64 @@ fn current_schema_fixture_is_queryable() {
     assert_eq!(row["document_kind"], "text");
     assert_eq!(row["conflict_loser"], false);
     assert_eq!(row["decided_by"], "recognizer_id");
+    assert_eq!(row["created_at"], Value::Null);
+}
+
+#[test]
+fn v0_4_4_shape_with_created_at_is_queryable_and_time_filtered() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("v0.4.4.sqlite");
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE redaction_log (
+            source TEXT NOT NULL,
+            class TEXT NOT NULL,
+            action TEXT NOT NULL,
+            field_name TEXT NULL,
+            document_kind TEXT NOT NULL,
+            conflict_loser INTEGER NOT NULL,
+            decided_by TEXT NOT NULL DEFAULT 'none',
+            created_at INTEGER NULL
+        );
+        INSERT INTO redaction_log
+            (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at)
+        VALUES
+            ('email.global', 'email', 'tokenize', NULL, 'text', 0, 'recognizer_id', 1700000000000),
+            ('phone.global', 'custom:phone', 'tokenize', NULL, 'text', 0, 'recognizer_id', 1700001000000);
+        "#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--from",
+            "2023-11-14T22:13:20Z",
+            "--to",
+            "2023-11-14T22:13:20Z",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let rows: Vec<Value> = String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["source"], "email.global");
+    assert_eq!(rows[0]["created_at"], 1700000000000_i64);
 }
 
 #[test]
