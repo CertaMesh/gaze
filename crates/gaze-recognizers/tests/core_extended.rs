@@ -194,6 +194,22 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ),
         vec!["+49 30 0000 0000".to_string()]
     );
+    for (input, expected) in [
+        // Source: synthetic-non-reachable; Germany has no official fictional
+        // range equivalent to NANPA 555-01XX, so these literals are
+        // parser-valid but intentionally non-routable-looking test shapes.
+        ("Phone +49 40 0000 0000", "+49 40 0000 0000"),
+        ("Phone +49 89 0000 0000", "+49 89 0000 0000"),
+        ("Phone +49 69 0000 0000", "+49 69 0000 0000"),
+        ("Phone +49 221 0000 000", "+49 221 0000 000"),
+        ("Phone +49 711 0000 000", "+49 711 0000 000"),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
     assert_eq!(
         detect_recognizer(
             &rulepack,
@@ -232,17 +248,28 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
 
     for input in [
         "1.2.3.4567",
+        "1.2.3",
         "version v1.2.3.4",
         "2026-04-25",
         "0815 12345",
         "0123-456789",
         "+99999999",
+        "Order_42",
+        "Subscriber_12345",
+        "This bare inventory count is 12345 in a non-postal sentence",
         "Subscriber_0001234567",
+        "Subscriber_4915550112233",
+        "Customer_4915550112234",
+        "Order_4915550112235",
         "Order_0815",
     ] {
         assert!(
             detect_recognizer(&rulepack, "phone.structural", input, LocaleTag::DeDe).is_empty(),
             "phone.structural must not fire for {input}"
+        );
+        assert!(
+            detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe).is_empty(),
+            "phone.national.de must not fire for {input}"
         );
     }
 }
