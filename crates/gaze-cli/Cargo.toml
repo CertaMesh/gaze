@@ -12,6 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 base64 = "0.22"
+chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 gaze = { path = "../gaze" }
 gaze-assembly = { path = "../gaze-assembly" }
