@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod bundle_tokenization_drift;
 mod no_tenant_knowledge;
 
 #[derive(Debug, Parser)]
@@ -22,6 +23,7 @@ enum Command {
     RecognizerCompositionValidator,
     NoTenantKnowledge,
     AuditMetadataOnly,
+    BundleTokenizationDrift(bundle_tokenization_drift::Args),
 }
 
 fn main() -> Result<()> {
@@ -32,6 +34,7 @@ fn main() -> Result<()> {
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
+        Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
     }
 }
 
