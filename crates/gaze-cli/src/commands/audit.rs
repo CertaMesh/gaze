@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
+use chrono::DateTime;
 use clap::ValueEnum;
 use gaze::{AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
 use serde::Serialize;
@@ -14,6 +15,8 @@ pub(crate) struct Args {
     pub(crate) source: Option<String>,
     pub(crate) action: Option<String>,
     pub(crate) document_kind: Option<String>,
+    pub(crate) from_iso8601: Option<String>,
+    pub(crate) to_iso8601: Option<String>,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,15 +60,29 @@ pub(crate) fn export(
 }
 
 fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
+    // Keep CLI flag parse rejection identical to any future TOML audit-filter
+    // default surface: invalid timestamps are PolicyConfig/exit 2, never clap.
+    let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
+    let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
     let filter = AuditFilter {
         class: args.class.clone(),
         source: args.source.clone(),
         action: args.action.clone(),
         document_kind: args.document_kind.clone(),
-        from_epoch_ms: None,
-        to_epoch_ms: None,
+        from_epoch_ms,
+        to_epoch_ms,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
+}
+
+fn parse_iso8601_epoch_ms(value: Option<&str>) -> std::result::Result<Option<i64>, CliError> {
+    value
+        .map(|value| {
+            DateTime::parse_from_rfc3339(value)
+                .map(|datetime| datetime.timestamp_millis())
+                .map_err(|_| CliError::PolicyConfigDetail("invalid audit ISO 8601 timestamp"))
+        })
+        .transpose()
 }
 
 fn write_jsonl(
