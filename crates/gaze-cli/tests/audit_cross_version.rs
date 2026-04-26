@@ -5,7 +5,7 @@ use serde_json::Value;
 use tempfile::tempdir;
 
 #[test]
-fn v0_4_3_shape_without_created_at_is_queryable_and_time_filters_pass_through() {
+fn v0_4_3_shape_without_created_at_is_queryable_but_time_filters_omit_nulls() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("v0.4.3.sqlite");
     let conn = Connection::open(&audit_path).unwrap();
@@ -51,8 +51,33 @@ fn v0_4_3_shape_without_created_at_is_queryable_and_time_filters_pass_through() 
         "audit export failed: {}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let line = String::from_utf8(output.stdout).unwrap();
-    let row: Value = serde_json::from_str(line.trim()).unwrap();
+    assert!(
+        output.stdout.is_empty(),
+        "filtered legacy rows with NULL created_at must be omitted: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--class",
+            "email",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let row: Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(row["class"], "email");
     assert_eq!(row["source"], "email.global");
     assert_eq!(row["action"], "tokenize");
@@ -194,8 +219,9 @@ fn audit_sql_uses_restricted_column_set() {
         .collect::<Vec<_>>()
     );
     assert_restricted_sql(&current_sql);
-    assert!(current_sql.contains("(created_at IS NULL OR created_at >= ?)"));
-    assert!(current_sql.contains("(created_at IS NULL OR created_at <= ?)"));
+    assert!(current_sql.contains("created_at >= ?"));
+    assert!(current_sql.contains("created_at <= ?"));
+    assert!(!current_sql.contains("created_at IS NULL"));
 
     let legacy_filter = AuditFilter {
         from_epoch_ms: Some(1_700_000_000_000),
@@ -206,7 +232,17 @@ fn audit_sql_uses_restricted_column_set() {
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
     assert!(legacy_sql.contains("NULL AS created_at"));
-    assert!(legacy_values.is_empty());
+    assert!(legacy_sql.contains("NULL >= ?"));
+    assert!(legacy_sql.contains("NULL <= ?"));
+    assert_eq!(
+        legacy_values,
+        [
+            SqlValue::Integer(1_700_000_000_000),
+            SqlValue::Integer(1_700_000_010_000),
+        ]
+        .into_iter()
+        .collect::<Vec<_>>()
+    );
 }
 
 fn assert_restricted_sql(sql: &str) {

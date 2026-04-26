@@ -80,7 +80,11 @@ fn parse_iso8601_epoch_ms(value: Option<&str>) -> std::result::Result<Option<i64
         .map(|value| {
             DateTime::parse_from_rfc3339(value)
                 .map(|datetime| datetime.timestamp_millis())
-                .map_err(|_| CliError::PolicyConfigDetail("invalid audit ISO 8601 timestamp"))
+                .map_err(|_| {
+                    CliError::PolicyConfigDetail(format!(
+                        "invalid audit ISO 8601 timestamp: {value:?}"
+                    ))
+                })
         })
         .transpose()
 }
