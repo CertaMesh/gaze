@@ -9,8 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- [bundle-tokenization-drift] Baseline snapshot contract added for `core` and `core-extended` no-policy bundled tokenization output; future snapshot drift must carry an explicit source ACK and this Changed-section marker.
-- [bundle-tokenization-drift] `core`/`core-extended` baselines updated for the S4 `core-extended` DE national phone broaden fixture.
+- [bundle-tokenization-drift] Release aggregation refreshed `core` and `core-extended` no-policy snapshots for the v0.4.6 bundled rulepack version bump.
+
+## [0.4.6] - 2026-04-26
+
+### Changed
+
+- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.6`.
+- Bundled rulepack versions now track `gaze-recognizers` at `0.4.6`.
+- **Bundle-tokenization drift gate:** no-policy `core` and `core-extended` bundled outputs now have checked-in baselines; intentional drift requires an explicit source ACK and changelog marker before release.
+- **Fixture-citation lint:** synthetic fixture policy is now enforced by `xtask`, tightening the no-real-PII discipline for examples and tests.
+- **Rulepack-derived bundle classes:** bundled class listings are derived from rulepacks instead of hand-maintained metadata, reducing release drift for adopter-facing bundle docs and checks.
+- **DE national-phone recall broaden:** `core-extended` recognizes additional documented synthetic German national-phone mobile shapes while preserving parser-backed validation.
+- **CI/no-feature matrix:** `xtask ci-feature-matrix` guards the no-default-feature phone parser path so unsupported parser validators continue to fail closed.
+- **Homebrew tap decision:** README install guidance remains release-asset first until a public tap exists and the release process publishes to it.
 
 ## [0.4.5] - 2026-04-26
 
@@ -316,7 +328,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.5...HEAD
+[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.6...HEAD
+[0.4.6]: https://github.com/piinuts/gaze/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/piinuts/gaze/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/piinuts/gaze/compare/v0.4.3...v0.4.4
 [0.4.3]: https://github.com/piinuts/gaze/compare/v0.4.2...v0.4.3
