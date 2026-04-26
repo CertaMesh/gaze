@@ -35,24 +35,24 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.4.4)
+## Install (v0.4.5)
 
-v0.4.4 is the current stable release.
+v0.4.5 is the current stable release.
 
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.4/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.5/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
-The Homebrew formula exists in `dist/homebrew/gaze.rb`, but the public `naoray/tap` formula is not published yet.
+The Homebrew formula exists in `dist/homebrew/gaze.rb`, but the public `piinuts/tap` formula is not published yet.
 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.4/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.5/gaze-x86_64-unknown-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -67,7 +67,7 @@ Intel macOS binaries are not published; build from source with `cargo build --re
 
 | Platform | Status | Notes |
 |---|---|---|
-| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/piinuts/gaze/releases). Homebrew formula exists in `dist/homebrew/gaze.rb`, but is not published in `naoray/tap` yet. |
+| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/piinuts/gaze/releases). Homebrew formula exists in `dist/homebrew/gaze.rb`, but is not published in `piinuts/tap` yet. |
 | **Linux x86_64 (glibc)** | ✅ Supported | **Requires glibc 2.39+** (Ubuntu 24.04, Debian 13, RHEL 10, or newer). The bundled ONNX Runtime needs C23 symbols (`__isoc23_strtoll` etc.) introduced in glibc 2.39. Older distributions: build from source. |
 | **Linux aarch64 / musl** | ❌ Not shipped | Adopter-driven; [open an issue](https://github.com/piinuts/gaze/issues/new) if needed. |
 | **macOS x86_64 (Intel)** | ❌ Not shipped | Apple Silicon focus. Build from source if needed. |
@@ -166,7 +166,19 @@ gaze audit query --audit-db audit.sqlite --from 2026-04-25T00:00:00Z --to 2026-0
 gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jsonl
 ```
 
-Filters: `--class`, `--source`, `--action`, `--document-kind`, plus `--from <iso8601>` and `--to <iso8601>` time bounds (v0.4.4). The audit DB opens read-only; export rows ship a restricted column set so raw PII payloads stay outside the export surface.
+Filters: `--class`, `--source`, `--action`, `--document-kind`, plus `--from <iso8601>` and `--to <iso8601>` time bounds (v0.4.4), and `--session <opaque>` for opaque session-scope filtering (v0.4.5 S1, NOT raw `session_hex`). The audit DB opens read-only; export rows ship a restricted column set so raw PII payloads stay outside the export surface.
+
+#### Audit Purge (v0.4.5+)
+
+Manual retention via `gaze audit purge`:
+
+```bash
+gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z --dry-run
+gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z --count
+gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z
+```
+
+Calendar-aware ISO 8601 validation rejects malformed cutoffs fail-closed with the typed `AuditPurgeIso8601` error. Restricted DELETE clause; no policy-level retention default; no background auto-purge — adopters drive retention explicitly.
 
 #### Policy Configuration
 
@@ -285,7 +297,18 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## What's new since v0.4.0-rc.1
 
-Cumulative highlights from v0.4.1 through v0.4.4 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+Cumulative highlights from v0.4.1 through v0.4.5 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+
+### v0.4.5 highlights
+
+- **Audit retention manual purge** (v0.4.5 S3) — `gaze audit purge --before <iso8601> [--dry-run | --count]` deletes redaction-log rows older than the cutoff. Calendar-aware ISO 8601 validation rejects malformed dates fail-closed via the typed `AuditPurgeIso8601` error. No policy-level retention default; no background auto-purge.
+- **`audit_metadata_only` xtask gate** (v0.4.5 S3) — compile-time enforcement that restore-path code does not import audit metadata symbols. Walker covers file scope, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) documented in [`docs/architecture/xtask.md`](docs/architecture/xtask.md); v0.5 architectural pivot to dylint-based name-resolution lint scheduled (todo #181, see [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md)).
+- **`--session` audit filter** (v0.4.5 S1) — opaque session-scope filter for `gaze audit query` / `gaze audit export`. Filters by opaque audit metadata, NOT raw `session_hex`.
+- **DE + US national phone recognizers** (v0.4.5 S2) — parser-backed E.164 region-aware validators (`phonenumber` crate) for German and US national phone numbers. Cooperate with the structural phone recognizer; gated behind the `phone-parser` Cargo feature.
+- **`core-extended` no-policy locale activation** (v0.4.5 S2) — the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. **Adopter impact:** invocations without a policy now tokenize German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply `--locale=global` or pass a policy with narrower locale gating. (todo #171)
+- **`gaze-assembly` crate restructure** (v0.4.5 S6) — `lib.rs` split into focused modules by responsibility. No public API change.
+- **ClassMapOverrideSafety extension** (v0.4.5 S4) — further hardening of the v0.4.4 class-map override safety gate.
+- **Rulepack version bump validation** (v0.4.5 S5) — rulepack version bump audit + drift-prevention rule.
 
 ### Detection: validators and the `core-extended` rulepack
 
@@ -312,6 +335,7 @@ Cumulative highlights from v0.4.1 through v0.4.4 — see [CHANGELOG.md](CHANGELO
 - **`RecognizerCompositionValidator`** — guards same-class rulepack composition; missing `cooperates_with` declarations fail closed with `RulepackError::SameClassWithoutCooperation`.
 - **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
 - **`ClassMapOverrideSafety`** (v0.4.4 S1) — previously scaffolded gate is now active. `cargo run -p xtask -- class-map-override-safety` runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. Adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed.
+- **`audit_metadata_only`** (v0.4.5 S3) — compile-time enforcement that restore-path code does not import audit metadata symbols. Syn-based AST walker covers file scope, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) and the v0.5 dylint pivot are documented in [docs/architecture/xtask.md](docs/architecture/xtask.md).
 
 See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate authoring contract.
 
@@ -336,7 +360,9 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.5 directions.
 
 - **Linux distros** — the published Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
 - **Phone validation** — `phone-parser` is enabled by default for `gaze-cli`. Library consumers that want parser-backed E.164 validation must opt in: `gaze-recognizers = { features = ["phone-parser"] }`. Without that feature, the rulepack loader rejects `e164_phone` at load time, preserving fail-closed behavior rather than silently degrading to shape-only matching.
+- **`core-extended` no-policy activation (v0.4.5)** — invocations of `--rulepack-bundled core-extended` *without a policy* now activate `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers. Adopters relying on the prior behavior (no national phone tokenization, no bare 5-digit numeric tokenization) must pass `--locale=global` or supply a policy with narrower locale gating. (todo #171)
 - **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy v0.4.3 audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
+- **Audit retention (v0.4.5)** — there is no policy-level retention default and no background auto-purge. Adopters who need retention drive it via `gaze audit purge --before <iso8601>` (preview with `--dry-run` or `--count`).
 - **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
