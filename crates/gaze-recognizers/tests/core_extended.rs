@@ -679,6 +679,33 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         .unwrap();
     assert_eq!(ip_v4.cooperates_with, vec!["ip.v6"]);
     assert_eq!(ip_v6.cooperates_with, vec!["ip.v4"]);
+    let phone_structural = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.structural")
+        .unwrap();
+    let phone_de = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.national.de")
+        .unwrap();
+    let phone_us = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.national.us")
+        .unwrap();
+    assert_eq!(
+        phone_structural.cooperates_with,
+        vec!["phone.national.de", "phone.national.us"]
+    );
+    assert_eq!(
+        phone_de.cooperates_with,
+        vec!["phone.structural", "phone.national.us"]
+    );
+    assert_eq!(
+        phone_us.cooperates_with,
+        vec!["phone.structural", "phone.national.de"]
+    );
 
     let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");
     Rulepack::parse(&one_side_removed).expect("one-sided cooperation remains valid");

@@ -2132,7 +2132,8 @@ fn s2_core_extended_national_phone_shipping_smoke() {
 
     let no_policy_us = clean_json_with_args(
         &["--rulepack-bundled=core-extended"],
-        // United States: NANPA reserved 555-0100 through 555-0199 fictional/test range.
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
         "Phone +1 555 0100",
     );
     let no_policy_us_clean = no_policy_us["clean_text"].as_str().unwrap();
@@ -2148,7 +2149,8 @@ fn s2_core_extended_national_phone_shipping_smoke() {
 
     let us = clean_json_with_args(
         &[&format!("--policy={}", policy.display()), "--locale=en-US"],
-        // United States: NANPA reserved 555-0100 through 555-0199 fictional/test range.
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
         "Phone +1 555 0100",
     );
     let us_clean = us["clean_text"].as_str().unwrap();
@@ -2166,7 +2168,8 @@ fn s2_core_extended_national_phone_shipping_smoke() {
 
     let de = clean_json_with_args(
         &[&format!("--policy={}", policy.display()), "--locale=de-DE"],
-        // Germany: synthetic non-reachable fixture, not a real number.
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
         "Phone +49 30 0000 0000",
     );
     let de_clean = de["clean_text"].as_str().unwrap();
@@ -2184,7 +2187,8 @@ fn s2_core_extended_national_phone_shipping_smoke() {
 
     let de_under_en = clean_json_with_args(
         &[&format!("--policy={}", policy.display()), "--locale=en-US"],
-        // Germany: synthetic non-reachable fixture, not a real number.
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable.
         "Phone +49 30 0000 0000",
     );
     assert_eq!(de_under_en["clean_text"], "Phone +49 30 0000 0000");
