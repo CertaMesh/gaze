@@ -24,6 +24,10 @@ pub use dictionaries::{
     dictionary_bundle_from_context, DictionaryBundle, DictionaryBundleExt, DictionaryEntry,
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
+#[cfg(feature = "audit")]
+pub use gaze_audit::{
+    build_audit_query_sql, AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
+};
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{
