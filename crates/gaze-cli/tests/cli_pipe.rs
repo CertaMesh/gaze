@@ -1170,7 +1170,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\n"
     ));
     assert!(
         stdout
@@ -1352,7 +1352,7 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true);
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true, true);
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"

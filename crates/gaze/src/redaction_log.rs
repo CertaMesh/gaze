@@ -1,5 +1,6 @@
 use std::path::Path;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 
@@ -26,6 +27,7 @@ pub struct RedactionEntry {
     pub document_kind: DocumentKind,
     pub conflict_loser: bool,
     pub decided_by: ConflictTier,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,6 +47,7 @@ pub struct AuditLogRow {
     pub document_kind: String,
     pub conflict_loser: bool,
     pub decided_by: String,
+    pub created_at: Option<i64>,
 }
 
 #[allow(dead_code)]
@@ -56,6 +59,7 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "document_kind",
     "conflict_loser",
     "decided_by",
+    "created_at",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,6 +72,13 @@ pub enum ConflictTier {
     Validator,
     RecognizerId,
     Merged,
+}
+
+pub(crate) fn current_epoch_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
 }
 
 /// `RedactionEntry` must remain metadata-only.
@@ -83,6 +94,7 @@ pub enum ConflictTier {
 ///     document_kind: DocumentKind::Text,
 ///     conflict_loser: false,
 ///     decided_by: gaze::ConflictTier::None,
+///     created_at: 0,
 ///     raw: Some("alice@example.com".to_string()),
 /// };
 /// ```
@@ -104,30 +116,35 @@ impl SqliteLogger {
                 field_name TEXT NULL,
                 document_kind TEXT NOT NULL,
                 conflict_loser INTEGER NOT NULL,
-                decided_by TEXT NOT NULL DEFAULT 'none'
+                decided_by TEXT NOT NULL DEFAULT 'none',
+                created_at INTEGER NULL
             );
             "#,
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
-        let has_decided_by = {
+        let columns = {
             let mut stmt = conn
                 .prepare("PRAGMA table_info(redaction_log)")
                 .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
             let columns = stmt
                 .query_map([], |row| row.get::<_, String>(1))
                 .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
-            let mut found = false;
+            let mut names = Vec::new();
             for column in columns {
-                if column.map_err(|err| crate::Error::Sqlite(err.to_string()))? == "decided_by" {
-                    found = true;
-                    break;
-                }
+                names.push(column.map_err(|err| crate::Error::Sqlite(err.to_string()))?);
             }
-            found
+            names
         };
-        if !has_decided_by {
+        if !columns.iter().any(|column| column == "decided_by") {
             conn.execute(
                 "ALTER TABLE redaction_log ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'none'",
+                [],
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "created_at") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN created_at INTEGER NULL",
                 [],
             )
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -144,7 +161,7 @@ impl SqliteLogger {
             .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by FROM redaction_log",
+                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at FROM redaction_log",
             )
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -157,6 +174,7 @@ impl SqliteLogger {
                     document_kind: document_kind_from_db(&row.get::<_, String>(4)?)?,
                     conflict_loser: row.get::<_, i64>(5)? != 0,
                     decided_by: conflict_tier_from_db(&row.get::<_, String>(6)?)?,
+                    created_at: row.get::<_, Option<i64>>(7)?.unwrap_or(0),
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -171,7 +189,8 @@ impl SqliteLogger {
     pub fn query(path: &Path, filter: &AuditFilter) -> Result<Vec<AuditLogRow>> {
         let conn = open_audit_query_connection(path)?;
         let has_decided_by = table_has_column(&conn, "decided_by")?;
-        let (sql, values) = build_audit_query_sql(filter, has_decided_by);
+        let has_created_at = table_has_column(&conn, "created_at")?;
+        let (sql, values) = build_audit_query_sql(filter, has_decided_by, has_created_at);
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -185,6 +204,7 @@ impl SqliteLogger {
                     document_kind: row.get(4)?,
                     conflict_loser: row.get::<_, i64>(5)? != 0,
                     decided_by: row.get(6)?,
+                    created_at: row.get(7)?,
                 })
             })
             .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -204,7 +224,7 @@ impl RedactionLogger for SqliteLogger {
             .lock()
             .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 entry.source,
                 pii_class_to_db(&entry.class),
@@ -213,6 +233,7 @@ impl RedactionLogger for SqliteLogger {
                 document_kind_to_db(&entry.document_kind),
                 if entry.conflict_loser { 1 } else { 0 },
                 conflict_tier_to_db(entry.decided_by),
+                entry.created_at,
             ],
         )
         .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
@@ -236,14 +257,23 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
 /// Audit reads are defense-in-depth restricted to metadata columns that are
 /// safe to display. Do not switch this path to `SELECT *`; future schema
 /// additions may include restore material or other sensitive payloads.
-pub fn build_audit_query_sql(filter: &AuditFilter, has_decided_by: bool) -> (String, Vec<String>) {
+pub fn build_audit_query_sql(
+    filter: &AuditFilter,
+    has_decided_by: bool,
+    has_created_at: bool,
+) -> (String, Vec<String>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
     } else {
         "'none' AS decided_by"
     };
+    let created_at_column = if has_created_at {
+        "created_at"
+    } else {
+        "NULL AS created_at"
+    };
     let mut sql = format!(
-        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column} FROM redaction_log"
+        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -419,6 +449,7 @@ mod tests {
                     document_kind: DocumentKind::Text,
                     conflict_loser: false,
                     decided_by: ConflictTier::None,
+                    created_at: 0,
                 })
                 .unwrap();
         }
