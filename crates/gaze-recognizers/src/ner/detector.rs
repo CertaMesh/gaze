@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gaze::{Detection, Detector};
+use gaze_types::{Detection, Detector};
 
 use super::backend::{load_backend, NerBackend};
 use super::decode;

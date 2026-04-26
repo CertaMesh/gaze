@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use gaze::PiiClass;
+use gaze_types::PiiClass;
 
 use super::error::NerLoadError;
 

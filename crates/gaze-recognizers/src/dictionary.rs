@@ -1,4 +1,4 @@
-use gaze::{Candidate, ConflictTier, DetectContext, LocaleTag, PiiClass, Recognizer};
+use gaze_types::{Candidate, ConflictTier, DetectContext, LocaleTag, PiiClass, Recognizer};
 
 pub struct DictionaryRecognizer {
     id: String,
@@ -76,22 +76,37 @@ impl Recognizer for DictionaryRecognizer {
         let Some(entry) = ctx.dictionaries.get(&self.dictionary_name) else {
             return Vec::new();
         };
+        let haystack = if self.case_sensitive {
+            None
+        } else {
+            Some(input.to_ascii_lowercase())
+        };
+        let search_input = haystack.as_deref().unwrap_or(input);
+
         entry
-            .automaton()
-            .find_iter(input)
-            .map(|m| Candidate {
-                span: m.start()..m.end(),
+            .terms()
+            .iter()
+            .enumerate()
+            .flat_map(|(pattern_index, term)| {
+                let needle = if self.case_sensitive {
+                    term.clone()
+                } else {
+                    term.to_ascii_lowercase()
+                };
+                search_input
+                    .match_indices(&needle)
+                    .map(move |(start, matched)| (pattern_index, start..start + matched.len()))
+                    .collect::<Vec<_>>()
+            })
+            .map(|(pattern_index, span)| Candidate {
+                canonical_form: Some(input[span.clone()].to_string()),
+                span,
                 class: self.class.clone(),
                 recognizer_id: self.id.clone(),
                 score: self.score,
                 priority: self.priority,
-                canonical_form: Some(input[m.start()..m.end()].to_string()),
                 token_family: self.token_family.clone(),
-                source: format!(
-                    "dictionary:{}[#{}]",
-                    self.dictionary_name,
-                    m.pattern().as_usize()
-                ),
+                source: format!("dictionary:{}[#{}]", self.dictionary_name, pattern_index),
                 decided_by: ConflictTier::None,
                 merged_sources: Vec::new(),
             })
@@ -112,7 +127,7 @@ mod tests {
     use std::cell::Cell;
     use std::collections::HashMap;
 
-    use gaze::{ContextDictionary, DictionaryBundle, RecognizerRegistry, TypedContext};
+    use gaze::{dictionary_bundle_from_context, ContextDictionary, RecognizerRegistry, TypedContext};
     use serde_json::Map;
 
     use super::*;
@@ -130,8 +145,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &bundle,
@@ -165,8 +180,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::EnUs],
             dictionaries: &bundle,
@@ -206,8 +221,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &bundle,

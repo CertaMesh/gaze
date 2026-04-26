@@ -1,31 +1,15 @@
 mod dictionary;
+mod error;
 mod ner;
 mod regex;
 
 pub use dictionary::DictionaryRecognizer;
+pub use error::{RecognizerError, Result};
 pub use ner::{
     LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
     VerifiedArtifacts,
 };
 pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
-
-pub fn load_rulepack(source: gaze::RulepackSource) -> Result<gaze::Rulepack, gaze::RulepackError> {
-    let rulepack = gaze::Rulepack::load(source)?;
-    validate_rulepack_recognizers(&rulepack)?;
-    Ok(rulepack)
-}
-
-fn validate_rulepack_recognizers(rulepack: &gaze::Rulepack) -> Result<(), gaze::RulepackError> {
-    for recognizer in &rulepack.recognizers {
-        if let Some(validator) = &recognizer.validator {
-            ValidatorKind::parse(&validator.kind)?;
-        }
-        if let Some(normalizer) = &recognizer.normalizer {
-            NormalizerKind::parse(&normalizer.kind)?;
-        }
-    }
-    Ok(())
-}
 
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {

@@ -1,6 +1,7 @@
 #![cfg(not(feature = "phone-parser"))]
 
-use gaze::{RulepackError, RulepackSource};
+use gaze::RulepackSource;
+use gaze_recognizers::{RecognizerError, ValidatorKind};
 
 #[test]
 fn phone_validators_fail_closed_at_rulepack_load_without_phone_parser() {
@@ -13,11 +14,17 @@ fn phone_validators_fail_closed_at_rulepack_load_without_phone_parser() {
         let path = tempdir.path().join("rulepack.toml");
         std::fs::write(&path, rulepack(validator)).expect("write minimal rulepack");
 
-        let err = gaze_recognizers::load_rulepack(RulepackSource::Path(path))
+        let rulepack = gaze::Rulepack::load(RulepackSource::Path(path)).expect("rulepack parses");
+        let kind = &rulepack.recognizers[0]
+            .validator
+            .as_ref()
+            .expect("validator")
+            .kind;
+        let err = ValidatorKind::parse(kind)
             .expect_err("phone validator must fail closed without phone-parser feature");
 
         assert!(
-            matches!(err, RulepackError::UnsupportedValidator { ref kind } if kind == validator),
+            matches!(err, RecognizerError::UnsupportedValidator { ref kind } if kind == validator),
             "expected UnsupportedValidator for {validator}, got {err:?}"
         );
     }

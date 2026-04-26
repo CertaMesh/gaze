@@ -748,6 +748,7 @@ dependencies = [
  "aho-corasick",
  "criterion",
  "gaze",
+ "gaze-types",
  "hex",
  "ndarray 0.16.1",
  "ort",

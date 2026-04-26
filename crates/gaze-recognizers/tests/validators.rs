@@ -1,5 +1,5 @@
 #[cfg(not(feature = "phone-parser"))]
-use gaze::RulepackError;
+use gaze_recognizers::RecognizerError;
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, PiiClass, Pipeline, RawDocument, Scope, Session,
 };
@@ -108,7 +108,7 @@ fn e164_phone_fails_closed_when_phone_parser_feature_disabled() {
     assert!(
         matches!(
             result,
-            Err(RulepackError::UnsupportedValidator { ref kind }) if kind == "e164_phone"
+            Err(RecognizerError::UnsupportedValidator { ref kind }) if kind == "e164_phone"
         ),
         "feature-disabled build MUST reject e164_phone with UnsupportedValidator (axis-1 fail-closed); got: {result:?}"
     );
