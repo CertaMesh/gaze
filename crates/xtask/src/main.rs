@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod ci_feature_matrix;
 mod no_tenant_knowledge;
 
 #[derive(Debug, Parser)]
@@ -22,6 +23,7 @@ enum Command {
     RecognizerCompositionValidator,
     NoTenantKnowledge,
     AuditMetadataOnly,
+    CiFeatureMatrix,
 }
 
 fn main() -> Result<()> {
@@ -32,6 +34,7 @@ fn main() -> Result<()> {
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
+        Command::CiFeatureMatrix => ci_feature_matrix::run(),
     }
 }
 
