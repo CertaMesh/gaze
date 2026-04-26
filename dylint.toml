@@ -1,0 +1,13 @@
+[gaze_dylint]
+protected_paths = [
+    "crates/gaze-cli/src/restore",
+    "crates/gaze/src",
+]
+forbidden_crates = ["gaze_audit"]
+forbidden_items = [
+    "gaze_audit::SqliteLogger",
+    "gaze_audit::AuditFilter",
+    "gaze_audit::AuditLogRow",
+    "gaze_audit::build_audit_query_sql",
+    "gaze_audit::AUDIT_RESTRICTED_COLUMNS",
+]
