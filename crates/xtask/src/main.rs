@@ -1,3 +1,5 @@
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
@@ -18,6 +20,7 @@ enum Command {
     ClassMapOverrideSafety,
     RecognizerCompositionValidator,
     NoTenantKnowledge,
+    AuditMetadataOnly,
 }
 
 fn main() -> Result<()> {
@@ -27,6 +30,7 @@ fn main() -> Result<()> {
         Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
+        Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
     }
 }
 
@@ -197,6 +201,109 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
         run_behavioral_test("recognizer_composition_validator", *test)?;
     }
     println!("recognizer_composition_validator: passed");
+    Ok(())
+}
+
+const RESTORE_AUDIT_FORBIDDEN_SYMBOLS: &[&str] = &[
+    "redaction_log",
+    "ConflictTier",
+    "DocumentKind",
+    "RedactionEntry",
+    "RedactionLogger",
+    "SqliteLogger",
+    // Extend denylist on each new audit export.
+    "AuditFilter",
+    "AuditLogRow",
+    "AUDIT_RESTRICTED_COLUMNS",
+    "build_audit_query_sql",
+    "current_epoch_ms",
+];
+
+fn run_audit_metadata_only_gate() -> Result<()> {
+    let root = std::env::current_dir().context("failed to resolve current directory")?;
+    let restore_files = restore_files(&root)?;
+    println!(
+        "audit_metadata_only: scanning {} restore files",
+        restore_files.len()
+    );
+    for path in restore_files {
+        let source = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read {}", path.display()))?;
+        let parsed = syn::parse_file(&source)
+            .with_context(|| format!("failed to parse {}", path.display()))?;
+        reject_forbidden_use_imports(&path, &parsed)?;
+    }
+    println!("audit_metadata_only: passed");
+    Ok(())
+}
+
+fn reject_forbidden_use_imports(path: &Path, file: &syn::File) -> Result<()> {
+    for item in &file.items {
+        if let syn::Item::Use(item_use) = item {
+            let mut imported = Vec::new();
+            collect_use_tree_names(&item_use.tree, &mut imported);
+            if let Some(symbol) = RESTORE_AUDIT_FORBIDDEN_SYMBOLS
+                .iter()
+                .find(|symbol| imported.iter().any(|name| name == **symbol))
+            {
+                bail!(
+                    "audit metadata import in restore path: {} imports {}",
+                    path.display(),
+                    symbol
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn collect_use_tree_names(tree: &syn::UseTree, names: &mut Vec<String>) {
+    match tree {
+        syn::UseTree::Path(path) => {
+            names.push(path.ident.to_string());
+            collect_use_tree_names(&path.tree, names);
+        }
+        syn::UseTree::Name(name) => names.push(name.ident.to_string()),
+        syn::UseTree::Rename(rename) => {
+            names.push(rename.ident.to_string());
+            names.push(rename.rename.to_string());
+        }
+        syn::UseTree::Glob(_) => names.push("*".to_string()),
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_tree_names(item, names);
+            }
+        }
+    }
+}
+
+fn restore_files(root: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    let cli_restore = root.join("crates/gaze-cli/src/restore");
+    if cli_restore.exists() {
+        collect_rs_files(&cli_restore, &mut files)?;
+    }
+    let core_restore = root.join("crates/gaze/src/restore.rs");
+    if core_restore.exists() {
+        files.push(core_restore);
+    }
+    if files.is_empty() {
+        bail!("audit_metadata_only found no restore files to scan");
+    }
+    files.sort();
+    Ok(files)
+}
+
+fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    for entry in fs::read_dir(dir).with_context(|| format!("failed to read {}", dir.display()))? {
+        let entry = entry.with_context(|| format!("failed to read entry in {}", dir.display()))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rs_files(&path, files)?;
+        } else if path.extension().and_then(|extension| extension.to_str()) == Some("rs") {
+            files.push(path);
+        }
+    }
     Ok(())
 }
 
