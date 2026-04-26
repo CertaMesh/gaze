@@ -38,14 +38,14 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.4.5)
+## Install (v0.4.6)
 
-v0.4.5 is the current stable release.
+v0.4.6 is the current stable release.
 
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.5/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.6/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -57,7 +57,7 @@ Public `brew install piinuts/tap/gaze` documentation should wait until a public 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.5/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.6/gaze-x86_64-unknown-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -259,7 +259,7 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## What's new since v0.4.0-rc.1
 
-Cumulative highlights from v0.4.1 through v0.4.5 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+Cumulative highlights from v0.4.1 through v0.4.6 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
 
 ### v0.4.5 highlights
 
