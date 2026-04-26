@@ -219,6 +219,14 @@ const RESTORE_AUDIT_FORBIDDEN_SYMBOLS: &[&str] = &[
     "current_epoch_ms",
 ];
 
+#[derive(Clone, Copy)]
+enum UseTreeRoot {
+    Crate,
+    Gaze,
+    GazeCli,
+    Other,
+}
+
 fn run_audit_metadata_only_gate() -> Result<()> {
     let root = std::env::current_dir().context("failed to resolve current directory")?;
     let restore_files = restore_files(&root)?;
@@ -267,22 +275,56 @@ fn walk_items(items: &[syn::Item], path: &Path) -> Result<()> {
 }
 
 fn collect_use_tree_names(tree: &syn::UseTree, names: &mut Vec<String>) {
+    collect_use_tree_names_with_root(tree, names, None);
+}
+
+fn collect_use_tree_names_with_root(
+    tree: &syn::UseTree,
+    names: &mut Vec<String>,
+    current_root: Option<UseTreeRoot>,
+) {
     match tree {
         syn::UseTree::Path(path) => {
             names.push(path.ident.to_string());
-            collect_use_tree_names(&path.tree, names);
+            let root = current_root.unwrap_or_else(|| use_tree_root(&path.ident));
+            collect_use_tree_names_with_root(&path.tree, names, Some(root));
         }
         syn::UseTree::Name(name) => names.push(name.ident.to_string()),
         syn::UseTree::Rename(rename) => {
             names.push(rename.ident.to_string());
             names.push(rename.rename.to_string());
         }
-        syn::UseTree::Glob(_) => names.push("*".to_string()),
-        syn::UseTree::Group(group) => {
-            for item in &group.items {
-                collect_use_tree_names(item, names);
+        syn::UseTree::Glob(_) => {
+            if matches!(
+                current_root,
+                Some(UseTreeRoot::Crate | UseTreeRoot::Gaze | UseTreeRoot::GazeCli)
+            ) {
+                names.extend(
+                    RESTORE_AUDIT_FORBIDDEN_SYMBOLS
+                        .iter()
+                        .map(|symbol| (*symbol).to_string()),
+                );
+            } else {
+                names.push("*".to_string());
             }
         }
+        syn::UseTree::Group(group) => {
+            for item in &group.items {
+                collect_use_tree_names_with_root(item, names, current_root);
+            }
+        }
+    }
+}
+
+fn use_tree_root(ident: &syn::Ident) -> UseTreeRoot {
+    if ident == "crate" {
+        UseTreeRoot::Crate
+    } else if ident == "gaze" {
+        UseTreeRoot::Gaze
+    } else if ident == "gaze_cli" {
+        UseTreeRoot::GazeCli
+    } else {
+        UseTreeRoot::Other
     }
 }
 
