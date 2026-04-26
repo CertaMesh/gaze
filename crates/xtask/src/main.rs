@@ -238,7 +238,11 @@ fn run_audit_metadata_only_gate() -> Result<()> {
 }
 
 fn reject_forbidden_use_imports(path: &Path, file: &syn::File) -> Result<()> {
-    for item in &file.items {
+    walk_items(&file.items, path)
+}
+
+fn walk_items(items: &[syn::Item], path: &Path) -> Result<()> {
+    for item in items {
         if let syn::Item::Use(item_use) = item {
             let mut imported = Vec::new();
             collect_use_tree_names(&item_use.tree, &mut imported);
@@ -251,6 +255,11 @@ fn reject_forbidden_use_imports(path: &Path, file: &syn::File) -> Result<()> {
                     path.display(),
                     symbol
                 );
+            }
+        }
+        if let syn::Item::Mod(item_mod) = item {
+            if let Some((_, items)) = &item_mod.content {
+                walk_items(items, path)?;
             }
         }
     }
