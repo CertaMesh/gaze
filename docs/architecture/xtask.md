@@ -10,6 +10,7 @@ $ cargo run -p xtask -- symmetric-potemkin
 $ cargo run -p xtask -- class-map-override-safety
 $ cargo run -p xtask -- recognizer-composition-validator
 $ cargo run -p xtask -- no-tenant-knowledge
+$ cargo run -p xtask -- fixture-citation-lint
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -22,6 +23,30 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `ClassMapOverrideSafety` | `cargo run -p xtask -- class-map-override-safety` | Activated in v0.4.4. Lists and runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. An adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`. |
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Lists and runs the behavioral tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
 | `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Added in v0.4.3. Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
+| `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
+
+## fixture_citation_lint self-test + limitation
+
+The fixture citation gate prevents production code from accumulating
+uncited fixture-shaped PII literals. It intentionally scans the same crate
+source roots as `no_tenant_knowledge`, while excluding Rust regions compiled
+only under `#[cfg(test)]`.
+
+Adversarial self-test for reviewers:
+
+1. On a throwaway branch, add a production-scope fixture literal such as
+   `"alice@example.invalid"` with a valid-looking marker:
+   `// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)`.
+2. Run `cargo run -p xtask -- fixture-citation-lint`; it must fail unless
+   `cargo test --workspace -- --list` contains the cited test name exactly.
+3. If the cited test exists, temporarily rename the test, rerun the gate, and
+   confirm it exits non-zero with `FixtureCitationMissingTest`.
+4. Revert the throwaway changes before merging.
+
+Known limitation: the gate proves that the cited test exists. It does not prove
+that the test body still asserts the specific fixture literal. That deeper
+semantic tie is out of scope for the v0.4.6 S2 two-point lint gate and remains
+a code-review responsibility.
 
 ## audit_metadata_only — known limitations (v0.4.5)
 
