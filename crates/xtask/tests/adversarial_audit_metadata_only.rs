@@ -118,6 +118,34 @@ fn audit_metadata_only_fails_on_impl_method_body_use() {
 }
 
 #[test]
+fn audit_metadata_only_fails_on_trait_default_method_body_use() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "trait RestoreProbe {\n    fn run(&self) {\n        use gaze::RedactionEntry;\n    }\n}\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "RedactionEntry");
+}
+
+#[test]
+fn audit_metadata_only_fails_on_const_block_initializer_use() {
+    let dir = tempdir().unwrap();
+    let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
+    fs::create_dir_all(&restore_dir).unwrap();
+    fs::write(
+        restore_dir.join("mod.rs"),
+        "const _: () = {\n    use gaze::redaction_log;\n};\n",
+    )
+    .unwrap();
+
+    assert_gate_rejects(dir.path(), "redaction_log");
+}
+
+#[test]
 fn audit_metadata_only_fails_on_extern_crate_alias() {
     let dir = tempdir().unwrap();
     let restore_dir = dir.path().join("crates/gaze-cli/src/restore");
