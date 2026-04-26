@@ -54,7 +54,7 @@ fn class_map_override_safety_gate_fails_when_required_test_is_missing() {
         .expect("create adversarial worktree");
     assert!(add_status.success(), "git worktree add must succeed");
 
-    let assembly = fixture_root.join("crates/gaze-assembly/src/lib.rs");
+    let assembly = fixture_root.join("crates/gaze-assembly/src/tests.rs");
     let source = fs::read_to_string(&assembly).expect("read gaze-assembly lib");
     assert!(
         source.contains(RENAMED_TEST),
