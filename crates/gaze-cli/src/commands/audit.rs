@@ -62,6 +62,8 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         source: args.source.clone(),
         action: args.action.clone(),
         document_kind: args.document_kind.clone(),
+        from_epoch_ms: None,
+        to_epoch_ms: None,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
