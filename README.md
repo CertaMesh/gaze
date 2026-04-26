@@ -35,9 +35,9 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.4.0-rc.1)
+## Install (v0.4.4)
 
-v0.4.0-rc.1 is a release candidate — pin it explicitly while dogfooding.
+v0.4.4 is the current stable release.
 
 Apple Silicon macOS via Homebrew (tap):
 
@@ -45,25 +45,25 @@ Apple Silicon macOS via Homebrew (tap):
 brew install Naoray/gaze/gaze
 ```
 
-Direct binary download from the release assets:
+Apple Silicon binary download from the release assets:
 
 ```bash
-curl -LO https://github.com/Naoray/gaze/releases/download/v0.4.0-rc.1/gaze-v0.4.0-rc.1-aarch64-apple-darwin.tar.gz
-tar -xzf gaze-v0.4.0-rc.1-aarch64-apple-darwin.tar.gz
+curl -L -o gaze https://github.com/Naoray/gaze/releases/download/v0.4.4/gaze-aarch64-apple-darwin
+chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
-Linux x86_64 release asset pattern for v0.4.2 release candidates and later:
+Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/Naoray/gaze/releases/download/v0.4.2-rc.1/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/Naoray/gaze/releases/download/v0.4.4/gaze-x86_64-unknown-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
 The Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
 
-Intel macOS binaries are not published in v0.4.0-rc.1; they return in a later release once the runner and runtime story is pinned. Build from source with `cargo build --release -p gaze-cli` in the meantime.
+Intel macOS binaries are not published; build from source with `cargo build --release -p gaze-cli`.
 
 ## Workspace Layout
 
@@ -107,12 +107,29 @@ Standalone `gaze` binary for LLM pipe-mode integration. Language-specific adapte
 
 #### CLI Example
 
+Pseudonymize on the way out, restore on the way back:
+
 ```bash
 echo "Email alice@example.invalid now" | gaze clean --policy=policy.toml
 # {"clean_text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>","stats":{"detections":1}}
+
+echo '{"text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>"}' | gaze restore
+# {"text":"Email alice@example.invalid now"}
 ```
 
 Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{session_hex}:Location_N>`, `<{session_hex}:Organization_N>`, `<{session_hex}:Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1.{session_hex}@gaze-fake.invalid`) intentionally stay bare — the whole point is to look like a real email.
+
+#### Audit Query and Export (v0.4.3+)
+
+When `gaze clean --audit-db <path>` is enabled, the metadata-only redaction log is queryable from the CLI:
+
+```bash
+gaze audit query --audit-db audit.sqlite --class email --action tokenize
+gaze audit query --audit-db audit.sqlite --from 2026-04-25T00:00:00Z --to 2026-04-26T00:00:00Z
+gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jsonl
+```
+
+Filters: `--class`, `--source`, `--action`, `--document-kind`, plus `--from <iso8601>` and `--to <iso8601>` time bounds (v0.4.4). The audit DB opens read-only; export rows ship a restricted column set so raw PII payloads stay outside the export surface.
 
 #### Policy Configuration
 
@@ -229,34 +246,61 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-## What's new in v0.4.0-rc.1
+## What's new since v0.4.0-rc.1
 
-Shipped 2026-04-24 (see [CHANGELOG.md](CHANGELOG.md) for the full entry):
+Cumulative highlights from v0.4.1 through v0.4.4 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
 
-- **Crate split** — `gaze` (core) + `gaze-recognizers` (detection backends) + `gaze-cli` (binary) + `debug-proxy` (MCP consumer). Debug-proxy canary test tightened to assert the 8-hex `{session_hex}` shape.
-- **`RecognizerRegistry` is the detection path.** The legacy standalone `Detector` trait path was removed; every detection routes through the registry with a typed `DetectContext` envelope.
-- **F3 rulepack schema** — TOML-defined recognizer bundles (`[policy.rulepacks]`) with a closed validator/normalizer kind registry. Unknown matchers fail closed.
-- **F4 locale chain** — 4-tier: CLI > policy > rulepack default > system default. Per-recognizer locale gating via `locales = [...]`; `LocaleTag::Other(_)` matches strict-equal only.
-- **F2-full resolver** — class-priority > rule-priority > score > span-length > recognizer-id, with a multi-overlap fixed-point pass. Audit entries carry `decided_by: ConflictTier` + merge-loser rows.
-- **F5 `.invalid` domain** — format-preserving email fakes now use `email{N}.{session_hex}@gaze-fake.invalid`. The legacy `example.test` Pass 2 trap arm is retained for v0.3 manifest restore compatibility.
-- **F6 Dictionary recognizer** — Aho-Corasick multi-term detector for tenant PII, registered through the `Recognizer` trait. Adopter-tunable via `[[policy.custom_recognizers]]`, `terms_file`, or `--context-json`.
-- **Typed `Context` envelope** — `--context-json` carries tenant `fields` / `dictionaries` / `class_map` through `DetectContext` instead of being parsed-and-dropped.
-- **F7.5 byte-range-skip** — Pass 1 substitution spans are tracked; Pass 2 trap scan skips fully-contained matches. Closes the cascade false-positive where adopter raw values matching trap arms (`Order_42`, `Song_42`, `User_7`) were rejected in strict mode (PR #22).
-- **Migration:** legacy top-level `[[detector]]` is rejected with `LegacyDetectorUnsupported`. Move blocks to `[[policy.custom_recognizers]]` — see [docs/policy.md](docs/policy.md#migrating-detector).
+### Detection: validators and the `core-extended` rulepack
 
-Known limits to surface during dogfooding (tracked for v0.4.1):
+- **`ValidatorKind` substrate** (v0.4.3) — `Luhn` (Mod 10), `IbanMod97` (ISO 7064), `IbanCanonical` (uppercase plus whitespace strip) join `EmailRfc` as closed validator/normalizer enums in `gaze-recognizers`.
+- **`E164Phone` parser-backed validator** (v0.4.4) — built on the `phonenumber` crate, gated behind the optional `phone-parser` feature. `gaze-cli` enables it by default; library users opt in via `gaze-recognizers = { features = ["phone-parser"] }`. Without the feature, `e164_phone` is rejected at rulepack load time with `RulepackError::UnsupportedValidator` rather than silently dropping detection.
+- **`core-extended` rulepack** (v0.4.2 Phase 1, v0.4.3 Phase 2) — opt-in shipped rulepack. Phase 1 covers shape-only E.164 phone numbers, IPv4/IPv6 addresses, and `de-DE`/`en-US` postal codes. Phase 2 adds validator-backed IBAN (`iban.structural`, `iban_mod97` + `iban_canonical`) and credit card (`card.structural`, `luhn`). Default `[[rule]]` entries ship in the rulepack so `--rulepack-bundled core,core-extended` tokenizes the new classes out of the box.
+- **`email.header.name` recognizer** (v0.4.2) — locale-aware regex for RFC822 display names, including German `Von:` / `An:` headers. Closes the prompt-preamble NER gap from issue #24.
+- **`[ner] threshold` knob** (v0.4.2) — `--ner-threshold` overrides the per-span confidence floor for tuning prompt-preamble PII without retraining the model.
 
-- `token.format` and `context.hotwords` / `boost` / `window` are still parsed only for schema validation in v0.4.1; non-default values fail closed with `RulepackError::UnsupportedFieldInB1`.
-- Same-class rulepack recognizer pairs require explicit `cooperates_with = ["other.id"]`; missing cooperation fails closed with `RulepackError::SameClassWithoutCooperation`.
-- NER context-sensitivity gap on prompt boilerplate / RFC822 email headers — workarounds + roadmap in issue #24.
+### CLI surface
 
-Deferred beyond v0.4:
+- **Three-surfaces backfill** (v0.4.2 S1) — `gaze clean` exposes `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path` overrides for existing policy knobs. Modular split moves `commands` / `pipeline` / `restore` / `io` / `error` / `logger` into their own files.
+- **`gaze clean --audit-db`** (v0.4.2) — persists the metadata-only SQLite redaction log for pipe-mode invocations. Dictionary sources include per-term traceability as `dictionary:{name}[#term_index]`.
+- **`gaze audit query` / `gaze audit export`** (v0.4.3 S4) — read-only audit metadata export from the SQLite log. Filters: `--class`, `--source`, `--action`, `--document-kind`. JSONL is the default output format. The audit DB opens read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`.
+- **Audit schema v2** (v0.4.4 S2) — `RedactionEntry` carries `created_at` epoch milliseconds; on-open `ALTER TABLE` migration keeps legacy DBs queryable through a NULL default. `gaze audit query` and `gaze audit export` accept `--from <iso8601>` and `--to <iso8601>` filters.
+
+### Linux releases
+
+- **Linux x86_64 binary** (v0.4.2 S4) — release CI publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-24.04` runner alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts. Requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer); older distros should build from source.
+
+### Repository gates (xtask)
+
+- **`SymmetricPotemkin`** (v0.4.1) — runs the named behavioral tests for symmetric audit-merge entries.
+- **`RecognizerCompositionValidator`** — guards same-class rulepack composition; missing `cooperates_with` declarations fail closed with `RulepackError::SameClassWithoutCooperation`.
+- **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
+- **`ClassMapOverrideSafety`** (v0.4.4 S1) — previously scaffolded gate is now active. `cargo run -p xtask -- class-map-override-safety` runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. Adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed.
+
+See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate authoring contract.
+
+### Date posture
+
+`docs/research/v0.4.4-date-posture.md` (v0.4.4 S4) locks Gaze's Date-as-PII stance: dates are not PII by default, never ship in default `core` or `core-extended` bundles. Future v0.4.5+ implementation scope is limited to DOB-only structured contexts. General-prose dates require context classification research for v0.5+.
+
+## Roadmap teaser — v0.5
+
+- **Open-key `PiiClass`** — sketched in [`docs/design/v0.5-open-piiclass.md`](docs/design/v0.5-open-piiclass.md). Replaces the closed enum with an open-key string interner so adopters and rulepacks can introduce new classes without core changes.
+- **Crate-shape Option B** — extract `gaze-types` and collapse `gaze-assembly`. Decision-deferred sketch in the same v0.5 design doc.
+
+Deferred beyond v0.5:
 
 - real sandbox backend implementations
 - k-anonymity / query-budget controls
 - full format-preserving fake generation
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.4.1 and v0.5 directions.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.4.5 and v0.5 directions.
+
+## Adopter notes
+
+- **Linux distros** — the published Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
+- **Phone validation** — `phone-parser` is enabled by default for `gaze-cli`. Library consumers that want parser-backed E.164 validation must opt in: `gaze-recognizers = { features = ["phone-parser"] }`. Without that feature, the rulepack loader rejects `e164_phone` at load time, preserving fail-closed behavior rather than silently degrading to shape-only matching.
+- **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy v0.4.3 audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
+- **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 
