@@ -8,11 +8,25 @@ fn validator_pipeline(
     validator: ValidatorKind,
     normalizer: Option<NormalizerKind>,
 ) -> Pipeline {
+    custom_validator_pipeline(
+        pattern,
+        PiiClass::custom("credit_card_or_iban"),
+        validator,
+        normalizer,
+    )
+}
+
+fn custom_validator_pipeline(
+    pattern: &str,
+    class: PiiClass,
+    validator: ValidatorKind,
+    normalizer: Option<NormalizerKind>,
+) -> Pipeline {
     Pipeline::builder()
         .recognizer(
             RegexDetector::with_rulepack_fields(
                 pattern,
-                PiiClass::custom("credit_card_or_iban"),
+                class.clone(),
                 "s1.validator.test",
                 vec![gaze::LocaleTag::Global],
                 0.90,
@@ -25,10 +39,7 @@ fn validator_pipeline(
             )
             .expect("regex detector"),
         )
-        .rule(ClassRule::new(
-            PiiClass::custom("credit_card_or_iban"),
-            Action::Tokenize,
-        ))
+        .rule(ClassRule::new(class, Action::Tokenize))
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .expect("pipeline")
@@ -88,6 +99,13 @@ fn iban_mod97_accepts_spec_examples_and_rejects_check_digit_mutants() {
 }
 
 #[test]
+fn e164_phone_accepts_assigned_international_number_and_rejects_unassigned_prefix() {
+    assert!(ValidatorKind::E164Phone.validates("+4915550112233"));
+    assert!(!ValidatorKind::E164Phone.validates("+99999999"));
+    assert!(!ValidatorKind::E164Phone.validates("4915550112233"));
+}
+
+#[test]
 fn iban_canonical_is_uppercase_whitespace_free_and_idempotent() {
     let canonical = NormalizerKind::IbanCanonical.normalize("gb82 west 1234 5698 7654 32");
 
@@ -96,6 +114,38 @@ fn iban_canonical_is_uppercase_whitespace_free_and_idempotent() {
         NormalizerKind::IbanCanonical.normalize(&canonical),
         canonical
     );
+}
+
+#[test]
+fn s3a_e164_phone_passing_candidate_emits_detection_and_round_trips() {
+    let pipeline = custom_validator_pipeline(
+        r"\+\d{6,15}\b",
+        PiiClass::custom("phone"),
+        ValidatorKind::E164Phone,
+        None,
+    );
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "Phone: +4915550112233";
+    let clean = clean_text(&pipeline, &session, input);
+
+    assert!(clean.starts_with("Phone: <"), "{clean}");
+    assert!(clean.ends_with(":Custom:phone_1>"), "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn s3a_e164_phone_unassigned_candidate_emits_no_detection() {
+    let pipeline = custom_validator_pipeline(
+        r"\+\d{6,15}\b",
+        PiiClass::custom("phone"),
+        ValidatorKind::E164Phone,
+        None,
+    );
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "Phone: +99999999";
+    let clean = clean_text(&pipeline, &session, input);
+
+    assert_eq!(clean, input);
 }
 
 #[test]
