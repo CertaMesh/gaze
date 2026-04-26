@@ -9,9 +9,21 @@ const EXPECTED_UI_FIXTURES: usize = 18;
 pub fn run() -> Result<()> {
     let root = std::env::current_dir().context("failed to resolve current directory")?;
     assert_ui_fixture_shape(&root)?;
+    if !cargo_dylint_available() {
+        eprintln!("cargo-dylint not installed; skipping dylint gate. CI installs it explicitly.");
+        return Ok(());
+    }
     run_cargo_dylint(&root)?;
     println!("dylint_gate: passed");
     Ok(())
+}
+
+fn cargo_dylint_available() -> bool {
+    Command::new("cargo")
+        .args(["dylint", "--version"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
 }
 
 fn assert_ui_fixture_shape(root: &Path) -> Result<()> {
