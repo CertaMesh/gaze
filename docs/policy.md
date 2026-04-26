@@ -302,7 +302,7 @@ Bundled rulepacks:
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
 | `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
-| `core-extended` | `phone.structural`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Phase 1 shape recognizers plus Phase 2 validator-backed IBAN and credit-card recognizers. |
+| `core-extended` | `phone.structural`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Validator-backed E.164 phone, IBAN, and credit-card recognizers plus structural IP/postal recognizers. |
 
 Opt into `core-extended` alongside `core`:
 
@@ -319,8 +319,10 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 
 `core-extended` recognizers are intentionally conservative:
 
-- `phone.structural` matches E.164-only `+\d{6,15}` numbers. National phone
-  patterns are not included.
+- `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
+  `custom:phone` only when the match passes `e164_phone`. National phone
+  patterns are not included. Regex-passing but unassigned values such as
+  `+99999999` do not emit detections.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
@@ -330,12 +332,13 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
 - `postal.us` emits `custom:postal_code` only under active locale `en-US`.
   Plain `en` does not activate `postal.us`.
 
-IBAN and credit-card recognizers are universal (`global`) because their
-validation rules are format-level checks, not national locale gates. They are
-also solo recognizers in their classes, so they do not need `cooperates_with`
-rows. Tenant numeric IDs such as `Subscriber_0001234567` and `Order_0815`
-are explicit negative fixtures for those recognizers; broad numeric shapes must
-not become credit-card detections without a passing validator.
+Phone, IBAN, and credit-card recognizers are universal (`global`) because their
+validation rules are format-level checks, not locale gates in Gaze policy. They
+are also solo recognizers in their classes, so they do not need
+`cooperates_with` rows. Tenant numeric IDs such as `Subscriber_0001234567` and
+`Order_0815` are explicit negative fixtures for those recognizers; broad
+numeric shapes must not become phone or credit-card detections without a
+passing validator.
 
 Within a rulepack, every `[[recognizers]]` block has an `id`, `class`, and
 `[recognizers.match]` table. If two recognizers in the same rulepack emit the
@@ -372,6 +375,7 @@ kind = "luhn"
 | Kind | Applies to | Behavior |
 |------|------------|----------|
 | `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
+| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core-extended` uses it with `phone.structural` so assigned international numbers such as `+4915550112233` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
 | `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
 | `iban_mod97` | IBAN-like alphanumeric candidates | ISO 7064 mod-97 check. Input is canonicalized as uppercase with ASCII whitespace removed before validation. |
 
@@ -380,12 +384,11 @@ returns false emits no detection. This is intentionally stricter than emitting
 an unvalidated candidate because shape-only false positives are a PII-leak risk
 for agent workflows.
 
-S1 adds validator names to rulepack TOML only. Three-surfaces parity is not
-applicable because validators are recognizer policy data, not runtime knobs:
-there is no CLI flag or default runtime surface for swapping validator
-semantics per invocation. `cooperates_with` parity is also not applicable in S1
-because no bundled recognizers are added; cooperation tests belong to bundle
-composition changes.
+Validator names live in rulepack TOML and are compile-time/library behavior,
+not per-invocation CLI policy. `e164_phone` is backed by the
+`gaze-recognizers` `phone-parser` feature, which gates the optional
+`phonenumber` dependency and is enabled in default builds. There is no CLI flag
+or policy runtime knob for swapping validator semantics per invocation.
 
 #### Built-in normalizers
 
