@@ -127,7 +127,9 @@ mod tests {
     use std::cell::Cell;
     use std::collections::HashMap;
 
-    use gaze::{dictionary_bundle_from_context, ContextDictionary, RecognizerRegistry, TypedContext};
+    use gaze::{
+        dictionary_bundle_from_context, ContextDictionary, RecognizerRegistry, TypedContext,
+    };
     use serde_json::Map;
 
     use super::*;

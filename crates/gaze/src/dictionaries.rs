@@ -33,8 +33,8 @@ pub fn dictionary_bundle_from_context(ctx: &Context) -> DictionaryBundle {
 mod tests {
     use super::*;
     use crate::{ContextDictionary, PiiClass};
-    use std::collections::HashMap;
     use serde_json::Map;
+    use std::collections::HashMap;
 
     #[test]
     fn context_bundle_builds_automata_per_request() {

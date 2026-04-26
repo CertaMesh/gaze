@@ -3,8 +3,8 @@
 use std::cell::Cell;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch,
-    RecognizerSpec, Rulepack, RulepackError, RulepackSource, Scope, Session,
+    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch, RecognizerSpec,
+    Rulepack, RulepackError, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
 use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};

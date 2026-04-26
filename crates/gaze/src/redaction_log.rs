@@ -5,8 +5,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use gaze_types::{ConflictTier, DocumentKind, RedactionEntry};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OpenFlags};
 
-use crate::{Action, PiiClass};
 use crate::Result;
+use crate::{Action, PiiClass};
 
 pub trait RedactionLogger: Send + Sync {
     fn log(&self, entry: &RedactionEntry) -> Result<()>;

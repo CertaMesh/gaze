@@ -1,8 +1,8 @@
-#[cfg(not(feature = "phone-parser"))]
-use gaze_recognizers::RecognizerError;
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, PiiClass, Pipeline, RawDocument, Scope, Session,
 };
+#[cfg(not(feature = "phone-parser"))]
+use gaze_recognizers::RecognizerError;
 use gaze_recognizers::{NormalizerKind, RegexDetector, ValidatorKind};
 
 fn validator_pipeline(
