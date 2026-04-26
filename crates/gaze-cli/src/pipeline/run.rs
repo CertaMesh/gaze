@@ -10,10 +10,10 @@ use base64::Engine;
 use serde::Serialize;
 
 use gaze::{
-    Action, DictionaryBundle, DictionarySource, DocumentKind, LocaleTag, Policy, RawDocument,
-    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy,
-    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger,
-    TypedContext,
+    dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
+    LocaleTag, Policy, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult,
+    RuleSpec, Rulepack, RulepackPolicy, RulepackSource, Scope, SensitiveSnapshot, Session,
+    SessionPolicy, SessionScope, SqliteLogger, TypedContext,
 };
 
 use crate::clean_overrides::CleanOverrides;
@@ -79,7 +79,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         .map_err(|_| CliError::PolicyConfig)?;
     let context_bundle = context
         .as_ref()
-        .map(DictionaryBundle::from_context)
+        .map(dictionary_bundle_from_context)
         .unwrap_or_default();
     let rulepack_dictionaries =
         dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;

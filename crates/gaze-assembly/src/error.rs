@@ -9,3 +9,19 @@ pub enum BuildError {
     #[error("pipeline error: {0}")]
     Pipeline(#[from] gaze::Error),
 }
+
+impl From<gaze_recognizers::RecognizerError> for BuildError {
+    fn from(err: gaze_recognizers::RecognizerError) -> Self {
+        match err {
+            gaze_recognizers::RecognizerError::InvalidRegex(err) => {
+                Self::Pipeline(gaze::Error::InvalidRegex(err))
+            }
+            gaze_recognizers::RecognizerError::UnsupportedValidator { kind } => {
+                Self::Rulepack(gaze::RulepackError::UnsupportedValidator { kind })
+            }
+            gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
+                Self::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
+            }
+        }
+    }
+}
