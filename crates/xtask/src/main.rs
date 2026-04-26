@@ -204,8 +204,10 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
     Ok(())
 }
 
+const RESTORE_AUDIT_RENAMED_ROOT_MARKER: &str = "__renamed_gaze_root__";
+
 const RESTORE_AUDIT_FORBIDDEN_SYMBOLS: &[&str] = &[
-    "__renamed_gaze_root__",
+    RESTORE_AUDIT_RENAMED_ROOT_MARKER,
     "redaction_log",
     "ConflictTier",
     "DocumentKind",
@@ -299,7 +301,7 @@ fn collect_use_tree_names_with_root(
                 root,
                 UseTreeRoot::Crate | UseTreeRoot::Gaze | UseTreeRoot::GazeCli
             ) {
-                names.push("__renamed_gaze_root__".to_string());
+                names.push(RESTORE_AUDIT_RENAMED_ROOT_MARKER.to_string());
             }
         }
         syn::UseTree::Glob(_) => {
@@ -310,6 +312,7 @@ fn collect_use_tree_names_with_root(
                 names.extend(
                     RESTORE_AUDIT_FORBIDDEN_SYMBOLS
                         .iter()
+                        .filter(|symbol| **symbol != RESTORE_AUDIT_RENAMED_ROOT_MARKER)
                         .map(|symbol| (*symbol).to_string()),
                 );
             } else {
