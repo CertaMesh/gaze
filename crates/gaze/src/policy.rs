@@ -250,7 +250,7 @@ impl TryFrom<RawPolicy> for Policy {
 
         if !raw.detectors.is_empty() {
             return Err(PolicyError::LegacyDetectorUnsupported(
-                "https://github.com/Naoray/gaze/blob/main/docs/policy.md#migrating-detector",
+                "https://github.com/piinuts/gaze/blob/main/docs/policy.md#migrating-detector",
             ));
         }
 
