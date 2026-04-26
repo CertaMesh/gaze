@@ -14,7 +14,7 @@ test-support = []
 
 [dependencies]
 aho-corasick = "1"
-gaze = { path = "../gaze" }
+gaze-types = { workspace = true }
 hex = "0.4"
 ndarray = "0.16"
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
@@ -30,6 +30,7 @@ unicode-normalization = "0.1"
 
 [dev-dependencies]
 criterion = "0.5"
+gaze = { path = "../gaze" }
 tempfile = "3"
 
 [[bench]]

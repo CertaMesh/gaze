@@ -2,33 +2,14 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+pub use gaze_types::{ConflictTier, DocumentKind, RedactionEntry};
 use rusqlite::{params, params_from_iter, types::Value, Connection, OpenFlags};
 
-use crate::detector::PiiClass;
-use crate::rule::Action;
 use crate::Result;
+use crate::{Action, PiiClass};
 
 pub trait RedactionLogger: Send + Sync {
     fn log(&self, entry: &RedactionEntry) -> Result<()>;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DocumentKind {
-    Structured,
-    Text,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RedactionEntry {
-    pub source: String,
-    pub class: PiiClass,
-    pub action: Action,
-    pub field_name: Option<String>,
-    pub document_kind: DocumentKind,
-    pub conflict_loser: bool,
-    pub decided_by: ConflictTier,
-    pub created_at: i64,
-    pub session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -67,18 +48,6 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "created_at",
     "session_id",
 ];
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConflictTier {
-    None,
-    ClassPriority,
-    RulePriority,
-    Score,
-    SpanLength,
-    Validator,
-    RecognizerId,
-    Merged,
-}
 
 pub(crate) fn current_epoch_ms() -> i64 {
     SystemTime::now()

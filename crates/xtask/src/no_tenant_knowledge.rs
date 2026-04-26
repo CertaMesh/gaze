@@ -4,7 +4,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const PRODUCTION_CRATES: &[&str] = &["gaze", "gaze-recognizers", "gaze-assembly", "gaze-cli"];
+const PRODUCTION_CRATES: &[&str] = &[
+    "gaze",
+    "gaze-types",
+    "gaze-recognizers",
+    "gaze-assembly",
+    "gaze-cli",
+];
 const ALLOW_MARKER: &str = "// allow(tenant-fixture)";
 // Denylist literals split via concat!() so this source file does not contain
 // the contiguous strings the gate scans for. This is meta-Potemkin avoidance:

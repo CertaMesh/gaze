@@ -12,8 +12,9 @@ It does not merely redact. It replaces PII with stable, reversible tokens, so th
 
 Gaze is a reversible PII pseudonymization runtime that lets AI agents work with production data without ever seeing the real personal data.
 
-The workspace has five crates:
+The workspace has six crates:
 
+- `crates/gaze-types` — shared value contracts for adopters and internal crates without pulling runtime or recognizer dependencies.
 - `crates/gaze` — core library: pipeline, sessions, policy loader, recognizer registry, locale chain, rulepack schema, token grammar.
 - `crates/gaze-recognizers` — detection backends plugged into the registry (regex, dictionary, NER) and bundled rulepacks.
 - `crates/gaze-assembly` — policy-to-pipeline assembly shared by CLI-style adopters.
@@ -111,6 +112,7 @@ cargo add gaze-recognizers --features phone-parser
 
 ```text
 crates/
+  gaze-types/         shared value contracts with serde only
   gaze/               core library (pipeline, sessions, policy, registry, locale, rulepack)
   gaze-recognizers/   detection backends (regex, dictionary, NER) + bundled rulepacks
   gaze-assembly/      policy-to-pipeline assembly shared by CLI-style adopters
@@ -295,7 +297,7 @@ Cumulative highlights from v0.4.1 through v0.4.6 — see [CHANGELOG.md](CHANGELO
 
 - **`SymmetricPotemkin`** (v0.4.1) — runs the named behavioral tests for symmetric audit-merge entries.
 - **`RecognizerCompositionValidator`** — guards same-class rulepack composition; missing `cooperates_with` declarations fail closed with `RulepackError::SameClassWithoutCooperation`.
-- **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
+- **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
 - **`ClassMapOverrideSafety`** (v0.4.4 S1) — previously scaffolded gate is now active. `cargo run -p xtask -- class-map-override-safety` runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. Adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed.
 - **`audit_metadata_only`** (v0.4.5 S3) — compile-time enforcement that restore-path code does not import audit metadata symbols. Syn-based AST walker covers file scope, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) and the v0.5 dylint pivot are documented in [docs/architecture/xtask.md](docs/architecture/xtask.md).
 
@@ -308,7 +310,7 @@ See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate author
 ## Roadmap teaser — v0.5
 
 - **Open-key `PiiClass`** — sketched in [`docs/design/v0.5-open-piiclass.md`](docs/design/v0.5-open-piiclass.md). Replaces the closed enum with an open-key string interner so adopters and rulepacks can introduce new classes without core changes.
-- **Crate-shape Option B** — extract `gaze-types` and collapse `gaze-assembly`. Decision-deferred sketch in the same v0.5 design doc.
+- **Crate-shape Option B** — `gaze-types` extraction is underway for v0.5; `gaze-assembly` remains the policy-to-pipeline joining layer.
 
 Deferred beyond v0.5:
 
@@ -325,7 +327,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.5 directions.
 - **`core-extended` no-policy activation (v0.4.5)** — invocations of `--rulepack-bundled core-extended` *without a policy* now activate `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers. Adopters relying on the prior behavior (no national phone tokenization, no bare 5-digit numeric tokenization) must pass `--locale=global` or supply a policy with narrower locale gating. (todo #171)
 - **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy v0.4.3 audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
 - **Audit retention (v0.4.5)** — there is no policy-level retention default and no background auto-purge. Adopters who need retention drive it via `gaze audit purge --before <iso8601>` (preview with `--dry-run` or `--count`).
-- **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+- **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
 

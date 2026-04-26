@@ -3,7 +3,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
-use gaze::PiiClass;
+use gaze_types::PiiClass;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 

@@ -96,7 +96,7 @@ fn t20_context_class_map_overrides_policy_dict_class() {
     let context = context_with_alpha_override();
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None).expect("pipeline");
-    let dictionaries = gaze::DictionaryBundle::from_context(&context);
+    let dictionaries = gaze::dictionary_bundle_from_context(&context);
     let fields = serde_json::Map::new();
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline

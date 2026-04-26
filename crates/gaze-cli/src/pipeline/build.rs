@@ -167,11 +167,23 @@ pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<Loc
 /// be exercised end-to-end; richer detectors arrive with the loader.
 pub(crate) fn build_stub_pipeline(logger: Arc<dyn RedactionLogger>) -> GazeResult<Pipeline> {
     Pipeline::builder()
-        .detector(RegexDetector::emails()?)
+        .detector(RegexDetector::emails().map_err(map_recognizer_error)?)
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
         .rule(DefaultRule::new(Action::Preserve))
         .redaction_logger(ArcLogger(logger))
         .build()
+}
+
+fn map_recognizer_error(err: gaze_recognizers::RecognizerError) -> gaze::Error {
+    match err {
+        gaze_recognizers::RecognizerError::InvalidRegex(err) => gaze::Error::InvalidRegex(err),
+        gaze_recognizers::RecognizerError::UnsupportedValidator { kind } => {
+            gaze::Error::Rulepack(gaze::RulepackError::UnsupportedValidator { kind })
+        }
+        gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
+            gaze::Error::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
+        }
+    }
 }
 
 pub(crate) fn build_context_pipeline(

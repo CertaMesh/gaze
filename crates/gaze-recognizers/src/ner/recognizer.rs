@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use gaze::{Candidate, ConflictTier, DetectContext, PiiClass, Recognizer};
+use gaze_types::{Candidate, ConflictTier, DetectContext, PiiClass, Recognizer};
 
 #[cfg(feature = "test-support")]
 use super::backend::test_support::load_test_support_recognizer;

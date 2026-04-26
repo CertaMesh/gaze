@@ -1,8 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use gaze::{
-    ContextDictionary, DetectContext, DictionaryBundle, PiiClass, Recognizer, TypedContext,
-};
+use gaze::{dictionary_bundle_from_context, ContextDictionary, TypedContext};
 use gaze_recognizers::DictionaryRecognizer;
+use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
 use std::collections::HashMap;
 
 fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundle) {
@@ -20,7 +19,7 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
         class_map: HashMap::new(),
         fields: serde_json::Map::new(),
     };
-    let bundle = DictionaryBundle::from_context(&ctx);
+    let bundle = dictionary_bundle_from_context(&ctx);
     (
         DictionaryRecognizer::new(
             "dict/orders",
@@ -35,9 +34,9 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
 
 fn dictionary_baseline(c: &mut Criterion) {
     let (recognizer_15k, bundle_15k) = build_recognizer(15_000);
-    let fields = serde_json::Map::new();
+    let fields = ();
     let ctx_15k = DetectContext {
-        locale_chain: &[gaze::LocaleTag::Global],
+        locale_chain: &[LocaleTag::Global],
         dictionaries: &bundle_15k,
         fields: &fields,
         degraded: std::cell::Cell::new(false),
@@ -49,7 +48,7 @@ fn dictionary_baseline(c: &mut Criterion) {
 
     let (recognizer_50k, bundle_50k) = build_recognizer(50_000);
     let ctx_50k = DetectContext {
-        locale_chain: &[gaze::LocaleTag::Global],
+        locale_chain: &[LocaleTag::Global],
         dictionaries: &bundle_50k,
         fields: &fields,
         degraded: std::cell::Cell::new(false),

@@ -3,12 +3,11 @@
 use std::cell::Cell;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, DetectContext, DictionaryBundle, LocaleTag,
-    PiiClass, Pipeline, RawDocument, RawMatch, Recognizer, RecognizerSpec, Rulepack, RulepackError,
-    RulepackSource, Scope, Session,
+    Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch, RecognizerSpec,
+    Rulepack, RulepackError, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
-use serde_json::Map;
+use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
 
 fn core_extended() -> Rulepack {
     Rulepack::load(RulepackSource::Embedded(
@@ -57,7 +56,7 @@ fn detect_recognizer(
     locale: LocaleTag,
 ) -> Vec<String> {
     let dictionaries = DictionaryBundle::default();
-    let fields = Map::new();
+    let fields = ();
     let ctx = DetectContext {
         locale_chain: &[locale, LocaleTag::Global],
         dictionaries: &dictionaries,
@@ -84,7 +83,7 @@ fn detect_recognizer_canonical_forms(
     locale: LocaleTag,
 ) -> Vec<Option<String>> {
     let dictionaries = DictionaryBundle::default();
-    let fields = Map::new();
+    let fields = ();
     let ctx = DetectContext {
         locale_chain: &[locale, LocaleTag::Global],
         dictionaries: &dictionaries,

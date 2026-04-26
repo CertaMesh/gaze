@@ -1,8 +1,9 @@
-use gaze::{
-    Candidate, ConflictTier, DetectContext, Detection, Detector, Error, LocaleTag, PiiClass,
-    Recognizer, Result, RulepackError,
+use gaze_types::{
+    Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleTag, PiiClass, Recognizer,
 };
 use regex::Regex;
+
+use crate::{RecognizerError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidatorKind {
@@ -23,7 +24,7 @@ pub enum Region {
 }
 
 impl ValidatorKind {
-    pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s {
             "email_rfc" => Ok(Self::EmailRfc),
             #[cfg(feature = "phone-parser")]
@@ -36,7 +37,7 @@ impl ValidatorKind {
             "iban_mod97" => Ok(Self::IbanMod97),
             // With phone-parser disabled, phone validators fall through here so
             // rulepack construction fails closed instead of silently dropping candidates.
-            other => Err(RulepackError::UnsupportedValidator {
+            other => Err(RecognizerError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
         }
@@ -62,11 +63,11 @@ pub enum NormalizerKind {
 }
 
 impl NormalizerKind {
-    pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
+    pub fn parse(s: &str) -> Result<Self> {
         match s {
             "email_canonical" => Ok(Self::EmailCanonical),
             "iban_canonical" => Ok(Self::IbanCanonical),
-            other => Err(RulepackError::UnsupportedNormalizer {
+            other => Err(RecognizerError::UnsupportedNormalizer {
                 kind: other.to_string(),
             }),
         }
@@ -129,7 +130,7 @@ impl RegexDetector {
         validator_kind: Option<ValidatorKind>,
         normalizer_kind: Option<NormalizerKind>,
     ) -> Result<Self> {
-        let regex = Regex::new(pattern).map_err(Error::InvalidRegex)?;
+        let regex = Regex::new(pattern).map_err(RecognizerError::InvalidRegex)?;
         Ok(Self {
             regex,
             class,
@@ -389,8 +390,8 @@ mod tests {
             Some(NormalizerKind::EmailCanonical),
         )
         .expect("regex detector");
-        let fields = serde_json::Map::new();
-        let dictionaries = gaze::DictionaryBundle::default();
+        let fields = ();
+        let dictionaries = gaze_types::DictionaryBundle::default();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &dictionaries,
@@ -446,7 +447,7 @@ mod tests {
             .expect_err("phone parser feature is disabled");
         assert!(matches!(
             err,
-            RulepackError::UnsupportedValidator { kind } if kind == "e164_phone_national_us"
+            RecognizerError::UnsupportedValidator { kind } if kind == "e164_phone_national_us"
         ));
     }
 
@@ -466,8 +467,8 @@ mod tests {
             None,
         )
         .expect("regex detector");
-        let fields = serde_json::Map::new();
-        let dictionaries = gaze::DictionaryBundle::default();
+        let fields = ();
+        let dictionaries = gaze_types::DictionaryBundle::default();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &dictionaries,
