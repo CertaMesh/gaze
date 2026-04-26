@@ -43,8 +43,12 @@ the background.
 
 ```sh
 gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z --dry-run
+gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z --count
 gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z
 ```
+
+`--count` is an alias for `--dry-run`; both flags count matching rows without
+deleting them.
 
 Successful output is JSON:
 
