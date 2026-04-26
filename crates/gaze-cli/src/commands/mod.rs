@@ -103,6 +103,12 @@ enum AuditCmd {
         /// Filter by document kind, such as `text` or `structured`.
         #[arg(long)]
         document_kind: Option<String>,
+        /// Include rows created at or after this ISO 8601 timestamp.
+        #[arg(long = "from")]
+        from_iso8601: Option<String>,
+        /// Include rows created at or before this ISO 8601 timestamp.
+        #[arg(long = "to")]
+        to_iso8601: Option<String>,
     },
     /// Export filtered audit metadata rows.
     Export {
@@ -127,6 +133,12 @@ enum AuditCmd {
         /// Filter by document kind, such as `text` or `structured`.
         #[arg(long)]
         document_kind: Option<String>,
+        /// Include rows created at or after this ISO 8601 timestamp.
+        #[arg(long = "from")]
+        from_iso8601: Option<String>,
+        /// Include rows created at or before this ISO 8601 timestamp.
+        #[arg(long = "to")]
+        to_iso8601: Option<String>,
     },
 }
 
@@ -177,12 +189,16 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 source,
                 action,
                 document_kind,
+                from_iso8601,
+                to_iso8601,
             } => audit::query(audit::Args {
                 audit_db,
                 class: pii_class,
                 source,
                 action,
                 document_kind,
+                from_iso8601,
+                to_iso8601,
             }),
             AuditCmd::Export {
                 audit_db,
@@ -192,6 +208,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 source,
                 action,
                 document_kind,
+                from_iso8601,
+                to_iso8601,
             } => audit::export(
                 audit::Args {
                     audit_db,
@@ -199,6 +217,8 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     source,
                     action,
                     document_kind,
+                    from_iso8601,
+                    to_iso8601,
                 },
                 format,
                 output,
