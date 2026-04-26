@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.5] - 2026-04-26
+
+### Added
+
+- **Audit retention manual purge (PR #59):** `gaze audit purge --before <iso8601> [--dry-run | --count]` deletes redaction-log rows older than the cutoff. Calendar-aware ISO 8601 validation rejects malformed dates fail-closed with typed `AuditPurgeIso8601` error. Restricted DELETE clause; no policy-level retention default; no background auto-purge.
+- **`audit_metadata_only` xtask gate (PR #59):** compile-time enforcement that restore-path code does not import audit metadata symbols. Walker covers file scope `use`, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) documented in `docs/architecture/xtask.md`; v0.5 architectural pivot to dylint-based name-resolution lint scheduled (todo #181).
+- **`--session` audit filter (PR #57):** opaque session-scope filter for `gaze audit query` / `gaze audit export` (NOT raw `session_hex`).
+- **DE + US national phone recognizers (PR #58):** parser-backed E.164 region-aware validators (`phonenumber` crate) for German and US national phone numbers. Cooperate with structural phone recognizer; gated behind `phone-parser` Cargo feature.
+- **ClassMapOverrideSafety extension (PR #55 / S4):** further hardening of class-map override safety gate.
+- **Rulepack version bump validation (PR #56 / S5):** rulepack version bump audit + drift-prevention rule.
+- **`gaze-assembly` crate restructure (PR #61 / S6):** `lib.rs` split into focused modules by responsibility.
+
+### Changed
+
+- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.5`.
+- **`core-extended` no-policy locale activation (PR #58):** the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. Adopters using the bundle without a policy will see additional tokenization for German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply an explicit `--locale=global` or pass a policy with narrower locale gating. (todo #171)
+
+### Fixed
+
+- No standalone `fix(...)` commits landed between `v0.4.4` and `v0.4.5`; the bundle is release plumbing plus S1-S6 feature, hardening, and documentation work.
+
+### Documentation
+
+- README catch-up for v0.4.2-v0.4.4 (PR #60).
+- README Requirements section with per-OS support matrix (PR #62).
+- Org transfer URL sweep `Naoray/gaze` -> `piinuts/gaze` (PR #63).
+- New `docs/architecture/xtask.md` documenting `audit_metadata_only` gate coverage, known limitations, and v0.5 roadmap.
+- New `docs/research/v0.5-dylint-audit-gate.md` stub (todo #181).
+
 ## [0.4.4] - 2026-04-26
 
 ### Added
@@ -282,7 +311,10 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.5...HEAD
+[0.4.5]: https://github.com/piinuts/gaze/compare/v0.4.4...v0.4.5
+[0.4.4]: https://github.com/piinuts/gaze/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/piinuts/gaze/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/piinuts/gaze/compare/v0.4.0-rc.1...v0.4.2
 [0.4.0-rc.1]: https://github.com/piinuts/gaze/releases/tag/v0.4.0-rc.1
 [v0.3.1]: https://github.com/piinuts/gaze/releases/tag/v0.3.1
