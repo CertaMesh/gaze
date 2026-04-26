@@ -234,6 +234,35 @@ impl SqliteLogger {
         }
         Ok(entries)
     }
+
+    pub fn count_before(&self, before_epoch_ms: i64) -> Result<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM redaction_log WHERE created_at < ?1",
+                params![before_epoch_ms],
+                |row| row.get(0),
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        Ok(count as usize)
+    }
+
+    pub fn purge_before(&self, before_epoch_ms: i64) -> Result<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| crate::Error::Sqlite("sqlite mutex poisoned".to_string()))?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM redaction_log WHERE created_at < ?1",
+                params![before_epoch_ms],
+            )
+            .map_err(|err| crate::Error::Sqlite(err.to_string()))?;
+        Ok(deleted)
+    }
 }
 
 impl RedactionLogger for SqliteLogger {

@@ -9,6 +9,7 @@ use gaze::{
     Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
 use gaze_recognizers::RegexDetector;
+use rusqlite::Connection;
 
 #[test]
 fn pipeline_is_clone_send_and_sync() {
@@ -500,4 +501,43 @@ fn sqlite_logger_persists_entries() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].source, "regex");
     assert_eq!(rows[0].field_name.as_deref(), Some("email"));
+}
+
+#[test]
+fn sqlite_logger_migrates_legacy_tables_and_purges_by_created_at() {
+    let temp = tempfile::NamedTempFile::new().expect("temp db");
+    {
+        let conn = Connection::open(temp.path()).expect("legacy sqlite");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE redaction_log (
+                source TEXT NOT NULL,
+                class TEXT NOT NULL,
+                action TEXT NOT NULL,
+                field_name TEXT NULL,
+                document_kind TEXT NOT NULL,
+                conflict_loser INTEGER NOT NULL,
+                decided_by TEXT NOT NULL DEFAULT 'none'
+            );
+            "#,
+        )
+        .expect("legacy schema");
+    }
+
+    let logger = SqliteLogger::new(temp.path()).expect("migrated sqlite logger");
+    logger
+        .log(&RedactionEntry {
+            source: "regex".to_string(),
+            class: PiiClass::Email,
+            action: Action::Tokenize,
+            field_name: None,
+            document_kind: gaze::DocumentKind::Text,
+            conflict_loser: false,
+            decided_by: gaze::ConflictTier::None,
+        })
+        .expect("log entry");
+
+    assert_eq!(logger.count_before("2100-01-01T00:00:00Z").unwrap(), 1);
+    assert_eq!(logger.purge_before("2100-01-01T00:00:00Z").unwrap(), 1);
+    assert_eq!(logger.entries().unwrap().len(), 0);
 }
