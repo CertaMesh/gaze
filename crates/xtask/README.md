@@ -14,6 +14,7 @@ From the workspace root:
 $ cargo run -p xtask -- symmetric-potemkin
 $ cargo run -p xtask -- class-map-override-safety
 $ cargo run -p xtask -- recognizer-composition-validator
+$ cargo run -p xtask -- no-tenant-knowledge
 ```
 
 Clap converts enum variants to kebab-case command names.
@@ -23,8 +24,9 @@ Clap converts enum variants to kebab-case command names.
 | Gate | Command | Behavior |
 |------|---------|----------|
 | `SymmetricPotemkin` | `symmetric-potemkin` | Checks that every named behavioral test in `SYMMETRIC_POTEMKIN_TESTS` exists, then runs each exact test. |
-| `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. |
+| `ClassMapOverrideSafety` | `class-map-override-safety` | Checks that every named behavioral test in `CLASS_MAP_OVERRIDE_SAFETY_TESTS` exists, then runs each exact test. Activated in v0.4.4. |
 | `RecognizerCompositionValidator` | `recognizer-composition-validator` | Checks that every named behavioral test in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS` exists, then runs each exact test. |
+| `NoTenantKnowledge` | `no-tenant-knowledge` | Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope. Added in v0.4.3. |
 
 The implementation lives in [`src/main.rs`](src/main.rs). The broader gate
 catalog and gate-authoring rules are in

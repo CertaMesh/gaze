@@ -11,9 +11,22 @@ tokenizer dependencies.
 
 ```toml
 [dependencies]
-gaze = "0.4.1"
-gaze-recognizers = "0.4.1"
+gaze = "0.4.4"
+gaze-recognizers = "0.4.4"
 ```
+
+Library users that need parser-backed E.164 phone validation must opt in to the
+`phone-parser` feature:
+
+```toml
+[dependencies]
+gaze-recognizers = { version = "0.4.4", features = ["phone-parser"] }
+```
+
+`gaze-cli` enables `phone-parser` by default. Without the feature, the
+rulepack loader rejects `e164_phone` at load time with
+`RulepackError::UnsupportedValidator`, preserving the axis-1 fail-closed
+posture rather than silently degrading to shape-only matching.
 
 Inside the workspace:
 
@@ -56,7 +69,16 @@ normalizers can flow from TOML rulepacks into the registry.
 Current validator and normalizer enums:
 
 - `ValidatorKind::EmailRfc`
+- `ValidatorKind::E164Phone` (requires the `phone-parser` feature)
+- `ValidatorKind::Luhn` (Mod 10 checksum, used by `card.structural`)
+- `ValidatorKind::IbanMod97` (ISO 7064 mod-97 IBAN checksum, used by `iban.structural`)
 - `NormalizerKind::EmailCanonical`
+- `NormalizerKind::IbanCanonical` (uppercase + whitespace strip, paired with `iban_mod97`)
+
+`E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
+matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
+while rejecting regex-passing but unassigned shapes such as `+99999999`. Audit notes live in
+[`docs/research/v0.4.4-phonenumber-audit.md`](../../docs/research/v0.4.4-phonenumber-audit.md).
 
 ## Dictionary backend
 
@@ -83,6 +105,8 @@ Current dependencies include:
 - `ort` for ONNX Runtime
 - `tokenizers` for tokenizer execution
 - `ndarray` for model tensors
+- `phonenumber` (gated behind the `phone-parser` Cargo feature) for the
+  parser-backed `E164Phone` validator
 
 The expected production model family is Davlan mBERT NER, configured through
 policy `[ner]` and loaded by `gaze-assembly` when `model_dir` is present.
@@ -95,6 +119,7 @@ Loading failures are policy configuration failures in the CLI path.
 | Name | File | Purpose |
 |------|------|---------|
 | `core` | [`embedded/core.toml`](embedded/core.toml) | Global core recognizers, including email address and email-header name detection. |
+| `core-extended` | [`embedded/core-extended.toml`](embedded/core-extended.toml) | Opt-in extension. Phase 1 (v0.4.2): shape-only E.164 phone numbers, IPv4/IPv6 addresses, `de-DE`/`en-US` postal codes. Phase 2 (v0.4.3): validator-backed IBAN (`iban.structural`, `iban_mod97` + `iban_canonical`) and credit card (`card.structural`, `luhn`). Phase 3 (v0.4.4): `e164_phone` parser-backed validator extends the existing `phone.structural` recognizer. Default `[[rule]]` entries ship in the rulepack so `--rulepack-bundled core,core-extended` tokenizes the new classes out of the box. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
 
