@@ -6,8 +6,9 @@ use std::time::Duration;
 use gaze::{
     Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, PiiClass, Pipeline,
     RawDocument, RedactionEntry, RedactionLogger, Sandbox, SandboxError, SandboxPlan, Scope,
-    Session, SqliteLogger, UntrustedExecRequest, ValidatedExecRequest, Value,
+    Session, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
+use gaze_audit::SqliteLogger;
 use gaze_recognizers::RegexDetector;
 use rusqlite::Connection;
 

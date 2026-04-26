@@ -1,5 +1,17 @@
 # Contributing
 
+## Workspace shape
+
+| Path | Role |
+|---|---|
+| `crates/gaze-types` | Shared value contracts with serde-only dependencies. |
+| `crates/gaze` | Core pipeline, sessions, policy loader, registry, locale, rulepack schema, and token grammar. |
+| `crates/gaze-audit` | Passive SQLite audit sink and read-side audit query API. |
+| `crates/gaze-recognizers` | Detection backends and bundled rulepacks. |
+| `crates/gaze-assembly` | Policy-to-pipeline assembly shared by CLI-style adopters. |
+| `crates/gaze-cli` | Standalone `gaze` binary. |
+| `crates/xtask` | Internal repository gate runner. |
+
 ## Tenant class names in tests
 
 Test fixtures and benchmark labels MUST use neutral class names (e.g. `class_alpha`, `tenant_class_a`, `dict_alpha`), never tenant-specific patterns like `order_id`, `Order_42`, `Song_42`, `User_7`. Rationale: drawer `eac549ae` — gaze core has no built-in tenant knowledge.

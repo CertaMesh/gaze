@@ -13,8 +13,9 @@ use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
     LocaleTag, Policy, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult,
     RuleSpec, Rulepack, RulepackPolicy, RulepackSource, Scope, SensitiveSnapshot, Session,
-    SessionPolicy, SessionScope, SqliteLogger, TypedContext,
+    SessionPolicy, SessionScope, TypedContext,
 };
+use gaze_audit::SqliteLogger;
 
 use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
@@ -287,7 +288,10 @@ impl CountingLogger {
     fn new(audit_db: Option<&Path>) -> GazeResult<Self> {
         Ok(Self {
             detections: AtomicU64::new(0),
-            audit: audit_db.map(SqliteLogger::new).transpose()?,
+            audit: audit_db
+                .map(SqliteLogger::new)
+                .transpose()
+                .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
     }
 }
@@ -295,7 +299,9 @@ impl CountingLogger {
 impl RedactionLogger for CountingLogger {
     fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
         if let Some(audit) = &self.audit {
-            audit.log(entry)?;
+            audit
+                .log(entry)
+                .map_err(|err| gaze::Error::Sqlite(err.to_string()))?;
         }
         if !entry.conflict_loser
             && entry.document_kind == DocumentKind::Text

@@ -13,6 +13,7 @@ $ cargo run -p xtask -- no-tenant-knowledge
 $ cargo run -p xtask -- bundle-tokenization-drift
 $ cargo run -p xtask -- fixture-citation-lint
 $ cargo run -p xtask -- ci-feature-matrix
+$ cargo run -p xtask -- cargo-metadata-audit-isolation
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -28,6 +29,27 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `BundleTokenizationDrift` | `cargo run -p xtask -- bundle-tokenization-drift` | Added in v0.4.6. Discovers recognizer-bearing bundled rulepacks from `crates/gaze-recognizers/embedded/*.toml`, runs the real `gaze clean --rulepack-bundled <bundle> --audit-db <tmp>` path against `crates/xtask/fixtures/drift-corpus.txt`, restores emitted tokens to infer byte spans, and compares canonical no-policy tokenization metadata to `crates/xtask/snapshots/<bundle>-no-policy.json`. Snapshots exclude raw values, `session_blob`, and audit `created_at`. `--verify-ack` fails closed when snapshot changes lack both a `// drift-ack:` source/test comment and a `[bundle-tokenization-drift]` line in the `[Unreleased]` `### Changed` section of `CHANGELOG.md`. |
 | `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
+| `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default or `--no-default-features` graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
+
+## cargo_metadata_audit_isolation self-test
+
+The `cargo_metadata_audit_isolation` gate protects the v0.5 crate boundary:
+`gaze-audit` owns the `rusqlite` sink, while `gaze` stays free of audit-sink
+normal dependencies unless the temporary `audit` compatibility shim is
+explicitly enabled.
+
+Adversarial self-test for reviewers:
+
+1. On a throwaway branch, add `gaze-audit = { workspace = true }` to
+   `crates/gaze/Cargo.toml` under `[dependencies]`.
+2. Run `cargo run -p xtask -- cargo-metadata-audit-isolation`.
+3. Confirm the gate exits non-zero and names `gaze` with a path to
+   `gaze-audit`.
+4. Revert the throwaway `Cargo.toml` edit.
+
+The gate walks normal dependency edges from `cargo metadata`; development
+dependencies are ignored so `gaze` contract tests can depend on `gaze-audit`
+without weakening the shipped default and no-default graphs.
 
 ## bundle-tokenization-drift adversarial self-test
 

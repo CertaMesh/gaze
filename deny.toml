@@ -1,0 +1,7 @@
+[bans]
+workspace-default-features = "allow"
+
+[[bans.features]]
+crate = "gaze"
+deny = ["audit"]
+reason = "The temporary v0.5 compatibility shim must not be enabled in normal CI builds; default and --no-default-features must keep gaze-audit out of gaze core."
