@@ -339,9 +339,12 @@ gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
   unassigned values such as `+99999999` do not emit detections.
 - `phone.national.de` and `phone.national.us` match parser-backed national
   phone shapes and emit `custom:phone` under the bundled default locale chain
-  (`en-US`, `de-DE`, `de-AT`, `de-CH`, then `global`). These recognizers
-  cooperate with `phone.structural` so the rulepack can carry multiple phone
-  recognizers without fail-closed same-class rejection.
+  (`en-US`, `de-DE`, `de-AT`, `de-CH`, then `global`). The DE recognizer
+  includes Berlin (`30`), Hamburg (`40`), Frankfurt (`69`), Munich (`89`),
+  Cologne (`221`), Stuttgart (`711`), and the synthetic mobile fixture shape
+  (`151`) while still requiring `e164_phone_national_de` validation. These
+  recognizers cooperate with `phone.structural` so the rulepack can carry
+  multiple phone recognizers without fail-closed same-class rejection.
 - `iban.structural` emits `custom:iban` only for IBAN-shaped candidates that
   pass `iban_mod97`; the canonical form is normalized with `iban_canonical`.
 - `card.structural` emits `custom:credit_card` only for 13- to 19-digit
