@@ -406,6 +406,51 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "phone-parser")]
+    fn national_phone_validator_kind_accepts_safe_fixtures() {
+        let us = ValidatorKind::parse("e164_phone_national_us").expect("US validator");
+        assert_eq!(
+            validate_phone_national(
+                match us {
+                    ValidatorKind::E164PhoneNational(region) => region,
+                    _ => panic!("expected phone validator"),
+                },
+                // Source: NANPA 555-LINE Number Reservation.
+                // https://nationalnanpa.com/number_resource_info/555_numbers.html
+                "+1 555 0100"
+            )
+            .as_deref(),
+            Some("+15550100")
+        );
+
+        let de = ValidatorKind::parse("e164_phone_national_de").expect("DE validator");
+        assert_eq!(
+            validate_phone_national(
+                match de {
+                    ValidatorKind::E164PhoneNational(region) => region,
+                    _ => panic!("expected phone validator"),
+                },
+                // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+                // literals chosen for parser-valid + non-routable.
+                "+49 30 0000 0000"
+            )
+            .as_deref(),
+            Some("+493000000000")
+        );
+    }
+
+    #[test]
+    #[cfg(not(feature = "phone-parser"))]
+    fn national_phone_validator_kind_fails_closed_without_feature() {
+        let err = ValidatorKind::parse("e164_phone_national_us")
+            .expect_err("phone parser feature is disabled");
+        assert!(matches!(
+            err,
+            RulepackError::UnsupportedValidator { kind } if kind == "e164_phone_national_us"
+        ));
+    }
+
+    #[test]
     fn regex_recognizer_uses_first_non_empty_capture_group() {
         let detector = RegexDetector::with_rulepack_fields(
             r#"(?m)^From:\s+(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))\s+<[^>]+>"#,

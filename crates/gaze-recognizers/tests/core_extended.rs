@@ -1,3 +1,5 @@
+#![cfg(feature = "phone-parser")]
+
 use std::cell::Cell;
 
 use gaze::{
