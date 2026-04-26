@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-04-26
+
+### Added
+
+- **S1 ClassMapOverrideSafety xtask gate** (#51): the previously scaffolded gate is now active. The behavioral test runner invokes `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered` through `cargo test`, while `.github/workflows/class-map-override-safety.yml` runs the gate on PRs and pushes to `main`. An adversarial in-PR self-test programmatically verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`. Closes todo #132.
+- **S2 audit schema v2** (#53): `RedactionEntry` now includes `created_at: i64` epoch milliseconds, with an on-open SQLite `ALTER TABLE` migration so legacy DBs without `created_at` remain queryable through a NULL default. `gaze audit query` and `gaze audit export` now accept `--from <iso8601>` and `--to <iso8601>` filters, JSONL export includes `created_at`, and ISO 8601 parse failures emit typed `CliError::PolicyConfig` messages with the offending input quoted. Time-filtered queries omit NULL `created_at` legacy rows by SQL semantics; unfiltered queries still include them. Fixture coverage covers both v0.4.3-shaped and v0.4.4-shaped SQLite DBs.
+- **S3a phonenumber-backed `E164Phone` validator** (#52): the `phonenumber` crate is available behind the optional `phone-parser` feature, default-on for `gaze-cli` and opt-in for raw library users. `ValidatorKind::E164Phone` extends the existing `phone.structural` recognizer in `core-extended.toml`, preserving valid E.164 matches such as `+4915550112233` while rejecting regex-passing but unassigned shapes such as `+99999999`. Builds without `phone-parser` reject the `e164_phone` validator at rulepack load time with `RulepackError::UnsupportedValidator`, preserving axis-1 fail-closed behavior rather than silently dropping phone detection at runtime. Audit notes live in `docs/research/v0.4.4-phonenumber-audit.md`.
+- **S4 Date posture memo** (#50): `docs/research/v0.4.4-date-posture.md` locks Gaze's Date-as-PII stance. Dates are not PII by default, never ship in default `core` or `core-extended` bundles, and future v0.4.5+ implementation scope is limited to DOB-only structured contexts. General-prose dates require context classification research for v0.5+, and the GH #5 token-spam tradeoff is resolved as no-default-on. The negative corpus covers version strings, IPs, file paths, ID-shaped numerics, year-only strings, and build or CI metadata.
+
+### Changed
+
+- Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.4`.
+- ClassMapOverrideSafety is no longer a scaffold; `cargo run -p xtask -- class-map-override-safety` now executes its named tests and returns a meaningful exit code.
+- The audit query path continues to open SQLite read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`, carrying forward the v0.4.3 S4 hardening.
+
+### Notes for adopters
+
+- The Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer), the same constraint as v0.4.2 and v0.4.3.
+- Phone validation is feature-gated. `gaze-cli` enables `phone-parser` by default; raw library users opt in with `gaze-recognizers = { features = ["phone-parser"] }` when they need parser-backed E.164 validation. Without that feature, `e164_phone` is rejected at rulepack load time.
+- Audit time filters accept ISO 8601 timestamps through `--from` and `--to`. Legacy audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
+
+### Deferred to v0.4.5
+
+- `--session` audit filtering, deferred from v0.4.4 until the session identifier storage type design is locked.
+- DOB-scoped Date recognizer, per the S4 memo and only if Markus or another adopter provides a concrete DOB leak fixture.
+- S3b national phone recognizers for DE and US, deferred from v0.4.4 due to scope budget.
+- ClassMapOverrideSafety coverage for other class-rule paths.
+- Audit retention and auto-purge, now unblocked by the v0.4.4 `created_at` foundation.
+
+### Deferred to v0.5
+
+- Open-key `PiiClass` refactor, per scratchpad 256 LOCK 2.
+- Crate-shape Option B: extract `gaze-types` and collapse `gaze-assembly`.
+
 ## [0.4.3] - 2026-04-26
 
 ### Added
