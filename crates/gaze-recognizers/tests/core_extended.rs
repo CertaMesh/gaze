@@ -194,6 +194,7 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ),
         vec!["+49 30 0000 0000".to_string()]
     );
+    // drift-ack: S4 DE national phone broaden — internal recall per gaze-laravel
     for (input, expected) in [
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are

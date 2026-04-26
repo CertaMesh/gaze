@@ -2,13 +2,13 @@
   "schema_version": 1,
   "bundle": "core-extended",
   "rulepack_version": "0.4.5",
-  "fixtures_sha256": "688b6313f178d62993aa714ee993adda9e4f1ad8f913fedff0100b1d2f294679",
+  "fixtures_sha256": "af37516341714906350a84bcf202dfb7040489f565212c341dd699d349398b00",
   "entries": [
     {
       "recognizer_id": "card.structural",
       "class": "custom:credit_card",
       "byte_span": {
-        "start": 376,
+        "start": 392,
         "len": 19
       },
       "family": "session_custom_counter",
@@ -19,7 +19,7 @@
       "recognizer_id": "iban.structural",
       "class": "custom:iban",
       "byte_span": {
-        "start": 329,
+        "start": 345,
         "len": 22
       },
       "family": "session_custom_counter",
@@ -30,7 +30,7 @@
       "recognizer_id": "ip.v4",
       "class": "custom:ip_address",
       "byte_span": {
-        "start": 432,
+        "start": 448,
         "len": 10
       },
       "family": "session_custom_counter",
@@ -41,7 +41,7 @@
       "recognizer_id": "ip.v6",
       "class": "custom:ip_address",
       "byte_span": {
-        "start": 493,
+        "start": 509,
         "len": 28
       },
       "family": "session_custom_counter",
@@ -49,11 +49,22 @@
       "count": 1
     },
     {
-      "recognizer_id": "phone.national.us",
+      "recognizer_id": "phone.national.de",
       "class": "custom:phone",
       "byte_span": {
-        "start": 228,
-        "len": 11
+        "start": 239,
+        "len": 16
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:phone_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "phone.national.de",
+      "class": "custom:phone",
+      "byte_span": {
+        "start": 291,
+        "len": 16
       },
       "family": "session_custom_counter",
       "token_shape": "<session:Custom:phone_{N}>",
@@ -63,7 +74,7 @@
       "recognizer_id": "postal.us",
       "class": "custom:postal_code",
       "byte_span": {
-        "start": 553,
+        "start": 569,
         "len": 10
       },
       "family": "session_custom_counter",
@@ -74,7 +85,7 @@
       "recognizer_id": "postal.us",
       "class": "custom:postal_code",
       "byte_span": {
-        "start": 611,
+        "start": 627,
         "len": 5
       },
       "family": "session_custom_counter",
@@ -83,12 +94,12 @@
     }
   ],
   "stats": {
-    "detections": 7,
+    "detections": 8,
     "classes": {
       "custom:credit_card": 1,
       "custom:iban": 1,
       "custom:ip_address": 2,
-      "custom:phone": 1,
+      "custom:phone": 2,
       "custom:postal_code": 2
     }
   }

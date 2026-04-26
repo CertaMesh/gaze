@@ -2,7 +2,7 @@
   "schema_version": 1,
   "bundle": "core",
   "rulepack_version": "0.4.5",
-  "fixtures_sha256": "688b6313f178d62993aa714ee993adda9e4f1ad8f913fedff0100b1d2f294679",
+  "fixtures_sha256": "af37516341714906350a84bcf202dfb7040489f565212c341dd699d349398b00",
   "entries": [
     {
       "recognizer_id": "email.global",
@@ -30,7 +30,7 @@
       "recognizer_id": "email.global",
       "class": "Email",
       "byte_span": {
-        "start": 1363,
+        "start": 1379,
         "len": 23
       },
       "family": "session_builtin_counter",
