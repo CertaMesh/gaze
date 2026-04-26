@@ -3,6 +3,8 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod no_tenant_knowledge;
+
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -15,6 +17,7 @@ enum Command {
     SymmetricPotemkin,
     ClassMapOverrideSafety,
     RecognizerCompositionValidator,
+    NoTenantKnowledge,
 }
 
 fn main() -> Result<()> {
@@ -23,6 +26,7 @@ fn main() -> Result<()> {
         Command::SymmetricPotemkin => run_symmetric_potemkin_gate(),
         Command::ClassMapOverrideSafety => run_class_map_override_safety_gate(),
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
+        Command::NoTenantKnowledge => no_tenant_knowledge::run(),
     }
 }
 
@@ -125,6 +129,9 @@ const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
     },
 ];
 
+/// Adversarial self-test: reviewer manually renames one of the listed
+/// tests on a throwaway branch and verifies xtask exits non-zero.
+/// Codifies meta-Potemkin guard per drawer gaze_architecture_12b32d53.
 const CLASS_MAP_OVERRIDE_SAFETY_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
         package: "gaze-assembly",
@@ -157,7 +164,7 @@ fn run_symmetric_potemkin_gate() -> Result<()> {
         ensure_test_exists(*test)?;
     }
     for test in SYMMETRIC_POTEMKIN_TESTS {
-        run_behavioral_test(*test)?;
+        run_behavioral_test("symmetric_potemkin_gate", *test)?;
     }
     println!("symmetric_potemkin_gate: passed");
     Ok(())
@@ -172,7 +179,7 @@ fn run_class_map_override_safety_gate() -> Result<()> {
         ensure_test_exists(*test)?;
     }
     for test in CLASS_MAP_OVERRIDE_SAFETY_TESTS {
-        run_behavioral_test(*test)?;
+        run_behavioral_test("class_map_override_safety", *test)?;
     }
     println!("class_map_override_safety: passed");
     Ok(())
@@ -187,7 +194,7 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
         ensure_test_exists(*test)?;
     }
     for test in RECOGNIZER_COMPOSITION_VALIDATOR_TESTS {
-        run_behavioral_test(*test)?;
+        run_behavioral_test("recognizer_composition_validator", *test)?;
     }
     println!("recognizer_composition_validator: passed");
     Ok(())
@@ -214,8 +221,8 @@ fn ensure_test_exists(test: BehavioralTest) -> Result<()> {
     Ok(())
 }
 
-fn run_behavioral_test(test: BehavioralTest) -> Result<()> {
-    println!("behavioral_test: running {}", describe(test));
+fn run_behavioral_test(gate: &str, test: BehavioralTest) -> Result<()> {
+    println!("{gate}: running {}", describe(test));
     let status = cargo_test_command(test, Some(test.name))
         .arg("--")
         .arg("--exact")

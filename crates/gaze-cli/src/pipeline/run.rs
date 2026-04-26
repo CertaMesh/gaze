@@ -81,7 +81,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         .unwrap_or_default();
     let rulepack_dictionaries =
         dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;
-    let policy_bundle = loaded_policy
+    let active_policy = loaded_policy.as_ref().or(cli_rulepack_policy.as_ref());
+    let policy_bundle = active_policy
         .as_ref()
         .map(|policy| {
             let mut dictionaries = policy.dictionaries.clone();
@@ -95,14 +96,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let cli_locales = parse_cli_locales(options.locale)?;
     let locale_chain = gaze::LocaleChain::merge_cli_policy_rulepack_default(
         cli_locales.as_deref(),
-        loaded_policy
-            .as_ref()
-            .and_then(|policy| policy.locale.as_deref()),
+        active_policy.and_then(|policy| policy.locale.as_deref()),
         Some(&rulepack_default_locales),
     );
-    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, loaded_policy.as_ref());
+    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, active_policy);
 
-    let pipeline = match &loaded_policy {
+    let pipeline = match active_policy {
         Some(policy) => build_pipeline_from_policy(
             policy,
             &loaded_rulepacks,
@@ -124,7 +123,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         }
     };
 
-    let session = match &loaded_policy {
+    let session = match active_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
         None => Session::new(scope_for_cli_without_policy(
             clean_overrides.session_scope.as_ref(),
@@ -221,7 +220,7 @@ fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
         detectors: Vec::new(),
         dictionaries: Vec::new(),
         rules: vec![RuleSpec::Default {
-            action: Action::Preserve,
+            action: Action::Tokenize,
         }],
         ner: None,
         rulepacks: RulepackPolicy {

@@ -13,7 +13,7 @@ pub(crate) fn map_policy_error(err: PolicyError) -> CliError {
     match err {
         PolicyError::Io(_) => CliError::PolicyOpen,
         PolicyError::UnsupportedRuleKind(_) => {
-            CliError::PolicyConfigDetail("column rules not supported in CLI mode")
+            CliError::PolicyConfigDetail("column rules not supported in CLI mode".to_string())
         }
         _ => CliError::PolicyConfig,
     }

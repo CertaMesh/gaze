@@ -12,10 +12,14 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use regex::Regex;
+use rusqlite::Connection;
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
-use gaze::{PiiClass, Scope, Session, SqliteLogger};
+use gaze::{
+    build_audit_query_sql, AuditFilter, PiiClass, Scope, Session, SqliteLogger,
+    AUDIT_RESTRICTED_COLUMNS,
+};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
@@ -370,6 +374,14 @@ fn write_policy_with_rulepack(
     rulepack: &str,
     locale_active: Option<&str>,
 ) -> (tempfile::TempDir, std::path::PathBuf) {
+    write_policy_with_rulepack_and_class(rulepack, locale_active, "email")
+}
+
+fn write_policy_with_rulepack_and_class(
+    rulepack: &str,
+    locale_active: Option<&str>,
+    class: &str,
+) -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();
     let rulepack_path = dir.path().join("rulepack.toml");
     fs::write(&rulepack_path, rulepack).unwrap();
@@ -391,7 +403,7 @@ paths = ["{}"]
 
 [[rule]]
 kind = "class"
-class = "email"
+class = "{class}"
 action = "tokenize"
 
 [[rule]]
@@ -520,6 +532,16 @@ action = "tokenize"
 [[rule]]
 kind = "class"
 class = "custom:postal_code"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:credit_card"
 action = "tokenize"
 
 [[rule]]
@@ -1111,6 +1133,367 @@ action = "preserve"
 }
 
 #[test]
+fn s4_audit_query_and_export_return_filtered_metadata_rows() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--class",
+            "email",
+            "--action",
+            "tokenize",
+            "--document-kind",
+            "text",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    assert!(stdout.starts_with(
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\n"
+    ));
+    assert!(
+        stdout
+            .lines()
+            .any(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t")),
+        "unexpected query stdout: {stdout}"
+    );
+
+    let export_path = dir.path().join("audit.jsonl");
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--output",
+            export_path.to_str().unwrap(),
+            "--source",
+            "regex",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert!(export.stdout.is_empty());
+    let rows = fs::read_to_string(export_path).unwrap();
+    let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
+    assert_eq!(row["class"], "email");
+    assert_eq!(row["source"], "regex");
+    assert_eq!(row["action"], "tokenize");
+    assert_eq!(row["field_name"], Value::Null);
+    assert_eq!(row["document_kind"], "text");
+    assert_eq!(row["conflict_loser"], false);
+    assert!(row.get("decided_by").is_some());
+}
+
+#[test]
+fn s2_audit_cli_smoke_filters_created_at_range() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "1970-01-01T00:00:00Z",
+            "--to",
+            "2999-12-31T23:59:59Z",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    let row = stdout
+        .lines()
+        .find(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t"))
+        .expect("expected email audit row in bounded time range");
+    let created_at = row
+        .split('\t')
+        .next_back()
+        .expect("created_at column")
+        .parse::<i64>()
+        .expect("created_at is epoch milliseconds");
+    assert!(created_at > 0, "expected positive created_at: {row}");
+
+    let future = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "2999-12-31T23:59:59Z",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        future.status.success(),
+        "future audit query failed: {}",
+        String::from_utf8_lossy(&future.stderr)
+    );
+    let future_stdout = String::from_utf8(future.stdout).unwrap();
+    assert_eq!(
+        future_stdout.lines().count(),
+        1,
+        "future lower bound should return only the header: {future_stdout}"
+    );
+}
+
+#[test]
+fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    for subcommand in ["query", "export"] {
+        let mut command = Command::cargo_bin("gaze").unwrap();
+        command.args([
+            "audit",
+            subcommand,
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--from",
+            "invalid-date",
+        ]);
+        if subcommand == "export" {
+            command.args(["--format", "jsonl"]);
+        }
+        let output = command.output().unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let stderr: Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(stderr["error"], "PolicyConfig");
+        assert_eq!(stderr["exit"], 2);
+        assert_eq!(
+            stderr["detail"],
+            format!("invalid audit ISO 8601 timestamp: {:?}", "invalid-date")
+        );
+    }
+}
+
+#[test]
+fn s4_audit_export_does_not_return_raw_pii() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let raw_input =
+        "Hello Dr. Schmidt, your phone is +4915550112233 and email alice@example.invalid";
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        raw_input,
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    assert_no_raw_audit_pii(&query.stdout);
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    assert_no_raw_audit_pii(&export.stdout);
+}
+
+#[test]
+fn s4_audit_extra_column_not_leaked() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    {
+        let conn = Connection::open(&audit_path).unwrap();
+        conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+            .unwrap();
+        conn.execute(
+            "UPDATE redaction_log SET raw_value = ?",
+            ["Dr. Schmidt's secret SSN: 999-99-9999"],
+        )
+        .unwrap();
+    }
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["audit", "query", "--audit-db", audit_path.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let needle = b"Dr. Schmidt's secret SSN";
+    assert!(
+        !query
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit query output"
+    );
+    assert!(
+        !export
+            .stdout
+            .windows(needle.len())
+            .any(|window| window == needle),
+        "FAIL: extra column raw_value leaked in audit export output"
+    );
+}
+
+#[test]
+fn s4_audit_query_columns_are_restricted() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Some content here for alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
+        .unwrap();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true, true);
+    assert!(
+        values.is_empty(),
+        "default audit filter should not bind query values"
+    );
+    let stmt = conn.prepare(&sql).unwrap();
+    let column_names: Vec<String> = stmt
+        .column_names()
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| column.to_string())
+        .collect();
+
+    assert_eq!(
+        column_names, expected,
+        "audit query SQL must return exactly AUDIT_RESTRICTED_COLUMNS"
+    );
+}
+
+fn assert_no_raw_audit_pii(bytes: &[u8]) {
+    for raw in [
+        b"Dr. Schmidt".as_slice(),
+        b"+4915550112233".as_slice(),
+        b"alice@example.invalid".as_slice(),
+    ] {
+        assert!(
+            !bytes.windows(raw.len()).any(|window| window == raw),
+            "FAIL: raw PII '{}' found in audit output",
+            String::from_utf8_lossy(raw)
+        );
+    }
+}
+
+#[test]
 fn t21g_pattern_template_uses_active_locale_de_when_en_loaded_after_de() {
     let (_dir, path) =
         write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
@@ -1343,7 +1726,7 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
 
 #[test]
 fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
-    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103-1234";
+    let input = "Email alice@example.invalid phone +4915550112233 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
     let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
     let core_clean = core_only["clean_text"].as_str().unwrap();
@@ -1351,6 +1734,8 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
     assert!(!core_clean.contains("Custom:phone"), "{core_clean}");
     assert!(!core_clean.contains("Custom:ip_address"), "{core_clean}");
     assert!(!core_clean.contains("Custom:postal_code"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:iban"), "{core_clean}");
+    assert!(!core_clean.contains("Custom:credit_card"), "{core_clean}");
     assert_eq!(core_only["stats"]["detections"], 1);
 
     let (_extended_dir, extended_policy) =
@@ -1371,7 +1756,15 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
         extended_clean.contains(":Custom:postal_code_1>"),
         "{extended_clean}"
     );
-    assert_eq!(extended["stats"]["detections"], 4);
+    assert!(
+        extended_clean.contains(":Custom:iban_1>"),
+        "{extended_clean}"
+    );
+    assert!(
+        extended_clean.contains(":Custom:credit_card_1>"),
+        "{extended_clean}"
+    );
+    assert_eq!(extended["stats"]["detections"], 6);
     assert_eq!(
         restore_success_text(extended["session_blob"].as_str().unwrap(), extended_clean),
         input
@@ -1380,7 +1773,7 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
 
 #[test]
 fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() {
-    let input = "phone +4915112345678 host 192.168.1.1 zip 94103";
+    let input = "phone +4915550112233 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_toml_dir, toml_policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
     let toml = clean_json_with_args(&[&format!("--policy={}", toml_policy.display())], input);
@@ -1412,6 +1805,70 @@ fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() 
     );
     let toml_out = clean_raw_with_args(&[&format!("--policy={}", invalid_policy.display())], input);
     assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+#[test]
+fn s2_core_extended_default_surface_does_not_load_phase2_recognizers() {
+    let input = "IBAN GB82WEST12345698765432 card 4111111111111111";
+    let default = clean_json_with_args(&[], input);
+
+    assert_eq!(default["clean_text"], input);
+    assert_eq!(default["stats"]["detections"], 0);
+}
+
+#[test]
+fn s2_cli_bundled_smoke_emits_formatted_phase2_tokens() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core,core-extended"],
+        "IBAN DE89 3704 0044 0532 0130 00 card 4111 1111 1111 1111",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(clean.contains("Custom:iban"), "{clean}");
+    assert!(clean.contains("Custom:credit_card"), "{clean}");
+    assert!(!clean.contains("3704 0044"), "{clean}");
+    assert!(!clean.contains("4111 1111"), "{clean}");
+    assert_eq!(value["stats"]["detections"], 2);
+}
+
+#[test]
+fn s2_cli_bundled_smoke_drops_luhn_failing_formatted_cc() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core,core-extended"],
+        "Card 4111 1111 1111 1112",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(!clean.contains("Custom:credit_card"), "{clean}");
+    assert_eq!(value["stats"]["detections"], 0);
+}
+
+#[test]
+fn s3a_cli_bundled_core_extended_rejects_unassigned_e164_phone() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        "+99999999 is fake",
+    );
+
+    assert_eq!(value["clean_text"], "+99999999 is fake");
+    assert_eq!(value["stats"]["detections"], 0);
+}
+
+#[test]
+fn s3a_cli_bundled_core_extended_tokenizes_valid_e164_phone() {
+    let value = clean_json_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        "+4915550112233 is real",
+    );
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^<[0-9a-f]{8}:Custom:phone_1> is real$")
+            .unwrap()
+            .is_match(clean),
+        "unexpected clean text: {clean}"
+    );
+    assert_eq!(value["stats"]["detections"], 1);
 }
 
 #[test]
@@ -1472,9 +1929,67 @@ fn s2_core_extended_tenant_like_numeric_ids_are_not_phone_tokens() {
     let clean = value["clean_text"].as_str().unwrap();
 
     assert!(!clean.contains("Custom:phone"), "{clean}");
+    assert!(!clean.contains("Custom:iban"), "{clean}");
+    assert!(!clean.contains("Custom:credit_card"), "{clean}");
     assert!(clean.contains("Subscriber_0001234567"), "{clean}");
     assert!(clean.contains("Order_0815"), "{clean}");
     assert!(clean.contains("0123-456789"), "{clean}");
+}
+
+#[test]
+fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
+    let (_dir, policy) =
+        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
+
+    for (input, class) in [
+        ("Card 4111111111111111", "credit_card"),
+        ("Card 5555555555554444", "credit_card"),
+        ("Card 378282246310005", "credit_card"),
+        ("IBAN GB82WEST12345698765432", "iban"),
+        ("IBAN DE89370400440532013000", "iban"),
+        ("IBAN FR1420041010050500013M02606", "iban"),
+        ("IBAN BE68539007547034", "iban"),
+        ("IBAN NL91ABNA0417164300", "iban"),
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(
+            Regex::new(&format!(r"^.+<[0-9a-f]{{8}}:Custom:{class}_1>$"))
+                .unwrap()
+                .is_match(clean),
+            "unexpected clean text for {input}: {clean}"
+        );
+        assert_eq!(value["stats"]["detections"], 1, "{input}");
+        assert_eq!(
+            restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+            input
+        );
+    }
+
+    for input in [
+        "Card 4111111111111112",
+        "Card 5555555555554445",
+        "Card 378282246310006",
+        "IBAN GB99WEST12345698765432",
+        "IBAN DE99370400440532013000",
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert_eq!(clean, input, "{input}");
+        assert_eq!(value["stats"]["detections"], 0, "{input}");
+    }
+
+    for input in [
+        "Subscriber_0001234567",
+        "Order_0815",
+        "0815 12345",
+        "Customer_42",
+    ] {
+        let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(!clean.contains("Custom:iban"), "{input}: {clean}");
+        assert!(!clean.contains("Custom:credit_card"), "{input}: {clean}");
+    }
 }
 
 #[test]
@@ -1608,7 +2123,7 @@ fn context_json_standalone_dictionary_detects_without_policy_entry() {
 fn rulepack_rejects_unknown_validator_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"iban_mod97\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"iban_modxx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
@@ -1627,7 +2142,7 @@ fn rulepack_rejects_unknown_validator_kind() {
 fn rulepack_rejects_unknown_normalizer_kind() {
     let rulepack = de_email_rulepack("\"global\"").replace(
         "[recognizers.token]",
-        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonical\"\n\n[recognizers.token]",
+        "[recognizers.validator]\nkind = \"email_rfc\"\n\n[recognizers.normalizer]\nkind = \"iban_canonicalx\"\n\n[recognizers.token]",
     );
     let (_dir, path) = write_policy_with_rulepack(&rulepack, None);
     let out = clean_raw_with_args(
@@ -1676,6 +2191,89 @@ fn rulepack_accepts_email_rfc_validator_kind() {
 
     assert!(clean.starts_with("Email <"));
     assert!(clean.ends_with(":Email_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_accepts_luhn_validator_kind() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-luhn"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "card.test"
+class = "custom:credit_card_or_iban"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '\b\d{16}\b'
+
+[recognizers.validator]
+kind = "luhn"
+
+[recognizers.scoring]
+base = 0.90
+priority = 77
+
+[recognizers.token]
+"#;
+    let (_dir, path) =
+        write_policy_with_rulepack_and_class(rulepack, None, "custom:credit_card_or_iban");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "Card 4111111111111111",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("Card <"));
+    assert!(clean.ends_with(":Custom:credit_card_or_iban_1>"));
+    assert_eq!(v["stats"]["detections"], 1);
+}
+
+#[test]
+fn rulepack_accepts_iban_mod97_validator_and_iban_canonical_normalizer() {
+    let rulepack = r#"
+schema_version = "0.1.0"
+rulepack_id = "test-iban"
+rulepack_version = "0.4.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "iban.test"
+class = "custom:credit_card_or_iban"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b'
+
+[recognizers.validator]
+kind = "iban_mod97"
+
+[recognizers.normalizer]
+kind = "iban_canonical"
+
+[recognizers.scoring]
+base = 0.90
+priority = 77
+
+[recognizers.token]
+"#;
+    let (_dir, path) =
+        write_policy_with_rulepack_and_class(rulepack, None, "custom:credit_card_or_iban");
+    let v = clean_json_with_args(
+        &[&format!("--policy={}", path.display())],
+        "IBAN GB82WEST12345698765432",
+    );
+    let clean = v["clean_text"].as_str().unwrap();
+
+    assert!(clean.starts_with("IBAN <"));
+    assert!(clean.ends_with(":Custom:credit_card_or_iban_1>"));
     assert_eq!(v["stats"]["detections"], 1);
 }
 

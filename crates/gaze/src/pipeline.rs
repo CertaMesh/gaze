@@ -215,6 +215,7 @@ impl Pipeline {
             document_kind,
             conflict_loser,
             decided_by: detection.decided_by,
+            created_at: crate::redaction_log::current_epoch_ms(),
         };
 
         for logger in &self.redaction_loggers {

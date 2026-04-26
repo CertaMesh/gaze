@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core-extended"
-rulepack_version = "0.4.2"
+rulepack_version = "0.4.3"
 default_locales = ["global"]
 
 [[recognizers]]
@@ -12,6 +12,51 @@ locales = ["global"]
 [recognizers.match]
 kind = "regex"
 pattern = '''\+\d{6,15}\b'''
+
+[recognizers.validator]
+kind = "e164_phone"
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "iban.structural"
+class = "custom:iban"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+# Allows internal whitespace; iban_canonical normalizer strips before mod-97 validation.
+pattern = '''\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b'''
+
+[recognizers.validator]
+kind = "iban_mod97"
+
+[recognizers.normalizer]
+kind = "iban_canonical"
+
+[recognizers.scoring]
+base = 0.70
+priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "card.structural"
+class = "custom:credit_card"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''\b\d(?:[\s-]?\d){12,18}\b'''
+
+[recognizers.validator]
+kind = "luhn"
 
 [recognizers.scoring]
 base = 0.70

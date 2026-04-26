@@ -43,17 +43,19 @@ mod tests {
     }
 
     #[test]
-    fn embedded_core_extended_rulepack_parses_and_contains_phase1_recognizers() {
+    fn embedded_core_extended_rulepack_parses_and_contains_phase2_recognizers() {
         let core_extended = embedded("core-extended").expect("core-extended rulepack");
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 5);
+        assert_eq!(rulepack.recognizers.len(), 7);
         assert_eq!(rulepack.recognizers[0].id, "phone.structural");
-        assert_eq!(rulepack.recognizers[1].id, "ip.v4");
-        assert_eq!(rulepack.recognizers[2].id, "ip.v6");
-        assert_eq!(rulepack.recognizers[3].id, "postal.de");
-        assert_eq!(rulepack.recognizers[4].id, "postal.us");
+        assert_eq!(rulepack.recognizers[1].id, "iban.structural");
+        assert_eq!(rulepack.recognizers[2].id, "card.structural");
+        assert_eq!(rulepack.recognizers[3].id, "ip.v4");
+        assert_eq!(rulepack.recognizers[4].id, "ip.v6");
+        assert_eq!(rulepack.recognizers[5].id, "postal.de");
+        assert_eq!(rulepack.recognizers[6].id, "postal.us");
         assert!(rulepack
             .recognizers
             .iter()

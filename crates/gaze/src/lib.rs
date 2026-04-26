@@ -31,7 +31,8 @@ pub use policy::{
     RulepackPolicy, SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,
 };
 pub use redaction_log::{
-    ConflictTier, DocumentKind, RedactionEntry, RedactionLogger, SqliteLogger,
+    build_audit_query_sql, AuditFilter, AuditLogRow, ConflictTier, DocumentKind, RedactionEntry,
+    RedactionLogger, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
 };
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, Recognizer, RecognizerRegistry,
