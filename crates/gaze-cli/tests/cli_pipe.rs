@@ -12,7 +12,7 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use regex::Regex;
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
@@ -1655,6 +1655,144 @@ fn assert_no_raw_audit_pii(bytes: &[u8]) {
             String::from_utf8_lossy(raw)
         );
     }
+}
+
+#[test]
+fn t23_audit_purge_counts_deletes_and_restore_still_round_trips() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let v = clean_json_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid and bob@example.invalid.",
+    );
+    assert_eq!(v["stats"]["detections"], 2);
+    let clean = v["clean_text"].as_str().unwrap();
+    let blob = v["session_blob"].as_str().unwrap();
+    assert_audit_db_has_no_raw_fixture_values(&audit_path);
+
+    let conn = Connection::open(&audit_path).unwrap();
+    let total: i64 = conn
+        .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(total, 2);
+    conn.execute(
+        "UPDATE redaction_log SET created_at = ?1 WHERE rowid = (SELECT rowid FROM redaction_log ORDER BY rowid LIMIT 1)",
+        params![1_767_225_600_000_i64],
+    )
+    .unwrap();
+    conn.execute(
+        "UPDATE redaction_log SET created_at = ?1 WHERE rowid = (SELECT rowid FROM redaction_log ORDER BY rowid LIMIT 1 OFFSET 1)",
+        params![1_772_323_200_000_i64],
+    )
+    .unwrap();
+    drop(conn);
+
+    let dry_run = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("audit")
+        .arg("purge")
+        .arg(format!("--audit-db={}", audit_path.display()))
+        .arg("--before=2026-02-01T00:00:00Z")
+        .arg("--dry-run")
+        .output()
+        .unwrap();
+    assert!(
+        dry_run.status.success(),
+        "dry-run failed: {}",
+        String::from_utf8_lossy(&dry_run.stderr)
+    );
+    assert!(dry_run.stderr.is_empty());
+    let dry_run_json: Value = serde_json::from_slice(&dry_run.stdout).unwrap();
+    assert_eq!(
+        dry_run_json,
+        json!({ "dry_run": true, "matched": 1, "deleted": 0 })
+    );
+
+    let conn = Connection::open(&audit_path).unwrap();
+    let total_after_dry_run: i64 = conn
+        .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(total_after_dry_run, 2);
+    drop(conn);
+
+    let purge = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("audit")
+        .arg("purge")
+        .arg(format!("--audit-db={}", audit_path.display()))
+        .arg("--before=2026-02-01T00:00:00Z")
+        .output()
+        .unwrap();
+    assert!(
+        purge.status.success(),
+        "purge failed: {}",
+        String::from_utf8_lossy(&purge.stderr)
+    );
+    assert!(purge.stderr.is_empty());
+    let purge_json: Value = serde_json::from_slice(&purge.stdout).unwrap();
+    assert_eq!(
+        purge_json,
+        json!({ "dry_run": false, "matched": 1, "deleted": 1 })
+    );
+
+    let conn = Connection::open(&audit_path).unwrap();
+    let remaining: i64 = conn
+        .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(remaining, 1);
+    let remaining_created_at: i64 = conn
+        .query_row(
+            "SELECT created_at FROM redaction_log ORDER BY rowid",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(remaining_created_at, 1_772_323_200_000_i64);
+    drop(conn);
+    assert_audit_db_has_no_raw_fixture_values(&audit_path);
+
+    let restored = restore_success_text(blob, clean);
+    assert_eq!(
+        restored,
+        "Email alice@example.invalid and bob@example.invalid."
+    );
+}
+
+fn assert_audit_db_has_no_raw_fixture_values(path: &std::path::Path) {
+    let bytes = fs::read(path).unwrap();
+    for raw in [
+        b"alice@example.invalid".as_slice(),
+        b"bob@example.invalid".as_slice(),
+    ] {
+        assert!(
+            !bytes.windows(raw.len()).any(|window| window == raw),
+            "FAIL: raw fixture value '{}' found in audit DB bytes",
+            String::from_utf8_lossy(raw)
+        );
+    }
+}
+
+#[test]
+fn t23_audit_purge_rejects_non_iso8601_before_with_quoted_input() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("audit")
+        .arg("purge")
+        .arg(format!("--audit-db={}", audit_path.display()))
+        .arg("--before=not-iso8601")
+        .output()
+        .unwrap();
+
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty());
+    let stderr = parse_stderr_variant(&out.stderr);
+    assert_eq!(
+        stderr,
+        json!({ "error": "AuditPurgeIso8601", "exit": 2, "input": "not-iso8601" })
+    );
 }
 
 #[test]

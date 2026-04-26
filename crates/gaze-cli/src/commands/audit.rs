@@ -20,9 +20,22 @@ pub(crate) struct Args {
     pub(crate) session_id: Option<String>,
 }
 
+pub(crate) struct PurgeArgs {
+    pub(crate) audit_db: PathBuf,
+    pub(crate) before: String,
+    pub(crate) dry_run: bool,
+}
+
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum ExportFormat {
     Jsonl,
+}
+
+#[derive(Serialize)]
+struct PurgeResponse {
+    dry_run: bool,
+    matched: usize,
+    deleted: usize,
 }
 
 pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
@@ -61,6 +74,29 @@ pub(crate) fn export(
     }
 }
 
+pub(crate) fn purge(args: PurgeArgs) -> std::result::Result<(), CliError> {
+    let before = parse_iso8601_utc_epoch_ms(&args.before)?;
+    let logger = SqliteLogger::new(&args.audit_db).map_err(|_| CliError::Pipeline)?;
+    let matched = logger
+        .count_before(before)
+        .map_err(|_| CliError::Pipeline)?;
+    let deleted = if args.dry_run {
+        0
+    } else {
+        logger
+            .purge_before(before)
+            .map_err(|_| CliError::Pipeline)?
+    };
+    let json = serde_json::to_string(&PurgeResponse {
+        dry_run: args.dry_run,
+        matched,
+        deleted,
+    })
+    .map_err(|_| CliError::Pipeline)?;
+    println!("{json}");
+    Ok(())
+}
+
 fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
     // Keep CLI flag parse rejection identical to any future TOML audit-filter
     // default surface: invalid timestamps are PolicyConfig/exit 2, never clap.
@@ -90,6 +126,19 @@ fn parse_iso8601_epoch_ms(value: Option<&str>) -> std::result::Result<Option<i64
                 })
         })
         .transpose()
+}
+
+fn parse_iso8601_utc_epoch_ms(input: &str) -> std::result::Result<i64, CliError> {
+    if input.is_empty() || !input.ends_with('Z') || !input.contains('T') || input.contains('t') {
+        return Err(CliError::AuditPurgeIso8601 {
+            input: input.to_string(),
+        });
+    }
+    DateTime::parse_from_rfc3339(input)
+        .map(|datetime| datetime.timestamp_millis())
+        .map_err(|_| CliError::AuditPurgeIso8601 {
+            input: input.to_string(),
+        })
 }
 
 fn write_jsonl(
