@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use chrono::DateTime;
 use clap::ValueEnum;
-use gaze::{AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
+use gaze_audit::{AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
 use serde::Serialize;
 
 use crate::error::CliError;

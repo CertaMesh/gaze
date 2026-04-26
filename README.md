@@ -12,10 +12,11 @@ It does not merely redact. It replaces PII with stable, reversible tokens, so th
 
 Gaze is a reversible PII pseudonymization runtime that lets AI agents work with production data without ever seeing the real personal data.
 
-The workspace has six crates:
+The workspace has seven crates:
 
 - `crates/gaze-types` — shared value contracts for adopters and internal crates without pulling runtime or recognizer dependencies.
 - `crates/gaze` — core library: pipeline, sessions, policy loader, recognizer registry, locale chain, rulepack schema, token grammar.
+- `crates/gaze-audit` — passive SQLite audit sink and read-side audit query API, isolated from `gaze` core.
 - `crates/gaze-recognizers` — detection backends plugged into the registry (regex, dictionary, NER) and bundled rulepacks.
 - `crates/gaze-assembly` — policy-to-pipeline assembly shared by CLI-style adopters.
 - `crates/gaze-cli` — the `gaze clean` / `gaze restore` binary adopters invoke from language adapters.
@@ -114,6 +115,7 @@ cargo add gaze-recognizers --features phone-parser
 crates/
   gaze-types/         shared value contracts with serde only
   gaze/               core library (pipeline, sessions, policy, registry, locale, rulepack)
+  gaze-audit/         passive SQLite audit sink + read-side query API
   gaze-recognizers/   detection backends (regex, dictionary, NER) + bundled rulepacks
   gaze-assembly/      policy-to-pipeline assembly shared by CLI-style adopters
   gaze-cli/           standalone `gaze` binary for LLM pipe-mode integrations
@@ -135,6 +137,13 @@ Pure Rust library. Owns:
 - TOML rulepack schema loader (`[policy.rulepacks]`, `[[policy.custom_recognizers]]`)
 - redaction logger + audit symmetry (`decided_by` + merge-loser entries)
 - pluggable sandbox trait shape for future action-side work
+
+### `gaze-audit`
+
+Passive audit sink crate. Owns `SqliteLogger`, `AuditFilter`, `AuditLogRow`,
+`build_audit_query_sql`, and `AUDIT_RESTRICTED_COLUMNS`. `gaze` does not depend
+on this crate in default or `--no-default-features` builds; the temporary
+`audit` feature re-exports these symbols for one minor migration window.
 
 ### `gaze-recognizers`
 

@@ -15,10 +15,8 @@ use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
-use gaze::{
-    build_audit_query_sql, AuditFilter, PiiClass, Scope, Session, SqliteLogger,
-    AUDIT_RESTRICTED_COLUMNS,
-};
+use gaze::{PiiClass, Scope, Session};
+use gaze_audit::{build_audit_query_sql, AuditFilter, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
 
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {

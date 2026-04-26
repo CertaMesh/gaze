@@ -1,0 +1,14 @@
+name: cargo-metadata-audit-isolation
+
+on:
+  pull_request:
+
+jobs:
+  cargo-metadata-audit-isolation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Run cargo_metadata_audit_isolation gate
+        run: cargo run -p xtask -- cargo-metadata-audit-isolation
