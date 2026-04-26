@@ -174,10 +174,10 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(
             &rulepack,
             "phone.structural",
-            "Phone +4915112345678",
+            "Phone +4915550112233",
             LocaleTag::DeDe
         ),
-        vec!["+4915112345678".to_string()]
+        vec!["+4915550112233".to_string()]
     );
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
@@ -210,6 +210,7 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "2026-04-25",
         "0815 12345",
         "0123-456789",
+        "+99999999",
         "Subscriber_0001234567",
         "Order_0815",
     ] {
@@ -512,7 +513,7 @@ fn core_and_core_extended_compose_without_counter_collision() {
     let clean = clean_text(
         &pipeline,
         &session,
-        "Contact alice@example.invalid or +4915112345678",
+        "Contact alice@example.invalid or +4915550112233",
         LocaleTag::EnUs,
     );
 
@@ -565,7 +566,7 @@ fn core_and_core_extended_compose_with_phase2_without_counter_collision() {
 
     let pipeline = builder.build().expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
+    let input = "Email alice@example.invalid phone +4915550112233 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
 
     assert!(clean.contains(":Email_1>"), "{clean}");
@@ -583,7 +584,7 @@ fn every_phase1_recognizer_round_trips_through_restore() {
     let pipeline = pipeline_from_rulepack(&rulepack);
 
     for (input, locale) in [
-        ("Call +4915112345678", LocaleTag::DeDe),
+        ("Call +4915550112233", LocaleTag::DeDe),
         ("Host 192.168.1.1", LocaleTag::EnUs),
         ("Loopback ::1", LocaleTag::EnUs),
         ("Host 2001:db8::1", LocaleTag::EnUs),
