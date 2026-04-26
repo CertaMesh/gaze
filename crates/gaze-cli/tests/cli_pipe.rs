@@ -1311,7 +1311,10 @@ fn s2_audit_invalid_iso8601_is_policy_config_for_query_and_export() {
         let stderr: Value = serde_json::from_slice(&output.stderr).unwrap();
         assert_eq!(stderr["error"], "PolicyConfig");
         assert_eq!(stderr["exit"], 2);
-        assert_eq!(stderr["detail"], "invalid audit ISO 8601 timestamp");
+        assert_eq!(
+            stderr["detail"],
+            format!("invalid audit ISO 8601 timestamp: {:?}", "invalid-date")
+        );
     }
 }
 

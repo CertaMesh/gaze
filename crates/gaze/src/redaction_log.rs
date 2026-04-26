@@ -295,15 +295,21 @@ pub fn build_audit_query_sql(
         predicates.push("document_kind = ?");
         values.push(Value::Text(document_kind.clone()));
     }
-    if has_created_at {
-        if let Some(from_epoch_ms) = filter.from_epoch_ms {
-            predicates.push("(created_at IS NULL OR created_at >= ?)");
-            values.push(Value::Integer(from_epoch_ms));
+    if let Some(from_epoch_ms) = filter.from_epoch_ms {
+        if has_created_at {
+            predicates.push("created_at >= ?");
+        } else {
+            predicates.push("NULL >= ?");
         }
-        if let Some(to_epoch_ms) = filter.to_epoch_ms {
-            predicates.push("(created_at IS NULL OR created_at <= ?)");
-            values.push(Value::Integer(to_epoch_ms));
+        values.push(Value::Integer(from_epoch_ms));
+    }
+    if let Some(to_epoch_ms) = filter.to_epoch_ms {
+        if has_created_at {
+            predicates.push("created_at <= ?");
+        } else {
+            predicates.push("NULL <= ?");
         }
+        values.push(Value::Integer(to_epoch_ms));
     }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");

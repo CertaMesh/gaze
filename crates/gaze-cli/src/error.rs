@@ -11,7 +11,7 @@ pub(crate) enum CliError {
     InputTooLarge,
     InvalidEncoding,
     PolicyConfig,
-    PolicyConfigDetail(&'static str),
+    PolicyConfigDetail(String),
     UnknownToken { token: String },
     InvalidSignature,
     InvalidBlobVersion,
@@ -54,12 +54,16 @@ impl CliError {
 
     pub(crate) fn emit_stderr(&self) {
         match self {
-            Self::PolicyConfigDetail(detail) => eprintln!(
-                r#"{{"error":"{}","exit":{},"detail":"{}"}}"#,
-                self.variant_name(),
-                self.exit_code(),
-                detail
-            ),
+            Self::PolicyConfigDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
             Self::UnknownToken { token } => {
                 let token = serde_json::to_string(token)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());

@@ -24,8 +24,9 @@ gaze audit query --audit-db audit.sqlite --from 2026-04-26T00:00:00Z --to 2026-0
 
 `query` writes tab-separated rows to stdout with a header row. `created_at` is
 epoch milliseconds. Legacy audit databases without a `created_at` column remain
-queryable; their `created_at` value is empty in TSV output and passes through
-`--from` / `--to` filters.
+queryable; their `created_at` value is empty in TSV output. Unfiltered queries
+(no `--from` / `--to`) include legacy rows. Filtered queries omit NULL rows by
+SQL semantics; to access legacy rows, omit time filters.
 
 ### Export
 
