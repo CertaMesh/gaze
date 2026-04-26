@@ -13,6 +13,9 @@ locales = ["global"]
 kind = "regex"
 pattern = '''\+\d{6,15}\b'''
 
+[recognizers.validator]
+kind = "e164_phone"
+
 [recognizers.scoring]
 base = 0.70
 priority = 80

@@ -7,6 +7,8 @@ use regex::Regex;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ValidatorKind {
     EmailRfc,
+    #[cfg(feature = "phone-parser")]
+    E164Phone,
     Luhn,
     IbanMod97,
 }
@@ -15,8 +17,13 @@ impl ValidatorKind {
     pub fn parse(s: &str) -> std::result::Result<Self, RulepackError> {
         match s {
             "email_rfc" => Ok(Self::EmailRfc),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone" => Ok(Self::E164Phone),
             "luhn" => Ok(Self::Luhn),
             "iban_mod97" => Ok(Self::IbanMod97),
+            // With phone-parser disabled, e164_phone falls through here so
+            // rulepack construction fails closed instead of silently dropping
+            // every phone candidate at runtime.
             other => Err(RulepackError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
@@ -26,6 +33,8 @@ impl ValidatorKind {
     pub fn validates(self, input: &str) -> bool {
         match self {
             Self::EmailRfc => is_basic_email(input),
+            #[cfg(feature = "phone-parser")]
+            Self::E164Phone => e164_phone_check(input),
             Self::Luhn => luhn_check(input),
             Self::IbanMod97 => iban_mod97_check(input),
         }
@@ -229,6 +238,11 @@ fn is_basic_email(input: &str) -> bool {
         return false;
     };
     !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+#[cfg(feature = "phone-parser")]
+fn e164_phone_check(input: &str) -> bool {
+    phonenumber::parse(None, input).is_ok_and(|phone| phonenumber::is_valid(&phone))
 }
 
 fn luhn_check(input: &str) -> bool {
