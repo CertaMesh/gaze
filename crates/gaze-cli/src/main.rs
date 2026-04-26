@@ -1,7 +1,7 @@
 //! Gaze CLI — pipe-mode `clean` / `restore` for LLM-facing integrations.
 //!
-//! See `docs/roadmap/v0.3/cli.md` for the design spec and
-//! `docs/roadmap/v0.3/laravel.md` for the host-side integration contract.
+//! See `ROADMAP.md` for consolidated roadmap context and host-side
+//! integration history.
 
 use std::process::ExitCode;
 
