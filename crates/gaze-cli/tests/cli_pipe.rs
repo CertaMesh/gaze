@@ -1621,7 +1621,7 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
 
 #[test]
 fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
-    let input = "Email alice@example.invalid phone +4915112345678 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
+    let input = "Email alice@example.invalid phone +4915550112233 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
     let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
     let core_clean = core_only["clean_text"].as_str().unwrap();
@@ -1668,7 +1668,7 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
 
 #[test]
 fn s2_core_extended_cli_opt_in_mirrors_toml_and_rejects_garbage_symmetrically() {
-    let input = "phone +4915112345678 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
+    let input = "phone +4915550112233 host 192.168.1.1 zip 94103 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_toml_dir, toml_policy) =
         write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
     let toml = clean_json_with_args(&[&format!("--policy={}", toml_policy.display())], input);
