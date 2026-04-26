@@ -355,13 +355,29 @@ pub enum CleanDocument {
 }
 
 /// Minimal structured value representation that avoids a serde_json dependency.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Value {
     /// String value.
     String(String),
     /// Signed 64-bit integer value.
     I64(i64),
+}
+
+impl Value {
+    /// Returns the inner string for string values.
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Self::String(value) => Some(value.as_str()),
+            Self::I64(_) => None,
+        }
+    }
+}
+
+impl PartialEq<&str> for Value {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == Some(*other)
+    }
 }
 
 /// Value-only dictionary bundle shared with recognizers.

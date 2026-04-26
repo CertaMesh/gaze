@@ -31,7 +31,7 @@ pub struct RecognizerRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{DictionaryBundle, LocaleTag, PiiClass};
+    use crate::{ConflictTier, DictionaryBundle, LocaleTag, PiiClass};
 
     struct StubRecognizer {
         class: PiiClass,
