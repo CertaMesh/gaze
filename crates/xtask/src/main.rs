@@ -6,6 +6,7 @@ use std::process::Command as ProcessCommand;
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 
+mod bundle_tokenization_drift;
 mod ci_feature_matrix;
 mod fixture_citation;
 mod no_tenant_knowledge;
@@ -25,6 +26,7 @@ enum Command {
     NoTenantKnowledge,
     FixtureCitationLint,
     AuditMetadataOnly,
+    BundleTokenizationDrift(bundle_tokenization_drift::Args),
     CiFeatureMatrix,
 }
 
@@ -37,6 +39,7 @@ fn main() -> Result<()> {
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
+        Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
     }
 }
