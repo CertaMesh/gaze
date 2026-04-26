@@ -3,15 +3,8 @@
 ## Audit Metadata
 
 `gaze audit` reads SQLite redaction-log metadata produced by `gaze clean --audit-db`.
-It is read-only and intentionally returns a restricted column set:
-
-```text
-source    class    action    field_name    document_kind    conflict_loser    decided_by    created_at
-```
-
-The audit command must not read raw spans, restore mappings, token payloads, or
-future sensitive columns. This preserves the Gaze north star: audit reporting can
-explain what happened without moving PII back toward an agent or terminal.
+It is intentionally restricted to metadata columns and must not read raw spans,
+restore mappings, token payloads, or future sensitive columns.
 
 ### Query
 
@@ -40,6 +33,34 @@ gaze audit export --audit-db audit.sqlite --format jsonl --from 2026-04-26T00:00
 
 ```json
 {"source":"email.global","class":"email","action":"tokenize","field_name":null,"document_kind":"text","conflict_loser":false,"decided_by":"recognizer_id","created_at":1777161600000}
+```
+
+### Purge
+
+`gaze audit purge` manually removes redaction audit metadata rows older than an
+ISO 8601 UTC timestamp. It never purges session manifests and does not run in
+the background.
+
+```sh
+gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z --dry-run
+gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z --count
+gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z
+```
+
+`--count` is an alias for `--dry-run`; both flags count matching rows without
+deleting them.
+
+Successful output is JSON:
+
+```json
+{"dry_run":true,"matched":12,"deleted":0}
+```
+
+Invalid `--before` values fail closed with a typed JSON error that quotes the
+input:
+
+```json
+{"error":"AuditPurgeIso8601","exit":2,"input":"not-iso8601"}
 ```
 
 ### Filters

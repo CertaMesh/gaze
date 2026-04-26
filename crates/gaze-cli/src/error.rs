@@ -12,6 +12,7 @@ pub(crate) enum CliError {
     InvalidEncoding,
     PolicyConfig,
     PolicyConfigDetail(String),
+    AuditPurgeIso8601 { input: String },
     UnknownToken { token: String },
     InvalidSignature,
     InvalidBlobVersion,
@@ -25,7 +26,7 @@ impl CliError {
     pub(crate) fn exit_code(&self) -> u8 {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
-            Self::PolicyConfig | Self::PolicyConfigDetail(_) => 2,
+            Self::PolicyConfig | Self::PolicyConfigDetail(_) | Self::AuditPurgeIso8601 { .. } => 2,
             Self::UnknownToken { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
@@ -42,6 +43,7 @@ impl CliError {
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
+            Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
             Self::InvalidSignature => "InvalidSignature",
             Self::InvalidBlobVersion => "InvalidBlobVersion",
@@ -62,6 +64,16 @@ impl CliError {
                     self.variant_name(),
                     self.exit_code(),
                     detail
+                )
+            }
+            Self::AuditPurgeIso8601 { input } => {
+                let input = serde_json::to_string(input)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"input":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    input
                 )
             }
             Self::UnknownToken { token } => {
