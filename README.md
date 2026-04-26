@@ -12,12 +12,15 @@ It does not merely redact. It replaces PII with stable, reversible tokens, so th
 
 Gaze is a reversible PII pseudonymization runtime that lets AI agents work with production data without ever seeing the real personal data.
 
-The workspace has four crates:
+The workspace has five crates:
 
 - `crates/gaze` — core library: pipeline, sessions, policy loader, recognizer registry, locale chain, rulepack schema, token grammar.
 - `crates/gaze-recognizers` — detection backends plugged into the registry (regex, dictionary, NER) and bundled rulepacks.
+- `crates/gaze-assembly` — policy-to-pipeline assembly shared by CLI-style adopters.
 - `crates/gaze-cli` — the `gaze clean` / `gaze restore` binary adopters invoke from language adapters.
-- `crates/debug-proxy` — MCP debug server for MySQL + Laravel logs, built on top of `gaze`.
+- `crates/xtask` — internal repository gate runner.
+
+External consumer: [piinuts/glance](https://github.com/PIInuts/glance), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
 
 ## Project north star
 
@@ -108,8 +111,9 @@ cargo add gaze-recognizers --features phone-parser
 crates/
   gaze/               core library (pipeline, sessions, policy, registry, locale, rulepack)
   gaze-recognizers/   detection backends (regex, dictionary, NER) + bundled rulepacks
+  gaze-assembly/      policy-to-pipeline assembly shared by CLI-style adopters
   gaze-cli/           standalone `gaze` binary for LLM pipe-mode integrations
-  debug-proxy/        MCP debug server consumer for MySQL + Laravel logs
+  xtask/              internal repository gate runner
 ```
 
 ## Crate Guide
@@ -226,55 +230,9 @@ Required files:
 
 See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](docs/research/ner-library-evaluation.md).
 
-### `debug-proxy`
+### External MCP Consumer
 
-MCP server consumer built on top of `gaze`.
-
-Commands:
-
-```text
-debug-proxy init
-debug-proxy check [policy.toml]
-debug-proxy serve [policy.toml]
-```
-
-#### What It Exposes
-
-- `db.schema`
-- `db.sample`
-- `db.count`
-- `db.distinct`
-- `db.explain`
-- `logs.search`
-- `logs.context`
-- `logs.tail`
-
-#### Typical Flow
-
-1. Scaffold a policy:
-
-```bash
-cargo run -p debug-proxy -- init
-```
-
-2. Validate it:
-
-```bash
-cargo run -p debug-proxy -- check policy.toml
-```
-
-3. Serve MCP over stdio:
-
-```bash
-cargo run -p debug-proxy -- serve policy.toml
-```
-
-#### Policy Notes
-
-- one production connection is required
-- table/column scope is allowlisted
-- NER locale is configured in policy
-- shared session state lets DB rows and logs reuse the same pseudonyms
+The former in-tree `debug-proxy` MCP consumer now lives in [piinuts/glance](https://github.com/PIInuts/glance). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
 
 ## Build
 
