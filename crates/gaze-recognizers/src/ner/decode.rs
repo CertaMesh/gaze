@@ -1,4 +1,4 @@
-use gaze::Detection;
+use gaze_types::Detection;
 
 use super::types::{LabelMap, NerSpanResult};
 

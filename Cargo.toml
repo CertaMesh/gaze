@@ -3,7 +3,12 @@ members = [
     "crates/gaze",
     "crates/gaze-assembly",
     "crates/gaze-recognizers",
+    "crates/gaze-types",
     "crates/gaze-cli",
     "crates/xtask",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+gaze-types = { path = "crates/gaze-types", version = "0.4.6" }
+serde = { version = "1" }

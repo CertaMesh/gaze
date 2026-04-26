@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use gaze::PiiClass;
+use gaze_types::PiiClass;
 
 use super::NerBackend;
 use crate::ner::detector::NerDetector;

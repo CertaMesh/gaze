@@ -6,7 +6,13 @@ use std::{
     process::Command,
 };
 
-const PRODUCTION_CRATES: &[&str] = &["gaze", "gaze-recognizers", "gaze-assembly", "gaze-cli"];
+const PRODUCTION_CRATES: &[&str] = &[
+    "gaze",
+    "gaze-types",
+    "gaze-recognizers",
+    "gaze-assembly",
+    "gaze-cli",
+];
 const MARKER_PREFIX: &str = "// fixture-cited(";
 const MARKER_SUFFIX: &str = ")";
 const FIXTURE_PATTERNS: &[&str] = &[

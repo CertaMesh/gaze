@@ -1,0 +1,14 @@
+[package]
+name = "gaze-types"
+version = "0.4.6"
+edition = "2021"
+rust-version = "1.89"
+license = "Apache-2.0"
+description = "Shared value contracts for Gaze"
+
+[lib]
+name = "gaze_types"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }

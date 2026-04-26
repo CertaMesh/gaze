@@ -1,4 +1,12 @@
-use gaze::{Candidate, ConflictTier, DetectContext, LocaleTag, PiiClass, Recognizer};
+use std::collections::hash_map::DefaultHasher;
+use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex};
+
+use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
+use gaze_types::{
+    Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleTag, PiiClass, Recognizer,
+};
 
 pub struct DictionaryRecognizer {
     id: String,
@@ -9,6 +17,7 @@ pub struct DictionaryRecognizer {
     locales: Vec<LocaleTag>,
     score: f32,
     priority: i32,
+    compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
 }
 
 impl DictionaryRecognizer {
@@ -51,6 +60,7 @@ impl DictionaryRecognizer {
             locales,
             score,
             priority,
+            compiled_dictionaries: Mutex::new(HashMap::new()),
         }
     }
 
@@ -60,6 +70,39 @@ impl DictionaryRecognizer {
 
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
+    }
+
+    fn automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
+        let key = DictionaryCacheKey::from_entry(entry);
+        let mut compiled = self
+            .compiled_dictionaries
+            .lock()
+            .expect("dictionary automaton cache poisoned");
+        Arc::clone(compiled.entry(key).or_insert_with(|| {
+            Arc::new(
+                AhoCorasickBuilder::new()
+                    .ascii_case_insensitive(!entry.case_sensitive())
+                    .build(entry.terms())
+                    .expect("DictionaryEntry validates terms before automaton construction"),
+            )
+        }))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct DictionaryCacheKey {
+    terms_hash: u64,
+    case_sensitive: bool,
+}
+
+impl DictionaryCacheKey {
+    fn from_entry(entry: &DictionaryEntry) -> Self {
+        let mut hasher = DefaultHasher::new();
+        entry.terms().hash(&mut hasher);
+        Self {
+            terms_hash: hasher.finish(),
+            case_sensitive: entry.case_sensitive(),
+        }
     }
 }
 
@@ -76,16 +119,17 @@ impl Recognizer for DictionaryRecognizer {
         let Some(entry) = ctx.dictionaries.get(&self.dictionary_name) else {
             return Vec::new();
         };
-        entry
-            .automaton()
+        let automaton = self.automaton_for(entry);
+
+        automaton
             .find_iter(input)
             .map(|m| Candidate {
+                canonical_form: Some(input[m.start()..m.end()].to_string()),
                 span: m.start()..m.end(),
                 class: self.class.clone(),
                 recognizer_id: self.id.clone(),
                 score: self.score,
                 priority: self.priority,
-                canonical_form: Some(input[m.start()..m.end()].to_string()),
                 token_family: self.token_family.clone(),
                 source: format!(
                     "dictionary:{}[#{}]",
@@ -112,7 +156,9 @@ mod tests {
     use std::cell::Cell;
     use std::collections::HashMap;
 
-    use gaze::{ContextDictionary, DictionaryBundle, RecognizerRegistry, TypedContext};
+    use gaze::{
+        dictionary_bundle_from_context, ContextDictionary, RecognizerRegistry, TypedContext,
+    };
     use serde_json::Map;
 
     use super::*;
@@ -130,8 +176,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &bundle,
@@ -165,8 +211,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::EnUs],
             dictionaries: &bundle,
@@ -206,8 +252,8 @@ mod tests {
             class_map: HashMap::new(),
             fields: Map::new(),
         };
-        let bundle = DictionaryBundle::from_context(&ctx);
-        let fields = Map::new();
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
         let detect_context = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &bundle,
@@ -239,5 +285,45 @@ mod tests {
         assert_eq!(hits[0].source, "dictionary:songs[#0]");
         assert_eq!(hits[1].source, "dictionary:songs[#1]");
         assert_eq!(hits[2].source, "dictionary:songs[#2]");
+    }
+
+    #[test]
+    fn dictionary_recognizer_source_index_matches_automaton_for_duplicate_terms() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "songs".to_string(),
+                ContextDictionary {
+                    terms: vec![
+                        "same-song".to_string(),
+                        "same-song".to_string(),
+                        "other-song".to_string(),
+                    ],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let fields = ();
+        let detect_context = DetectContext {
+            locale_chain: &[LocaleTag::Global],
+            dictionaries: &bundle,
+            fields: &fields,
+            degraded: Cell::new(false),
+        };
+        let recognizer = DictionaryRecognizer::new(
+            "dict/songs",
+            PiiClass::Custom("song".to_string()),
+            "songs",
+            true,
+            "counter",
+        );
+
+        let hits = recognizer.detect("same-song then other-song", &detect_context);
+
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].source, "dictionary:songs[#0]");
+        assert_eq!(hits[1].source, "dictionary:songs[#2]");
     }
 }

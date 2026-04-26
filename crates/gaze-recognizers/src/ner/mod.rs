@@ -22,7 +22,7 @@ mod tests {
     use crate::ner::backend::NerBackend;
     use crate::ner::error::NerRuntimeError;
     use crate::ner::types::{CHECKSUMS_FILE, CONFIG_FILE, LABELS_FILE, MODEL_FILE, TOKENIZER_FILE};
-    use gaze::{DetectContext, PiiClass, Recognizer};
+    use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
     use std::fs;
@@ -351,10 +351,10 @@ mod tests {
                 }),
             },
         };
-        let dictionaries = gaze::DictionaryBundle::default();
-        let fields = serde_json::Map::new();
+        let dictionaries = DictionaryBundle::default();
+        let fields = ();
         let ctx = DetectContext {
-            locale_chain: &[gaze::LocaleTag::Global],
+            locale_chain: &[LocaleTag::Global],
             dictionaries: &dictionaries,
             fields: &fields,
             degraded: std::cell::Cell::new(false),
@@ -382,10 +382,10 @@ mod tests {
         let input = "Du antwortest als Artistfy-Support an Alice Example.";
         let name_start = input.find("Alice Example").expect("name span start");
         let name_end = name_start + "Alice Example".len();
-        let dictionaries = gaze::DictionaryBundle::default();
-        let fields = serde_json::Map::new();
+        let dictionaries = DictionaryBundle::default();
+        let fields = ();
         let ctx = DetectContext {
-            locale_chain: &[gaze::LocaleTag::DeDe, gaze::LocaleTag::Global],
+            locale_chain: &[LocaleTag::DeDe, LocaleTag::Global],
             dictionaries: &dictionaries,
             fields: &fields,
             degraded: std::cell::Cell::new(false),

@@ -1,26 +1,10 @@
 use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
-use std::ops::Range;
 use std::sync::Arc;
 
-use serde_json::{Map, Value};
-
-use crate::locale::{LocaleChain, LocaleTag};
-use crate::redaction_log::ConflictTier;
 use crate::resolver::resolve_candidates;
-use crate::{DictionaryBundle, PiiClass};
-
-static GLOBAL_LOCALE: [LocaleTag; 1] = [LocaleTag::Global];
-
-pub trait Recognizer: Send + Sync {
-    fn id(&self) -> &str;
-    fn supported_class(&self) -> &PiiClass;
-    fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate>;
-    fn token_family(&self) -> &str;
-    fn locales(&self) -> &[LocaleTag] {
-        &GLOBAL_LOCALE
-    }
-}
+pub use gaze_types::{Candidate, DetectContext, Recognizer};
+use gaze_types::{LocaleChain, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -38,27 +22,6 @@ pub trait Canonicalizer: Send + Sync {
     fn canonicalize(&self, raw: &str) -> Option<String>;
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Candidate {
-    pub span: Range<usize>,
-    pub class: PiiClass,
-    pub recognizer_id: String,
-    pub score: f32,
-    pub priority: i32,
-    pub canonical_form: Option<String>,
-    pub token_family: String,
-    pub source: String,
-    pub decided_by: ConflictTier,
-    pub merged_sources: Vec<String>,
-}
-
-pub struct DetectContext<'a> {
-    pub locale_chain: &'a [LocaleTag],
-    pub dictionaries: &'a DictionaryBundle,
-    pub fields: &'a Map<String, Value>,
-    pub degraded: Cell<bool>,
-}
-
 pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
     validators: HashMap<String, Arc<dyn Validator>>,
@@ -68,7 +31,7 @@ pub struct RecognizerRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PiiClass;
+    use crate::{ConflictTier, DictionaryBundle, LocaleTag, PiiClass};
 
     struct StubRecognizer {
         class: PiiClass,
@@ -111,7 +74,7 @@ mod tests {
             })
             .build();
         let dictionaries = DictionaryBundle::default();
-        let fields = Map::new();
+        let fields = ();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::Global],
             dictionaries: &dictionaries,
@@ -183,7 +146,7 @@ mod tests {
             })
             .build();
         let dictionaries = DictionaryBundle::default();
-        let fields = Map::new();
+        let fields = ();
         let ctx = DetectContext {
             locale_chain: &[LocaleTag::EnUs, LocaleTag::Global],
             dictionaries: &dictionaries,
@@ -252,16 +215,6 @@ impl RecognizerRegistry {
 
     pub fn canonicalizers(&self) -> &HashMap<String, Arc<dyn Canonicalizer>> {
         &self.canonicalizers
-    }
-}
-
-impl From<&[LocaleTag]> for LocaleChain {
-    fn from(tags: &[LocaleTag]) -> Self {
-        let mut owned = tags.to_vec();
-        if !owned.contains(&LocaleTag::Global) {
-            owned.push(LocaleTag::Global);
-        }
-        LocaleChain::from_tags(owned)
     }
 }
 
