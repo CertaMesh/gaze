@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use thiserror::Error;
 
-use crate::detector::{Detection, Detector};
+use crate::detector::{Detection, Detector, PiiClass};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
 use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry, RedactionLogger};
@@ -83,7 +83,7 @@ impl Pipeline {
             raw,
             locale_chain,
             &dictionaries,
-            empty_detect_fields(),
+            &serde_json::Map::new(),
         )
     }
 
@@ -126,7 +126,7 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        fields: &serde_json::Map<String, serde_json::Value>,
+        _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<String> {
         let mut out = text.to_string();
         let normalized = normalize(text);
@@ -134,7 +134,7 @@ impl Pipeline {
         let ctx = DetectContext {
             locale_chain,
             dictionaries,
-            fields,
+            fields: &(),
             degraded: std::cell::Cell::new(false),
         };
         let resolved = self
@@ -309,7 +309,7 @@ fn redact_structured(
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
         let value = match value {
-            Value::String(text) => serde_json::Value::String(pipeline.redact_text(
+            Value::String(text) => Value::String(pipeline.redact_text(
                 session,
                 &text,
                 Some(&key),
@@ -318,7 +318,7 @@ fn redact_structured(
                 dictionaries,
                 detect_fields,
             )?),
-            Value::I64(value) => serde_json::Value::Number(value.into()),
+            Value::I64(value) => Value::I64(value),
         };
         clean.insert(key, value);
     }
@@ -430,13 +430,13 @@ where
     }
 }
 
-fn generalize_token(class: &crate::detector::PiiClass) -> String {
+fn generalize_token(class: &PiiClass) -> String {
     match class {
-        crate::detector::PiiClass::Email => "[EMAIL]".to_string(),
-        crate::detector::PiiClass::Name => "[NAME]".to_string(),
-        crate::detector::PiiClass::Location => "[LOCATION]".to_string(),
-        crate::detector::PiiClass::Organization => "[ORGANIZATION]".to_string(),
-        crate::detector::PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+        PiiClass::Email => "[EMAIL]".to_string(),
+        PiiClass::Name => "[NAME]".to_string(),
+        PiiClass::Location => "[LOCATION]".to_string(),
+        PiiClass::Organization => "[ORGANIZATION]".to_string(),
+        PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
     }
 }
 
@@ -444,11 +444,6 @@ fn build_context(field_name: Option<&str>) -> RuleContext {
     RuleContext {
         field_name: field_name.map(str::to_string),
     }
-}
-
-fn empty_detect_fields() -> &'static serde_json::Map<String, serde_json::Value> {
-    static EMPTY_FIELDS: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
-    EMPTY_FIELDS.get_or_init(serde_json::Map::new)
 }
 
 #[cfg(test)]

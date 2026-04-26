@@ -13,10 +13,10 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1"
-aho-corasick = "1"
 base64 = "0.22"
 dashmap = "6"
 ed25519-dalek = "2"
+gaze-types = { workspace = true }
 hex = "0.4"
 libc = "0.2"
 rand = "0.8"

@@ -685,12 +685,12 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 name = "gaze"
 version = "0.4.6"
 dependencies = [
- "aho-corasick",
  "anyhow",
  "base64 0.22.1",
  "dashmap",
  "ed25519-dalek",
  "gaze-recognizers",
+ "gaze-types",
  "hex",
  "libc",
  "rand 0.8.5",
