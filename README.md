@@ -280,7 +280,7 @@ See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate author
 
 ### Date posture
 
-`docs/research/v0.4.4-date-posture.md` (v0.4.4 S4) locks Gaze's Date-as-PII stance: dates are not PII by default, never ship in default `core` or `core-extended` bundles. Future v0.4.5+ implementation scope is limited to DOB-only structured contexts. General-prose dates require context classification research for v0.5+.
+`docs/research/v0.4.4-date-posture.md` (v0.4.4 S4) locks Gaze's Date-as-PII stance: dates are not PII by default, never ship in default `core` or `core-extended` bundles. General-prose dates require context classification research for v0.5+.
 
 ## Roadmap teaser — v0.5
 
@@ -293,7 +293,7 @@ Deferred beyond v0.5:
 - k-anonymity / query-budget controls
 - full format-preserving fake generation
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.4.5 and v0.5 directions.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.5 directions.
 
 ## Adopter notes
 

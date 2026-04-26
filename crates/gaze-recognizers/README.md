@@ -76,8 +76,8 @@ Current validator and normalizer enums:
 - `NormalizerKind::IbanCanonical` (uppercase + whitespace strip, paired with `iban_mod97`)
 
 `E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
-matches such as `+4915550112233` while rejecting regex-passing but unassigned
-shapes such as `+99999999`. Audit notes live in
+matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
+while rejecting regex-passing but unassigned shapes such as `+99999999`. Audit notes live in
 [`docs/research/v0.4.4-phonenumber-audit.md`](../../docs/research/v0.4.4-phonenumber-audit.md).
 
 ## Dictionary backend
