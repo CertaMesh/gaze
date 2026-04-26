@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
 use serde::Deserialize;
@@ -179,6 +179,14 @@ impl Rulepack {
     pub fn parse(raw: &str) -> Result<Rulepack, RulepackError> {
         let raw: RawRulepack = toml::from_str(raw).map_err(RulepackError::Toml)?;
         raw.try_into()
+    }
+
+    pub fn activated_classes(&self) -> BTreeSet<PiiClass> {
+        self.recognizers
+            .iter()
+            .filter(|recognizer| recognizer.enabled)
+            .map(|recognizer| recognizer.class.clone())
+            .collect()
     }
 }
 
@@ -569,6 +577,69 @@ license = "Apache-2.0"
         assert_eq!(recognizer.class, PiiClass::Email);
         assert_eq!(recognizer.scoring.priority, 90);
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
+    }
+
+    #[test]
+    fn embedded_core_activated_classes_match_rulepack_classes() {
+        let rulepack = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").expect("core rulepack"),
+        ))
+        .expect("embedded core rulepack");
+
+        assert_eq!(
+            rulepack.activated_classes(),
+            BTreeSet::from([PiiClass::Email, PiiClass::Name])
+        );
+    }
+
+    #[test]
+    fn embedded_core_extended_activated_classes_match_rulepack_classes() {
+        let rulepack = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded("core-extended").expect("core-extended rulepack"),
+        ))
+        .expect("embedded core-extended rulepack");
+
+        assert_eq!(
+            rulepack.activated_classes(),
+            BTreeSet::from([
+                PiiClass::custom("phone"),
+                PiiClass::custom("iban"),
+                PiiClass::custom("credit_card"),
+                PiiClass::custom("ip_address"),
+                PiiClass::custom("postal_code"),
+            ])
+        );
+    }
+
+    #[test]
+    fn activated_classes_include_new_rulepack_recognizer_class() {
+        let raw = format!(
+            r#"{}
+
+[[recognizers]]
+id = "test.only"
+class = "custom:test_only"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = "TEST_ONLY"
+
+[recognizers.scoring]
+base = 0.70
+priority = 1
+"#,
+            gaze_recognizers::embedded("core-extended").expect("core-extended rulepack")
+        );
+        let rulepack = Rulepack::parse(&raw).expect("core-extended with synthetic recognizer");
+
+        assert!(
+            rulepack
+                .activated_classes()
+                .contains(&PiiClass::custom("test_only")),
+            "new recognizer class must be derived from rulepack data"
+        );
     }
 
     #[test]
