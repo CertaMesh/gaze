@@ -11,6 +11,8 @@ $ cargo run -p xtask -- class-map-override-safety
 $ cargo run -p xtask -- recognizer-composition-validator
 $ cargo run -p xtask -- no-tenant-knowledge
 $ cargo run -p xtask -- bundle-tokenization-drift
+$ cargo run -p xtask -- fixture-citation-lint
+$ cargo run -p xtask -- ci-feature-matrix
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -24,6 +26,8 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Lists and runs the behavioral tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
 | `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Added in v0.4.3. Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
 | `BundleTokenizationDrift` | `cargo run -p xtask -- bundle-tokenization-drift` | Added in v0.4.6. Discovers recognizer-bearing bundled rulepacks from `crates/gaze-recognizers/embedded/*.toml`, runs the real `gaze clean --rulepack-bundled <bundle> --audit-db <tmp>` path against `crates/xtask/fixtures/drift-corpus.txt`, restores emitted tokens to infer byte spans, and compares canonical no-policy tokenization metadata to `crates/xtask/snapshots/<bundle>-no-policy.json`. Snapshots exclude raw values, `session_blob`, and audit `created_at`. `--verify-ack` fails closed when snapshot changes lack both a `// drift-ack:` source/test comment and a `[bundle-tokenization-drift]` line in the `[Unreleased]` `### Changed` section of `CHANGELOG.md`. |
+| `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
+| `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 
 ## bundle-tokenization-drift adversarial self-test
 
@@ -41,6 +45,29 @@ Then rehearse failure on a throwaway branch or detached worktree:
 4. Revert the TOML edit.
 
 To intentionally update snapshots, run `cargo run -p xtask -- bundle-tokenization-drift --regenerate-baseline`, add or update a nearby `// drift-ack:` source/test comment, and add a `[bundle-tokenization-drift]` line naming each changed bundle under `[Unreleased]` `### Changed` in `CHANGELOG.md`. Then run `cargo run -p xtask -- bundle-tokenization-drift --verify-ack`.
+
+## fixture_citation_lint self-test + limitation
+
+The fixture citation gate prevents production code from accumulating
+uncited fixture-shaped PII literals. It intentionally scans the same crate
+source roots as `no_tenant_knowledge`, while excluding Rust regions compiled
+only under `#[cfg(test)]`.
+
+Adversarial self-test for reviewers:
+
+1. On a throwaway branch, add a production-scope fixture literal such as
+   `"alice@example.invalid"` with a valid-looking marker:
+   `// fixture-cited(crates/gaze/tests/email.rs:gaze::tests::email_round_trip)`.
+2. Run `cargo run -p xtask -- fixture-citation-lint`; it must fail unless
+   `cargo test --workspace -- --list` contains the cited test name exactly.
+3. If the cited test exists, temporarily rename the test, rerun the gate, and
+   confirm it exits non-zero with `FixtureCitationMissingTest`.
+4. Revert the throwaway changes before merging.
+
+Known limitation: the gate proves that the cited test exists. It does not prove
+that the test body still asserts the specific fixture literal. That deeper
+semantic tie is out of scope for the v0.4.6 S2 two-point lint gate and remains
+a code-review responsibility.
 
 ## audit_metadata_only — known limitations (v0.4.5)
 
