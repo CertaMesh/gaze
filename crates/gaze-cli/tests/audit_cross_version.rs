@@ -100,7 +100,7 @@ fn legacy_schema_without_decided_by_is_queryable() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\n"
     ));
     assert!(
         stdout.contains("dictionary:audit_terms[#0]\tcustom:term\ttokenize\t\ttext\tfalse\tnone")
@@ -115,7 +115,7 @@ fn audit_sql_uses_restricted_column_set() {
         action: Some("tokenize".to_string()),
         document_kind: Some("text".to_string()),
     };
-    let (current_sql, values) = build_audit_query_sql(&filter, true);
+    let (current_sql, values) = build_audit_query_sql(&filter, true, true);
     assert_eq!(
         values,
         ["email", "email.global", "tokenize", "text"]
@@ -125,7 +125,7 @@ fn audit_sql_uses_restricted_column_set() {
     );
     assert_restricted_sql(&current_sql);
 
-    let (legacy_sql, _) = build_audit_query_sql(&AuditFilter::default(), false);
+    let (legacy_sql, _) = build_audit_query_sql(&AuditFilter::default(), false, false);
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
 }

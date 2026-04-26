@@ -28,14 +28,17 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
             row.field_name.as_deref().unwrap_or(""),
             row.document_kind,
             row.conflict_loser,
-            row.decided_by
+            row.decided_by,
+            row.created_at
+                .map(|created_at| created_at.to_string())
+                .unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -88,6 +91,7 @@ struct JsonlRow {
     document_kind: String,
     conflict_loser: bool,
     decided_by: String,
+    created_at: Option<i64>,
 }
 
 impl From<AuditLogRow> for JsonlRow {
@@ -100,6 +104,7 @@ impl From<AuditLogRow> for JsonlRow {
             document_kind: row.document_kind,
             conflict_loser: row.conflict_loser,
             decided_by: row.decided_by,
+            created_at: row.created_at,
         }
     }
 }

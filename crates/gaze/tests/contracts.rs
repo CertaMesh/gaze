@@ -491,6 +491,7 @@ fn sqlite_logger_persists_entries() {
             document_kind: gaze::DocumentKind::Structured,
             conflict_loser: false,
             decided_by: gaze::ConflictTier::None,
+            created_at: 0,
         })
         .expect("log entry");
 
