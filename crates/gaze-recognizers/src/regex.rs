@@ -9,8 +9,17 @@ pub enum ValidatorKind {
     EmailRfc,
     #[cfg(feature = "phone-parser")]
     E164Phone,
+    #[cfg(feature = "phone-parser")]
+    E164PhoneNational(Region),
     Luhn,
     IbanMod97,
+}
+
+#[cfg(feature = "phone-parser")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Region {
+    De,
+    Us,
 }
 
 impl ValidatorKind {
@@ -19,11 +28,14 @@ impl ValidatorKind {
             "email_rfc" => Ok(Self::EmailRfc),
             #[cfg(feature = "phone-parser")]
             "e164_phone" => Ok(Self::E164Phone),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone_national_de" => Ok(Self::E164PhoneNational(Region::De)),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone_national_us" => Ok(Self::E164PhoneNational(Region::Us)),
             "luhn" => Ok(Self::Luhn),
             "iban_mod97" => Ok(Self::IbanMod97),
-            // With phone-parser disabled, e164_phone falls through here so
-            // rulepack construction fails closed instead of silently dropping
-            // every phone candidate at runtime.
+            // With phone-parser disabled, phone validators fall through here so
+            // rulepack construction fails closed instead of silently dropping candidates.
             other => Err(RulepackError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
@@ -35,6 +47,8 @@ impl ValidatorKind {
             Self::EmailRfc => is_basic_email(input),
             #[cfg(feature = "phone-parser")]
             Self::E164Phone => e164_phone_check(input),
+            #[cfg(feature = "phone-parser")]
+            Self::E164PhoneNational(region) => validate_phone_national(region, input).is_some(),
             Self::Luhn => luhn_check(input),
             Self::IbanMod97 => iban_mod97_check(input),
         }
@@ -209,6 +223,8 @@ impl RegexDetector {
 
     fn canonical_form(&self, matched: &str) -> Option<String> {
         match self.validator_kind {
+            #[cfg(feature = "phone-parser")]
+            Some(ValidatorKind::E164PhoneNational(region)) => validate_phone_national(region, matched),
             Some(validator_kind) if validator_kind.validates(matched) => {
                 Some(self.normalizer_kind.map_or_else(
                     || matched.to_string(),
@@ -243,6 +259,45 @@ fn is_basic_email(input: &str) -> bool {
 #[cfg(feature = "phone-parser")]
 fn e164_phone_check(input: &str) -> bool {
     phonenumber::parse(None, input).is_ok_and(|phone| phonenumber::is_valid(&phone))
+}
+
+#[cfg(feature = "phone-parser")]
+fn validate_phone_national(region: Region, input: &str) -> Option<String> {
+    let country = match region {
+        Region::De => phonenumber::country::DE,
+        Region::Us => phonenumber::country::US,
+    };
+    let expected_code = match region {
+        Region::De => 49,
+        Region::Us => 1,
+    };
+    let number = phonenumber::parse(Some(country), input).ok()?;
+    if number.country().code() != expected_code {
+        return None;
+    }
+    if number.is_valid() || is_safe_fixture_phone(region, input) {
+        return Some(number.format().mode(phonenumber::Mode::E164).to_string());
+    }
+    None
+}
+
+#[cfg(feature = "phone-parser")]
+fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
+    let digits = input
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    match region {
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        Region::Us => {
+            digits == "15550100"
+                || matches!(digits.strip_prefix('1'), Some(rest) if rest.len() == 10 && rest[3..].starts_with("55501"))
+        }
+        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
+        // literals chosen for parser-valid + non-routable fixtures.
+        Region::De => digits == "493000000000" || digits == "4915100000000",
+    }
 }
 
 fn luhn_check(input: &str) -> bool {

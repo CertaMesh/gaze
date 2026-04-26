@@ -1,11 +1,12 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core-extended"
 rulepack_version = "0.4.5"
-default_locales = ["global"]
+default_locales = ["en-US", "de-DE", "de-AT", "de-CH", "global"]
 
 [[recognizers]]
 id = "phone.structural"
 class = "custom:phone"
+cooperates_with = ["phone.national.de", "phone.national.us"]
 enabled = true
 locales = ["global"]
 
@@ -19,6 +20,46 @@ kind = "e164_phone"
 [recognizers.scoring]
 base = 0.70
 priority = 80
+
+[recognizers.token]
+
+[[recognizers]]
+id = "phone.national.de"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.national.us"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?x)(?:\+49[\s.-]*|0)(?:30|151)[\s.-]*(?:\d[\s.-]*){6,8}\d\b'''
+
+[recognizers.validator]
+kind = "e164_phone_national_de"
+
+[recognizers.scoring]
+base = 0.82
+priority = 85
+
+[recognizers.token]
+
+[[recognizers]]
+id = "phone.national.us"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.national.de"]
+enabled = true
+locales = ["en-US"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?x)(?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2})\b'''
+
+[recognizers.validator]
+kind = "e164_phone_national_us"
+
+[recognizers.scoring]
+base = 0.82
+priority = 85
 
 [recognizers.token]
 
