@@ -10,9 +10,10 @@ use base64::Engine;
 use serde::Serialize;
 
 use gaze::{
-    Action, DictionaryBundle, DictionarySource, DocumentKind, LocaleTag, PiiClass, Policy,
-    RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, RulepackPolicy,
-    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger, TypedContext,
+    Action, DictionaryBundle, DictionarySource, DocumentKind, LocaleTag, Policy, RawDocument,
+    RedactionEntry, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy,
+    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, SqliteLogger,
+    TypedContext,
 };
 
 use crate::clean_overrides::CleanOverrides;
@@ -60,7 +61,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         None => None,
     };
     let cli_rulepack_policy = if loaded_policy.is_none() && has_rulepack_overrides(&options) {
-        Some(policy_for_rulepack_overrides(&clean_overrides))
+        Some(policy_for_rulepack_overrides(&clean_overrides)?)
     } else {
         None
     };
@@ -210,8 +211,10 @@ fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
     !options.rulepack_bundled.is_empty() || !options.rulepack_paths.is_empty()
 }
 
-fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
-    let mut rules = class_rules_for_bundled_overrides(clean_overrides);
+fn policy_for_rulepack_overrides(
+    clean_overrides: &CleanOverrides,
+) -> std::result::Result<Policy, CliError> {
+    let mut rules = class_rules_for_bundled_overrides(clean_overrides)?;
     rules.push(RuleSpec::Default {
         action: Action::Preserve,
     });
@@ -230,46 +233,29 @@ fn policy_for_rulepack_overrides(clean_overrides: &CleanOverrides) -> Policy {
         },
         locale: None,
     };
-    clean_overrides.apply_to(&base)
+    Ok(clean_overrides.apply_to(&base))
 }
 
-fn class_rules_for_bundled_overrides(clean_overrides: &CleanOverrides) -> Vec<RuleSpec> {
+fn class_rules_for_bundled_overrides(
+    clean_overrides: &CleanOverrides,
+) -> std::result::Result<Vec<RuleSpec>, CliError> {
     let Some(bundled) = &clean_overrides.rulepack_bundled else {
-        return Vec::new();
+        return Ok(Vec::new());
     };
-    let mut classes = Vec::<PiiClass>::new();
+    let mut classes = std::collections::BTreeSet::new();
     for bundle in bundled {
-        match bundle.as_str() {
-            "core" => {
-                push_class_once(&mut classes, PiiClass::Email);
-                push_class_once(&mut classes, PiiClass::Name);
-            }
-            "core-extended" => {
-                push_class_once(&mut classes, PiiClass::custom("phone"));
-                push_class_once(&mut classes, PiiClass::custom("ip_address"));
-                push_class_once(&mut classes, PiiClass::custom("postal_code"));
-                push_class_once(&mut classes, PiiClass::custom("iban"));
-                push_class_once(&mut classes, PiiClass::custom("credit_card"));
-            }
-            "locale-de" | "locale-en" => {
-                push_class_once(&mut classes, PiiClass::Name);
-            }
-            _ => {}
-        }
+        let contents = gaze_recognizers::embedded(bundle).ok_or(CliError::PolicyConfig)?;
+        let rulepack = Rulepack::load(RulepackSource::Embedded(contents))
+            .map_err(|_| CliError::PolicyConfig)?;
+        classes.extend(rulepack.activated_classes());
     }
-    classes
+    Ok(classes
         .into_iter()
         .map(|class| RuleSpec::Class {
             class,
             action: Action::Tokenize,
         })
-        .collect()
-}
-
-fn push_class_once(classes: &mut Vec<PiiClass>, class: PiiClass) {
-    if !classes.iter().any(|existing| existing == &class) {
-        classes.push(class);
-    }
+        .collect())
 }
 
 fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u64>) -> Scope {

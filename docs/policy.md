@@ -310,7 +310,9 @@ bundled = ["core"]
 paths = ["./tenant-rulepack.toml"]
 ```
 
-Bundled rulepacks:
+Bundled rulepacks. The classes shown here come from the embedded rulepack TOML
+`class` fields; runtime bundle activation derives the active class set from the
+loaded rulepack rather than a separate hand-maintained list.
 
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
