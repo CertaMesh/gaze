@@ -1,0 +1,29 @@
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_const_initializer.rs:1:17
+   |
+LL | const QUERY: fn(gaze_audit::AuditFilter) -> String = gaze_audit::build_audit_query_sql;
+   |                 ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_const_initializer.rs:1:17-1:40
+   = note: resolved DefId: DefId(20:5 ~ gaze_audit[f6e3]::AuditFilter)
+   = note: resolved item: gaze_audit::AuditFilter
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+   = note: `#[deny(gaze_module_isolation)]` on by default
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_const_initializer.rs:1:54
+   |
+LL | const QUERY: fn(gaze_audit::AuditFilter) -> String = gaze_audit::build_audit_query_sql;
+   |                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_const_initializer.rs:1:54-1:87
+   = note: resolved DefId: DefId(20:15 ~ gaze_audit[f6e3]::build_audit_query_sql)
+   = note: resolved item: gaze_audit::build_audit_query_sql
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: expression path
+
+error: aborting due to 2 previous errors
+
