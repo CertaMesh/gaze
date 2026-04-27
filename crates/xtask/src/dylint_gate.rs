@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 
 const EXPECTED_UI_FIXTURES: usize = 18;
 
@@ -50,12 +50,14 @@ fn assert_ui_fixture_shape(root: &Path) -> Result<()> {
 
     let fixture_count = fixtures
         .iter()
-        .filter(|path| !path.components().any(|component| component.as_os_str() == "auxiliary"))
+        .filter(|path| {
+            !path
+                .components()
+                .any(|component| component.as_os_str() == "auxiliary")
+        })
         .count();
     if fixture_count != EXPECTED_UI_FIXTURES {
-        bail!(
-            "dylint_gate: expected {EXPECTED_UI_FIXTURES} UI fixtures, found {fixture_count}"
-        );
+        bail!("dylint_gate: expected {EXPECTED_UI_FIXTURES} UI fixtures, found {fixture_count}");
     }
 
     println!("dylint_gate: verified {fixture_count} UI fixtures");
