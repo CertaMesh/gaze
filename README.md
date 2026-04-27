@@ -270,12 +270,23 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## What's new since v0.4.0-rc.1
 
-Cumulative highlights from v0.4.1 through v0.4.6 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+Cumulative highlights from v0.4.1 through v0.4.6 plus v0.5 dev — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+
+### v0.5 architectural pivot (dev complete, in `[Unreleased]`)
+
+Four phases shipped to `main` between v0.4.6 and the v0.5-rc.1 cut. None of them change runtime detection behavior; they reshape the workspace and the audit-sink protected-path enforcement story.
+
+- **Phase B — `gaze-types` extraction (PR #74).** New `crates/gaze-types` hosts the shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Adopters can now consume Gaze's contract surface without `ort`/`tokenizers`/`ndarray` ML deps via the new `bundled-recognizers` feature gate. `gaze` re-exports the contracts under the previous paths for source-compatibility. `DictionaryBundleExt` is the new explicit seam for `bundle.from_context(&ctx)`; `DictionaryEntry::try_new` replaces `new` and fails closed on empty term lists or non-ASCII case-insensitive entries.
+- **Phase C — `gaze-audit` extraction (PR #75).** New `crates/gaze-audit` owns the passive SQLite sink (`SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`). `gaze` no longer depends on `rusqlite` in default or `--no-default-features` builds. A one-minor `audit` feature shim on `gaze` re-exports `gaze::SqliteLogger` for migration; it is scheduled to drop in v0.6. The new `cargo-metadata-audit-isolation` xtask gate plus a `cargo deny` ban rule keep the protected default graph clean.
+- **Phase D — `gaze_module_isolation` Dylint lint (PR #76).** Replaces the syn-walker `audit-metadata-only` gate with a Dylint late-HIR lint that resolves through `LateContext::qpath_res` against rustc's name resolver. 18 UI fixtures cover every known bypass class (macro call-site hygiene, `#[path]`, `include!`, type positions, trait bounds, `extern crate`). Pinned toolchain: `nightly-2025-09-18`, `clippy_utils@20ce69b9...`, `dylint_linting`/`dylint_testing` 5.0. New `dylint` GitHub Actions workflow runs on every push to `main` and PR. See [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
+- **Phase E — legacy syn walker decommissioned (PR #77).** Deletes the inline syn walker source, the `RESTORE_AUDIT_FORBIDDEN_SYMBOLS` constant, the adversarial walker tests, and the legacy CI workflow. Net: `-942` lines of decommissioned code.
+
+Adopter migration: `use gaze::SqliteLogger;` → `use gaze_audit::SqliteLogger;` (preferred), with `gaze = { features = ["audit"] }` available as a one-minor migration shim.
 
 ### v0.4.5 highlights
 
 - **Audit retention manual purge** (v0.4.5 S3) — `gaze audit purge --before <iso8601> [--dry-run | --count]` deletes redaction-log rows older than the cutoff. Calendar-aware ISO 8601 validation rejects malformed dates fail-closed via the typed `AuditPurgeIso8601` error. No policy-level retention default; no background auto-purge.
-- **`audit_metadata_only` xtask gate** (v0.4.5 S3) — compile-time enforcement that restore-path code does not import audit metadata symbols. Walker covers file scope, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) documented in [`docs/architecture/xtask.md`](docs/architecture/xtask.md); v0.5 architectural pivot to dylint-based name-resolution lint scheduled (todo #181, see [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md)).
+- **`audit_metadata_only` xtask gate** (v0.4.5 S3, decommissioned v0.5 Phase E) — the syn-based AST walker shipped in v0.4.5 that enforced restore-path audit-symbol isolation. Superseded and removed by the Dylint resolver gate (PR #76 / PR #77). See [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md) for the architectural pivot rationale.
 - **`--session` audit filter** (v0.4.5 S1) — opaque session-scope filter for `gaze audit query` / `gaze audit export`. Filters by opaque audit metadata, NOT raw `session_hex`.
 - **DE + US national phone recognizers** (v0.4.5 S2) — parser-backed E.164 region-aware validators (`phonenumber` crate) for German and US national phone numbers. Cooperate with the structural phone recognizer; gated behind the `phone-parser` Cargo feature.
 - **`core-extended` no-policy locale activation** (v0.4.5 S2) — the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. **Adopter impact:** invocations without a policy now tokenize German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply `--locale=global` or pass a policy with narrower locale gating. (todo #171)
@@ -308,7 +319,9 @@ Cumulative highlights from v0.4.1 through v0.4.6 — see [CHANGELOG.md](CHANGELO
 - **`RecognizerCompositionValidator`** — guards same-class rulepack composition; missing `cooperates_with` declarations fail closed with `RulepackError::SameClassWithoutCooperation`.
 - **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
 - **`ClassMapOverrideSafety`** (v0.4.4 S1) — previously scaffolded gate is now active. `cargo run -p xtask -- class-map-override-safety` runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. Adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed.
-- **`audit_metadata_only`** (v0.4.5 S3) — compile-time enforcement that restore-path code does not import audit metadata symbols. Syn-based AST walker covers file scope, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) and the v0.5 dylint pivot are documented in [docs/architecture/xtask.md](docs/architecture/xtask.md).
+- **`audit_metadata_only`** (v0.4.5 S3 → decommissioned in v0.5 Phase E) — the syn-based AST walker that previously enforced restore-path audit-symbol isolation. Replaced by the resolver-based Dylint gate below. Removed in PR #77 (`f4fde12`).
+- **`cargo-metadata-audit-isolation`** (v0.5 Phase C) — parses `cargo metadata` and fails closed if any non-audit-responsible workspace member has a normal-dependency path to `gaze-audit`. The audit-responsible allowlist is documented in source; `gaze-cli` is the only allowed consumer. Complemented by a `cargo deny` ban rule on `gaze`'s `audit` feature outside the dedicated compatibility tests.
+- **`gaze_module_isolation` Dylint lint / `dylint-gate`** (v0.5 Phase D) — canonical resolver-based audit-sink protected-path gate. Late-HIR lint resolves through `LateContext::qpath_res`; covers 18 UI fixtures including macro call-site hygiene, `#[path]`, `include!`, type positions, trait bounds, and `extern crate`. Toolchain pins, timing, and bypass-coverage matrix live in [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
 
 See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate authoring contract.
 
@@ -318,8 +331,9 @@ See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate author
 
 ## Roadmap teaser — v0.5
 
-- **Open-key `PiiClass`** — sketched in [`docs/design/v0.5-open-piiclass.md`](docs/design/v0.5-open-piiclass.md). Replaces the closed enum with an open-key string interner so adopters and rulepacks can introduce new classes without core changes.
-- **Crate-shape Option B** — `gaze-types` extraction is underway for v0.5; `gaze-assembly` remains the policy-to-pipeline joining layer.
+- **Crate-shape Option B (shipped, in `[Unreleased]`)** — `gaze-types` extracted in Phase B (PR #74) and `gaze-audit` extracted in Phase C (PR #75). `gaze-assembly` remains the policy-to-pipeline joining layer; collapsing it stays a v0.6+ candidate.
+- **Dylint-based audit-sink isolation (shipped, in `[Unreleased]`)** — Phase D added `gaze_module_isolation` (PR #76); Phase E removed the legacy syn walker (PR #77).
+- **Open-key `PiiClass`** — sketched in [`docs/design/v0.5-open-piiclass.md`](docs/design/v0.5-open-piiclass.md). Replaces the closed enum with an open-key string interner so adopters and rulepacks can introduce new classes without core changes. Not yet shipped.
 
 Deferred beyond v0.5:
 
