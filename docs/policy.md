@@ -279,6 +279,13 @@ shim (`audit = ["dep:gaze-audit"]`) that re-exports the old
 should depend on `gaze-audit` directly; the shim is temporary and scheduled to
 drop in v0.6.
 
+> **v0.5 migration note.** `gaze::SqliteLogger` and the audit-query API now
+> live in the new `gaze-audit` crate (Phase C, PR #75). Library callers should
+> `use gaze_audit::SqliteLogger;` directly. The `gaze` crate's `audit` feature
+> shim re-exports the same path for one minor migration cycle and will be
+> removed in v0.6 (decision drawer
+> `gaze_decisions_6c60bce3b9f8ed7a4de538d8`).
+
 This is the same fixture the CLI integration suite uses
 (`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
 
