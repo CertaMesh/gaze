@@ -40,14 +40,14 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.4.6)
+## Install (v0.5.0)
 
-v0.4.6 is the current stable release.
+v0.5.0 is the current stable release.
 
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.6/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.0/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -59,7 +59,7 @@ Public `brew install piinuts/tap/gaze` documentation should wait until a public 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.4.6/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.0/gaze-x86_64-unknown-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -270,11 +270,11 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 
 ## What's new since v0.4.0-rc.1
 
-Cumulative highlights from v0.4.1 through v0.4.6 plus v0.5 dev — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+Cumulative highlights from v0.4.1 through v0.5.0 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
 
 ### v0.5 architectural pivot (dev complete, in `[Unreleased]`)
 
-Four phases shipped to `main` between v0.4.6 and the v0.5-rc.1 cut. None of them change runtime detection behavior; they reshape the workspace and the audit-sink protected-path enforcement story.
+Four phases shipped between v0.4.6 and v0.5.0. None of them change runtime detection behavior; they reshape the workspace and the audit-sink protected-path enforcement story.
 
 - **Phase B — `gaze-types` extraction (PR #74).** New `crates/gaze-types` hosts the shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Adopters can now consume Gaze's contract surface without `ort`/`tokenizers`/`ndarray` ML deps via the new `bundled-recognizers` feature gate. `gaze` re-exports the contracts under the previous paths for source-compatibility. `DictionaryBundleExt` is the new explicit seam for `bundle.from_context(&ctx)`; `DictionaryEntry::try_new` replaces `new` and fails closed on empty term lists or non-ASCII case-insensitive entries.
 - **Phase C — `gaze-audit` extraction (PR #75).** New `crates/gaze-audit` owns the passive SQLite sink (`SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`). `gaze` no longer depends on `rusqlite` in default or `--no-default-features` builds. A one-minor `audit` feature shim on `gaze` re-exports `gaze::SqliteLogger` for migration; it is scheduled to drop in v0.6. The new `cargo-metadata-audit-isolation` xtask gate plus a `cargo deny` ban rule keep the protected default graph clean.
