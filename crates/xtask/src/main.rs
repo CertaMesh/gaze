@@ -9,6 +9,7 @@ use clap::{Parser, Subcommand};
 mod bundle_tokenization_drift;
 mod cargo_metadata_audit_isolation;
 mod ci_feature_matrix;
+mod dylint_gate;
 mod fixture_citation;
 mod no_tenant_knowledge;
 
@@ -28,6 +29,7 @@ enum Command {
     FixtureCitationLint,
     AuditMetadataOnly,
     CargoMetadataAuditIsolation,
+    DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
     CiFeatureMatrix,
 }
@@ -42,6 +44,7 @@ fn main() -> Result<()> {
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::AuditMetadataOnly => run_audit_metadata_only_gate(),
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
+        Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
     }

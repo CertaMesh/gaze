@@ -14,6 +14,7 @@ $ cargo run -p xtask -- bundle-tokenization-drift
 $ cargo run -p xtask -- fixture-citation-lint
 $ cargo run -p xtask -- ci-feature-matrix
 $ cargo run -p xtask -- cargo-metadata-audit-isolation
+$ cargo run -p xtask -- dylint-gate
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -30,6 +31,28 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default or `--no-default-features` graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
+| `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, a rustc-resolver-based replacement path for the `audit-metadata-only` syn walker. |
+
+## dylint_gate
+
+The `dylint_gate` command enforces the Phase D resolver-based audit isolation
+lint. It is CI-only in practice because local developer machines may not have
+`cargo-dylint`; until Phase E removes the syn walker fallback, the wrapper
+skips locally with a clear message when `cargo-dylint` is absent.
+
+CI runs:
+
+```console
+$ cd xtask/dylint && cargo test --test ui
+$ cd ../..
+$ cargo run -p xtask -- dylint-gate
+```
+
+The UI suite covers 18 bypass classes, including macro call-site hygiene,
+`#[path]` modules, `include!()`, type positions, trait bounds, and clean
+controls. The architecture, toolchain pins, timings, and Phase E migration plan
+are documented in
+[`docs/research/v0.5-dylint-audit-gate.md`](../research/v0.5-dylint-audit-gate.md).
 
 ## cargo_metadata_audit_isolation self-test
 

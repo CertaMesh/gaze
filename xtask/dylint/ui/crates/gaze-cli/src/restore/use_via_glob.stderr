@@ -1,0 +1,55 @@
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_glob.rs:1:1
+   |
+LL | use gaze_audit::*;
+   | ^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_glob.rs:1:1-1:19
+   = note: resolved DefId: DefId(20:0 ~ gaze_audit[f6e3])
+   = note: resolved item: gaze_audit
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: use item
+   = note: `#[deny(gaze_module_isolation)]` on by default
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_glob.rs:1:5
+   |
+LL | use gaze_audit::*;
+   |     ^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_glob.rs:1:5-1:15
+   = note: resolved DefId: DefId(20:0 ~ gaze_audit[f6e3])
+   = note: resolved item: gaze_audit
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: HIR path
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_glob.rs:4:13
+   |
+LL |     let _ = SqliteLogger::new();
+   |             ^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_glob.rs:4:13-4:30
+   = note: resolved DefId: DefId(20:13 ~ gaze_audit[f6e3]::{impl#1}::new)
+   = note: resolved item: gaze_audit::SqliteLogger::new
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: expression path
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/use_via_glob.rs:4:13
+   |
+LL |     let _ = SqliteLogger::new();
+   |             ^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/use_via_glob.rs:4:13-4:25
+   = note: resolved DefId: DefId(20:3 ~ gaze_audit[f6e3]::SqliteLogger)
+   = note: resolved item: gaze_audit::SqliteLogger
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+
+error: aborting due to 4 previous errors
+

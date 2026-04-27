@@ -1,0 +1,42 @@
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/type_fn_param_return.rs:1:18
+   |
+LL | fn build(filter: gaze_audit::AuditFilter) -> gaze_audit::AuditLogRow {
+   |                  ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/type_fn_param_return.rs:1:18-1:41
+   = note: resolved DefId: DefId(20:5 ~ gaze_audit[f6e3]::AuditFilter)
+   = note: resolved item: gaze_audit::AuditFilter
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+   = note: `#[deny(gaze_module_isolation)]` on by default
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/type_fn_param_return.rs:1:46
+   |
+LL | fn build(filter: gaze_audit::AuditFilter) -> gaze_audit::AuditLogRow {
+   |                                              ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/type_fn_param_return.rs:1:46-1:69
+   = note: resolved DefId: DefId(20:7 ~ gaze_audit[f6e3]::AuditLogRow)
+   = note: resolved item: gaze_audit::AuditLogRow
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: type path
+
+error: forbidden audit dependency `gaze_audit` used inside protected path
+  --> $DIR/type_fn_param_return.rs:3:5
+   |
+LL |     gaze_audit::AuditLogRow
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: protected path: crates/gaze-cli/src/restore
+   = note: source span: $DIR/type_fn_param_return.rs:3:5-3:28
+   = note: resolved DefId: DefId(20:8 ~ gaze_audit[f6e3]::AuditLogRow::{constructor#0})
+   = note: resolved item: gaze_audit::AuditLogRow
+   = note: why forbidden: crate `gaze_audit` is forbidden in protected paths
+   = note: usage: expression path
+
+error: aborting due to 3 previous errors
+
