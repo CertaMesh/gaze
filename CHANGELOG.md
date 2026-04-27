@@ -7,9 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **v0.5 Phase B — `gaze-types` crate (PR #74, commit `4675b79`):** new shared-contract crate hosts `Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, and the token-related value types. Adopters now get a serde-only contract crate without `ort`/`tokenizers`/`ndarray` ML deps in their dependency tree. `gaze` re-exports the contracts under their previous paths for source-compatibility.
+- **v0.5 Phase B — `bundled-recognizers` feature gate (PR #74):** `gaze` no longer pulls `ort`/`tokenizers`/`ndarray`/`onig` in `--no-default-features` builds. Default features remain unchanged, so existing CLI / library consumers see no behavior change.
+- **v0.5 Phase B — `DictionaryBundleExt` extension trait (PR #74):** `bundle.from_context(&ctx)` now requires `use gaze::DictionaryBundleExt;` (or import from `gaze-types`). The split keeps `gaze-types::DictionaryBundle` a pure value type while preserving the convenience constructor for `gaze` callers.
+- **v0.5 Phase B — `DictionaryEntry::try_new` validated construction (PR #74):** empty term lists and non-ASCII case-insensitive entries fail closed at construction time rather than reaching the recognizer registry. `DictionaryEntry::new` is replaced by the validated `try_new`.
+- **v0.5 Phase C — `gaze-audit` crate (PR #75, commit `64b6394`):** new passive-sink crate hosts `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, and `AUDIT_RESTRICTED_COLUMNS`. `gaze` no longer carries `rusqlite` in its default or `--no-default-features` graphs.
+- **v0.5 Phase C — `audit` feature shim on `gaze` (PR #75):** one-minor migration window. `gaze = { features = ["audit"] }` re-exports `gaze::SqliteLogger` and the audit-query symbols by adding `gaze-audit` as a normal dependency. Scheduled to be removed in v0.6 (decision drawer `gaze_decisions_6c60bce3b9f8ed7a4de538d8`).
+- **v0.5 Phase C — `cargo-metadata-audit-isolation` xtask gate (PR #75):** parses `cargo metadata --format-version=1` and fails closed if any non-audit-responsible workspace member has a normal-dependency path to `gaze-audit` in default or `--no-default-features` graphs. The audit-responsible allowlist is documented in source; `gaze-cli` is the only allowed consumer because its `audit` subcommands run against the passive sink directly.
+- **v0.5 Phase C — `cargo deny` audit-feature ban (PR #75):** denies enabling `gaze`'s `audit` feature outside the dedicated compatibility tests, blocking accidental reintroduction of `gaze-audit` into the protected default graph.
+- **v0.5 Phase D — `gaze_module_isolation` Dylint lint (PR #76, commit `3e367d1`):** Dylint late-HIR lint replaces the syn-walker `audit-metadata-only` gate. Resolution runs through `LateContext::qpath_res` against rustc's name resolver, not text matching. `check_item`, `check_expr`, `check_ty`, trait references, struct fields, and macro emission are covered. 18 UI fixtures cover all known bypass classes including macro call-site hygiene, `#[path]` modules, `include!`, type positions, trait bounds, and `extern crate gaze_audit`. Pinned toolchain: `nightly-2025-09-18`, `clippy_utils@20ce69b9...`, `dylint_linting`/`dylint_testing` 5.0. New `dylint` GitHub Actions workflow runs the gate on every push to `main` and PR.
+- **v0.5 Phase D — `dylint-gate` xtask command (PR #76):** verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed (skips with a clear message locally when absent; CI installs it explicitly).
+
 ### Changed
 
+- **v0.5 Phase B / C audit-sink refactor:** `gaze` core no longer carries `rusqlite` in default or `--no-default-features` builds. Library callers that previously imported `gaze::SqliteLogger` should switch to `use gaze_audit::SqliteLogger;` (preferred), or temporarily enable `gaze`'s `audit` feature for the one-minor migration window.
 - [bundle-tokenization-drift] Release aggregation refreshed `core` and `core-extended` no-policy snapshots for the v0.4.6 bundled rulepack version bump.
+
+### Removed
+
+- **v0.5 Phase E — legacy `audit-metadata-only` syn walker (PR #77, commit `f4fde12`):** decommissioned. The Dylint gate added in Phase D is now the canonical audit-sink protected-path enforcer. Phase E removed: the inline syn-walker source from `crates/xtask`, the `RESTORE_AUDIT_FORBIDDEN_SYMBOLS` constant, the adversarial walker tests in `crates/xtask/tests/adversarial_audit_metadata_only.rs`, and the `.github/workflows/audit-metadata-only.yml` workflow. Net: `-942` lines of legacy walker code, tests, and workflow.
+
+### Migration notes (adopters)
+
+- `use gaze::SqliteLogger;` → `use gaze_audit::SqliteLogger;` (preferred). One-minor compatibility option: `gaze = { features = ["audit"] }` re-exports the original path; the shim is scheduled to drop in v0.6.
+- `bundle.from_context(&ctx)` now requires `use gaze::DictionaryBundleExt;` (or `use gaze_types::DictionaryBundleExt;`). The trait is the explicit migration seam introduced when `DictionaryBundle` moved into `gaze-types`.
+- `DictionaryEntry::new(...)` → `DictionaryEntry::try_new(...)?` if the call site cannot statically guarantee a non-empty term list and ASCII case-insensitive entries.
+- Workspace tests that reference `gaze::SqliteLogger` via the dev-dependency path should run with `cargo test --workspace --all-features`; the `--all-features` flag enables the `audit` shim that those compatibility tests rely on.
 
 ## [0.4.6] - 2026-04-26
 

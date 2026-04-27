@@ -24,6 +24,20 @@ Every design, implementation, and review decision MUST be evaluated against thes
 
 Full rationale, reframes of active decisions, what the north star rejects, and drift-measurement protocol live in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
 
+## Workspace shape (v0.5)
+
+As of v0.5 dev complete (`[Unreleased]`), the workspace has six published-shape crates plus `xtask`:
+
+- `gaze` — core (pipeline, session, policy, registry, locale, rulepack, `RedactionLogger` trait). No `rusqlite` dep in default builds.
+- `gaze-types` — shared value contracts (serde-only, no ML/sql deps). New in Phase B.
+- `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks.
+- `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. New in Phase C.
+- `gaze-assembly` — policy-to-pipeline builder for CLI-style adopters.
+- `gaze-cli` — standalone `gaze` binary; only allowlisted `gaze-audit` consumer outside compatibility tests.
+- `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in Phase E.
+
+Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](./CONTRIBUTING.md#workspace-shape).
+
 ## Universal rules (ALL agents)
 
 1. **Never weaken an axis without an explicit PR-body note.** If a change regresses reliability, reversibility, agentic fit, trust, or adopter ergonomics — say so in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.

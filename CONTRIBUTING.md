@@ -2,15 +2,18 @@
 
 ## Workspace shape
 
-| Path | Role |
+As of v0.5 dev complete (`[Unreleased]`):
+
+| Crate | Role |
 |---|---|
-| `crates/gaze-types` | Shared value contracts with serde-only dependencies. |
-| `crates/gaze` | Core pipeline, sessions, policy loader, registry, locale, rulepack schema, and token grammar. |
-| `crates/gaze-audit` | Passive SQLite audit sink and read-side audit query API. |
-| `crates/gaze-recognizers` | Detection backends and bundled rulepacks. |
+| `crates/gaze` | Core: pipeline, session, policy loader, recognizer registry, locale chain, rulepack schema, token grammar, `RedactionLogger` trait. **No `rusqlite` dep in default or `--no-default-features` builds.** |
+| `crates/gaze-types` | Shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Serde-only — no ML or sql deps. New in v0.5 Phase B (PR #74). |
+| `crates/gaze-recognizers` | Regex/dictionary/NER detection backends + embedded `core` and `core-extended` rulepacks + locale bundles. |
+| `crates/gaze-audit` | Passive audit sink: `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`. `rusqlite` is isolated here. New in v0.5 Phase C (PR #75). |
 | `crates/gaze-assembly` | Policy-to-pipeline assembly shared by CLI-style adopters. |
-| `crates/gaze-cli` | Standalone `gaze` binary. |
-| `crates/xtask` | Internal repository gate runner. |
+| `crates/gaze-cli` | Standalone `gaze` binary; the only allowlisted `gaze-audit` consumer outside compatibility tests. |
+| `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D). |
+| `xtask/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
 
 ## Tenant class names in tests
 
@@ -69,19 +72,33 @@ behavioral xtask gates:
 ```bash
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace
+cargo test --workspace --all-features
 cargo run -p xtask -- symmetric-potemkin
 cargo run -p xtask -- class-map-override-safety
 cargo run -p xtask -- recognizer-composition-validator
 cargo run -p xtask -- no-tenant-knowledge
+cargo run -p xtask -- bundle-tokenization-drift
 cargo run -p xtask -- fixture-citation-lint
-cargo run -p xtask -- audit-metadata-only
+cargo run -p xtask -- ci-feature-matrix
+cargo run -p xtask -- cargo-metadata-audit-isolation
+cargo run -p xtask -- dylint-gate
 ```
 
-The `audit-metadata-only` gate (added v0.4.5 S3) is a syn-based AST walker that
-fails closed when restore-path code imports audit metadata symbols. Known
-limitations and the v0.5 dylint pivot are documented in
-[`docs/architecture/xtask.md`](docs/architecture/xtask.md).
+The `--all-features` flag on `cargo test` enables `gaze`'s `audit` feature shim
+(v0.5 Phase C compatibility window) so dev-dep tests that reference the
+re-exported `gaze::SqliteLogger` continue to compile.
+
+The `cargo-metadata-audit-isolation` gate (v0.5 Phase C) parses
+`cargo metadata` and fails closed if any non-audit-responsible workspace
+member has a normal-dependency path to `gaze-audit`.
+
+The `dylint-gate` (v0.5 Phase D) is the canonical audit-sink protected-path
+enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was
+decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
+fixture matrix, and timings live in
+[`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
+`cargo-dylint` is a CI-only requirement; the local wrapper skips with a clear
+message when `cargo-dylint` is absent.
 
 CI runs the equivalents of these gates on every PR. Running them locally
 before pushing prevents the "I forgot to run xtask" round-trip.
