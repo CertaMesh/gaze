@@ -683,7 +683,7 @@ checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
 
 [[package]]
 name = "gaze"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -713,7 +713,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-assembly"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "gaze",
  "gaze-recognizers",
@@ -725,7 +725,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-audit"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "gaze-types",
  "rusqlite",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "aho-corasick",
  "criterion",
@@ -781,7 +781,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-types"
-version = "0.4.6"
+version = "0.5.0-rc.1"
 dependencies = [
  "serde",
 ]
