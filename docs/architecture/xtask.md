@@ -31,14 +31,14 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default or `--no-default-features` graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
-| `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, a rustc-resolver-based replacement path for the `audit-metadata-only` syn walker. |
+| `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
 
 ## dylint_gate
 
 The `dylint_gate` command enforces the Phase D resolver-based audit isolation
 lint. It is CI-only in practice because local developer machines may not have
-`cargo-dylint`; until Phase E removes the syn walker fallback, the wrapper
-skips locally with a clear message when `cargo-dylint` is absent.
+`cargo-dylint`; the wrapper skips locally with a clear message when
+`cargo-dylint` is absent.
 
 CI runs:
 
@@ -50,8 +50,9 @@ $ cargo run -p xtask -- dylint-gate
 
 The UI suite covers 18 bypass classes, including macro call-site hygiene,
 `#[path]` modules, `include!()`, type positions, trait bounds, and clean
-controls. The architecture, toolchain pins, timings, and Phase E migration plan
-are documented in
+controls. This is the source of truth for audit-sink protected-path isolation;
+the legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
+The architecture, toolchain pins, timings, and Phase E migration plan are documented in
 [`docs/research/v0.5-dylint-audit-gate.md`](../research/v0.5-dylint-audit-gate.md).
 
 ## cargo_metadata_audit_isolation self-test
@@ -113,37 +114,6 @@ Known limitation: the gate proves that the cited test exists. It does not prove
 that the test body still asserts the specific fixture literal. That deeper
 semantic tie is out of scope for the v0.4.6 S2 two-point lint gate and remains
 a code-review responsibility.
-
-## audit_metadata_only — known limitations (v0.4.5)
-
-The `audit_metadata_only` xtask gate enforces "no audit metadata symbols
-imported in restore paths" via syn-based AST scanning. As of v0.4.5 round-3,
-the gate covers:
-
-- File-scope `Item::Use` (top-level + nested inline `mod { ... }`)
-- Function body / impl method body `use` statements
-- Trait default-method body `use` statements (covered by walker; behavioral test added in this round: `audit_metadata_only_fails_on_trait_default_method_body_use`)
-- Const/static initializer block-expression `use` statements (covered by walker; behavioral test added in this round: `audit_metadata_only_fails_on_const_block_initializer_use`)
-- `Item::ExternCrate { gaze | gaze_cli }` (with or without alias)
-- Glob imports `use gaze::*;` / `use gaze_cli::*;` / `use crate::*;` (expand to all denylist symbols)
-- Aliased crate `use gaze as <ident>;` (synthetic `__renamed_gaze_root__` marker)
-- External modules declared via `#[path = "..."]` (rustc-style file resolution)
-- All denylist symbols including forward-guards (`AuditFilter`, `AuditLogRow`, `AUDIT_RESTRICTED_COLUMNS`, `build_audit_query_sql`, `current_epoch_ms`)
-
-Known limitations (v0.4.5 — accepted-risk; covered by code review):
-
-1. **Macro-emitted use statements.** `macro_rules! pull_audit { () => { use gaze::RedactionEntry; }; } pull_audit!();` — the gate does not expand macros. Code review must catch macros that emit forbidden imports. Future: see `docs/research/v0.5-dylint-audit-gate.md` (todo #181).
-2. **`use super::*;` re-export chains.** A submodule glob-importing from a `super` that re-exports audit symbols would bypass the gate. Currently no such re-exports exist, but no defense in depth.
-3. **Indirect references via name-resolution edge cases** (for example, `extern crate alloc as gaze;`). Rare and would be obvious in code review.
-4. **Fully-qualified path references without `use` statement.** A restore module can reference an audit symbol via fully-qualified path WITHOUT importing it: `let _ = std::marker::PhantomData::<gaze::RedactionEntry>;` or `let _ = gaze::current_epoch_ms();` or `fn x(_: gaze::AuditFilter)`. The walker scans `Item::Use` and `Item::ExternCrate` and recursively walks block statements for nested `use`, but does NOT inspect `syn::Path` references in type positions, expression positions, function signatures, return types, struct fields, or generic args. Closing this requires walking `syn::Path` references via `syn::visit::Visit` (which is essentially recreating rustc's name resolver — see todo #181 v0.5 dylint pivot for the architectural answer).
-5. **`include!("...")` macro inlining sibling files.** `include!("../external_inc.rs")` at module scope inlines a sibling file's source into the current module. The walker hits `Item::Macro` and falls through; the included file may live outside the scanned restore tree. Distinct from `macro_rules!` emission (limitation #1) — `include!` doesn't emit, it inlines. The reviewer skimming for `macro_rules!` definitions would miss this class.
-6. **`let-else` diverge block use statements.** `let Some(_x) = predicate else { use gaze::RedactionEntry; ... };` — the `else { ... }` block is `Local::init.diverge` in the syn AST. The walker walks `local.init.expr` but not the diverge block. Stable Rust since 1.65.
-
-Architectural roadmap: todo #181 schedules a v0.5 rewrite using
-rustc-resolver-based lint (likely `dylint`). That replaces the syn-walker
-entirely and eliminates this class of recursive-Potemkin risk.
-
-**Naming caveat:** the gate is named `audit_metadata_only` to match its goal ("only non-audit metadata may live in restore"), but its actual enforcement is narrower: "no audit symbols imported via `use` or `extern crate` in restore". Adopters should NOT trust the name alone — read the limitations above. The v0.5 dylint pivot (#181) closes this gap by switching to rustc-resolver-based enforcement.
 
 ## Recursive-Potemkin discipline
 
