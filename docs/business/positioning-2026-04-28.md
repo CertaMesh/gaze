@@ -20,6 +20,111 @@ Alle Repos privat. Org: [PIInuts](https://github.com/orgs/PIInuts/repositories).
 - Reversibilität (GDPR Art. 4(5) Pseudonymisierung), nicht nur Redaction.
 - Agentic-first (MCP-nativ via `gaze-lens`).
 - Manifest + Audit-Trail → legal defensible.
+- **Compliance-Beweis-Pipeline** → signierte Reports für DPO/Behörde, nicht nur Filter-Layer.
+
+---
+
+## Compliance-Hebel — warum der DPO zahlt
+
+> **Kernthese:** Der stärkste Verkaufs-Hebel ist nicht "wir filtern PII raus" — sondern "**wir liefern den Nachweis, den der Datenschutzbeauftragte gegenüber Behörden braucht**, automatisch und signiert."
+>
+> Genau deshalb öffnet ein DPO Budget. Das Filter-Feature ist Mittel zum Zweck. Der **Beweis** ist das Produkt.
+
+### GDPR-Nachweispflichten (Art. 5(2) "Accountability")
+
+Verantwortlicher (= Kunde) muss **belegen** können, dass Datenverarbeitung GDPR-konform läuft. Nicht "wir machen das schon richtig" — Dokumentation auf den Tisch.
+
+| Artikel | Pflicht | Was Gaze liefert |
+|---|---|---|
+| **Art. 5(2)** | Rechenschaftspflicht — Konformität nachweisen | Signierte Compliance-Reports (PDF + JSON) |
+| **Art. 30** | Verzeichnis von Verarbeitungstätigkeiten (VVT) | Welche PII-Klassen, welche Recognizer-Versionen, welche LLM-Empfänger |
+| **Art. 32** | Sicherheit der Verarbeitung — Pseudonymisierung explizit erwähnt | Beweis: Daten **wurden** pseudonymisiert, mit welchen Tokens, wann, durch welche Regel |
+| **Art. 33/34** | Meldepflicht bei Datenpanne | Forensik: was hat Agent gesehen, war PII drin, wer hat restored |
+| **Art. 35** | Datenschutz-Folgenabschätzung (DSFA) | Risiko-Bewertung der KI-Nutzung mit Pipeline-Architektur |
+
+### Wer fragt wann
+
+Drei typische Trigger:
+
+1. **Routine-Audit** durch internen DPO (jährlich, oder vom Aufsichtsrat angeordnet).
+2. **Behörden-Anfrage** (LfDI, BfDI, Landesdatenschutz) — routinemäßig oder nach Beschwerde / Vorfall.
+3. **Kunden-Anfrage** (B2B-Vertrag mit Auftragsverarbeitung — Kunde will sehen, was Sub-Verarbeiter macht).
+
+**Frist typisch: 30 Tage.** Wer Doku nicht hat → Bußgeld bis **4 % Konzernumsatz oder 20 Mio. €** (Art. 83). Diese Zahl ist der Schmerz, der Budget bewegt.
+
+### Warum klassische App-Logs nicht reichen
+
+Standard-Logs sind compliance-untauglich:
+
+- **Nicht signiert** → manipulationsverdächtig, vor Gericht schwach.
+- **Enthalten oft selbst PII** → schaffen neues Compliance-Problem statt es zu lösen.
+- **Kein Pseudonymisierungs-Schema** → Auditor versteht Token-Mapping nicht.
+- **Keine Reversibility-Manifest-Bindung** → Restore-Vorgänge nicht nachvollziehbar.
+
+Auditor will sehen: "Token `<EMAIL_001>` entstand am 12.04. 14:23, durch Recognizer-Regel `eu.email.v3`, Mapping liegt verschlüsselt im Manifest Y, Restore-Befugnis hat Rolle Z." — vollständig **deterministisch nachvollziehbar**, ohne dass Auditor selbst PII sieht.
+
+### Beispiel-Compliance-Report (Skizze)
+
+Das, was Kunde am Quartalsende automatisch generiert und an DPO / Auditor mailt:
+
+```
+GDPR Compliance Report — Acme GmbH
+Period: 2026-03-01 — 2026-03-31
+
+[Art. 30 VVT-Auszug]
+PII-Klassen verarbeitet: EMAIL, NAME_FULL, IBAN, PHONE_DE
+Recognizer-Versionen: eu.core@v3.2, finance@v1.4
+Empfänger (LLM-Provider): Anthropic Claude 4.7 (EU-Region)
+
+[Art. 32 Pseudonymisierungs-Nachweis]
+Total Sessions: 47.213
+Total Tokens generated: 218.402
+Reversal-Operations: 18 (durch Rolle "incident-responder")
+Kein Klartext-Leak detektiert (Canary-Tests bestanden 100 %)
+
+[Audit-Stichprobe]
+Session ULID 01HZX...4F9
+  - 12 Tokens emittiert
+  - Recognizer-Quelle: eu.core regex.email_v3
+  - Manifest-Signatur verifiziert: ed25519:abc123...
+  - Original-Restore: nicht durchgeführt
+
+[Anomalien]
+Keine.
+
+Signatur Bericht: ed25519:def456...
+Erstellt: 2026-04-01T08:00:00Z
+```
+
+### Warum das ein Verkaufs-Hammer ist
+
+- **DPO kennt Compliance sonst als Quartals-Albtraum.** Excel-Tabellen, manuelle Doku, Anwalts-Reviews. Wir liefern automatisch generierten, signierten Report → ihre Arbeit halbiert.
+- **Schmerz beim Käufer = direkte Zahlungsbereitschaft.** Anders als "Tech-Schönheit" hat Compliance-Pain einen klar identifizierbaren Käufer mit Budget.
+- **Audit-Pass = Vertragsverlängerung.** Ein Quartal mit erfolgreichem Behörden-Audit dank unserem Report → Kunde kündigt nie.
+- **Differenzierung gegen Presidio / Tonic.** Die liefern Filter, kein Compliance-Beweis. Selbst wenn die morgen Reversal nachbauen — Audit-Pipeline + Manifest-Signaturen sind 12+ Monate Arbeit.
+
+### Quer-Wirkung auf alle drei Strategie-Optionen
+
+| Option | Wie Compliance-Hebel wirkt |
+|---|---|
+| **1 Open-Core** | Audit-Cloud ist Premium-Layer #1 (höchste Margen). Open-Source-Filter zieht Trust, Compliance-Layer zieht Geld. |
+| **2 Laravel-Vertical** | Hebt ACV von ~588 €/Jahr (Pro-Tier) auf ~3000+ €/Jahr (Compliance-Pack). Mittelständische Laravel-Shops mit DPO sind Hauptziel, nicht Solo-Devs. |
+| **3 Compliance-Enterprise** | **Ist** das Produkt. Lens + Audit-Cloud + Compliance-Reports + AVV-Vorlagen + DSFA-Templates = das, wofür Konzern 50–150k €/Jahr zahlt. |
+
+### Erweiterungs-Pfade jenseits GDPR
+
+Die Pipeline-Mechanik (signierter Audit-Trail + Manifest-Restore) ist regulierungs-agnostisch. Spiegelbildliche Märkte:
+
+- **HIPAA** (US Health, 45 CFR § 164.312) → Health-Recognizer-Pack + HIPAA-Report-Variante.
+- **EU AI Act** (ab 2026 in Stufen) → Logging-Pflichten für Hochrisiko-KI-Systeme, Art. 12.
+- **PCI-DSS** (Zahlungsdaten) → Finance-Recognizer + PCI-Audit-Layer.
+- **BaFin / MaRisk** (DE Finanz-Aufsicht) → KI-Governance-Anforderungen.
+
+Jede neue Regulierung = neues Recognizer-Pack + neuer Report-Template = neuer Premium-SKU.
+
+### Caveat
+
+Wir sind **keine Anwälte**. Konkrete Auslegung von GDPR-Artikeln muss DPO / Anwaltskanzlei machen. Aber Architektur + Pipeline-Design sind genau auf diese Pflichten ausgelegt. TÜV-/Zertifizierungs-Stempel kommt später — Substanz ist da.
 
 ---
 
