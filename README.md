@@ -40,14 +40,14 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.5.0)
+## Install (v0.5.1)
 
-v0.5.0 is the current stable release.
+v0.5.1 is the current stable release.
 
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.0/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.1/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -59,7 +59,7 @@ Public `brew install piinuts/tap/gaze` documentation should wait until a public 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.0/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.1/gaze-x86_64-unknown-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
