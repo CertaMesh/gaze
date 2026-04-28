@@ -4,6 +4,9 @@
 
 #[test]
 fn drift_ack_marker_is_source_controlled() {
-    let source = std::fs::read_to_string(file!()).expect("snapshot_ack.rs is readable");
+    let source = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshot_ack.rs"),
+    )
+    .expect("snapshot_ack.rs is readable");
     assert!(source.contains("drift-ack:"));
 }
