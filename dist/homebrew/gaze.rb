@@ -8,7 +8,7 @@ class Gaze < Formula
     on_arm do
       url "https://github.com/piinuts/gaze/releases/download/v0.5.1/gaze-aarch64-apple-darwin",
           using: :nounzip
-      sha256 "TBD-after-release-run"
+      sha256 "161c43e50d838935aeefb02c764240792942e5226e63a18207294a02d4262671"
     end
   end
 
