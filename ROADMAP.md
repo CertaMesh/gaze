@@ -23,14 +23,13 @@ Art. 4(5) term for reversible substitution with tokens, chosen over
 
 ## Now (in flight)
 
-v0.5.0 shipped 2026-04-27 (gaze-types extraction, gaze-audit passive sink with
-the one-minor `audit` feature shim, dylint-based `gaze_module_isolation` lint
-replacing the syn-walker `audit_metadata_only` gate, `bundled-recognizers`
-feature gate). v0.4.6 shipped 2026-04-26.
-
-A v0.5.1 patch is in flight on a separate branch to bump the bundled
-`rulepack_version` from `0.4.6` to `0.5.0` in the four embedded TOMLs that
-release prep missed (todo #267). Once merged, v0.5.1 closes out the v0.5 line.
+v0.5.1 shipped 2026-04-29 (bundled `rulepack_version` sync — the four embedded
+TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract
+that bundled rulepacks track `gaze-recognizers`; todo #267). v0.5.0 shipped
+2026-04-27 (gaze-types extraction, gaze-audit passive sink with the one-minor
+`audit` feature shim, dylint-based `gaze_module_isolation` lint replacing the
+syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate).
+v0.4.6 shipped 2026-04-26. The v0.5 line is closed.
 
 No v0.6 implementation scope is locked in this roadmap yet. The next cycle
 should start with brainstorm → plan → multi-review before dispatching
@@ -53,8 +52,6 @@ brainstorm:
 - **`RedactionLogger` trait → `gaze-types`** — todo #252 (low). Hygiene
   follow-on from v0.5 Phases B/C; pairs with the `audit` feature shim
   decommission planned for v0.6.
-- **v0.5.1 patch — bundled `rulepack_version` sync** — todo #267 (high). In
-  flight on a separate branch; remove from this list once shipped.
 
 The following entries are still tagged `v0.5` from the v0.5 design wave but did
 not block the v0.5.0 ship; the v0.6 brainstorm should decide whether to fold
@@ -77,12 +74,12 @@ them into v0.6, defer further, or close:
 
 | Version | Date | Highlights |
 |---|---:|---|
+| v0.5.1 | 2026-04-29 | Bundled `rulepack_version` sync (todo #267) — `core`, `core-extended`, `locale-de`, `locale-en` embedded TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract that bundled rulepacks track `gaze-recognizers` |
 | v0.5.0 | 2026-04-27 | `gaze-types` extraction, `gaze-audit` passive sink with one-minor `audit` feature shim, dylint-based `gaze_module_isolation` lint replaces syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate frees `gaze` core from `ort` / `tokenizers` / `ndarray` ML deps |
 | v0.4.6 | 2026-04-26 | Bundle-tokenization-drift xtask gate, fixture-citation lint, rulepack-derived bundle classes, DE national-phone recall broaden, no-feature phone parser fail-closed regression, Homebrew tap decision |
 | v0.4.5 | 2026-04-26 | DE+US national phones, audit retention purge + `audit_metadata_only` gate, `--session` audit filter, ClassMapOverrideSafety extension, rulepack version bump validation, `gaze-assembly` split |
 | v0.4.4 | 2026-04-26 | ClassMapOverrideSafety gate, audit schema v2 with `--from` / `--to`, parser-backed E.164 phone validation, Date-as-PII posture memo |
 | v0.4.3 | 2026-04-26 | Luhn + IBAN MOD-97 validators, `core-extended` Phase 2 for IBAN + credit cards, `no_tenant_knowledge` gate, audit query/export |
-| v0.4.2 | 2026-04-25 | macOS aarch64 + Linux x86_64 binaries, `core-extended` Phase 1, audit log persistence, three-surfaces CLI backfill, v0.5 design stub |
 
 Older versions are tracked in `CHANGELOG.md`.
 
@@ -108,4 +105,4 @@ changes.
 - `CLAUDE.md` — Claude Code-specific addenda
 - `docs/research/gaze-first-principles-vision.md` — north star locked 2026-04-24
 - `docs/research/v0.5-dylint-audit-gate.md` — v0.5 architectural pivot stub
-- `docs/architecture/xtask.md` — `audit_metadata_only` gate coverage + limitations
+- `docs/architecture/xtask.md` — current xtask gate inventory; `audit_metadata_only` is decommissioned as of v0.5 Phase E and is documented for historical context only
