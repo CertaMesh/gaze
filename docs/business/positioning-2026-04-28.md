@@ -126,6 +126,12 @@ Jede neue Regulierung = neues Recognizer-Pack + neuer Report-Template = neuer Pr
 
 Wir sind **keine Anwälte**. Konkrete Auslegung von GDPR-Artikeln muss DPO / Anwaltskanzlei machen. Aber Architektur + Pipeline-Design sind genau auf diese Pflichten ausgelegt. TÜV-/Zertifizierungs-Stempel kommt später — Substanz ist da.
 
+### Verwandt: Trust-Signale & Zertifikate
+
+Compliance-Reports allein reichen nicht — wir brauchen zusätzlich **Trust-Signale**, die Käufer auf einen Blick prüfen können (OpenSSF Badge, Sigstore-signierte Releases, Pen-Test-Reports, ISO 27001/27701/42001 in späterer Phase).
+
+Eigene Übersicht mit Phasen-Empfehlung, Kostenabschätzung und Anti-Patterns: → [`trust-and-certifications-2026-04-28.md`](./trust-and-certifications-2026-04-28.md)
+
 ---
 
 ## Wichtiges Grundprinzip — wo Gaze läuft
