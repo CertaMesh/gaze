@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-locale-en"
-rulepack_version = "0.4.6"
+rulepack_version = "0.5.1"
 default_locales = ["en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 
 # Phase 2 ports English locale recognizers.
