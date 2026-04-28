@@ -21,6 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.5.1] - 2026-04-29
+
+### Fixed
+
+- **Bundled rulepack version sync (todo #267):** corrective patch - bundled `core`, `core-extended`, `locale-de`, and `locale-en` rulepacks now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 CHANGELOG contract that bundled rulepacks track `gaze-recognizers`. v0.5.0 release-prep missed the embedded TOMLs; this patch corrects that.
+
+### Changed
+
+- Version bump 0.5.0 -> 0.5.1 across `gaze`, `gaze-types`, `gaze-recognizers`, `gaze-audit`, `gaze-cli`, and `gaze-assembly`.
+- [bundle-tokenization-drift] v0.5.1 rulepack_version sync refreshed `core` and `core-extended` no-policy snapshots; only the `rulepack_version` field changed.
+
 ## [0.5.0] - 2026-04-27
 
 ### Added
