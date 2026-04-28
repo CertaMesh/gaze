@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [bundle-tokenization-drift] v0.5.1 rulepack_version sync refreshed `core` and `core-extended` no-policy snapshots; only the `rulepack_version` field changed.
+
 ### Deprecated
 
 ### Removed

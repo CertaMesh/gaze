@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "bundle": "core-extended",
-  "rulepack_version": "0.4.6",
+  "rulepack_version": "0.5.1",
   "fixtures_sha256": "af37516341714906350a84bcf202dfb7040489f565212c341dd699d349398b00",
   "entries": [
     {
