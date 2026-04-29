@@ -200,7 +200,7 @@ pub(crate) fn register_rulepack_recognizers(
                         bucket: cues_bucket,
                     });
                 };
-                let source_short_label = derive_source_short_label(&recognizer.id, &cues_bucket);
+                let source_short_label = derive_source_short_label(&recognizer.id);
                 builder = builder.recognizer(AnchoredMatchRecognizer::new(
                     recognizer.id,
                     cues.clone(),
@@ -236,8 +236,7 @@ fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
     )
 }
 
-pub(crate) fn derive_source_short_label(recognizer_id: &str, bucket: &str) -> String {
-    let _ = bucket;
+pub(crate) fn derive_source_short_label(recognizer_id: &str) -> String {
     recognizer_id
         .strip_prefix("name.")
         .unwrap_or(recognizer_id)
