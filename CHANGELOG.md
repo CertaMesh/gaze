@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Tracked `.githooks/pre-push` runs full local gate matrix (cargo fmt + tests + xtask gates) before allowing push. Doc-only pushes fast-path. `GAZE_PREPUSH_FAST=1` skips xtask gates when CI is healthy. One-time setup: `git config core.hooksPath .githooks` per clone.
-- **v0.6 GH#24 / todo #87 anchored_match recognizer kind:** cue-anchored
+- **v0.6 GH #24 anchored_match recognizer kind:** cue-anchored
   `Name` detection now covers email forward headers, agent reply preambles, and
   auto-footers through deterministic structural rules. The default `core`
   bundle adds `name.forward_marker`, `name.agent_recipient`, and
@@ -67,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **v0.6 audit source-label coverage:** audit-row metadata tests now lock in
   `AUDIT_RESTRICTED_COLUMNS` including `source`, so persisted audit queries can
   explain structural `anchored_match` emissions without adding a
-  `recognizer_id` column. References GH#24 and todo #87.
+  `recognizer_id` column. References GH #24.
 - **v0.6 audit source-label normalization:** `name.auto_footer` now emits the
   structural source label `structural.footer`, matching the `footer_cues`
   bucket wording used by the bundled locale rulepacks. References PR #84 NIT
@@ -92,11 +92,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-### Pass-3 SafetyNet (PR #91, todo #65 — ships in v0.6.0 alongside the audit-shim drop and the v0.6 anchored_match work)
+### Pass-3 SafetyNet (PR #91 — ships in v0.6.0 alongside the audit-shim drop and the v0.6 anchored_match work)
 
 #### Added
 
-- **Pass-3 observer-only SafetyNet rollup (PR #91, todo #65):** new
+- **Pass-3 observer-only SafetyNet rollup (PR #91):** new
   privacy backend that audits Gaze's clean output for PII the deterministic
   pipeline missed, without ever mutating the manifest, the clean text, or
   the restore path. The shipped backend is the official OpenAI Privacy
@@ -229,7 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Pass-3 rollup. See `docs/policy.md` for the requirements any future
   TOML surface must satisfy.
 - This rollup ships in **v0.6.0** alongside the audit-shim drop
-  (todo #315) and the v0.6 `anchored_match` recognizer work. Adopters
+  and the v0.6 `anchored_match` recognizer work. Adopters
   upgrading from v0.5.x see one combined release: switch
   `gaze::SqliteLogger` imports to `gaze_audit::SqliteLogger`, then opt
   into SafetyNet at their own pace via the `safety-net-openai` feature.
@@ -240,8 +240,7 @@ The following SafetyNet items are intentionally out of scope for v0.6.0
 and are tracked for a later release:
 
 - **Live-model nightly workflow** with a non-empty synthetic corpus to
-  detect FP-rate drift between checkpoint upgrades. Tracked under
-  todo #328.
+  detect FP-rate drift between checkpoint upgrades.
 - **Native `ort` backend** with a `weights.rs` SHA-pinned scaffolding
   module that removes the subprocess hop. The `OpenAiFilterBackend`
   trait shape was designed so the same adapter API serves both
@@ -250,8 +249,7 @@ and are tracked for a later release:
   pinned `opf` build into a private cache directory and verifies the
   checksum offline. Closes the "first-run requires manual install" gap.
 - **Long-lived subprocess / daemon mode** to amortize subprocess
-  startup cost when latency budgets tighten. The shared subprocess
-  helper proposal is filed under todo #303.
+  startup cost when latency budgets tighten.
 - **False-positive adjudication dashboard** on top of `gaze audit
   safety-net query` and `audit export` so reviewers can triage
   suspects across runs.
@@ -264,7 +262,7 @@ for the same list with its design notes.
 
 ### Added
 
-- **NER adopter assets (todo #301, GH issue #90 items 1+4):** promoted the
+- **NER adopter assets (GH issue #90 items 1+4):** promoted the
   Davlan mBERT label contract and canonical NER policy snippet to
   `assets/ner/` for framework adapters and adopters. `assets/ner/README.md`
   documents the BIO tag to Gaze class schema, the `"drop"` sentinel, and the
@@ -272,7 +270,7 @@ for the same list with its design notes.
 
 ### Changed
 
-- **Pinned default NER artifact source (todo #292, GH issue #90 item 2):**
+- **Pinned default NER artifact source (GH issue #90 item 2):**
   `scripts/fetch-ner-model.sh` now installs the pre-quantized int8 ONNX artifact
   from `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
   `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, copies the Gaze-authored
@@ -287,7 +285,7 @@ for the same list with its design notes.
 
 ### Fixed
 
-- **Bundled rulepack version sync (todo #267):** corrective patch - bundled `core`, `core-extended`, `locale-de`, and `locale-en` rulepacks now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 CHANGELOG contract that bundled rulepacks track `gaze-recognizers`. v0.5.0 release-prep missed the embedded TOMLs; this patch corrects that.
+- **Bundled rulepack version sync:** corrective patch - bundled `core`, `core-extended`, `locale-de`, and `locale-en` rulepacks now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 CHANGELOG contract that bundled rulepacks track `gaze-recognizers`. v0.5.0 release-prep missed the embedded TOMLs; this patch corrects that.
 
 ### Changed
 
@@ -343,7 +341,7 @@ for the same list with its design notes.
 ### Added
 
 - **Audit retention manual purge (PR #59):** `gaze audit purge --before <iso8601> [--dry-run | --count]` deletes redaction-log rows older than the cutoff. Calendar-aware ISO 8601 validation rejects malformed dates fail-closed with typed `AuditPurgeIso8601` error. Restricted DELETE clause; no policy-level retention default; no background auto-purge.
-- **`audit_metadata_only` xtask gate (PR #59):** compile-time enforcement that restore-path code does not import audit metadata symbols. Walker covers file scope `use`, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) documented in `docs/architecture/xtask.md`; v0.5 architectural pivot to dylint-based name-resolution lint scheduled (todo #181).
+- **`audit_metadata_only` xtask gate (PR #59):** compile-time enforcement that restore-path code does not import audit metadata symbols. Walker covers file scope `use`, nested `mod`, function/impl/trait-default/const/static block-statement `use`, glob imports, aliased crates, `extern crate`, and `#[path]`-resolved external modules. Known limitations (fully-qualified path references, `include!`, let-else diverge, macro-emit) documented in `docs/architecture/xtask.md`; v0.5 architectural pivot to dylint-based name-resolution lint scheduled.
 - **`--session` audit filter (PR #57):** opaque session-scope filter for `gaze audit query` / `gaze audit export` (NOT raw `session_hex`).
 - **DE + US national phone recognizers (PR #58):** parser-backed E.164 region-aware validators (`phonenumber` crate) for German and US national phone numbers. Cooperate with structural phone recognizer; gated behind `phone-parser` Cargo feature.
 - **ClassMapOverrideSafety extension (PR #55 / S4):** further hardening of class-map override safety gate.
@@ -353,7 +351,7 @@ for the same list with its design notes.
 ### Changed
 
 - Coordinated version bump across `gaze`, `gaze-recognizers`, `gaze-cli`, and `gaze-assembly` to `0.4.5`.
-- **`core-extended` no-policy locale activation (PR #58):** the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. Adopters using the bundle without a policy will see additional tokenization for German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply an explicit `--locale=global` or pass a policy with narrower locale gating. (todo #171)
+- **`core-extended` no-policy locale activation (PR #58):** the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. Adopters using the bundle without a policy will see additional tokenization for German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply an explicit `--locale=global` or pass a policy with narrower locale gating.
 
 ### Fixed
 
@@ -365,13 +363,13 @@ for the same list with its design notes.
 - README Requirements section with per-OS support matrix (PR #62).
 - Org transfer URL sweep `Naoray/gaze` -> `piinuts/gaze` (PR #63).
 - New `docs/architecture/xtask.md` documenting `audit_metadata_only` gate coverage, known limitations, and v0.5 roadmap.
-- New `docs/research/v0.5-dylint-audit-gate.md` stub (todo #181).
+- New `docs/research/v0.5-dylint-audit-gate.md` stub.
 
 ## [0.4.4] - 2026-04-26
 
 ### Added
 
-- **S1 ClassMapOverrideSafety xtask gate** (#51): the previously scaffolded gate is now active. The behavioral test runner invokes `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered` through `cargo test`, while `.github/workflows/class-map-override-safety.yml` runs the gate on PRs and pushes to `main`. An adversarial in-PR self-test programmatically verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`. Closes todo #132.
+- **S1 ClassMapOverrideSafety xtask gate** (#51): the previously scaffolded gate is now active. The behavioral test runner invokes `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered` through `cargo test`, while `.github/workflows/class-map-override-safety.yml` runs the gate on PRs and pushes to `main`. An adversarial in-PR self-test programmatically verifies the gate fails non-zero when a listed test is missing or renamed, following the meta-Potemkin guard captured in drawer `gaze_architecture_12b32d53`.
 - **S2 audit schema v2** (#53): `RedactionEntry` now includes `created_at: i64` epoch milliseconds, with an on-open SQLite `ALTER TABLE` migration so legacy DBs without `created_at` remain queryable through a NULL default. `gaze audit query` and `gaze audit export` now accept `--from <iso8601>` and `--to <iso8601>` filters, JSONL export includes `created_at`, and ISO 8601 parse failures emit typed `CliError::PolicyConfig` messages with the offending input quoted. Time-filtered queries omit NULL `created_at` legacy rows by SQL semantics; unfiltered queries still include them. Fixture coverage covers both v0.4.3-shaped and v0.4.4-shaped SQLite DBs.
 - **S3a phonenumber-backed `E164Phone` validator** (#52): the `phonenumber` crate is available behind the optional `phone-parser` feature, default-on for `gaze-cli` and opt-in for raw library users. `ValidatorKind::E164Phone` extends the existing `phone.structural` recognizer in `core-extended.toml`, preserving valid E.164 matches such as `+4915550112233` while rejecting regex-passing but unassigned shapes such as `+99999999`. Builds without `phone-parser` reject the `e164_phone` validator at rulepack load time with `RulepackError::UnsupportedValidator`, preserving axis-1 fail-closed behavior rather than silently dropping phone detection at runtime. Audit notes live in `docs/research/v0.4.4-phonenumber-audit.md`.
 - **S4 Date posture memo** (#50): `docs/research/v0.4.4-date-posture.md` locks Gaze's Date-as-PII stance. Dates are not PII by default, never ship in default `core` or `core-extended` bundles, and future v0.4.5+ implementation scope is limited to DOB-only structured contexts. General-prose dates require context classification research for v0.5+, and the GH #5 token-spam tradeoff is resolved as no-default-on. The negative corpus covers version strings, IPs, file paths, ID-shaped numerics, year-only strings, and build or CI metadata.
@@ -398,7 +396,7 @@ for the same list with its design notes.
 
 ### Deferred to v0.5
 
-- Open-key `PiiClass` refactor, per scratchpad 256 LOCK 2.
+- Open-key `PiiClass` refactor.
 - Crate-shape Option B: extract `gaze-types` and collapse `gaze-assembly`.
 
 ## [0.4.3] - 2026-04-26
