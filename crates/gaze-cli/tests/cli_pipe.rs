@@ -11,7 +11,7 @@ use assert_cmd::Command;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use regex::Regex;
-use rusqlite::{params, Connection};
+use rusqlite::{params, params_from_iter, Connection};
 use serde_json::{json, Value};
 use tempfile::tempdir;
 
@@ -1639,6 +1639,65 @@ fn s4_audit_query_columns_are_restricted() {
     assert_eq!(
         column_names, expected,
         "audit query SQL must return exactly AUDIT_RESTRICTED_COLUMNS"
+    );
+}
+
+#[test]
+fn p5_audit_query_reads_structural_agent_recipient_source() {
+    let (_dir, policy_path) =
+        write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
+    let audit_dir = tempdir().unwrap();
+    let audit_path = audit_dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[
+            &format!("--policy={}", policy_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        "Du antwortest als Artistfy-Support an Alice Example.",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+    let body: Value = serde_json::from_slice(&clean.stdout).expect("stdout is JSON");
+    assert!(
+        Regex::new(r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$")
+            .unwrap()
+            .is_match(body["clean_text"].as_str().expect("clean_text")),
+        "unexpected clean_text: {}",
+        body["clean_text"]
+    );
+
+    // Phase 5: `AUDIT_RESTRICTED_COLUMNS` is the safe display allow-list, and
+    // `source` is intentionally present so audit reads can explain the
+    // structural family without a schema change.
+    assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), true, true, true);
+    let conn = Connection::open(&audit_path).unwrap();
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows = stmt
+        .query_map(params_from_iter(values.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(6)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+
+    assert_eq!(
+        rows,
+        vec![(
+            "structural.agent_recipient".to_string(),
+            "name".to_string(),
+            "tokenize".to_string(),
+            "none".to_string()
+        )]
     );
 }
 
