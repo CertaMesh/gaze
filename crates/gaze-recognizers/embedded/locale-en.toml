@@ -6,3 +6,12 @@ default_locales = ["en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
 # Phase 2 ports English locale recognizers.
 [locale.email_headers]
 names = ["From", "To", "Cc", "Bcc", "Reply-To", "Sender"]
+
+[locale.forward_markers]
+names = ["Forwarded message from", "Begin forwarded message", "----- Forwarded message"]
+
+[locale.agent_recipient_cues]
+names = ["reply to", "respond to", "draft for", "draft to"]
+
+[locale.footer_cues]
+names = ["Sent by", "Sent via", "On behalf of"]

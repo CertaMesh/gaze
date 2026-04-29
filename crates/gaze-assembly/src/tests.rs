@@ -39,6 +39,13 @@ fn empty_context() -> Context {
     }
 }
 
+fn embedded_rulepack(name: &str) -> Rulepack {
+    Rulepack::load(gaze::RulepackSource::Embedded(
+        gaze_recognizers::embedded(name).expect("embedded rulepack"),
+    ))
+    .expect("rulepack")
+}
+
 fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
     gaze::Policy {
         session: SessionPolicy {
@@ -251,6 +258,105 @@ fn pattern_template_lowers_correctly_under_locale_chain_de() {
             .unwrap()
             .is_match(&text)
     );
+}
+
+#[test]
+fn merged_vocab_for_de_de_loads_only_locale_de_buckets() {
+    let core = embedded_rulepack("core");
+    let de = embedded_rulepack("locale-de");
+    let en = embedded_rulepack("locale-en");
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::DeDe]), None);
+    let vocab = merged_locale_vocab(&[core, de, en], &active_locales);
+
+    let forward_markers = vocab
+        .get("forward_markers")
+        .expect("locale-de forward markers");
+    assert_eq!(
+        forward_markers,
+        &vec![
+            "Weitergeleitete Nachricht von".to_string(),
+            "Forwarded message from".to_string(),
+            "Begin forwarded message from".to_string(),
+            "----- Forwarded message".to_string(),
+        ]
+    );
+    assert!(
+        !forward_markers.contains(&"Begin forwarded message".to_string()),
+        "de-DE chain must not merge locale-en-only buckets; English safety cues are duplicated into locale-de deliberately"
+    );
+    assert_eq!(
+        vocab
+            .get("agent_recipient_cues")
+            .expect("agent recipient cues"),
+        &vec![
+            "antwortest".to_string(),
+            "antworte".to_string(),
+            "schreibst".to_string(),
+            "reply to".to_string(),
+            "respond to".to_string(),
+            "draft for".to_string(),
+            "draft to".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn merged_vocab_for_en_us_loads_only_locale_en_buckets() {
+    let core = embedded_rulepack("core");
+    let de = embedded_rulepack("locale-de");
+    let en = embedded_rulepack("locale-en");
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+    let vocab = merged_locale_vocab(&[core, de, en], &active_locales);
+
+    assert_eq!(
+        vocab
+            .get("forward_markers")
+            .expect("locale-en forward markers"),
+        &vec![
+            "Forwarded message from".to_string(),
+            "Begin forwarded message".to_string(),
+            "----- Forwarded message".to_string(),
+        ]
+    );
+    assert!(
+        !vocab
+            .get("agent_recipient_cues")
+            .expect("agent recipient cues")
+            .contains(&"antwortest".to_string()),
+        "en-US chain must not merge locale-de cues"
+    );
+}
+
+#[test]
+#[ignore = "passes after Phase 4"]
+fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
+    let policy = policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let von_header_pattern =
+        regex::Regex::new(r"^Von: <[0-9a-f]{8}:Name_\d+> <[a-z0-9._%+\-]+@example\.invalid>$")
+            .expect("regex");
+    for rulepacks in [
+        vec![embedded_rulepack("core"), embedded_rulepack("locale-de")],
+        vec![
+            embedded_rulepack("core"),
+            embedded_rulepack("locale-de"),
+            embedded_rulepack("locale-en"),
+        ],
+    ] {
+        let pipeline = build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Von: Alice Example <alice@example.invalid>".to_string()),
+            )
+            .expect("redact");
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        assert!(von_header_pattern.is_match(&text));
+    }
 }
 
 #[test]
