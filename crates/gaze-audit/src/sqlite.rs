@@ -35,6 +35,26 @@ impl SqliteLogger {
                 created_at INTEGER NULL,
                 session_id TEXT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS safety_net_log (
+                id INTEGER PRIMARY KEY,
+                safety_net_id TEXT NOT NULL,
+                raw_label TEXT NOT NULL,
+                mapped_class TEXT NOT NULL,
+                leak_kind TEXT NOT NULL,
+                span_len INTEGER NOT NULL,
+                document_kind TEXT NOT NULL,
+                field_path TEXT NULL,
+                score REAL NULL,
+                created_at INTEGER NOT NULL,
+                session_id TEXT NULL,
+                pipeline_class TEXT NULL,
+                safety_net_replay_hash TEXT NULL,
+                backend_id TEXT NULL,
+                backend_version TEXT NULL,
+                decoding_params_hash TEXT NULL,
+                telemetry_kind TEXT NULL
+            );
             "#,
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
