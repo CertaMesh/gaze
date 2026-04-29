@@ -53,7 +53,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern_template = '''(?m)^(?:{locale_email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>'''
+pattern_template = '''(?m)^(?:{locale.email_headers}):\s*(?:"([^"]+)"|([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,3}))\s+<[^>]+>'''
 capture_groups = [1, 2]
 
 [recognizers.scoring]
