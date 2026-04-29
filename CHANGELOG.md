@@ -56,6 +56,148 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+### Pass-3 SafetyNet (PR #91, todo #65 — ships in v0.6.0 alongside the audit-shim drop and the v0.6 anchored_match work)
+
+#### Added
+
+- **Pass-3 observer-only SafetyNet rollup (PR #91, todo #65):** new
+  privacy backend that audits Gaze's clean output for PII the deterministic
+  pipeline missed, without ever mutating the manifest, the clean text, or
+  the restore path. The shipped backend is the official OpenAI Privacy
+  Filter (`opf`) subprocess adapter. North-star fit is explicit: A1 (never
+  leak) holds because the upstream `text` and `placeholder` JSON fields
+  are stripped at the adapter boundary and never cross into Gaze; A2
+  (reversibility) is preserved because the contract is observer-only and
+  the manifest is immutable from a backend's perspective; A3
+  (agentic-first) is supported by per-field structured-document traversal
+  that emits field-pathed suspects for agent tool-call JSON; A4
+  (auditable + deterministic) is preserved by the closed `SafetyNetError`
+  variant set, the typed `LeakKind` classification (`Uncovered` /
+  `PartialBleed` / `ClassMismatch`), and the optional `safety_net_log`
+  SQLite table.
+- **`gaze-types` SafetyNet trait surface (Phase 1):** new public
+  `SafetyNet`, `SafetyNetContext`, `LeakSuspect`, `LeakKind`,
+  `LeakReport`, `LeakReportTelemetry`, `SafetyNetPiiClass`,
+  `OpenAiPrivateLabel`, and `SafetyNetError` types. The contract is
+  byte-free: `SafetyNetContext` is `Copy`, holds borrowed references, and
+  exposes only manifest, locale chain, document kind, optional opaque
+  session id, and optional structured field path.
+- **`Pipeline::clean_with_safety_net_detect_context` (Phase 2):** new
+  pipeline entry point that runs deterministic clean, builds the manifest,
+  and dispatches per-field structured traversal to registered safety
+  nets. Returns `(CleanDocument, LeakReport)`. Locale-skip telemetry is
+  recorded per field when the session-level locale chain does not match
+  the backend's `supported_locales`.
+- **`OpenAiFilterSafetyNet` adapter (Phase 4) at
+  `crates/gaze-recognizers/src/safety_net/openai_filter`:** subprocess
+  adapter for the official `openai/privacy-filter` `opf` CLI, invoked as
+  `opf --format json --output-mode typed`. Adopters bring their own
+  pinned upstream Git revision or release. PII-bearing `text` and
+  `placeholder` JSON fields are deserialized through a private
+  `PrivatePiiString` whose `Drop` clears the buffer and whose `Debug`
+  writes `<private-opf-field>`; spans are projected to `RawSpan`
+  (start, end, label, score) before any code outside the adapter sees
+  them.
+- **Subprocess deadline + resource isolation (closes #320, refs #321,
+  closes #322):** single deadline covers stdin write, stdout read,
+  stderr read, and child wait. Timeout fires `SIGKILL` and reaps the
+  process, returns `SafetyNetError::Runtime { message: "opf subprocess
+  timed out and was killed" }`, which the CLI maps to exit `3` with
+  variant `Timeout`. Stdout/stderr readers are bounded (4 MiB / 256 B).
+  Initialization failures are cached in a
+  `OnceLock<Result<Arc<...>, Arc<...>>>` so deterministic problems do
+  not retry on every clean.
+- **Stderr discipline:** default `Stdio::null()`. Opt-in
+  `with_stderr_diagnostics(true)` captures up to 256 bytes, replaces
+  non-printable bytes with spaces, and sanitizes whitespace-separated
+  tokens that contain `@` or seven or more ASCII digits to `<redacted>`
+  so backend logs cannot leak emails or phone shapes.
+- **Checkpoint perms verification:** `--openai-filter-checkpoint` must
+  exist before the subprocess spawns. Files and directories must be
+  owned by the current uid, must not be symlinks, and must not be
+  group/world writable; directories must be mode `0700`. Missing
+  checkpoints produce sanitized `WeightsMissing { path:
+  "<missing:<filename>>" }`.
+- **`gaze-cli` SafetyNet surface (Phase 6):** new flags `--safety-net`,
+  `--openai-filter-command`, `--openai-filter-checkpoint`,
+  `--openai-filter-operating-point`, `--safety-net-timeout-ms`,
+  `--safety-net-input-limit-bytes`, `--safety-net-mode` (strict |
+  tolerant). `clean` JSON output gains a `leak_report` block carrying
+  typed stats. Strict mode exits `3` on `Uncovered` / `PartialBleed`
+  suspects with variant `SuspectedLeak`; tolerant mode emits a stderr
+  `{"warning":"SafetyNet",...}` event and exits `0`. `ClassMismatch`
+  always warns and never fails strict mode.
+- **Exhaustive `SafetyNetError` -> `CliError::SafetyNetFailure` mapping:**
+  stable variant strings (`Unavailable`, `WeightsMissing`,
+  `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`,
+  `InvalidOutput`, `SuspectedLeak`) so adopters can branch on the
+  failure shape without parsing free-form text.
+- **`safety_net_log` audit table (Phase 5, `gaze-audit`):** new table
+  on the existing audit DB stores metadata-only suspect rows plus
+  `LocaleSkipped` telemetry events. Restricted columns lock that no raw
+  upstream payload (text or placeholder bytes) is persisted; the
+  `safety_net_log_does_not_persist_suspect_or_placeholder_bytes` test
+  pins the invariant. `gaze audit safety-net query --audit-db <path>`
+  reads filtered rows back from a read-only connection.
+- **`safety-net-sanity` xtask gate (Phase 7):** new behavioral gate
+  batched across `gaze`, `gaze-cli`, `gaze-recognizers`, and
+  `gaze-audit` that asserts manifest diff invariants, strict/tolerant
+  CLI behavior, subprocess boundary safety, and `safety_net_log` schema.
+  Backed by `.github/workflows/safety-net-sanity.yml`, which runs on
+  every PR and on push to `main`.
+- **`class-map-override-safety` extension (Phase 7):** the existing gate
+  now asserts that `all_official_labels_map_exactly_to_gaze_classes`
+  runs and passes, so the closed OPF label allowlist cannot drift
+  silently.
+- **`ci-feature-matrix` extension (Phase 7):** the matrix now enrolls
+  the `safety-net` and `safety-net-openai` feature combos so the gated
+  code paths build on every PR.
+- **MockSafetyNet test helper (Phase 3):** `gaze-recognizers` exports
+  a `test-support`-gated `MockSafetyNet` so adopter tests can drive
+  manifest diffing without spawning a subprocess.
+- **Documentation (Phase 8):** new
+  [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md)
+  covers the trait shape, observer-only contract, OPF adapter boundary,
+  stderr discipline, structured-doc traversal, replay hash, audit
+  table, and CI gate. `crates/gaze-cli/README.md` documents every
+  flag, the exit-code map, the latency budget, and synthetic examples
+  using only approved fixtures (RFC 6761 `*.invalid` domains, NANPA
+  `555-01xx` phones, Ofcom drama ranges). `docs/policy.md` notes that
+  SafetyNet activation is CLI / programmatic only and lists the
+  requirements any future TOML surface must satisfy (locale gating,
+  fail-closed load, default strict mode, CLI override precedence).
+
+#### Changed
+
+- **deny.toml feature scope (Phase 0):** safety-net dependency bans for
+  `reqwest`, `hyper`, `tokio`, and `ureq` are scoped to the
+  `safety-net-*` feature graphs. The `cargo-metadata-audit-isolation`
+  xtask gate is the authoritative enforcer; `cargo-deny` remains a
+  belt-and-suspenders check for feature policy.
+
+#### Notes for adopters
+
+- SafetyNet code paths are gated off by default. Build with
+  `--features safety-net-openai` on `gaze-cli` (or `gaze-recognizers`
+  for programmatic use) to opt in. Existing clean / restore consumers
+  see no dependency-graph change.
+- Bring-your-own-binary plus bring-your-own-weights: install `opf`
+  from a pinned upstream Git revision or release. The adapter does
+  not download or update the checkpoint. Pin the install path with
+  `GAZE_OPENAI_FILTER_OPF=<path>` or `--openai-filter-command=<path>`.
+- Strict mode is the default. Tolerant mode
+  (`--safety-net-mode=tolerant`) preserves exit `0` for runs that
+  report suspects, but always writes a stderr warning event so
+  monitoring can pick it up.
+- Activation is **CLI / programmatic only**, not `policy.toml`, in this
+  Pass-3 rollup. See `docs/policy.md` for the requirements any future
+  TOML surface must satisfy.
+- This rollup ships in **v0.6.0** alongside the audit-shim drop
+  (todo #315) and the v0.6 `anchored_match` recognizer work. Adopters
+  upgrading from v0.5.x see one combined release: switch
+  `gaze::SqliteLogger` imports to `gaze_audit::SqliteLogger`, then opt
+  into SafetyNet at their own pace via the `safety-net-openai` feature.
+
 ## [0.5.1] - 2026-04-29
 
 ### Fixed
