@@ -2,10 +2,18 @@ use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
 
+const MAX_CARGO_TEST_INVOCATIONS: usize = 4;
+
 pub fn run() -> Result<()> {
     let suites = suites();
+    if suites.len() > MAX_CARGO_TEST_INVOCATIONS {
+        bail!(
+            "safety_net_sanity: expected at most {MAX_CARGO_TEST_INVOCATIONS} batched cargo test invocations, got {}",
+            suites.len()
+        );
+    }
     println!(
-        "safety_net_sanity: checking {} behavioral tests across {} batched suites",
+        "safety_net_sanity: checking {} behavioral tests across {} batched cargo test invocations",
         suites
             .iter()
             .map(|suite| suite.required_tests.len())
