@@ -3,6 +3,8 @@ mod dictionary;
 mod error;
 mod ner;
 mod regex;
+#[cfg(feature = "safety-net")]
+pub mod safety_net;
 
 pub use anchored_match::{
     is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,

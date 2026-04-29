@@ -7,6 +7,7 @@ const REQUIRED_NO_FEATURE_TEST_COMMAND: &str =
     "cargo test -p gaze-recognizers --no-default-features";
 const REQUIRED_PACKAGE_TARGET: &str = "gaze-recognizers";
 const REQUIRED_NO_DEFAULT_FEATURES: &str = "--no-default-features";
+const REQUIRED_SAFETY_NET_SANITY_COMMAND: &str = "cargo run -p xtask -- safety-net-sanity";
 
 pub fn run() -> Result<()> {
     let hook = Path::new(PRE_PUSH_HOOK);
@@ -34,6 +35,14 @@ pub fn run() -> Result<()> {
             "ci_feature_matrix: {} must contain `{}`",
             hook.display(),
             REQUIRED_NO_FEATURE_TEST_COMMAND
+        );
+    }
+
+    if !contents.contains(REQUIRED_SAFETY_NET_SANITY_COMMAND) {
+        bail!(
+            "ci_feature_matrix: {} must contain `{}`",
+            hook.display(),
+            REQUIRED_SAFETY_NET_SANITY_COMMAND
         );
     }
 

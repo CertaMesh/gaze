@@ -43,6 +43,7 @@ run "cargo test -p gaze-recognizers --no-default-features" \
   cargo test -p gaze-recognizers --no-default-features
 run "xtask ci-feature-matrix"                       cargo run -p xtask -- ci-feature-matrix
 run "xtask no-tenant-knowledge"                     cargo run -p xtask -- no-tenant-knowledge
+run "xtask safety-net-sanity"                       cargo run -p xtask -- safety-net-sanity
 run "xtask symmetric-potemkin"                      cargo run -p xtask -- symmetric-potemkin
 run "xtask recognizer-composition-validator"        cargo run -p xtask -- recognizer-composition-validator
 

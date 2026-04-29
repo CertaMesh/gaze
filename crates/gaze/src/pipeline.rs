@@ -1,6 +1,10 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use gaze_types::{
+    EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, SafetyNet,
+    SafetyNetContext, SafetyNetError,
+};
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector, PiiClass};
@@ -40,12 +44,15 @@ pub enum Error {
     Policy(#[from] PolicyError),
     #[error("rulepack error: {0}")]
     Rulepack(#[from] RulepackError),
+    #[error("safety net error: {0}")]
+    SafetyNet(#[from] SafetyNetError),
 }
 
 #[derive(Clone)]
 pub struct Pipeline {
     registry: Arc<RecognizerRegistry>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
+    safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -59,6 +66,14 @@ impl Pipeline {
         L: RedactionLogger + 'static,
     {
         self.redaction_loggers.push(Arc::new(logger));
+        self
+    }
+
+    pub fn with_safety_net<N>(mut self, safety_net: N) -> Pipeline
+    where
+        N: SafetyNet + 'static,
+    {
+        self.safety_nets.push(Arc::new(safety_net));
         self
     }
 
@@ -117,6 +132,67 @@ impl Pipeline {
         }
     }
 
+    pub fn clean_with_safety_net(
+        &self,
+        session: &Session,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        let dictionaries = DictionaryBundle::default();
+        self.clean_with_safety_net_detect_context(
+            session,
+            raw,
+            locale_chain,
+            &dictionaries,
+            &serde_json::Map::new(),
+        )
+    }
+
+    pub fn clean_with_safety_net_detect_context(
+        &self,
+        session: &Session,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        detect_fields: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        match raw {
+            RawDocument::Structured(structured_fields) => {
+                let mut report = LeakReport::default();
+                let clean = redact_structured_with_safety_net(
+                    self,
+                    session,
+                    structured_fields,
+                    locale_chain,
+                    dictionaries,
+                    detect_fields,
+                    &mut report,
+                )?;
+                Ok((CleanDocument::Structured(clean), Vec::new(), report))
+            }
+            RawDocument::Text(text) => {
+                let clean = self.redact_text_with_manifest(
+                    session,
+                    &text,
+                    None,
+                    DocumentKind::Text,
+                    locale_chain,
+                    dictionaries,
+                    detect_fields,
+                )?;
+                let report = self.run_safety_nets(
+                    session,
+                    &clean.text,
+                    &Manifest::from_spans(clean.manifest.clone()),
+                    DocumentKind::Text,
+                    locale_chain,
+                    None,
+                )?;
+                Ok((CleanDocument::Text(clean.text), clean.manifest, report))
+            }
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn redact_text(
         &self,
@@ -128,7 +204,30 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<String> {
-        let mut out = text.to_string();
+        Ok(self
+            .redact_text_with_manifest(
+                session,
+                text,
+                field_name,
+                document_kind,
+                locale_chain,
+                dictionaries,
+                _fields,
+            )?
+            .text)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn redact_text_with_manifest(
+        &self,
+        session: &Session,
+        text: &str,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        _fields: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext {
@@ -153,14 +252,16 @@ impl Pipeline {
                 session,
                 loser,
                 field_name,
-                document_kind.clone(),
+                document_kind,
                 self.action_for(&loser.detection, &build_context(field_name)),
                 true,
             )?;
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
-        let mut replacements = Vec::with_capacity(detections.len());
+        let mut out = String::with_capacity(text.len());
+        let mut emitted = Vec::with_capacity(detections.len());
+        let mut cursor = 0usize;
 
         for detection in detections {
             let raw = text[detection.detection.span.clone()].to_string();
@@ -170,7 +271,7 @@ impl Pipeline {
                 session,
                 &detection,
                 field_name,
-                document_kind.clone(),
+                document_kind,
                 action,
                 false,
             )?;
@@ -188,16 +289,81 @@ impl Pipeline {
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
             };
-            replacements.push((detection.detection.span, replacement));
-        }
 
-        for (span, replacement) in replacements.into_iter().rev() {
-            if let Some(replacement) = replacement {
-                out.replace_range(span, &replacement);
+            let span = detection.detection.span;
+            if span.start > cursor {
+                out.push_str(&text[cursor..span.start]);
             }
+            match replacement {
+                Some(replacement) => {
+                    let clean_start = out.len();
+                    out.push_str(&replacement);
+                    emitted.push(EmittedTokenSpan {
+                        clean_span: clean_start..out.len(),
+                        raw_span: span.clone(),
+                        class: detection.detection.class,
+                    });
+                }
+                None => out.push_str(&text[span.clone()]),
+            }
+            cursor = span.end;
         }
 
-        Ok(out)
+        if cursor < text.len() {
+            out.push_str(&text[cursor..]);
+        }
+
+        Ok(CleanText {
+            text: out,
+            manifest: emitted,
+        })
+    }
+
+    fn run_safety_nets(
+        &self,
+        session: &Session,
+        clean_text: &str,
+        manifest: &Manifest,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        field_path: Option<&str>,
+    ) -> Result<LeakReport> {
+        if self.safety_nets.is_empty() {
+            return Ok(LeakReport::default());
+        }
+
+        let mut suspects = Vec::<LeakSuspect>::new();
+        let mut telemetry = Vec::new();
+        let active = gaze_types::LocaleChain::from(locale_chain);
+        for net in &self.safety_nets {
+            if !active.intersects(net.supported_locales()) {
+                telemetry.push(LeakReportTelemetry::LocaleSkipped {
+                    safety_net_id: net.id().to_string(),
+                    document_kind,
+                    field_path: field_path.map(str::to_string),
+                });
+                continue;
+            }
+
+            let context = SafetyNetContext {
+                manifest,
+                locale_chain,
+                document_kind,
+                session_id: Some(session.audit_session_id()),
+                field_path,
+            };
+            let mut reported = net.check(clean_text, context)?;
+            if let Some(path) = field_path {
+                for suspect in &mut reported {
+                    if suspect.field_path.is_none() {
+                        suspect.field_path = Some(path.to_string());
+                    }
+                }
+            }
+            suspects.extend(reported);
+        }
+
+        Ok(LeakReport::from_parts(suspects, telemetry))
     }
 
     fn action_for(&self, detection: &Detection, context: &RuleContext) -> Action {
@@ -243,10 +409,16 @@ struct IndexedDetection {
     family: String,
 }
 
+struct CleanText {
+    text: String,
+    manifest: Vec<EmittedTokenSpan>,
+}
+
 #[derive(Default)]
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
+    safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -284,6 +456,14 @@ impl PipelineBuilder {
         self
     }
 
+    pub fn register_safety_net<N>(mut self, safety_net: N) -> Self
+    where
+        N: SafetyNet + 'static,
+    {
+        self.safety_nets.push(Arc::new(safety_net));
+        self
+    }
+
     pub fn build(self) -> Result<Pipeline> {
         let mut registry = RecognizerRegistry::builder();
         for recognizer in self.recognizers {
@@ -292,6 +472,7 @@ impl PipelineBuilder {
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
             redaction_loggers: self.redaction_loggers,
+            safety_nets: self.safety_nets,
             rules: self.rules,
         })
     }
@@ -308,21 +489,214 @@ fn redact_structured(
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
-        let value = match value {
-            Value::String(text) => Value::String(pipeline.redact_text(
+        let path = format!("$.{key}");
+        clean.insert(
+            key.clone(),
+            redact_structured_value(
+                pipeline,
                 session,
-                &text,
-                Some(&key),
-                document_kind.clone(),
+                value,
+                &key,
+                &path,
+                document_kind,
                 locale_chain,
                 dictionaries,
                 detect_fields,
-            )?),
-            Value::I64(value) => Value::I64(value),
-        };
-        clean.insert(key, value);
+            )?,
+        );
     }
     Ok(CleanDocument::Structured(clean))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn redact_structured_value(
+    pipeline: &Pipeline,
+    session: &Session,
+    value: Value,
+    field_name: &str,
+    field_path: &str,
+    document_kind: DocumentKind,
+    locale_chain: &[crate::LocaleTag],
+    dictionaries: &DictionaryBundle,
+    detect_fields: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Value> {
+    match value {
+        Value::String(text) => Ok(Value::String(pipeline.redact_text(
+            session,
+            &text,
+            Some(field_name),
+            document_kind,
+            locale_chain,
+            dictionaries,
+            detect_fields,
+        )?)),
+        Value::Array(values) => values
+            .into_iter()
+            .enumerate()
+            .map(|(idx, value)| {
+                redact_structured_value(
+                    pipeline,
+                    session,
+                    value,
+                    field_name,
+                    &format!("{field_path}[{idx}]"),
+                    document_kind,
+                    locale_chain,
+                    dictionaries,
+                    detect_fields,
+                )
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Value::Array),
+        Value::Object(fields) => {
+            let mut clean = BTreeMap::new();
+            for (key, value) in fields {
+                let child_path = format!("{field_path}.{key}");
+                clean.insert(
+                    key.clone(),
+                    redact_structured_value(
+                        pipeline,
+                        session,
+                        value,
+                        &key,
+                        &child_path,
+                        document_kind,
+                        locale_chain,
+                        dictionaries,
+                        detect_fields,
+                    )?,
+                );
+            }
+            Ok(Value::Object(clean))
+        }
+        Value::Null | Value::Bool(_) | Value::I64(_) => Ok(value),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn redact_structured_with_safety_net(
+    pipeline: &Pipeline,
+    session: &Session,
+    fields: BTreeMap<String, Value>,
+    locale_chain: &[crate::LocaleTag],
+    dictionaries: &DictionaryBundle,
+    detect_fields: &serde_json::Map<String, serde_json::Value>,
+    report: &mut LeakReport,
+) -> Result<BTreeMap<String, Value>> {
+    let mut clean = BTreeMap::new();
+    for (key, value) in fields {
+        let path = format!("$.{key}");
+        clean.insert(
+            key.clone(),
+            redact_structured_value_with_safety_net(
+                pipeline,
+                session,
+                value,
+                &key,
+                &path,
+                locale_chain,
+                dictionaries,
+                detect_fields,
+                report,
+            )?,
+        );
+    }
+    Ok(clean)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn redact_structured_value_with_safety_net(
+    pipeline: &Pipeline,
+    session: &Session,
+    value: Value,
+    field_name: &str,
+    field_path: &str,
+    locale_chain: &[crate::LocaleTag],
+    dictionaries: &DictionaryBundle,
+    detect_fields: &serde_json::Map<String, serde_json::Value>,
+    report: &mut LeakReport,
+) -> Result<Value> {
+    match value {
+        Value::String(text) => {
+            if text.is_empty() {
+                return Ok(Value::String(text));
+            }
+            let clean = pipeline.redact_text_with_manifest(
+                session,
+                &text,
+                Some(field_name),
+                DocumentKind::Structured,
+                locale_chain,
+                dictionaries,
+                detect_fields,
+            )?;
+            // For RawDocument::Structured, locale gating uses the session-level
+            // locale chain across all fields; fields have no locale annotations.
+            let field_report = pipeline.run_safety_nets(
+                session,
+                &clean.text,
+                &Manifest::from_spans(clean.manifest),
+                DocumentKind::Structured,
+                locale_chain,
+                Some(field_path),
+            )?;
+            report.extend(field_report);
+            Ok(Value::String(clean.text))
+        }
+        Value::Array(values) => values
+            .into_iter()
+            .enumerate()
+            .map(|(idx, value)| {
+                redact_structured_value_with_safety_net(
+                    pipeline,
+                    session,
+                    value,
+                    field_name,
+                    &format!("{field_path}[{idx}]"),
+                    locale_chain,
+                    dictionaries,
+                    detect_fields,
+                    report,
+                )
+            })
+            .collect::<Result<Vec<_>>>()
+            .map(Value::Array),
+        Value::Object(fields) => {
+            let mut clean = BTreeMap::new();
+            for (key, value) in fields {
+                let child_path = format!("{field_path}.{key}");
+                clean.insert(
+                    key.clone(),
+                    redact_structured_value_with_safety_net(
+                        pipeline,
+                        session,
+                        value,
+                        &key,
+                        &child_path,
+                        locale_chain,
+                        dictionaries,
+                        detect_fields,
+                        report,
+                    )?,
+                );
+            }
+            Ok(Value::Object(clean))
+        }
+        Value::Null | Value::Bool(_) | Value::I64(_) => {
+            if let Some(scalar) = value.scalar_to_safety_net_string() {
+                let field_report = pipeline.run_safety_nets(
+                    session,
+                    &scalar,
+                    &Manifest::default(),
+                    DocumentKind::Structured,
+                    locale_chain,
+                    Some(field_path),
+                )?;
+                report.extend(field_report);
+            }
+            Ok(value)
+        }
+    }
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {

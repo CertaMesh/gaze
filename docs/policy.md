@@ -332,6 +332,40 @@ preserve formatting, unwrap the content before passing it to the Gaze pipeline
 and re-wrap the clean output afterward. RegionHint-style envelope markers for
 `CodeBlock` and `Url` are deferred to v0.7.
 
+### v0.6 safety-net activation surface
+
+The v0.6 OpenAI Privacy Filter safety net is **not exposed through
+`policy.toml`**. Activation happens via `gaze clean --safety-net=<kind>`
+plus the `--openai-filter-*` flags, or programmatically through
+`Pipeline::with_safety_net(...)` behind the `safety-net-openai` feature
+on `gaze-recognizers`.
+
+This is deliberate. The safety-net contract is observer-only and runs
+after the deterministic clean, so it is closer to a CLI/runtime concern
+than a recognizer policy. Adding a `[safety_net]` table would force a
+schema commitment before adopters have exercised the contract on
+production traffic.
+
+If a future minor release adds a TOML surface for safety nets, it must:
+
+- Gate by locale: a `locales = [...]` field that delegates to the same
+  closed `LocaleTag` matching used by recognizers, with strict
+  `LocaleTag::Other(_)` semantics.
+- Fail closed at policy load when a safety-net backend is unknown,
+  required parameters (command path, checkpoint) are missing, or the
+  feature flag (`safety-net-openai`) is not compiled in.
+- Reuse `SafetyNetMode::Strict` as the default so unconfigured deployments
+  cannot silently downgrade to tolerant behavior.
+- Keep the runtime CLI flag set as overrides — same precedence rule as
+  `[ner]` and `[locale]` blocks (CLI flag > policy.toml > Gaze default).
+
+Until that work lands, the only supported activation paths in v0.6 are
+the CLI flags documented in
+[`crates/gaze-cli/README.md`](../crates/gaze-cli/README.md#safety-net) and
+the programmatic `Pipeline::with_safety_net` builder. The architecture
+contract is documented in
+[`docs/architecture/safety-nets.md`](architecture/safety-nets.md).
+
 ### v0.5.1 to v0.6 migration note
 
 Adopters using the bundled rulepacks should load `core` plus the relevant

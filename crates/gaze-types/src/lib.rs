@@ -4,6 +4,7 @@ use std::fmt;
 use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 /// Shared detector contract for text-only PII detection.
 pub trait Detector: Send + Sync {
@@ -105,6 +106,396 @@ pub struct Detection {
     pub source: String,
 }
 
+/// Observer-only privacy safety net.
+///
+/// Safety nets run after Gaze has emitted clean text. They can report suspected
+/// missed PII, but the contract intentionally has no return channel for
+/// replacement text.
+pub trait SafetyNet: Send + Sync {
+    /// Stable backend identifier used in telemetry and audit rows.
+    fn id(&self) -> &str;
+
+    /// Locale tags supported by this safety net. Empty means global.
+    fn supported_locales(&self) -> &[LocaleTag];
+
+    /// Checks clean text for possible PII that the manifest did not cover.
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError>;
+}
+
+/// Context passed to a privacy safety net.
+#[derive(Debug, Clone, Copy)]
+pub struct SafetyNetContext<'a> {
+    /// Tokens emitted by the pseudonymization pipeline for this text segment.
+    pub manifest: &'a Manifest,
+    /// Active session-level locale chain. For `RawDocument::Structured`, locale
+    /// gating uses this same session-level chain across all fields; structured
+    /// fields do not carry per-field locale annotations.
+    pub locale_chain: &'a [LocaleTag],
+    /// Source document kind being checked.
+    pub document_kind: DocumentKind,
+    /// Optional audit session identifier.
+    pub session_id: Option<&'a str>,
+    /// Structured-document field path, such as `$.user.email`.
+    pub field_path: Option<&'a str>,
+}
+
+/// A replacement emitted by the pseudonymization pipeline.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmittedTokenSpan {
+    /// Byte span in the clean text.
+    pub clean_span: Range<usize>,
+    /// Byte span in the raw text that produced the token.
+    pub raw_span: Range<usize>,
+    /// PII class represented by the emitted token.
+    pub class: PiiClass,
+}
+
+/// Set of emitted token spans for one clean text segment.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Manifest {
+    /// Spans sorted by `clean_span.start`.
+    pub spans: Vec<EmittedTokenSpan>,
+}
+
+impl Manifest {
+    /// Builds a manifest from spans and sorts them by clean byte start.
+    pub fn from_spans(mut spans: Vec<EmittedTokenSpan>) -> Self {
+        spans.sort_by_key(|span| (span.clean_span.start, span.clean_span.end));
+        Self { spans }
+    }
+
+    /// Diffs one safety-net suspect span against emitted token coverage.
+    ///
+    /// Returns `None` when the suspect span is continuously covered by emitted
+    /// token spans of the same class. Internal gaps return
+    /// `LeakKind::PartialBleed`. When multiple uncovered gaps exist, this method
+    /// deterministically returns the first gap by byte offset; full gap
+    /// enumeration is intentionally deferred to a future report format.
+    pub fn diff_against(
+        &self,
+        suspect_span: &Range<usize>,
+        suspect_class: &PiiClass,
+    ) -> Option<LeakKind> {
+        if suspect_span.is_empty() {
+            return None;
+        }
+
+        let start_idx = self
+            .spans
+            .partition_point(|span| span.clean_span.end <= suspect_span.start);
+        let overlapping = self.spans[start_idx..]
+            .iter()
+            .take_while(|span| span.clean_span.start < suspect_span.end)
+            .filter(|span| ranges_overlap(&span.clean_span, suspect_span))
+            .collect::<Vec<_>>();
+
+        if overlapping.is_empty() {
+            return Some(LeakKind::Uncovered);
+        }
+
+        let mut cursor = suspect_span.start;
+        let mut first_mismatch = None::<&EmittedTokenSpan>;
+        for span in overlapping {
+            if span.clean_span.start > cursor {
+                return Some(LeakKind::PartialBleed {
+                    uncovered: cursor..span.clean_span.start.min(suspect_span.end),
+                });
+            }
+
+            if span.clean_span.end > cursor {
+                if first_mismatch.is_none() && &span.class != suspect_class {
+                    first_mismatch = Some(span);
+                }
+                cursor = cursor.max(span.clean_span.end.min(suspect_span.end));
+                if cursor >= suspect_span.end {
+                    break;
+                }
+            }
+        }
+
+        if cursor < suspect_span.end {
+            return Some(LeakKind::PartialBleed {
+                uncovered: cursor..suspect_span.end,
+            });
+        }
+
+        first_mismatch.map(|span| LeakKind::ClassMismatch {
+            pipeline_class: span.class.clone(),
+            safety_net_class: suspect_class.clone(),
+        })
+    }
+}
+
+fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
+}
+
+/// Suspected leak reported by an observer-only safety net.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LeakSuspect {
+    /// Byte span in clean text.
+    pub span: Range<usize>,
+    /// Mapped PII class for the suspect.
+    pub class: PiiClass,
+    /// Safety-net backend identifier.
+    pub safety_net_id: String,
+    /// Optional backend confidence score.
+    pub score: Option<f32>,
+    /// Leak classification after manifest correlation.
+    pub kind: LeakKind,
+    /// Raw backend label after validation/mapping, never source text.
+    pub raw_label: String,
+    /// Optional structured field path.
+    pub field_path: Option<String>,
+}
+
+/// Manifest correlation result for a safety-net suspect.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeakKind {
+    /// No same-class emitted token overlaps the suspect span.
+    Uncovered,
+    /// The suspect is only partly covered; `uncovered` is the first gap.
+    PartialBleed {
+        /// First uncovered byte range in the suspect span.
+        uncovered: Range<usize>,
+    },
+    /// The suspect is continuously covered, but by a different class.
+    ClassMismatch {
+        /// Class emitted by the pipeline.
+        pipeline_class: PiiClass,
+        /// Class reported by the safety net.
+        safety_net_class: PiiClass,
+    },
+}
+
+/// Stable tag for leak-kind aggregation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum LeakKindTag {
+    /// `LeakKind::Uncovered`.
+    Uncovered,
+    /// `LeakKind::PartialBleed`.
+    PartialBleed,
+    /// `LeakKind::ClassMismatch`.
+    ClassMismatch,
+}
+
+impl LeakKind {
+    /// Returns the stable aggregation tag.
+    pub fn tag(&self) -> LeakKindTag {
+        match self {
+            Self::Uncovered => LeakKindTag::Uncovered,
+            Self::PartialBleed { .. } => LeakKindTag::PartialBleed,
+            Self::ClassMismatch { .. } => LeakKindTag::ClassMismatch,
+        }
+    }
+}
+
+/// Bytes-free telemetry emitted by safety-net orchestration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LeakReportTelemetry {
+    /// Safety net skipped because the session-level locale chain did not match.
+    LocaleSkipped {
+        /// Safety-net backend identifier.
+        safety_net_id: String,
+        /// Document kind checked.
+        document_kind: DocumentKind,
+        /// Optional structured field path when skip was recorded per field.
+        field_path: Option<String>,
+    },
+}
+
+/// Aggregate leak report statistics.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LeakReportStats {
+    /// Number of suspects reported.
+    pub suspect_count: usize,
+    /// Number of uncovered suspects.
+    pub uncovered_count: usize,
+    /// Number of partial-bleed suspects.
+    pub partial_bleed_count: usize,
+    /// Number of class-mismatch suspects.
+    pub class_mismatch_count: usize,
+    /// Number of locale-skip telemetry events.
+    pub locale_skipped_count: usize,
+}
+
+/// Safety-net report for one pipeline run.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LeakReport {
+    /// Suspected leaks, containing metadata only.
+    pub suspects: Vec<LeakSuspect>,
+    /// Bytes-free telemetry events.
+    pub telemetry: Vec<LeakReportTelemetry>,
+    /// Aggregated counts for callers that do not need full suspect metadata.
+    pub stats: LeakReportStats,
+    /// Optional replay hash.
+    ///
+    /// Replay determinism is guaranteed only when command path, checkpoint,
+    /// operating point, min score, and decode parameters are fixed externally.
+    pub replay_hash: Option<String>,
+}
+
+impl LeakReport {
+    /// Builds a report from suspects and telemetry.
+    pub fn from_parts(
+        suspects: Vec<LeakSuspect>,
+        telemetry: Vec<LeakReportTelemetry>,
+    ) -> LeakReport {
+        let mut stats = LeakReportStats {
+            suspect_count: suspects.len(),
+            locale_skipped_count: telemetry
+                .iter()
+                .filter(|event| matches!(event, LeakReportTelemetry::LocaleSkipped { .. }))
+                .count(),
+            ..LeakReportStats::default()
+        };
+        for suspect in &suspects {
+            match suspect.kind {
+                LeakKind::Uncovered => stats.uncovered_count += 1,
+                LeakKind::PartialBleed { .. } => stats.partial_bleed_count += 1,
+                LeakKind::ClassMismatch { .. } => stats.class_mismatch_count += 1,
+            }
+        }
+        LeakReport {
+            suspects,
+            telemetry,
+            stats,
+            replay_hash: None,
+        }
+    }
+
+    /// Merges another report into this report.
+    pub fn extend(&mut self, other: LeakReport) {
+        self.suspects.extend(other.suspects);
+        self.telemetry.extend(other.telemetry);
+        *self = LeakReport::from_parts(
+            std::mem::take(&mut self.suspects),
+            std::mem::take(&mut self.telemetry),
+        );
+    }
+}
+
+/// Closed set of upstream OpenAI Privacy Filter labels accepted by Gaze.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum OpenAiPrivateLabel {
+    /// `private_person`.
+    PrivatePerson,
+    /// `private_address`.
+    PrivateAddress,
+    /// `private_email`.
+    PrivateEmail,
+    /// `private_phone`.
+    PrivatePhone,
+    /// `private_url`.
+    PrivateUrl,
+    /// `private_date`.
+    PrivateDate,
+    /// `account_number`.
+    AccountNumber,
+    /// `secret`.
+    Secret,
+}
+
+impl OpenAiPrivateLabel {
+    /// Returns the raw upstream label.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::PrivatePerson => "private_person",
+            Self::PrivateAddress => "private_address",
+            Self::PrivateEmail => "private_email",
+            Self::PrivatePhone => "private_phone",
+            Self::PrivateUrl => "private_url",
+            Self::PrivateDate => "private_date",
+            Self::AccountNumber => "account_number",
+            Self::Secret => "secret",
+        }
+    }
+}
+
+/// Closed safety-net PII vocabulary before mapping into `PiiClass`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum SafetyNetPiiClass {
+    /// Email address.
+    Email,
+    /// Person name.
+    Name,
+    /// Location or address.
+    Location,
+    /// Phone number.
+    Phone,
+    /// URL.
+    Url,
+    /// Date.
+    Date,
+    /// Account number.
+    AccountNumber,
+    /// Secret.
+    Secret,
+}
+
+impl SafetyNetPiiClass {
+    /// Maps the safety-net class into the shared pipeline class vocabulary.
+    pub fn to_pii_class(self) -> PiiClass {
+        match self {
+            Self::Email => PiiClass::Email,
+            Self::Name => PiiClass::Name,
+            Self::Location => PiiClass::Location,
+            Self::Phone => PiiClass::custom("phone"),
+            Self::Url => PiiClass::custom("url"),
+            Self::Date => PiiClass::custom("date"),
+            Self::AccountNumber => PiiClass::custom("account_number"),
+            Self::Secret => PiiClass::custom("secret"),
+        }
+    }
+}
+
+/// Exhaustive, closed error set for safety-net execution.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum SafetyNetError {
+    /// Safety net was explicitly requested but is unavailable.
+    #[error("safety net unavailable: {reason}")]
+    Unavailable {
+        /// Sanitized reason.
+        reason: String,
+    },
+    /// Required model weights or checkpoint are missing.
+    #[error("safety net weights missing: {path}")]
+    WeightsMissing {
+        /// Sanitized path or identifier.
+        path: String,
+    },
+    /// Backend model could not be loaded or reached.
+    #[error("safety net model unavailable: {reason}")]
+    ModelUnavailable {
+        /// Sanitized reason.
+        reason: String,
+    },
+    /// Input exceeded configured backend limit.
+    #[error("safety net input too large: limit={limit}, actual={actual}")]
+    InputTooLarge {
+        /// Configured byte limit.
+        limit: usize,
+        /// Actual byte length.
+        actual: usize,
+    },
+    /// Backend runtime failed.
+    #[error("safety net runtime failed: {message}")]
+    Runtime {
+        /// Sanitized diagnostic message.
+        message: String,
+    },
+    /// Backend returned invalid output.
+    #[error("safety net invalid output: {message}")]
+    InvalidOutput {
+        /// Sanitized diagnostic message.
+        message: String,
+    },
+}
+
 /// Policy action vocabulary for handling detected PII.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -142,7 +533,7 @@ pub enum ConflictTier {
 }
 
 /// Source document kind for metadata-only audit logging.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DocumentKind {
     /// Structured key/value document.
     Structured,
@@ -358,10 +749,18 @@ pub enum CleanDocument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Value {
+    /// Null value.
+    Null,
+    /// Boolean value.
+    Bool(bool),
     /// String value.
     String(String),
     /// Signed 64-bit integer value.
     I64(i64),
+    /// Array value.
+    Array(Vec<Value>),
+    /// Object value.
+    Object(BTreeMap<String, Value>),
 }
 
 impl Value {
@@ -369,7 +768,17 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(value) => Some(value.as_str()),
-            Self::I64(_) => None,
+            Self::Null | Self::Bool(_) | Self::I64(_) | Self::Array(_) | Self::Object(_) => None,
+        }
+    }
+
+    /// Returns a scalar string representation used for structured safety-net checks.
+    pub fn scalar_to_safety_net_string(&self) -> Option<String> {
+        match self {
+            Self::String(value) if !value.is_empty() => Some(value.clone()),
+            Self::String(_) | Self::Null | Self::Array(_) | Self::Object(_) => None,
+            Self::Bool(value) => Some(value.to_string()),
+            Self::I64(value) => Some(value.to_string()),
         }
     }
 }
@@ -562,6 +971,173 @@ mod dictionary_tests {
             err,
             DictionaryLoadError::UnicodeInsensitiveUnsupported { name } if name == "songs"
         ));
+    }
+}
+
+#[cfg(test)]
+mod safety_net_manifest_tests {
+    use super::*;
+
+    fn span(start: usize, end: usize, class: PiiClass) -> EmittedTokenSpan {
+        EmittedTokenSpan {
+            clean_span: start..end,
+            raw_span: start..end,
+            class,
+        }
+    }
+
+    fn diff(manifest: Manifest, suspect: Range<usize>, class: PiiClass) -> Option<LeakKind> {
+        manifest.diff_against(&suspect, &class)
+    }
+
+    #[test]
+    fn exact_same_class_coverage_is_not_a_leak() {
+        let manifest = Manifest::from_spans(vec![span(0, 8, PiiClass::Email)]);
+
+        assert_eq!(diff(manifest, 0..8, PiiClass::Email), None);
+    }
+
+    #[test]
+    fn uncovered_outside_all_tokens_is_uncovered() {
+        let manifest = Manifest::from_spans(vec![span(20, 30, PiiClass::Email)]);
+
+        assert_eq!(
+            diff(manifest, 0..10, PiiClass::Email),
+            Some(LeakKind::Uncovered)
+        );
+    }
+
+    #[test]
+    fn single_internal_gap_returns_partial_bleed() {
+        let manifest = Manifest::from_spans(vec![
+            span(0, 5, PiiClass::Email),
+            span(10, 15, PiiClass::Email),
+        ]);
+
+        assert_eq!(
+            diff(manifest, 0..15, PiiClass::Email),
+            Some(LeakKind::PartialBleed { uncovered: 5..10 })
+        );
+    }
+
+    #[test]
+    fn multi_gap_returns_deterministic_first_uncovered_gap() {
+        let manifest = Manifest::from_spans(vec![
+            span(0, 3, PiiClass::Email),
+            span(5, 7, PiiClass::Email),
+            span(9, 12, PiiClass::Email),
+        ]);
+
+        // The first-gap-only rule is intentional for v0.6.1; full gap
+        // enumeration is deferred until the report format can carry it.
+        assert_eq!(
+            diff(manifest, 0..12, PiiClass::Email),
+            Some(LeakKind::PartialBleed { uncovered: 3..5 })
+        );
+    }
+
+    #[test]
+    fn multi_class_overlap_reports_first_mismatch_deterministically() {
+        let manifest = Manifest::from_spans(vec![
+            span(0, 4, PiiClass::Name),
+            span(4, 8, PiiClass::Location),
+        ]);
+
+        assert_eq!(
+            diff(manifest, 0..8, PiiClass::Email),
+            Some(LeakKind::ClassMismatch {
+                pipeline_class: PiiClass::Name,
+                safety_net_class: PiiClass::Email,
+            })
+        );
+    }
+
+    #[test]
+    fn adjacent_same_class_tokens_cover_continuously() {
+        let manifest = Manifest::from_spans(vec![
+            span(0, 5, PiiClass::Email),
+            span(5, 10, PiiClass::Email),
+        ]);
+
+        assert_eq!(diff(manifest, 0..10, PiiClass::Email), None);
+    }
+
+    #[test]
+    fn partial_bleed_at_start_end_and_middle() {
+        let manifest = Manifest::from_spans(vec![span(3, 8, PiiClass::Email)]);
+
+        assert_eq!(
+            diff(manifest.clone(), 0..8, PiiClass::Email),
+            Some(LeakKind::PartialBleed { uncovered: 0..3 })
+        );
+        assert_eq!(
+            diff(manifest.clone(), 3..10, PiiClass::Email),
+            Some(LeakKind::PartialBleed { uncovered: 8..10 })
+        );
+
+        let with_gap = Manifest::from_spans(vec![
+            span(0, 3, PiiClass::Email),
+            span(6, 10, PiiClass::Email),
+        ]);
+        assert_eq!(
+            diff(with_gap, 0..10, PiiClass::Email),
+            Some(LeakKind::PartialBleed { uncovered: 3..6 })
+        );
+    }
+
+    #[test]
+    fn byte_indices_are_not_character_indices() {
+        let text = "ID: 😀 <Email_1>";
+        let token_start = text.find("<Email_1>").expect("token start");
+        assert_eq!(token_start, 9, "emoji is four bytes, not one char");
+        let manifest = Manifest::from_spans(vec![span(token_start, text.len(), PiiClass::Email)]);
+
+        assert_eq!(
+            diff(manifest, token_start..text.len(), PiiClass::Email),
+            None
+        );
+    }
+
+    #[test]
+    fn empty_suspect_range_is_not_a_leak() {
+        let manifest = Manifest::default();
+
+        assert_eq!(diff(manifest, 3..3, PiiClass::Email), None);
+    }
+
+    #[test]
+    fn safety_net_error_display_is_variant_specific_and_bytes_free() {
+        let cases = [
+            SafetyNetError::Unavailable {
+                reason: "not configured".to_string(),
+            }
+            .to_string(),
+            SafetyNetError::WeightsMissing {
+                path: "/models/opf".to_string(),
+            }
+            .to_string(),
+            SafetyNetError::ModelUnavailable {
+                reason: "load failed".to_string(),
+            }
+            .to_string(),
+            SafetyNetError::InputTooLarge {
+                limit: 1024,
+                actual: 2048,
+            }
+            .to_string(),
+            SafetyNetError::Runtime {
+                message: "timeout".to_string(),
+            }
+            .to_string(),
+            SafetyNetError::InvalidOutput {
+                message: "bad json".to_string(),
+            }
+            .to_string(),
+        ];
+
+        for rendered in cases {
+            assert!(!rendered.contains("alice@example.invalid"));
+        }
     }
 }
 

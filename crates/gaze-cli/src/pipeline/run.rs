@@ -11,13 +11,17 @@ use serde::Serialize;
 
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
-    LocaleTag, Policy, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult,
-    RuleSpec, Rulepack, RulepackPolicy, RulepackSource, Scope, SensitiveSnapshot, Session,
-    SessionPolicy, SessionScope, TypedContext,
+    LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, Policy, RawDocument, RedactionEntry,
+    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy, RulepackSource,
+    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
-use gaze_audit::SqliteLogger;
+use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
+use crate::commands::{
+    OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
+    DEFAULT_SAFETY_NET_TIMEOUT_MS,
+};
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
@@ -41,6 +45,13 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) max_bytes: u64,
     pub(crate) context_json: Option<&'a Path>,
     pub(crate) audit_db: Option<&'a Path>,
+    pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) openai_filter_command: Option<&'a Path>,
+    pub(crate) openai_filter_checkpoint: Option<&'a Path>,
+    pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    pub(crate) safety_net_timeout_ms: u64,
+    pub(crate) safety_net_input_limit_bytes: usize,
+    pub(crate) safety_net_mode: SafetyNetMode,
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
@@ -123,6 +134,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 .map_err(|_| CliError::PolicyConfig)?
         }
     };
+    let pipeline = maybe_register_safety_net(pipeline, &options)?;
 
     let session = match effective_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
@@ -137,15 +149,33 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         Some(context) => &context.fields,
         None => empty_fields(),
     };
-    let clean_doc = pipeline
-        .redact_with_detect_context(
-            &session,
-            RawDocument::Text(raw),
-            locale_chain.as_slice(),
-            &dictionaries,
-            detect_fields,
-        )
+    let (clean_doc, leak_report) = if options.safety_net.is_some() {
+        let (doc, _manifest, _report) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(raw),
+                locale_chain.as_slice(),
+                &dictionaries,
+                detect_fields,
+            )
+            .map_err(map_safety_net_pipeline_error)?;
+        (doc, _report)
+    } else {
+        let doc = pipeline
+            .redact_with_detect_context(
+                &session,
+                RawDocument::Text(raw),
+                locale_chain.as_slice(),
+                &dictionaries,
+                detect_fields,
+            )
+            .map_err(|_| CliError::Pipeline)?;
+        (doc, LeakReport::default())
+    };
+    counter
+        .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
         .map_err(|_| CliError::Pipeline)?;
+    enforce_safety_net_mode(&leak_report, options.safety_net_mode)?;
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
@@ -171,10 +201,122 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 .collect(),
             context_source: options.context_json.map(|_| "cli".to_string()),
         },
+        leak_report: LeakReportResponse::from(&leak_report),
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn maybe_register_safety_net(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    use gaze_recognizers::safety_net::openai_filter::{
+        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
+    };
+
+    let Some(kind) = options.safety_net else {
+        validate_no_openai_filter_options(options)?;
+        return Ok(pipeline);
+    };
+    match kind {
+        SafetyNetKind::OpenaiFilter => {
+            let command = options.openai_filter_command.ok_or_else(|| {
+                CliError::SafetyNetConfigDetail(
+                    "--openai-filter-command is required for --safety-net=openai-filter"
+                        .to_string(),
+                )
+            })?;
+            let checkpoint = options.openai_filter_checkpoint.ok_or_else(|| {
+                CliError::SafetyNetConfigDetail(
+                    "--openai-filter-checkpoint is required for --safety-net=openai-filter"
+                        .to_string(),
+                )
+            })?;
+            let mut config = SubprocessOpenAiFilterConfig::new(command)
+                .with_checkpoint_path(checkpoint)
+                .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
+                .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            if let Some(operating_point) = options.openai_filter_operating_point {
+                let value = operating_point.as_opf_value();
+                config = config
+                    .with_args([
+                        "--format",
+                        "json",
+                        "--output-mode",
+                        "typed",
+                        "--operating-point",
+                        value,
+                    ])
+                    .with_decoding_param("operating_point", value);
+            }
+            Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
+        }
+    }
+}
+
+#[cfg(not(feature = "safety-net-openai"))]
+fn maybe_register_safety_net(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    if options.safety_net.is_some() {
+        return Err(CliError::SafetyNetConfigDetail(
+            "safety net requested but gaze-cli was not compiled with feature safety-net-openai"
+                .to_string(),
+        ));
+    }
+    validate_no_openai_filter_options(options)?;
+    Ok(pipeline)
+}
+
+fn validate_no_openai_filter_options(
+    options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
+    if options.openai_filter_command.is_some()
+        || options.openai_filter_checkpoint.is_some()
+        || options.openai_filter_operating_point.is_some()
+        || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
+        || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
+    {
+        return Err(CliError::SafetyNetConfigDetail(
+            "openai-filter options require --safety-net=openai-filter".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
+    match err {
+        gaze::Error::SafetyNet(err) => map_safety_net_error(err),
+        _ => CliError::Pipeline,
+    }
+}
+
+fn map_safety_net_error(err: gaze::SafetyNetError) -> CliError {
+    match err {
+        gaze::SafetyNetError::Unavailable { .. } => CliError::SafetyNetFailure {
+            variant: "Unavailable",
+        },
+        gaze::SafetyNetError::WeightsMissing { .. } => CliError::SafetyNetFailure {
+            variant: "WeightsMissing",
+        },
+        gaze::SafetyNetError::ModelUnavailable { .. } => CliError::SafetyNetFailure {
+            variant: "ModelUnavailable",
+        },
+        gaze::SafetyNetError::InputTooLarge { .. } => CliError::SafetyNetFailure {
+            variant: "InputTooLarge",
+        },
+        gaze::SafetyNetError::Runtime { message } if message.contains("timed out") => {
+            CliError::SafetyNetFailure { variant: "Timeout" }
+        }
+        gaze::SafetyNetError::Runtime { .. } => CliError::SafetyNetFailure { variant: "Runtime" },
+        gaze::SafetyNetError::InvalidOutput { .. } => CliError::SafetyNetFailure {
+            variant: "InvalidOutput",
+        },
+    }
 }
 
 fn clean_overrides_from_options(
@@ -294,6 +436,29 @@ impl CountingLogger {
                 .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
     }
+
+    fn log_safety_net_report(
+        &self,
+        report: &LeakReport,
+        session: &Session,
+        document_kind: DocumentKind,
+    ) -> gaze_audit::Result<()> {
+        let Some(audit) = &self.audit else {
+            return Ok(());
+        };
+        let created_at = chrono::Utc::now().timestamp_millis();
+        for suspect in &report.suspects {
+            let entry = LeakSuspectLogEntry::from_suspect(
+                suspect,
+                document_kind,
+                created_at,
+                Some(session.audit_session_id().to_string()),
+                report.replay_hash.clone(),
+            );
+            audit.log_safety_net(&entry)?;
+        }
+        Ok(())
+    }
 }
 
 impl RedactionLogger for CountingLogger {
@@ -318,6 +483,7 @@ struct CleanResponse {
     clean_text: String,
     session_blob: String,
     stats: Stats,
+    leak_report: LeakReportResponse,
 }
 
 #[derive(Serialize)]
@@ -348,6 +514,145 @@ impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
             source: source.to_string(),
         }
     }
+}
+
+#[derive(Serialize)]
+struct LeakReportResponse {
+    stats: LeakReportStatsResponse,
+    suspects: Vec<LeakSuspectResponse>,
+    telemetry: Vec<LeakTelemetryResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replay_hash: Option<String>,
+}
+
+impl From<&LeakReport> for LeakReportResponse {
+    fn from(report: &LeakReport) -> Self {
+        Self {
+            stats: LeakReportStatsResponse {
+                suspect_count: report.stats.suspect_count,
+                uncovered_count: report.stats.uncovered_count,
+                partial_bleed_count: report.stats.partial_bleed_count,
+                class_mismatch_count: report.stats.class_mismatch_count,
+                locale_skipped_count: report.stats.locale_skipped_count,
+            },
+            suspects: report
+                .suspects
+                .iter()
+                .map(LeakSuspectResponse::from)
+                .collect(),
+            telemetry: report
+                .telemetry
+                .iter()
+                .map(LeakTelemetryResponse::from)
+                .collect(),
+            replay_hash: report.replay_hash.clone(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct LeakReportStatsResponse {
+    suspect_count: usize,
+    uncovered_count: usize,
+    partial_bleed_count: usize,
+    class_mismatch_count: usize,
+    locale_skipped_count: usize,
+}
+
+#[derive(Serialize)]
+struct LeakSuspectResponse {
+    safety_net_id: String,
+    raw_label: String,
+    mapped_class: String,
+    leak_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pipeline_class: Option<String>,
+    span_len: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    score: Option<f32>,
+}
+
+impl From<&gaze::LeakSuspect> for LeakSuspectResponse {
+    fn from(suspect: &gaze::LeakSuspect) -> Self {
+        let (leak_kind, pipeline_class) = match &suspect.kind {
+            LeakKind::Uncovered => ("uncovered", None),
+            LeakKind::PartialBleed { .. } => ("partial_bleed", None),
+            LeakKind::ClassMismatch { pipeline_class, .. } => {
+                ("class_mismatch", Some(pipeline_class.class_name()))
+            }
+        };
+        Self {
+            safety_net_id: suspect.safety_net_id.clone(),
+            raw_label: suspect.raw_label.clone(),
+            mapped_class: suspect.class.class_name(),
+            leak_kind: leak_kind.to_string(),
+            pipeline_class,
+            span_len: suspect.span.end.saturating_sub(suspect.span.start),
+            field_path: suspect.field_path.clone(),
+            score: suspect.score,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+enum LeakTelemetryResponse {
+    LocaleSkipped {
+        safety_net_id: String,
+        document_kind: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_path: Option<String>,
+    },
+}
+
+impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
+    fn from(event: &LeakReportTelemetry) -> Self {
+        match event {
+            LeakReportTelemetry::LocaleSkipped {
+                safety_net_id,
+                document_kind,
+                field_path,
+            } => Self::LocaleSkipped {
+                safety_net_id: safety_net_id.clone(),
+                document_kind: document_kind_label(*document_kind).to_string(),
+                field_path: field_path.clone(),
+            },
+        }
+    }
+}
+
+fn document_kind_label(kind: DocumentKind) -> &'static str {
+    match kind {
+        DocumentKind::Structured => "structured",
+        DocumentKind::Text => "text",
+    }
+}
+
+fn enforce_safety_net_mode(
+    report: &LeakReport,
+    mode: SafetyNetMode,
+) -> std::result::Result<(), CliError> {
+    let suspected_leaks = report.stats.uncovered_count + report.stats.partial_bleed_count;
+    if suspected_leaks > 0 {
+        match mode {
+            SafetyNetMode::Strict => {
+                return Err(CliError::SafetyNetFailure {
+                    variant: "SuspectedLeak",
+                });
+            }
+            SafetyNetMode::Tolerant => emit_safety_net_warning("SuspectedLeak", suspected_leaks),
+        }
+    }
+    if report.stats.class_mismatch_count > 0 {
+        emit_safety_net_warning("ClassMismatch", report.stats.class_mismatch_count);
+    }
+    Ok(())
+}
+
+fn emit_safety_net_warning(variant: &'static str, count: usize) {
+    eprintln!(r#"{{"warning":"SafetyNet","variant":"{variant}","count":{count}}}"#);
 }
 
 #[cfg(test)]

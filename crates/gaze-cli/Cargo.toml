@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Gaze command-line interface"
 
+[features]
+default = []
+safety-net-openai = ["gaze-recognizers/safety-net-openai"]
+
 [[bin]]
 name = "gaze"
 path = "src/main.rs"
