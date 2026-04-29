@@ -45,7 +45,7 @@ CLI flag > policy.toml > Gaze default
 | `[session].scope` | `--session-scope <ephemeral|conversation|persistent>` | Overrides session lifetime for the current clean run. `ephemeral` keeps export-forbidden semantics, so pipe-mode clean exits `Pipeline` if a session blob would be required. |
 | `[session].ttl_secs` | `--session-ttl <SECONDS>` | Existing override for persistent session TTL. |
 | `[ner].model_dir` | `--ner-model-dir <PATH>` | Overrides the NER model directory. If neither CLI nor TOML sets a model directory, no NER detector is registered. |
-| `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. Invalid tags fail closed with `PolicyConfig`. |
+| `[ner].locale` | `--ner-locale <BCP47>` | Overrides the NER locale hint. TOML accepts one BCP47 string, not a list. Invalid tags fail closed with `PolicyConfig`. |
 | `[ner].threshold` | `--ner-threshold <FLOAT>` | Existing override for NER confidence threshold; must be `0.0..=1.0`. |
 | `[locale].active` | `--locale <BCP47,...>` | Existing override for the active locale fallback chain. |
 | `[policy.rulepacks].bundled` | `--rulepack-bundled <ID,...>` | Comma-separated and repeatable. Replaces TOML bundled rulepack IDs for the current run. |
@@ -101,7 +101,7 @@ rulepacks and intentionally stay in TOML only, per the three-surfaces boundary.
 | `Policy.session.scope` | enum | `--session-scope` | `[session].scope` | Required in TOML; policy-less CLI uses `persistent` | runtime knob | CLI/TOML/default parity required for per-run session behavior. |
 | `Policy.session.ttl_secs` | `u64` | `--session-ttl` | `[session].ttl_secs` | Required for `persistent`; policy-less CLI uses `86400` | runtime knob | CLI/TOML/default parity required for per-run session lifetime. |
 | `Policy.ner.model_dir` | path | `--ner-model-dir` | `[ner].model_dir` | Absent; NER disabled unless configured | runtime knob | CLI/TOML/default parity required for per-run NER backend selection. |
-| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. |
+| `Policy.ner.locale` | BCP47 string | `--ner-locale` | `[ner].locale` | Absent; NER backend default | runtime knob | CLI/TOML/default parity required for per-run NER locale selection. `[ner].locale` is a single string, unlike `[locale].active`. |
 | `Policy.ner.threshold` | `f32` | `--ner-threshold` | `[ner].threshold` | `0.3` | runtime knob | CLI/TOML/default parity required for per-run NER sensitivity. |
 | `Policy.locale` | BCP47 list | `--locale` | `[locale].active` | Rulepack defaults, then system default chain | runtime knob | CLI/TOML/default parity required for per-run locale gating. |
 | `Policy.rulepacks.bundled` | string list | `--rulepack-bundled` | `[policy.rulepacks].bundled` | `["core"]` when `[policy.rulepacks]` is omitted | runtime knob | CLI/TOML/default parity required for per-run bundled rulepack selection. |
@@ -655,13 +655,22 @@ threshold = 0.3
 | Field       | Type   | Required | Notes                                                          |
 |-------------|--------|----------|----------------------------------------------------------------|
 | `model_dir` | string | no       | Directory containing the ONNX model bundle. `~/` is expanded from `$HOME`. If absent, NER is silently disabled and the pipeline runs with regex detectors only (a `tracing::warn!` is logged). |
-| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`).          |
+| `locale`    | string | no       | Locale hint passed to the NER detector (e.g. `"de"`). This is a single BCP47 string, not an array; use `[locale].active` for the rulepack locale fallback list. |
 | `threshold` | float  | no       | Confidence floor in the inclusive range `0.0..=1.0`. Defaults to `0.3`. `gaze clean --ner-threshold=<float>` overrides this value for one invocation. |
 
 If `model_dir` is set but the model fails to load (missing files, bad
 manifest), the CLI maps the failure to **exit `2` `PolicyConfig`**. Treat
 NER load errors as policy configuration failures: verify the install path
 against [README §"NER Model Runtime"](../README.md#ner-model-runtime).
+
+The v0.5.2 default NER bundle is pinned to the Hugging Face mirror
+`onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+`cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`. The runtime `model.onnx` is
+downloaded from `onnx/model_int8.onnx` and verified against the repository-root
+[`SHA256SUMS`](../SHA256SUMS). The canonical adopter label map is
+[`assets/ner/labels.davlan-mbert.json`](../assets/ner/labels.davlan-mbert.json);
+the canonical copy-paste policy block is
+[`assets/ner/policy-snippet.davlan-mbert.toml`](../assets/ner/policy-snippet.davlan-mbert.toml).
 
 ## Detectors
 
@@ -676,7 +685,9 @@ Common idioms:
 
 - Use `\b` word boundaries to avoid matching inside identifiers
   (`\bORD-\d{6}\b`, not `ORD-\d{6}`).
-- Use `(?i)` at the start of a pattern for case-insensitive matching.
+- Use `(?i)` at the start of a pattern for case-insensitive matching. PCRE-style
+  inline flags such as `pattern = "(?i)customer-\\d+"` work because they are
+  supported by Rust `regex`.
 - TOML literal strings (`'...'`) avoid double-escaping backslashes —
   prefer them over basic strings (`"..."`) for regex patterns.
 
@@ -696,10 +707,13 @@ local ONNX model directory; no models are downloaded at runtime. See the
 [README NER Model Runtime](../README.md#ner-model-runtime) section for the
 required files and the canonical install path.
 
-When loaded, the NER detector emits `PiiClass::Name`, `PiiClass::Location`,
-and `PiiClass::Organization` for entities the model recognises. Map them to
-actions via `kind = "class"` rules — declare detector-side once via `[ner]`,
-then act on the classes the model produces.
+When loaded with the default label contract, the NER detector emits
+`PiiClass::Name`, `PiiClass::Location`, and `PiiClass::Organization` for
+entities the model recognises. The mirror also exposes `DATE` tags, but
+[`assets/ner/labels.davlan-mbert.json`](../assets/ner/labels.davlan-mbert.json)
+maps `DATE` to `"drop"` to preserve Gaze's no-default-on date posture. Map
+emitted classes to actions via `kind = "class"` rules — declare detector-side
+once via `[ner]`, then act on the classes the model produces.
 
 ## Rule actions
 
@@ -838,6 +852,9 @@ action = "preserve"
 the real address.
 
 ### Example D — Mixed regex + NER + custom class
+
+The canonical NER subset of this example lives in
+[`assets/ner/policy-snippet.davlan-mbert.toml`](../assets/ner/policy-snippet.davlan-mbert.toml).
 
 ```toml
 [session]
