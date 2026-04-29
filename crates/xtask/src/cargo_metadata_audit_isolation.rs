@@ -10,7 +10,7 @@ const SAFETY_NET_BASE_FEATURES: &[(&str, &str)] =
 const SAFETY_NET_OPENAI_SUBPROCESS_FEATURES: &[(&str, &str)] = &[
     ("gaze", "safety-net"),
     ("gaze-recognizers", "safety-net"),
-    ("gaze-recognizers", "safety-net-openai-subprocess"),
+    ("gaze-recognizers", "safety-net-openai"),
 ];
 
 // Phase 0 of todo #65 scopes these bans to safety-net feature graphs only.
