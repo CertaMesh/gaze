@@ -79,6 +79,9 @@ enum Cmd {
         /// OpenAI Privacy Filter operating point, when supported by the command.
         #[arg(long, value_enum)]
         openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+        /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
+        #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
+        openai_filter_device: OpenAiFilterDevice,
         /// Safety-net subprocess timeout in milliseconds.
         #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
         safety_net_timeout_ms: u64,
@@ -241,6 +244,26 @@ impl OpenAiFilterOperatingPoint {
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OpenAiFilterDevice {
+    Auto,
+    Cpu,
+    Cuda,
+    Mps,
+}
+
+impl OpenAiFilterDevice {
+    #[cfg(feature = "safety-net-openai")]
+    pub(crate) fn as_opf_value(self) -> Option<&'static str> {
+        match self {
+            Self::Auto => None,
+            Self::Cpu => Some("cpu"),
+            Self::Cuda => Some("cuda"),
+            Self::Mps => Some("mps"),
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetMode {
     Strict,
     Tolerant,
@@ -266,6 +289,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
+            openai_filter_device,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
@@ -287,6 +311,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
+            openai_filter_device,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
@@ -374,5 +399,25 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 }),
             },
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn openai_filter_device_defaults_to_auto() {
+        let cli = Cli::parse_from(["gaze", "clean"]);
+
+        let Cmd::Clean {
+            openai_filter_device,
+            ..
+        } = cli.cmd
+        else {
+            unreachable!("expected clean command");
+        };
+
+        assert_eq!(openai_filter_device, OpenAiFilterDevice::Auto);
     }
 }

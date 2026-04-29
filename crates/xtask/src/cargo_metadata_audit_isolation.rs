@@ -28,6 +28,11 @@ const SAFETY_NET_LEGACY_NER_EXEMPTIONS: &[LegacyNerExemption] = &[LegacyNerExemp
     reason: "legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only",
 }];
 
+// No current workspace feature is allowed to disappear silently. Keep this
+// table explicit so future cfg-gated feature plans must carry a reason beside
+// the exception instead of reintroducing fail-open metadata gates.
+const PLANNED_FEATURE_AVAILABILITY_EXCEPTIONS: &[PlannedFeatureAvailabilityException] = &[];
+
 // Package-level exceptions require an explicit source comment. `gaze-cli` is
 // audit-responsible because its audit command reads and purges audit metadata
 // through the passive sink crate directly instead of using the `gaze` shim.
@@ -106,6 +111,13 @@ struct LegacyNerExemption {
     reason: &'static str,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct PlannedFeatureAvailabilityException {
+    package: &'static str,
+    feature: &'static str,
+    reason: &'static str,
+}
+
 fn metadata_for_graph(graph: &GraphCategory, workspace: &Metadata) -> Result<Metadata> {
     let mut args = graph
         .base_args
@@ -125,6 +137,18 @@ fn available_planned_features(
     workspace: &Metadata,
     planned_features: &[(&str, &str)],
 ) -> Result<Vec<String>> {
+    available_planned_features_with_exceptions(
+        workspace,
+        planned_features,
+        PLANNED_FEATURE_AVAILABILITY_EXCEPTIONS,
+    )
+}
+
+fn available_planned_features_with_exceptions(
+    workspace: &Metadata,
+    planned_features: &[(&str, &str)],
+    exceptions: &[PlannedFeatureAvailabilityException],
+) -> Result<Vec<String>> {
     let packages = workspace
         .packages
         .iter()
@@ -135,11 +159,29 @@ fn available_planned_features(
         let package = packages
             .get(package_name)
             .with_context(|| format!("workspace metadata did not include {package_name}"))?;
-        if package.features.contains_key(*feature_name) {
-            features.push(format!("{package_name}/{feature_name}"));
+        if !package.features.contains_key(*feature_name) {
+            if planned_feature_is_excepted(exceptions, package_name, feature_name) {
+                continue;
+            }
+            bail!(
+                "planned cargo-metadata-audit-isolation feature {package_name}/{feature_name} is not declared in {package_name} Cargo.toml [features]"
+            );
         }
+        features.push(format!("{package_name}/{feature_name}"));
     }
     Ok(features)
+}
+
+fn planned_feature_is_excepted(
+    exceptions: &[PlannedFeatureAvailabilityException],
+    package: &str,
+    feature: &str,
+) -> bool {
+    exceptions.iter().any(|exception| {
+        exception.package == package
+            && exception.feature == feature
+            && !exception.reason.trim().is_empty()
+    })
 }
 
 fn check_graph(
@@ -417,6 +459,37 @@ mod tests {
             .expect("legacy NER ort -> ureq path should remain narrowly exempt");
     }
 
+    #[test]
+    fn planned_feature_unknown_name_fails_loud() {
+        let metadata = fixture_metadata_with_features(&["gaze"], &[], &[("gaze", &["safety-net"])]);
+
+        let err = available_planned_features(&metadata, &[("gaze", "typo-safety-net")])
+            .expect_err("unknown planned feature must fail loud");
+
+        let message = err.to_string();
+        assert!(message.contains("gaze/typo-safety-net"), "{message}");
+        assert!(message.contains("Cargo.toml [features]"), "{message}");
+    }
+
+    #[test]
+    fn planned_feature_allowlist_exception_passes_silently() {
+        let metadata = fixture_metadata_with_features(&["gaze"], &[], &[("gaze", &["safety-net"])]);
+        let exceptions = [PlannedFeatureAvailabilityException {
+            package: "gaze",
+            feature: "cfg-only-feature",
+            reason: "test-only stand-in for a target-specific planned feature",
+        }];
+
+        let features = available_planned_features_with_exceptions(
+            &metadata,
+            &[("gaze", "safety-net"), ("gaze", "cfg-only-feature")],
+            &exceptions,
+        )
+        .expect("allowlisted planned feature should not fail metadata gate");
+
+        assert_eq!(features, vec!["gaze/safety-net".to_string()]);
+    }
+
     fn graph_category(label: &str) -> GraphCategory {
         *GRAPH_CATEGORIES
             .iter()
@@ -425,6 +498,14 @@ mod tests {
     }
 
     fn fixture_metadata(workspace_members: &[&str], edges: &[(&str, &[&str])]) -> Metadata {
+        fixture_metadata_with_features(workspace_members, edges, &[])
+    }
+
+    fn fixture_metadata_with_features(
+        workspace_members: &[&str],
+        edges: &[(&str, &[&str])],
+        features: &[(&str, &[&str])],
+    ) -> Metadata {
         let mut names = HashSet::from([AUDIT_PACKAGE.to_string()]);
         for member in workspace_members {
             names.insert((*member).to_string());
@@ -435,13 +516,25 @@ mod tests {
                 names.insert((*target).to_string());
             }
         }
+        for (package, _) in features {
+            names.insert((*package).to_string());
+        }
 
         let packages = names
             .iter()
             .map(|name| Package {
                 id: name.clone(),
                 name: name.clone(),
-                features: HashMap::new(),
+                features: features
+                    .iter()
+                    .find(|(package, _)| *package == name)
+                    .map(|(_, names)| {
+                        names
+                            .iter()
+                            .map(|feature| ((*feature).to_string(), Vec::new()))
+                            .collect()
+                    })
+                    .unwrap_or_default(),
             })
             .collect::<Vec<_>>();
         let nodes = names
