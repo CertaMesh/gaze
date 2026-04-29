@@ -1,3 +1,19 @@
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    # webpki-roots ships Mozilla's root store under the permissive Community Data License.
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "Unicode-3.0",
+    "Zlib",
+]
+
+private = { ignore = true }
+
 [bans]
 workspace-default-features = "allow"
 
