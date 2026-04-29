@@ -372,3 +372,114 @@ struct NodeDep {
 struct DepKind {
     kind: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn safety_net_base_rejects_new_network_clients_from_gaze_types() {
+        let graph = graph_category("safety-net-base");
+        assert!(graph.policy.safety_net_dep_bans);
+
+        for package in SAFETY_NET_PROHIBITED_PACKAGES {
+            let metadata = fixture_metadata(&["gaze-types"], &[("gaze-types", &[*package])]);
+            let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+            let err = check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+                .expect_err("safety-net-base must fail closed on new network clients");
+
+            let message = err.to_string();
+            assert!(
+                message.contains(package),
+                "error should name prohibited package {package}: {message}"
+            );
+            assert!(
+                message.contains("gaze-types"),
+                "error should trace violation to gaze-types: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_graph_does_not_apply_safety_net_network_client_bans() {
+        let graph = graph_category("default");
+        assert!(!graph.policy.safety_net_dep_bans);
+
+        let metadata = fixture_metadata(&["gaze-types"], &[("gaze-types", &["reqwest"])]);
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect("default graph must not inherit safety-net-only bans");
+    }
+
+    #[test]
+    fn legacy_ner_ort_ureq_path_is_the_only_current_safety_net_exemption() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(
+            &["gaze-recognizers"],
+            &[("gaze-recognizers", &["ort"]), ("ort", &["ureq"])],
+        );
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect("legacy NER ort -> ureq path should remain narrowly exempt");
+    }
+
+    fn graph_category(label: &str) -> GraphCategory {
+        *GRAPH_CATEGORIES
+            .iter()
+            .find(|graph| graph.label == label)
+            .expect("test graph category should exist")
+    }
+
+    fn fixture_metadata(workspace_members: &[&str], edges: &[(&str, &[&str])]) -> Metadata {
+        let mut names = HashSet::from([AUDIT_PACKAGE.to_string()]);
+        for member in workspace_members {
+            names.insert((*member).to_string());
+        }
+        for (from, targets) in edges {
+            names.insert((*from).to_string());
+            for target in *targets {
+                names.insert((*target).to_string());
+            }
+        }
+
+        let packages = names
+            .iter()
+            .map(|name| Package {
+                id: name.clone(),
+                name: name.clone(),
+                features: HashMap::new(),
+            })
+            .collect::<Vec<_>>();
+        let nodes = names
+            .iter()
+            .map(|name| Node {
+                id: name.clone(),
+                deps: edges
+                    .iter()
+                    .find(|(from, _)| *from == name)
+                    .map(|(_, targets)| {
+                        targets
+                            .iter()
+                            .map(|target| NodeDep {
+                                pkg: (*target).to_string(),
+                                dep_kinds: vec![DepKind { kind: None }],
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default(),
+            })
+            .collect::<Vec<_>>();
+
+        Metadata {
+            packages,
+            workspace_members: workspace_members
+                .iter()
+                .map(|member| (*member).to_string())
+                .collect(),
+            resolve: Some(Resolve { nodes }),
+        }
+    }
+}
