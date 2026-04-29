@@ -1,0 +1,20 @@
+name: Safety Net Sanity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  safety-net-sanity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.89.0
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check -p gaze --features safety-net
+      - run: cargo check -p gaze-recognizers --features safety-net-openai
+      - run: cargo check -p gaze-cli --features safety-net-openai
+      - run: cargo test -p gaze-audit
+      - run: cargo run -p xtask -- safety-net-sanity
