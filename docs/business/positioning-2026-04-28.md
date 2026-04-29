@@ -1,7 +1,88 @@
 # PIInuts — Business-Positionierung (Diskussionsgrundlage)
 
 **Datum:** 2026-04-28
-**Status:** Entwurf, noch nicht entschieden
+**Status:** Entwurf, geschärft durch Multi-Agent-Brainstorm 2026-04-29 (siehe nächster Abschnitt)
+
+## Update 2026-04-29 — Brainstorm-Verdict (Multi-Agent Panel)
+
+> Konvergiert nach 1 Runde, 3 Panelisten (core-runtime, lens-wedge, laravel-beachhead).
+> Provenance: [`solo://proj/23/scratchpad/gaze-product-family--746`](solo://proj/23/scratchpad/gaze-product-family--746)
+> Ersetzt nicht den Co-Founder-Termin (siehe unten), schärft aber die Optionen vorab.
+
+### TL;DR
+
+- **Option 1 (Open-Core) ist Default-Wahl** — Trust-Boundary aufschneiden, Geld an Koordination/Governance verdienen.
+- **Lizenz: Apache-2.0** für den lokalen Stack. Kein BSL, kein Dual-License auf Code, der PII, Credentials, DB-Zugänge, Logs, Restore-Daten oder lokalen Audit-State berührt.
+- **Laravel = Beachhead-Channel, nicht Produkt-Grenze.** Erste zahlbare Motion = Compliance/Audit verkauft via Laravel-Beachhead — Produkt selbst bleibt sprach-/framework-agnostisch.
+- **Lens = Adoption-Wedge.** `gaze-lens` als lokales Binary mit Demo-Subcommand zieht Teams rein, dann Upgrade auf Shared-Replay / Policy-Distribution / Retention / Governance.
+
+### Open Source — Trust-Boundary (Apache-2.0)
+
+- `gaze` Runtime: Redaktions-Pipeline, reversible Restore-/Session-Logik, Policy-Parser, Recognizer-Registry/Interface, Locale-Chain, Conflict-Resolution.
+- Standard-Recognizer-Set, das für reale Solo-Nutzung reicht.
+- `gaze-cli` inkl. lokaler `clean` / `restore` / `audit` Workflows.
+- `gaze-lens` lokales Binary + MCP/CLI-Trust-Pfad.
+- `gaze-laravel` Adapter (Composer-Plugin + Glue-Code).
+- Profile-/Policy-Schemas, Audit-Schema, Manifest-/Snapshot-Formate, Threat-Model, Redaktions-Garantien.
+
+Begründung: Security-Tools im LLM-Pfad verkaufen sich nicht ohne Inspizierbarkeit. DPO/Security-Lead muss die Trust-Boundary lesen können, sonst kein Approval. Closed-Source-Adapter oder Closed-Source-Lens zerstören den Trust-Anker und blockieren Adoption.
+
+### Kommerziell ohne Trust-Verlust
+
+- **Premium-Recognizer-Packs** — Branche, Locale, proprietäre NER-Weights, Custom-Tenant-Klassen.
+- **Signierte Policy-Bundles** + Policy-Registry/Distribution.
+- **Team-Profile-Sync** + Rollout-Management.
+- **Shared Replay / Audit-Collaboration** mit RBAC.
+- **Hosted Metadata-Only Audit-Aggregation** + Retention.
+- **SSO / Enterprise-RBAC / Governance-Reports / DSAR-Export**.
+- **Signed Builds, Support-SLA, Indemnification, On-Prem-Control-Plane**.
+- **Laravel-spezifisch:** Filament/Horizon Audit-Dashboard.
+
+### Free für Solo-Devs
+
+Voller lokaler Runtime + CLI + Lens + Laravel-Adapter + Default/Core-Recognizer + lokale Audit-DB + lokales Replay/Restore + lokale Profile. **Keine künstlichen Row-Caps, keine kastrierte Redaction.** Free muss glaubwürdig sein, sonst trauen die Käufer dem Projekt nicht.
+
+### Top-Risiken (panel-konvergent)
+
+1. **Audit-Cloud-Egress.** Hosted Metadata-Only darf raw PII oder Token↔Klartext-Paare nicht ingest-en — kryptographischer/technischer Egress-Guard ist Pflicht, nicht nice-to-have. Ohne Beweis = Verkaufs-Blocker und North-Star-Verletzung.
+2. **Lens-Distribution-Friction.** Source-only-Distribution past v0.2 tötet den Wedge bevor Paid-Features überhaupt greifen. Frictionless Install (Brew/Tap, GH-Releases, signierte Binaries) ist Vorbedingung.
+3. **Laravel Cold-Start-Latenz.** Blockt Production-Adoption bevor irgendein Compliance-Tier verkauft werden kann. Warm-Daemon / Model-Cold-Start lösen, sonst kein Beachhead.
+
+### 8-Wochen-Proof
+
+- Frictionless Distribution (Brew/Tap, signierte Releases, Ein-Befehl-Install).
+- Metadata-Only Cloud + technischer Egress-Beweis (Audit-Logs können kein PII ingest-en, by design).
+- 3 Design-Partner validieren eines von: Team-Profile-Sync, Premium-Recognizer, Audit-Dashboard/Retention als Paid-Value.
+
+### Open Items (out-of-band zu lösen)
+
+- Exakter Metadata-Only-Cloud-Payload + Egress-Guard-Implementierung.
+- `gaze-recognizers core-extended` frei oder paid? Panel lehnte zu **frei**, Premium nur für Spezial-Packs.
+- Laravel-Production-Performance (Warm-Daemon / Cold-Start).
+- Erster Paid-SKU-Name + Pricing nach Design-Partner-Interviews.
+
+### First Experiments (panel-konvergent)
+
+1. **Laravel-Compliance-Buyer-Call.** 5 GDPR-sensitive Laravel-Shops. Demo: lokale Redaction + Audit-DB + Filament-Dashboard. Frage: ist Audit-Retention / DSAR-Export / Policy-Evidence budgetierter Schmerz oder nice-to-have?
+2. **Team-Workflow-Pilot.** Ein kleines Eng-Team mit `gaze-lens` in echtem Incident/Debug-Workflow. Test: ist Shared-Replay / RBAC / Profile-Sync der Moment, an dem sie zahlen würden?
+3. **Trust-Proof-Review.** Metadata-Only-Cloud-Design vor Security-Lead. Ziel: bestätigen, dass open lokal + egress-proof Cloud für Approval reicht.
+
+### Positionierungs-Statement (panel-konvergent, EN für Marketing-Konsistenz)
+
+> Gaze lets developers and AI agents work with production-shaped data without exposing raw PII. The redaction and investigation tools run locally and are open source; teams pay only for the coordination, policy distribution, audit retention, and governance needed to operate that trust model across an organization.
+
+### Was sich gegenüber 2026-04-28-Entwurf ändert
+
+- **Lizenz-Frage entschieden** (Frage 4 unten): **Apache-2.0**. MIT raus (kein Patent-Grant), BSL raus (würde Trust-Boundary brechen).
+- **Option 2 (Laravel-Vertical Closed-Source) abgewählt** als langfristige Produkt-Grenze. Laravel bleibt aber Beachhead-Channel innerhalb Option 1.
+- **`gaze-lens` und `gaze-laravel` sind explizit Open Source** — der ursprüngliche Entwurf ließ das offen.
+- **Egress-Guard für Audit-Cloud** wird zur expliziten Vorbedingung, nicht Implementierungs-Detail.
+
+### Diversity-Caveat
+
+Alle 3 Panelisten liefen auf Claude (verschiedene Repos/Lenses). Konvergenz nach 1 Runde könnte Konsens überzeichnen. Trust-Proof-Review (Experiment 3) und Co-Founder-Gespräch sind die Gegenkontrollen.
+
+---
 
 ## Produktfamilie (Stand heute)
 
@@ -325,7 +406,7 @@ Du gibst die **Schokolade gratis raus**. Jeder darf sie essen, kopieren, weiterg
 - Andere Firmen probieren's aus → **manche kommen wieder und wollen mehr**
 
 Geld machst du dann mit den **Extras** drumherum:
-- Hübsche Geschenkbox (= `gaze-audit` Compliance-Reports)
+- Hübsche Geschenkbox (= `gaze-evidence` Compliance-Reports — vorher im Entwurf "`gaze-audit` Pack" genannt; umbenannt 2026-04-29 wegen Namens-Kollision mit OSS-Crate `gaze-audit`)
 - Lieferservice nach Hause (= gemanagte Cloud)
 - Schoki mit Logo der Firma drauf (= Enterprise-Features wie Login, Rechte-Verwaltung)
 
@@ -335,12 +416,22 @@ Geld machst du dann mit den **Extras** drumherum:
 
 #### Modell technisch
 
-- **Öffentlich (MIT / Apache-2.0):** `gaze`, `gaze-types`, `gaze-recognizers` (Basis-Pakete), `gaze-cli`, `gaze-assembly`.
-- **Kommerziell (proprietäre Lizenz):**
-  - `gaze-audit` Compliance-Pack (gemanagte Reports, Retention, Export)
-  - `gaze-lens` Enterprise (RBAC, SSO, Multi-Tenant, gemanagte Recognizer-Updates)
-  - Premium-Recognizer-Pakete (Health, Finance, Telco, …)
-  - Cloud-Audit-Sink (SaaS)
+> Aktualisiert 2026-04-29 nach Brainstorm-Verdict — Public-Liste erweitert (Lens, Laravel-Adapter, lokaler Audit-Sink), Pack-Namen entkollidiert.
+
+- **Öffentlich (Apache-2.0, alle in `piinuts/gaze` Workspace bzw. Schwester-Repos):**
+  - `gaze` (Runtime: Pipeline, Session, Restore, Policy-Parser, Recognizer-Registry, Locale-Chain, Conflict-Resolution)
+  - `gaze-types` (Value-Contracts, serde-only)
+  - `gaze-recognizers` (`core` + `core-extended` Basis-Packs inkl. Locale-Bundles)
+  - `gaze-audit` (lokaler SQLite-Sink, AuditFilter, Query-SQL-Builder — **lokaler Trust-Boundary-Code, keine Cloud**)
+  - `gaze-assembly`, `gaze-cli`
+  - `gaze-lens` (lokales Binary, MCP/CLI Trust-Pfad — separates Repo `piinuts/gaze-lens`)
+  - `gaze-laravel` (Composer-Adapter — separates Repo `piinuts/gaze-laravel`)
+- **Kommerziell (proprietäre Lizenz, separate private Repos, License-Key-gegated):**
+  - **`gaze-evidence`** Compliance-Pack — gemanagte Reports, Retention, signierter Export, Auditor-Login, DSAR-Workflow. *Vorher im Entwurf als "`gaze-audit` Pack" — umbenannt wegen Namens-Kollision mit dem OSS-Crate.*
+  - **`gaze-lens-enterprise`** — als **Plugin** auf OSS-Lens (RBAC, SSO/SAML/OIDC, Multi-Tenant, gemanagte Recognizer-Updates, Policy-Distribution). Kein Fork — dieselbe Lens, mit ladbaren Enterprise-Modulen.
+  - **`gaze-recognizers-premium`** — Branchen-Packs (Health, Finance, Telco, Insurance, Public-Sector) als signierte Bundles, runtime-geladen.
+  - **`gaze-cloud`** — Audit-Sink-SaaS mit kryptographischem Egress-Guard (raw PII technisch ausgeschlossen, Push-Modell aus Kunden-Infrastruktur).
+  - **`gaze-laravel-filament`** — paid Composer-Package mit Filament-/Horizon-Audit-Dashboard.
 
 #### Geld-Hebel-Mix
 
@@ -480,11 +571,11 @@ ACV (Annual Contract Value) bei Enterprise typisch **30k–150k €**. 20–50 K
 
 | Option | Zeit bis erstes Geld | € pro Kunde / Jahr | Kunden-Zahl realistisch | Risiko | Funding nötig |
 |---|---|---|---|---|---|
-| 1 Open-Core | 3–6 Monate | 5k–50k | hunderte–tausende | mittel | Bootstrap möglich |
-| 2 Laravel-Vertical | 1–3 Monate | 1k–10k | 50–500 | gering | Bootstrap |
+| 1 Open-Core ✅ Default | 3–6 Monate | 5k–50k | hunderte–tausende | mittel | Bootstrap möglich |
+| 2 Laravel-Vertical ⚠️ als Produkt-Grenze abgewählt 2026-04-29 — Channel-Use bleibt | 1–3 Monate | 1k–10k | 50–500 | gering | Bootstrap |
 | 3 Compliance-Enterprise | 9–18 Monate | 30k–150k | 20–100 | hoch | VC nötig |
 
-**Hybrid denkbar:** Open-Core (Option 1) als Basis, **plus** Laravel-Adapter (Option 2 als Bottom-up-Land) **plus** Lens-Enterprise (Option 3 als Top-Down) — auf einer gemeinsamen Code-Basis. Das ist genau das, was die aktuelle Repo-Struktur schon hergibt.
+**Hybrid (Brainstorm-Verdict):** Open-Core (Option 1) als Basis-Strategie, Laravel-Adapter als **Beachhead-Channel** (nicht eigenes Produkt) für ersten Compliance-SKU, Lens-Enterprise (Option 3) als Top-Down-Upsell — alles auf gemeinsamer Apache-2.0 Code-Basis. Genau die aktuelle Repo-Struktur.
 
 ---
 
@@ -493,7 +584,7 @@ ACV (Annual Contract Value) bei Enterprise typisch **30k–150k €**. 20–50 K
 1. **Funding-Pfad:** Bootstrap → Vertical-SaaS sinnvoll. VC → Compliance-Plattform sinnvoll. Open-Core funktioniert in beiden Welten.
 2. **Repo-Sichtbarkeit:** Wann `piinuts/gaze` public? Vor oder nach erstem Design-Partner?
 3. **Naoray-Rolle:** Co-Founder, Advisor, oder reiner Laravel-Champion?
-4. **Lizenz für Kern:** MIT (max. Adoption) vs. Apache-2.0 (Patent-Grant) vs. BSL (Commercial-Schutz mit zeitversetztem OSS)?
+4. ~~**Lizenz für Kern:** MIT (max. Adoption) vs. Apache-2.0 (Patent-Grant) vs. BSL (Commercial-Schutz mit zeitversetztem OSS)?~~ → **Entschieden 2026-04-29 (Brainstorm-Verdict): Apache-2.0** für gesamten lokalen Stack. MIT verworfen (kein Patent-Grant), BSL verworfen (würde Trust-Boundary brechen).
 5. **License-Key-Infrastruktur:** Wer baut den Lizenz-Server? Off-the-shelf (Keygen.sh, Cryptolens) vs. Eigenbau?
 6. **Pricing-Hypothesen:**
    - Core: gratis
