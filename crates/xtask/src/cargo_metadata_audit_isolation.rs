@@ -157,7 +157,7 @@ fn check_graph(
             .get("gaze")
             .context("workspace metadata did not include gaze")?;
         let Some(path) = path_to_package(gaze_id, &audit_id, &graph) else {
-            bail!("{label}: expected gaze --features audit to resolve {AUDIT_PACKAGE}");
+            bail!("{label}: expected gaze feature graph to resolve {AUDIT_PACKAGE}");
         };
         println!(
             "cargo_metadata_audit_isolation: {label}: confirmed {}",
