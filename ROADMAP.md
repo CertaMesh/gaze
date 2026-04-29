@@ -23,35 +23,28 @@ Art. 4(5) term for reversible substitution with tokens, chosen over
 
 ## Now (in flight)
 
-v0.6.0 is in flight as the breaking release that bundles Pass-3 SafetyNet,
-anchored-match coverage, the audit-shim drop, and the `RedactionLogger` move to
-`gaze-types`. v0.5.1 shipped 2026-04-29 (bundled `rulepack_version` sync — the four embedded
-TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract
-that bundled rulepacks track `gaze-recognizers`; todo #267). v0.5.0 shipped
-2026-04-27 (gaze-types extraction, gaze-audit passive sink with the one-minor
-`audit` feature shim, dylint-based `gaze_module_isolation` lint replacing the
-syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate).
-v0.4.6 shipped 2026-04-26. The v0.5 line is closed.
+Post-v0.6 work is focused on tightening the newly shipped detection and
+SafetyNet surfaces without weakening restore or audit boundaries:
+
+- **Pass-3 SafetyNet follow-ups.** Decide the nightly/live-model drift-check
+  shape, the native `ort` backend path, fetch/download UX, and whether a
+  long-lived subprocess helper is needed for lower-latency adopters.
+- **Cue-anchored Name precision.** Add RegionHint-based `CodeBlock` and `Url`
+  exclusions for `anchored_match`, then revisit Subject/Re anchors, broader
+  `name_shape` support, and per-region NER thresholding.
+- **DE phone separator recall.** Extend `phone.national.de` coverage for
+  separator-heavy synthetic fixture shapes while preserving parser-backed
+  validation and tenant-numeric false-positive guards.
 
 ## Next (committed but not started)
 
-These are open, verified candidates for the v0.6 cycle pending the v0.6
-brainstorm:
+These are open, verified candidates for the next planning pass:
 
-- **OpenAI-filter Pass-3 safety net recognizer** — todo #65 (high). Retargeted
-  to v0.6 from v0.4.1. Adds a fresh independent eye after Gaze's regex +
-  dictionary + NER passes; the runtime arm of the never-leak promise.
-- **OpenAI-filter CI sanity gate** — todo #66 (medium). Retargeted to v0.6.
-  Sibling to #65; CI-only, runs the filter over gold-positive fixtures to
-  surface detection drift between releases.
-
-The following entries are still tagged `v0.5` from the v0.5 design wave but did
-not block the v0.5.0 ship; the v0.6 brainstorm should decide whether to fold
-them into v0.6, defer further, or close:
-
-- **Token grammar G1/G2/G3 brainstorm-pair** — todo #148 (high).
-- **Feature-flag naming brainstorm-pair** — todo #149 (medium).
-- **PiiClass `Arc<str>` vs `Box<str>` post-impl bench** — todo #152 (low).
+- **OpenAI-filter CI sanity gate.** CI-only drift check over gold-positive
+  fixtures for the SafetyNet path, separate from the local pre-push sanity gate.
+- **Token grammar G1/G2/G3 brainstorm-pair.**
+- **Feature-flag naming brainstorm-pair.**
+- **PiiClass `Arc<str>` vs `Box<str>` post-impl bench.**
 
 ## Later (under consideration / longer horizon)
 
@@ -66,7 +59,8 @@ them into v0.6, defer further, or close:
 
 | Version | Date | Highlights |
 |---|---:|---|
-| v0.5.1 | 2026-04-29 | Bundled `rulepack_version` sync (todo #267) — `core`, `core-extended`, `locale-de`, `locale-en` embedded TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract that bundled rulepacks track `gaze-recognizers` |
+| v0.6.0 | 2026-04-29 | Pass-3 SafetyNet runtime, cue-anchored `Name` detection through `anchored_match`, audit feature shim removal, `RedactionLogger` moved to `gaze-types`, tracked pre-push hook with doc-only fast path |
+| v0.5.1 | 2026-04-29 | Bundled `rulepack_version` sync — `core`, `core-extended`, `locale-de`, `locale-en` embedded TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract that bundled rulepacks track `gaze-recognizers` |
 | v0.5.0 | 2026-04-27 | `gaze-types` extraction, `gaze-audit` passive sink with one-minor `audit` feature shim, dylint-based `gaze_module_isolation` lint replaces syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate frees `gaze` core from `ort` / `tokenizers` / `ndarray` ML deps |
 | v0.4.6 | 2026-04-26 | Bundle-tokenization-drift xtask gate, fixture-citation lint, rulepack-derived bundle classes, DE national-phone recall broaden, no-feature phone parser fail-closed regression, Homebrew tap decision |
 | v0.4.5 | 2026-04-26 | DE+US national phones, audit retention purge + `audit_metadata_only` gate, `--session` audit filter, ClassMapOverrideSafety extension, rulepack version bump validation, `gaze-assembly` split |

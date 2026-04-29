@@ -40,14 +40,12 @@ Every design, implementation, and review decision is evaluated against these fiv
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred; every token emission traceable to a rule or recognizer.
 5. **Adopter ergonomics.** Low-friction framework adapters; adopter picks Gaze up in under a day without deep PII expertise.
 
-## Install (v0.5.2)
-
-v0.5.2 is the current stable release.
+## Install
 
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.2/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -59,7 +57,7 @@ Public `brew install piinuts/tap/gaze` documentation should wait until a public 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/piinuts/gaze/releases/download/v0.5.2/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-x86_64-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -106,7 +104,7 @@ cargo add gaze-recognizers --features phone-parser
 ### Runtime
 
 - No external services required (all detection runs locally)
-- Network access NOT used at runtime (audited per [docs/research/v0.4.4-phonenumber-audit.md](docs/research/v0.4.4-phonenumber-audit.md))
+- Network access NOT used at runtime
 - SQLite for audit logs (optional, opt-in via `--audit-db <path>`)
 
 ## Workspace Layout
@@ -131,7 +129,7 @@ Pure Rust library. Owns:
 - pipeline + rule evaluation
 - session-scoped tokenization (`<{session_hex}:Class_N>` grammar)
 - signed sensitive snapshots with TTL enforcement
-- `RecognizerRegistry` trait + `DetectContext` envelope (the recognizer-native detection path; the legacy standalone `Detector` path was removed in v0.4.0-rc.1)
+- `RecognizerRegistry` trait + `DetectContext` envelope (the recognizer-native detection path; the legacy standalone `Detector` path was removed)
 - class/rule/score/length/id conflict resolver
 - locale chain (CLI > policy > rulepack default > system default) with strict opaque-tag matching
 - TOML rulepack schema loader (`[policy.rulepacks]`, `[[policy.custom_recognizers]]`)
@@ -142,8 +140,8 @@ Pure Rust library. Owns:
 
 Passive audit sink crate. Owns `SqliteLogger`, `AuditFilter`, `AuditLogRow`,
 `build_audit_query_sql`, and `AUDIT_RESTRICTED_COLUMNS`. `gaze` does not depend
-on this crate in default or `--no-default-features` builds; the temporary
-`audit` feature re-exports these symbols for one minor migration window.
+on this crate in default or `--no-default-features` builds; adopters that need
+SQLite audit logging depend on `gaze-audit` directly.
 
 ### `gaze-recognizers`
 
@@ -157,7 +155,7 @@ The crate also ships the embedded `core` rulepack (`gaze-recognizers/embedded/co
 
 ### `gaze-cli`
 
-Standalone `gaze` binary for LLM pipe-mode integration. Language-specific adapters (e.g. `gaze-laravel`) shell out to it rather than linking the library. See `docs/roadmap/v0.3/cli.md` for the full CLI contract and `docs/roadmap/v0.3/laravel.md` for the host-side integration. v0.4 flag additions: `--locale` (comma-separated priority chain) and `--context-json` (typed `DetectContext` envelope with tenant fields + dictionaries + class map).
+Standalone `gaze` binary for LLM pipe-mode integration. Language-specific adapters (e.g. `gaze-laravel`) shell out to it rather than linking the library. The CLI contract centers on stdin/stdout JSON for `gaze clean` and `gaze restore`, with runtime overrides such as `--locale` (comma-separated priority chain) and `--context-json` (typed `DetectContext` envelope with tenant fields, dictionaries, and class map).
 
 #### CLI Example
 
@@ -175,7 +173,7 @@ Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{s
 
 Default bundled-rulepack tokenization is a contract surface. The no-policy baselines for bundled outputs live in `crates/xtask/snapshots/`, and intentional drift requires a `[bundle-tokenization-drift]` `CHANGELOG.md` `[Unreleased]` Changed entry alongside a source ACK. See `ROADMAP.md` Now/Next/Later for the live stability context behind these gates.
 
-#### Audit Query and Export (v0.4.3+)
+#### Audit Query and Export
 
 When `gaze clean --audit-db <path>` is enabled, the metadata-only redaction log is queryable from the CLI:
 
@@ -185,9 +183,9 @@ gaze audit query --audit-db audit.sqlite --from 2026-04-25T00:00:00Z --to 2026-0
 gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jsonl
 ```
 
-Filters: `--class`, `--source`, `--action`, `--document-kind`, plus `--from <iso8601>` and `--to <iso8601>` time bounds (v0.4.4), and `--session <opaque>` for opaque session-scope filtering (v0.4.5 S1, NOT raw `session_hex`). The audit DB opens read-only; export rows ship a restricted column set so raw PII payloads stay outside the export surface.
+Filters: `--class`, `--source`, `--action`, `--document-kind`, plus `--from <iso8601>` and `--to <iso8601>` time bounds, and `--session <opaque>` for opaque session-scope filtering (NOT raw `session_hex`). The audit DB opens read-only; export rows ship a restricted column set so raw PII payloads stay outside the export surface.
 
-#### Audit Purge (v0.4.5+)
+#### Audit Purge
 
 Manual retention via `gaze audit purge`:
 
@@ -268,88 +266,67 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 ```
 
-## What's new since v0.4.0-rc.1
+## Detection coverage
 
-Cumulative highlights from v0.4.1 through v0.5.0 — see [CHANGELOG.md](CHANGELOG.md) for the per-release detail.
+Gaze runs a layered detection pipeline built for fail-closed agent workflows:
+deterministic regex recognizers, dictionary recognizers, optional transformer
+NER, and an observer-only Pass-3 SafetyNet that checks already-cleaned text
+without mutating the manifest or restore path. See
+[`docs/policy.md`](docs/policy.md) for policy shape and
+[`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md) for the
+SafetyNet contract.
 
-### v0.5 architectural pivot (dev complete, in `[Unreleased]`)
+Bundled rulepacks:
 
-Four phases shipped between v0.4.6 and v0.5.0. None of them change runtime detection behavior; they reshape the workspace and the audit-sink protected-path enforcement story.
+- `core` — always-on email detection plus locale-aware email header and
+  cue-anchored `Name` coverage for forward headers, agent reply preambles, and
+  auto-footer sender lines.
+- `core-extended` — opt-in phone, IP address, postal code, IBAN, and credit-card
+  recognizers, with default rules so `--rulepack-bundled core,core-extended`
+  tokenizes those classes out of the box.
 
-- **Phase B — `gaze-types` extraction (PR #74).** New `crates/gaze-types` hosts the shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Adopters can now consume Gaze's contract surface without `ort`/`tokenizers`/`ndarray` ML deps via the new `bundled-recognizers` feature gate. `gaze` re-exports the contracts under the previous paths for source-compatibility. `DictionaryBundleExt` is the new explicit seam for `bundle.from_context(&ctx)`; `DictionaryEntry::try_new` replaces `new` and fails closed on empty term lists or non-ASCII case-insensitive entries.
-- **Phase C — `gaze-audit` extraction (PR #75, shim removed in v0.6).** `crates/gaze-audit` owns the passive SQLite sink (`SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`). `gaze` no longer depends on `rusqlite` or `gaze-audit` in default or `--no-default-features` builds. The `cargo-metadata-audit-isolation` xtask gate keeps the protected default graph clean.
-- **Phase D — `gaze_module_isolation` Dylint lint (PR #76).** Replaces the syn-walker `audit-metadata-only` gate with a Dylint late-HIR lint that resolves through `LateContext::qpath_res` against rustc's name resolver. 18 UI fixtures cover every known bypass class (macro call-site hygiene, `#[path]`, `include!`, type positions, trait bounds, `extern crate`). Pinned toolchain: `nightly-2025-09-18`, `clippy_utils@20ce69b9...`, `dylint_linting`/`dylint_testing` 5.0. New `dylint` GitHub Actions workflow runs on every push to `main` and PR. See [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
-- **Phase E — legacy syn walker decommissioned (PR #77).** Deletes the inline syn walker source, the `RESTORE_AUDIT_FORBIDDEN_SYMBOLS` constant, the adversarial walker tests, and the legacy CI workflow. Net: `-942` lines of decommissioned code.
+Locale bundles and cue buckets let adopters compose `core` with DACH and EN
+language cues without custom recognizers. The locale chain is strict and
+ordered: CLI override, policy, bundled rulepack default, then system default.
 
-Adopter migration for v0.6: `use gaze::SqliteLogger;` no longer compiles; use `use gaze_audit::SqliteLogger;`.
+Validators keep structural matches from becoming broad regex guesses: Luhn for
+payment-card shapes, IBAN MOD-97 plus canonicalization for IBANs, IPv4/IPv6 and
+VIN validators, and parser-backed E.164 / national phone validation when the
+`phone-parser` feature is enabled.
 
-### v0.4.5 highlights
+## Audit & restore
 
-- **Audit retention manual purge** (v0.4.5 S3) — `gaze audit purge --before <iso8601> [--dry-run | --count]` deletes redaction-log rows older than the cutoff. Calendar-aware ISO 8601 validation rejects malformed dates fail-closed via the typed `AuditPurgeIso8601` error. No policy-level retention default; no background auto-purge.
-- **`audit_metadata_only` xtask gate** (v0.4.5 S3, decommissioned v0.5 Phase E) — the syn-based AST walker shipped in v0.4.5 that enforced restore-path audit-symbol isolation. Superseded and removed by the Dylint resolver gate (PR #76 / PR #77). See [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md) for the architectural pivot rationale.
-- **`--session` audit filter** (v0.4.5 S1) — opaque session-scope filter for `gaze audit query` / `gaze audit export`. Filters by opaque audit metadata, NOT raw `session_hex`.
-- **DE + US national phone recognizers** (v0.4.5 S2) — parser-backed E.164 region-aware validators (`phonenumber` crate) for German and US national phone numbers. Cooperate with the structural phone recognizer; gated behind the `phone-parser` Cargo feature.
-- **`core-extended` no-policy locale activation** (v0.4.5 S2) — the bundled `core-extended` rulepack now activates `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers when invoked without a policy via `--rulepack-bundled core-extended`. Previously these required an explicit `--locale` or policy-supplied locale. **Adopter impact:** invocations without a policy now tokenize German/US national phone numbers AND bare 5-digit numeric strings (matching the postal recognizers). To restore prior behavior, supply `--locale=global` or pass a policy with narrower locale gating. (todo #171)
-- **`gaze-assembly` crate restructure** (v0.4.5 S6) — `lib.rs` split into focused modules by responsibility. No public API change.
-- **ClassMapOverrideSafety extension** (v0.4.5 S4) — further hardening of the v0.4.4 class-map override safety gate.
-- **Rulepack version bump validation** (v0.4.5 S5) — rulepack version bump audit + drift-prevention rule.
+Gaze's restore contract is manifest-first: emitted tokens are session-scoped,
+countered by class, and restored only through the signed sensitive snapshot.
+The optional SQLite audit sink is metadata-only and lives in
+`gaze-audit::SqliteLogger`; `gaze` core does not carry SQLite in default builds.
 
-### Detection: validators and the `core-extended` rulepack
+`gaze audit query`, `gaze audit export`, `gaze audit purge`, and
+`gaze audit safety-net query` provide read-side audit and retention operations
+without exposing raw PII payloads. See
+[`docs/architecture/crates.md`](docs/architecture/crates.md) for crate
+boundaries and [`docs/policy.md`](docs/policy.md) for adopter-facing policy
+examples.
 
-- **`ValidatorKind` substrate** (v0.4.3) — `Luhn` (Mod 10), `IbanMod97` (ISO 7064), `IbanCanonical` (uppercase plus whitespace strip) join `EmailRfc` as closed validator/normalizer enums in `gaze-recognizers`.
-- **`E164Phone` parser-backed validator** (v0.4.4) — built on the `phonenumber` crate, gated behind the optional `phone-parser` feature. `gaze-cli` enables it by default; library users opt in via `gaze-recognizers = { features = ["phone-parser"] }`. Without the feature, `e164_phone` is rejected at rulepack load time with `RulepackError::UnsupportedValidator` rather than silently dropping detection.
-- **`core-extended` rulepack** (v0.4.2 Phase 1, v0.4.3 Phase 2) — opt-in shipped rulepack. Phase 1 covers shape-only E.164 phone numbers, IPv4/IPv6 addresses, and `de-DE`/`en-US` postal codes. Phase 2 adds validator-backed IBAN (`iban.structural`, `iban_mod97` + `iban_canonical`) and credit card (`card.structural`, `luhn`). Default `[[rule]]` entries ship in the rulepack so `--rulepack-bundled core,core-extended` tokenizes the new classes out of the box.
-- **`email.header.name` recognizer** (v0.4.2) — locale-aware regex for RFC822 display names, including German `Von:` / `An:` headers. Closes the prompt-preamble NER gap from issue #24.
-- **`[ner] threshold` knob** (v0.4.2) — `--ner-threshold` overrides the per-span confidence floor for tuning prompt-preamble PII without retraining the model.
+## Repository gates
 
-### CLI surface
+The `xtask` gate matrix protects the contracts above: recognizer composition,
+tenant-fixture hygiene, class-map override safety, bundle-tokenization drift,
+SafetyNet sanity, cargo metadata audit isolation, and the resolver-based
+`gaze_module_isolation` Dylint gate. The full gate inventory and authoring
+contract live in [`docs/architecture/xtask.md`](docs/architecture/xtask.md).
 
-- **Three-surfaces backfill** (v0.4.2 S1) — `gaze clean` exposes `--session-scope`, `--ner-model-dir`, `--ner-locale`, `--rulepack-bundled`, and `--rulepack-path` overrides for existing policy knobs. Modular split moves `commands` / `pipeline` / `restore` / `io` / `error` / `logger` into their own files.
-- **`gaze clean --audit-db`** (v0.4.2) — persists the metadata-only SQLite redaction log for pipe-mode invocations. Dictionary sources include per-term traceability as `dictionary:{name}[#term_index]`.
-- **`gaze audit query` / `gaze audit export`** (v0.4.3 S4) — read-only audit metadata export from the SQLite log. Filters: `--class`, `--source`, `--action`, `--document-kind`. JSONL is the default output format. The audit DB opens read-only via `OpenFlags::SQLITE_OPEN_READ_ONLY`.
-- **Audit schema v2** (v0.4.4 S2) — `RedactionEntry` carries `created_at` epoch milliseconds; on-open `ALTER TABLE` migration keeps legacy DBs queryable through a NULL default. `gaze audit query` and `gaze audit export` accept `--from <iso8601>` and `--to <iso8601>` filters.
+## Roadmap
 
-### Linux releases
-
-- **Linux x86_64 binary** (v0.4.2 S4) — release CI publishes `gaze-x86_64-unknown-linux-gnu` from a native `ubuntu-24.04` runner alongside `gaze-aarch64-apple-darwin`, with `.sha256` files for both artifacts. Requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer); older distros should build from source.
-
-### Repository gates (xtask)
-
-- **`SymmetricPotemkin`** (v0.4.1) — runs the named behavioral tests for symmetric audit-merge entries.
-- **`RecognizerCompositionValidator`** — guards same-class rulepack composition; missing `cooperates_with` declarations fail closed with `RulepackError::SameClassWithoutCooperation`.
-- **`NoTenantKnowledge`** (v0.4.3 S3) — production-code lint scanner rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. `// allow(tenant-fixture)` markers hard-fail in production scope.
-- **`ClassMapOverrideSafety`** (v0.4.4 S1) — previously scaffolded gate is now active. `cargo run -p xtask -- class-map-override-safety` runs `t20_context_class_map_overrides_policy_dict_class` and `t20a_class_map_override_fails_closed_when_action_rule_uncovered`. Adversarial in-PR self-test verifies the gate fails non-zero when a listed test is missing or renamed.
-- **`audit_metadata_only`** (v0.4.5 S3 → decommissioned in v0.5 Phase E) — the syn-based AST walker that previously enforced restore-path audit-symbol isolation. Replaced by the resolver-based Dylint gate below. Removed in PR #77 (`f4fde12`).
-- **`cargo-metadata-audit-isolation`** (v0.5 Phase C, updated in v0.6) — parses `cargo metadata` and fails closed if any non-audit-responsible workspace member has a normal-dependency path to `gaze-audit`. The audit-responsible allowlist is documented in source; `gaze-cli` is the only allowed consumer.
-- **`gaze_module_isolation` Dylint lint / `dylint-gate`** (v0.5 Phase D) — canonical resolver-based audit-sink protected-path gate. Late-HIR lint resolves through `LateContext::qpath_res`; covers 18 UI fixtures including macro call-site hygiene, `#[path]`, `include!`, type positions, trait bounds, and `extern crate`. Toolchain pins, timing, and bypass-coverage matrix live in [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
-
-See [docs/architecture/xtask.md](docs/architecture/xtask.md) for the gate authoring contract.
-
-### Date posture
-
-`docs/research/v0.4.4-date-posture.md` (v0.4.4 S4) locks Gaze's Date-as-PII stance: dates are not PII by default, never ship in default `core` or `core-extended` bundles. General-prose dates require context classification research for v0.5+.
-
-## Roadmap teaser — v0.5
-
-- **Crate-shape Option B (shipped, in `[Unreleased]`)** — `gaze-types` extracted in Phase B (PR #74) and `gaze-audit` extracted in Phase C (PR #75). `gaze-assembly` remains the policy-to-pipeline joining layer; collapsing it stays a v0.6+ candidate.
-- **Dylint-based audit-sink isolation (shipped, in `[Unreleased]`)** — Phase D added `gaze_module_isolation` (PR #76); Phase E removed the legacy syn walker (PR #77).
-- **Open-key `PiiClass`** — sketched in [`docs/design/v0.5-open-piiclass.md`](docs/design/v0.5-open-piiclass.md). Replaces the closed enum with an open-key string interner so adopters and rulepacks can introduce new classes without core changes. Not yet shipped.
-
-Deferred beyond v0.5:
-
-- real sandbox backend implementations
-- k-anonymity / query-budget controls
-- full format-preserving fake generation
-
-See [docs/ROADMAP.md](docs/ROADMAP.md) for v0.5 directions.
+See [ROADMAP.md](ROADMAP.md) for current priorities and recently shipped work.
 
 ## Adopter notes
 
 - **Linux distros** — the published Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
 - **Phone validation** — `phone-parser` is enabled by default for `gaze-cli`. Library consumers that want parser-backed E.164 validation must opt in: `gaze-recognizers = { features = ["phone-parser"] }`. Without that feature, the rulepack loader rejects `e164_phone` at load time, preserving fail-closed behavior rather than silently degrading to shape-only matching.
-- **`core-extended` no-policy activation (v0.4.5)** — invocations of `--rulepack-bundled core-extended` *without a policy* now activate `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers. Adopters relying on the prior behavior (no national phone tokenization, no bare 5-digit numeric tokenization) must pass `--locale=global` or supply a policy with narrower locale gating. (todo #171)
-- **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy v0.4.3 audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
-- **Audit retention (v0.4.5)** — there is no policy-level retention default and no background auto-purge. Adopters who need retention drive it via `gaze audit purge --before <iso8601>` (preview with `--dry-run` or `--count`).
+- **`core-extended` no-policy activation** — invocations of `--rulepack-bundled core-extended` *without a policy* activate `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers. Adopters relying on no national phone tokenization or no bare 5-digit numeric tokenization must pass `--locale=global` or supply a policy with narrower locale gating.
+- **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
+- **Audit retention** — there is no policy-level retention default and no background auto-purge. Adopters who need retention drive it via `gaze audit purge --before <iso8601>` (preview with `--dry-run` or `--count`).
 - **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## License
