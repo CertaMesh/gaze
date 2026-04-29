@@ -233,6 +233,38 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(&rulepack, "ip.v6", "Host 2001:db8::1.", LocaleTag::EnUs),
         vec!["2001:db8::1".to_string()]
     );
+    for (input, expected) in [
+        ("Host ::ffff:192.0.2.128.", "::ffff:192.0.2.128"),
+        ("Host ::ffff:0.0.0.0.", "::ffff:0.0.0.0"),
+        ("Host ::192.0.2.1.", "::192.0.2.1"),
+        ("Host 2001:db8::192.0.2.1.", "2001:db8::192.0.2.1"),
+        ("Host fe80::ffff:1.2.3.4.", "fe80::ffff:1.2.3.4"),
+        ("Host 0:0:0:0:0:ffff:192.0.2.1.", "0:0:0:0:0:ffff:192.0.2.1"),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+    // Invalid IPv4-embedded octets are rejected entirely instead of falling
+    // through to a partial hex-only IPv6 prefix match.
+    assert!(detect_recognizer(
+        &rulepack,
+        "ip.v6",
+        "Host ::ffff:256.0.0.1.",
+        LocaleTag::EnUs
+    )
+    .is_empty());
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "ip.v6",
+            "Build at 1.2.3.4 ::ffff:5.6.7.8 done",
+            LocaleTag::EnUs
+        ),
+        vec!["::ffff:5.6.7.8".to_string()]
+    );
     assert_eq!(
         detect_recognizer(&rulepack, "postal.de", "Berlin 10115", LocaleTag::DeDe),
         vec!["10115".to_string()]
