@@ -8,6 +8,11 @@ pub enum BuildError {
     Rulepack(#[from] gaze::RulepackError),
     #[error("pipeline error: {0}")]
     Pipeline(#[from] gaze::Error),
+    #[error("unknown locale bucket '{bucket}' for recognizer '{recognizer_id}'")]
+    UnknownLocaleBucket {
+        recognizer_id: String,
+        bucket: String,
+    },
 }
 
 impl From<gaze_recognizers::RecognizerError> for BuildError {

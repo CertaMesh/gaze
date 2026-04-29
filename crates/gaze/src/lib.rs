@@ -42,9 +42,9 @@ pub use registry::{
 pub use resolver::resolve_candidates;
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
-    recognizer_composition_validator, ContextSpec, LocaleBucket, LocaleData, NormalizerSpec,
-    RawMatch, RecognizerSpec, Rulepack, RulepackError, RulepackSource, ScoringSpec, SourceSpec,
-    TokenSpec, ValidatorSpec,
+    recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,
+    LocaleData, NameShape, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack, RulepackError,
+    RulepackSource, ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
 };
 pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,

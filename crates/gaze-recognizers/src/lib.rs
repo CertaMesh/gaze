@@ -1,8 +1,12 @@
+mod anchored_match;
 mod dictionary;
 mod error;
 mod ner;
 mod regex;
 
+pub use anchored_match::{
+    is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
+};
 pub use dictionary::DictionaryRecognizer;
 pub use error::{RecognizerError, Result};
 pub use ner::{
@@ -31,9 +35,13 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 2);
+        assert_eq!(rulepack.recognizers.len(), 6);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
+        assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
+        assert_eq!(rulepack.recognizers[3].id, "name.forward_marker");
+        assert_eq!(rulepack.recognizers[4].id, "name.agent_recipient");
+        assert_eq!(rulepack.recognizers[5].id, "name.auto_footer");
         assert!(matches!(
             rulepack.recognizers[0].matcher,
             RawMatch::Regex { .. }
@@ -42,6 +50,13 @@ mod tests {
             rulepack.recognizers[1].matcher,
             RawMatch::Regex { .. }
         ));
+        assert!(matches!(
+            rulepack.recognizers[2].matcher,
+            RawMatch::Regex { .. }
+        ));
+        assert!(rulepack.recognizers[3..]
+            .iter()
+            .all(|recognizer| matches!(recognizer.matcher, RawMatch::AnchoredMatch { .. })));
     }
 
     #[test]

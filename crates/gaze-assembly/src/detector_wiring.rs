@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, PiiClass, PipelineBuilder, PolicyError, RawMatch, Rulepack,
-    RulepackError,
+    Context, DetectorKind, LocaleChain, LocaleTag, PiiClass, PipelineBuilder, PolicyError,
+    RawMatch, Rulepack, RulepackError,
 };
-use gaze_recognizers::{DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze_recognizers::{
+    AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
+};
 
 use crate::{class_map::class_for_dictionary, template::lower_regex_pattern, BuildError};
 
@@ -59,6 +61,7 @@ pub(crate) fn register_rulepack_recognizers(
     policy: &gaze::Policy,
     context: &Context,
     rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
     locale_vocab: &HashMap<String, Vec<String>>,
     registered_dictionaries: &mut BTreeSet<String>,
 ) -> Result<PipelineBuilder, BuildError> {
@@ -167,10 +170,100 @@ pub(crate) fn register_rulepack_recognizers(
             RawMatch::Ner { .. } => {
                 return Err(RulepackError::UnsupportedMatcher("Ner".to_string()).into())
             }
+            RawMatch::AnchoredMatch {
+                cues_bucket,
+                boundary,
+                right_window_chars,
+                name_shape,
+                cue_position,
+            } => {
+                if !recognizer_matches_active_locale(&recognizer.locales, active_locales) {
+                    continue;
+                }
+                let Some(cues) = locale_vocab.get(&cues_bucket) else {
+                    if is_optional_builtin_cue_bucket(&cues_bucket) {
+                        continue;
+                    }
+                    return Err(BuildError::UnknownLocaleBucket {
+                        recognizer_id: recognizer.id.clone(),
+                        bucket: cues_bucket,
+                    });
+                };
+                if cues.is_empty() {
+                    return Err(BuildError::UnknownLocaleBucket {
+                        recognizer_id: recognizer.id.clone(),
+                        bucket: cues_bucket,
+                    });
+                };
+                let source_short_label = derive_source_short_label(&recognizer.id, &cues_bucket);
+                builder = builder.recognizer(AnchoredMatchRecognizer::new(
+                    recognizer.id,
+                    cues.clone(),
+                    convert_boundary(&boundary),
+                    right_window_chars,
+                    convert_name_shape(&name_shape),
+                    convert_cue_position(&cue_position),
+                    source_short_label,
+                    recognizer.scoring.base,
+                    recognizer.scoring.priority,
+                ));
+            }
         }
     }
 
     Ok(builder)
+}
+
+fn recognizer_matches_active_locale(locales: &[LocaleTag], active_locales: &LocaleChain) -> bool {
+    locales.iter().any(|locale| {
+        *locale == LocaleTag::Global
+            || active_locales
+                .as_slice()
+                .iter()
+                .any(|active| active == locale)
+    })
+}
+
+fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
+    matches!(
+        bucket,
+        "forward_markers" | "agent_recipient_cues" | "footer_cues"
+    )
+}
+
+pub(crate) fn derive_source_short_label(recognizer_id: &str, bucket: &str) -> String {
+    let _ = bucket;
+    recognizer_id
+        .strip_prefix("name.")
+        .unwrap_or(recognizer_id)
+        .rsplit('.')
+        .next()
+        .unwrap_or(recognizer_id)
+        .to_string()
+}
+
+fn convert_boundary(boundary: &str) -> gaze_recognizers::AnchoredBoundary {
+    match boundary {
+        "punctuation" => gaze_recognizers::AnchoredBoundary::Punctuation,
+        "whitespace" => gaze_recognizers::AnchoredBoundary::Whitespace,
+        "line_end" => gaze_recognizers::AnchoredBoundary::LineEnd,
+        _ => unreachable!("rulepack validation rejects unknown anchored_match boundary"),
+    }
+}
+
+fn convert_name_shape(name_shape: &str) -> gaze_recognizers::NameShape {
+    match name_shape {
+        "person_name" => gaze_recognizers::NameShape::PersonName,
+        _ => unreachable!("rulepack validation rejects unknown anchored_match name_shape"),
+    }
+}
+
+fn convert_cue_position(cue_position: &str) -> gaze_recognizers::CuePosition {
+    match cue_position {
+        "before" => gaze_recognizers::CuePosition::Before,
+        "after" => gaze_recognizers::CuePosition::After,
+        _ => unreachable!("rulepack validation rejects unknown anchored_match cue_position"),
+    }
 }
 
 pub(crate) fn register_context_dictionaries(
