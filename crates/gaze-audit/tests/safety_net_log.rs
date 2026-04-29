@@ -4,8 +4,12 @@ use gaze_audit::{
     AuditFilter, AuditLogRow, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger,
     SAFETY_NET_RESTRICTED_COLUMNS,
 };
-use gaze_types::{DocumentKind, LeakKind, LeakSuspect, PiiClass};
+use gaze_types::{
+    Action, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass, RedactionEntry,
+    RedactionLogger,
+};
 use rusqlite::Connection;
+use tempfile::NamedTempFile;
 
 #[test]
 fn opens_v05_db_creates_safety_net_log_and_preserves_redaction_rows() {
@@ -83,6 +87,30 @@ fn safety_net_log_insert_and_read_round_trips_bytes_free_metadata() {
         Some("decode-sha256:0f91")
     );
     assert_eq!(row.telemetry_kind.as_deref(), Some("suspect"));
+}
+
+#[test]
+fn sqlite_logger_implements_gaze_types_redaction_logger_trait() {
+    let temp = NamedTempFile::new().expect("temp db");
+    let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
+    let entry = RedactionEntry {
+        source: "regex".to_string(),
+        class: PiiClass::Email,
+        action: Action::Tokenize,
+        field_name: Some("contact.email".to_string()),
+        document_kind: DocumentKind::Structured,
+        conflict_loser: false,
+        decided_by: ConflictTier::None,
+        created_at: 1_767_225_600_000,
+        session_id: Some("session-redaction-log".to_string()),
+    };
+
+    let trait_object: &dyn RedactionLogger = &logger;
+    trait_object.log(&entry).expect("log redaction entry");
+
+    let rows = SqliteLogger::query(temp.path(), &AuditFilter::default()).expect("query rows");
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].class, "email");
 }
 
 #[test]
