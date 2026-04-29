@@ -19,7 +19,7 @@ jobs:
             artifact: gaze-aarch64-apple-darwin
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            artifact: gaze-x86_64-unknown-linux-gnu
+            artifact: gaze-x86_64-linux-gnu
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6

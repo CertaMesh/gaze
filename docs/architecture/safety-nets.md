@@ -6,8 +6,8 @@ mutate the [`Manifest`](../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
-This document describes the safety-net contract introduced in v0.6 under
-todo #65 / PR #91. The first shipped backend is the OpenAI Privacy Filter
+This document describes the safety-net contract introduced in v0.6 through
+PR #91. The first shipped backend is the OpenAI Privacy Filter
 (`opf`) subprocess adapter; the contract is generic so additional backends
 can land without changing the trait shape or audit schema.
 
@@ -383,7 +383,7 @@ not in the v0.6 SafetyNet rollup scope:
 
 - **Live-model nightly workflow.** A scheduled cron that runs the safety
   net against a non-empty synthetic corpus to detect FP-rate drift between
-  checkpoint upgrades. Tracked under todo #328.
+  checkpoint upgrades.
 - **Native `ort` backend.** A first-party in-process backend that loads OPF
   weights through `ort` plus a `weights.rs` SHA-pinned scaffolding module,
   removing the subprocess hop. The trait shape on `OpenAiFilterBackend`
@@ -394,21 +394,16 @@ not in the v0.6 SafetyNet rollup scope:
   checksum offline. Closes the "first-run requires manual install" gap.
 - **Long-lived subprocess / daemon mode.** The current adapter spawns one
   `opf` invocation per clean. A persistent helper would amortize startup
-  cost when latency budgets tighten. The shared subprocess helper proposal
-  is filed under todo #303.
+  cost when latency budgets tighten.
 - **False-positive adjudication dashboard.** A UI on top of
   `gaze audit safety-net query` and `audit export` that lets reviewers
   triage suspects across runs.
 
 Cross-references:
 
-- todo #65 — Pass-3 SafetyNet rollup (this PR; ships in v0.6.0).
-- todo #303 — `SubprocessAdapter` shared helper for safety-net + future
-  external recognizers.
-- todo #315 — v0.6.0 `audit` feature shim drop. Resolved in the same v0.6.0
-  release as the SafetyNet rollup. Adopters must import concrete audit sinks
+- PR #91 — Pass-3 SafetyNet rollup.
+- v0.6.0 audit feature shim drop. Adopters must import concrete audit sinks
   from `gaze-audit` directly.
-- todo #328 — live-model nightly + non-empty synthetic corpus.
 
 ## See also
 
