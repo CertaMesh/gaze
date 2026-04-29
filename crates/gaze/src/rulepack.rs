@@ -352,13 +352,15 @@ impl TryFrom<RawRulepack> for Rulepack {
             .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
         recognizer_composition_validator(&recognizers)?;
+        let locale = raw.locale.map(LocaleData::from);
+        reject_anchored_match_ellipsis_cues(&recognizers, locale.as_ref())?;
 
         Ok(Self {
             schema_version: raw.schema_version,
             rulepack_id: raw.rulepack_id,
             rulepack_version: raw.rulepack_version,
             default_locales,
-            locale: raw.locale.map(LocaleData::from),
+            locale,
             recognizers,
         })
     }
@@ -485,14 +487,32 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
                     value: cue_position.clone(),
                 });
             }
-            if cues_bucket.contains("...") {
-                return Err(RulepackError::UnsupportedAnchoredMatch {
-                    field: "cues_bucket".to_string(),
-                    value: cues_bucket.clone(),
-                });
-            }
         }
         RawMatch::Dictionary { .. } | RawMatch::Ner { .. } => {}
+    }
+    Ok(())
+}
+
+fn reject_anchored_match_ellipsis_cues(
+    recognizers: &[RecognizerSpec],
+    locale: Option<&LocaleData>,
+) -> Result<(), RulepackError> {
+    let Some(locale) = locale else {
+        return Ok(());
+    };
+    for recognizer in recognizers {
+        let RawMatch::AnchoredMatch { cues_bucket, .. } = &recognizer.matcher else {
+            continue;
+        };
+        let Some(bucket) = locale.buckets.get(cues_bucket) else {
+            continue;
+        };
+        if let Some(cue) = bucket.names.iter().find(|cue| cue.contains("...")) {
+            return Err(RulepackError::UnsupportedAnchoredMatch {
+                field: format!("locale.{cues_bucket}.names"),
+                value: cue.clone(),
+            });
+        }
     }
     Ok(())
 }
@@ -896,6 +916,41 @@ kind = "regex"
             .expect_err("missing cues_bucket fails closed");
 
         assert_unsupported_anchored_match(err, "cues_bucket", "");
+    }
+
+    #[test]
+    fn anchored_match_rejects_ellipsis_in_cue_values() {
+        let err = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "anchored"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[locale.forward_markers]
+names = ["Forwarded ... message"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+"#,
+        )
+        .expect_err("ellipsis cue fails closed");
+
+        assert_unsupported_anchored_match(
+            err,
+            "locale.forward_markers.names",
+            "Forwarded ... message",
+        );
     }
 
     #[test]

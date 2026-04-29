@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AUDIT_RESTRICTED_COLUMNS` including `source`, so persisted audit queries can
   explain structural `anchored_match` emissions without adding a
   `recognizer_id` column. References GH#24 and todo #87.
+- **v0.6 audit source-label normalization:** `name.auto_footer` now emits the
+  structural source label `structural.footer`, matching the `footer_cues`
+  bucket wording used by the bundled locale rulepacks. References PR #84 NIT
+  #289.
 
 ### Deprecated
 

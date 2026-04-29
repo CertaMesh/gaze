@@ -34,6 +34,7 @@ fn anchored_recognizers() -> Vec<AnchoredMatchRecognizer> {
             NameShape::PersonName,
             CuePosition::Before,
             "forward_marker".to_string(),
+            1,
             0.88,
             110,
         ),
@@ -53,6 +54,7 @@ fn anchored_recognizers() -> Vec<AnchoredMatchRecognizer> {
             NameShape::PersonName,
             CuePosition::Before,
             "agent_recipient".to_string(),
+            2,
             0.88,
             110,
         ),
@@ -69,7 +71,8 @@ fn anchored_recognizers() -> Vec<AnchoredMatchRecognizer> {
             64,
             NameShape::PersonName,
             CuePosition::Before,
-            "auto_footer".to_string(),
+            "footer".to_string(),
+            2,
             0.88,
             110,
         ),
@@ -152,7 +155,7 @@ fn p6_context_sensitivity_matrix_locks_expected_verdicts() {
         &ctx,
     );
     assert_eq!(row3.len(), 1);
-    assert_eq!(row3[0].source, "structural.auto_footer");
+    assert_eq!(row3[0].source, "structural.footer");
 
     // Synthesis matrix row 4 / R2-Patch-11: GH#24 headline prompt preamble.
     let row4 = anchored_recognizers()[1]
