@@ -46,6 +46,22 @@ fn embedded_rulepack(name: &str) -> Rulepack {
     .expect("rulepack")
 }
 
+fn clean_with_rulepacks(rulepacks: &[Rulepack], locales: &[LocaleTag], input: &str) -> String {
+    let mut policy = policy();
+    policy.locale = Some(locales.to_vec());
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(&policy, &empty_context(), rulepacks, &active_locales, None)
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = pipeline
+        .redact(&session, RawDocument::Text(input.to_string()))
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    text
+}
+
 fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
     gaze::Policy {
         session: SessionPolicy {
@@ -357,6 +373,58 @@ fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
         };
         assert!(von_header_pattern.is_match(&text));
     }
+}
+
+#[test]
+fn paren_display_name_from_header_tokenizes_single_address() {
+    // Matrix row 5 / R2-Patch-9: paren display name beside a header email.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-en")],
+        &[LocaleTag::EnUs],
+        "From: alice@example.invalid (Alice Example)",
+    );
+
+    assert!(
+        regex::Regex::new(r"^From: alice@example\.invalid \(<[0-9a-f]{8}:Name_\d+>\)$")
+            .unwrap()
+            .is_match(&text)
+    );
+}
+
+#[test]
+fn paren_display_name_von_header_tokenizes_under_de_locale_chain() {
+    // Matrix row 5 / R2-Patch-9: DE locale bucket lowers `Von`.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-de")],
+        &[LocaleTag::DeDe],
+        "Von: alice@example.invalid (Alice Example)",
+    );
+
+    assert!(
+        regex::Regex::new(r"^Von: alice@example\.invalid \(<[0-9a-f]{8}:Name_\d+>\)$")
+            .unwrap()
+            .is_match(&text)
+    );
+}
+
+#[test]
+fn paren_display_name_from_header_tokenizes_multi_address_line() {
+    // Matrix row 5 / R2-Patch-9: regex.rs uses captures_iter, so after the
+    // first header-anchored address the comma arm walks the second paren form.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-en")],
+        &[LocaleTag::EnUs],
+        "From: bob@example.invalid (Bob B), alice@example.invalid (Alice A)",
+    );
+
+    assert!(
+        regex::Regex::new(
+            r"^From: bob@example\.invalid \(<[0-9a-f]{8}:Name_\d+>\), alice@example\.invalid \(<[0-9a-f]{8}:Name_\d+>\)$"
+        )
+        .unwrap()
+        .is_match(&text)
+    );
+    assert_eq!(text.matches(":Name_").count(), 2);
 }
 
 #[test]

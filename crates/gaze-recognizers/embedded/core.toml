@@ -58,3 +58,22 @@ capture_groups = [1, 2]
 [recognizers.scoring]
 base = 0.85
 priority = 100
+
+[[recognizers]]
+id = "email.header.name.paren"
+class = "Name"
+cooperates_with = ["email.header.name"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?:(?:{locale.email_headers}):|,)\s*\S+@\S+\s*\(([^)]+)\)'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.85
+priority = 100
+
+[recognizers.token]
+family = "name.counter"
