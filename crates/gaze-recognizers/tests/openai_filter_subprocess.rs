@@ -4,7 +4,8 @@ use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 use gaze_recognizers::safety_net::openai_filter::{
     map_openai_label, openai_label_to_safety_net_class, OpenAiFilterBackend, OpenAiFilterSafetyNet,
@@ -135,6 +136,42 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[],"text":"","redacted_text"
 }
 
 #[test]
+fn stdin_blocked_child_times_out_and_kills_subprocess() {
+    let dir = tempfile::tempdir().unwrap();
+    let pidfile = dir.path().join("opf.pid");
+    let opf = script(
+        "opf-stdin-block",
+        &format!(
+            r#"#!/bin/sh
+printf '%s\n' "$$" > '{}'
+exec sleep 30
+"#,
+            pidfile.display()
+        ),
+    )
+    .unwrap();
+    let backend = SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(1)),
+    )
+    .unwrap();
+    let clean = "x".repeat(128 * 1024);
+
+    let started = Instant::now();
+    let error = backend.infer(&clean).unwrap_err();
+    let elapsed = started.elapsed();
+
+    assert!(matches!(error, SafetyNetError::Runtime { .. }));
+    assert!(error.to_string().contains("timed out"));
+    assert!(
+        elapsed < Duration::from_secs(3),
+        "blocked stdin timeout took {elapsed:?}"
+    );
+
+    let pid = fs::read_to_string(pidfile).unwrap();
+    assert!(!process_is_present(pid.trim()));
+}
+
+#[test]
 fn oversized_input_returns_before_spawn() {
     let dir = tempfile::tempdir().unwrap();
     let marker = dir.path().join("spawned");
@@ -256,6 +293,16 @@ fn script(name: &str, body: &str) -> io::Result<PathBuf> {
     fs::write(&path, body)?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
     Ok(path)
+}
+
+fn process_is_present(pid: &str) -> bool {
+    Command::new("ps")
+        .args(["-p", pid])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn assert_private_payload_absent(value: &str) {

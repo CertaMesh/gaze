@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -200,38 +200,96 @@ impl SubprocessOpenAiFilterBackend {
             .take()
             .map(|stderr| thread::spawn(move || read_bounded(stderr, MAX_VERBOSE_STDERR_BYTES)));
 
-        join_stdin(stdin_thread)?;
-
         let deadline = Instant::now() + self.config.timeout;
-        let status = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if Instant::now() >= deadline => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(SafetyNetError::Runtime {
-                        message: "opf subprocess timed out and was killed".to_string(),
-                    });
-                }
-                Ok(None) => thread::sleep(WAIT_POLL_INTERVAL),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(SafetyNetError::Runtime {
-                        message: format!(
-                            "failed waiting for opf subprocess: {}",
-                            sanitize_error(&error.to_string())
-                        ),
-                    });
+        let mut stdin_thread = Some(stdin_thread);
+        let mut stdout_thread = Some(stdout_thread);
+        let mut stderr_thread = stderr_thread;
+        let mut status = None;
+        let mut stdout = None;
+        let mut stderr = if stderr_thread.is_some() {
+            None
+        } else {
+            Some(String::new())
+        };
+
+        loop {
+            if stdin_thread
+                .as_ref()
+                .is_some_and(thread::JoinHandle::is_finished)
+            {
+                let thread = stdin_thread.take().expect("checked stdin thread");
+                if let Err(error) = join_stdin(thread) {
+                    kill_reap(&mut child);
+                    join_remaining(stdin_thread, stdout_thread, stderr_thread);
+                    return Err(error);
                 }
             }
-        };
 
-        let stdout = join_reader(stdout_thread, "stdout")?;
-        let stderr = match stderr_thread {
-            Some(thread) => sanitize_stderr(&join_reader(thread, "stderr")?),
-            None => String::new(),
-        };
+            if stdout_thread
+                .as_ref()
+                .is_some_and(thread::JoinHandle::is_finished)
+            {
+                let thread = stdout_thread.take().expect("checked stdout thread");
+                match join_reader(thread, "stdout") {
+                    Ok(output) => stdout = Some(output),
+                    Err(error) => {
+                        kill_reap(&mut child);
+                        join_remaining(stdin_thread, stdout_thread, stderr_thread);
+                        return Err(error);
+                    }
+                }
+            }
+
+            if stderr_thread
+                .as_ref()
+                .is_some_and(thread::JoinHandle::is_finished)
+            {
+                let thread = stderr_thread.take().expect("checked stderr thread");
+                match join_reader(thread, "stderr") {
+                    Ok(output) => stderr = Some(sanitize_stderr(&output)),
+                    Err(error) => {
+                        kill_reap(&mut child);
+                        join_remaining(stdin_thread, stdout_thread, stderr_thread);
+                        return Err(error);
+                    }
+                }
+            }
+
+            if status.is_none() {
+                match child.try_wait() {
+                    Ok(Some(child_status)) => status = Some(child_status),
+                    Ok(None) => {}
+                    Err(error) => {
+                        kill_reap(&mut child);
+                        join_remaining(stdin_thread, stdout_thread, stderr_thread);
+                        return Err(SafetyNetError::Runtime {
+                            message: format!(
+                                "failed waiting for opf subprocess: {}",
+                                sanitize_error(&error.to_string())
+                            ),
+                        });
+                    }
+                }
+            }
+
+            if status.is_some() && stdin_thread.is_none() && stdout.is_some() && stderr.is_some() {
+                break;
+            }
+
+            if Instant::now() >= deadline {
+                kill_reap(&mut child);
+                join_remaining(stdin_thread, stdout_thread, stderr_thread);
+                return Err(SafetyNetError::Runtime {
+                    message: "opf subprocess timed out and was killed".to_string(),
+                });
+            }
+
+            thread::sleep(WAIT_POLL_INTERVAL);
+        }
+
+        let status = status.expect("status checked before loop exit");
+        let stdout = stdout.expect("stdout checked before loop exit");
+        let stderr = stderr.expect("stderr checked before loop exit");
 
         if !status.success() {
             let detail = if stderr.is_empty() {
@@ -417,6 +475,27 @@ fn join_stdin(thread: thread::JoinHandle<std::io::Result<()>>) -> Result<(), Saf
                 sanitize_error(&error.to_string())
             ),
         })
+}
+
+fn kill_reap(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn join_remaining(
+    stdin_thread: Option<thread::JoinHandle<std::io::Result<()>>>,
+    stdout_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+    stderr_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+) {
+    if let Some(thread) = stdin_thread {
+        let _ = join_stdin(thread);
+    }
+    if let Some(thread) = stdout_thread {
+        let _ = join_reader(thread, "stdout");
+    }
+    if let Some(thread) = stderr_thread {
+        let _ = join_reader(thread, "stderr");
+    }
 }
 
 fn sanitize_stderr(bytes: &[u8]) -> String {
