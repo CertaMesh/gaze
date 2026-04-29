@@ -1,5 +1,34 @@
 # Contributing
 
+## Setup
+
+Install the tracked git hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The tracked `.githooks/pre-push` hook runs the local gate matrix before
+allowing `git push`: `cargo fmt --all -- --check`,
+`cargo test --workspace --all-features`, and the repository xtask gates. It is
+defense in depth for normal PR work and critical when GitHub Actions is
+unavailable.
+
+Doc-only pushes skip the gate run when the pushed diff contains only `*.md`,
+`*.txt`, files under `docs/**`, or `CHANGELOG.md`. Pushes to `main` always run
+the full gates.
+
+For routine feature-branch pushes while CI is healthy, use:
+
+```bash
+GAZE_PREPUSH_FAST=1 git push
+```
+
+Fast mode runs only formatting and workspace tests. It is ignored for pushes to
+`main`. Standard `git push --no-verify` bypasses the hook, but that is
+exceptional and requires a written justification in the commit body or PR
+description.
+
 ## Workspace shape
 
 As of v0.5 dev complete (`[Unreleased]`):
