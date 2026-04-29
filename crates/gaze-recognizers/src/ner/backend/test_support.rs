@@ -15,8 +15,13 @@ impl NerBackend for TestSupportBackend {
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         Ok(input
             .find("Alice Example")
+            .or_else(|| input.find("Alice"))
             .map(|start| NerSpanResult {
-                span: start..start + "Alice Example".len(),
+                span: start
+                    ..input[start..]
+                        .find(|ch: char| !ch.is_alphabetic() && ch != ' ')
+                        .map_or(input.len(), |end| start + end)
+                        .min(start + "Alice Example".len()),
                 class: PiiClass::Name,
                 score: 0.40,
             })
