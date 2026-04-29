@@ -143,9 +143,9 @@ cargo run -p xtask -- ci-feature-matrix
 cargo run -p xtask -- cargo-metadata-audit-isolation
 ```
 
-The `--all-features` flag on `cargo test` enables `gaze`'s `audit` feature shim
-(v0.5 Phase C compatibility window) so dev-dep tests that reference the
-re-exported `gaze::SqliteLogger` continue to compile.
+The `--all-features` flag on `cargo test` exercises every current workspace
+feature. The v0.5 `gaze` audit feature shim was removed in v0.6; compatibility
+tests import concrete audit sinks from `gaze-audit` directly.
 
 The `cargo-metadata-audit-isolation` gate (v0.5 Phase C) parses
 `cargo metadata` and fails closed if any non-audit-responsible workspace

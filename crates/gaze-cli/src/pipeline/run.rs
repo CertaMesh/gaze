@@ -12,8 +12,8 @@ use serde::Serialize;
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
     LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, Policy, RawDocument, RedactionEntry,
-    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy, RulepackSource,
-    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
+    RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy,
+    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
 use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
@@ -462,11 +462,11 @@ impl CountingLogger {
 }
 
 impl RedactionLogger for CountingLogger {
-    fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         if let Some(audit) = &self.audit {
             audit
                 .log(entry)
-                .map_err(|err| gaze::Error::Sqlite(err.to_string()))?;
+                .map_err(|err| RedactionLogError::Sqlite(err.to_string()))?;
         }
         if !entry.conflict_loser
             && entry.document_kind == DocumentKind::Text

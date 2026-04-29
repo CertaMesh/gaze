@@ -2,15 +2,15 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use gaze_types::{
-    EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, SafetyNet,
-    SafetyNetContext, SafetyNetError,
+    EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
+    RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
 };
 use thiserror::Error;
 
 use crate::detector::{Detection, Detector, PiiClass};
 use crate::normalize::normalize;
 use crate::policy::PolicyError;
-use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry, RedactionLogger};
+use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
@@ -46,6 +46,8 @@ pub enum Error {
     Rulepack(#[from] RulepackError),
     #[error("safety net error: {0}")]
     SafetyNet(#[from] SafetyNetError),
+    #[error("redaction log error: {0}")]
+    RedactionLog(#[from] RedactionLogError),
 }
 
 #[derive(Clone)]
@@ -858,7 +860,7 @@ mod tests {
     }
 
     impl RedactionLogger for CapturingLogger {
-        fn log(&self, entry: &RedactionEntry) -> Result<()> {
+        fn log(&self, entry: &RedactionEntry) -> std::result::Result<(), RedactionLogError> {
             self.entries.lock().unwrap().push(entry.clone());
             Ok(())
         }

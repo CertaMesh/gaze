@@ -37,7 +37,7 @@ The public surface is re-exported from [`src/lib.rs`](src/lib.rs).
 | Rules and classes | `PiiClass`, `BUILTIN_CLASS_NAMES`, `Action`, `ClassRule`, `ColumnRule`, `DefaultRule`, `Rule`, `RuleContext` |
 | Documents | `RawDocument`, `CleanDocument`, `Value` |
 | Context dictionaries | `Context`, `TypedContext`, `RawContext`, `ContextDictionary`, `ContextFieldsRef`, `DictionaryBundle`, `DictionaryEntry`, `DictionarySource`, `RulepackDict` |
-| Audit logging | `RedactionLogger`, `RedactionEntry` (carries `created_at` epoch ms since v0.4.4), `SqliteLogger`, `ConflictTier`, `DocumentKind` |
+| Audit logging | `RedactionLogger`, `RedactionEntry` (carries `created_at` epoch ms since v0.4.4), `ConflictTier`, `DocumentKind`; concrete SQLite sinks live in `gaze-audit` |
 | Sandbox contracts | `Sandbox`, `SandboxPlan`, `ExecPolicy`, `UntrustedExecRequest`, `ValidatedExecRequest`, `SandboxError` |
 
 ## Minimal library flow

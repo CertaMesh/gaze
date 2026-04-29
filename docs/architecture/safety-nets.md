@@ -405,10 +405,9 @@ Cross-references:
 - todo #65 — Pass-3 SafetyNet rollup (this PR; ships in v0.6.0).
 - todo #303 — `SubprocessAdapter` shared helper for safety-net + future
   external recognizers.
-- todo #315 — v0.6.0 `audit` feature shim drop. Ships in the same v0.6.0
-  release as the SafetyNet rollup. Adopters need to migrate
-  `gaze::SqliteLogger` -> `gaze_audit::SqliteLogger` whether or not they
-  enable the safety net.
+- todo #315 — v0.6.0 `audit` feature shim drop. Resolved in the same v0.6.0
+  release as the SafetyNet rollup. Adopters must import concrete audit sinks
+  from `gaze-audit` directly.
 - todo #328 — live-model nightly + non-empty synthetic corpus.
 
 ## See also

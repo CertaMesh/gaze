@@ -31,7 +31,3 @@ workspace-default-features = "allow"
 # `reqwest`/`hyper`/`tokio`/`ureq` safety-net rules because global bans would
 # also hit the existing v0.5 NER graph. xtask is the authoritative gate;
 # cargo-deny remains secondary belt-and-suspenders for feature policy.
-[[bans.features]]
-crate = "gaze"
-deny = ["audit"]
-reason = "The temporary v0.5 compatibility shim must not be enabled in normal CI builds; default and --no-default-features must keep gaze-audit out of gaze core."

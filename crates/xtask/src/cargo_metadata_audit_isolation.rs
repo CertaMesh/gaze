@@ -66,15 +66,6 @@ const GRAPH_CATEGORIES: &[GraphCategory] = &[
         },
     },
     GraphCategory {
-        label: "gaze audit feature sanity",
-        base_args: &["--no-default-features", "--features", "gaze/audit"],
-        planned_features: &[],
-        policy: GraphPolicy {
-            expect_gaze_audit_from_gaze: true,
-            safety_net_dep_bans: false,
-        },
-    },
-    GraphCategory {
         label: "safety-net-base",
         base_args: &["--no-default-features"],
         planned_features: SAFETY_NET_BASE_FEATURES,
@@ -166,7 +157,7 @@ fn check_graph(
             .get("gaze")
             .context("workspace metadata did not include gaze")?;
         let Some(path) = path_to_package(gaze_id, &audit_id, &graph) else {
-            bail!("{label}: expected gaze --features audit to resolve {AUDIT_PACKAGE}");
+            bail!("{label}: expected gaze feature graph to resolve {AUDIT_PACKAGE}");
         };
         println!(
             "cargo_metadata_audit_isolation: {label}: confirmed {}",

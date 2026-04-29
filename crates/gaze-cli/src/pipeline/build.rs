@@ -2,8 +2,9 @@ use std::sync::{Arc, OnceLock};
 
 use gaze::{
     Action, ClassRule, DefaultRule, LocaleChain, LocaleTag, PiiClass, Pipeline, Policy,
-    PolicyError, RawMatch, RedactionEntry, RedactionLogger, Result as GazeResult, Rulepack,
-    RulepackDict, RulepackSource, TypedContext, DEFAULT_NER_THRESHOLD,
+    PolicyError, RawMatch, RedactionEntry, RedactionLogError, RedactionLogger,
+    Result as GazeResult, Rulepack, RulepackDict, RulepackSource, TypedContext,
+    DEFAULT_NER_THRESHOLD,
 };
 use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 
@@ -222,7 +223,7 @@ pub(crate) fn build_context_pipeline(
 pub(crate) struct ArcLogger(pub(crate) Arc<dyn RedactionLogger>);
 
 impl RedactionLogger for ArcLogger {
-    fn log(&self, entry: &RedactionEntry) -> GazeResult<()> {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.0.log(entry)
     }
 }
