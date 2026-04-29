@@ -66,15 +66,6 @@ const GRAPH_CATEGORIES: &[GraphCategory] = &[
         },
     },
     GraphCategory {
-        label: "gaze audit feature sanity",
-        base_args: &["--no-default-features", "--features", "gaze/audit"],
-        planned_features: &[],
-        policy: GraphPolicy {
-            expect_gaze_audit_from_gaze: true,
-            safety_net_dep_bans: false,
-        },
-    },
-    GraphCategory {
         label: "safety-net-base",
         base_args: &["--no-default-features"],
         planned_features: SAFETY_NET_BASE_FEATURES,
