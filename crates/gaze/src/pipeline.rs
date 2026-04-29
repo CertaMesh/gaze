@@ -252,7 +252,7 @@ impl Pipeline {
                 session,
                 loser,
                 field_name,
-                document_kind.clone(),
+                document_kind,
                 self.action_for(&loser.detection, &build_context(field_name)),
                 true,
             )?;
@@ -271,7 +271,7 @@ impl Pipeline {
                 session,
                 &detection,
                 field_name,
-                document_kind.clone(),
+                document_kind,
                 action,
                 false,
             )?;

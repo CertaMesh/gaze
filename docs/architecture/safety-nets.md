@@ -331,7 +331,8 @@ field path, and creation time. The query is opened
 
 ## CI gate
 
-`safety-net-sanity` is the canonical PR-only gate for the safety-net surface.
+`safety-net-sanity` is the canonical local pre-push gate for the safety-net
+surface.
 
 The xtask command lives at
 [`crates/xtask/src/safety_net_sanity.rs`](../../crates/xtask/src/safety_net_sanity.rs)
@@ -343,13 +344,10 @@ and batches required behavioral tests across four target suites:
   mapping.
 - `gaze-audit` — `safety_net_log` schema and bytes-free invariants.
 
-The GitHub workflow at
-[`.github/workflows/safety-net-sanity.yml`](../../.github/workflows/safety-net-sanity.yml)
-runs feature-gated `cargo check` for `gaze`, `gaze-recognizers`, and
-`gaze-cli`, plus `cargo test -p gaze-audit` and the xtask gate. It triggers
-on every pull request and on push to `main`. The gate is **not** scheduled
-nightly in v0.6; the live-model nightly workflow is deferred — see the
-"Future work" section below.
+The pre-push hook at [`.githooks/pre-push`](../../.githooks/pre-push) runs the
+xtask gate before shared-branch pushes. The gate is **not** scheduled nightly
+in v0.6; the live-model nightly workflow is deferred — see the "Future work"
+section below.
 
 ## Activation surface
 

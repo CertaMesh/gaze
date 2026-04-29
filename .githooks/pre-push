@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# gaze pre-push gate.
+#
+# Replaces 7 xtask CI workflows + adds fmt/clippy/test. Runs all gates locally
+# before push, without burning GitHub Actions minutes.
+#
+# Activate per clone (one-time):
+#   git config core.hooksPath .githooks
+#
+# Emergency bypass (WIP backups only):
+#   SKIP_HOOK=1 git push ...
+#
+# Note: dylint is NOT in this hook (heavy nightly toolchain). It runs weekly
+# on .github/workflows/dylint.yml. Trigger manually with `gh workflow run dylint.yml`.
+
+set -euo pipefail
+
+if [[ "${SKIP_HOOK:-0}" == "1" ]]; then
+  echo "WARN: SKIP_HOOK=1 - bypassed. Don't do this on shared branches."
+  exit 0
+fi
+
+run() {
+  local label="$1"; shift
+  echo "pre-push gate: $label"
+  if ! "$@"; then
+    echo
+    echo "FAIL: $label failed. Fix and push again. Bypass with SKIP_HOOK=1 git push."
+    exit 1
+  fi
+}
+
+run "cargo fmt --all -- --check"                    cargo fmt --all -- --check
+run "cargo clippy --all-targets"                    cargo clippy --all-targets --no-deps -- -D warnings
+
+# Ex-CI xtask gates.
+run "xtask bundle-tokenization-drift"               cargo run -p xtask -- bundle-tokenization-drift
+run "xtask bundle-tokenization-drift --verify-ack"  cargo run -p xtask -- bundle-tokenization-drift --verify-ack
+run "xtask cargo-metadata-audit-isolation"          cargo run -p xtask -- cargo-metadata-audit-isolation
+run "xtask class-map-override-safety"               cargo run -p xtask -- class-map-override-safety
+run "xtask fixture-citation-lint"                   cargo run -p xtask -- fixture-citation-lint
+run "cargo test -p gaze-recognizers --no-default-features" \
+  cargo test -p gaze-recognizers --no-default-features
+run "xtask ci-feature-matrix"                       cargo run -p xtask -- ci-feature-matrix
+run "xtask no-tenant-knowledge"                     cargo run -p xtask -- no-tenant-knowledge
+run "xtask safety-net-sanity"                       cargo run -p xtask -- safety-net-sanity
+run "xtask symmetric-potemkin"                      cargo run -p xtask -- symmetric-potemkin
+run "xtask recognizer-composition-validator"        cargo run -p xtask -- recognizer-composition-validator
+
+run "cargo test --all-targets"                      cargo test --all-targets
+
+echo "pre-push gate clean."

@@ -9,6 +9,9 @@ use clap::{Parser, Subcommand, ValueEnum};
 use crate::error::{CliError, RestoreMode};
 use crate::io::DEFAULT_MAX_BYTES;
 
+pub(crate) const DEFAULT_SAFETY_NET_TIMEOUT_MS: u64 = 5_000;
+pub(crate) const DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES: usize = 1_048_576;
+
 #[derive(Parser, Debug)]
 #[command(
     name = "gaze",
@@ -77,10 +80,10 @@ enum Cmd {
         #[arg(long, value_enum)]
         openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
         /// Safety-net subprocess timeout in milliseconds.
-        #[arg(long, default_value_t = 5_000)]
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
         safety_net_timeout_ms: u64,
         /// Maximum clean-text bytes submitted to the safety net.
-        #[arg(long, default_value_t = 1_048_576)]
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
         safety_net_input_limit_bytes: usize,
         /// Safety-net handling mode for suspected leaks.
         #[arg(long, value_enum, default_value_t = SafetyNetMode::Strict)]
@@ -227,6 +230,7 @@ pub(crate) enum OpenAiFilterOperatingPoint {
 }
 
 impl OpenAiFilterOperatingPoint {
+    #[cfg(feature = "safety-net-openai")]
     pub(crate) fn as_opf_value(self) -> &'static str {
         match self {
             Self::HighRecall => "high-recall",

@@ -209,7 +209,7 @@ fn check_safety_net_prohibited_packages(
             let Some(path) = path_to_package(workspace_id, &package_id, graph) else {
                 continue;
             };
-            if let Some(exemption) = matching_legacy_ner_exemption(*package, &path, metadata) {
+            if let Some(exemption) = matching_legacy_ner_exemption(package, &path, metadata) {
                 println!(
                     "cargo_metadata_audit_isolation: {label}: allowed {} for {workspace_name}: {} ({})",
                     package,

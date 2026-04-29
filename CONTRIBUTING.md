@@ -1,5 +1,34 @@
 # Contributing
 
+## Setup
+
+Install the tracked git hooks once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The tracked `.githooks/pre-push` hook runs the local gate matrix before
+allowing `git push`: `cargo fmt --all -- --check`,
+`cargo test --workspace --all-features`, and the repository xtask gates. It is
+defense in depth for normal PR work and critical when GitHub Actions is
+unavailable.
+
+Doc-only pushes skip the gate run when the pushed diff contains only `*.md`,
+`*.txt`, files under `docs/**`, or `CHANGELOG.md`. Pushes to `main` always run
+the full gates.
+
+For routine feature-branch pushes while CI is healthy, use:
+
+```bash
+GAZE_PREPUSH_FAST=1 git push
+```
+
+Fast mode runs only formatting and workspace tests. It is ignored for pushes to
+`main`. Standard `git push --no-verify` bypasses the hook, but that is
+exceptional and requires a written justification in the commit body or PR
+description.
+
 ## Workspace shape
 
 As of v0.5 dev complete (`[Unreleased]`):
@@ -64,6 +93,37 @@ E.164, so positive-path tests continue to exercise the validator without using
 real numbers. v0.4.5 S2 (PR #58) adds parser-backed national phone recognizers
 for DE and US that follow the same synthetic-only fixture posture.
 
+## Local pre-push hook
+
+Gaze uses a repository-local pre-push hook for day-to-day gating. Activate it
+once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The hook runs formatting, clippy, the seven former xtask CI workflows, the
+`gaze-recognizers` no-default-features test path, and `cargo test
+--all-targets`. The former cloud CI gate commands are now local:
+`bundle-tokenization-drift`, `bundle-tokenization-drift --verify-ack`,
+`cargo-metadata-audit-isolation`, `class-map-override-safety`,
+`fixture-citation-lint`, `ci-feature-matrix`, `no-tenant-knowledge`,
+`symmetric-potemkin`, and `recognizer-composition-validator`.
+
+Emergency bypass for WIP backups only:
+
+```bash
+SKIP_HOOK=1 git push ...
+```
+
+`dylint` is intentionally not part of the pre-push hook because it requires the
+pinned `nightly-2025-09-18` toolchain and cargo-dylint setup. It runs weekly on
+Monday at 08:00 UTC and can be triggered manually:
+
+```bash
+gh workflow run dylint.yml
+```
+
 ## PR-checks ritual
 
 Before opening or pushing to a PR, run the workspace test suite plus all
@@ -81,7 +141,6 @@ cargo run -p xtask -- bundle-tokenization-drift
 cargo run -p xtask -- fixture-citation-lint
 cargo run -p xtask -- ci-feature-matrix
 cargo run -p xtask -- cargo-metadata-audit-isolation
-cargo run -p xtask -- dylint-gate
 ```
 
 The `--all-features` flag on `cargo test` enables `gaze`'s `audit` feature shim
@@ -97,8 +156,8 @@ enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was
 decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
 fixture matrix, and timings live in
 [`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
-`cargo-dylint` is a CI-only requirement; the local wrapper skips with a clear
-message when `cargo-dylint` is absent.
+`cargo-dylint` is a scheduled-workflow requirement; devs do not need it for the
+pre-push hook.
 
-CI runs the equivalents of these gates on every PR. Running them locally
-before pushing prevents the "I forgot to run xtask" round-trip.
+The pre-push hook runs the local equivalents before push. Run `dylint` manually
+when touching audit-sink boundaries or wait for the weekly scheduled workflow.

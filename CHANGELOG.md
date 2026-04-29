@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Tracked `.githooks/pre-push` runs full local gate matrix (cargo fmt + tests + xtask gates) before allowing push. Doc-only pushes fast-path. `GAZE_PREPUSH_FAST=1` skips xtask gates when CI is healthy. One-time setup: `git config core.hooksPath .githooks` per clone.
 - **v0.6 GH#24 / todo #87 anchored_match recognizer kind:** cue-anchored
   `Name` detection now covers email forward headers, agent reply preambles, and
   auto-footers through deterministic structural rules. The default `core`
@@ -143,15 +144,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   batched across `gaze`, `gaze-cli`, `gaze-recognizers`, and
   `gaze-audit` that asserts manifest diff invariants, strict/tolerant
   CLI behavior, subprocess boundary safety, and `safety_net_log` schema.
-  Backed by `.github/workflows/safety-net-sanity.yml`, which runs on
-  every PR and on push to `main`.
+  Enforced by `.githooks/pre-push` through
+  `cargo run -p xtask -- safety-net-sanity`.
 - **`class-map-override-safety` extension (Phase 7):** the existing gate
   now asserts that `all_official_labels_map_exactly_to_gaze_classes`
   runs and passes, so the closed OPF label allowlist cannot drift
   silently.
 - **`ci-feature-matrix` extension (Phase 7):** the matrix now enrolls
   the `safety-net` and `safety-net-openai` feature combos so the gated
-  code paths build on every PR.
+  code paths are covered by the local pre-push gate.
 - **MockSafetyNet test helper (Phase 3):** `gaze-recognizers` exports
   a `test-support`-gated `MockSafetyNet` so adopter tests can drive
   manifest diffing without spawning a subprocess.
@@ -223,6 +224,29 @@ and are tracked for a later release:
 See
 [`docs/architecture/safety-nets.md` "Future work"](docs/architecture/safety-nets.md#future-work-deferred-to-a-post-v060-release)
 for the same list with its design notes.
+
+## [0.5.2] - 2026-04-29
+
+### Added
+
+- **NER adopter assets (todo #301, GH issue #90 items 1+4):** promoted the
+  Davlan mBERT label contract and canonical NER policy snippet to
+  `assets/ner/` for framework adapters and adopters. `assets/ner/README.md`
+  documents the BIO tag to Gaze class schema, the `"drop"` sentinel, and the
+  future `gaze model fetch <name>` / `gaze policy snippet ner` manifest path.
+
+### Changed
+
+- **Pinned default NER artifact source (todo #292, GH issue #90 item 2):**
+  `scripts/fetch-ner-model.sh` now installs the pre-quantized int8 ONNX artifact
+  from `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+  `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, copies the Gaze-authored
+  `labels.json` contract, and verifies all installed bytes against the
+  repository-root `SHA256SUMS`.
+- **Policy docs for NER adopters:** `docs/policy.md` now cites the canonical
+  `assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
+  and calls out Rust-regex inline flags such as `(?i)` in
+  `[[policy.custom_recognizers]].pattern`.
 
 ## [0.5.1] - 2026-04-29
 

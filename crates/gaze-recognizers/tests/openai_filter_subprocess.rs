@@ -150,8 +150,8 @@ fn stdin_blocked_child_times_out_and_kills_subprocess() {
         "opf-stdin-block",
         &format!(
             r#"#!/bin/sh
-IFS= read -r _ || true
 printf '%s\n' "$$" > '{}'
+IFS= read -r _ || true
 exec sleep 30
 "#,
             pidfile.display()

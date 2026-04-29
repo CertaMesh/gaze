@@ -18,7 +18,10 @@ use gaze::{
 use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
-use crate::commands::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
+use crate::commands::{
+    OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
+    DEFAULT_SAFETY_NET_TIMEOUT_MS,
+};
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
@@ -275,6 +278,8 @@ fn validate_no_openai_filter_options(
     if options.openai_filter_command.is_some()
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
+        || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
+        || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
     {
         return Err(CliError::SafetyNetConfigDetail(
             "openai-filter options require --safety-net=openai-filter".to_string(),
