@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **v0.6 closes #114 — generic locale-bucket placeholder syntax adopted in
+  bundled `core` rulepack:** the shipped `email.header.name` recognizer now uses
+  the canonical `{locale.email_headers}` placeholder. The legacy
+  `{locale_email_headers}` underscore alias still parses for back-compat (one
+  more rev cycle, scheduled to drop in v0.7) — adopter rulepacks should migrate
+  to the dotted form. No detection or token-shape change.
 - **v0.6 adopter migration for GH#24:** v0.5.1 adopters can load
   `["core", "locale-de"]` under `[locale].active = ["de-DE"]` to tokenize the
   Markus prompt/header/footer leak shapes without changing existing custom
