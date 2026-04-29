@@ -6,6 +6,8 @@ pub struct AuditFilter {
     pub source: Option<String>,
     pub action: Option<String>,
     pub document_kind: Option<String>,
+    pub raw_label: Option<String>,
+    pub field_path: Option<String>,
     pub from_epoch_ms: Option<i64>,
     pub to_epoch_ms: Option<i64>,
     pub session_id: Option<String>,
@@ -176,9 +178,17 @@ pub fn build_safety_net_query_sql(filter: &AuditFilter) -> (String, Vec<Value>) 
         predicates.push("leak_kind = ?");
         values.push(Value::Text(action.clone()));
     }
+    if let Some(raw_label) = &filter.raw_label {
+        predicates.push("raw_label = ?");
+        values.push(Value::Text(raw_label.clone()));
+    }
     if let Some(document_kind) = &filter.document_kind {
         predicates.push("document_kind = ?");
         values.push(Value::Text(document_kind.clone()));
+    }
+    if let Some(field_path) = &filter.field_path {
+        predicates.push("field_path = ?");
+        values.push(Value::Text(field_path.clone()));
     }
     if let Some(from_epoch_ms) = filter.from_epoch_ms {
         predicates.push("created_at >= ?");

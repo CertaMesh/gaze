@@ -117,6 +117,8 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             source: Some("openai-privacy-filter".to_string()),
             action: Some("partial_bleed".to_string()),
             document_kind: Some("structured".to_string()),
+            raw_label: None,
+            field_path: None,
             from_epoch_ms: Some(150),
             to_epoch_ms: Some(250),
             session_id: Some("session-b".to_string()),

@@ -179,6 +179,39 @@ enum AuditCmd {
         #[arg(long, alias = "count")]
         dry_run: bool,
     },
+    /// Query safety-net leak metadata without changing redaction-log output.
+    SafetyNet {
+        #[command(subcommand)]
+        command: SafetyNetAuditCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SafetyNetAuditCmd {
+    /// Print filtered safety-net metadata rows as tab-separated values.
+    Query {
+        /// SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: PathBuf,
+        /// Filter by safety-net leak kind.
+        #[arg(long)]
+        leak_kind: Option<String>,
+        /// Filter by raw backend label.
+        #[arg(long)]
+        raw_label: Option<String>,
+        /// Filter by mapped Gaze class.
+        #[arg(long)]
+        mapped_class: Option<String>,
+        /// Filter by structured field path.
+        #[arg(long)]
+        field_path: Option<String>,
+        /// Include rows created at or after this ISO 8601 timestamp.
+        #[arg(long = "from")]
+        from_iso8601: Option<String>,
+        /// Include rows created at or before this ISO 8601 timestamp.
+        #[arg(long = "to")]
+        to_iso8601: Option<String>,
+    },
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -317,6 +350,25 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 before,
                 dry_run,
             }),
+            AuditCmd::SafetyNet { command } => match command {
+                SafetyNetAuditCmd::Query {
+                    audit_db,
+                    leak_kind,
+                    raw_label,
+                    mapped_class,
+                    field_path,
+                    from_iso8601,
+                    to_iso8601,
+                } => audit::query_safety_net(audit::SafetyNetArgs {
+                    audit_db,
+                    leak_kind,
+                    raw_label,
+                    mapped_class,
+                    field_path,
+                    from_iso8601,
+                    to_iso8601,
+                }),
+            },
         },
     }
 }

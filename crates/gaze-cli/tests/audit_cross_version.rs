@@ -282,6 +282,8 @@ fn audit_sql_uses_restricted_column_set() {
         source: Some("email.global".to_string()),
         action: Some("tokenize".to_string()),
         document_kind: Some("text".to_string()),
+        raw_label: None,
+        field_path: None,
         from_epoch_ms: Some(1_700_000_000_000),
         to_epoch_ms: Some(1_700_000_010_000),
         session_id: Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),

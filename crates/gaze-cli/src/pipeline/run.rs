@@ -15,7 +15,7 @@ use gaze::{
     RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy, RulepackSource,
     Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
-use gaze_audit::SqliteLogger;
+use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::commands::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::clean_overrides::CleanOverrides;
@@ -169,6 +169,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             .map_err(|_| CliError::Pipeline)?;
         (doc, LeakReport::default())
     };
+    counter
+        .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
+        .map_err(|_| CliError::Pipeline)?;
     enforce_safety_net_mode(&leak_report, options.safety_net_mode)?;
 
     let clean_text = match clean_doc {
@@ -426,6 +429,29 @@ impl CountingLogger {
                 .transpose()
                 .map_err(|err| gaze::Error::Sqlite(err.to_string()))?,
         })
+    }
+
+    fn log_safety_net_report(
+        &self,
+        report: &LeakReport,
+        session: &Session,
+        document_kind: DocumentKind,
+    ) -> gaze_audit::Result<()> {
+        let Some(audit) = &self.audit else {
+            return Ok(());
+        };
+        let created_at = chrono::Utc::now().timestamp_millis();
+        for suspect in &report.suspects {
+            let entry = LeakSuspectLogEntry::from_suspect(
+                suspect,
+                document_kind,
+                created_at,
+                Some(session.audit_session_id().to_string()),
+                report.replay_hash.clone(),
+            );
+            audit.log_safety_net(&entry)?;
+        }
+        Ok(())
     }
 }
 
