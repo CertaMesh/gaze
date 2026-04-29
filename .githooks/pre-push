@@ -1,240 +1,51 @@
 #!/usr/bin/env bash
+# gaze pre-push gate.
+#
+# Replaces 7 xtask CI workflows + adds fmt/clippy/test. Runs all gates locally
+# before push, without burning GitHub Actions minutes.
+#
+# Activate per clone (one-time):
+#   git config core.hooksPath .githooks
+#
+# Emergency bypass (WIP backups only):
+#   SKIP_HOOK=1 git push ...
+#
+# Note: dylint is NOT in this hook (heavy nightly toolchain). It runs weekly
+# on .github/workflows/dylint.yml. Trigger manually with `gh workflow run dylint.yml`.
+
 set -euo pipefail
 
-# .githooks/pre-push — run local gate matrix before allowing push.
-# Bypass: git push --no-verify (requires justification in commit/PR).
-# Fast mode: GAZE_PREPUSH_FAST=1 git push (skips xtask gates except on main).
-# See CONTRIBUTING.md + CLAUDE.md for full discipline.
-
-remote_name="${1:-origin}"
-
-if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ "$(tput colors 2>/dev/null || echo 0)" -ge 8 ]]; then
-    bold="$(tput bold)"
-    dim="$(tput dim)"
-    red="$(tput setaf 1)"
-    green="$(tput setaf 2)"
-    yellow="$(tput setaf 3)"
-    blue="$(tput setaf 4)"
-    reset="$(tput sgr0)"
-else
-    bold=""
-    dim=""
-    red=""
-    green=""
-    yellow=""
-    blue=""
-    reset=""
+if [[ "${SKIP_HOOK:-0}" == "1" ]]; then
+  echo "WARN: SKIP_HOOK=1 - bypassed. Don't do this on shared branches."
+  exit 0
 fi
 
-start_time="$(date +%s)"
-zero_sha="0000000000000000000000000000000000000000"
-
-BASE_XTASK_GATES=(
-    "bundle-tokenization-drift"
-    "bundle-tokenization-drift --verify-ack"
-    "cargo-metadata-audit-isolation"
-    "class-map-override-safety"
-    "fixture-citation-lint"
-    "ci-feature-matrix"
-    "no-tenant-knowledge"
-    "symmetric-potemkin"
-    "recognizer-composition-validator"
-    "dylint-gate"
-)
-
-log() {
-    printf '%b\n' "$*"
+run() {
+  local label="$1"; shift
+  echo "pre-push gate: $label"
+  if ! "$@"; then
+    echo
+    echo "FAIL: $label failed. Fix and push again. Bypass with SKIP_HOOK=1 git push."
+    exit 1
+  fi
 }
 
-elapsed() {
-    local now
-    now="$(date +%s)"
-    printf '%ss' "$((now - start_time))"
-}
+run "cargo fmt --all -- --check"                    cargo fmt --all -- --check
+run "cargo clippy --all-targets"                    cargo clippy --all-targets --no-deps -- -D warnings
 
-is_main_push() {
-    local local_ref="$1"
-    [[ "$local_ref" == "refs/heads/main" ]]
-}
+# Ex-CI xtask gates.
+run "xtask bundle-tokenization-drift"               cargo run -p xtask -- bundle-tokenization-drift
+run "xtask bundle-tokenization-drift --verify-ack"  cargo run -p xtask -- bundle-tokenization-drift --verify-ack
+run "xtask cargo-metadata-audit-isolation"          cargo run -p xtask -- cargo-metadata-audit-isolation
+run "xtask class-map-override-safety"               cargo run -p xtask -- class-map-override-safety
+run "xtask fixture-citation-lint"                   cargo run -p xtask -- fixture-citation-lint
+run "cargo test -p gaze-recognizers --no-default-features" \
+  cargo test -p gaze-recognizers --no-default-features
+run "xtask ci-feature-matrix"                       cargo run -p xtask -- ci-feature-matrix
+run "xtask no-tenant-knowledge"                     cargo run -p xtask -- no-tenant-knowledge
+run "xtask symmetric-potemkin"                      cargo run -p xtask -- symmetric-potemkin
+run "xtask recognizer-composition-validator"        cargo run -p xtask -- recognizer-composition-validator
 
-resolve_base_ref() {
-    local local_sha="$1"
-    local upstream=""
+run "cargo test --all-targets"                      cargo test --all-targets
 
-    upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
-    if [[ -n "$upstream" ]] && git rev-parse --verify -q "$upstream" >/dev/null; then
-        printf '%s' "$upstream"
-        return 0
-    fi
-
-    if git rev-parse --verify -q "${remote_name}/HEAD" >/dev/null; then
-        printf '%s' "${remote_name}/HEAD"
-        return 0
-    fi
-
-    if git rev-parse --verify -q "${remote_name}/main" >/dev/null; then
-        printf '%s' "${remote_name}/main"
-        return 0
-    fi
-
-    git rev-list --max-parents=0 "$local_sha" | tail -n 1
-}
-
-changed_files_for_update() {
-    local local_ref="$1"
-    local local_sha="$2"
-    local remote_sha="$3"
-    local base_ref
-    local base_sha
-
-    if [[ "$local_sha" == "$zero_sha" ]]; then
-        return 0
-    fi
-
-    if [[ "$remote_sha" != "$zero_sha" ]]; then
-        git diff --name-only "${remote_sha}..${local_sha}"
-        return 0
-    fi
-
-    base_ref="$(resolve_base_ref "$local_sha")"
-    if base_sha="$(git merge-base "$base_ref" "$local_sha" 2>/dev/null)"; then
-        git diff --name-only "${base_sha}..${local_sha}"
-    else
-        git diff --name-only "${base_ref}..${local_sha}"
-    fi
-}
-
-is_doc_only_push() {
-    local local_ref="$1"
-    local local_sha="$2"
-    local remote_sha="$3"
-    local files
-
-    if is_main_push "$local_ref"; then
-        return 1
-    fi
-
-    files="$(changed_files_for_update "$local_ref" "$local_sha" "$remote_sha")"
-    [[ -n "$files" ]] || return 1
-
-    while IFS= read -r path; do
-        [[ -n "$path" ]] || continue
-        case "$path" in
-            *.md|*.txt|docs/*|CHANGELOG.md)
-                ;;
-            *)
-                return 1
-                ;;
-        esac
-    done <<<"$files"
-
-    return 0
-}
-
-discover_xtask_gates() {
-    local gate
-    local known
-    local help_output
-
-    help_output="$(cargo run -p xtask -- --help 2>/dev/null || true)"
-    printf '%s\n' "$help_output" \
-        | awk '/^  [a-z0-9][a-z0-9-]+[[:space:]]*/ { print $1 }' \
-        | while IFS= read -r gate; do
-            [[ "$gate" != "help" ]] || continue
-            known="false"
-            for configured in "${BASE_XTASK_GATES[@]}"; do
-                if [[ "$configured" == "$gate" || "$configured" == "$gate "* ]]; then
-                    known="true"
-                    break
-                fi
-            done
-            if [[ "$known" == "false" ]]; then
-                printf '%s\n' "$gate"
-            fi
-        done
-}
-
-run_gate() {
-    local index="$1"
-    local total="$2"
-    local label="$3"
-    shift 3
-    local stderr_file
-    local status
-
-    stderr_file="$(mktemp -t gaze-pre-push-stderr.XXXXXX)"
-    log "${blue}${bold}[$index/$total]${reset} ${bold}${label}${reset}"
-
-    set +e
-    "$@" 2> >(tee "$stderr_file" >&2)
-    status=$?
-    set -e
-
-    if [[ "$status" -ne 0 ]]; then
-        log "${red}${bold}pre-push gate failed:${reset} $label"
-        log "${yellow}first 2KB of stderr:${reset}"
-        head -c 2048 "$stderr_file" >&2 || true
-        printf '\n' >&2
-        rm -f "$stderr_file"
-        exit "$status"
-    fi
-
-    rm -f "$stderr_file"
-}
-
-local_updates=()
-main_push="false"
-doc_only_candidates=0
-doc_only_matches=0
-
-while read -r local_ref local_sha remote_ref remote_sha; do
-    [[ -n "${local_ref:-}" ]] || continue
-    local_updates+=("${local_ref}|${local_sha}|${remote_ref}|${remote_sha}")
-    if is_main_push "$local_ref"; then
-        main_push="true"
-    fi
-    if [[ "$local_sha" != "$zero_sha" ]]; then
-        doc_only_candidates=$((doc_only_candidates + 1))
-        if is_doc_only_push "$local_ref" "$local_sha" "$remote_sha"; then
-            doc_only_matches=$((doc_only_matches + 1))
-        fi
-    fi
-done
-
-if [[ "${#local_updates[@]}" -gt 0 && "$doc_only_candidates" -gt 0 && "$doc_only_candidates" -eq "$doc_only_matches" ]]; then
-    log "${green}doc-only push detected, skipping gates${reset}"
-    exit 0
-fi
-
-xtask_gates=("${BASE_XTASK_GATES[@]}")
-while IFS= read -r discovered_gate; do
-    [[ -n "$discovered_gate" ]] || continue
-    xtask_gates+=("$discovered_gate")
-done < <(discover_xtask_gates)
-
-commands=(
-    "cargo fmt --all -- --check"
-    "cargo test --workspace --all-features"
-)
-
-if [[ "${GAZE_PREPUSH_FAST:-0}" == "1" && "$main_push" != "true" ]]; then
-    log "${yellow}GAZE_PREPUSH_FAST=1: running cargo fmt + cargo test only${reset}"
-elif [[ "${GAZE_PREPUSH_FAST:-0}" == "1" && "$main_push" == "true" ]]; then
-    log "${yellow}main push detected: ignoring GAZE_PREPUSH_FAST=1 and running full gates${reset}"
-    for gate in "${xtask_gates[@]}"; do
-        commands+=("cargo run -p xtask -- $gate")
-    done
-else
-    for gate in "${xtask_gates[@]}"; do
-        commands+=("cargo run -p xtask -- $gate")
-    done
-fi
-
-total="${#commands[@]}"
-log "${bold}Gaze pre-push gates:${reset} $total gate(s), fail-fast enabled"
-
-for i in "${!commands[@]}"; do
-    run_gate "$((i + 1))" "$total" "${commands[$i]}" bash -c "${commands[$i]}"
-done
-
-log "${green}${bold}pre-push gates passed${reset} ${dim}(elapsed: $(elapsed))${reset}"
+echo "pre-push gate clean."
