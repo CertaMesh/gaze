@@ -587,6 +587,7 @@ fn same_span_structural_name_overlap_logs_loser() {
             NameShape::PersonName,
             CuePosition::Before,
             "agent_recipient".to_string(),
+            2,
             0.88,
             110,
         ))

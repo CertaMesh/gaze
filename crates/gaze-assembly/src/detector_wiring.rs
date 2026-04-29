@@ -201,6 +201,7 @@ pub(crate) fn register_rulepack_recognizers(
                     });
                 };
                 let source_short_label = derive_source_short_label(&recognizer.id);
+                let min_components = anchored_match_min_components(&recognizer.id);
                 builder = builder.recognizer(AnchoredMatchRecognizer::new(
                     recognizer.id,
                     cues.clone(),
@@ -209,6 +210,7 @@ pub(crate) fn register_rulepack_recognizers(
                     convert_name_shape(&name_shape),
                     convert_cue_position(&cue_position),
                     source_short_label,
+                    min_components,
                     recognizer.scoring.base,
                     recognizer.scoring.priority,
                 ));
@@ -244,6 +246,14 @@ pub(crate) fn derive_source_short_label(recognizer_id: &str) -> String {
         .next()
         .unwrap_or(recognizer_id)
         .to_string()
+}
+
+fn anchored_match_min_components(recognizer_id: &str) -> usize {
+    if recognizer_id == "name.forward_marker" {
+        1
+    } else {
+        2
+    }
 }
 
 fn convert_boundary(boundary: &str) -> gaze_recognizers::AnchoredBoundary {

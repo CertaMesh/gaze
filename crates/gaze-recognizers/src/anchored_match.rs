@@ -50,6 +50,7 @@ impl AnchoredMatchRecognizer {
         name_shape: NameShape,
         cue_position: CuePosition,
         source_short_label: String,
+        min_components: usize,
         score: f32,
         priority: i32,
     ) -> Self {
@@ -58,11 +59,6 @@ impl AnchoredMatchRecognizer {
             .filter(|cue| !cue.trim().is_empty())
             .collect::<Vec<_>>();
         cues.sort_by_key(|cue| std::cmp::Reverse(cue.chars().count()));
-        let min_components = if source_short_label == "forward_marker" {
-            1
-        } else {
-            2
-        };
         Self {
             id,
             cues,
@@ -463,10 +459,47 @@ mod tests {
             NameShape::PersonName,
             CuePosition::Before,
             "from".to_string(),
+            2,
             0.9,
             10,
         );
         assert!(short.detect("from Alice Example.", &ctx()).is_empty());
+    }
+
+    #[test]
+    fn min_components_is_explicit_not_source_label_derived() {
+        let one_component_non_forward = AnchoredMatchRecognizer::new(
+            "test.one_component".to_string(),
+            vec!["from".to_string()],
+            AnchoredBoundary::Punctuation,
+            64,
+            NameShape::PersonName,
+            CuePosition::Before,
+            "agent_recipient".to_string(),
+            1,
+            0.9,
+            10,
+        );
+        assert_eq!(
+            one_component_non_forward.detect("from Alice:", &ctx())[0].span,
+            5..10
+        );
+
+        let two_component_forward = AnchoredMatchRecognizer::new(
+            "test.two_component".to_string(),
+            vec!["from".to_string()],
+            AnchoredBoundary::Punctuation,
+            64,
+            NameShape::PersonName,
+            CuePosition::Before,
+            "forward_marker".to_string(),
+            2,
+            0.9,
+            10,
+        );
+        assert!(two_component_forward
+            .detect("from Alice:", &ctx())
+            .is_empty());
     }
 
     #[test]
@@ -547,6 +580,7 @@ mod tests {
             NameShape::PersonName,
             cue_position,
             source_short_label.to_string(),
+            2,
             0.91,
             60,
         )
