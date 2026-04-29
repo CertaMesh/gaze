@@ -1,0 +1,19 @@
+[ner]
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
+locale = "de"
+threshold = 0.3
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "location"
+action = "generalize"
+
+[[rule]]
+kind = "class"
+class = "organization"
+action = "preserve"
