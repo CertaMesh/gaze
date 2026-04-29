@@ -564,6 +564,23 @@ pub struct RedactionEntry {
     pub session_id: Option<String>,
 }
 
+/// Closed error set for redaction log sinks.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum RedactionLogError {
+    /// SQLite-backed redaction log sink failed.
+    #[error("sqlite redaction log error: {0}")]
+    Sqlite(String),
+    /// Non-SQLite redaction log sink failed.
+    #[error("backend redaction log error: {0}")]
+    Backend(String),
+}
+
+/// Sink trait for metadata-only redaction log entries.
+pub trait RedactionLogger: Send + Sync {
+    /// Records a metadata-only redaction entry.
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError>;
+}
+
 /// Locale tag recognized by policy and recognizers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum LocaleTag {
@@ -971,6 +988,57 @@ mod dictionary_tests {
             err,
             DictionaryLoadError::UnicodeInsensitiveUnsupported { name } if name == "songs"
         ));
+    }
+}
+
+#[cfg(test)]
+mod redaction_logger_tests {
+    use super::*;
+
+    struct CapturingLogger;
+
+    impl RedactionLogger for CapturingLogger {
+        fn log(&self, _entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+            Ok(())
+        }
+    }
+
+    fn assert_send_sync<T: Send + Sync + ?Sized>() {}
+
+    #[test]
+    fn redaction_log_error_display_is_stable() {
+        assert_eq!(
+            RedactionLogError::Sqlite("write failed".to_string()).to_string(),
+            "sqlite redaction log error: write failed"
+        );
+        assert_eq!(
+            RedactionLogError::Backend("sink failed".to_string()).to_string(),
+            "backend redaction log error: sink failed"
+        );
+    }
+
+    #[test]
+    fn redaction_logger_trait_object_is_send_sync() {
+        assert_send_sync::<dyn RedactionLogger>();
+    }
+
+    #[test]
+    fn local_logger_can_implement_redaction_logger() {
+        let logger = CapturingLogger;
+        let entry = RedactionEntry {
+            source: "unit-test".to_string(),
+            class: PiiClass::Email,
+            action: Action::Tokenize,
+            field_name: None,
+            document_kind: DocumentKind::Text,
+            conflict_loser: false,
+            decided_by: ConflictTier::None,
+            created_at: 0,
+            session_id: None,
+        };
+
+        let trait_object: &dyn RedactionLogger = &logger;
+        trait_object.log(&entry).expect("log entry");
     }
 }
 
