@@ -131,6 +131,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 .map_err(|_| CliError::PolicyConfig)?
         }
     };
+    let pipeline = maybe_register_safety_net(pipeline, &options)?;
 
     let session = match effective_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
@@ -145,15 +146,28 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         Some(context) => &context.fields,
         None => empty_fields(),
     };
-    let clean_doc = pipeline
-        .redact_with_detect_context(
+    let clean_doc = if options.safety_net.is_some() {
+        let (doc, _manifest, _report) = pipeline
+            .clean_with_safety_net_detect_context(
+                &session,
+                RawDocument::Text(raw),
+                locale_chain.as_slice(),
+                &dictionaries,
+                detect_fields,
+            )
+            .map_err(map_safety_net_pipeline_error)?;
+        doc
+    } else {
+        pipeline
+            .redact_with_detect_context(
             &session,
             RawDocument::Text(raw),
             locale_chain.as_slice(),
             &dictionaries,
             detect_fields,
         )
-        .map_err(|_| CliError::Pipeline)?;
+            .map_err(|_| CliError::Pipeline)?
+    };
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
@@ -183,6 +197,90 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn maybe_register_safety_net(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError>
+{
+    use gaze_recognizers::safety_net::openai_filter::{
+        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
+    };
+
+    let Some(kind) = options.safety_net else {
+        validate_no_openai_filter_options(options)?;
+        return Ok(pipeline);
+    };
+    match kind {
+        SafetyNetKind::OpenaiFilter => {
+            let command = options.openai_filter_command.ok_or_else(|| {
+                CliError::SafetyNetConfigDetail(
+                    "--openai-filter-command is required for --safety-net=openai-filter"
+                        .to_string(),
+                )
+            })?;
+            let checkpoint = options.openai_filter_checkpoint.ok_or_else(|| {
+                CliError::SafetyNetConfigDetail(
+                    "--openai-filter-checkpoint is required for --safety-net=openai-filter"
+                        .to_string(),
+                )
+            })?;
+            let mut config = SubprocessOpenAiFilterConfig::new(command)
+                .with_checkpoint_path(checkpoint)
+                .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
+                .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            if let Some(operating_point) = options.openai_filter_operating_point {
+                let value = operating_point.as_opf_value();
+                config = config
+                    .with_args([
+                        "--format",
+                        "json",
+                        "--output-mode",
+                        "typed",
+                        "--operating-point",
+                        value,
+                    ])
+                    .with_decoding_param("operating_point", value);
+            }
+            Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
+        }
+    }
+}
+
+#[cfg(not(feature = "safety-net-openai"))]
+fn maybe_register_safety_net(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    if options.safety_net.is_some() {
+        return Err(CliError::SafetyNetConfigDetail(
+            "safety net requested but gaze-cli was not compiled with feature safety-net-openai"
+                .to_string(),
+        ));
+    }
+    validate_no_openai_filter_options(options)?;
+    Ok(pipeline)
+}
+
+fn validate_no_openai_filter_options(options: &CleanOptions<'_>) -> std::result::Result<(), CliError> {
+    if options.openai_filter_command.is_some()
+        || options.openai_filter_checkpoint.is_some()
+        || options.openai_filter_operating_point.is_some()
+    {
+        return Err(CliError::SafetyNetConfigDetail(
+            "openai-filter options require --safety-net=openai-filter".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
+    match err {
+        gaze::Error::SafetyNet(_) => CliError::Pipeline,
+        _ => CliError::Pipeline,
+    }
 }
 
 fn clean_overrides_from_options(

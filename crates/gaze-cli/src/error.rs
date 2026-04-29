@@ -12,6 +12,7 @@ pub(crate) enum CliError {
     InvalidEncoding,
     PolicyConfig,
     PolicyConfigDetail(String),
+    SafetyNetConfigDetail(String),
     AuditPurgeIso8601 { input: String },
     UnknownToken { token: String },
     InvalidSignature,
@@ -27,6 +28,7 @@ impl CliError {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
             Self::PolicyConfig | Self::PolicyConfigDetail(_) | Self::AuditPurgeIso8601 { .. } => 2,
+            Self::SafetyNetConfigDetail(_) => 3,
             Self::UnknownToken { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
@@ -43,6 +45,7 @@ impl CliError {
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
+            Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
             Self::InvalidSignature => "InvalidSignature",
@@ -56,7 +59,7 @@ impl CliError {
 
     pub(crate) fn emit_stderr(&self) {
         match self {
-            Self::PolicyConfigDetail(detail) => {
+            Self::PolicyConfigDetail(detail) | Self::SafetyNetConfigDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 eprintln!(

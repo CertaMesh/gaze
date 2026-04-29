@@ -69,6 +69,14 @@ impl Pipeline {
         self
     }
 
+    pub fn with_safety_net<N>(mut self, safety_net: N) -> Pipeline
+    where
+        N: SafetyNet + 'static,
+    {
+        self.safety_nets.push(Arc::new(safety_net));
+        self
+    }
+
     /// Redacts using the default `[Global]` locale chain.
     ///
     /// Prefer `redact_with_context` when policy, CLI, or rulepack locale
