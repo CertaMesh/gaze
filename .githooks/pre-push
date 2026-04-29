@@ -20,6 +20,81 @@ if [[ "${SKIP_HOOK:-0}" == "1" ]]; then
   exit 0
 fi
 
+# --- docs-only fast-path -----------------------------------------------------
+# Skip cargo/xtask gates when every changed file in this push matches a
+# documentation/text allowlist. Saves 5-15 min on doc-only PRs (positioning
+# notes, README tweaks, .claude/ skill updates, CHANGELOG, etc.).
+#
+# Allowlist is conservative: any unrecognized path triggers the full gate.
+# Override with FORCE_FULL_GATE=1 git push to run gates anyway.
+#
+# Bypass entirely with SKIP_HOOK=1 (handled above).
+
+zero="0000000000000000000000000000000000000000"
+push_has_refs=0
+changed_files=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  push_has_refs=1
+  # Branch deletion — nothing to validate.
+  if [[ "$local_sha" == "$zero" ]]; then
+    continue
+  fi
+  if [[ "$remote_sha" == "$zero" ]]; then
+    # New branch on remote — diff against merge-base with origin/main, or fall
+    # back to the new commits' file list if no common base exists.
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || echo "")
+    if [[ -n "$base" ]]; then
+      range_files=$(git diff --name-only "$base" "$local_sha")
+    else
+      range_files=$(git diff-tree --no-commit-id --name-only -r "$local_sha")
+    fi
+  else
+    range_files=$(git diff --name-only "$remote_sha" "$local_sha")
+  fi
+  if [[ -n "$range_files" ]]; then
+    changed_files+="${range_files}"$'\n'
+  fi
+done
+
+if [[ "$push_has_refs" == "1" && "${FORCE_FULL_GATE:-0}" != "1" && -n "$changed_files" ]]; then
+  is_docs_only=1
+  non_doc_sample=""
+  while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    case "$f" in
+      # Plain documentation / text formats.
+      *.md|*.txt|*.rst|*.adoc) ;;
+      # Doc-embedded images.
+      *.png|*.jpg|*.jpeg|*.gif|*.svg|*.webp|*.ico) ;;
+      # Top-level licence / governance files.
+      LICENSE|LICENSE-*|COPYING|NOTICE|AUTHORS|CODEOWNERS) ;;
+      # Documentation tree (recursive — bash case * matches slashes).
+      docs/*) ;;
+      # Claude / AI tooling metadata (skills, rules, settings).
+      .claude/*|.ai/*) ;;
+      # Top-level project docs that humans treat as text-only.
+      AGENTS.md|CLAUDE.md|CHANGELOG.md|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|GOVERNANCE.md) ;;
+      # GitHub issue/PR templates and metadata that don't affect builds.
+      .github/ISSUE_TEMPLATE/*|.github/PULL_REQUEST_TEMPLATE.md|.github/FUNDING.yml) ;;
+      *)
+        is_docs_only=0
+        non_doc_sample="$f"
+        break
+        ;;
+    esac
+  done <<< "$changed_files"
+
+  if [[ "$is_docs_only" == "1" ]]; then
+    echo "pre-push gate: docs-only push detected — skipping cargo/xtask gates."
+    echo "  Override with FORCE_FULL_GATE=1 git push to run gates anyway."
+    exit 0
+  else
+    echo "pre-push gate: code change detected (e.g. $non_doc_sample) — running full gate."
+  fi
+fi
+# --- end docs-only fast-path -------------------------------------------------
+
 run() {
   local label="$1"; shift
   echo "pre-push gate: $label"
