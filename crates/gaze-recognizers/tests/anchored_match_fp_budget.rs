@@ -73,7 +73,7 @@ fn anchored_recognizers() -> Vec<AnchoredMatchRecognizer> {
             64,
             NameShape::PersonName,
             CuePosition::Before,
-            "auto_footer".to_string(),
+            "footer".to_string(),
             2,
             0.88,
             110,

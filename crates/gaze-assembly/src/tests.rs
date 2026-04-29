@@ -982,7 +982,7 @@ fn source_short_label_derivation_handles_builtin_and_adopter_shapes() {
         derive_source_short_label("name.forward_marker"),
         "forward_marker"
     );
-    assert_eq!(derive_source_short_label("name.auto_footer"), "auto_footer");
+    assert_eq!(derive_source_short_label("name.auto_footer"), "footer");
     assert_eq!(
         derive_source_short_label("name.x.team_handoff"),
         "team_handoff"

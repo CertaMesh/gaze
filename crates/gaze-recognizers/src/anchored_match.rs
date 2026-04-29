@@ -541,11 +541,11 @@ mod tests {
                 "structural.agent_recipient",
             ),
             (
-                "auto_footer",
+                "footer",
                 "Sent by",
                 AnchoredBoundary::Whitespace,
                 "Sent by Alice Example via Mailgun",
-                "structural.auto_footer",
+                "structural.footer",
             ),
         ] {
             let recognizer = test_recognizer(

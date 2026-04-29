@@ -239,6 +239,9 @@ fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
 }
 
 pub(crate) fn derive_source_short_label(recognizer_id: &str) -> String {
+    if recognizer_id == "name.auto_footer" {
+        return "footer".to_string();
+    }
     recognizer_id
         .strip_prefix("name.")
         .unwrap_or(recognizer_id)
