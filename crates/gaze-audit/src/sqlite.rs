@@ -1,11 +1,15 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use gaze_types::{Action, ConflictTier, DocumentKind, PiiClass, RedactionEntry};
+use gaze_types::{
+    Action, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass, RedactionEntry,
+};
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 use thiserror::Error;
 
-use crate::query::{build_audit_query_sql, AuditFilter, AuditLogRow};
+use crate::query::{
+    build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
+};
 
 pub type Result<T> = std::result::Result<T, AuditError>;
 
@@ -17,6 +21,59 @@ pub enum AuditError {
 
 pub struct SqliteLogger {
     conn: Mutex<Connection>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LeakSuspectLogEntry {
+    pub safety_net_id: String,
+    pub raw_label: String,
+    pub mapped_class: String,
+    pub leak_kind: String,
+    pub span_len: i64,
+    pub document_kind: String,
+    pub field_path: Option<String>,
+    pub score: Option<f64>,
+    pub created_at: i64,
+    pub session_id: Option<String>,
+    pub pipeline_class: Option<String>,
+    pub safety_net_replay_hash: Option<String>,
+    pub backend_id: Option<String>,
+    pub backend_version: Option<String>,
+    pub decoding_params_hash: Option<String>,
+    pub telemetry_kind: Option<String>,
+}
+
+impl LeakSuspectLogEntry {
+    pub fn from_suspect(
+        suspect: &LeakSuspect,
+        document_kind: DocumentKind,
+        created_at: i64,
+        session_id: Option<String>,
+        safety_net_replay_hash: Option<String>,
+    ) -> Self {
+        Self {
+            safety_net_id: suspect.safety_net_id.clone(),
+            raw_label: suspect.raw_label.clone(),
+            mapped_class: pii_class_to_db(&suspect.class),
+            leak_kind: leak_kind_to_db(&suspect.kind).to_string(),
+            span_len: suspect.span.end.saturating_sub(suspect.span.start) as i64,
+            document_kind: document_kind_to_db(&document_kind).to_string(),
+            field_path: suspect.field_path.clone(),
+            score: suspect.score.map(f64::from),
+            created_at,
+            session_id,
+            pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(pii_class_to_db),
+            safety_net_replay_hash,
+            backend_id: None,
+            backend_version: None,
+            decoding_params_hash: None,
+            telemetry_kind: None,
+        }
+    }
+}
+
+pub trait LeakSuspectLogger: Send + Sync {
+    fn log_leak_suspect(&self, entry: &LeakSuspectLogEntry) -> Result<()>;
 }
 
 impl SqliteLogger {
@@ -186,6 +243,73 @@ impl SqliteLogger {
         Ok(entries)
     }
 
+    pub fn query_safety_net(path: &Path, filter: &AuditFilter) -> Result<Vec<LeakSuspectRow>> {
+        let conn = open_audit_query_connection(path)?;
+        let (sql, values) = build_safety_net_query_sql(filter);
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        let rows = stmt
+            .query_map(params_from_iter(values.iter()), |row| {
+                Ok(LeakSuspectRow {
+                    id: row.get(0)?,
+                    safety_net_id: row.get(1)?,
+                    raw_label: row.get(2)?,
+                    mapped_class: row.get(3)?,
+                    leak_kind: row.get(4)?,
+                    span_len: row.get(5)?,
+                    document_kind: row.get(6)?,
+                    field_path: row.get(7)?,
+                    score: row.get(8)?,
+                    created_at: row.get(9)?,
+                    session_id: row.get(10)?,
+                    pipeline_class: row.get(11)?,
+                    safety_net_replay_hash: row.get(12)?,
+                    backend_id: row.get(13)?,
+                    backend_version: row.get(14)?,
+                    decoding_params_hash: row.get(15)?,
+                    telemetry_kind: row.get(16)?,
+                })
+            })
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row.map_err(|err| AuditError::Sqlite(err.to_string()))?);
+        }
+        Ok(entries)
+    }
+
+    pub fn log_safety_net(&self, entry: &LeakSuspectLogEntry) -> Result<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
+        conn.execute(
+            "INSERT INTO safety_net_log (safety_net_id, raw_label, mapped_class, leak_kind, span_len, document_kind, field_path, score, created_at, session_id, pipeline_class, safety_net_replay_hash, backend_id, backend_version, decoding_params_hash, telemetry_kind) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            params![
+                entry.safety_net_id,
+                entry.raw_label,
+                entry.mapped_class,
+                entry.leak_kind,
+                entry.span_len,
+                entry.document_kind,
+                entry.field_path,
+                entry.score,
+                entry.created_at,
+                entry.session_id,
+                entry.pipeline_class,
+                entry.safety_net_replay_hash,
+                entry.backend_id,
+                entry.backend_version,
+                entry.decoding_params_hash,
+                entry.telemetry_kind,
+            ],
+        )
+        .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        Ok(())
+    }
+
     pub fn count_before(&self, before_epoch_ms: i64) -> Result<usize> {
         let conn = self
             .conn
@@ -216,6 +340,12 @@ impl SqliteLogger {
     }
 }
 
+impl LeakSuspectLogger for SqliteLogger {
+    fn log_leak_suspect(&self, entry: &LeakSuspectLogEntry) -> Result<()> {
+        self.log_safety_net(entry)
+    }
+}
+
 fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
     match tier {
         ConflictTier::None => "none",
@@ -226,6 +356,21 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::Validator => "validator",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
+    }
+}
+
+fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
+    match kind {
+        LeakKind::Uncovered => "uncovered",
+        LeakKind::PartialBleed { .. } => "partial_bleed",
+        LeakKind::ClassMismatch { .. } => "class_mismatch",
+    }
+}
+
+fn leak_kind_pipeline_class(kind: &LeakKind) -> Option<&PiiClass> {
+    match kind {
+        LeakKind::ClassMismatch { pipeline_class, .. } => Some(pipeline_class),
+        LeakKind::Uncovered | LeakKind::PartialBleed { .. } => None,
     }
 }
 
