@@ -169,6 +169,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             .map_err(|_| CliError::Pipeline)?;
         (doc, LeakReport::default())
     };
+    enforce_safety_net_mode(&leak_report, options.safety_net_mode)?;
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
@@ -591,6 +592,31 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
         DocumentKind::Structured => "structured",
         DocumentKind::Text => "text",
     }
+}
+
+fn enforce_safety_net_mode(
+    report: &LeakReport,
+    mode: SafetyNetMode,
+) -> std::result::Result<(), CliError> {
+    let suspected_leaks = report.stats.uncovered_count + report.stats.partial_bleed_count;
+    if suspected_leaks > 0 {
+        match mode {
+            SafetyNetMode::Strict => {
+                return Err(CliError::SafetyNetFailure {
+                    variant: "SuspectedLeak",
+                });
+            }
+            SafetyNetMode::Tolerant => emit_safety_net_warning("SuspectedLeak", suspected_leaks),
+        }
+    }
+    if report.stats.class_mismatch_count > 0 {
+        emit_safety_net_warning("ClassMismatch", report.stats.class_mismatch_count);
+    }
+    Ok(())
+}
+
+fn emit_safety_net_warning(variant: &'static str, count: usize) {
+    eprintln!(r#"{{"warning":"SafetyNet","variant":"{variant}","count":{count}}}"#);
 }
 
 #[cfg(test)]
