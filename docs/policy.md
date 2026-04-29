@@ -650,7 +650,6 @@ action = "preserve"
 model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
 locale = "de"
 threshold = 0.3
-threshold = 0.3
 ```
 
 | Field       | Type   | Required | Notes                                                          |
