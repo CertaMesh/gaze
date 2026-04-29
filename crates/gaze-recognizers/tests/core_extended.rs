@@ -246,6 +246,38 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         vec!["94103-1234".to_string()]
     );
 
+    // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists.
+    // +49 1555 0112233-style literals follow the documented DE fixture shape;
+    // 0171 0000000 covers the separator regression shape without live-looking data.
+    for (input, expected) in [
+        ("Phone +49 1555 0112233", "+49 1555 0112233"),
+        ("Phone +49-1555-0112233", "+49-1555-0112233"),
+        ("Phone +49 1555/0112233", "+49 1555/0112233"),
+        ("Phone +49.1555.0112233", "+49.1555.0112233"),
+        ("Phone +4915550112233", "+4915550112233"),
+        ("Phone 01555 0112233", "01555 0112233"),
+        ("Phone 01555-0112233", "01555-0112233"),
+        ("Phone 01555/0112233", "01555/0112233"),
+        ("Phone 01555.0112233", "01555.0112233"),
+        ("Phone 0171-0000000", "0171-0000000"),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+    for input in [
+        "Build finished at 01:55:50.112233",
+        "Order 0171-0000000X",
+        "Customer_4915550112233",
+    ] {
+        assert!(
+            detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe).is_empty(),
+            "phone.national.de must not fire for {input}"
+        );
+    }
+
     for input in [
         "1.2.3.4567",
         "1.2.3",
