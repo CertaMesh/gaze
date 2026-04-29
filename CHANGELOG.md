@@ -19,6 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.1] — 2026-04-30
+
+### Added
+
+- `gaze clean --openai-filter-device {auto|cpu|cuda|mps}` selects the
+  Pass-3 OpenAI SafetyNet subprocess device. The default `auto` preserves
+  v0.6.0 behavior (closes #362).
+
+### Changed
+
+- `phone.national.de` now matches German national phone numbers across
+  hyphen, space, slash, and dot separator variants, including `0171-...`,
+  `0171 ...`, `0171/...`, and `+49-171-...` shapes (closes #316, refs #92).
+
+### Fixed
+
+- `xtask cargo-metadata-audit-isolation` now fails loud on unknown feature
+  names instead of silently ignoring them, with an explicit cross-platform
+  allowlist for known optional cargo metadata features (closes #340, closes
+  #350).
+- Default-feature CLI builds no longer warn on dead OpenAI device-selection
+  helper code when `safety-net-openai` is disabled.
+
 ## [0.6.0] — 2026-04-29
 
 ### Added
