@@ -3,7 +3,7 @@
 use std::fs;
 use std::io;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
@@ -143,6 +143,7 @@ fn stdin_blocked_child_times_out_and_kills_subprocess() {
         "opf-stdin-block",
         &format!(
             r#"#!/bin/sh
+IFS= read -r _ || true
 printf '%s\n' "$$" > '{}'
 exec sleep 30
 "#,
@@ -151,10 +152,10 @@ exec sleep 30
     )
     .unwrap();
     let backend = SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(1)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_millis(2500)),
     )
     .unwrap();
-    let clean = "x".repeat(128 * 1024);
+    let clean = format!("x\n{}", "x".repeat(128 * 1024));
 
     let started = Instant::now();
     let error = backend.infer(&clean).unwrap_err();
@@ -167,8 +168,9 @@ exec sleep 30
         "blocked stdin timeout took {elapsed:?}"
     );
 
-    let pid = fs::read_to_string(pidfile).unwrap();
-    assert!(!process_is_present(pid.trim()));
+    let child_pid = wait_for_pidfile(&pidfile, Duration::from_millis(500))
+        .expect("child failed to create pidfile within budget - child startup broken");
+    assert!(!process_is_present(&child_pid.to_string()));
 }
 
 #[test]
@@ -293,6 +295,23 @@ fn script(name: &str, body: &str) -> io::Result<PathBuf> {
     fs::write(&path, body)?;
     fs::set_permissions(&path, fs::Permissions::from_mode(0o700))?;
     Ok(path)
+}
+
+fn wait_for_pidfile(path: &Path, deadline: Duration) -> io::Result<u32> {
+    let started = Instant::now();
+    while started.elapsed() < deadline {
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(pid) = content.trim().parse::<u32>() {
+                return Ok(pid);
+            }
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        format!("pidfile {path:?} not created within {deadline:?}"),
+    ))
 }
 
 fn process_is_present(pid: &str) -> bool {
