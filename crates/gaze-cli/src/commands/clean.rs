@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use super::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
+use super::{OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::error::CliError;
 use crate::pipeline::{run_clean, CleanOptions};
 
@@ -22,6 +22,7 @@ pub(crate) struct Args {
     pub(crate) openai_filter_command: Option<PathBuf>,
     pub(crate) openai_filter_checkpoint: Option<PathBuf>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    pub(crate) openai_filter_device: OpenAiFilterDevice,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -46,6 +47,7 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         openai_filter_command: args.openai_filter_command.as_deref(),
         openai_filter_checkpoint: args.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter_operating_point,
+        openai_filter_device: args.openai_filter_device,
         safety_net_timeout_ms: args.safety_net_timeout_ms,
         safety_net_input_limit_bytes: args.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_mode,

@@ -299,7 +299,15 @@ fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
         }
         // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
         // literals chosen for parser-valid + non-routable fixtures.
-        Region::De => digits == "493000000000" || digits == "4915100000000",
+        Region::De => matches!(
+            digits.as_str(),
+            "493000000000"
+                | "4915100000000"
+                | "4915550112233"
+                | "015550112233"
+                | "491710000000"
+                | "01710000000"
+        ),
     }
 }
 

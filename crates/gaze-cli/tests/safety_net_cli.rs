@@ -31,6 +31,30 @@ printf '%s\n' '{}'
     (dir, path)
 }
 
+fn write_arg_logging_mock_opf(body: &str, arg_log: &Path) -> (TempDir, PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("mock-opf");
+    fs::write(
+        &path,
+        format!(
+            r#"#!/bin/sh
+printf '%s\n' "$@" > '{}'
+cat >/dev/null
+printf '%s\n' '{}'
+"#,
+            arg_log.display(),
+            body
+        ),
+    )
+    .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    (dir, path)
+}
+
 fn checkpoint_dir() -> TempDir {
     let dir = tempdir().unwrap();
     #[cfg(unix)]
@@ -60,6 +84,49 @@ fn safety_args(command: &Path, checkpoint: &Path) -> Vec<String> {
         "--openai-filter-checkpoint".to_string(),
         checkpoint.display().to_string(),
     ]
+}
+
+#[test]
+fn explicit_openai_filter_device_reaches_opf_argv() {
+    let arg_dir = tempdir().unwrap();
+    let arg_log = arg_dir.path().join("opf.args");
+    let (_opf_dir, opf) = write_arg_logging_mock_opf("[]", &arg_log);
+    let checkpoint = checkpoint_dir();
+    let mut args = safety_args(&opf, checkpoint.path());
+    args.extend(["--openai-filter-device".to_string(), "cuda".to_string()]);
+
+    let out = clean(&args, "Plain text");
+
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let argv = fs::read_to_string(arg_log).unwrap();
+    assert!(argv.lines().any(|arg| arg == "--device"));
+    assert!(argv.lines().any(|arg| arg == "cuda"));
+}
+
+#[test]
+fn auto_openai_filter_device_does_not_inject_opf_device_arg() {
+    let arg_dir = tempdir().unwrap();
+    let arg_log = arg_dir.path().join("opf.args");
+    let (_opf_dir, opf) = write_arg_logging_mock_opf("[]", &arg_log);
+    let checkpoint = checkpoint_dir();
+    let mut args = safety_args(&opf, checkpoint.path());
+    args.extend(["--openai-filter-device".to_string(), "auto".to_string()]);
+
+    let out = clean(&args, "Plain text");
+
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let argv = fs::read_to_string(arg_log).unwrap();
+    assert!(!argv.lines().any(|arg| arg == "--device"));
 }
 
 #[test]
