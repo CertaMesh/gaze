@@ -12,3 +12,11 @@
 //! This module treats those fields as private deserialization details and
 //! reduces output to byte offsets, labels, and scores before returning anything
 //! to the rest of Gaze.
+
+pub mod backend;
+pub mod class_map;
+
+pub use backend::{OpenAiFilterBackend, RawSpan};
+pub use class_map::{
+    map_openai_label, openai_label_to_safety_net_class, validate_openai_label,
+};
