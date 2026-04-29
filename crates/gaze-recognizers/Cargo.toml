@@ -11,6 +11,7 @@ description = "Built-in recognizers for Gaze"
 default = ["phone-parser"]
 phone-parser = ["dep:phonenumber"]
 safety-net = []
+safety-net-openai = ["safety-net"]
 test-support = ["safety-net"]
 
 [dependencies]
