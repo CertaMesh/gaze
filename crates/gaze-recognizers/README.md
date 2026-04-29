@@ -44,6 +44,7 @@ The public surface is re-exported from [`src/lib.rs`](src/lib.rs).
 |---------|--------------|
 | Regex | `RegexDetector`, `NormalizerKind`, `ValidatorKind` |
 | Dictionary | `DictionaryRecognizer` |
+| Anchored match | `AnchoredMatchRecognizer`, `AnchoredBoundary`, `NameShape`, `CuePosition` |
 | NER | `NerRecognizer`, `NerDetector`, `NerOptions`, `NerLoadError`, `NerBackendKind`, `LabelMap`, `VerifiedArtifacts` |
 | Rulepacks | `embedded(name)` |
 
@@ -79,6 +80,19 @@ Current validator and normalizer enums:
 matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
 while rejecting regex-passing but unassigned shapes such as `+99999999`. Audit notes live in
 [`docs/research/v0.4.4-phonenumber-audit.md`](../../docs/research/v0.4.4-phonenumber-audit.md).
+
+## Anchored match backend
+
+`AnchoredMatchRecognizer` is the v0.6 structural-context backend for
+cue-anchored person-name detection. Bundled `core` uses it for
+`name.forward_marker`, `name.agent_recipient`, and `name.auto_footer`; the
+`locale-de` and `locale-en` bundles provide the `forward_markers`,
+`agent_recipient_cues`, and `footer_cues` cue buckets.
+
+Use it when a name appears near deterministic prompt or email structure, not
+as a replacement for NER over general prose. Known limits and adopter migration
+notes live in
+[`docs/policy.md#known-limits---ner-and-prompt-shape`](../../docs/policy.md#known-limits---ner-and-prompt-shape).
 
 ## Dictionary backend
 
@@ -118,7 +132,7 @@ Loading failures are policy configuration failures in the CLI path.
 
 | Name | File | Purpose |
 |------|------|---------|
-| `core` | [`embedded/core.toml`](embedded/core.toml) | Global core recognizers, including email address and email-header name detection. |
+| `core` | [`embedded/core.toml`](embedded/core.toml) | Global core recognizers, including email address, email-header display-name detection, and v0.6 anchored structural Name detection. |
 | `core-extended` | [`embedded/core-extended.toml`](embedded/core-extended.toml) | Opt-in extension. Phase 1 (v0.4.2): shape-only E.164 phone numbers, IPv4/IPv6 addresses, `de-DE`/`en-US` postal codes. Phase 2 (v0.4.3): validator-backed IBAN (`iban.structural`, `iban_mod97` + `iban_canonical`) and credit card (`card.structural`, `luhn`). Phase 3 (v0.4.4): `e164_phone` parser-backed validator extends the existing `phone.structural` recognizer. Default `[[rule]]` entries ship in the rulepack so `--rulepack-bundled core,core-extended` tokenizes the new classes out of the box. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |

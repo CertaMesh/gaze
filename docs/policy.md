@@ -289,6 +289,63 @@ drop in v0.6.
 This is the same fixture the CLI integration suite uses
 (`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).
 
+## Known limits - NER and prompt shape
+
+NER is not a region parser. A model that catches names in natural prose can
+miss the same bytes in agent prompt preambles, email headers, forwarded-message
+blocks, and auto-generated footers because those regions do not look like the
+training prose the model learned. v0.6 keeps NER as a useful free-text layer,
+but adds a deterministic `anchored_match` recognizer kind for cue-anchored
+structural contexts that commonly appear in agent workflows.
+
+`anchored_match` has a closed primitive surface:
+
+- `boundary` controls what may follow the extracted span.
+- `name_shape` is currently `person_name`.
+- `cue_position` says whether the name appears before or after the cue.
+- `right_window_chars` bounds how far the recognizer may search after a cue.
+
+The cue text itself is intentionally data-driven. Bundled locale rulepacks
+define open cue buckets:
+
+- `forward_markers` for forwarded-message headers.
+- `agent_recipient_cues` for agent reply/draft preambles.
+- `footer_cues` for generated sender/footer lines.
+
+The default v0.6 posture is conservative: structural recognizers catch the
+documented GH#24 leak shapes while the open cue surface is held by the
+`p6_anchored_match_false_positive_budget_stays_within_limit` regression test.
+The v0.6 synthesis matrix explicitly leaves these classes out of scope:
+
+- Subject-line and `Re:` text such as `Re: Order 12345 - Status update from Alice Example`.
+- Unanchored scheduling prose such as `Schedule a call with Alice next Tuesday`.
+- Markdown code-block exclusion. `anchored_match` and email-header recognizers
+  still fire inside fenced code blocks in v0.6.
+- URL exclusion. Cue-like text inside URLs is not region-filtered in v0.6.
+- Additional `name_shape` variants beyond `person_name`.
+- Per-region NER thresholding. `[ner].threshold` is global to the NER
+  recognizer invocation, not separately tunable for email headers, prompt
+  preambles, footers, or body prose.
+
+If an integration wraps raw email content in markdown code fences only to
+preserve formatting, unwrap the content before passing it to the Gaze pipeline
+and re-wrap the clean output afterward. RegionHint-style envelope markers for
+`CodeBlock` and `Url` are deferred to v0.7.
+
+### v0.5.1 to v0.6 migration note
+
+Adopters using the bundled rulepacks should load `core` plus the relevant
+locale bundle. A German workflow that sets `[locale].active = ["de-DE"]` and
+loads `["core", "locale-de"]` gets cue-anchored detection for forwarded-message
+markers, agent-recipient preambles, and auto-footers without editing existing
+custom recognizers. Mixed German/English prompt templates can load
+`["core", "locale-de", "locale-en"]`.
+
+Per-tenant cue strings belong in policy data, not code. Ship a custom rulepack
+that adds entries to `forward_markers`, `agent_recipient_cues`, or
+`footer_cues`. Keep cue additions narrow and add local regression fixtures
+before broadening a bucket.
+
 ## Schema reference
 
 TOML tables use closed schemas unless explicitly documented otherwise — any key
