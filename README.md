@@ -57,7 +57,7 @@ Public `brew install piinuts/tap/gaze` documentation should wait until a public 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-x86_64-unknown-linux-gnu
+curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-x86_64-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
