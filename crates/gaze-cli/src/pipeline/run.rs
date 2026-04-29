@@ -17,8 +17,8 @@ use gaze::{
 };
 use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
-use crate::commands::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::clean_overrides::CleanOverrides;
+use crate::commands::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
@@ -160,12 +160,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     } else {
         let doc = pipeline
             .redact_with_detect_context(
-            &session,
-            RawDocument::Text(raw),
-            locale_chain.as_slice(),
-            &dictionaries,
-            detect_fields,
-        )
+                &session,
+                RawDocument::Text(raw),
+                locale_chain.as_slice(),
+                &dictionaries,
+                detect_fields,
+            )
             .map_err(|_| CliError::Pipeline)?;
         (doc, LeakReport::default())
     };
@@ -209,8 +209,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
 fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
-) -> std::result::Result<gaze::Pipeline, CliError>
-{
+) -> std::result::Result<gaze::Pipeline, CliError> {
     use gaze_recognizers::safety_net::openai_filter::{
         OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
     };
@@ -270,7 +269,9 @@ fn maybe_register_safety_net(
     Ok(pipeline)
 }
 
-fn validate_no_openai_filter_options(options: &CleanOptions<'_>) -> std::result::Result<(), CliError> {
+fn validate_no_openai_filter_options(
+    options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
     if options.openai_filter_command.is_some()
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
@@ -529,7 +530,11 @@ impl From<&LeakReport> for LeakReportResponse {
                 class_mismatch_count: report.stats.class_mismatch_count,
                 locale_skipped_count: report.stats.locale_skipped_count,
             },
-            suspects: report.suspects.iter().map(LeakSuspectResponse::from).collect(),
+            suspects: report
+                .suspects
+                .iter()
+                .map(LeakSuspectResponse::from)
+                .collect(),
             telemetry: report
                 .telemetry
                 .iter()

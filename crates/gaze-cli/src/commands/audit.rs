@@ -79,8 +79,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
 pub(crate) fn query_safety_net(args: SafetyNetArgs) -> std::result::Result<(), CliError> {
     let rows = read_safety_net_rows(&args)?;
     let mut stdout = io::stdout().lock();
-    writeln!(stdout, "{}", SAFETY_NET_RESTRICTED_COLUMNS.join("\t"))
-        .map_err(|_| CliError::Io)?;
+    writeln!(stdout, "{}", SAFETY_NET_RESTRICTED_COLUMNS.join("\t")).map_err(|_| CliError::Io)?;
     for row in rows {
         writeln!(
             stdout,
