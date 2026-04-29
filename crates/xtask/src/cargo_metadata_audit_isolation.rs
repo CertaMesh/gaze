@@ -5,6 +5,28 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 const AUDIT_PACKAGE: &str = "gaze-audit";
+const SAFETY_NET_BASE_FEATURES: &[(&str, &str)] =
+    &[("gaze", "safety-net"), ("gaze-recognizers", "safety-net")];
+const SAFETY_NET_OPENAI_SUBPROCESS_FEATURES: &[(&str, &str)] = &[
+    ("gaze", "safety-net"),
+    ("gaze-recognizers", "safety-net"),
+    ("gaze-recognizers", "safety-net-openai-subprocess"),
+];
+
+// Phase 0 of todo #65 scopes these bans to safety-net feature graphs only.
+// The default graph intentionally keeps the existing v0.5 NER dependency
+// shape untouched so the v0.6 audit-shim drop is not blocked by v0.6.1 gates.
+const SAFETY_NET_PROHIBITED_PACKAGES: &[&str] = &["reqwest", "hyper", "tokio", "ureq"];
+
+// Existing NER deps are not part of the Phase 0 safety-net ban. Keep this
+// exemption narrow and path-based: it allows the current `ort` downloader edge
+// without permitting future safety-net modules or shared value crates to add
+// their own network client dependency.
+const SAFETY_NET_LEGACY_NER_EXEMPTIONS: &[LegacyNerExemption] = &[LegacyNerExemption {
+    package: "ureq",
+    required_path_member: "ort",
+    reason: "legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only",
+}];
 
 // Package-level exceptions require an explicit source comment. `gaze-cli` is
 // audit-responsible because its audit command reads and purges audit metadata
@@ -15,35 +37,131 @@ pub fn run() -> Result<()> {
     let workspace = cargo_metadata(&["--no-deps"])?;
     let workspace_members = workspace_members_by_name(&workspace)?;
 
-    check_graph("default", &cargo_metadata(&[])?, &workspace_members, false)?;
-    check_graph(
-        "no-default-features",
-        &cargo_metadata(&["--no-default-features"])?,
-        &workspace_members,
-        false,
-    )?;
-    check_graph(
-        "gaze audit feature sanity",
-        &cargo_metadata(&["--no-default-features", "--features", "gaze/audit"])?,
-        &workspace_members,
-        true,
-    )?;
+    for graph in GRAPH_CATEGORIES {
+        let metadata = metadata_for_graph(graph, &workspace)?;
+        check_graph(graph.label, &metadata, &workspace_members, graph.policy)?;
+    }
 
     println!("cargo_metadata_audit_isolation: passed");
     Ok(())
+}
+
+const GRAPH_CATEGORIES: &[GraphCategory] = &[
+    GraphCategory {
+        label: "default",
+        base_args: &[],
+        planned_features: &[],
+        policy: GraphPolicy {
+            expect_gaze_audit_from_gaze: false,
+            safety_net_dep_bans: false,
+        },
+    },
+    GraphCategory {
+        label: "no-default-features",
+        base_args: &["--no-default-features"],
+        planned_features: &[],
+        policy: GraphPolicy {
+            expect_gaze_audit_from_gaze: false,
+            safety_net_dep_bans: false,
+        },
+    },
+    GraphCategory {
+        label: "gaze audit feature sanity",
+        base_args: &["--no-default-features", "--features", "gaze/audit"],
+        planned_features: &[],
+        policy: GraphPolicy {
+            expect_gaze_audit_from_gaze: true,
+            safety_net_dep_bans: false,
+        },
+    },
+    GraphCategory {
+        label: "safety-net-base",
+        base_args: &["--no-default-features"],
+        planned_features: SAFETY_NET_BASE_FEATURES,
+        policy: GraphPolicy {
+            expect_gaze_audit_from_gaze: false,
+            safety_net_dep_bans: true,
+        },
+    },
+    GraphCategory {
+        label: "safety-net-openai-subprocess",
+        base_args: &["--no-default-features"],
+        planned_features: SAFETY_NET_OPENAI_SUBPROCESS_FEATURES,
+        policy: GraphPolicy {
+            expect_gaze_audit_from_gaze: false,
+            safety_net_dep_bans: true,
+        },
+    },
+];
+
+#[derive(Debug, Clone, Copy)]
+struct GraphCategory {
+    label: &'static str,
+    base_args: &'static [&'static str],
+    planned_features: &'static [(&'static str, &'static str)],
+    policy: GraphPolicy,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GraphPolicy {
+    expect_gaze_audit_from_gaze: bool,
+    safety_net_dep_bans: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct LegacyNerExemption {
+    package: &'static str,
+    required_path_member: &'static str,
+    reason: &'static str,
+}
+
+fn metadata_for_graph(graph: &GraphCategory, workspace: &Metadata) -> Result<Metadata> {
+    let mut args = graph
+        .base_args
+        .iter()
+        .map(|arg| (*arg).to_string())
+        .collect::<Vec<_>>();
+    let enabled_features = available_planned_features(workspace, graph.planned_features)?;
+    if !enabled_features.is_empty() {
+        args.push("--features".to_string());
+        args.push(enabled_features.join(","));
+    }
+    let arg_refs = args.iter().map(String::as_str).collect::<Vec<_>>();
+    cargo_metadata(&arg_refs)
+}
+
+fn available_planned_features(
+    workspace: &Metadata,
+    planned_features: &[(&str, &str)],
+) -> Result<Vec<String>> {
+    let packages = workspace
+        .packages
+        .iter()
+        .map(|package| (package.name.as_str(), package))
+        .collect::<HashMap<_, _>>();
+    let mut features = Vec::new();
+    for (package_name, feature_name) in planned_features {
+        let package = packages
+            .get(package_name)
+            .with_context(|| format!("workspace metadata did not include {package_name}"))?;
+        if package.features.contains_key(*feature_name) {
+            features.push(format!("{package_name}/{feature_name}"));
+        }
+    }
+    Ok(features)
 }
 
 fn check_graph(
     label: &str,
     metadata: &Metadata,
     workspace_members: &HashMap<String, String>,
-    expect_gaze_audit_from_gaze: bool,
+    policy: GraphPolicy,
 ) -> Result<()> {
     let audit_id = package_id_by_name(metadata, AUDIT_PACKAGE)
         .with_context(|| format!("{label}: failed to find {AUDIT_PACKAGE} package"))?;
     let graph = normal_dependency_graph(metadata);
 
-    if expect_gaze_audit_from_gaze {
+    if policy.expect_gaze_audit_from_gaze {
         let gaze_id = workspace_members
             .get("gaze")
             .context("workspace metadata did not include gaze")?;
@@ -69,8 +187,60 @@ fn check_graph(
         }
     }
 
+    if policy.safety_net_dep_bans {
+        check_safety_net_prohibited_packages(label, metadata, workspace_members, &graph)?;
+    }
+
     println!("cargo_metadata_audit_isolation: {label}: passed");
     Ok(())
+}
+
+fn check_safety_net_prohibited_packages(
+    label: &str,
+    metadata: &Metadata,
+    workspace_members: &HashMap<String, String>,
+    graph: &HashMap<String, Vec<String>>,
+) -> Result<()> {
+    for package in SAFETY_NET_PROHIBITED_PACKAGES {
+        let Some(package_id) = package_id_by_name(metadata, package) else {
+            continue;
+        };
+        for (workspace_name, workspace_id) in workspace_members {
+            let Some(path) = path_to_package(workspace_id, &package_id, graph) else {
+                continue;
+            };
+            if let Some(exemption) = matching_legacy_ner_exemption(*package, &path, metadata) {
+                println!(
+                    "cargo_metadata_audit_isolation: {label}: allowed {} for {workspace_name}: {} ({})",
+                    package,
+                    format_path(&path, metadata),
+                    exemption.reason
+                );
+                continue;
+            }
+            bail!(
+                "{label}: safety-net graph resolves prohibited package {package} from {workspace_name}: {}",
+                format_path(&path, metadata)
+            );
+        }
+    }
+    Ok(())
+}
+
+fn matching_legacy_ner_exemption<'a>(
+    package: &str,
+    path: &[String],
+    metadata: &Metadata,
+) -> Option<&'a LegacyNerExemption> {
+    let names = package_names(metadata);
+    SAFETY_NET_LEGACY_NER_EXEMPTIONS.iter().find(|exemption| {
+        exemption.package == package
+            && path.iter().any(|id| {
+                names
+                    .get(id)
+                    .is_some_and(|name| name == exemption.required_path_member)
+            })
+    })
 }
 
 fn cargo_metadata(args: &[&str]) -> Result<Metadata> {
@@ -177,6 +347,8 @@ struct Metadata {
 struct Package {
     id: String,
     name: String,
+    #[serde(default)]
+    features: HashMap<String, Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
