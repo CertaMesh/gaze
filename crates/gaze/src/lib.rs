@@ -24,10 +24,6 @@ pub use dictionaries::{
     dictionary_bundle_from_context, DictionaryBundle, DictionaryBundleExt, DictionaryEntry,
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
-#[cfg(feature = "audit")]
-pub use gaze_audit::{
-    build_audit_query_sql, AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
-};
 pub use gaze_types::{
     EmittedTokenSpan, LeakKind, LeakKindTag, LeakReport, LeakReportStats, LeakReportTelemetry,
     LeakSuspect, Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet,
