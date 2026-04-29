@@ -30,8 +30,8 @@ pub use gaze_audit::{
 };
 pub use gaze_types::{
     EmittedTokenSpan, LeakKind, LeakKindTag, LeakReport, LeakReportStats, LeakReportTelemetry,
-    LeakSuspect, Manifest, OpenAiPrivateLabel, SafetyNet, SafetyNetContext, SafetyNetError,
-    SafetyNetPiiClass,
+    LeakSuspect, Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet,
+    SafetyNetContext, SafetyNetError, SafetyNetPiiClass,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
@@ -39,7 +39,7 @@ pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,
     RulepackPolicy, SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,
 };
-pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry, RedactionLogger};
+pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{
     Candidate, Canonicalizer, DetectContext, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,
