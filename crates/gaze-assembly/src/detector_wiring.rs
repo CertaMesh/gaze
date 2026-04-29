@@ -182,6 +182,11 @@ pub(crate) fn register_rulepack_recognizers(
                 }
                 let Some(cues) = locale_vocab.get(&cues_bucket) else {
                     if is_optional_builtin_cue_bucket(&cues_bucket) {
+                        tracing::warn!(
+                            recognizer_id = %recognizer.id,
+                            bucket = %cues_bucket,
+                            "skipping anchored_match; locale bucket missing"
+                        );
                         continue;
                     }
                     return Err(BuildError::UnknownLocaleBucket {
