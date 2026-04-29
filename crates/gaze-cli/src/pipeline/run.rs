@@ -278,8 +278,32 @@ fn validate_no_openai_filter_options(options: &CleanOptions<'_>) -> std::result:
 
 fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
     match err {
-        gaze::Error::SafetyNet(_) => CliError::Pipeline,
+        gaze::Error::SafetyNet(err) => map_safety_net_error(err),
         _ => CliError::Pipeline,
+    }
+}
+
+fn map_safety_net_error(err: gaze::SafetyNetError) -> CliError {
+    match err {
+        gaze::SafetyNetError::Unavailable { .. } => CliError::SafetyNetFailure {
+            variant: "Unavailable",
+        },
+        gaze::SafetyNetError::WeightsMissing { .. } => CliError::SafetyNetFailure {
+            variant: "WeightsMissing",
+        },
+        gaze::SafetyNetError::ModelUnavailable { .. } => CliError::SafetyNetFailure {
+            variant: "ModelUnavailable",
+        },
+        gaze::SafetyNetError::InputTooLarge { .. } => CliError::SafetyNetFailure {
+            variant: "InputTooLarge",
+        },
+        gaze::SafetyNetError::Runtime { message } if message.contains("timed out") => {
+            CliError::SafetyNetFailure { variant: "Timeout" }
+        }
+        gaze::SafetyNetError::Runtime { .. } => CliError::SafetyNetFailure { variant: "Runtime" },
+        gaze::SafetyNetError::InvalidOutput { .. } => CliError::SafetyNetFailure {
+            variant: "InvalidOutput",
+        },
     }
 }
 

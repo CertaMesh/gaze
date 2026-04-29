@@ -13,6 +13,7 @@ pub(crate) enum CliError {
     PolicyConfig,
     PolicyConfigDetail(String),
     SafetyNetConfigDetail(String),
+    SafetyNetFailure { variant: &'static str },
     AuditPurgeIso8601 { input: String },
     UnknownToken { token: String },
     InvalidSignature,
@@ -28,7 +29,7 @@ impl CliError {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
             Self::PolicyConfig | Self::PolicyConfigDetail(_) | Self::AuditPurgeIso8601 { .. } => 2,
-            Self::SafetyNetConfigDetail(_) => 3,
+            Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
@@ -46,6 +47,7 @@ impl CliError {
             Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
+            Self::SafetyNetFailure { .. } => "SafetyNet",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
             Self::InvalidSignature => "InvalidSignature",
@@ -89,6 +91,12 @@ impl CliError {
                     token
                 )
             }
+            Self::SafetyNetFailure { variant } => eprintln!(
+                r#"{{"error":"{}","exit":{},"variant":"{}"}}"#,
+                self.variant_name(),
+                self.exit_code(),
+                variant
+            ),
             _ => eprintln!(
                 r#"{{"error":"{}","exit":{}}}"#,
                 self.variant_name(),
