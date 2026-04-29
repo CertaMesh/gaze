@@ -182,6 +182,11 @@ pub(crate) fn register_rulepack_recognizers(
                 }
                 let Some(cues) = locale_vocab.get(&cues_bucket) else {
                     if is_optional_builtin_cue_bucket(&cues_bucket) {
+                        tracing::warn!(
+                            recognizer_id = %recognizer.id,
+                            bucket = %cues_bucket,
+                            "skipping anchored_match; locale bucket missing"
+                        );
                         continue;
                     }
                     return Err(BuildError::UnknownLocaleBucket {
@@ -195,7 +200,8 @@ pub(crate) fn register_rulepack_recognizers(
                         bucket: cues_bucket,
                     });
                 };
-                let source_short_label = derive_source_short_label(&recognizer.id, &cues_bucket);
+                let source_short_label = derive_source_short_label(&recognizer.id);
+                let min_components = anchored_match_min_components(&recognizer.id);
                 builder = builder.recognizer(AnchoredMatchRecognizer::new(
                     recognizer.id,
                     cues.clone(),
@@ -204,6 +210,7 @@ pub(crate) fn register_rulepack_recognizers(
                     convert_name_shape(&name_shape),
                     convert_cue_position(&cue_position),
                     source_short_label,
+                    min_components,
                     recognizer.scoring.base,
                     recognizer.scoring.priority,
                 ));
@@ -231,8 +238,10 @@ fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
     )
 }
 
-pub(crate) fn derive_source_short_label(recognizer_id: &str, bucket: &str) -> String {
-    let _ = bucket;
+pub(crate) fn derive_source_short_label(recognizer_id: &str) -> String {
+    if recognizer_id == "name.auto_footer" {
+        return "footer".to_string();
+    }
     recognizer_id
         .strip_prefix("name.")
         .unwrap_or(recognizer_id)
@@ -240,6 +249,14 @@ pub(crate) fn derive_source_short_label(recognizer_id: &str, bucket: &str) -> St
         .next()
         .unwrap_or(recognizer_id)
         .to_string()
+}
+
+fn anchored_match_min_components(recognizer_id: &str) -> usize {
+    if recognizer_id == "name.forward_marker" {
+        1
+    } else {
+        2
+    }
 }
 
 fn convert_boundary(boundary: &str) -> gaze_recognizers::AnchoredBoundary {
