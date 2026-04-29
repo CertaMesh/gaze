@@ -47,6 +47,7 @@ license = "Apache-2.0"
 [[recognizers]]
 id = "email.header.name"
 class = "Name"
+cooperates_with = ["email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
 enabled = true
 locales = ["global"]
 
@@ -58,3 +59,88 @@ capture_groups = [1, 2]
 [recognizers.scoring]
 base = 0.85
 priority = 100
+
+[[recognizers]]
+id = "email.header.name.paren"
+class = "Name"
+cooperates_with = ["email.header.name", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern_template = '''(?:(?:{locale.email_headers}):|,)\s*\S+@\S+\s*\(([^)]+)\)'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.85
+priority = 100
+
+[recognizers.token]
+family = "name.counter"
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.agent_recipient", "name.auto_footer"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.scoring]
+base = 0.88
+priority = 110
+
+[recognizers.token]
+family = "name.counter"
+
+[[recognizers]]
+id = "name.agent_recipient"
+class = "Name"
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.auto_footer"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "agent_recipient_cues"
+boundary = "punctuation"
+right_window_chars = 48
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.scoring]
+base = 0.88
+priority = 110
+
+[recognizers.token]
+family = "name.counter"
+
+[[recognizers]]
+id = "name.auto_footer"
+class = "Name"
+cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.agent_recipient"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "footer_cues"
+boundary = "whitespace"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.scoring]
+base = 0.88
+priority = 110
+
+[recognizers.token]
+family = "name.counter"

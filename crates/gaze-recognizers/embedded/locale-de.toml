@@ -6,3 +6,12 @@ default_locales = ["de-DE", "de-AT", "de-CH"]
 # Phase 2 ports DACH structured recognizers.
 [locale.email_headers]
 names = ["Von", "An", "Cc", "Bcc", "Antwort-An", "Absender"]
+
+[locale.forward_markers]
+names = ["Weitergeleitete Nachricht von", "Forwarded message from", "Begin forwarded message from", "----- Forwarded message"]
+
+[locale.agent_recipient_cues]
+names = ["antwortest", "antworte", "schreibst", "reply to", "respond to", "draft for", "draft to"]
+
+[locale.footer_cues]
+names = ["Gesendet von", "Gesendet durch", "Sent by", "Sent via", "On behalf of", "via"]

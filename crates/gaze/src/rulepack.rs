@@ -58,6 +58,42 @@ pub enum RawMatch {
     Ner {
         model_ref: String,
     },
+    AnchoredMatch {
+        cues_bucket: String,
+        boundary: String,
+        right_window_chars: u16,
+        name_shape: String,
+        cue_position: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum AnchoredBoundary {
+    Punctuation,
+    Whitespace,
+    LineEnd,
+}
+
+/// Closed enum for the shape of token sequences `anchored_match` extracts.
+///
+/// v0.6 ships a single `PersonName` variant. Future variants
+/// (e.g. `Organization`, `Address`, `LegalEntity`) must justify
+/// why they aren't a locale-bucket lookup before being added here.
+/// Adding variants without that justification regresses the
+/// principle drawer `session-2026-04-25-no-codified-domain-concerns`
+/// (see also `lower_email_header_pattern_template` in pre-v0.4.1 history).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum NameShape {
+    PersonName,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
+pub enum CuePosition {
+    Before,
+    After,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -127,6 +163,8 @@ pub enum RulepackError {
     UnknownLocale(String),
     #[error("unsupported matcher kind: {0}")]
     UnsupportedMatcher(String),
+    #[error("unsupported anchored_match field '{field}' value '{value}'")]
+    UnsupportedAnchoredMatch { field: String, value: String },
     #[error("unsupported rulepack field '{field}' in B1; planned for {planned_version}")]
     UnsupportedField {
         field: String,
@@ -399,15 +437,62 @@ fn parse_recognizer(
 }
 
 fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
-    if let RawMatch::Regex {
-        pattern,
-        pattern_template,
-        ..
-    } = &raw.matcher
-    {
-        if pattern.is_some() == pattern_template.is_some() {
-            return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+    match &raw.matcher {
+        RawMatch::Regex {
+            pattern,
+            pattern_template,
+            ..
+        } => {
+            if pattern.is_some() == pattern_template.is_some() {
+                return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+            }
         }
+        RawMatch::AnchoredMatch {
+            cues_bucket,
+            boundary,
+            right_window_chars,
+            name_shape,
+            cue_position,
+            ..
+        } => {
+            if cues_bucket.trim().is_empty() {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "cues_bucket".to_string(),
+                    value: cues_bucket.clone(),
+                });
+            }
+            if !(1..=512).contains(right_window_chars) {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "right_window_chars".to_string(),
+                    value: right_window_chars.to_string(),
+                });
+            }
+            if !matches!(boundary.as_str(), "punctuation" | "whitespace" | "line_end") {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "boundary".to_string(),
+                    value: boundary.clone(),
+                });
+            }
+            if name_shape != "person_name" {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "name_shape".to_string(),
+                    value: name_shape.clone(),
+                });
+            }
+            if !matches!(cue_position.as_str(), "before" | "after") {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "cue_position".to_string(),
+                    value: cue_position.clone(),
+                });
+            }
+            if cues_bucket.contains("...") {
+                return Err(RulepackError::UnsupportedAnchoredMatch {
+                    field: "cues_bucket".to_string(),
+                    value: cues_bucket.clone(),
+                });
+            }
+        }
+        RawMatch::Dictionary { .. } | RawMatch::Ner { .. } => {}
     }
     Ok(())
 }
@@ -593,6 +678,34 @@ license = "Apache-2.0"
     }
 
     #[test]
+    fn embedded_core_loads_full_name_recognizer_cooperation_matrix() {
+        let rulepack = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").expect("core rulepack"),
+        ))
+        .expect("embedded core rulepack");
+        let name_recognizers = rulepack
+            .recognizers
+            .iter()
+            .filter(|recognizer| recognizer.class == PiiClass::Name)
+            .collect::<Vec<_>>();
+
+        assert_eq!(name_recognizers.len(), 5);
+        for recognizer in &name_recognizers {
+            for peer in &name_recognizers {
+                if recognizer.id == peer.id {
+                    continue;
+                }
+                assert!(
+                    recognizer.cooperates_with.contains(&peer.id),
+                    "{} missing cooperates_with {}",
+                    recognizer.id,
+                    peer.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn embedded_core_extended_activated_classes_match_rulepack_classes() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
             gaze_recognizers::embedded("core-extended").expect("core-extended rulepack"),
@@ -745,6 +858,59 @@ kind = "regex"
     }
 
     #[test]
+    fn anchored_match_accepts_valid_schema() {
+        let rulepack = Rulepack::parse(&anchored_match_rulepack("")).expect("anchored_match");
+        assert!(matches!(
+            rulepack.recognizers[0].matcher,
+            RawMatch::AnchoredMatch { .. }
+        ));
+    }
+
+    #[test]
+    fn anchored_match_rejects_unknown_boundary() {
+        let err = Rulepack::parse(&anchored_match_rulepack("boundary = \"paragraph\"\n"))
+            .expect_err("unknown boundary fails closed");
+
+        assert_unsupported_anchored_match(err, "boundary", "paragraph");
+    }
+
+    #[test]
+    fn anchored_match_rejects_unknown_name_shape() {
+        let err = Rulepack::parse(&anchored_match_rulepack("name_shape = \"organization\"\n"))
+            .expect_err("unknown name_shape fails closed");
+
+        assert_unsupported_anchored_match(err, "name_shape", "organization");
+    }
+
+    #[test]
+    fn anchored_match_rejects_unknown_cue_position() {
+        let err = Rulepack::parse(&anchored_match_rulepack("cue_position = \"around\"\n"))
+            .expect_err("unknown cue_position fails closed");
+
+        assert_unsupported_anchored_match(err, "cue_position", "around");
+    }
+
+    #[test]
+    fn anchored_match_rejects_missing_cues_bucket() {
+        let err = Rulepack::parse(&anchored_match_rulepack("cues_bucket = \"\"\n"))
+            .expect_err("missing cues_bucket fails closed");
+
+        assert_unsupported_anchored_match(err, "cues_bucket", "");
+    }
+
+    #[test]
+    fn anchored_match_rejects_invalid_window_bounds() {
+        for (value, expected) in [("0", "0"), ("513", "513")] {
+            let err = Rulepack::parse(&anchored_match_rulepack(&format!(
+                "right_window_chars = {value}\n"
+            )))
+            .expect_err("invalid right_window_chars fails closed");
+
+            assert_unsupported_anchored_match(err, "right_window_chars", expected);
+        }
+    }
+
+    #[test]
     fn rulepack_load_fails_when_two_name_recognizers_omit_cooperates_with() {
         let err = Rulepack::parse(
             r#"
@@ -884,6 +1050,51 @@ pattern = ".+"
         )
     }
 
+    fn anchored_match_rulepack(override_line: &str) -> String {
+        let cues_bucket = if override_line.starts_with("cues_bucket") {
+            override_line.to_string()
+        } else {
+            "cues_bucket = \"forward_markers\"\n".to_string()
+        };
+        let boundary = if override_line.starts_with("boundary") {
+            override_line.to_string()
+        } else {
+            "boundary = \"punctuation\"\n".to_string()
+        };
+        let right_window_chars = if override_line.starts_with("right_window_chars") {
+            override_line.to_string()
+        } else {
+            "right_window_chars = 64\n".to_string()
+        };
+        let name_shape = if override_line.starts_with("name_shape") {
+            override_line.to_string()
+        } else {
+            "name_shape = \"person_name\"\n".to_string()
+        };
+        let cue_position = if override_line.starts_with("cue_position") {
+            override_line.to_string()
+        } else {
+            "cue_position = \"before\"\n".to_string()
+        };
+        format!(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "anchored"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+{cues_bucket}{boundary}{right_window_chars}{name_shape}{cue_position}
+"#
+        )
+    }
+
     fn assert_unsupported_field(err: RulepackError, field: &str) {
         assert!(matches!(
             err,
@@ -891,6 +1102,16 @@ pattern = ".+"
                 field: ref actual,
                 planned_version: "v0.4.1",
             } if actual == field
+        ));
+    }
+
+    fn assert_unsupported_anchored_match(err: RulepackError, field: &str, value: &str) {
+        assert!(matches!(
+            err,
+            RulepackError::UnsupportedAnchoredMatch {
+                field: ref actual_field,
+                value: ref actual_value,
+            } if actual_field == field && actual_value == value
         ));
     }
 }
