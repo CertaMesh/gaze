@@ -1,9 +1,14 @@
 use super::*;
 use crate::{detector_wiring::derive_source_short_label, template::lower_pattern_template};
 use gaze::{
-    Action, CleanDocument, DetectorKind, LocaleTag, PiiClass, PolicyError, RawDocument,
-    RulepackError, Scope, Session, SessionPolicy, SessionScope,
+    Action, CleanDocument, ConflictTier, DetectorKind, LocaleTag, PiiClass, PolicyError,
+    RawDocument, RedactionEntry, RedactionLogger, RulepackError, Scope, Session, SessionPolicy,
+    SessionScope,
 };
+use gaze_recognizers::{
+    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
+};
+use std::sync::{Arc, Mutex};
 
 fn policy() -> gaze::Policy {
     gaze::Policy {
@@ -49,8 +54,16 @@ fn embedded_rulepack(name: &str) -> Rulepack {
 fn clean_with_rulepacks(rulepacks: &[Rulepack], locales: &[LocaleTag], input: &str) -> String {
     let mut policy = policy();
     policy.locale = Some(locales.to_vec());
+    clean_with_policy_and_rulepacks(&policy, rulepacks, input)
+}
+
+fn clean_with_policy_and_rulepacks(
+    policy: &gaze::Policy,
+    rulepacks: &[Rulepack],
+    input: &str,
+) -> String {
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
-    let pipeline = build_pipeline(&policy, &empty_context(), rulepacks, &active_locales, None)
+    let pipeline = build_pipeline(policy, &empty_context(), rulepacks, &active_locales, None)
         .expect("pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline
@@ -60,6 +73,46 @@ fn clean_with_rulepacks(rulepacks: &[Rulepack], locales: &[LocaleTag], input: &s
         panic!("expected text");
     };
     text
+}
+
+fn name_email_policy(locales: Vec<LocaleTag>) -> gaze::Policy {
+    let mut policy = policy();
+    policy.locale = Some(locales);
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::Name,
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::Email,
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    policy
+}
+
+#[derive(Clone, Default)]
+struct MemoryLogger {
+    entries: Arc<Mutex<Vec<RedactionEntry>>>,
+}
+
+impl MemoryLogger {
+    fn entries(&self) -> Vec<RedactionEntry> {
+        self.entries.lock().expect("entries lock").clone()
+    }
+}
+
+impl RedactionLogger for MemoryLogger {
+    fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
+        self.entries
+            .lock()
+            .expect("entries lock")
+            .push(entry.clone());
+        Ok(())
+    }
 }
 
 fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
@@ -344,13 +397,26 @@ fn merged_vocab_for_en_us_loads_only_locale_en_buckets() {
 }
 
 #[test]
-#[ignore = "passes after Phase 4"]
 fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
-    let policy = policy();
-    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
-    let von_header_pattern =
-        regex::Regex::new(r"^Von: <[0-9a-f]{8}:Name_\d+> <[a-z0-9._%+\-]+@example\.invalid>$")
-            .expect("regex");
+    let policy = name_email_policy(vec![LocaleTag::DeDe]);
+    let fixtures = [
+        (
+            "Von: Alice Example <alice@example.invalid>",
+            r"^Von: <[0-9a-f]{8}:Name_\d+> <<[0-9a-f]{8}:Email_\d+>>$",
+        ),
+        (
+            "From: alice@example.invalid (Alice Example)",
+            r"^From: <[0-9a-f]{8}:Email_\d+> \(<[0-9a-f]{8}:Name_\d+>\)$",
+        ),
+        (
+            "Forwarded message from Alice Example:",
+            r"^Forwarded message from <[0-9a-f]{8}:Name_\d+>:$",
+        ),
+        (
+            "Du antwortest als Artistfy-Support an Alice Example.",
+            r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$",
+        ),
+    ];
     for rulepacks in [
         vec![embedded_rulepack("core"), embedded_rulepack("locale-de")],
         vec![
@@ -359,19 +425,13 @@ fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
             embedded_rulepack("locale-en"),
         ],
     ] {
-        let pipeline = build_pipeline(&policy, &empty_context(), &rulepacks, &active_locales, None)
-            .expect("pipeline");
-        let session = Session::new(Scope::Ephemeral).expect("session");
-        let clean = pipeline
-            .redact(
-                &session,
-                RawDocument::Text("Von: Alice Example <alice@example.invalid>".to_string()),
-            )
-            .expect("redact");
-        let CleanDocument::Text(text) = clean else {
-            panic!("expected text");
-        };
-        assert!(von_header_pattern.is_match(&text));
+        for (input, expected) in fixtures {
+            let text = clean_with_policy_and_rulepacks(&policy, &rulepacks, input);
+            assert!(
+                regex::Regex::new(expected).unwrap().is_match(&text),
+                "{input} produced {text}"
+            );
+        }
     }
 }
 
@@ -425,6 +485,136 @@ fn paren_display_name_from_header_tokenizes_multi_address_line() {
         .is_match(&text)
     );
     assert_eq!(text.matches(":Name_").count(), 2);
+}
+
+#[test]
+fn anchored_footer_catches_sender_name_without_org_suffix() {
+    // Matrix row 3 / R2-Patch-8: max-greedy captures `Alice Example`;
+    // single-component `Mailgun` and organization-shaped `Acme Corp` stay out.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-en")],
+        &[LocaleTag::EnUs],
+        "Sent by Alice Example via Mailgun on behalf of Acme Corp",
+    );
+
+    assert!(regex::Regex::new(
+        r"^Sent by <[0-9a-f]{8}:Name_\d+> via Mailgun on behalf of Acme Corp$"
+    )
+    .unwrap()
+    .is_match(&text));
+    assert_eq!(text.matches(":Name_").count(), 1);
+}
+
+#[test]
+fn anchored_agent_recipient_catches_german_prompt_preamble() {
+    // Matrix row 4 / R2-Patch-11: cue is literal `antwortest`; the 48-char
+    // window walks past `als Artistfy-Support an `, while the 2-component
+    // minimum skips the product-role fragment and captures `Alice Example`.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-de")],
+        &[LocaleTag::DeDe],
+        "Du antwortest als Artistfy-Support an Alice Example.",
+    );
+
+    assert!(
+        regex::Regex::new(r"^Du antwortest als Artistfy-Support an <[0-9a-f]{8}:Name_\d+>\.$")
+            .unwrap()
+            .is_match(&text)
+    );
+}
+
+#[test]
+fn anchored_forward_marker_catches_single_path() {
+    // Matrix row 6 / R2-Patch-13: fixture is covered by anchored_match only.
+    let text = clean_with_rulepacks(
+        &[embedded_rulepack("core"), embedded_rulepack("locale-en")],
+        &[LocaleTag::EnUs],
+        "Forwarded message from Alice Example:",
+    );
+
+    assert!(
+        regex::Regex::new(r"^Forwarded message from <[0-9a-f]{8}:Name_\d+>:$")
+            .unwrap()
+            .is_match(&text)
+    );
+    assert_eq!(text.matches(":Name_").count(), 1);
+}
+
+#[test]
+fn deferred_and_not_caught_rows_do_not_emit_name_tokens() {
+    for (locale, input) in [
+        (LocaleTag::EnUs, "Re: ticket update from Alice Example"),
+        (
+            LocaleTag::EnUs,
+            "Cc: bob@example.invalid, alice@example.invalid",
+        ),
+        (LocaleTag::EnUs, "Schedule a call with Alice next Tuesday"),
+    ] {
+        let text = clean_with_rulepacks(
+            &[embedded_rulepack("core"), embedded_rulepack("locale-en")],
+            &[locale],
+            input,
+        );
+        assert!(!text.contains(":Name_"), "{input} produced {text}");
+    }
+}
+
+#[test]
+fn same_span_structural_name_overlap_logs_loser() {
+    let logger = MemoryLogger::default();
+    let pipeline = gaze::Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"reply to alice@example\.invalid \(([^)]+)\)",
+                PiiClass::Name,
+                "email.header.name.paren",
+                vec![LocaleTag::Global],
+                0.85,
+                100,
+                "name.counter",
+                Some(vec![1]),
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("regex recognizer"),
+        )
+        .recognizer(AnchoredMatchRecognizer::new(
+            "name.agent_recipient".to_string(),
+            vec!["reply to alice@example.invalid".to_string()],
+            AnchoredBoundary::Punctuation,
+            48,
+            NameShape::PersonName,
+            CuePosition::Before,
+            "agent_recipient".to_string(),
+            0.88,
+            110,
+        ))
+        .rule(gaze::ClassRule::new(PiiClass::Name, Action::Tokenize))
+        .rule(gaze::DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("reply to alice@example.invalid (Alice Example)".to_string()),
+        )
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+
+    assert!(text.contains(":Name_"));
+    let entries = logger.entries();
+    assert_eq!(entries.len(), 2, "{entries:?}");
+    let loser = entries
+        .iter()
+        .find(|entry| entry.conflict_loser)
+        .expect("loser");
+    assert_eq!(loser.source, "email.header.name.paren");
+    assert_eq!(loser.decided_by, ConflictTier::Merged);
 }
 
 #[test]

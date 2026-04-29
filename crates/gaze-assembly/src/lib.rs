@@ -36,6 +36,7 @@ pub fn build_pipeline(
         policy,
         context,
         rulepacks,
+        active_locales,
         &locale_vocab,
         &mut registered_dictionaries,
     )?;

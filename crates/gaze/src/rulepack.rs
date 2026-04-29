@@ -678,6 +678,34 @@ license = "Apache-2.0"
     }
 
     #[test]
+    fn embedded_core_loads_full_name_recognizer_cooperation_matrix() {
+        let rulepack = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").expect("core rulepack"),
+        ))
+        .expect("embedded core rulepack");
+        let name_recognizers = rulepack
+            .recognizers
+            .iter()
+            .filter(|recognizer| recognizer.class == PiiClass::Name)
+            .collect::<Vec<_>>();
+
+        assert_eq!(name_recognizers.len(), 5);
+        for recognizer in &name_recognizers {
+            for peer in &name_recognizers {
+                if recognizer.id == peer.id {
+                    continue;
+                }
+                assert!(
+                    recognizer.cooperates_with.contains(&peer.id),
+                    "{} missing cooperates_with {}",
+                    recognizer.id,
+                    peer.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn embedded_core_extended_activated_classes_match_rulepack_classes() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
             gaze_recognizers::embedded("core-extended").expect("core-extended rulepack"),

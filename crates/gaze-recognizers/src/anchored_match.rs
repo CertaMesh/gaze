@@ -253,6 +253,9 @@ fn person_name_at(
     }
 
     let candidate = &input[start..end];
+    if has_organization_suffix(candidate) {
+        return None;
+    }
     (components >= min_components
         && uppercase_components > 0
         && candidate.len() <= 64
@@ -305,6 +308,18 @@ fn is_upper_component(token: &str) -> bool {
 
 fn is_particle(token: &str) -> bool {
     matches!(token, "de" | "la" | "van" | "der")
+}
+
+fn has_organization_suffix(candidate: &str) -> bool {
+    candidate
+        .split_whitespace()
+        .next_back()
+        .is_some_and(|last| {
+            matches!(
+                trim_trailing_boundary(last),
+                "Corp" | "Corporation" | "Inc" | "LLC" | "GmbH" | "AG"
+            )
+        })
 }
 
 fn find_cue_ranges(input: &str, cue: &str) -> Vec<std::ops::Range<usize>> {
@@ -379,7 +394,7 @@ mod tests {
                 "{value} should not match"
             );
         }
-        assert!(is_person_name_candidate_with_min("Acme Corp", 3).is_none());
+        assert!(is_person_name_candidate_with_min("Acme Corp", 2).is_none());
     }
 
     #[test]

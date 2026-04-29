@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, PiiClass, PipelineBuilder, PolicyError, RawMatch, Rulepack,
-    RulepackError,
+    Context, DetectorKind, LocaleChain, LocaleTag, PiiClass, PipelineBuilder, PolicyError,
+    RawMatch, Rulepack, RulepackError,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -61,6 +61,7 @@ pub(crate) fn register_rulepack_recognizers(
     policy: &gaze::Policy,
     context: &Context,
     rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
     locale_vocab: &HashMap<String, Vec<String>>,
     registered_dictionaries: &mut BTreeSet<String>,
 ) -> Result<PipelineBuilder, BuildError> {
@@ -176,10 +177,19 @@ pub(crate) fn register_rulepack_recognizers(
                 name_shape,
                 cue_position,
             } => {
-                let Some(cues) = locale_vocab
-                    .get(&cues_bucket)
-                    .filter(|cues| !cues.is_empty())
-                else {
+                if !recognizer_matches_active_locale(&recognizer.locales, active_locales) {
+                    continue;
+                }
+                let Some(cues) = locale_vocab.get(&cues_bucket) else {
+                    if is_optional_builtin_cue_bucket(&cues_bucket) {
+                        continue;
+                    }
+                    return Err(BuildError::UnknownLocaleBucket {
+                        recognizer_id: recognizer.id.clone(),
+                        bucket: cues_bucket,
+                    });
+                };
+                if cues.is_empty() {
                     return Err(BuildError::UnknownLocaleBucket {
                         recognizer_id: recognizer.id.clone(),
                         bucket: cues_bucket,
@@ -202,6 +212,23 @@ pub(crate) fn register_rulepack_recognizers(
     }
 
     Ok(builder)
+}
+
+fn recognizer_matches_active_locale(locales: &[LocaleTag], active_locales: &LocaleChain) -> bool {
+    locales.iter().any(|locale| {
+        *locale == LocaleTag::Global
+            || active_locales
+                .as_slice()
+                .iter()
+                .any(|active| active == locale)
+    })
+}
+
+fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
+    matches!(
+        bucket,
+        "forward_markers" | "agent_recipient_cues" | "footer_cues"
+    )
 }
 
 pub(crate) fn derive_source_short_label(recognizer_id: &str, bucket: &str) -> String {
