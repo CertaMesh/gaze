@@ -23,6 +23,7 @@ pub struct SubprocessOpenAiFilterConfig {
     command: PathBuf,
     args: Vec<OsString>,
     checkpoint_path: Option<PathBuf>,
+    cache_dir: Option<PathBuf>,
     timeout: Duration,
     max_input_bytes: usize,
     max_stdout_bytes: usize,
@@ -43,6 +44,7 @@ impl SubprocessOpenAiFilterConfig {
                 OsString::from("typed"),
             ],
             checkpoint_path: None,
+            cache_dir: None,
             timeout: DEFAULT_TIMEOUT,
             max_input_bytes: DEFAULT_MAX_INPUT_BYTES,
             max_stdout_bytes: DEFAULT_MAX_STDOUT_BYTES,
@@ -73,6 +75,11 @@ impl SubprocessOpenAiFilterConfig {
 
     pub fn with_checkpoint_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.checkpoint_path = Some(path.into());
+        self
+    }
+
+    pub fn with_cache_dir(mut self, path: impl Into<PathBuf>) -> Self {
+        self.cache_dir = Some(path.into());
         self
     }
 
@@ -113,6 +120,10 @@ impl SubprocessOpenAiFilterConfig {
     pub fn checkpoint_path(&self) -> Option<&Path> {
         self.checkpoint_path.as_deref()
     }
+
+    pub fn cache_dir(&self) -> Option<&Path> {
+        self.cache_dir.as_deref()
+    }
 }
 
 /// `opf --format json` subprocess backend.
@@ -128,6 +139,8 @@ impl SubprocessOpenAiFilterBackend {
                 reason: "opf command path is empty".to_string(),
             });
         }
+        verify_command_path(&config.command)?;
+        verify_sensitive_paths(&config)?;
 
         Ok(Self { config })
     }
@@ -444,6 +457,171 @@ fn sanitize_token(token: &str) -> String {
     token.to_string()
 }
 
+fn verify_command_path(command: &Path) -> Result<(), SafetyNetError> {
+    if command.components().count() <= 1 {
+        return Ok(());
+    }
+
+    let metadata =
+        std::fs::symlink_metadata(command).map_err(|_| SafetyNetError::ModelUnavailable {
+            reason: "opf command path is not accessible".to_string(),
+        })?;
+
+    if !metadata.file_type().is_file() || metadata.file_type().is_symlink() {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf command path is not a regular file".to_string(),
+        });
+    }
+
+    Ok(())
+}
+
+fn verify_sensitive_paths(config: &SubprocessOpenAiFilterConfig) -> Result<(), SafetyNetError> {
+    if let Some(cache_dir) = &config.cache_dir {
+        ensure_secure_dir(cache_dir)?;
+    }
+
+    let Some(checkpoint_path) = &config.checkpoint_path else {
+        return Ok(());
+    };
+
+    if !checkpoint_path.exists() {
+        return Err(SafetyNetError::WeightsMissing {
+            path: sanitize_path(checkpoint_path),
+        });
+    }
+
+    verify_sensitive_tree(checkpoint_path)
+}
+
+fn ensure_secure_dir(path: &Path) -> Result<(), SafetyNetError> {
+    if !path.exists() {
+        std::fs::create_dir_all(path).map_err(|_| SafetyNetError::ModelUnavailable {
+            reason: "failed to create opf cache directory".to_string(),
+        })?;
+        set_private_dir_permissions(path)?;
+    }
+
+    verify_sensitive_tree(path)
+}
+
+fn verify_sensitive_tree(path: &Path) -> Result<(), SafetyNetError> {
+    let metadata = verify_one_sensitive_path(path)?;
+    if metadata.is_dir() {
+        for entry in std::fs::read_dir(path).map_err(|_| SafetyNetError::ModelUnavailable {
+            reason: "failed to read opf sensitive directory".to_string(),
+        })? {
+            let entry = entry.map_err(|_| SafetyNetError::ModelUnavailable {
+                reason: "failed to read opf sensitive directory entry".to_string(),
+            })?;
+            verify_sensitive_tree(&entry.path())?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn verify_one_sensitive_path(path: &Path) -> Result<std::fs::Metadata, SafetyNetError> {
+    use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
+    let metadata =
+        std::fs::symlink_metadata(path).map_err(|_| SafetyNetError::ModelUnavailable {
+            reason: "failed to inspect opf sensitive path".to_string(),
+        })?;
+    let file_type = metadata.file_type();
+    if file_type.is_symlink() {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf sensitive path must not be a symlink".to_string(),
+        });
+    }
+
+    let uid = current_uid();
+    if metadata.uid() != uid {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf sensitive path owner mismatch".to_string(),
+        });
+    }
+
+    let mode = metadata.permissions().mode() & 0o777;
+    if file_type.is_dir() {
+        if mode != 0o700 {
+            return Err(SafetyNetError::ModelUnavailable {
+                reason: "opf sensitive directory must be mode 0700".to_string(),
+            });
+        }
+    } else if file_type.is_file() {
+        if mode & 0o022 != 0 {
+            return Err(SafetyNetError::ModelUnavailable {
+                reason: "opf sensitive file must not be group/world writable".to_string(),
+            });
+        }
+    } else {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf sensitive path must be a regular file or directory".to_string(),
+        });
+    }
+
+    Ok(metadata)
+}
+
+#[cfg(unix)]
+fn set_private_dir_permissions(path: &Path) -> Result<(), SafetyNetError> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let permissions = std::fs::Permissions::from_mode(0o700);
+    std::fs::set_permissions(path, permissions).map_err(|_| SafetyNetError::ModelUnavailable {
+        reason: "failed to set opf cache directory permissions".to_string(),
+    })
+}
+
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    std::fs::metadata(".")
+        .map(|metadata| {
+            use std::os::unix::fs::MetadataExt;
+            metadata.uid()
+        })
+        .unwrap_or(0)
+}
+
+#[cfg(windows)]
+fn verify_one_sensitive_path(path: &Path) -> Result<std::fs::Metadata, SafetyNetError> {
+    let metadata =
+        std::fs::symlink_metadata(path).map_err(|_| SafetyNetError::ModelUnavailable {
+            reason: "failed to inspect opf sensitive path".to_string(),
+        })?;
+    if metadata.file_type().is_symlink() {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf sensitive path must not be a symlink".to_string(),
+        });
+    }
+    if !(metadata.file_type().is_file() || metadata.file_type().is_dir()) {
+        return Err(SafetyNetError::ModelUnavailable {
+            reason: "opf sensitive path must be a regular file or directory".to_string(),
+        });
+    }
+    if metadata.permissions().readonly() {
+        return Ok(metadata);
+    }
+    Err(SafetyNetError::ModelUnavailable {
+        reason: "opf sensitive Windows ACL could not be verified".to_string(),
+    })
+}
+
+#[cfg(windows)]
+fn set_private_dir_permissions(_path: &Path) -> Result<(), SafetyNetError> {
+    Err(SafetyNetError::ModelUnavailable {
+        reason: "opf sensitive Windows ACL could not be configured".to_string(),
+    })
+}
+
+fn sanitize_path(path: &Path) -> String {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| format!("<missing:{name}>"))
+        .unwrap_or_else(|| "<missing:checkpoint>".to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -478,5 +656,43 @@ mod tests {
         assert!(!stderr.contains("alice@example.invalid"));
         assert!(!stderr.contains("+1-555-0101"));
         assert!(stderr.contains("<redacted>"));
+    }
+
+    #[test]
+    fn missing_checkpoint_fails_before_spawn() {
+        let missing = tempfile::tempdir().unwrap().path().join("checkpoint");
+        let config = SubprocessOpenAiFilterConfig::new("opf").with_checkpoint_path(missing);
+        let error = SubprocessOpenAiFilterBackend::new(config).unwrap_err();
+        assert!(matches!(error, SafetyNetError::WeightsMissing { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cache_dir_is_created_private() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        let cache_dir = dir.path().join("opf-cache");
+        let config = SubprocessOpenAiFilterConfig::new("opf").with_cache_dir(&cache_dir);
+        SubprocessOpenAiFilterBackend::new(config).unwrap();
+
+        let mode = std::fs::metadata(cache_dir).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn group_writable_checkpoint_file_fails_closed() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        let checkpoint = dir.path().join("model.bin");
+        std::fs::write(&checkpoint, b"weights").unwrap();
+        std::fs::set_permissions(&checkpoint, std::fs::Permissions::from_mode(0o660)).unwrap();
+
+        let config = SubprocessOpenAiFilterConfig::new("opf").with_checkpoint_path(checkpoint);
+        let error = SubprocessOpenAiFilterBackend::new(config).unwrap_err();
+        assert!(matches!(error, SafetyNetError::ModelUnavailable { .. }));
     }
 }
