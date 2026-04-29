@@ -1,3 +1,5 @@
+#![cfg(feature = "bundled-recognizers")]
+
 use std::collections::BTreeMap;
 
 use gaze::{

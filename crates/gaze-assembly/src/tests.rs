@@ -2,8 +2,8 @@ use super::*;
 use crate::{detector_wiring::derive_source_short_label, template::lower_pattern_template};
 use gaze::{
     Action, CleanDocument, ConflictTier, DetectorKind, LocaleTag, PiiClass, PolicyError,
-    RawDocument, RedactionEntry, RedactionLogger, RulepackError, Scope, Session, SessionPolicy,
-    SessionScope,
+    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RulepackError, Scope, Session,
+    SessionPolicy, SessionScope,
 };
 use gaze_recognizers::{
     AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
@@ -106,7 +106,7 @@ impl MemoryLogger {
 }
 
 impl RedactionLogger for MemoryLogger {
-    fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.entries
             .lock()
             .expect("entries lock")

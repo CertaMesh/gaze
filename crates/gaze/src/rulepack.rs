@@ -684,6 +684,7 @@ license = "Apache-2.0"
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
     }
 
+    #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_activated_classes_match_rulepack_classes() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
@@ -697,6 +698,7 @@ license = "Apache-2.0"
         );
     }
 
+    #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_loads_full_name_recognizer_cooperation_matrix() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
@@ -725,6 +727,7 @@ license = "Apache-2.0"
         }
     }
 
+    #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_extended_activated_classes_match_rulepack_classes() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
@@ -744,6 +747,7 @@ license = "Apache-2.0"
         );
     }
 
+    #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn activated_classes_include_new_rulepack_recognizer_class() {
         let raw = format!(

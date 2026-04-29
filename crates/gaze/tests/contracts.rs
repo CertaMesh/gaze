@@ -1,3 +1,5 @@
+#![cfg(feature = "bundled-recognizers")]
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -5,8 +7,8 @@ use std::time::Duration;
 
 use gaze::{
     Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, PiiClass, Pipeline,
-    RawDocument, RedactionEntry, RedactionLogger, Sandbox, SandboxError, SandboxPlan, Scope,
-    Session, UntrustedExecRequest, ValidatedExecRequest, Value,
+    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Sandbox, SandboxError,
+    SandboxPlan, Scope, Session, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
 use gaze_audit::SqliteLogger;
 use gaze_recognizers::RegexDetector;
@@ -192,7 +194,7 @@ impl MemoryLogger {
 }
 
 impl RedactionLogger for MemoryLogger {
-    fn log(&self, entry: &RedactionEntry) -> gaze::Result<()> {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
         self.entries
             .lock()
             .expect("entries lock")

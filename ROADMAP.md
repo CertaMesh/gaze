@@ -23,20 +23,15 @@ Art. 4(5) term for reversible substitution with tokens, chosen over
 
 ## Now (in flight)
 
-v0.5.1 shipped 2026-04-29 (bundled `rulepack_version` sync — the four embedded
+v0.6.0 is in flight as the breaking release that bundles Pass-3 SafetyNet,
+anchored-match coverage, the audit-shim drop, and the `RedactionLogger` move to
+`gaze-types`. v0.5.1 shipped 2026-04-29 (bundled `rulepack_version` sync — the four embedded
 TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract
 that bundled rulepacks track `gaze-recognizers`; todo #267). v0.5.0 shipped
 2026-04-27 (gaze-types extraction, gaze-audit passive sink with the one-minor
 `audit` feature shim, dylint-based `gaze_module_isolation` lint replacing the
 syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate).
 v0.4.6 shipped 2026-04-26. The v0.5 line is closed.
-
-No v0.6 implementation scope is locked in this roadmap yet. The next cycle
-should start with brainstorm → plan → multi-review before dispatching
-implementation work. The leading hygiene candidate is the v0.6 decommission of
-the `audit` feature shim on `gaze` (per the v0.5 migration window documented in
-CHANGELOG.md and decision drawer `gaze_decisions_6c60bce3b9f8ed7a4de538d8`),
-optionally landed alongside todo #252.
 
 ## Next (committed but not started)
 
@@ -49,9 +44,6 @@ brainstorm:
 - **OpenAI-filter CI sanity gate** — todo #66 (medium). Retargeted to v0.6.
   Sibling to #65; CI-only, runs the filter over gold-positive fixtures to
   surface detection drift between releases.
-- **`RedactionLogger` trait → `gaze-types`** — todo #252 (low). Hygiene
-  follow-on from v0.5 Phases B/C; pairs with the `audit` feature shim
-  decommission planned for v0.6.
 
 The following entries are still tagged `v0.5` from the v0.5 design wave but did
 not block the v0.5.0 ship; the v0.6 brainstorm should decide whether to fold

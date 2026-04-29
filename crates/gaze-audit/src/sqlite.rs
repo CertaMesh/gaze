@@ -346,6 +346,16 @@ impl LeakSuspectLogger for SqliteLogger {
     }
 }
 
+impl gaze_types::RedactionLogger for SqliteLogger {
+    fn log(
+        &self,
+        entry: &gaze_types::RedactionEntry,
+    ) -> std::result::Result<(), gaze_types::RedactionLogError> {
+        SqliteLogger::log(self, entry)
+            .map_err(|err| gaze_types::RedactionLogError::Sqlite(err.to_string()))
+    }
+}
+
 fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
     match tier {
         ConflictTier::None => "none",

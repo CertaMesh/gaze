@@ -272,19 +272,17 @@ redaction log for the invocation. Dictionary rows use
 `dictionary:{name}[#term_index]` source labels so an operator can trace which
 configured term fired without storing raw PII.
 
-Rust adopters should import the concrete SQLite sink from
-`gaze_audit::SqliteLogger`. For v0.5 only, `gaze` exposes an `audit` feature
-shim (`audit = ["dep:gaze-audit"]`) that re-exports the old
-`gaze::SqliteLogger` and audit query symbols for migration. New integrations
-should depend on `gaze-audit` directly; the shim is temporary and scheduled to
-drop in v0.6.
+Rust adopters should import the concrete SQLite sink and audit-query API from
+`gaze-audit` directly:
 
-> **v0.5 migration note.** `gaze::SqliteLogger` and the audit-query API now
-> live in the new `gaze-audit` crate (Phase C, PR #75). Library callers should
-> `use gaze_audit::SqliteLogger;` directly. The `gaze` crate's `audit` feature
-> shim re-exports the same path for one minor migration cycle and will be
-> removed in v0.6 (decision drawer
-> `gaze_decisions_6c60bce3b9f8ed7a4de538d8`).
+```rust
+use gaze_audit::SqliteLogger;
+```
+
+The v0.5 `gaze` audit feature shim has been removed in v0.6. Paths such as
+`gaze::SqliteLogger` no longer compile; `gaze::RedactionLogger` remains a
+supported facade re-export for the trait, whose canonical home is
+`gaze_types::RedactionLogger`.
 
 This is the same fixture the CLI integration suite uses
 (`crates/gaze/tests/cli_pipe.rs::t16_clean_with_policy_tokenizes_email`).

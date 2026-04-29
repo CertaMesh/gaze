@@ -23,6 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Trait method signature changed.** Custom `RedactionLogger` impls must update
+  their return type from `gaze::Result<()>` to
+  `Result<(), gaze_types::RedactionLogError>`. Import-path source-compat is
+  preserved via the permanent `gaze::RedactionLogger` re-export; the canonical
+  trait home is `gaze_types::RedactionLogger`.
+- **v0.6 RedactionLogger home moved to `gaze-types` (closes #252):**
+  `gaze-types` now owns `RedactionLogger` and the closed
+  `RedactionLogError` sink-error set. `gaze-audit::SqliteLogger` implements
+  the trait directly, and `gaze` converts sink failures at the pipeline
+  boundary through `gaze::Error::RedactionLog`.
 - **v0.6 closes #114 — generic locale-bucket placeholder syntax adopted in
   bundled `core` rulepack:** the shipped `email.header.name` recognizer now uses
   the canonical `{locale.email_headers}` placeholder. The legacy
@@ -52,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 
 ### Removed
+
+- **BREAKING — audit-sink imports.** Replace `use gaze::SqliteLogger;` with
+  `use gaze_audit::SqliteLogger;`. Same for `gaze::AuditFilter`,
+  `gaze::AuditLogRow`, `gaze::build_audit_query_sql`, and
+  `gaze::AUDIT_RESTRICTED_COLUMNS`. The v0.5 `gaze = { features = ["audit"] }`
+  shim is removed.
+- **v0.6 audit feature shim removed from `gaze` (closes #315):** removed the
+  `audit` feature, the optional normal `gaze-audit` dependency, the cfg-gated
+  `gaze::{SqliteLogger, AuditFilter, AuditLogRow, build_audit_query_sql,
+  AUDIT_RESTRICTED_COLUMNS}` re-exports, the cargo-deny `gaze.audit` feature
+  ban, and the xtask `"gaze audit feature sanity"` cargo-metadata graph.
 
 ### Fixed
 
