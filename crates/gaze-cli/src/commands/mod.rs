@@ -252,6 +252,7 @@ pub(crate) enum OpenAiFilterDevice {
 }
 
 impl OpenAiFilterDevice {
+    #[cfg(feature = "safety-net-openai")]
     pub(crate) fn as_opf_value(self) -> Option<&'static str> {
         match self {
             Self::Auto => None,
