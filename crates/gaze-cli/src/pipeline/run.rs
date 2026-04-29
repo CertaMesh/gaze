@@ -19,8 +19,8 @@ use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
-    DEFAULT_SAFETY_NET_TIMEOUT_MS,
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode,
+    DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES, DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
@@ -49,6 +49,7 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) openai_filter_command: Option<&'a Path>,
     pub(crate) openai_filter_checkpoint: Option<&'a Path>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    pub(crate) openai_filter_device: OpenAiFilterDevice,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -239,19 +240,17 @@ fn maybe_register_safety_net(
                 .with_checkpoint_path(checkpoint)
                 .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
                 .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            let mut opf_args = vec!["--format", "json", "--output-mode", "typed"];
             if let Some(operating_point) = options.openai_filter_operating_point {
                 let value = operating_point.as_opf_value();
-                config = config
-                    .with_args([
-                        "--format",
-                        "json",
-                        "--output-mode",
-                        "typed",
-                        "--operating-point",
-                        value,
-                    ])
-                    .with_decoding_param("operating_point", value);
+                opf_args.extend(["--operating-point", value]);
+                config = config.with_decoding_param("operating_point", value);
             }
+            if let Some(device) = options.openai_filter_device.as_opf_value() {
+                opf_args.extend(["--device", device]);
+                config = config.with_decoding_param("device", device);
+            }
+            config = config.with_args(opf_args);
             Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
         }
     }
@@ -278,6 +277,7 @@ fn validate_no_openai_filter_options(
     if options.openai_filter_command.is_some()
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
+        || options.openai_filter_device != OpenAiFilterDevice::Auto
         || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
         || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
     {
