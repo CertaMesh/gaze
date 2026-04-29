@@ -26,6 +26,16 @@ All design, implementation, and review decisions in this repo must be evaluated 
 
 Full rationale (including what the north star rejects and how drift is measured) lives in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
 
+## Pre-push hook discipline
+
+Install tracked hooks once per clone with `git config core.hooksPath .githooks`.
+All coding workers SHOULD run local gates before declaring `IMPL DONE`; the
+pre-push hook is defense in depth and is critical when CI is unavailable.
+`git push --no-verify` is allowed only as an exceptional bypass with written
+justification in the commit body or PR description. `GAZE_PREPUSH_FAST=1` is
+acceptable for routine feature-branch pushes only when CI is healthy; pushes to
+`main` still run the full gate matrix.
+
 ## v0.5 architecture primer
 
 As of v0.5 dev complete (`[Unreleased]`) the repo is split into six published-shape crates plus one internal `xtask` crate. v0.5 dev introduced two new crates (`gaze-types`, `gaze-audit`) and replaced the syn-walker audit-isolation gate with a Dylint resolver-based gate. Detection contract is unchanged from v0.4. Always `cargo test --workspace --all-features` (the `--all-features` flag enables `gaze`'s `audit` feature shim that the dev-dep compatibility tests rely on).
