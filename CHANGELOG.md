@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.6.0] — 2026-04-29
+
+### Added
+
 - Tracked `.githooks/pre-push` runs full local gate matrix (cargo fmt + tests + xtask gates) before allowing push. Doc-only pushes fast-path. `GAZE_PREPUSH_FAST=1` skips xtask gates when CI is healthy. One-time setup: `git config core.hooksPath .githooks` per clone.
 - **v0.6 GH#24 / todo #87 anchored_match recognizer kind:** cue-anchored
   `Name` detection now covers email forward headers, agent reply preambles, and
