@@ -10,7 +10,8 @@ description = "Built-in recognizers for Gaze"
 # phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
 default = ["phone-parser"]
 phone-parser = ["dep:phonenumber"]
-test-support = []
+safety-net = []
+test-support = ["safety-net"]
 
 [dependencies]
 aho-corasick = "1"
@@ -35,6 +36,10 @@ tempfile = "3"
 
 [[test]]
 name = "context_sensitivity_v0_6"
+required-features = ["test-support"]
+
+[[test]]
+name = "mock_safety_net"
 required-features = ["test-support"]
 
 [[bench]]
