@@ -9,7 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **v0.6 GH#24 / todo #87 anchored_match recognizer kind:** cue-anchored
+  `Name` detection now covers email forward headers, agent reply preambles, and
+  auto-footers through deterministic structural rules. The default `core`
+  bundle adds `name.forward_marker`, `name.agent_recipient`, and
+  `name.auto_footer` with structural audit source labels such as
+  `structural.agent_recipient`.
+- **v0.6 locale cue buckets:** `locale-de` now ships `forward_markers`,
+  `agent_recipient_cues`, and `footer_cues` with German cues plus English
+  safety duplicates; `locale-en` ships English-only cue buckets. The synthesis
+  matrix and 12-fixture false-positive budget are locked in tests for GH#24.
+
 ### Changed
+
+- **v0.6 adopter migration for GH#24:** v0.5.1 adopters can load
+  `["core", "locale-de"]` under `[locale].active = ["de-DE"]` to tokenize the
+  Markus prompt/header/footer leak shapes without changing existing custom
+  recognizers. Mixed German/English templates can load
+  `["core", "locale-de", "locale-en"]`; per-tenant cue additions should live in
+  custom locale/rulepack data.
+- **v0.6 known limits documented:** `anchored_match` still fires inside
+  markdown code fences and URLs in v0.6; RegionHint-based `CodeBlock` / `Url`
+  exclusion is deferred to v0.7. The docs also call out deferred Subject/Re
+  anchors, unanchored scheduling prose, the current `person_name`-only
+  `name_shape`, and global rather than per-region NER thresholding.
+- **v0.6 audit source-label coverage:** audit-row metadata tests now lock in
+  `AUDIT_RESTRICTED_COLUMNS` including `source`, so persisted audit queries can
+  explain structural `anchored_match` emissions without adding a
+  `recognizer_id` column. References GH#24 and todo #87.
 
 ### Deprecated
 

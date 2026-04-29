@@ -33,6 +33,10 @@ criterion = "0.5"
 gaze = { path = "../gaze" }
 tempfile = "3"
 
+[[test]]
+name = "context_sensitivity_v0_6"
+required-features = ["test-support"]
+
 [[bench]]
 name = "dictionary"
 harness = false

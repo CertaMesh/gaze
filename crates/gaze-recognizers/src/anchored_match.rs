@@ -490,6 +490,48 @@ mod tests {
             .is_empty());
     }
 
+    #[test]
+    fn emits_structural_source_labels_for_core_anchored_match_families() {
+        for (short_label, cue, boundary, input, expected_source) in [
+            (
+                "forward_marker",
+                "Forwarded message from",
+                AnchoredBoundary::Punctuation,
+                "Forwarded message from Alice Example:",
+                "structural.forward_marker",
+            ),
+            (
+                "agent_recipient",
+                "antwortest",
+                AnchoredBoundary::Punctuation,
+                "Du antwortest als Artistfy-Support an Alice Example.",
+                "structural.agent_recipient",
+            ),
+            (
+                "auto_footer",
+                "Sent by",
+                AnchoredBoundary::Whitespace,
+                "Sent by Alice Example via Mailgun",
+                "structural.auto_footer",
+            ),
+        ] {
+            let recognizer = test_recognizer(
+                &format!("test.{short_label}"),
+                vec![cue],
+                boundary,
+                CuePosition::Before,
+                short_label,
+            );
+            let hits = recognizer.detect(input, &ctx());
+
+            assert_eq!(
+                hits.first().map(|hit| hit.source.as_str()),
+                Some(expected_source),
+                "{short_label} should persist the structural source label"
+            );
+        }
+    }
+
     fn test_recognizer(
         id: &str,
         cues: Vec<&str>,
