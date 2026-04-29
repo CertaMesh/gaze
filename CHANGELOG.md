@@ -56,6 +56,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.5.2] - 2026-04-29
+
+### Added
+
+- **NER adopter assets (todo #301, GH issue #90 items 1+4):** promoted the
+  Davlan mBERT label contract and canonical NER policy snippet to
+  `assets/ner/` for framework adapters and adopters. `assets/ner/README.md`
+  documents the BIO tag to Gaze class schema, the `"drop"` sentinel, and the
+  future `gaze model fetch <name>` / `gaze policy snippet ner` manifest path.
+
+### Changed
+
+- **Pinned default NER artifact source (todo #292, GH issue #90 item 2):**
+  `scripts/fetch-ner-model.sh` now installs the pre-quantized int8 ONNX artifact
+  from `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
+  `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, copies the Gaze-authored
+  `labels.json` contract, and verifies all installed bytes against the
+  repository-root `SHA256SUMS`.
+- **Policy docs for NER adopters:** `docs/policy.md` now cites the canonical
+  `assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
+  and calls out Rust-regex inline flags such as `(?i)` in
+  `[[policy.custom_recognizers]].pattern`.
+
 ## [0.5.1] - 2026-04-29
 
 ### Fixed
