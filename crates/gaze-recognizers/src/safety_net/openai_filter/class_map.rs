@@ -41,9 +41,7 @@ pub fn map_openai_label(label: &str) -> Result<OpenAiPrivateLabel, SafetyNetErro
 }
 
 /// Maps an official OPF label into the closed safety-net PII vocabulary.
-pub fn openai_label_to_safety_net_class(
-    label: OpenAiPrivateLabel,
-) -> SafetyNetPiiClass {
+pub fn openai_label_to_safety_net_class(label: OpenAiPrivateLabel) -> SafetyNetPiiClass {
     match label {
         OpenAiPrivateLabel::PrivatePerson => SafetyNetPiiClass::Name,
         OpenAiPrivateLabel::PrivateAddress => SafetyNetPiiClass::Location,

@@ -18,12 +18,7 @@ pub struct RawSpan {
 }
 
 impl RawSpan {
-    pub fn new(
-        start: usize,
-        end: usize,
-        label: impl Into<String>,
-        score: Option<f32>,
-    ) -> Self {
+    pub fn new(start: usize, end: usize, label: impl Into<String>, score: Option<f32>) -> Self {
         Self {
             start,
             end,
@@ -130,11 +125,9 @@ mod tests {
 
     #[test]
     fn rejects_out_of_bounds_and_overlaps() {
-        assert!(normalize_raw_spans(
-            vec![RawSpan::new(0, 9, "private_email", None)],
-            "short"
-        )
-        .is_err());
+        assert!(
+            normalize_raw_spans(vec![RawSpan::new(0, 9, "private_email", None)], "short").is_err()
+        );
         assert!(normalize_raw_spans(
             vec![
                 RawSpan::new(0, 3, "private_email", None),

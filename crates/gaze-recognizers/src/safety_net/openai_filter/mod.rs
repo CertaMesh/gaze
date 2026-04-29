@@ -17,6 +17,4 @@ pub mod backend;
 pub mod class_map;
 
 pub use backend::{OpenAiFilterBackend, RawSpan};
-pub use class_map::{
-    map_openai_label, openai_label_to_safety_net_class, validate_openai_label,
-};
+pub use class_map::{map_openai_label, openai_label_to_safety_net_class, validate_openai_label};
