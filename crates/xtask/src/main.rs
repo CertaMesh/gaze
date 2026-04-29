@@ -10,6 +10,7 @@ mod class_map_override_safety;
 mod dylint_gate;
 mod fixture_citation;
 mod no_tenant_knowledge;
+mod safety_net_sanity;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -29,6 +30,7 @@ enum Command {
     DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
     CiFeatureMatrix,
+    SafetyNetSanity,
 }
 
 fn main() -> Result<()> {
@@ -43,6 +45,7 @@ fn main() -> Result<()> {
         Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
+        Command::SafetyNetSanity => safety_net_sanity::run(),
     }
 }
 
