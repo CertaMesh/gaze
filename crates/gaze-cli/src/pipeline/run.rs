@@ -11,9 +11,9 @@ use serde::Serialize;
 
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
-    LocaleTag, Policy, RawDocument, RedactionEntry, RedactionLogger, Result as GazeResult,
-    RuleSpec, Rulepack, RulepackPolicy, RulepackSource, Scope, SensitiveSnapshot, Session,
-    SessionPolicy, SessionScope, TypedContext,
+    LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, Policy, RawDocument, RedactionEntry,
+    RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy, RulepackSource,
+    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
 use gaze_audit::SqliteLogger;
 
@@ -146,7 +146,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         Some(context) => &context.fields,
         None => empty_fields(),
     };
-    let clean_doc = if options.safety_net.is_some() {
+    let (clean_doc, leak_report) = if options.safety_net.is_some() {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_detect_context(
                 &session,
@@ -156,9 +156,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 detect_fields,
             )
             .map_err(map_safety_net_pipeline_error)?;
-        doc
+        (doc, _report)
     } else {
-        pipeline
+        let doc = pipeline
             .redact_with_detect_context(
             &session,
             RawDocument::Text(raw),
@@ -166,7 +166,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             &dictionaries,
             detect_fields,
         )
-            .map_err(|_| CliError::Pipeline)?
+            .map_err(|_| CliError::Pipeline)?;
+        (doc, LeakReport::default())
     };
 
     let clean_text = match clean_doc {
@@ -193,6 +194,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 .collect(),
             context_source: options.context_json.map(|_| "cli".to_string()),
         },
+        leak_report: LeakReportResponse::from(&leak_report),
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
@@ -448,6 +450,7 @@ struct CleanResponse {
     clean_text: String,
     session_blob: String,
     stats: Stats,
+    leak_report: LeakReportResponse,
 }
 
 #[derive(Serialize)]
@@ -477,6 +480,116 @@ impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
             term_count: stats.term_count,
             source: source.to_string(),
         }
+    }
+}
+
+#[derive(Serialize)]
+struct LeakReportResponse {
+    stats: LeakReportStatsResponse,
+    suspects: Vec<LeakSuspectResponse>,
+    telemetry: Vec<LeakTelemetryResponse>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    replay_hash: Option<String>,
+}
+
+impl From<&LeakReport> for LeakReportResponse {
+    fn from(report: &LeakReport) -> Self {
+        Self {
+            stats: LeakReportStatsResponse {
+                suspect_count: report.stats.suspect_count,
+                uncovered_count: report.stats.uncovered_count,
+                partial_bleed_count: report.stats.partial_bleed_count,
+                class_mismatch_count: report.stats.class_mismatch_count,
+                locale_skipped_count: report.stats.locale_skipped_count,
+            },
+            suspects: report.suspects.iter().map(LeakSuspectResponse::from).collect(),
+            telemetry: report
+                .telemetry
+                .iter()
+                .map(LeakTelemetryResponse::from)
+                .collect(),
+            replay_hash: report.replay_hash.clone(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct LeakReportStatsResponse {
+    suspect_count: usize,
+    uncovered_count: usize,
+    partial_bleed_count: usize,
+    class_mismatch_count: usize,
+    locale_skipped_count: usize,
+}
+
+#[derive(Serialize)]
+struct LeakSuspectResponse {
+    safety_net_id: String,
+    raw_label: String,
+    mapped_class: String,
+    leak_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pipeline_class: Option<String>,
+    span_len: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    field_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    score: Option<f32>,
+}
+
+impl From<&gaze::LeakSuspect> for LeakSuspectResponse {
+    fn from(suspect: &gaze::LeakSuspect) -> Self {
+        let (leak_kind, pipeline_class) = match &suspect.kind {
+            LeakKind::Uncovered => ("uncovered", None),
+            LeakKind::PartialBleed { .. } => ("partial_bleed", None),
+            LeakKind::ClassMismatch { pipeline_class, .. } => {
+                ("class_mismatch", Some(pipeline_class.class_name()))
+            }
+        };
+        Self {
+            safety_net_id: suspect.safety_net_id.clone(),
+            raw_label: suspect.raw_label.clone(),
+            mapped_class: suspect.class.class_name(),
+            leak_kind: leak_kind.to_string(),
+            pipeline_class,
+            span_len: suspect.span.end.saturating_sub(suspect.span.start),
+            field_path: suspect.field_path.clone(),
+            score: suspect.score,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+enum LeakTelemetryResponse {
+    LocaleSkipped {
+        safety_net_id: String,
+        document_kind: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        field_path: Option<String>,
+    },
+}
+
+impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
+    fn from(event: &LeakReportTelemetry) -> Self {
+        match event {
+            LeakReportTelemetry::LocaleSkipped {
+                safety_net_id,
+                document_kind,
+                field_path,
+            } => Self::LocaleSkipped {
+                safety_net_id: safety_net_id.clone(),
+                document_kind: document_kind_label(*document_kind).to_string(),
+                field_path: field_path.clone(),
+            },
+        }
+    }
+}
+
+fn document_kind_label(kind: DocumentKind) -> &'static str {
+    match kind {
+        DocumentKind::Structured => "structured",
+        DocumentKind::Text => "text",
     }
 }
 
