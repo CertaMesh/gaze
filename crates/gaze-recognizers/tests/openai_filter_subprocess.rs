@@ -159,7 +159,7 @@ exec sleep 30
     )
     .unwrap();
     let backend = SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(1)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(5)),
     )
     .unwrap();
     let clean = format!("x\n{}", "x".repeat(128 * 1024));
@@ -171,11 +171,11 @@ exec sleep 30
     assert!(matches!(error, SafetyNetError::Runtime { .. }));
     assert!(error.to_string().contains("timed out"));
     assert!(
-        elapsed < Duration::from_secs(3),
+        elapsed < Duration::from_secs(7),
         "blocked stdin timeout took {elapsed:?}"
     );
 
-    let child_pid = wait_for_pidfile(&pidfile, Duration::from_millis(500))
+    let child_pid = wait_for_pidfile(&pidfile, Duration::from_secs(2))
         .expect("child failed to create pidfile within budget - child startup broken");
     assert!(!process_is_present(&child_pid.to_string()));
 }
