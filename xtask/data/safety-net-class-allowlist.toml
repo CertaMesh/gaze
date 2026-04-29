@@ -1,0 +1,10 @@
+[allowlist]
+# Each line: openai_label = "PiiClass mapping"
+private_person = "Name"
+private_address = "Location"
+private_email = "Email"
+private_phone = 'Custom("phone")'
+private_url = 'Custom("url")'
+private_date = 'Custom("date")'
+account_number = 'Custom("account_number")'
+secret = 'Custom("secret")'
