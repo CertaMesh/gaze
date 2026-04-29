@@ -332,9 +332,9 @@ preserve formatting, unwrap the content before passing it to the Gaze pipeline
 and re-wrap the clean output afterward. RegionHint-style envelope markers for
 `CodeBlock` and `Url` are deferred to v0.7.
 
-### v0.6.1 safety-net activation surface
+### v0.6 safety-net activation surface
 
-The v0.6.1 OpenAI Privacy Filter safety net is **not exposed through
+The v0.6 OpenAI Privacy Filter safety net is **not exposed through
 `policy.toml`**. Activation happens via `gaze clean --safety-net=<kind>`
 plus the `--openai-filter-*` flags, or programmatically through
 `Pipeline::with_safety_net(...)` behind the `safety-net-openai` feature
@@ -359,7 +359,7 @@ If a future minor release adds a TOML surface for safety nets, it must:
 - Keep the runtime CLI flag set as overrides — same precedence rule as
   `[ner]` and `[locale]` blocks (CLI flag > policy.toml > Gaze default).
 
-Until that work lands, the only supported activation paths in v0.6.1 are
+Until that work lands, the only supported activation paths in v0.6 are
 the CLI flags documented in
 [`crates/gaze-cli/README.md`](../crates/gaze-cli/README.md#safety-net) and
 the programmatic `Pipeline::with_safety_net` builder. The architecture

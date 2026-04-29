@@ -6,7 +6,7 @@ mutate the [`Manifest`](../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
-This document describes the v0.6.1 safety-net contract introduced under
+This document describes the safety-net contract introduced in v0.6 under
 todo #65 / PR #91. The first shipped backend is the OpenAI Privacy Filter
 (`opf`) subprocess adapter; the contract is generic so additional backends
 can land without changing the trait shape or audit schema.
@@ -58,7 +58,7 @@ pub trait SafetyNet: Send + Sync {
   `Uncovered`, `PartialBleed`, or `ClassMismatch`.
 - `locale_chain: &[LocaleTag]` — session-level locale fallback chain.
   `RawDocument::Structured` shares one chain across all fields by design;
-  per-field locale annotations are out of scope for v0.6.1.
+  per-field locale annotations are out of scope for v0.6.
 - `document_kind: DocumentKind` — `Text` or `Structured`.
 - `session_id: Option<&str>` — opaque audit session id.
 - `field_path: Option<&str>` — JSONPath-style field selector for structured
@@ -129,7 +129,7 @@ tarball. The official CLI was chosen over the `chiefautism/privacy-parser`
 fork because it documents pipe input, exposes a stable JSON schema, and
 publishes a reproducible Git history. The fork could be re-evaluated if a
 later review confirms native byte spans and the absence of PII-bearing JSON
-fields, but it is not the v0.6.1 default.
+fields, but it is not the v0.6 default.
 
 The adapter always invokes `opf --format json --output-mode typed`. Output
 mode `typed` is the only accepted shape; other modes are not parsed.
@@ -348,13 +348,13 @@ The GitHub workflow at
 runs feature-gated `cargo check` for `gaze`, `gaze-recognizers`, and
 `gaze-cli`, plus `cargo test -p gaze-audit` and the xtask gate. It triggers
 on every pull request and on push to `main`. The gate is **not** scheduled
-nightly in v0.6.1; the live-model nightly workflow is deferred — see the
+nightly in v0.6; the live-model nightly workflow is deferred — see the
 "Future work" section below.
 
 ## Activation surface
 
-v0.6.1 activates the safety net through the CLI or the programmatic builder
-on `Pipeline`. There is **no policy-TOML surface** in v0.6.1. Policy support
+v0.6 activates the safety net through the CLI or the programmatic builder
+on `Pipeline`. There is **no policy-TOML surface** in v0.6. Policy support
 is a deliberately deferred decision so the activation contract can be locked
 down before TOML adopters take a dependency on the shape.
 
@@ -378,10 +378,10 @@ path is excluded from the default `cargo build` graph.
 codes, and synthetic examples. `docs/policy.md` notes the explicit absence
 of a TOML surface.
 
-## Future work (deferred to v0.6.2 and later)
+## Future work (deferred to a post-v0.6.0 release)
 
-The following items are filed for v0.6.2 or later and intentionally not in
-v0.6.1 scope:
+The following items are filed for a release after v0.6.0 and intentionally
+not in the v0.6 SafetyNet rollup scope:
 
 - **Live-model nightly workflow.** A scheduled cron that runs the safety
   net against a non-empty synthetic corpus to detect FP-rate drift between
@@ -404,19 +404,19 @@ v0.6.1 scope:
 
 Cross-references:
 
-- todo #65 — v0.6.1 Pass-3 SafetyNet rollup (this PR).
+- todo #65 — Pass-3 SafetyNet rollup (this PR; ships in v0.6.0).
 - todo #303 — `SubprocessAdapter` shared helper for safety-net + future
   external recognizers.
-- todo #315 — v0.6.0 `audit` feature shim drop. The safety-net audit table
-  ships in `gaze-audit` and is unaffected by the shim drop, but adopters
-  will need to migrate to `use gaze_audit::SqliteLogger;` before turning the
-  safety net on.
+- todo #315 — v0.6.0 `audit` feature shim drop. Ships in the same v0.6.0
+  release as the SafetyNet rollup. Adopters need to migrate
+  `gaze::SqliteLogger` -> `gaze_audit::SqliteLogger` whether or not they
+  enable the safety net.
 - todo #328 — live-model nightly + non-empty synthetic corpus.
 
 ## See also
 
-- [`docs/policy.md`](../policy.md) — explicit note that v0.6.1 safety nets
-  are CLI-only.
+- [`docs/policy.md`](../policy.md) — explicit note that the v0.6 safety
+  nets are CLI-only.
 - [`crates/gaze-cli/README.md`](../../crates/gaze-cli/README.md) — full flag
   reference, exit-code map, and synthetic examples.
 - [`docs/architecture/crates.md`](crates.md) — workspace map, including the

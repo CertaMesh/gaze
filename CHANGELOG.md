@@ -198,6 +198,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gaze::SqliteLogger` imports to `gaze_audit::SqliteLogger`, then opt
   into SafetyNet at their own pace via the `safety-net-openai` feature.
 
+#### Deferred to a post-v0.6.0 release
+
+The following SafetyNet items are intentionally out of scope for v0.6.0
+and are tracked for a later release:
+
+- **Live-model nightly workflow** with a non-empty synthetic corpus to
+  detect FP-rate drift between checkpoint upgrades. Tracked under
+  todo #328.
+- **Native `ort` backend** with a `weights.rs` SHA-pinned scaffolding
+  module that removes the subprocess hop. The `OpenAiFilterBackend`
+  trait shape was designed so the same adapter API serves both
+  subprocess and in-process implementations.
+- **Fetch / download command** (`gaze safety-net fetch`) that pulls a
+  pinned `opf` build into a private cache directory and verifies the
+  checksum offline. Closes the "first-run requires manual install" gap.
+- **Long-lived subprocess / daemon mode** to amortize subprocess
+  startup cost when latency budgets tighten. The shared subprocess
+  helper proposal is filed under todo #303.
+- **False-positive adjudication dashboard** on top of `gaze audit
+  safety-net query` and `audit export` so reviewers can triage
+  suspects across runs.
+
+See
+[`docs/architecture/safety-nets.md` "Future work"](docs/architecture/safety-nets.md#future-work-deferred-to-a-post-v060-release)
+for the same list with its design notes.
+
 ## [0.5.1] - 2026-04-29
 
 ### Fixed

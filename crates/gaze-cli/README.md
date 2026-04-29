@@ -77,8 +77,8 @@ surface can be exercised. Production use should pass `--policy`.
 
 ### Safety net
 
-The optional `--safety-net=openai-filter` flag activates the v0.6.1
-observer-only safety net documented in
+The optional `--safety-net=openai-filter` flag activates the observer-only
+safety net documented in
 [docs/architecture/safety-nets.md](../../docs/architecture/safety-nets.md).
 The safety net runs after the deterministic clean and reports suspected
 leaks against the manifest of emitted tokens. It cannot mutate the clean
@@ -97,8 +97,8 @@ an official release of the
 [`openai/privacy-filter`](https://github.com/openai/privacy-filter) repository.
 Adopters should record the exact upstream Git SHA or tag they install in
 their deployment manifest. The adapter does **not** download or update the
-checkpoint; bring-your-own-binary plus bring-your-own-weights is the v0.6.1
-contract.
+checkpoint; bring-your-own-binary plus bring-your-own-weights is the
+v0.6 contract.
 
 Pin the install path with `GAZE_OPENAI_FILTER_OPF=/opt/opf/bin/opf` or pass
 `--openai-filter-command=<path>` per invocation. The command path must be a
@@ -193,7 +193,7 @@ deadline is `5000` ms; tighten it via `--safety-net-timeout-ms` for
 latency-sensitive callers. On timeout the adapter sends `SIGKILL`, reaps
 the process, and returns exit `3` with variant `Timeout`. The safety net
 does not currently amortize subprocess startup across calls; a long-lived
-helper is filed for v0.6.2+ (todo #303).
+helper is filed for post-v0.6.0 (todo #303).
 
 #### Audit
 
