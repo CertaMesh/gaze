@@ -9,7 +9,7 @@ use gaze_types::SafetyNetError;
 use serde::Deserialize;
 
 use super::{normalize_raw_spans, OpenAiFilterBackend, RawSpan};
-use crate::safety_net::openai_filter::class_map::validate_openai_label;
+use crate::safety_net::openai_filter::class_map::map_openai_label;
 
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
@@ -200,6 +200,8 @@ impl SubprocessOpenAiFilterBackend {
             .take()
             .map(|stderr| thread::spawn(move || read_bounded(stderr, MAX_VERBOSE_STDERR_BYTES)));
 
+        join_stdin(stdin_thread)?;
+
         let deadline = Instant::now() + self.config.timeout;
         let status = loop {
             match child.try_wait() {
@@ -225,7 +227,6 @@ impl SubprocessOpenAiFilterBackend {
             }
         };
 
-        join_stdin(stdin_thread)?;
         let stdout = join_reader(stdout_thread, "stdout")?;
         let stderr = match stderr_thread {
             Some(thread) => sanitize_stderr(&join_reader(thread, "stderr")?),
@@ -331,7 +332,7 @@ impl std::fmt::Debug for PrivateOpfSpan {
 
 impl PrivateOpfSpan {
     fn into_raw_span(self) -> Result<RawSpan, SafetyNetError> {
-        validate_openai_label(&self.label)?;
+        map_openai_label(&self.label)?;
         if let Some(score) = self.score {
             if !score.is_finite() {
                 return Err(SafetyNetError::InvalidOutput {

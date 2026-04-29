@@ -43,6 +43,10 @@ required-features = ["test-support"]
 name = "mock_safety_net"
 required-features = ["test-support"]
 
+[[test]]
+name = "openai_filter_subprocess"
+required-features = ["safety-net-openai"]
+
 [[bench]]
 name = "dictionary"
 harness = false
