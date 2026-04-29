@@ -817,7 +817,7 @@ mod tests {
             scope: SnapshotScope::Persistent { ttl_secs: 300 },
             session_hex: "a7f3b8e2".to_string(),
             entries: Vec::new(),
-            issued_at: now.saturating_add(61),
+            issued_at: now.saturating_add(3_600),
             next_by_class: Vec::new(),
         });
 

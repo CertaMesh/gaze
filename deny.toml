@@ -25,6 +25,12 @@ private = { ignore = true }
 [bans]
 workspace-default-features = "allow"
 
+# Safety-net dependency bans are graph-scoped in
+# `cargo run -p xtask -- cargo-metadata-audit-isolation`.
+# cargo-deny's package bans are intentionally not used for the Phase 0
+# `reqwest`/`hyper`/`tokio`/`ureq` safety-net rules because global bans would
+# also hit the existing v0.5 NER graph. xtask is the authoritative gate;
+# cargo-deny remains secondary belt-and-suspenders for feature policy.
 [[bans.features]]
 crate = "gaze"
 deny = ["audit"]

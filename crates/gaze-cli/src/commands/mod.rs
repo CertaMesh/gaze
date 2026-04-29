@@ -4,10 +4,13 @@ mod restore;
 
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::error::{CliError, RestoreMode};
 use crate::io::DEFAULT_MAX_BYTES;
+
+pub(crate) const DEFAULT_SAFETY_NET_TIMEOUT_MS: u64 = 5_000;
+pub(crate) const DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES: usize = 1_048_576;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -64,6 +67,27 @@ enum Cmd {
         /// Optional SQLite redaction-log database path.
         #[arg(long)]
         audit_db: Option<PathBuf>,
+        /// Optional observer-only privacy safety net.
+        #[arg(long, value_enum)]
+        safety_net: Option<SafetyNetKind>,
+        /// Path to the local OpenAI Privacy Filter `opf` command.
+        #[arg(long)]
+        openai_filter_command: Option<PathBuf>,
+        /// Path to the local OpenAI Privacy Filter checkpoint or model directory.
+        #[arg(long)]
+        openai_filter_checkpoint: Option<PathBuf>,
+        /// OpenAI Privacy Filter operating point, when supported by the command.
+        #[arg(long, value_enum)]
+        openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+        /// Safety-net subprocess timeout in milliseconds.
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
+        safety_net_timeout_ms: u64,
+        /// Maximum clean-text bytes submitted to the safety net.
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
+        safety_net_input_limit_bytes: usize,
+        /// Safety-net handling mode for suspected leaks.
+        #[arg(long, value_enum, default_value_t = SafetyNetMode::Strict)]
+        safety_net_mode: SafetyNetMode,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -158,6 +182,68 @@ enum AuditCmd {
         #[arg(long, alias = "count")]
         dry_run: bool,
     },
+    /// Query safety-net leak metadata without changing redaction-log output.
+    SafetyNet {
+        #[command(subcommand)]
+        command: SafetyNetAuditCmd,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum SafetyNetAuditCmd {
+    /// Print filtered safety-net metadata rows as tab-separated values.
+    Query {
+        /// SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: PathBuf,
+        /// Filter by safety-net leak kind.
+        #[arg(long)]
+        leak_kind: Option<String>,
+        /// Filter by raw backend label.
+        #[arg(long)]
+        raw_label: Option<String>,
+        /// Filter by mapped Gaze class.
+        #[arg(long)]
+        mapped_class: Option<String>,
+        /// Filter by structured field path.
+        #[arg(long)]
+        field_path: Option<String>,
+        /// Include rows created at or after this ISO 8601 timestamp.
+        #[arg(long = "from")]
+        from_iso8601: Option<String>,
+        /// Include rows created at or before this ISO 8601 timestamp.
+        #[arg(long = "to")]
+        to_iso8601: Option<String>,
+    },
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SafetyNetKind {
+    OpenaiFilter,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum OpenAiFilterOperatingPoint {
+    HighRecall,
+    Balanced,
+    HighPrecision,
+}
+
+impl OpenAiFilterOperatingPoint {
+    #[cfg(feature = "safety-net-openai")]
+    pub(crate) fn as_opf_value(self) -> &'static str {
+        match self {
+            Self::HighRecall => "high-recall",
+            Self::Balanced => "balanced",
+            Self::HighPrecision => "high-precision",
+        }
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SafetyNetMode {
+    Strict,
+    Tolerant,
 }
 
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
@@ -176,6 +262,13 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             max_bytes,
             context_json,
             audit_db,
+            safety_net,
+            openai_filter_command,
+            openai_filter_checkpoint,
+            openai_filter_operating_point,
+            safety_net_timeout_ms,
+            safety_net_input_limit_bytes,
+            safety_net_mode,
         } => clean::run(clean::Args {
             policy,
             format,
@@ -190,6 +283,13 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             max_bytes,
             context_json,
             audit_db,
+            safety_net,
+            openai_filter_command,
+            openai_filter_checkpoint,
+            openai_filter_operating_point,
+            safety_net_timeout_ms,
+            safety_net_input_limit_bytes,
+            safety_net_mode,
         }),
         Cmd::Restore {
             format,
@@ -254,6 +354,25 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 before,
                 dry_run,
             }),
+            AuditCmd::SafetyNet { command } => match command {
+                SafetyNetAuditCmd::Query {
+                    audit_db,
+                    leak_kind,
+                    raw_label,
+                    mapped_class,
+                    field_path,
+                    from_iso8601,
+                    to_iso8601,
+                } => audit::query_safety_net(audit::SafetyNetArgs {
+                    audit_db,
+                    leak_kind,
+                    raw_label,
+                    mapped_class,
+                    field_path,
+                    from_iso8601,
+                    to_iso8601,
+                }),
+            },
         },
     }
 }

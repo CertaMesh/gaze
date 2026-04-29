@@ -4,7 +4,10 @@ use std::path::PathBuf;
 
 use chrono::DateTime;
 use clap::ValueEnum;
-use gaze_audit::{AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
+use gaze_audit::{
+    AuditFilter, AuditLogRow, LeakSuspectRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
+    SAFETY_NET_RESTRICTED_COLUMNS,
+};
 use serde::Serialize;
 
 use crate::error::CliError;
@@ -24,6 +27,16 @@ pub(crate) struct PurgeArgs {
     pub(crate) audit_db: PathBuf,
     pub(crate) before: String,
     pub(crate) dry_run: bool,
+}
+
+pub(crate) struct SafetyNetArgs {
+    pub(crate) audit_db: PathBuf,
+    pub(crate) leak_kind: Option<String>,
+    pub(crate) raw_label: Option<String>,
+    pub(crate) mapped_class: Option<String>,
+    pub(crate) field_path: Option<String>,
+    pub(crate) from_iso8601: Option<String>,
+    pub(crate) to_iso8601: Option<String>,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -57,6 +70,37 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
                 .map(|created_at| created_at.to_string())
                 .unwrap_or_default(),
             row.session_id.unwrap_or_default()
+        )
+        .map_err(|_| CliError::Io)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn query_safety_net(args: SafetyNetArgs) -> std::result::Result<(), CliError> {
+    let rows = read_safety_net_rows(&args)?;
+    let mut stdout = io::stdout().lock();
+    writeln!(stdout, "{}", SAFETY_NET_RESTRICTED_COLUMNS.join("\t")).map_err(|_| CliError::Io)?;
+    for row in rows {
+        writeln!(
+            stdout,
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            row.id,
+            row.safety_net_id,
+            row.raw_label,
+            row.mapped_class,
+            row.leak_kind,
+            row.span_len,
+            row.document_kind,
+            row.field_path.unwrap_or_default(),
+            row.score.map(|score| score.to_string()).unwrap_or_default(),
+            row.created_at,
+            row.session_id.unwrap_or_default(),
+            row.pipeline_class.unwrap_or_default(),
+            row.safety_net_replay_hash.unwrap_or_default(),
+            row.backend_id.unwrap_or_default(),
+            row.backend_version.unwrap_or_default(),
+            row.decoding_params_hash.unwrap_or_default(),
+            row.telemetry_kind.unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -107,11 +151,32 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         source: args.source.clone(),
         action: args.action.clone(),
         document_kind: args.document_kind.clone(),
+        raw_label: None,
+        field_path: None,
         from_epoch_ms,
         to_epoch_ms,
         session_id: args.session_id.clone(),
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
+}
+
+fn read_safety_net_rows(
+    args: &SafetyNetArgs,
+) -> std::result::Result<Vec<LeakSuspectRow>, CliError> {
+    let from_epoch_ms = parse_iso8601_epoch_ms(args.from_iso8601.as_deref())?;
+    let to_epoch_ms = parse_iso8601_epoch_ms(args.to_iso8601.as_deref())?;
+    let filter = AuditFilter {
+        class: args.mapped_class.clone(),
+        source: None,
+        action: args.leak_kind.clone(),
+        document_kind: None,
+        raw_label: args.raw_label.clone(),
+        field_path: args.field_path.clone(),
+        from_epoch_ms,
+        to_epoch_ms,
+        session_id: None,
+    };
+    SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
 
 fn parse_iso8601_epoch_ms(value: Option<&str>) -> std::result::Result<Option<i64>, CliError> {

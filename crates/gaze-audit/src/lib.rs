@@ -6,5 +6,8 @@
 mod query;
 mod sqlite;
 
-pub use query::{build_audit_query_sql, AuditFilter, AuditLogRow, AUDIT_RESTRICTED_COLUMNS};
-pub use sqlite::{AuditError, Result, SqliteLogger};
+pub use query::{
+    build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
+    AUDIT_RESTRICTED_COLUMNS, SAFETY_NET_RESTRICTED_COLUMNS,
+};
+pub use sqlite::{AuditError, LeakSuspectLogEntry, LeakSuspectLogger, Result, SqliteLogger};
