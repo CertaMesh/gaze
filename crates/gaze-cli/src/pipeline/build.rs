@@ -50,6 +50,9 @@ pub(crate) fn build_pipeline_from_policy(
         gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
         gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
         gaze_assembly::BuildError::Pipeline(err) => err,
+        gaze_assembly::BuildError::UnknownLocaleBucket { bucket, .. } => {
+            gaze::Error::Policy(PolicyError::UnknownLocaleBucket { name: bucket })
+        }
     })
 }
 

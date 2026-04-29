@@ -1,8 +1,12 @@
+mod anchored_match;
 mod dictionary;
 mod error;
 mod ner;
 mod regex;
 
+pub use anchored_match::{
+    is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
+};
 pub use dictionary::DictionaryRecognizer;
 pub use error::{RecognizerError, Result};
 pub use ner::{

@@ -1,5 +1,5 @@
 use super::*;
-use crate::template::lower_pattern_template;
+use crate::{detector_wiring::derive_source_short_label, template::lower_pattern_template};
 use gaze::{
     Action, CleanDocument, DetectorKind, LocaleTag, PiiClass, PolicyError, RawDocument,
     RulepackError, Scope, Session, SessionPolicy, SessionScope,
@@ -449,4 +449,180 @@ pattern_template = '''{unknown_placeholder}: (.+)'''
             ..
         }) if placeholder == "unknown_placeholder"
     ));
+}
+
+#[test]
+fn anchored_match_missing_bucket_fails_closed_with_recognizer_id() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-anchored"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "missing_bucket"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+"#,
+    )
+    .expect("parse");
+    let policy = policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+    let err = match build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    ) {
+        Ok(_) => panic!("missing anchored_match bucket must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(
+        err,
+        BuildError::UnknownLocaleBucket {
+            recognizer_id,
+            bucket,
+        } if recognizer_id == "name.forward_marker" && bucket == "missing_bucket"
+    ));
+}
+
+#[test]
+fn anchored_match_empty_bucket_fails_closed_with_recognizer_id() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-anchored"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[locale.empty_bucket]
+names = []
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "empty_bucket"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+"#,
+    )
+    .expect("parse");
+    let policy = policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+    let err = match build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    ) {
+        Ok(_) => panic!("empty anchored_match bucket must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(
+        err,
+        BuildError::UnknownLocaleBucket {
+            recognizer_id,
+            bucket,
+        } if recognizer_id == "name.forward_marker" && bucket == "empty_bucket"
+    ));
+}
+
+#[test]
+fn anchored_match_builds_with_constructor_owned_cues() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "anchored"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[locale.forward_markers]
+names = ["Forwarded message from"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.scoring]
+base = 0.95
+priority = 60
+"#,
+    )
+    .expect("parse");
+    let policy = policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    )
+    .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("Forwarded message from Alice Example:".to_string()),
+        )
+        .expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert!(
+        regex::Regex::new(r"^Forwarded message from <[0-9a-f]{8}:Name_\d+>:$")
+            .unwrap()
+            .is_match(&text)
+    );
+}
+
+#[test]
+fn source_short_label_derivation_handles_builtin_and_adopter_shapes() {
+    assert_eq!(
+        derive_source_short_label("name.agent_recipient", "agent_recipient_cues"),
+        "agent_recipient"
+    );
+    assert_eq!(
+        derive_source_short_label("name.forward_marker", "forward_markers"),
+        "forward_marker"
+    );
+    assert_eq!(
+        derive_source_short_label("name.auto_footer", "footer_cues"),
+        "auto_footer"
+    );
+    assert_eq!(
+        derive_source_short_label("name.x.team_handoff", "team_handoff_cues"),
+        "team_handoff"
+    );
 }
