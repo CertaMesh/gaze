@@ -1,8 +1,9 @@
 # Gaze NER testdata
 
 This directory holds **test fixtures** for the `NerDetector` load contract.
-No real model weights live here and none ever should — the runtime weights
-are fetched out-of-repo via `scripts/fetch-ner-model.sh`.
+No real model weights live here and none ever should. The canonical adopter
+contracts moved to `assets/ner/`, and the runtime weights are fetched
+out-of-repo via `scripts/fetch-ner-model.sh`.
 
 ## What's in here
 
@@ -10,10 +11,11 @@ are fetched out-of-repo via `scripts/fetch-ner-model.sh`.
   placeholder hashes. Unit tests that build a temp model dir copy this
   file, write matching (fake) artifact bytes, and then exercise the
   checksum / missing-artifact fail-closed paths without any model.
-- `labels.example.json` — example label map used by the fetch script and
-  by integration tests that verify `labels.json` parsing. `MISC` maps to
-  `"drop"` by default (the sentinel that causes `NerDetector` to silently
-  skip those spans).
+- `labels.example.json` — schema-only label map for integration tests that
+  verify `labels.json` parsing. The adopter-facing label contract lives at
+  `assets/ner/labels.davlan-mbert.json`. `DATE` and `O` map to `"drop"` by
+  default (the sentinel that causes `NerDetector` to silently skip those
+  spans).
 - Production `config.json` may include `"backend": "ort"` (or another
   supported driver name in the future). `NerDetector::load` reads that
   field to choose the runtime backend while keeping the pipeline API
