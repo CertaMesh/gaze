@@ -28,6 +28,11 @@ pub use dictionaries::{
 pub use gaze_audit::{
     build_audit_query_sql, AuditFilter, AuditLogRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
 };
+pub use gaze_types::{
+    EmittedTokenSpan, LeakKind, LeakKindTag, LeakReport, LeakReportStats, LeakReportTelemetry,
+    LeakSuspect, Manifest, OpenAiPrivateLabel, SafetyNet, SafetyNetContext, SafetyNetError,
+    SafetyNetPiiClass,
+};
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
 pub use policy::{

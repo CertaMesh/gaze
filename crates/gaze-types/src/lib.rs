@@ -749,10 +749,18 @@ pub enum CleanDocument {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
 pub enum Value {
+    /// Null value.
+    Null,
+    /// Boolean value.
+    Bool(bool),
     /// String value.
     String(String),
     /// Signed 64-bit integer value.
     I64(i64),
+    /// Array value.
+    Array(Vec<Value>),
+    /// Object value.
+    Object(BTreeMap<String, Value>),
 }
 
 impl Value {
@@ -760,7 +768,17 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Self::String(value) => Some(value.as_str()),
-            Self::I64(_) => None,
+            Self::Null | Self::Bool(_) | Self::I64(_) | Self::Array(_) | Self::Object(_) => None,
+        }
+    }
+
+    /// Returns a scalar string representation used for structured safety-net checks.
+    pub fn scalar_to_safety_net_string(&self) -> Option<String> {
+        match self {
+            Self::String(value) if !value.is_empty() => Some(value.clone()),
+            Self::String(_) | Self::Null | Self::Array(_) | Self::Object(_) => None,
+            Self::Bool(value) => Some(value.to_string()),
+            Self::I64(value) => Some(value.to_string()),
         }
     }
 }
@@ -991,8 +1009,10 @@ mod safety_net_manifest_tests {
 
     #[test]
     fn single_internal_gap_returns_partial_bleed() {
-        let manifest =
-            Manifest::from_spans(vec![span(0, 5, PiiClass::Email), span(10, 15, PiiClass::Email)]);
+        let manifest = Manifest::from_spans(vec![
+            span(0, 5, PiiClass::Email),
+            span(10, 15, PiiClass::Email),
+        ]);
 
         assert_eq!(
             diff(manifest, 0..15, PiiClass::Email),
@@ -1034,8 +1054,10 @@ mod safety_net_manifest_tests {
 
     #[test]
     fn adjacent_same_class_tokens_cover_continuously() {
-        let manifest =
-            Manifest::from_spans(vec![span(0, 5, PiiClass::Email), span(5, 10, PiiClass::Email)]);
+        let manifest = Manifest::from_spans(vec![
+            span(0, 5, PiiClass::Email),
+            span(5, 10, PiiClass::Email),
+        ]);
 
         assert_eq!(diff(manifest, 0..10, PiiClass::Email), None);
     }
@@ -1053,8 +1075,10 @@ mod safety_net_manifest_tests {
             Some(LeakKind::PartialBleed { uncovered: 8..10 })
         );
 
-        let with_gap =
-            Manifest::from_spans(vec![span(0, 3, PiiClass::Email), span(6, 10, PiiClass::Email)]);
+        let with_gap = Manifest::from_spans(vec![
+            span(0, 3, PiiClass::Email),
+            span(6, 10, PiiClass::Email),
+        ]);
         assert_eq!(
             diff(with_gap, 0..10, PiiClass::Email),
             Some(LeakKind::PartialBleed { uncovered: 3..6 })
@@ -1068,7 +1092,10 @@ mod safety_net_manifest_tests {
         assert_eq!(token_start, 9, "emoji is four bytes, not one char");
         let manifest = Manifest::from_spans(vec![span(token_start, text.len(), PiiClass::Email)]);
 
-        assert_eq!(diff(manifest, token_start..text.len(), PiiClass::Email), None);
+        assert_eq!(
+            diff(manifest, token_start..text.len(), PiiClass::Email),
+            None
+        );
     }
 
     #[test]
