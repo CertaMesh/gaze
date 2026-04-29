@@ -7,7 +7,7 @@ jobs:
   cargo-metadata-audit-isolation:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run cargo_metadata_audit_isolation gate
