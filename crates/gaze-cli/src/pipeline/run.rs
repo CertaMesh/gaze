@@ -17,6 +17,7 @@ use gaze::{
 };
 use gaze_audit::SqliteLogger;
 
+use crate::commands::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
@@ -41,6 +42,13 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) max_bytes: u64,
     pub(crate) context_json: Option<&'a Path>,
     pub(crate) audit_db: Option<&'a Path>,
+    pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) openai_filter_command: Option<&'a Path>,
+    pub(crate) openai_filter_checkpoint: Option<&'a Path>,
+    pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    pub(crate) safety_net_timeout_ms: u64,
+    pub(crate) safety_net_input_limit_bytes: usize,
+    pub(crate) safety_net_mode: SafetyNetMode,
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {

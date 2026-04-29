@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use super::{OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
 use crate::error::CliError;
 use crate::pipeline::{run_clean, CleanOptions};
 
@@ -17,6 +18,13 @@ pub(crate) struct Args {
     pub(crate) max_bytes: u64,
     pub(crate) context_json: Option<PathBuf>,
     pub(crate) audit_db: Option<PathBuf>,
+    pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) openai_filter_command: Option<PathBuf>,
+    pub(crate) openai_filter_checkpoint: Option<PathBuf>,
+    pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    pub(crate) safety_net_timeout_ms: u64,
+    pub(crate) safety_net_input_limit_bytes: usize,
+    pub(crate) safety_net_mode: SafetyNetMode,
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
@@ -34,5 +42,12 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         max_bytes: args.max_bytes,
         context_json: args.context_json.as_deref(),
         audit_db: args.audit_db.as_deref(),
+        safety_net: args.safety_net,
+        openai_filter_command: args.openai_filter_command.as_deref(),
+        openai_filter_checkpoint: args.openai_filter_checkpoint.as_deref(),
+        openai_filter_operating_point: args.openai_filter_operating_point,
+        safety_net_timeout_ms: args.safety_net_timeout_ms,
+        safety_net_input_limit_bytes: args.safety_net_input_limit_bytes,
+        safety_net_mode: args.safety_net_mode,
     })
 }
