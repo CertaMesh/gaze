@@ -13,7 +13,6 @@ path = "src/lib.rs"
 
 [features]
 default = ["bundled-recognizers"]
-audit = ["dep:gaze-audit"]
 bundled-recognizers = ["dep:gaze-recognizers"]
 safety-net = []
 
@@ -22,7 +21,6 @@ anyhow = "1"
 base64 = "0.22"
 dashmap = "6"
 ed25519-dalek = "2"
-gaze-audit = { workspace = true, optional = true }
 gaze-recognizers = { path = "../gaze-recognizers", optional = true }
 gaze-types = { workspace = true }
 hex = "0.4"
