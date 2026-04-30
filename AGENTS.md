@@ -24,17 +24,17 @@ Every design, implementation, and review decision MUST be evaluated against thes
 
 Full rationale, reframes of active decisions, what the north star rejects, and drift-measurement protocol live in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
 
-## Workspace shape (v0.5)
+## Workspace shape (v0.6)
 
-As of v0.5 dev complete (`[Unreleased]`), the workspace has six published-shape crates plus `xtask`:
+As of v0.6.4, the workspace has six published-shape crates plus `xtask`:
 
-- `gaze` — core (pipeline, session, policy, registry, locale, rulepack, `RedactionLogger` trait). No `rusqlite` dep in default builds.
-- `gaze-types` — shared value contracts (serde-only, no ML/sql deps). New in Phase B.
+- `gaze` — core (pipeline, session, policy, registry, locale, rulepack). Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph.
+- `gaze-types` — shared value contracts including the canonical `RedactionLogger` trait (serde-only, no ML/sql deps). Introduced in v0.5 Phase B.
 - `gaze-recognizers` — regex/dictionary/NER detection backends + embedded rulepacks.
-- `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. New in Phase C.
+- `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. Introduced in v0.5 Phase C.
 - `gaze-assembly` — policy-to-pipeline builder for CLI-style adopters.
 - `gaze-cli` — standalone `gaze` binary; only allowlisted `gaze-audit` consumer outside compatibility tests.
-- `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in Phase E.
+- `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 
 Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](./CONTRIBUTING.md#workspace-shape).
 

@@ -59,13 +59,14 @@ These are open, verified candidates for the next planning pass:
 
 | Version | Date | Highlights |
 |---|---:|---|
+| v0.6.4 | 2026-04-30 | `phone.national.de` 3-digit and 4-digit area-code metro coverage (closes #420); pre-push hook docs-only fast-path skips cargo/xtask gates for allowlisted documentation paths (PR #120, external contributor @naoray) |
+| v0.6.3 | 2026-04-30 | `phone.national.de` 10-digit metro landline coverage for Berlin/Hamburg/Frankfurt/Munich (closes #414); `phone.national.us` and `phone.structural` consuming-boundary fix rejects identifier-attached numbers (closes #415); DE phone regex no longer over-matches IBAN tails |
+| v0.6.2 | 2026-04-30 | `ip.v6` recognizer RFC 4291 §2.2 IPv4-embedded form support including IPv4-mapped `::ffff:d.d.d.d` and IPv4-compatible `::d.d.d.d`; closes leak path where `::ffff:192.0.2.128` partially tokenized (closes #419) |
+| v0.6.1 | 2026-04-30 | `gaze clean --openai-filter-device {auto\|cpu\|cuda\|mps}` SafetyNet device selection (closes #362); `phone.national.de` separator variants for hyphen/space/slash/dot (closes #316); `cargo-metadata-audit-isolation` fails loud on unknown feature names (closes #340, #350) |
 | v0.6.0 | 2026-04-29 | Pass-3 SafetyNet runtime, cue-anchored `Name` detection through `anchored_match`, audit feature shim removal, `RedactionLogger` moved to `gaze-types`, tracked pre-push hook with doc-only fast path |
 | v0.5.1 | 2026-04-29 | Bundled `rulepack_version` sync — `core`, `core-extended`, `locale-de`, `locale-en` embedded TOMLs now report `rulepack_version = "0.5.1"`, restoring the v0.4.6 contract that bundled rulepacks track `gaze-recognizers` |
 | v0.5.0 | 2026-04-27 | `gaze-types` extraction, `gaze-audit` passive sink with one-minor `audit` feature shim, dylint-based `gaze_module_isolation` lint replaces syn-walker `audit_metadata_only` gate, `bundled-recognizers` feature gate frees `gaze` core from `ort` / `tokenizers` / `ndarray` ML deps |
 | v0.4.6 | 2026-04-26 | Bundle-tokenization-drift xtask gate, fixture-citation lint, rulepack-derived bundle classes, DE national-phone recall broaden, no-feature phone parser fail-closed regression, Homebrew tap decision |
-| v0.4.5 | 2026-04-26 | DE+US national phones, audit retention purge + `audit_metadata_only` gate, `--session` audit filter, ClassMapOverrideSafety extension, rulepack version bump validation, `gaze-assembly` split |
-| v0.4.4 | 2026-04-26 | ClassMapOverrideSafety gate, audit schema v2 with `--from` / `--to`, parser-backed E.164 phone validation, Date-as-PII posture memo |
-| v0.4.3 | 2026-04-26 | Luhn + IBAN MOD-97 validators, `core-extended` Phase 2 for IBAN + credit cards, `no_tenant_knowledge` gate, audit query/export |
 
 Older versions are tracked in `CHANGELOG.md`.
 
