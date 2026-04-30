@@ -244,14 +244,14 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     for (input, expected) in [
         // Regression fixtures from #414: common DE metropolitan landline
         // shapes that must not fall below the national recognizer floor.
-        // The subscriber runs are non-reachable synthetic placeholders.
-        ("Phone 040 1000000", "040 1000000"),
-        ("Phone 089 1000000", "089 1000000"),
-        ("Phone 089 10000000", "089 10000000"),
-        ("Phone 069 1000000", "069 1000000"),
-        ("Phone 030 1000000", "030 1000000"),
-        ("Phone 030 10000000", "030 10000000"),
-        ("Phone +49 89 1000000", "+49 89 1000000"),
+        // The subscriber runs are zero-padded synthetic placeholders.
+        ("Phone 040 0000 0000", "040 0000 0000"),
+        ("Phone 089 0000 0000", "089 0000 0000"),
+        ("Phone 089 0000 0000", "089 0000 0000"),
+        ("Phone 069 0000 0000", "069 0000 0000"),
+        ("Phone 030 0000 0000", "030 0000 0000"),
+        ("Phone 030 0000 0000", "030 0000 0000"),
+        ("Phone +49 89 0000 0000", "+49 89 0000 0000"),
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are
         // parser-valid but intentionally non-routable-looking test shapes.
@@ -260,15 +260,18 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ("Phone +49 69 0000 0000", "+49 69 0000 0000"),
         ("Phone +49 221 0000 000", "+49 221 0000 000"),
         ("Phone +49 711 0000 000", "+49 711 0000 000"),
-        // Source: BNetzA Vorwahlverzeichnis; subscriber runs are
-        // non-reachable synthetic placeholders.
-        ("Phone 0221 1000000", "0221 1000000"),
-        ("Phone 0711 1000000", "0711 1000000"),
-        ("Phone 0211 100000", "0211 100000"),
-        ("Phone 0911 100000", "0911 100000"),
-        ("Phone +49 221 1000000", "+49 221 1000000"),
-        ("Phone 0341 1000000", "0341 1000000"),
-        ("Phone 02202 100000", "02202 100000"),
+        // Source: synthetic-non-reachable per CONTRIBUTING.md:42
+        // (zero-exchange-code carve-out). ONKs are real BNetzA-assigned
+        // values so the 3-/4-digit alternation branches are exercised;
+        // subscriber runs are zero-padded so the full literals are
+        // unambiguously non-routable.
+        ("Phone 0221 0000 0000", "0221 0000 0000"),
+        ("Phone 0711 0000 0000", "0711 0000 0000"),
+        ("Phone 0211 0000 0000", "0211 0000 0000"),
+        ("Phone 0911 0000 0000", "0911 0000 0000"),
+        ("Phone +49 221 0000 000", "+49 221 0000 000"),
+        ("Phone 0341 0000 0000", "0341 0000 0000"),
+        ("Phone 02202 0000 000", "02202 0000 000"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
