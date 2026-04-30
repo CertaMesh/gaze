@@ -195,6 +195,13 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     );
     // drift-ack: S4 DE national phone broaden — internal recall per gaze-laravel
     for (input, expected) in [
+        // Regression fixtures from #414: common DE metropolitan landline
+        // shapes that must not fall below the national recognizer floor.
+        ("Phone 040 1234567", "040 1234567"),
+        ("Phone 089 12345678", "089 12345678"),
+        ("Phone 069 1234567", "069 1234567"),
+        ("Phone 030 12345678", "030 12345678"),
+        ("Phone +49 89 1234567", "+49 89 1234567"),
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are
         // parser-valid but intentionally non-routable-looking test shapes.
@@ -303,6 +310,8 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "Build finished at 01:55:50.112233",
         "Order 0171-0000000X",
         "Customer_4915550112233",
+        "Order_4915550112233",
+        "0911 1234",
     ] {
         assert!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe).is_empty(),
