@@ -31,11 +31,11 @@ description.
 
 ## Workspace shape
 
-As of v0.5 dev complete (`[Unreleased]`):
+As of v0.6.4:
 
 | Crate | Role |
 |---|---|
-| `crates/gaze` | Core: pipeline, session, policy loader, recognizer registry, locale chain, rulepack schema, token grammar, `RedactionLogger` trait. **No `rusqlite` dep in default or `--no-default-features` builds.** |
+| `crates/gaze` | Core: pipeline, session, policy loader, recognizer registry, locale chain, rulepack schema, token grammar. Re-exports `gaze_types::RedactionLogger` for source-compat. **No `rusqlite` dep in any feature graph.** |
 | `crates/gaze-types` | Shared value contracts (`Recognizer`, `Detection`, `PiiClass`, `Action`, `RedactionEntry`, `LocaleTag` / `LocaleChain` / `LocaleError`, `RawDocument`, `CleanDocument`, `DictionaryBundle`, token-related types). Serde-only — no ML or sql deps. New in v0.5 Phase B (PR #74). |
 | `crates/gaze-recognizers` | Regex/dictionary/NER detection backends + embedded `core` and `core-extended` rulepacks + locale bundles. |
 | `crates/gaze-audit` | Passive audit sink: `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`. `rusqlite` is isolated here. New in v0.5 Phase C (PR #75). |
