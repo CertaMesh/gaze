@@ -582,6 +582,31 @@ fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
 }
 
 #[test]
+fn phase2_mod97_failing_iban_shape_can_still_tokenize_phone_tail() {
+    let rulepack = core_extended();
+    let input = "My IBAN DE12 3456 7890 01555 0112233";
+
+    assert!(
+        detect_recognizer(&rulepack, "iban.structural", input, LocaleTag::DeDe).is_empty(),
+        "iban.structural must reject mod-97-failing IBAN shapes"
+    );
+    assert_eq!(
+        detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
+        vec!["01555 0112233".to_string()]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+    assert_custom_token(&clean, "phone");
+    assert!(
+        !clean.contains(":Custom:iban_"),
+        "invalid IBAN shape must not produce an IBAN token: {clean}"
+    );
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
 fn phase2_formatted_card_with_spaces_tokenizes_and_round_trips() {
     let rulepack = core_extended();
     let input = "Card: 4111 1111 1111 1111";
