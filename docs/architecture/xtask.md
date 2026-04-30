@@ -15,6 +15,7 @@ $ cargo run -p xtask -- fixture-citation-lint
 $ cargo run -p xtask -- ci-feature-matrix
 $ cargo run -p xtask -- cargo-metadata-audit-isolation
 $ cargo run -p xtask -- dylint-gate
+$ cargo run -p xtask -- safety-net-sanity
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -32,6 +33,7 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C and updated in v0.6 after the `gaze` audit feature shim was removed. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default, `--no-default-features`, or safety-net graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
 | `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
+| `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Added in v0.6.0 alongside the Pass-3 SafetyNet runtime (todo #65). Behavioral gate over the OpenAI-filter SafetyNet path: lists and runs the `mock_safety_net`, `openai_filter_subprocess`, and `context_sensitivity_v0_6` recognizer-suite tests. Cargo invocations are batched per Phase 7.3 of #65. |
 
 ## dylint_gate
 
