@@ -36,10 +36,13 @@ locales = ["de-DE", "de-AT", "de-CH"]
 
 [recognizers.match]
 kind = "regex"
-# BNetzA Vorwahlverzeichnis lists 2- to 5-digit Ortsnetzkennzahlen. Following
-# the v0.6.3 short-branch precedent, audited metro area codes get literal
-# branches while the generic branch stays at 11+ digits to reject IBAN tails.
-pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:(?:\+49[\s./-]*|0)(?:30|40|69|89)[\s./-]*[1-9](?:\d[\s./-]*){5}\d)|(?:(?:\+49[\s./-]*|0)(?:201|203|211|212|214|221|228|231|234|241|261|271|281|291|331|335|341|345|351|361|365|371|375|381|385|391|395|421|441|451|461|471|481|511|531|541|551|561|571|581|591|611|621|631|641|651|661|671|681|711|721|731|741|751|761|771|781|791|821|831|841|851|861|871|881|891|911|921|931|941|951|961|971|981|991)[\s./-]*[1-9](?:\d[\s./-]*){4,5}\d)|(?:(?:\+49[\s./-]*|0)(?:2051|2102|2131|2133|2173|2181|2202|2233|2241|2302|2305|2361|2366|2371|2421|2841|4101|4131|4421|4721|5121|5131|5141|5151|5241|5251|5341|7071|7121|7131|7141|7231)[\s./-]*[1-9](?:\d[\s./-]*){4}\d)|(?:(?:\+49[\s./-]*|0)[1-9](?:\d[\s./-]*){8,13}\d))\b'''
+# Source: BNetzA Vorwahlverzeichnis (https://www.bundesnetzagentur.de/DE/Fachthemen/Telekommunikation/Nummerierung/ONRufnr/start.html), as-of 2026-04-29.
+# BNetzA lists 2- to 5-digit Ortsnetzkennzahlen. Following the v0.6.3 short-branch
+# precedent, audited metro area codes get literal branches while the generic
+# branch stays at 11+ digits to reject IBAN tails.
+# ONKs are prefix-free; do not add 3-digit codes whose 2-digit prefix is already
+# a valid ONK like 30/40/69/89.
+pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:(?:\+49[\s./-]*|0)(?:30|40|69|89)[\s./-]*[1-9](?:\d[\s./-]*){5}\d)|(?:(?:\+49[\s./-]*|0)(?:201|203|211|212|214|221|228|231|234|241|261|271|281|291|331|335|341|345|351|361|365|371|375|381|385|391|395|421|441|451|461|471|481|511|531|541|551|561|571|581|591|611|621|631|641|651|661|671|681|711|721|731|741|751|761|771|781|791|821|831|841|851|861|871|881|911|921|931|941|951|961|971|981|991)[\s./-]*[1-9](?:\d[\s./-]*){4,5}\d)|(?:(?:\+49[\s./-]*|0)(?:2051|2102|2131|2133|2173|2181|2202|2233|2241|2302|2305|2361|2366|2371|2421|2841|4101|4131|4421|4721|5121|5131|5141|5151|5241|5251|5341|7071|7121|7131|7141|7231)[\s./-]*[1-9](?:\d[\s./-]*){4}\d)|(?:(?:\+49[\s./-]*|0)[1-9](?:\d[\s./-]*){8,13}\d))\b'''
 capture_groups = [1]
 
 [recognizers.validator]
