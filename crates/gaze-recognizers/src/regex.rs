@@ -14,6 +14,10 @@ pub enum ValidatorKind {
     E164PhoneNational(Region),
     Luhn,
     IbanMod97,
+    /// Strict decimal dotted-quad IPv4 parser.
+    Ipv4Parse,
+    /// RFC 4291 / RFC 5952 IPv6 textual parser.
+    Ipv6Parse,
 }
 
 #[cfg(feature = "phone-parser")]
@@ -35,6 +39,8 @@ impl ValidatorKind {
             "e164_phone_national_us" => Ok(Self::E164PhoneNational(Region::Us)),
             "luhn" => Ok(Self::Luhn),
             "iban_mod97" => Ok(Self::IbanMod97),
+            "ipv4_parse" => Ok(Self::Ipv4Parse),
+            "ipv6_parse" => Ok(Self::Ipv6Parse),
             // With phone-parser disabled, phone validators fall through here so
             // rulepack construction fails closed instead of silently dropping candidates.
             other => Err(RecognizerError::UnsupportedValidator {
@@ -52,6 +58,8 @@ impl ValidatorKind {
             Self::E164PhoneNational(region) => validate_phone_national(region, input).is_some(),
             Self::Luhn => luhn_check(input),
             Self::IbanMod97 => iban_mod97_check(input),
+            Self::Ipv4Parse => ipv4_parse_check(input),
+            Self::Ipv6Parse => ipv6_parse_check(input),
         }
     }
 }
@@ -376,6 +384,14 @@ fn iban_mod97_check(input: &str) -> bool {
         }
     }
     remainder == 1
+}
+
+fn ipv4_parse_check(input: &str) -> bool {
+    input.parse::<std::net::Ipv4Addr>().is_ok()
+}
+
+fn ipv6_parse_check(input: &str) -> bool {
+    input.parse::<std::net::Ipv6Addr>().is_ok()
 }
 
 #[cfg(test)]

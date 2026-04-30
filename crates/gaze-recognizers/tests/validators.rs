@@ -100,6 +100,78 @@ fn iban_mod97_accepts_spec_examples_and_rejects_check_digit_mutants() {
     }
 }
 
+#[test]
+fn ipv4_parse_accepts_rfc5737_documentation_addresses_and_rejects_malformed() {
+    // Source: RFC 5737 documentation prefixes 192.0.2.0/24,
+    // 198.51.100.0/24, and 203.0.113.0/24.
+    for input in [
+        "192.0.2.1",
+        "198.51.100.10",
+        "203.0.113.255",
+        "0.0.0.0",
+        "255.255.255.255",
+    ] {
+        assert!(ValidatorKind::Ipv4Parse.validates(input), "{input}");
+    }
+    for input in [
+        // Source: RFC 6943 Section 3.1.1 warns against non-decimal IPv4 forms.
+        "192.000.2.1",
+        "01.2.3.4",
+        "0xC0.0x00.0x02.0x01",
+        "192.168.1",
+        "192.168",
+        "256.0.0.1",
+        "192.0.2.300",
+        "192.0.2.1.",
+        " 192.0.2.1",
+        "",
+    ] {
+        assert!(!ValidatorKind::Ipv4Parse.validates(input), "{input}");
+    }
+}
+
+#[test]
+fn ipv4_parse_kind_token_round_trips() {
+    let kind = ValidatorKind::parse("ipv4_parse").expect("parse ipv4_parse");
+    assert_eq!(kind, ValidatorKind::Ipv4Parse);
+}
+
+#[test]
+fn ipv6_parse_accepts_rfc3849_documentation_addresses_and_ipv4_embedded() {
+    // Source: RFC 3849 documentation prefix 2001:db8::/32 and RFC 4291
+    // Section 2.2 textual forms, including IPv4-embedded form 3.
+    for input in [
+        "2001:db8::1",
+        "::1",
+        "::",
+        "fe80::1",
+        "2001:db8:0:0:0:0:0:1",
+        "::ffff:192.0.2.128",
+        "::192.0.2.1",
+        "2001:db8::192.0.2.1",
+        "fe80::ffff:1.2.3.4",
+        "0:0:0:0:0:ffff:192.0.2.1",
+    ] {
+        assert!(ValidatorKind::Ipv6Parse.validates(input), "{input}");
+    }
+    for input in [
+        "2001::1::2",
+        "[2001:db8::1]",
+        "fe80::1%eth0",
+        "::ffff:256.0.0.1",
+        "",
+        " 2001:db8::1",
+    ] {
+        assert!(!ValidatorKind::Ipv6Parse.validates(input), "{input}");
+    }
+}
+
+#[test]
+fn ipv6_parse_kind_token_round_trips() {
+    let kind = ValidatorKind::parse("ipv6_parse").expect("parse ipv6_parse");
+    assert_eq!(kind, ValidatorKind::Ipv6Parse);
+}
+
 #[cfg(not(feature = "phone-parser"))]
 #[test]
 fn e164_phone_fails_closed_when_phone_parser_feature_disabled() {
