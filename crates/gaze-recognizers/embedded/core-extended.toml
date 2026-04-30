@@ -55,7 +55,10 @@ locales = ["en-US"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?x)(?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2})\b'''
+# Mirrors phone.national.de's consuming boundary so identifier-attached
+# numbers reject consistently; see audit scratchpad 778.
+pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2}))\b'''
+capture_groups = [1]
 
 [recognizers.validator]
 kind = "e164_phone_national_us"

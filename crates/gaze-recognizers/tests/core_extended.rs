@@ -228,6 +228,22 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ),
         vec!["+1 555 0100".to_string()]
     );
+    for (input, expected) in [
+        ("Order 1-202-555-0100", "1-202-555-0100"),
+        ("Phone (415) 555-0101", "(415) 555-0101"),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "phone.national.us", input, LocaleTag::EnUs),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+    for input in ["Order_15551234567", "Customer+12025550100"] {
+        assert!(
+            detect_recognizer(&rulepack, "phone.national.us", input, LocaleTag::EnUs).is_empty(),
+            "phone.national.us must not fire for {input}"
+        );
+    }
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
         vec!["192.168.1.1".to_string()]
