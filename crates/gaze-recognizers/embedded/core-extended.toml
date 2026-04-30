@@ -12,7 +12,11 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\+\d{6,15}\b'''
+# Mirrors the national phone consuming boundary so phone.structural cannot
+# re-open identifier-attached E.164 matches rejected by locale recognizers;
+# cross-recognizer asymmetry caught in PR #126 review scratchpad 795.
+pattern = '''(?:^|[^[:alnum:]_+])(\+\d{6,15})\b'''
+capture_groups = [1]
 
 [recognizers.validator]
 kind = "e164_phone"
@@ -32,7 +36,11 @@ locales = ["de-DE", "de-AT", "de-CH"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:\+49[\s./-]*|0)[1-9](?:\d[\s./-]*){8,13}\d)\b'''
+# BNetzA Numbering Plan permits 10+ digit national significant numbers; audit
+# scratchpad 778 flagged 10-digit metropolitan landlines as an A1 leak vector.
+# The short branch is intentionally limited to the audited metro area codes;
+# keeping the generic branch at 11+ digits avoids matching formatted IBAN tails.
+pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:(?:\+49[\s./-]*|0)(?:30|40|69|89)[\s./-]*[1-9](?:\d[\s./-]*){5}\d)|(?:(?:\+49[\s./-]*|0)[1-9](?:\d[\s./-]*){8,13}\d))\b'''
 capture_groups = [1]
 
 [recognizers.validator]
@@ -53,7 +61,10 @@ locales = ["en-US"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?x)(?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2})\b'''
+# Mirrors phone.national.de's consuming boundary so identifier-attached
+# numbers reject consistently; see audit scratchpad 778.
+pattern = '''(?x)(?:^|[^[:alnum:]_+])((?:\+?1[\s.-]+555[\s.-]*01\d{2}|\+?1[\s.-]+(?:\([2-9]\d{2}\)|[2-9]\d{2})[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|\([2-9]\d{2}\)[\s.-]*[2-9]\d{2}[\s.-]*\d{4}|[2-9]\d{2}[\s.-]+[2-9]\d{2}[\s.-]+\d{4}|555[\s.-]*01\d{2}))\b'''
+capture_groups = [1]
 
 [recognizers.validator]
 kind = "e164_phone_national_us"

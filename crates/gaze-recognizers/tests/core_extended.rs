@@ -168,6 +168,53 @@ fn assert_custom_token(clean: &str, class: &str) {
 }
 
 #[test]
+fn full_pipeline_rejects_identifier_attached_e164_phone_candidates() {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    let extended = core_extended();
+    let mut builder = Pipeline::builder()
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(ClassRule::new(
+            PiiClass::Custom("phone".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve));
+
+    let email_spec = core
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "email.global")
+        .expect("email.global");
+    builder = builder.recognizer(regex_from_spec(email_spec));
+    for spec in &extended.recognizers {
+        if spec.enabled {
+            builder = builder.recognizer(regex_from_spec(spec));
+        }
+    }
+
+    let pipeline = builder.build().expect("pipeline");
+
+    for input in ["Customer+12025550100", "Order_+12025550100"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+        assert_eq!(clean, input, "unexpected tokenization for {input}: {clean}");
+        assert!(
+            !clean.contains(":Custom:phone_"),
+            "custom:phone must not fire for {input}: {clean}"
+        );
+    }
+
+    for input in ["Phone +12025550100", "+12025550100 logged at startup"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+        assert!(
+            clean.contains(":Custom:phone_1>"),
+            "missing Custom:phone token in {clean}"
+        );
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
 fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     let rulepack = core_extended();
 
@@ -195,6 +242,15 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     );
     // drift-ack: S4 DE national phone broaden — internal recall per gaze-laravel
     for (input, expected) in [
+        // Regression fixtures from #414: common DE metropolitan landline
+        // shapes that must not fall below the national recognizer floor.
+        ("Phone 040 1234567", "040 1234567"),
+        ("Phone 089 1234567", "089 1234567"),
+        ("Phone 089 12345678", "089 12345678"),
+        ("Phone 069 1234567", "069 1234567"),
+        ("Phone 030 1234567", "030 1234567"),
+        ("Phone 030 12345678", "030 12345678"),
+        ("Phone +49 89 1234567", "+49 89 1234567"),
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are
         // parser-valid but intentionally non-routable-looking test shapes.
@@ -221,6 +277,22 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ),
         vec!["+1 555 0100".to_string()]
     );
+    for (input, expected) in [
+        ("Order 1-202-555-0100", "1-202-555-0100"),
+        ("Phone (415) 555-0101", "(415) 555-0101"),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "phone.national.us", input, LocaleTag::EnUs),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+    for input in ["Order_15551234567", "Customer+12025550100"] {
+        assert!(
+            detect_recognizer(&rulepack, "phone.national.us", input, LocaleTag::EnUs).is_empty(),
+            "phone.national.us must not fire for {input}"
+        );
+    }
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
         vec!["192.168.1.1".to_string()]
@@ -303,6 +375,9 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "Build finished at 01:55:50.112233",
         "Order 0171-0000000X",
         "Customer_4915550112233",
+        "Order_4915550112233",
+        "0911 1234",
+        "IBAN DE89 3704 0044 0532 0130 00",
     ] {
         assert!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe).is_empty(),
