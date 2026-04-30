@@ -19,6 +19,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.3] - 2026-04-30
+
+### Added
+
+- `phone.national.de`: 10-digit metropolitan landline coverage (Berlin 030,
+  Hamburg 040, Frankfurt 069, Munich 089). Previously only matched 11+ digit
+  national-significant-numbers, leaking common metro landlines. Closes #414.
+
+### Fixed
+
+- `phone.national.us`: consuming-boundary mirror with `phone.national.de`
+  rejects identifier-attached numbers like `Order_15551234567`,
+  `Customer+12025550100`. Closes #415.
+- `phone.structural`: cross-recognizer leak — applied consuming-boundary class
+  so global E.164 candidate respects same identifier-attached rejection as
+  national recognizers. Previously `Customer+12025550100` leaked through
+  `phone.structural` even after `phone.national.us` rejected it.
+- DE phone regex no longer over-matches formatted IBAN tails like
+  `DE89 3704 0044 0532 0130 00`.
+
 ## [0.6.2] - 2026-04-30
 
 ### Fixed
