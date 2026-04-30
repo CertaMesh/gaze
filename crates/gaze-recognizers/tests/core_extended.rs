@@ -168,6 +168,53 @@ fn assert_custom_token(clean: &str, class: &str) {
 }
 
 #[test]
+fn full_pipeline_rejects_identifier_attached_e164_phone_candidates() {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    let extended = core_extended();
+    let mut builder = Pipeline::builder()
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(ClassRule::new(
+            PiiClass::Custom("phone".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve));
+
+    let email_spec = core
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "email.global")
+        .expect("email.global");
+    builder = builder.recognizer(regex_from_spec(email_spec));
+    for spec in &extended.recognizers {
+        if spec.enabled {
+            builder = builder.recognizer(regex_from_spec(spec));
+        }
+    }
+
+    let pipeline = builder.build().expect("pipeline");
+
+    for input in ["Customer+12025550100", "Order_+12025550100"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+        assert_eq!(clean, input, "unexpected tokenization for {input}: {clean}");
+        assert!(
+            !clean.contains(":Custom:phone_"),
+            "custom:phone must not fire for {input}: {clean}"
+        );
+    }
+
+    for input in ["Phone +12025550100", "+12025550100 logged at startup"] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+        assert!(
+            clean.contains(":Custom:phone_1>"),
+            "missing Custom:phone token in {clean}"
+        );
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
 fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     let rulepack = core_extended();
 

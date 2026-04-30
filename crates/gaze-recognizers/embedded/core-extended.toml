@@ -12,7 +12,11 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''\+\d{6,15}\b'''
+# Mirrors the national phone consuming boundary so phone.structural cannot
+# re-open identifier-attached E.164 matches rejected by locale recognizers;
+# cross-recognizer asymmetry caught in PR #126 review scratchpad 795.
+pattern = '''(?:^|[^[:alnum:]_+])(\+\d{6,15})\b'''
+capture_groups = [1]
 
 [recognizers.validator]
 kind = "e164_phone"
