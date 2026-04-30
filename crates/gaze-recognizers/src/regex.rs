@@ -2,6 +2,7 @@ use gaze_types::{
     Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleTag, PiiClass, Recognizer,
 };
 use regex::Regex;
+use sha3::{Digest, Keccak256};
 
 use crate::{RecognizerError, Result};
 
@@ -18,6 +19,8 @@ pub enum ValidatorKind {
     Ipv4Parse,
     /// RFC 4291 / RFC 5952 IPv6 textual parser.
     Ipv6Parse,
+    /// EIP-55 Ethereum address checksum validator.
+    EthEip55,
 }
 
 #[cfg(feature = "phone-parser")]
@@ -41,6 +44,7 @@ impl ValidatorKind {
             "iban_mod97" => Ok(Self::IbanMod97),
             "ipv4_parse" => Ok(Self::Ipv4Parse),
             "ipv6_parse" => Ok(Self::Ipv6Parse),
+            "eth_eip55" => Ok(Self::EthEip55),
             // With phone-parser disabled, phone validators fall through here so
             // rulepack construction fails closed instead of silently dropping candidates.
             other => Err(RecognizerError::UnsupportedValidator {
@@ -60,6 +64,7 @@ impl ValidatorKind {
             Self::IbanMod97 => iban_mod97_check(input),
             Self::Ipv4Parse => ipv4_parse_check(input),
             Self::Ipv6Parse => ipv6_parse_check(input),
+            Self::EthEip55 => eth_eip55_check(input),
         }
     }
 }
@@ -392,6 +397,41 @@ fn ipv4_parse_check(input: &str) -> bool {
 
 fn ipv6_parse_check(input: &str) -> bool {
     input.parse::<std::net::Ipv6Addr>().is_ok()
+}
+
+fn eth_eip55_check(input: &str) -> bool {
+    let Some(address) = input.strip_prefix("0x") else {
+        return false;
+    };
+    if address.len() != 40 || !address.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return false;
+    }
+    if address
+        .bytes()
+        .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_lowercase())
+        || address
+            .bytes()
+            .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_uppercase())
+    {
+        return true;
+    }
+
+    let lowercase = address.to_ascii_lowercase();
+    let hash = Keccak256::digest(lowercase.as_bytes());
+    for (index, byte) in address.bytes().enumerate() {
+        if byte.is_ascii_digit() {
+            continue;
+        }
+        let hash_nibble = if index % 2 == 0 {
+            hash[index / 2] >> 4
+        } else {
+            hash[index / 2] & 0x0f
+        };
+        if (hash_nibble > 7) != byte.is_ascii_uppercase() {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]

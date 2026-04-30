@@ -67,7 +67,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 9);
+        assert_eq!(rulepack.recognizers.len(), 10);
         assert_eq!(rulepack.recognizers[0].id, "phone.structural");
         assert_eq!(rulepack.recognizers[1].id, "phone.national.de");
         assert_eq!(rulepack.recognizers[2].id, "phone.national.us");
@@ -75,8 +75,9 @@ mod tests {
         assert_eq!(rulepack.recognizers[4].id, "card.structural");
         assert_eq!(rulepack.recognizers[5].id, "ip.v4");
         assert_eq!(rulepack.recognizers[6].id, "ip.v6");
-        assert_eq!(rulepack.recognizers[7].id, "postal.de");
-        assert_eq!(rulepack.recognizers[8].id, "postal.us");
+        assert_eq!(rulepack.recognizers[7].id, "eth.address");
+        assert_eq!(rulepack.recognizers[8].id, "postal.de");
+        assert_eq!(rulepack.recognizers[9].id, "postal.us");
         assert!(rulepack
             .recognizers
             .iter()

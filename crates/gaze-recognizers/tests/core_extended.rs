@@ -115,6 +115,10 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
             Action::Tokenize,
         ))
         .rule(ClassRule::new(
+            PiiClass::Custom("eth_address".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
             PiiClass::Custom("postal_code".to_string()),
             Action::Tokenize,
         ))
@@ -387,6 +391,58 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         let input = "Forwarding ::ffff:198.51.100.7 to upstream";
         let matches = detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs);
         assert_eq!(matches, vec!["::ffff:198.51.100.7".to_string()]);
+    }
+    // Source: EIP-55 "Test Cases". Mixed-case addresses must pass only when
+    // the Keccak-256 case checksum is correct; all-lower legacy form is
+    // accepted per the EIP.
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0x52908400098527886E0F7030069857D2E4169EE7.",
+            LocaleTag::EnUs
+        ),
+        vec!["0x52908400098527886E0F7030069857D2E4169EE7".to_string()]
+    );
+    assert!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0x52908400098527886e0F7030069857D2E4169EE7.",
+            LocaleTag::EnUs
+        )
+        .is_empty(),
+        "eth.address must reject mixed-case checksum mutants"
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0xde709f2102306220921060314715629080e2fb77.",
+            LocaleTag::EnUs
+        ),
+        vec!["0xde709f2102306220921060314715629080e2fb77".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Pair 0x52908400098527886E0F7030069857D2E4169EE7;0x8617E340B3D01FA5F11F306F4090FD50E238070D",
+            LocaleTag::EnUs
+        ),
+        vec![
+            "0x52908400098527886E0F7030069857D2E4169EE7".to_string(),
+            "0x8617E340B3D01FA5F11F306F4090FD50E238070D".to_string(),
+        ]
+    );
+    {
+        let input = "Wallet 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359 approved";
+        let matches = detect_recognizer(&rulepack, "eth.address", input, LocaleTag::EnUs);
+        assert_eq!(
+            matches,
+            vec!["0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359".to_string()],
+            "EthEip55 must preserve original matched bytes verbatim"
+        );
     }
     assert_eq!(
         detect_recognizer(&rulepack, "postal.de", "Berlin 10115", LocaleTag::DeDe),

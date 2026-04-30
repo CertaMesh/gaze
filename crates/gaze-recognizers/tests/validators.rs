@@ -4,6 +4,7 @@ use gaze::{
 #[cfg(not(feature = "phone-parser"))]
 use gaze_recognizers::RecognizerError;
 use gaze_recognizers::{NormalizerKind, RegexDetector, ValidatorKind};
+use sha3::{Digest, Sha3_256};
 
 fn validator_pipeline(
     pattern: &str,
@@ -170,6 +171,79 @@ fn ipv6_parse_accepts_rfc3849_documentation_addresses_and_ipv4_embedded() {
 fn ipv6_parse_kind_token_round_trips() {
     let kind = ValidatorKind::parse("ipv6_parse").expect("parse ipv6_parse");
     assert_eq!(kind, ValidatorKind::Ipv6Parse);
+}
+
+#[test]
+fn eth_eip55_accepts_spec_vectors_and_rejects_mutants() {
+    // Source: EIP-55 "Test Cases".
+    for input in [
+        "0x52908400098527886E0F7030069857D2E4169EE7",
+        "0x8617E340B3D01FA5F11F306F4090FD50E238070D",
+        "0xde709f2102306220921060314715629080e2fb77",
+        "0x27b1fdb04752bbc536007a920d24acb045561c26",
+        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+    ] {
+        assert!(ValidatorKind::EthEip55.validates(input), "{input}");
+    }
+
+    for input in [
+        "0x52908400098527886e0F7030069857D2E4169EE7",
+        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d358",
+        "52908400098527886E0F7030069857D2E4169EE7",
+        "0x52908400098527886E0F7030069857D2E4169EE",
+        "0x52908400098527886E0F7030069857D2E4169EE7Z",
+        "",
+    ] {
+        assert!(!ValidatorKind::EthEip55.validates(input), "{input}");
+    }
+}
+
+#[test]
+fn eth_eip55_kind_token_round_trips() {
+    let kind = ValidatorKind::parse("eth_eip55").expect("parse eth_eip55");
+    assert_eq!(kind, ValidatorKind::EthEip55);
+}
+
+#[test]
+fn eth_eip55_spec_vectors_fail_under_nist_sha3_256() {
+    // Source: EIP-55 "Test Cases"; NIST SHA3-256 uses different padding than
+    // Keccak-256 and must not be substituted for the checksum hash.
+    for input in [
+        "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        "0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359",
+        "0xdbF03B407c01E7cD3CBea99509d93f8DDDC8C6FB",
+        "0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb",
+    ] {
+        assert!(!eth_eip55_check_with_nist_sha3_256(input), "{input}");
+    }
+}
+
+fn eth_eip55_check_with_nist_sha3_256(input: &str) -> bool {
+    let Some(address) = input.strip_prefix("0x") else {
+        return false;
+    };
+    if address.len() != 40 || !address.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return false;
+    }
+    let lowercase = address.to_ascii_lowercase();
+    let hash = Sha3_256::digest(lowercase.as_bytes());
+    for (index, byte) in address.bytes().enumerate() {
+        if byte.is_ascii_digit() {
+            continue;
+        }
+        let hash_nibble = if index % 2 == 0 {
+            hash[index / 2] >> 4
+        } else {
+            hash[index / 2] & 0x0f
+        };
+        if (hash_nibble > 7) != byte.is_ascii_uppercase() {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(not(feature = "phone-parser"))]

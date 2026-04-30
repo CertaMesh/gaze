@@ -742,6 +742,7 @@ license = "Apache-2.0"
                 PiiClass::custom("iban"),
                 PiiClass::custom("credit_card"),
                 PiiClass::custom("ip_address"),
+                PiiClass::custom("eth_address"),
                 PiiClass::custom("postal_code"),
             ])
         );

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `Ipv4Parse`, `Ipv6Parse`, and `EthEip55` validator kinds for parser-backed
+  IP address validation and EIP-55 Ethereum address checksums. Closes #440.
+- `eth.address` in `core-extended`, emitting `custom:eth_address` for
+  EIP-55-valid Ethereum addresses.
+- New dependency: `sha3 = "0.10"` for Keccak-256 checksum validation.
+
 ### Changed
 
 ### Deprecated
