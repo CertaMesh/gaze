@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.4] - 2026-04-30
+
+### Added
+
+- `phone.national.de` rulepack class extended with DE 3-digit and 4-digit
+  area-code metro alternations. Closes #420.
+
+### Changed
+
+- Removed bogus `891` ONK from the 3-digit alternation; BNetzA
+  Vorwahlverzeichnis source URL and as-of date are pinned in test fixture
+  comments.
+- Test fixtures use synthetic non-reachable subscriber shapes
+  (zero-exchange-code per `CONTRIBUTING.md:42`) instead of real-looking
+  BNetzA-assigned numbers.
+- Pre-push hook gains a docs-only fast-path for allowlisted documentation
+  paths, from PR #120 by external contributor @naoray.
+
+### Fixed
+
+- IBAN-shape mod-97-failing input now has test coverage documenting the
+  class-misattribution behavior while preserving manifest restore and avoiding
+  leaks.
+
 ## [0.6.3] - 2026-04-30
 
 ### Added
@@ -693,7 +717,12 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/piinuts/gaze/compare/v0.4.6...HEAD
+[Unreleased]: https://github.com/piinuts/gaze/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/piinuts/gaze/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/piinuts/gaze/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/piinuts/gaze/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/piinuts/gaze/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/piinuts/gaze/compare/v0.5.1...v0.6.0
 [0.4.6]: https://github.com/piinuts/gaze/compare/v0.4.5...v0.4.6
 [0.4.5]: https://github.com/piinuts/gaze/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/piinuts/gaze/compare/v0.4.3...v0.4.4
