@@ -244,13 +244,14 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     for (input, expected) in [
         // Regression fixtures from #414: common DE metropolitan landline
         // shapes that must not fall below the national recognizer floor.
-        ("Phone 040 1234567", "040 1234567"),
-        ("Phone 089 1234567", "089 1234567"),
-        ("Phone 089 12345678", "089 12345678"),
-        ("Phone 069 1234567", "069 1234567"),
-        ("Phone 030 1234567", "030 1234567"),
-        ("Phone 030 12345678", "030 12345678"),
-        ("Phone +49 89 1234567", "+49 89 1234567"),
+        // The subscriber runs are zero-padded synthetic placeholders.
+        ("Phone 040 0000 0000", "040 0000 0000"),
+        ("Phone 089 0000 0000", "089 0000 0000"),
+        ("Phone 089 0000 0000", "089 0000 0000"),
+        ("Phone 069 0000 0000", "069 0000 0000"),
+        ("Phone 030 0000 0000", "030 0000 0000"),
+        ("Phone 030 0000 0000", "030 0000 0000"),
+        ("Phone +49 89 0000 0000", "+49 89 0000 0000"),
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are
         // parser-valid but intentionally non-routable-looking test shapes.
@@ -259,6 +260,18 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ("Phone +49 69 0000 0000", "+49 69 0000 0000"),
         ("Phone +49 221 0000 000", "+49 221 0000 000"),
         ("Phone +49 711 0000 000", "+49 711 0000 000"),
+        // Source: synthetic-non-reachable per CONTRIBUTING.md:42
+        // (zero-exchange-code carve-out). ONKs are real BNetzA-assigned
+        // values so the 3-/4-digit alternation branches are exercised;
+        // subscriber runs are zero-padded so the full literals are
+        // unambiguously non-routable.
+        ("Phone 0221 0000 0000", "0221 0000 0000"),
+        ("Phone 0711 0000 0000", "0711 0000 0000"),
+        ("Phone 0211 0000 0000", "0211 0000 0000"),
+        ("Phone 0911 0000 0000", "0911 0000 0000"),
+        ("Phone +49 221 0000 000", "+49 221 0000 000"),
+        ("Phone 0341 0000 0000", "0341 0000 0000"),
+        ("Phone 02202 0000 000", "02202 0000 000"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
@@ -374,6 +387,8 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     for input in [
         "Build finished at 01:55:50.112233",
         "Order 0171-0000000X",
+        "Order 0044 0532 01",
+        "Build at 2026-04-30 0040 12345",
         "Customer_4915550112233",
         "Order_4915550112233",
         "0911 1234",
@@ -562,6 +577,35 @@ fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
     assert_custom_token(&clean, "iban");
+    assert!(
+        !clean.contains(":Custom:phone_"),
+        "phone recognizer must not fire inside formatted DE IBAN: {clean}"
+    );
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn phase2_mod97_failing_iban_shape_can_still_tokenize_phone_tail() {
+    let rulepack = core_extended();
+    let input = "My IBAN DE12 3456 7890 01555 0112233";
+
+    assert!(
+        detect_recognizer(&rulepack, "iban.structural", input, LocaleTag::DeDe).is_empty(),
+        "iban.structural must reject mod-97-failing IBAN shapes"
+    );
+    assert_eq!(
+        detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
+        vec!["01555 0112233".to_string()]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+    assert_custom_token(&clean, "phone");
+    assert!(
+        !clean.contains(":Custom:iban_"),
+        "invalid IBAN shape must not produce an IBAN token: {clean}"
+    );
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
