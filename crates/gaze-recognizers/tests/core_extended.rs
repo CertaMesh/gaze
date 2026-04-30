@@ -198,8 +198,10 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         // Regression fixtures from #414: common DE metropolitan landline
         // shapes that must not fall below the national recognizer floor.
         ("Phone 040 1234567", "040 1234567"),
+        ("Phone 089 1234567", "089 1234567"),
         ("Phone 089 12345678", "089 12345678"),
         ("Phone 069 1234567", "069 1234567"),
+        ("Phone 030 1234567", "030 1234567"),
         ("Phone 030 12345678", "030 12345678"),
         ("Phone +49 89 1234567", "+49 89 1234567"),
         // Source: synthetic-non-reachable; Germany has no official fictional
@@ -328,6 +330,7 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "Customer_4915550112233",
         "Order_4915550112233",
         "0911 1234",
+        "IBAN DE89 3704 0044 0532 0130 00",
     ] {
         assert!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe).is_empty(),
