@@ -2927,8 +2927,8 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[patch.unused]]
 name = "gaze"
-version = "0.6.0"
+version = "0.4.6"
 
 [[patch.unused]]
 name = "gaze-recognizers"
-version = "0.6.0"
+version = "0.4.6"
