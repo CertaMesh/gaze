@@ -259,6 +259,15 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ("Phone +49 69 0000 0000", "+49 69 0000 0000"),
         ("Phone +49 221 0000 000", "+49 221 0000 000"),
         ("Phone +49 711 0000 000", "+49 711 0000 000"),
+        // Source: BNetzA Vorwahlverzeichnis; examples use synthetic subscriber
+        // numbers rather than live-looking personal phone numbers.
+        ("Phone 0221 1234567", "0221 1234567"),
+        ("Phone 0711 1234567", "0711 1234567"),
+        ("Phone 0211 123456", "0211 123456"),
+        ("Phone 0911 123456", "0911 123456"),
+        ("Phone +49 221 1234567", "+49 221 1234567"),
+        ("Phone 0341 1234567", "0341 1234567"),
+        ("Phone 02202 123456", "02202 123456"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
@@ -374,6 +383,8 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     for input in [
         "Build finished at 01:55:50.112233",
         "Order 0171-0000000X",
+        "Order 0044 0532 01",
+        "Build at 2026-04-30 0040 12345",
         "Customer_4915550112233",
         "Order_4915550112233",
         "0911 1234",
@@ -562,6 +573,10 @@ fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
     assert_custom_token(&clean, "iban");
+    assert!(
+        !clean.contains(":Custom:phone_"),
+        "phone recognizer must not fire inside formatted DE IBAN: {clean}"
+    );
     assert_eq!(restore_tokens(&session, &clean), input);
 }
 
