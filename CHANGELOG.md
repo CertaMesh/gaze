@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.2] - 2026-04-30
+
+### Fixed
+
+- `ip.v6` recognizer: RFC 4291 §2.2 IPv4-embedded form support
+  (`x:x:x:x:x:x:d.d.d.d`, including IPv4-mapped `::ffff:d.d.d.d` and
+  IPv4-compatible `::d.d.d.d`). Previously, inputs like
+  `::ffff:192.0.2.128` partially tokenized as `::ffff:192`, leaking the
+  embedded IPv4 octets. Closes #419.
+
 ## [0.6.1] — 2026-04-30
 
 ### Added
