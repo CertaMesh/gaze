@@ -244,13 +244,14 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
     for (input, expected) in [
         // Regression fixtures from #414: common DE metropolitan landline
         // shapes that must not fall below the national recognizer floor.
-        ("Phone 040 1234567", "040 1234567"),
-        ("Phone 089 1234567", "089 1234567"),
-        ("Phone 089 12345678", "089 12345678"),
-        ("Phone 069 1234567", "069 1234567"),
-        ("Phone 030 1234567", "030 1234567"),
-        ("Phone 030 12345678", "030 12345678"),
-        ("Phone +49 89 1234567", "+49 89 1234567"),
+        // The subscriber runs are non-reachable synthetic placeholders.
+        ("Phone 040 1000000", "040 1000000"),
+        ("Phone 089 1000000", "089 1000000"),
+        ("Phone 089 10000000", "089 10000000"),
+        ("Phone 069 1000000", "069 1000000"),
+        ("Phone 030 1000000", "030 1000000"),
+        ("Phone 030 10000000", "030 10000000"),
+        ("Phone +49 89 1000000", "+49 89 1000000"),
         // Source: synthetic-non-reachable; Germany has no official fictional
         // range equivalent to NANPA 555-01XX, so these literals are
         // parser-valid but intentionally non-routable-looking test shapes.
@@ -259,15 +260,15 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ("Phone +49 69 0000 0000", "+49 69 0000 0000"),
         ("Phone +49 221 0000 000", "+49 221 0000 000"),
         ("Phone +49 711 0000 000", "+49 711 0000 000"),
-        // Source: BNetzA Vorwahlverzeichnis; examples use synthetic subscriber
-        // numbers rather than live-looking personal phone numbers.
-        ("Phone 0221 1234567", "0221 1234567"),
-        ("Phone 0711 1234567", "0711 1234567"),
-        ("Phone 0211 123456", "0211 123456"),
-        ("Phone 0911 123456", "0911 123456"),
-        ("Phone +49 221 1234567", "+49 221 1234567"),
-        ("Phone 0341 1234567", "0341 1234567"),
-        ("Phone 02202 123456", "02202 123456"),
+        // Source: BNetzA Vorwahlverzeichnis; subscriber runs are
+        // non-reachable synthetic placeholders.
+        ("Phone 0221 1000000", "0221 1000000"),
+        ("Phone 0711 1000000", "0711 1000000"),
+        ("Phone 0211 100000", "0211 100000"),
+        ("Phone 0911 100000", "0911 100000"),
+        ("Phone +49 221 1000000", "+49 221 1000000"),
+        ("Phone 0341 1000000", "0341 1000000"),
+        ("Phone 02202 100000", "02202 100000"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
