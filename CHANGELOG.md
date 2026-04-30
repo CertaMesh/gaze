@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [bundle-tokenization-drift] `eth.address` and parser-backed IP validator fixtures refreshed `core` and `core-extended` no-policy snapshots.
+
 ### Deprecated
 
 ### Removed

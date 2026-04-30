@@ -392,6 +392,8 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         let matches = detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs);
         assert_eq!(matches, vec!["::ffff:198.51.100.7".to_string()]);
     }
+    // drift-ack: v0.6.5 validator bundle adds eth.address and parser-backed
+    // IP fixture coverage to the core/core-extended no-policy drift snapshots.
     // Source: EIP-55 "Test Cases". Mixed-case addresses must pass only when
     // the Keccak-256 case checksum is correct; all-lower legacy form is
     // accepted per the EIP.
