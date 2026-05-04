@@ -325,6 +325,41 @@ fn core_pipeline_config_extended_tokenizes_synthetic_iban() {
     assert!(text.contains(":Custom:iban_"), "{text}");
 }
 
+#[test]
+fn core_pipeline_restore_round_trip() {
+    let core = CorePipelineConfig::new().build().expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = "alice@example.invalid";
+    let text = clean_text(
+        core.redact_text(&session, format!("Email {original}"))
+            .expect("redact"),
+    );
+    let token = regex::Regex::new(r"<[^>]+:Email_\d+>")
+        .expect("token regex")
+        .find(&text)
+        .map(|matched| matched.as_str())
+        .expect("email token");
+
+    assert_eq!(session.restore_strict(token).expect("restore"), original);
+}
+
+#[test]
+fn unknown_bundled_rulepack_fails_closed() {
+    let err = match CorePipelineConfig::new()
+        .with_bundled_rulepack("missing-core-addon")
+        .build()
+    {
+        Ok(_) => panic!("unknown bundled rulepack must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(
+        err,
+        BuildError::Policy(PolicyError::BundledRulepackUnknown { value })
+            if value == "missing-core-addon"
+    ));
+}
+
 #[derive(Clone, Default)]
 struct MemoryLogger {
     entries: Arc<Mutex<Vec<RedactionEntry>>>,
