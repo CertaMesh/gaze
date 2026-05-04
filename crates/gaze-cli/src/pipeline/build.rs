@@ -48,6 +48,7 @@ pub(crate) fn build_pipeline_from_policy(
         Some(ner_threshold),
     )
     .map_err(|err| match err {
+        gaze_assembly::BuildError::NoRecognizers => gaze::Error::Policy(PolicyError::NoDetectors),
         gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
         gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
         gaze_assembly::BuildError::Pipeline(err) => err,

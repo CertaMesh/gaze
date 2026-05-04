@@ -47,6 +47,30 @@ pub fn build_pipeline(
         &registered_dictionaries,
     )?;
 
+    let has_policy_detector = !policy.detectors.is_empty();
+    let has_enabled_rulepack_recognizer = rulepacks.iter().any(|rulepack| {
+        rulepack
+            .recognizers
+            .iter()
+            .any(|recognizer| recognizer.enabled && active_locales.intersects(&recognizer.locales))
+    });
+    let has_usable_ner = policy
+        .ner
+        .as_ref()
+        .is_some_and(|ner| ner.model_dir.is_some());
+    let has_context_dictionary = context
+        .dictionaries
+        .keys()
+        .any(|name| !registered_dictionaries.contains(name));
+
+    if !has_policy_detector
+        && !has_enabled_rulepack_recognizer
+        && !has_usable_ner
+        && !has_context_dictionary
+    {
+        return Err(BuildError::NoRecognizers);
+    }
+
     for rule in &policy.rules {
         builder = match rule {
             RuleSpec::Class { class, action } => {

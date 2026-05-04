@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BuildError {
+    #[error("no effective recognizers configured")]
+    NoRecognizers,
     #[error("policy error: {0}")]
     Policy(#[from] gaze::PolicyError),
     #[error("rulepack error: {0}")]
