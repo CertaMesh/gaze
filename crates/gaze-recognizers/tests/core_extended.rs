@@ -115,6 +115,10 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
             Action::Tokenize,
         ))
         .rule(ClassRule::new(
+            PiiClass::Custom("eth_address".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
             PiiClass::Custom("postal_code".to_string()),
             Action::Tokenize,
         ))
@@ -310,6 +314,16 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(&rulepack, "ip.v4", "Host 192.168.1.1.", LocaleTag::EnUs),
         vec!["192.168.1.1".to_string()]
     );
+    // Source: RFC 6943 Section 3.1.1. Parser-backed validation must reject
+    // non-decimal and out-of-range IPv4 candidates even if regexes change later.
+    assert!(
+        detect_recognizer(&rulepack, "ip.v4", "Host 192.000.2.1.", LocaleTag::EnUs).is_empty(),
+        "ip.v4 must reject leading-zero octets via Ipv4Parse"
+    );
+    assert!(
+        detect_recognizer(&rulepack, "ip.v4", "Host 256.0.0.1.", LocaleTag::EnUs).is_empty(),
+        "ip.v4 must reject out-of-range octets"
+    );
     assert_eq!(
         detect_recognizer(&rulepack, "ip.v6", "Loopback ::1.", LocaleTag::EnUs),
         vec!["::1".to_string()]
@@ -350,6 +364,88 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         ),
         vec!["::ffff:5.6.7.8".to_string()]
     );
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let cleaned = clean_text(
+        &pipeline,
+        &session,
+        "Server ::ffff:192.0.2.1 logged",
+        LocaleTag::EnUs,
+    );
+    assert_eq!(
+        restore_tokens(&session, &cleaned),
+        "Server ::ffff:192.0.2.1 logged",
+        "IPv4-embedded IPv6 wrapper must redact and restore as one unit"
+    );
+    assert!(
+        !cleaned.contains("192.0.2.1"),
+        "cleaned text leaked inner IPv4 octets: {cleaned:?}"
+    );
+
+    {
+        let input = "Server 192.0.2.1 logged";
+        let matches = detect_recognizer(&rulepack, "ip.v4", input, LocaleTag::EnUs);
+        assert_eq!(matches, vec!["192.0.2.1".to_string()]);
+    }
+    {
+        let input = "Forwarding ::ffff:198.51.100.7 to upstream";
+        let matches = detect_recognizer(&rulepack, "ip.v6", input, LocaleTag::EnUs);
+        assert_eq!(matches, vec!["::ffff:198.51.100.7".to_string()]);
+    }
+    // drift-ack: v0.6.5 validator bundle adds eth.address and parser-backed
+    // IP fixture coverage to the core/core-extended no-policy drift snapshots.
+    // Source: EIP-55 "Test Cases". Mixed-case addresses must pass only when
+    // the Keccak-256 case checksum is correct; all-lower legacy form is
+    // accepted per the EIP.
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0x52908400098527886E0F7030069857D2E4169EE7.",
+            LocaleTag::EnUs
+        ),
+        vec!["0x52908400098527886E0F7030069857D2E4169EE7".to_string()]
+    );
+    assert!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0x52908400098527886e0F7030069857D2E4169EE7.",
+            LocaleTag::EnUs
+        )
+        .is_empty(),
+        "eth.address must reject mixed-case checksum mutants"
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Wallet 0xde709f2102306220921060314715629080e2fb77.",
+            LocaleTag::EnUs
+        ),
+        vec!["0xde709f2102306220921060314715629080e2fb77".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer(
+            &rulepack,
+            "eth.address",
+            "Pair 0x52908400098527886E0F7030069857D2E4169EE7;0x8617E340B3D01FA5F11F306F4090FD50E238070D",
+            LocaleTag::EnUs
+        ),
+        vec![
+            "0x52908400098527886E0F7030069857D2E4169EE7".to_string(),
+            "0x8617E340B3D01FA5F11F306F4090FD50E238070D".to_string(),
+        ]
+    );
+    {
+        let input = "Wallet 0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359 approved";
+        let matches = detect_recognizer(&rulepack, "eth.address", input, LocaleTag::EnUs);
+        assert_eq!(
+            matches,
+            vec!["0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359".to_string()],
+            "EthEip55 must preserve original matched bytes verbatim"
+        );
+    }
     assert_eq!(
         detect_recognizer(&rulepack, "postal.de", "Berlin 10115", LocaleTag::DeDe),
         vec!["10115".to_string()]

@@ -10,6 +10,9 @@ Extended IBAN sample GB82WEST12345698765432 is synthetic.
 Test card 4111 1111 1111 1111 is a Luhn fixture.
 Documentation IP 192.0.2.44 is reserved for examples.
 IPv6 documentation host 2001:db8:85a3::8a2e:370:7334 is reserved.
+IPv4 parser fixture 198.51.100.7 is reserved for examples.
+IPv6 embedded fixture ::ffff:192.0.2.128 is reserved for examples.
+Ethereum EIP-55 fixture 0x52908400098527886E0F7030069857D2E4169EE7 is from the public checksum specification.
 US postal fixture 94103-1234 is synthetic in this corpus.
 DE postal fixture 10115 is synthetic in this corpus.
 
