@@ -5,12 +5,14 @@ use gaze::{
 };
 
 mod class_map;
+pub mod defaults;
 mod detector_wiring;
 mod error;
 mod locale;
 mod ner;
 mod template;
 
+pub use defaults::{CorePipeline, CorePipelineConfig};
 pub use error::BuildError;
 pub(crate) use locale::merged_locale_vocab;
 

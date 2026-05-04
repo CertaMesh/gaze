@@ -242,6 +242,13 @@ fn clean_with_policy_and_rulepacks(
     text
 }
 
+fn clean_text(clean: CleanDocument) -> String {
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    text
+}
+
 fn name_email_policy(locales: Vec<LocaleTag>) -> gaze::Policy {
     let mut policy = policy();
     policy.locale = Some(locales);
@@ -259,6 +266,63 @@ fn name_email_policy(locales: Vec<LocaleTag>) -> gaze::Policy {
         },
     ];
     policy
+}
+
+#[test]
+fn core_pipeline_config_tokenizes_synthetic_email() {
+    let core = CorePipelineConfig::new().build().expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "Email alice@example.invalid")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Email_"), "{text}");
+}
+
+#[test]
+fn core_pipeline_config_core_only_does_not_tokenize_phone() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::EnUs])
+        .build()
+        .expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "Phone +12025550100";
+    let text = clean_text(core.redact_text(&session, input).expect("redact"));
+
+    assert_eq!(text, input);
+}
+
+#[test]
+fn core_pipeline_config_extended_tokenizes_synthetic_phone() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::EnUs])
+        .with_bundled_rulepack("core-extended")
+        .build()
+        .expect("extended pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "Phone +12025550100")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Custom:phone_"), "{text}");
+}
+
+#[test]
+fn core_pipeline_config_extended_tokenizes_synthetic_iban() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::DeDe])
+        .with_bundled_rulepack("core-extended")
+        .build()
+        .expect("extended pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "IBAN DE89 3704 0044 0532 0130 00")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Custom:iban_"), "{text}");
 }
 
 #[derive(Clone, Default)]
