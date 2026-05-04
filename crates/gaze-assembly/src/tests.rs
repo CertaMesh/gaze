@@ -1,7 +1,7 @@
 use super::*;
 use crate::{detector_wiring::derive_source_short_label, template::lower_pattern_template};
 use gaze::{
-    Action, CleanDocument, ConflictTier, DetectorKind, LocaleTag, PiiClass, PolicyError,
+    Action, CleanDocument, ConflictTier, DetectorKind, LocaleTag, NerPolicy, PiiClass, PolicyError,
     RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RulepackError, Scope, Session,
     SessionPolicy, SessionScope,
 };
@@ -44,11 +44,178 @@ fn empty_context() -> Context {
     }
 }
 
+fn empty_policy() -> gaze::Policy {
+    gaze::Policy {
+        session: SessionPolicy {
+            scope: SessionScope::Ephemeral,
+            ttl_secs: None,
+        },
+        detectors: Vec::new(),
+        dictionaries: Vec::new(),
+        rules: Vec::new(),
+        ner: None,
+        rulepacks: gaze::RulepackPolicy {
+            bundled: Vec::new(),
+            paths: Vec::new(),
+        },
+        locale: None,
+    }
+}
+
 fn embedded_rulepack(name: &str) -> Rulepack {
     Rulepack::load(gaze::RulepackSource::Embedded(
         gaze_recognizers::embedded(name).expect("embedded rulepack"),
     ))
     .expect("rulepack")
+}
+
+#[test]
+fn build_pipeline_empty_inputs_returns_no_recognizers() {
+    let policy = empty_policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let err = match build_pipeline(&policy, &empty_context(), &[], &active_locales, None) {
+        Ok(_) => panic!("empty inputs must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(err, BuildError::NoRecognizers));
+}
+
+#[test]
+fn build_pipeline_all_disabled_rulepack_returns_no_recognizers() {
+    let policy = empty_policy();
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "disabled-only"
+rulepack_version = "0.6.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "disabled.email"
+class = "Email"
+enabled = false
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#,
+    )
+    .expect("rulepack");
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let err = match build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    ) {
+        Ok(_) => panic!("all-disabled rulepack must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(err, BuildError::NoRecognizers));
+}
+
+#[test]
+fn build_pipeline_locale_filtered_rulepack_returns_no_recognizers() {
+    let policy = empty_policy();
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "filtered"
+rulepack_version = "0.6.0"
+default_locales = ["de-DE"]
+
+[[recognizers]]
+id = "filtered.email"
+class = "Email"
+enabled = true
+locales = ["de-DE"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#,
+    )
+    .expect("rulepack");
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+    let err = match build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    ) {
+        Ok(_) => panic!("locale-filtered rulepack must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(err, BuildError::NoRecognizers));
+}
+
+#[test]
+fn build_pipeline_ner_without_model_dir_returns_no_recognizers() {
+    let mut policy = empty_policy();
+    policy.ner = Some(NerPolicy {
+        model_dir: None,
+        locale: None,
+        threshold: gaze::DEFAULT_NER_THRESHOLD,
+    });
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let err = match build_pipeline(&policy, &empty_context(), &[], &active_locales, None) {
+        Ok(_) => panic!("threshold-only NER must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(err, BuildError::NoRecognizers));
+}
+
+#[test]
+fn build_pipeline_context_only_still_succeeds() {
+    let mut policy = empty_policy();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("song"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    let context = Context {
+        dictionaries: std::collections::HashMap::from([(
+            "song".to_string(),
+            gaze::ContextDictionary {
+                terms: vec!["context-song-123".to_string()],
+                case_sensitive: true,
+            },
+        )]),
+        class_map: std::collections::HashMap::from([(
+            "song".to_string(),
+            PiiClass::custom("song"),
+        )]),
+        fields: serde_json::Map::new(),
+    };
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None)
+        .expect("context-only assembly must remain supported");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let dictionaries = gaze::dictionary_bundle_from_context(&context);
+    let clean = pipeline
+        .redact_with_detect_context(
+            &session,
+            RawDocument::Text("track context-song-123".to_string()),
+            active_locales.as_slice(),
+            &dictionaries,
+            &serde_json::Map::new(),
+        )
+        .expect("redact");
+
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    assert!(text.contains(":Custom:song_"));
 }
 
 fn clean_with_rulepacks(rulepacks: &[Rulepack], locales: &[LocaleTag], input: &str) -> String {
@@ -75,6 +242,13 @@ fn clean_with_policy_and_rulepacks(
     text
 }
 
+fn clean_text(clean: CleanDocument) -> String {
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text");
+    };
+    text
+}
+
 fn name_email_policy(locales: Vec<LocaleTag>) -> gaze::Policy {
     let mut policy = policy();
     policy.locale = Some(locales);
@@ -92,6 +266,98 @@ fn name_email_policy(locales: Vec<LocaleTag>) -> gaze::Policy {
         },
     ];
     policy
+}
+
+#[test]
+fn core_pipeline_config_tokenizes_synthetic_email() {
+    let core = CorePipelineConfig::new().build().expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "Email alice@example.invalid")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Email_"), "{text}");
+}
+
+#[test]
+fn core_pipeline_config_core_only_does_not_tokenize_phone() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::EnUs])
+        .build()
+        .expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "Phone +12025550100";
+    let text = clean_text(core.redact_text(&session, input).expect("redact"));
+
+    assert_eq!(text, input);
+}
+
+#[test]
+fn core_pipeline_config_extended_tokenizes_synthetic_phone() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::EnUs])
+        .with_bundled_rulepack("core-extended")
+        .build()
+        .expect("extended pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "Phone +12025550100")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Custom:phone_"), "{text}");
+}
+
+#[test]
+fn core_pipeline_config_extended_tokenizes_synthetic_iban() {
+    let core = CorePipelineConfig::new()
+        .with_locale(&[LocaleTag::DeDe])
+        .with_bundled_rulepack("core-extended")
+        .build()
+        .expect("extended pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.redact_text(&session, "IBAN DE89 3704 0044 0532 0130 00")
+            .expect("redact"),
+    );
+
+    assert!(text.contains(":Custom:iban_"), "{text}");
+}
+
+#[test]
+fn core_pipeline_restore_round_trip() {
+    let core = CorePipelineConfig::new().build().expect("core pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let original = "alice@example.invalid";
+    let text = clean_text(
+        core.redact_text(&session, format!("Email {original}"))
+            .expect("redact"),
+    );
+    let token = regex::Regex::new(r"<[^>]+:Email_\d+>")
+        .expect("token regex")
+        .find(&text)
+        .map(|matched| matched.as_str())
+        .expect("email token");
+
+    assert_eq!(session.restore_strict(token).expect("restore"), original);
+}
+
+#[test]
+fn unknown_bundled_rulepack_fails_closed() {
+    let err = match CorePipelineConfig::new()
+        .with_bundled_rulepack("missing-core-addon")
+        .build()
+    {
+        Ok(_) => panic!("unknown bundled rulepack must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(
+        err,
+        BuildError::Policy(PolicyError::BundledRulepackUnknown { value })
+            if value == "missing-core-addon"
+    ));
 }
 
 #[derive(Clone, Default)]

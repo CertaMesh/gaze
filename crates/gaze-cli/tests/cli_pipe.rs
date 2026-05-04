@@ -917,13 +917,16 @@ fn clean_echoes_locale_chain_from_cli() {
 fn rulepack_recognizer_is_gated_by_policy_locale() {
     let (_dir, path) =
         write_policy_with_rulepack(&de_email_rulepack("\"de-DE\""), Some("\"en-US\""));
-    let v = clean_json_with_args(
+    let out = clean_raw_with_args(
         &[&format!("--policy={}", path.display())],
         "kennung kundennummer-123",
     );
-
-    assert_eq!(v["clean_text"], "kennung kundennummer-123");
-    assert_eq!(v["stats"]["detections"], 0);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty(), "policy config must not emit stdout");
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
 
     let (_dir, path) =
         write_policy_with_rulepack(&de_email_rulepack("\"de-DE\""), Some("\"de-DE\""));
@@ -942,13 +945,17 @@ fn rulepack_recognizer_is_gated_by_policy_locale() {
 fn rulepack_recognizer_fr_fr_not_gated_by_en_us() {
     let rulepack = de_email_rulepack("\"fr-FR\"").replace("kundennummer", "ticket");
     let (_dir, path) = write_policy_with_rulepack(&rulepack, Some("\"en-US\""));
-    let v = clean_json_with_args(
+    let out = clean_raw_with_args(
         &[&format!("--policy={}", path.display())],
         "kennung ticket-123",
     );
 
-    assert_eq!(v["clean_text"], "kennung ticket-123");
-    assert_eq!(v["stats"]["detections"], 0);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty(), "policy config must not emit stdout");
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
 }
 
 #[test]
@@ -972,12 +979,16 @@ terms = ["Sonnenlied"]
 [recognizers.token]
 "#;
     let (_dir, path) = write_policy_with_rulepack(rulepack, Some("\"en-US\""));
-    let v = clean_json_with_args(
+    let out = clean_raw_with_args(
         &[&format!("--policy={}", path.display())],
         "track Sonnenlied",
     );
-    assert_eq!(v["clean_text"], "track Sonnenlied");
-    assert_eq!(v["stats"]["detections"], 0);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(out.stdout.is_empty(), "policy config must not emit stdout");
+    assert_eq!(
+        parse_stderr_variant(&out.stderr),
+        json!({ "error": "PolicyConfig", "exit": 2 })
+    );
 
     let (_dir, path) = write_policy_with_rulepack(rulepack, Some("\"de-DE\""));
     let v = clean_json_with_args(
