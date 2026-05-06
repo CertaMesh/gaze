@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Passive audit sinks for Gaze metadata-only redaction logs"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lib]
 name = "gaze_audit"
 path = "src/lib.rs"

@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 use std::cell::Cell;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt;

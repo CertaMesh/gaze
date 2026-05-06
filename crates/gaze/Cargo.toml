@@ -7,6 +7,10 @@ build = "build.rs"
 license = "Apache-2.0"
 description = "Reversible PII pseudonymization runtime for agentic workflows"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lib]
 name = "gaze"
 path = "src/lib.rs"
