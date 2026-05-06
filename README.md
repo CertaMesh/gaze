@@ -316,10 +316,6 @@ SafetyNet sanity, cargo metadata audit isolation, and the resolver-based
 `gaze_module_isolation` Dylint gate. The full gate inventory and authoring
 contract live in [`docs/architecture/xtask.md`](docs/architecture/xtask.md).
 
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for current priorities and recently shipped work.
-
 ## Adopter notes
 
 - **Linux distros** — the published Linux x86_64 binary requires glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). On older distros, build from source with `cargo build --release -p gaze-cli`.
