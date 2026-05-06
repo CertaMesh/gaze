@@ -28,11 +28,11 @@ External consumer: [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens), fo
 
 > **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**
 
-"Pseudonymization" is the GDPR Art. 4(5) term for reversible substitution with tokens — that reversibility is the Gaze moat, not one-way redaction. See [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24) for the locked north star and rationale.
+"Pseudonymization" is the GDPR Art. 4(5) term for reversible substitution with tokens — that reversibility is the Gaze moat, not one-way redaction. See [AGENTS.md](AGENTS.md#project-north-star) for the locked north star and rationale.
 
 ## Five Axes
 
-Every design, implementation, and review decision is evaluated against these five axes. Full rationale: [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+Every design, implementation, and review decision is evaluated against these five axes. Full rationale: [AGENTS.md](AGENTS.md#project-north-star).
 
 1. **Reliability (never leak).** Fail-closed always; defense in depth across regex, NER, dictionary, and optional neural safety net.
 2. **Reversibility.** Manifest-first restore; no one-way primitives in the core contract.
@@ -171,7 +171,7 @@ echo '{"text":"Email <{session_hex}:Email_1> now","session_blob":"<base64>"}' | 
 
 Counter-family tokens (`<{session_hex}:Email_N>`, `<{session_hex}:Name_N>`, `<{session_hex}:Location_N>`, `<{session_hex}:Organization_N>`, `<{session_hex}:Custom:name_N>`) are wrapped in angle brackets so the LLM cannot silently dissolve them into adjacent words. Format-preserving email tokens (`email1.{session_hex}@gaze-fake.invalid`) intentionally stay bare — the whole point is to look like a real email.
 
-Default bundled-rulepack tokenization is a contract surface. The no-policy baselines for bundled outputs live in `crates/xtask/snapshots/`, and intentional drift requires a `[bundle-tokenization-drift]` `CHANGELOG.md` `[Unreleased]` Changed entry alongside a source ACK. See `ROADMAP.md` Now/Next/Later for the live stability context behind these gates.
+Default bundled-rulepack tokenization is a contract surface. The no-policy baselines for bundled outputs live in `crates/xtask/snapshots/`, and intentional drift requires a `[bundle-tokenization-drift]` `CHANGELOG.md` `[Unreleased]` Changed entry alongside a source ACK.
 
 #### Audit Query and Export
 
@@ -315,10 +315,6 @@ tenant-fixture hygiene, class-map override safety, bundle-tokenization drift,
 SafetyNet sanity, cargo metadata audit isolation, and the resolver-based
 `gaze_module_isolation` Dylint gate. The full gate inventory and authoring
 contract live in [`docs/architecture/xtask.md`](docs/architecture/xtask.md).
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for current priorities and recently shipped work.
 
 ## Adopter notes
 
