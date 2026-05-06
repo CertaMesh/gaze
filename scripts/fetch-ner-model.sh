@@ -7,8 +7,8 @@
 # network and no local ONNX export happen in the gaze binary; the binary only
 # consumes the pinned local artifacts produced by this script.
 #
-# SHA256SUMS is checked in at the repository root so adopters can copy or curl
-# it from a known-stable Gaze revision and fail closed on byte drift.
+# Checksums are embedded below, pinned to HF_COMMIT_SHA. Update them whenever
+# the model pin changes.
 #
 # Usage:
 #   scripts/fetch-ner-model.sh [dest_dir]
@@ -31,7 +31,6 @@ REQUIRED_FILES=(
   "special_tokens_map.json"
   "vocab.txt"
   "labels.json"
-  "SHA256SUMS"
 )
 
 # ---- Destination ------------------------------------------------------------
@@ -52,17 +51,26 @@ require_cmd curl
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_SHA256SUMS="${REPO_ROOT}/SHA256SUMS"
 LABELS_SOURCE="${REPO_ROOT}/assets/ner/labels.davlan-mbert.json"
 
-if [ ! -f "$ROOT_SHA256SUMS" ]; then
-  log "missing repository checksum manifest: ${ROOT_SHA256SUMS}"
-  exit 2
-fi
 if [ ! -f "$LABELS_SOURCE" ]; then
   log "missing Gaze NER labels contract: ${LABELS_SOURCE}"
   exit 2
 fi
+
+write_sha256sums() {
+  # Pinned to HF_COMMIT_SHA=cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8
+  # Update whenever the model pin changes.
+  cat > SHA256SUMS <<'SHASUMS'
+1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f  model.onnx
+bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088  tokenizer.json
+470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59  tokenizer_config.json
+8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638  config.json
+b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3  special_tokens_map.json
+fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c  vocab.txt
+8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb  labels.json
+SHASUMS
+}
 
 verify_sha256sums() {
   if command -v shasum >/dev/null 2>&1; then
@@ -102,10 +110,7 @@ fetch_raw "vocab.txt" "vocab.txt"
 log "installing labels.json from assets/ner/labels.davlan-mbert.json"
 cp "$LABELS_SOURCE" labels.json
 
-log "installing SHA256SUMS from repository root"
-cp "$ROOT_SHA256SUMS" SHA256SUMS
-
-# ---- Verify SHA256SUMS ------------------------------------------------------
+# ---- Verify checksums -------------------------------------------------------
 
 for f in "${REQUIRED_FILES[@]}"; do
   if [ ! -f "$f" ]; then
@@ -114,7 +119,8 @@ for f in "${REQUIRED_FILES[@]}"; do
   fi
 done
 
-log "verifying SHA256SUMS"
+log "writing and verifying checksums"
+write_sha256sums
 verify_sha256sums
 
 log "done. model dir: $DEST"
