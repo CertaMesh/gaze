@@ -26,15 +26,21 @@ All design, implementation, and review decisions in this repo must be evaluated 
 
 Full rationale (including what the north star rejects and how drift is measured) lives in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
 
-## Pre-push hook discipline
+## Local gates
 
-Install tracked hooks once per clone with `git config core.hooksPath .githooks`.
-All coding workers SHOULD run local gates before declaring `IMPL DONE`; the
-pre-push hook is defense in depth and is critical when CI is unavailable.
-`git push --no-verify` is allowed only as an exceptional bypass with written
-justification in the commit body or PR description. `GAZE_PREPUSH_FAST=1` is
-acceptable for routine feature-branch pushes only when CI is healthy; pushes to
-`main` still run the full gate matrix.
+The repo no longer ships a tracked pre-push hook. Run gates manually before
+pushing if you want defense in depth:
+
+```
+cargo fmt --all -- --check
+cargo clippy --workspace --all-features --all-targets -- -D warnings
+cargo test --workspace --all-features
+cargo run -p xtask -- ci-feature-matrix
+```
+
+PR-triggered CI (`.github/workflows/docs.yml`) catches doc-test and rustdoc
+warnings on every PR. Workspace test gates and xtask gates are not yet in
+remote CI — add when CI capacity allows.
 
 ## v0.6 architecture primer
 
@@ -52,5 +58,4 @@ As of v0.6.4 the repo is split into six published-shape crates plus one internal
 - **Validator/normalizer enums (v0.4.2+):** `ValidatorKind` closed (`EmailRfc`, `E164Phone` gated behind `phone-parser`, `Luhn`, `IbanMod97`); `NormalizerKind` closed (`EmailCanonical`, `IbanCanonical`). Unknown names fail closed at rulepack load with `RulepackError::UnsupportedValidator` / `UnsupportedNormalizer`.
 - **Active xtask gates:** `symmetric-potemkin`, `class-map-override-safety`, `recognizer-composition-validator`, `no-tenant-knowledge`, `bundle-tokenization-drift`, `fixture-citation-lint`, `ci-feature-matrix`, `cargo-metadata-audit-isolation`, `dylint-gate` (canonical audit-sink isolation), `safety-net-sanity` (v0.6 SafetyNet behavioral gate). All gates must invoke at least one behavioral test; symbol-or-string-presence-only checks are recursive-Potemkin and forbidden.
 - **`core-extended` no-policy bundled activation (v0.6+):** invocations of `--rulepack-bundled core-extended` without a policy activate `phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` recognizers. Adopters relying on no national phone tokenization or no bare 5-digit numeric tokenization must pass `--locale=global` or supply a policy with narrower locale gating.
-- **Pre-push hook docs-only fast-path (v0.6.4):** `.githooks/pre-push` skips cargo/xtask gates when the pushed diff contains only allowlisted documentation paths (`*.md`, `*.txt`, `docs/**`, `CHANGELOG.md`). Pushes to `main` always run the full gate matrix. `--no-verify` is allowed only as an exceptional bypass with written justification in the commit body or PR description.
 - **Rulepack fields parsed but gated** (v0.4.1-pending): `token.format`, `context.hotwords`, `context.boost`, `context.window`. `token.family` was un-gated in v0.4.2.
