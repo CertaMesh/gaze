@@ -1,5 +1,36 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+//! Policy-to-pipeline builder using bundled defaults.
+//!
+//! Provides [`CorePipelineConfig`], the recommended entry point for Rust adopters
+//! who want the `core` rulepack and locale-aware recognizers without manually wiring
+//! recognizer, rulepack, policy, and pipeline crates.
+//!
+//! # Quickstart
+//!
+//! ```toml
+//! [dependencies]
+//! gaze = "0.6"
+//! gaze-assembly = "0.6"
+//! ```
+//!
+//! ```rust,no_run
+//! use gaze::{CleanDocument, RawDocument, Scope, Session};
+//! use gaze_assembly::CorePipelineConfig;
+//!
+//! let core = CorePipelineConfig::new().build()?;
+//! let session = Session::new(Scope::Conversation("s1".into()))?;
+//! let CleanDocument::Text(_clean) = core.pipeline().redact(
+//!     &session,
+//!     RawDocument::Text("alice@example.invalid".into()),
+//! )? else {
+//!     panic!("text variant expected");
+//! };
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! For custom recognizer topology, use [`gaze::Pipeline::builder`] directly.
+//!
 use std::collections::BTreeSet;
 
 use gaze::{
@@ -14,10 +45,21 @@ mod locale;
 mod ner;
 mod template;
 
-pub use defaults::{CorePipeline, CorePipelineConfig};
+pub use defaults::CorePipeline;
+/// Configuration builder for the bundled-default pipeline.
+///
+/// Activates the `core` rulepack and registers locale-aware recognizers. Use this
+/// for the common case; drop to [`gaze::Pipeline::builder`] only when you need a
+/// custom recognizer topology or non-bundled rulepack.
+pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
 pub(crate) use locale::merged_locale_vocab;
 
+/// Assemble a pipeline from a loaded [`gaze::Policy`], matching the CLI code path.
+///
+/// Use this when you load a policy file programmatically and want to mirror the
+/// exact assembly the `gaze` binary uses, including locale chain resolution and
+/// rulepack loading.
 pub fn build_pipeline(
     policy: &gaze::Policy,
     context: &Context,
