@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [bundle-tokenization-drift] `core` and `core-extended` no-policy snapshots refreshed to reflect updated fixture corpus sha256 (fixture file extended in earlier commits). No tokenization behavioral change.
+
 ### Deprecated
 
 ### Removed
