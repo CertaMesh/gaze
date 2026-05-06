@@ -28,7 +28,7 @@ pub(crate) struct Cli {
 enum Cmd {
     /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
     Clean {
-        /// Path to policy.toml. Required once the policy loader lands (solo #3).
+        /// Path to policy.toml. Required once the policy loader lands (issue #3).
         #[arg(long)]
         policy: Option<PathBuf>,
         /// Output format. Only `json` is supported today.
