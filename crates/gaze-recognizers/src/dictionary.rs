@@ -8,6 +8,15 @@ use gaze_types::{
     Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleTag, PiiClass, Recognizer,
 };
 
+/// Lookup-based [`Recognizer`] for tenant-specific PII.
+///
+/// Matches exact strings from a runtime-supplied dictionary: order IDs, song
+/// titles, customer codes, or any domain-specific identifiers that regex cannot
+/// reliably detect.
+///
+/// Supply dictionaries at runtime via [`DetectContext`] or the CLI's
+/// `--context-json` wiring. Dictionary entries are session-scoped detection
+/// inputs and are not stored in the audit log.
 pub struct DictionaryRecognizer {
     id: String,
     class: PiiClass,
