@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Passive audit sinks for Gaze metadata-only redaction logs.
 //!
 //! This crate owns concrete audit storage and query helpers. It depends on

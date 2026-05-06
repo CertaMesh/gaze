@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Built-in recognizers for Gaze"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 # phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
 default = ["phone-parser"]

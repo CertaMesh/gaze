@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Gaze command-line interface"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [features]
 default = []
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]

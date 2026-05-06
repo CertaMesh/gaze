@@ -6,6 +6,10 @@ rust-version = "1.89"
 license = "Apache-2.0"
 description = "Shared value contracts for Gaze"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
 [lib]
 name = "gaze_types"
 path = "src/lib.rs"
