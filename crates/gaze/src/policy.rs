@@ -10,7 +10,7 @@ use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct Policy {
     pub session: SessionPolicy,
@@ -22,19 +22,6 @@ pub struct Policy {
     pub locale: Option<Vec<LocaleTag>>,
 }
 
-impl Default for Policy {
-    fn default() -> Self {
-        Self {
-            session: SessionPolicy::default(),
-            detectors: Vec::new(),
-            dictionaries: Vec::new(),
-            rules: Vec::new(),
-            ner: None,
-            rulepacks: RulepackPolicy::default(),
-            locale: None,
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -133,21 +120,13 @@ impl Default for NerPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub struct RulepackPolicy {
     pub bundled: Vec<String>,
     pub paths: Vec<PathBuf>,
 }
 
-impl Default for RulepackPolicy {
-    fn default() -> Self {
-        Self {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
