@@ -344,10 +344,9 @@ and batches required behavioral tests across four target suites:
   mapping.
 - `gaze-audit` — `safety_net_log` schema and bytes-free invariants.
 
-The pre-push hook at [`.githooks/pre-push`](../../.githooks/pre-push) runs the
-xtask gate before shared-branch pushes. The gate is **not** scheduled nightly
-in v0.6; the live-model nightly workflow is deferred — see the "Future work"
-section below.
+Run the xtask gate manually before shared-branch pushes; the gate is **not**
+scheduled nightly in v0.6 and the live-model nightly workflow is deferred —
+see the "Future work" section below.
 
 ## Activation surface
 
