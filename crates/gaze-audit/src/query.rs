@@ -1,5 +1,11 @@
 use rusqlite::types::Value;
 
+/// Query filter for [`crate::SqliteLogger::query`] and
+/// [`crate::SqliteLogger::query_safety_net`].
+///
+/// Construct with `AuditFilter::default()` for all rows, or set fields to
+/// narrow by class, source, action, document kind, raw safety-net label, field
+/// path, epoch-millisecond time range, or session ID.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AuditFilter {
     pub class: Option<String>,
@@ -13,6 +19,11 @@ pub struct AuditFilter {
     pub session_id: Option<String>,
 }
 
+/// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
+///
+/// This row mirrors the approved audit export surface. It is safe for audit
+/// display and reporting, but it is not restore material and contains no
+/// original PII or token values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditLogRow {
     pub source: String,
@@ -47,6 +58,13 @@ pub struct LeakSuspectRow {
     pub telemetry_kind: Option<String>,
 }
 
+/// The approved metadata-only column set exported by `audit export` and queried
+/// by [`crate::SqliteLogger::query`].
+///
+/// Columns that would expose raw PII, token values, or document content are
+/// excluded. The `audit export` CLI command selects only from this set, and the
+/// `gaze_module_isolation` Dylint lint prevents the clean path from routing raw
+/// values into the audit path.
 pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "source",
     "class",

@@ -19,6 +19,56 @@ pub enum AuditError {
     Sqlite(String),
 }
 
+/// SQLite-backed [`gaze_types::RedactionLogger`] implementation.
+///
+/// Appends redaction metadata rows to a local SQLite database. The schema is
+/// append-only: rows are inserted and optionally purged by TTL, never updated
+/// in place.
+///
+/// `SqliteLogger` is **not** `Clone`. Build it where the pipeline is
+/// constructed and pass ownership directly. Querying happens through the static
+/// [`SqliteLogger::query`] and [`SqliteLogger::query_safety_net`] functions.
+/// They take a [`Path`], so the database file can be queried after the logger
+/// has been moved into the pipeline.
+///
+/// # Audit log is metadata-only
+///
+/// Records class, action, source, field name, document kind, conflict status,
+/// decision tier, timestamp, and session ID. It never stores original PII or
+/// token values. **Do not use as a restore source**: restore requires the
+/// `gaze::SensitiveSnapshot` exported from a `gaze::Session`.
+///
+/// # Isolation
+///
+/// `gaze` core has no compile-time dependency on `gaze-audit`. Wire
+/// `SqliteLogger` in your application layer only. See the Dylint isolation gate
+/// in `docs/architecture/`.
+///
+/// # Example
+///
+/// ```rust
+/// use std::path::Path;
+/// use gaze_audit::SqliteLogger;
+///
+/// let logger = SqliteLogger::new(Path::new("audit.db"))?;
+/// # let _ = logger;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// In an application that depends on both `gaze` and `gaze-audit`, pass the
+/// logger into the pipeline builder once:
+///
+/// ```rust,ignore
+/// use std::path::Path;
+/// use gaze::Pipeline;
+/// use gaze_audit::SqliteLogger;
+///
+/// let logger = SqliteLogger::new(Path::new("audit.db"))?;
+/// let pipeline = Pipeline::builder()
+///     .redaction_logger(logger)
+///     .build()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub struct SqliteLogger {
     conn: Mutex<Connection>,
 }
@@ -210,6 +260,11 @@ impl SqliteLogger {
         Ok(entries)
     }
 
+    /// Queries metadata-only redaction audit rows from a SQLite database file.
+    ///
+    /// This is a static function, not a method on `SqliteLogger`. Call it with
+    /// the database [`Path`] and an [`AuditFilter`] after the logger has been
+    /// moved into a pipeline or dropped.
     pub fn query(path: &Path, filter: &AuditFilter) -> Result<Vec<AuditLogRow>> {
         let conn = open_audit_query_connection(path)?;
         let has_decided_by = table_has_column(&conn, "decided_by")?;
@@ -243,6 +298,10 @@ impl SqliteLogger {
         Ok(entries)
     }
 
+    /// Queries metadata-only safety-net audit rows from a SQLite database file.
+    ///
+    /// Returned rows include labels, classes, span lengths, and replay hashes,
+    /// never suspect text bytes or emitted placeholder bytes.
     pub fn query_safety_net(path: &Path, filter: &AuditFilter) -> Result<Vec<LeakSuspectRow>> {
         let conn = open_audit_query_connection(path)?;
         let (sql, values) = build_safety_net_query_sql(filter);
