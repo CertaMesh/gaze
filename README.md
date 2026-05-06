@@ -50,9 +50,9 @@ chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
-Homebrew is repo-local for now. The formula source exists at `dist/homebrew/gaze.rb`, but no public `piinuts/tap` or `piinuts/homebrew-tap` formula is published yet, and this repository is private. Maintainers can smoke the formula by staging it into a scratch local tap; direct `brew install piinuts/tap/gaze` is not supported yet.
+Homebrew tap installation is not yet available. The formula source exists at `dist/homebrew/gaze.rb`, but no `piinuts/tap` or `piinuts/homebrew-tap` formula is published yet. Maintainers can smoke the formula by staging it into a scratch local tap; direct `brew install piinuts/tap/gaze` is not supported yet.
 
-Public `brew install piinuts/tap/gaze` documentation should wait until a public tap exists and the release process publishes to it.
+`brew install piinuts/tap/gaze` will be documented once a public tap exists and the release process publishes to it.
 
 Linux x86_64 binary download from the release assets:
 
