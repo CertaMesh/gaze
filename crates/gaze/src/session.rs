@@ -17,6 +17,17 @@ const DEFAULT_COUNTER_FAMILY: &str = "counter";
 const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 
+/// Lifetime scope of a [`Session`]'s token manifest.
+///
+/// | Variant | Use case | `export()` allowed |
+/// |---------|----------|--------------------|
+/// | `Ephemeral` | Single-pass sanitization, no restore needed | No |
+/// | `Conversation(id)` | Multi-turn LLM sessions | Yes |
+/// | `Persistent { ttl: Duration }` | Long-lived sessions across restarts | Yes |
+///
+/// `Persistent`'s `ttl` is a [`std::time::Duration`]. `SensitiveSnapshot`s exported from a
+/// persistent session carry the TTL; [`Session::import`] returns `Error::BlobExpired { .. }` once
+/// the deadline has elapsed.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum Scope {
@@ -25,6 +36,20 @@ pub enum Scope {
     Persistent { ttl: Duration },
 }
 
+/// Serializable snapshot of a [`Session`]'s token manifest.
+///
+/// Produced by [`Session::export`] and consumed by [`Session::import`]. Carries the full
+/// token-to-PII mapping plus a session signing key - treat it as sensitive as the original
+/// document.
+///
+/// **Storage:** the snapshot is delivered as raw bytes via [`Self::into_bytes`] and reconstructed
+/// via `SensitiveSnapshot::from(Vec<u8>)`. There is no `Serialize`/`Deserialize` impl - bytes are
+/// the wire format. Encrypt at rest, bind to a conversation/user, enforce a TTL.
+///
+/// **Must not:** send to the LLM, analytics, browser clients, logs, or support tickets.
+///
+/// The audit log (`gaze-audit`) is **not** a restore source; only this snapshot can reconstruct
+/// original PII values.
 #[derive(Debug, Clone)]
 pub struct SensitiveSnapshot(Vec<u8>);
 
@@ -75,6 +100,80 @@ struct SnapshotPayload {
     next_by_class: Vec<(PiiClass, usize)>,
 }
 
+/// Owns the token manifest for one conversation or request.
+///
+/// A `Session` holds the bidirectional map between PII values and their pseudonymous tokens.
+/// Create one per conversation and thread it through every [`Pipeline::redact`] call.
+///
+/// # Restore workflow
+///
+/// 1. Call [`Pipeline::redact`] - returns a [`gaze_types::CleanDocument`] and updates the session
+///    map.
+/// 2. Call [`Session::export`] to produce a [`SensitiveSnapshot`].
+/// 3. Persist the raw bytes (`snapshot.into_bytes()`) **encrypted at rest** - they contain
+///    original PII.
+/// 4. Send only the cleaned text to the LLM.
+/// 5. After the LLM responds, call [`Session::import`] with `SensitiveSnapshot::from(bytes)`.
+/// 6. For each token in the LLM response, call [`Session::restore_strict`] (or
+///    [`Session::restore`]).
+///
+/// There is no `Pipeline::restore_text` method - full-text restore is performed by scanning tokens
+/// with [`crate::token_shape::pattern`] and calling `restore_strict` per token.
+///
+/// # Round-trip example
+///
+/// ```rust
+/// use gaze::{
+///     token_shape, Action, ClassRule, CleanDocument, DefaultRule, Detection, Detector, PiiClass,
+///     Pipeline, RawDocument, Scope, SensitiveSnapshot, Session,
+/// };
+///
+/// struct ExampleEmailDetector;
+///
+/// impl Detector for ExampleEmailDetector {
+///     fn detect(&self, input: &str) -> Vec<Detection> {
+///         let email = "alice@example.invalid";
+///         input
+///             .find(email)
+///             .map(|start| Detection::new(start..start + email.len(), PiiClass::Email, "docs"))
+///             .into_iter()
+///             .collect()
+///     }
+/// }
+///
+/// let pipeline = Pipeline::builder()
+///     .detector(ExampleEmailDetector)
+///     .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+///     .rule(DefaultRule::new(Action::Preserve))
+///     .build()?;
+/// let session = Session::new(Scope::Conversation("conv-1".into()))?;
+///
+/// let CleanDocument::Text(clean) = pipeline.redact(
+///     &session,
+///     RawDocument::Text("alice@example.invalid".into()),
+/// )? else {
+///     panic!("text variant expected");
+/// };
+///
+/// // Export before sending clean text to the LLM. Persist `blob` encrypted at rest.
+/// let snapshot = session.export()?;
+/// let blob: Vec<u8> = snapshot.into_bytes();
+///
+/// // Restore on the owner side after the LLM responds.
+/// let restored_session = Session::import(SensitiveSnapshot::from(blob))?;
+/// let mut restored = String::new();
+/// let mut last = 0;
+/// for m in token_shape::pattern().find_iter(&clean) {
+///     restored.push_str(&clean[last..m.start()]);
+///     restored.push_str(&restored_session.restore_strict(m.as_str())?);
+///     last = m.end();
+/// }
+/// restored.push_str(&clean[last..]);
+/// assert_eq!(restored, "alice@example.invalid");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// [`Pipeline::redact`]: crate::Pipeline::redact
 // intentionally not Debug: contains session signing key and token manifest
 pub struct Session {
     scope: Scope,
