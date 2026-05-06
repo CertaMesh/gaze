@@ -75,6 +75,7 @@ struct SnapshotPayload {
     next_by_class: Vec<(PiiClass, usize)>,
 }
 
+// intentionally not Debug: contains session signing key and token manifest
 pub struct Session {
     scope: Scope,
     session_hex: [u8; 4],

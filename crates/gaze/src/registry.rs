@@ -29,6 +29,12 @@ pub struct RecognizerRegistry {
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
 }
 
+impl std::fmt::Debug for RecognizerRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecognizerRegistry").finish_non_exhaustive()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
