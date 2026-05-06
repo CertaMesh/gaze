@@ -174,11 +174,7 @@ impl Detector for RegexDetector {
         self.regex
             .captures_iter(input)
             .filter_map(|caps| self.span_from_captures(&caps))
-            .map(|span| Detection {
-                span,
-                class: self.class.clone(),
-                source: self.source.clone(),
-            })
+            .map(|span| Detection::new(span, self.class.clone(), self.source.clone()))
             .collect()
     }
 }
@@ -205,18 +201,18 @@ impl Recognizer for RegexDetector {
                 if self.validator_kind.is_some() && canonical_form.is_none() {
                     return None;
                 }
-                Some(Candidate {
+                Some(Candidate::new(
                     span,
-                    class: self.class.clone(),
-                    recognizer_id: self.source.clone(),
-                    score: self.base_score,
-                    priority: self.priority,
+                    self.class.clone(),
+                    self.source.clone(),
+                    self.base_score,
+                    self.priority,
                     canonical_form,
-                    token_family: self.token_family().to_string(),
-                    source: self.source.clone(),
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
-                })
+                    self.token_family(),
+                    self.source.clone(),
+                    ConflictTier::None,
+                    Vec::new(),
+                ))
             })
             .collect()
     }
@@ -456,14 +452,8 @@ mod tests {
             Some(NormalizerKind::EmailCanonical),
         )
         .expect("regex detector");
-        let fields = ();
         let dictionaries = gaze_types::DictionaryBundle::default();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: std::cell::Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
         let detections = Recognizer::detect(&detector, "Email Alice@Example.invalid", &ctx);
 
         assert_eq!(
@@ -533,14 +523,8 @@ mod tests {
             None,
         )
         .expect("regex detector");
-        let fields = ();
         let dictionaries = gaze_types::DictionaryBundle::default();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: std::cell::Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
         let input =
             "From: Dana Weber <user@example.invalid>\nFrom: \"Prof. Weber\" <other@example.invalid>";
 

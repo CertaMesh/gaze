@@ -62,16 +62,16 @@ mod tests {
 
     #[test]
     fn merge_prefers_second_bundle_for_same_name() {
-        let a = DictionaryBundle::from_rulepack_terms(&[RulepackDict {
-            name: "songs".to_string(),
-            terms: vec!["Song A".to_string()],
-            case_sensitive: true,
-        }]);
-        let b = DictionaryBundle::from_rulepack_terms(&[RulepackDict {
-            name: "songs".to_string(),
-            terms: vec!["Song B".to_string()],
-            case_sensitive: true,
-        }]);
+        let a = DictionaryBundle::from_rulepack_terms(&[RulepackDict::new(
+            "songs",
+            vec!["Song A".to_string()],
+            true,
+        )]);
+        let b = DictionaryBundle::from_rulepack_terms(&[RulepackDict::new(
+            "songs",
+            vec!["Song B".to_string()],
+            true,
+        )]);
 
         let merged = DictionaryBundle::merge(a, b);
         let entry = merged.get("songs").expect("entry");

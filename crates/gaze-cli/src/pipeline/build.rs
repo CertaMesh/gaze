@@ -140,11 +140,11 @@ pub(crate) fn dictionary_terms_from_rulepacks(
                             .to_string(),
                 }));
             }
-            dictionaries.push(RulepackDict {
-                name: recognizer.id.clone(),
-                terms: all_terms,
-                case_sensitive: *case_sensitive,
-            });
+            dictionaries.push(RulepackDict::new(
+                recognizer.id.clone(),
+                all_terms,
+                *case_sensitive,
+            ));
         }
     }
     Ok(dictionaries)

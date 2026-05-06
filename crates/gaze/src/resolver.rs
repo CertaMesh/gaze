@@ -233,18 +233,18 @@ mod tests {
     use super::*;
 
     fn candidate(span: Range<usize>, class: PiiClass, score: f32, id: &str) -> Candidate {
-        Candidate {
+        Candidate::new(
             span,
             class,
-            recognizer_id: id.to_string(),
+            id,
             score,
-            priority: 0,
-            canonical_form: None,
-            token_family: "counter".to_string(),
-            source: id.to_string(),
-            decided_by: ConflictTier::None,
-            merged_sources: Vec::new(),
-        }
+            0,
+            None,
+            "counter",
+            id,
+            ConflictTier::None,
+            Vec::new(),
+        )
     }
 
     #[test]

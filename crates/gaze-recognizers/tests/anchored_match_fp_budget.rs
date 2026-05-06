@@ -1,4 +1,4 @@
-use std::{cell::Cell, collections::HashMap};
+use std::collections::HashMap;
 
 use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
 
@@ -7,19 +7,13 @@ use gaze_recognizers::{
 };
 
 fn ctx() -> DetectContext<'static> {
-    let fields = Box::leak(Box::new(()));
     let dictionaries = Box::leak(Box::new(DictionaryBundle::from_entries(HashMap::new())));
     let locale_chain = Box::leak(Box::new([
         LocaleTag::DeDe,
         LocaleTag::EnUs,
         LocaleTag::Global,
     ]));
-    DetectContext {
-        locale_chain,
-        dictionaries,
-        fields,
-        degraded: Cell::new(false),
-    }
+    DetectContext::new(locale_chain, dictionaries)
 }
 
 fn anchored_recognizers() -> Vec<AnchoredMatchRecognizer> {

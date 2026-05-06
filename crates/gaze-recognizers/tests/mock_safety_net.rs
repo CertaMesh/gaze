@@ -18,11 +18,11 @@ struct FixedDetector {
 
 impl Detector for FixedDetector {
     fn detect(&self, _input: &str) -> Vec<Detection> {
-        vec![Detection {
-            span: self.span.clone(),
-            class: self.class.clone(),
-            source: "fixed".to_string(),
-        }]
+        vec![Detection::new(
+            self.span.clone(),
+            self.class.clone(),
+            "fixed",
+        )]
     }
 }
 
@@ -62,15 +62,15 @@ fn tokenizing_pipeline(net: Option<MockSafetyNet>) -> Pipeline {
 
 fn precomputed_email_report(span: Range<usize>) -> LeakReport {
     LeakReport::from_parts(
-        vec![LeakSuspect {
+        vec![LeakSuspect::new(
             span,
-            class: PiiClass::Email,
-            safety_net_id: "mock-safety-net".to_string(),
-            score: Some(0.99),
-            kind: LeakKind::Uncovered,
-            raw_label: "private_email".to_string(),
-            field_path: None,
-        }],
+            PiiClass::Email,
+            "mock-safety-net",
+            Some(0.99),
+            LeakKind::Uncovered,
+            "private_email",
+            None,
+        )],
         Vec::new(),
     )
 }

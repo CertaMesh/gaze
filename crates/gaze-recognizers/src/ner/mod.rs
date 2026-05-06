@@ -352,13 +352,7 @@ mod tests {
             },
         };
         let dictionaries = DictionaryBundle::default();
-        let fields = ();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: std::cell::Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
         let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx);
 
@@ -383,13 +377,7 @@ mod tests {
         let name_start = input.find("Alice Example").expect("name span start");
         let name_end = name_start + "Alice Example".len();
         let dictionaries = DictionaryBundle::default();
-        let fields = ();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::DeDe, LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: std::cell::Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::DeDe, LocaleTag::Global], &dictionaries);
         let backend = Arc::new(FixedBackend {
             spans: vec![NerSpanResult {
                 span: name_start..name_end,

@@ -11,11 +11,7 @@ pub(crate) fn merge_bio_spans(
     let scores = vec![1.0; subword_labels.len()];
     merge_bio_span_results(labels, subword_spans, subword_labels, &scores, source)
         .into_iter()
-        .map(|span| Detection {
-            span: span.span,
-            class: span.class,
-            source: source.to_string(),
-        })
+        .map(|span| Detection::new(span.span, span.class, source))
         .collect()
 }
 

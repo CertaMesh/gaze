@@ -98,6 +98,7 @@ impl PiiClass {
 
 /// A detected span and its class/source metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Detection {
     /// Byte span in the original input.
     pub span: Range<usize>,
@@ -105,6 +106,17 @@ pub struct Detection {
     pub class: PiiClass,
     /// Detector source identifier.
     pub source: String,
+}
+
+impl Detection {
+    /// Builds a detected PII span.
+    pub fn new(span: Range<usize>, class: PiiClass, source: impl Into<String>) -> Self {
+        Self {
+            span,
+            class,
+            source: source.into(),
+        }
+    }
 }
 
 /// Observer-only privacy safety net.
@@ -129,6 +141,7 @@ pub trait SafetyNet: Send + Sync {
 
 /// Context passed to a privacy safety net.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct SafetyNetContext<'a> {
     /// Tokens emitted by the pseudonymization pipeline for this text segment.
     pub manifest: &'a Manifest,
@@ -144,8 +157,28 @@ pub struct SafetyNetContext<'a> {
     pub field_path: Option<&'a str>,
 }
 
+impl<'a> SafetyNetContext<'a> {
+    /// Builds safety-net context for one clean text segment.
+    pub fn new(
+        manifest: &'a Manifest,
+        locale_chain: &'a [LocaleTag],
+        document_kind: DocumentKind,
+        session_id: Option<&'a str>,
+        field_path: Option<&'a str>,
+    ) -> Self {
+        Self {
+            manifest,
+            locale_chain,
+            document_kind,
+            session_id,
+            field_path,
+        }
+    }
+}
+
 /// A replacement emitted by the pseudonymization pipeline.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct EmittedTokenSpan {
     /// Byte span in the clean text.
     pub clean_span: Range<usize>,
@@ -155,8 +188,20 @@ pub struct EmittedTokenSpan {
     pub class: PiiClass,
 }
 
+impl EmittedTokenSpan {
+    /// Builds an emitted token span.
+    pub fn new(clean_span: Range<usize>, raw_span: Range<usize>, class: PiiClass) -> Self {
+        Self {
+            clean_span,
+            raw_span,
+            class,
+        }
+    }
+}
+
 /// Set of emitted token spans for one clean text segment.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Manifest {
     /// Spans sorted by `clean_span.start`.
     pub spans: Vec<EmittedTokenSpan>,
@@ -237,6 +282,7 @@ fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
 
 /// Suspected leak reported by an observer-only safety net.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct LeakSuspect {
     /// Byte span in clean text.
     pub span: Range<usize>,
@@ -252,6 +298,29 @@ pub struct LeakSuspect {
     pub raw_label: String,
     /// Optional structured field path.
     pub field_path: Option<String>,
+}
+
+impl LeakSuspect {
+    /// Builds a safety-net leak suspect.
+    pub fn new(
+        span: Range<usize>,
+        class: PiiClass,
+        safety_net_id: impl Into<String>,
+        score: Option<f32>,
+        kind: LeakKind,
+        raw_label: impl Into<String>,
+        field_path: Option<String>,
+    ) -> Self {
+        Self {
+            span,
+            class,
+            safety_net_id: safety_net_id.into(),
+            score,
+            kind,
+            raw_label: raw_label.into(),
+            field_path,
+        }
+    }
 }
 
 /// Manifest correlation result for a safety-net suspect.
@@ -314,6 +383,7 @@ pub enum LeakReportTelemetry {
 
 /// Aggregate leak report statistics.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct LeakReportStats {
     /// Number of suspects reported.
     pub suspect_count: usize,
@@ -329,6 +399,7 @@ pub struct LeakReportStats {
 
 /// Safety-net report for one pipeline run.
 #[derive(Debug, Clone, Default, PartialEq)]
+#[non_exhaustive]
 pub struct LeakReport {
     /// Suspected leaks, containing metadata only.
     pub suspects: Vec<LeakSuspect>,
@@ -385,6 +456,7 @@ impl LeakReport {
 
 /// Closed set of upstream OpenAI Privacy Filter labels accepted by Gaze.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum OpenAiPrivateLabel {
     /// `private_person`.
     PrivatePerson,
@@ -422,6 +494,7 @@ impl OpenAiPrivateLabel {
 
 /// Closed safety-net PII vocabulary before mapping into `PiiClass`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum SafetyNetPiiClass {
     /// Email address.
     Email,
@@ -551,6 +624,7 @@ pub enum DocumentKind {
 
 /// Metadata-only audit entry for a redaction decision.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RedactionEntry {
     /// Detector or recognizer source identifier.
     pub source: String,
@@ -570,6 +644,33 @@ pub struct RedactionEntry {
     pub created_at: i64,
     /// Optional session identifier.
     pub session_id: Option<String>,
+}
+
+impl RedactionEntry {
+    /// Builds a metadata-only redaction log entry.
+    pub fn new(
+        source: impl Into<String>,
+        class: PiiClass,
+        action: Action,
+        field_name: Option<String>,
+        document_kind: DocumentKind,
+        conflict_loser: bool,
+        decided_by: ConflictTier,
+        created_at: i64,
+        session_id: Option<String>,
+    ) -> Self {
+        Self {
+            source: source.into(),
+            class,
+            action,
+            field_name,
+            document_kind,
+            conflict_loser,
+            decided_by,
+            created_at,
+            session_id,
+        }
+    }
 }
 
 /// Closed error set for redaction log sinks.
@@ -618,6 +719,7 @@ pub enum LocaleTag {
 
 /// Locale parsing error.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LocaleError {
     /// Locale tag is unsupported or invalid.
     Unsupported,
@@ -845,6 +947,7 @@ pub enum DictionarySource {
 
 /// Dictionary metadata used for diagnostics and tests.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DictionaryStats {
     /// Dictionary name.
     pub name: String,
@@ -854,8 +957,20 @@ pub struct DictionaryStats {
     pub source: DictionarySource,
 }
 
+impl DictionaryStats {
+    /// Builds dictionary diagnostics metadata.
+    pub fn new(name: impl Into<String>, term_count: usize, source: DictionarySource) -> Self {
+        Self {
+            name: name.into(),
+            term_count,
+            source,
+        }
+    }
+}
+
 /// Dictionary declared by a rulepack.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RulepackDict {
     /// Dictionary name.
     pub name: String,
@@ -863,6 +978,17 @@ pub struct RulepackDict {
     pub terms: Vec<String>,
     /// Whether matching is case-sensitive.
     pub case_sensitive: bool,
+}
+
+impl RulepackDict {
+    /// Builds a rulepack dictionary declaration.
+    pub fn new(name: impl Into<String>, terms: Vec<String>, case_sensitive: bool) -> Self {
+        Self {
+            name: name.into(),
+            terms,
+            case_sensitive,
+        }
+    }
 }
 
 /// Error raised when constructing invalid dictionary entries.
@@ -1242,6 +1368,7 @@ pub trait Recognizer: Send + Sync {
 
 /// Candidate PII span emitted by a recognizer before final conflict resolution.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Candidate {
     /// Byte span in the original input.
     pub span: Range<usize>,
@@ -1265,7 +1392,43 @@ pub struct Candidate {
     pub merged_sources: Vec<String>,
 }
 
+impl Candidate {
+    /// Builds a recognizer candidate.
+    pub fn new(
+        span: Range<usize>,
+        class: PiiClass,
+        recognizer_id: impl Into<String>,
+        score: f32,
+        priority: i32,
+        canonical_form: Option<String>,
+        token_family: impl Into<String>,
+        source: impl Into<String>,
+        decided_by: ConflictTier,
+        merged_sources: Vec<String>,
+    ) -> Self {
+        Self {
+            span,
+            class,
+            recognizer_id: recognizer_id.into(),
+            score,
+            priority,
+            canonical_form,
+            token_family: token_family.into(),
+            source: source.into(),
+            decided_by,
+            merged_sources,
+        }
+    }
+
+    /// Returns this candidate with a translated span.
+    pub fn with_span(mut self, span: Range<usize>) -> Self {
+        self.span = span;
+        self
+    }
+}
+
 /// Context supplied to recognizers during detection.
+#[non_exhaustive]
 pub struct DetectContext<'a> {
     /// Active locale chain.
     pub locale_chain: &'a [LocaleTag],
@@ -1275,6 +1438,18 @@ pub struct DetectContext<'a> {
     pub fields: &'a (),
     /// Whether a recognizer degraded due to unavailable optional capability.
     pub degraded: Cell<bool>,
+}
+
+impl<'a> DetectContext<'a> {
+    /// Builds detection context for a recognizer pass.
+    pub fn new(locale_chain: &'a [LocaleTag], dictionaries: &'a DictionaryBundle) -> Self {
+        Self {
+            locale_chain,
+            dictionaries,
+            fields: &(),
+            degraded: Cell::new(false),
+        }
+    }
 }
 
 fn ensure_global(tags: &mut Vec<LocaleTag>) {

@@ -127,18 +127,18 @@ impl Recognizer for AnchoredMatchRecognizer {
                 if !self.boundary_allows(input, &span) {
                     continue;
                 }
-                candidates.push(Candidate {
+                candidates.push(Candidate::new(
                     span,
-                    class: PiiClass::Name,
-                    recognizer_id: self.id.clone(),
-                    score: self.score,
-                    priority: self.priority,
-                    canonical_form: None,
-                    token_family: self.token_family.clone(),
-                    source: self.source.clone(),
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
-                });
+                    PiiClass::Name,
+                    self.id.clone(),
+                    self.score,
+                    self.priority,
+                    None,
+                    self.token_family.clone(),
+                    self.source.clone(),
+                    ConflictTier::None,
+                    Vec::new(),
+                ));
             }
         }
         candidates.sort_by_key(|candidate| candidate.span.start);
@@ -359,7 +359,7 @@ fn bounded_window_before(input: &str, end: usize, max_chars: u16) -> &str {
 
 #[cfg(test)]
 mod tests {
-    use std::{cell::Cell, collections::HashMap};
+    use std::collections::HashMap;
 
     use gaze_types::{DictionaryBundle, LocaleTag};
 
@@ -587,14 +587,8 @@ mod tests {
     }
 
     fn ctx() -> DetectContext<'static> {
-        let fields = Box::leak(Box::new(()));
         let dictionaries = Box::leak(Box::new(DictionaryBundle::from_entries(HashMap::new())));
         let locale_chain = Box::leak(Box::new([LocaleTag::Global]));
-        DetectContext {
-            locale_chain,
-            dictionaries,
-            fields,
-            degraded: Cell::new(false),
-        }
+        DetectContext::new(locale_chain, dictionaries)
     }
 }

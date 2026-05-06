@@ -1,7 +1,5 @@
 #![cfg(feature = "phone-parser")]
 
-use std::cell::Cell;
-
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch, RecognizerSpec,
     Rulepack, RulepackError, RulepackSource, Scope, Session,
@@ -56,13 +54,8 @@ fn detect_recognizer(
     locale: LocaleTag,
 ) -> Vec<String> {
     let dictionaries = DictionaryBundle::default();
-    let fields = ();
-    let ctx = DetectContext {
-        locale_chain: &[locale, LocaleTag::Global],
-        dictionaries: &dictionaries,
-        fields: &fields,
-        degraded: Cell::new(false),
-    };
+    let locale_chain = [locale, LocaleTag::Global];
+    let ctx = DetectContext::new(&locale_chain, &dictionaries);
     let spec = rulepack
         .recognizers
         .iter()
@@ -83,13 +76,8 @@ fn detect_recognizer_canonical_forms(
     locale: LocaleTag,
 ) -> Vec<Option<String>> {
     let dictionaries = DictionaryBundle::default();
-    let fields = ();
-    let ctx = DetectContext {
-        locale_chain: &[locale, LocaleTag::Global],
-        dictionaries: &dictionaries,
-        fields: &fields,
-        degraded: Cell::new(false),
-    };
+    let locale_chain = [locale, LocaleTag::Global];
+    let ctx = DetectContext::new(&locale_chain, &dictionaries);
     let spec = rulepack
         .recognizers
         .iter()

@@ -476,11 +476,11 @@ fn parse_dictionary_detector(
                         .to_string(),
             });
         }
-        Some(RulepackDict {
-            name: dictionary_name.clone(),
+        Some(RulepackDict::new(
+            dictionary_name.clone(),
             terms,
-            case_sensitive: raw.case_sensitive,
-        })
+            raw.case_sensitive,
+        ))
     };
 
     Ok((

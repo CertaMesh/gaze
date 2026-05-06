@@ -51,6 +51,7 @@ pub fn openai_label_to_safety_net_class(label: OpenAiPrivateLabel) -> SafetyNetP
         OpenAiPrivateLabel::PrivateDate => SafetyNetPiiClass::Date,
         OpenAiPrivateLabel::AccountNumber => SafetyNetPiiClass::AccountNumber,
         OpenAiPrivateLabel::Secret => SafetyNetPiiClass::Secret,
+        _ => panic!("unknown OpenAI private label - update class_map.rs"),
     }
 }
 

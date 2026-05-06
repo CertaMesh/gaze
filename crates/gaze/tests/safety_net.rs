@@ -16,11 +16,11 @@ struct FixedDetector {
 
 impl Detector for FixedDetector {
     fn detect(&self, _input: &str) -> Vec<Detection> {
-        vec![Detection {
-            span: self.span.clone(),
-            class: self.class.clone(),
-            source: "fixed".to_string(),
-        }]
+        vec![Detection::new(
+            self.span.clone(),
+            self.class.clone(),
+            "fixed",
+        )]
     }
 }
 
@@ -121,15 +121,15 @@ impl SafetyNet for MockNet {
             return Ok(Vec::new());
         };
 
-        Ok(vec![LeakSuspect {
+        Ok(vec![LeakSuspect::new(
             span,
-            class: self.class.clone(),
-            safety_net_id: self.id().to_string(),
-            score: Some(0.99),
+            self.class.clone(),
+            self.id(),
+            Some(0.99),
             kind,
-            raw_label: self.raw_label.to_string(),
-            field_path: context.field_path.map(str::to_string),
-        }])
+            self.raw_label,
+            context.field_path.map(str::to_string),
+        )])
     }
 }
 

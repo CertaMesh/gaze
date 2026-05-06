@@ -93,17 +93,17 @@ fn safety_net_log_insert_and_read_round_trips_bytes_free_metadata() {
 fn sqlite_logger_implements_gaze_types_redaction_logger_trait() {
     let temp = NamedTempFile::new().expect("temp db");
     let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
-    let entry = RedactionEntry {
-        source: "regex".to_string(),
-        class: PiiClass::Email,
-        action: Action::Tokenize,
-        field_name: Some("contact.email".to_string()),
-        document_kind: DocumentKind::Structured,
-        conflict_loser: false,
-        decided_by: ConflictTier::None,
-        created_at: 1_767_225_600_000,
-        session_id: Some("session-redaction-log".to_string()),
-    };
+    let entry = RedactionEntry::new(
+        "regex",
+        PiiClass::Email,
+        Action::Tokenize,
+        Some("contact.email".to_string()),
+        DocumentKind::Structured,
+        false,
+        ConflictTier::None,
+        1_767_225_600_000,
+        Some("session-redaction-log".to_string()),
+    );
 
     let trait_object: &dyn RedactionLogger = &logger;
     trait_object.log(&entry).expect("log redaction entry");
@@ -279,15 +279,15 @@ fn legacy_rows() -> Vec<AuditLogRow> {
 }
 
 fn leak_suspect(span: Range<usize>, class: PiiClass, kind: LeakKind) -> LeakSuspect {
-    LeakSuspect {
+    LeakSuspect::new(
         span,
         class,
-        safety_net_id: "openai-privacy-filter".to_string(),
-        score: Some(0.91),
+        "openai-privacy-filter",
+        Some(0.91),
         kind,
-        raw_label: "private_email".to_string(),
-        field_path: Some("$.contact.email".to_string()),
-    }
+        "private_email",
+        Some("$.contact.email".to_string()),
+    )
 }
 
 fn table_columns(conn: &Connection, table: &str) -> Vec<String> {

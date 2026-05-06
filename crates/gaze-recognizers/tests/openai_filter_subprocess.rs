@@ -269,11 +269,11 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
     )
     .unwrap();
     let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new(opf));
-    let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan {
-        clean_span: 0..9,
-        raw_span: 0..21,
-        class: PiiClass::Email,
-    }]);
+    let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
+        0..9,
+        0..21,
+        PiiClass::Email,
+    )]);
 
     let suspects = net.check(clean, context(&manifest, None)).unwrap();
     assert!(suspects.is_empty());
@@ -290,13 +290,13 @@ fn backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
 }
 
 fn context<'a>(manifest: &'a Manifest, field_path: Option<&'a str>) -> SafetyNetContext<'a> {
-    SafetyNetContext {
+    SafetyNetContext::new(
         manifest,
-        locale_chain: &[LocaleTag::Global],
-        document_kind: DocumentKind::Text,
-        session_id: None,
+        &[LocaleTag::Global],
+        DocumentKind::Text,
+        None,
         field_path,
-    }
+    )
 }
 
 fn script(name: &str, body: &str) -> io::Result<PathBuf> {
