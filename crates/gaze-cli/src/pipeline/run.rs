@@ -26,9 +26,8 @@ use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
     build_context_pipeline, build_pipeline_from_policy, build_stub_pipeline,
-    dictionary_terms_from_rulepacks, empty_fields, load_rulepacks, map_pipeline_error,
-    map_policy_error, merged_rulepack_default_locales, resolve_ner_threshold,
-    validate_ner_threshold, ArcLogger,
+    dictionary_terms_from_rulepacks, load_rulepacks, map_pipeline_error, map_policy_error,
+    merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold, ArcLogger,
 };
 
 pub(crate) struct CleanOptions<'a> {
@@ -146,10 +145,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     }
     .map_err(|_| CliError::Pipeline)?;
 
-    let detect_fields = match &context {
-        Some(context) => &context.fields,
-        None => empty_fields(),
-    };
     let (clean_doc, leak_report) = if options.safety_net.is_some() {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_detect_context(
@@ -157,7 +152,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
-                detect_fields,
             )
             .map_err(map_safety_net_pipeline_error)?;
         (doc, _report)
@@ -168,7 +162,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
-                detect_fields,
             )
             .map_err(|_| CliError::Pipeline)?;
         (doc, LeakReport::default())

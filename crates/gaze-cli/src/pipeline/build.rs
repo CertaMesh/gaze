@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use gaze::{
     Action, ClassRule, DefaultRule, LocaleChain, LocaleTag, PiiClass, Pipeline, Policy,
@@ -148,11 +148,6 @@ pub(crate) fn dictionary_terms_from_rulepacks(
         }
     }
     Ok(dictionaries)
-}
-
-pub(crate) fn empty_fields() -> &'static serde_json::Map<String, serde_json::Value> {
-    static EMPTY_FIELDS: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
-    EMPTY_FIELDS.get_or_init(serde_json::Map::new)
 }
 
 pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {

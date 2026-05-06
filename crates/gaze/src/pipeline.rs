@@ -100,7 +100,6 @@ impl Pipeline {
             raw,
             locale_chain,
             &dictionaries,
-            &serde_json::Map::new(),
         )
     }
 
@@ -110,7 +109,6 @@ impl Pipeline {
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        detect_fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<CleanDocument> {
         match raw {
             RawDocument::Structured(structured_fields) => redact_structured(
@@ -120,7 +118,6 @@ impl Pipeline {
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
                 session,
@@ -129,7 +126,6 @@ impl Pipeline {
                 DocumentKind::Text,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?)),
         }
     }
@@ -146,7 +142,6 @@ impl Pipeline {
             raw,
             locale_chain,
             &dictionaries,
-            &serde_json::Map::new(),
         )
     }
 
@@ -156,7 +151,6 @@ impl Pipeline {
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        detect_fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         match raw {
             RawDocument::Structured(structured_fields) => {
@@ -167,7 +161,6 @@ impl Pipeline {
                     structured_fields,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                     &mut report,
                 )?;
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
@@ -180,7 +173,6 @@ impl Pipeline {
                     DocumentKind::Text,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                 )?;
                 let report = self.run_safety_nets(
                     session,
@@ -204,7 +196,6 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<String> {
         Ok(self
             .redact_text_with_manifest(
@@ -214,7 +205,6 @@ impl Pipeline {
                 document_kind,
                 locale_chain,
                 dictionaries,
-                _fields,
             )?
             .text)
     }
@@ -228,7 +218,6 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
@@ -487,7 +476,6 @@ fn redact_structured(
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
@@ -503,7 +491,6 @@ fn redact_structured(
                 document_kind,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?,
         );
     }
@@ -520,7 +507,6 @@ fn redact_structured_value(
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Value> {
     match value {
         Value::String(text) => Ok(Value::String(pipeline.redact_text(
@@ -530,7 +516,6 @@ fn redact_structured_value(
             document_kind,
             locale_chain,
             dictionaries,
-            detect_fields,
         )?)),
         Value::Array(values) => values
             .into_iter()
@@ -545,7 +530,6 @@ fn redact_structured_value(
                     document_kind,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                 )
             })
             .collect::<Result<Vec<_>>>()
@@ -565,7 +549,6 @@ fn redact_structured_value(
                         document_kind,
                         locale_chain,
                         dictionaries,
-                        detect_fields,
                     )?,
                 );
             }
@@ -582,7 +565,6 @@ fn redact_structured_with_safety_net(
     fields: BTreeMap<String, Value>,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
     report: &mut LeakReport,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
@@ -598,7 +580,6 @@ fn redact_structured_with_safety_net(
                 &path,
                 locale_chain,
                 dictionaries,
-                detect_fields,
                 report,
             )?,
         );
@@ -615,7 +596,6 @@ fn redact_structured_value_with_safety_net(
     field_path: &str,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
     report: &mut LeakReport,
 ) -> Result<Value> {
     match value {
@@ -630,7 +610,6 @@ fn redact_structured_value_with_safety_net(
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?;
             // For RawDocument::Structured, locale gating uses the session-level
             // locale chain across all fields; fields have no locale annotations.
@@ -657,7 +636,6 @@ fn redact_structured_value_with_safety_net(
                     &format!("{field_path}[{idx}]"),
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                     report,
                 )
             })
@@ -677,7 +655,6 @@ fn redact_structured_value_with_safety_net(
                         &child_path,
                         locale_chain,
                         dictionaries,
-                        detect_fields,
                         report,
                     )?,
                 );

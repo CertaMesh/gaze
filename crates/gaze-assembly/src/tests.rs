@@ -439,7 +439,6 @@ fn t20_context_class_map_overrides_policy_dict_class() {
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None).expect("pipeline");
     let dictionaries = gaze::dictionary_bundle_from_context(&context);
-    let fields = serde_json::Map::new();
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline
         .redact_with_detect_context(
@@ -447,7 +446,6 @@ fn t20_context_class_map_overrides_policy_dict_class() {
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
             &dictionaries,
-            &fields,
         )
         .expect("redact");
 
