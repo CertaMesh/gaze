@@ -414,5 +414,5 @@ Cross-references:
   safety-net feature gates on `gaze`, `gaze-recognizers`, and `gaze-cli`.
 - [`docs/architecture/xtask.md`](xtask.md) — `safety-net-sanity` and
   `class-map-override-safety` gates.
-- [`docs/research/gaze-first-principles-vision.md`](../research/gaze-first-principles-vision.md) —
+- [`AGENTS.md`](../../AGENTS.md#project-north-star) —
   the five-axis north star that the safety-net contract is checked against.

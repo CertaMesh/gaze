@@ -22,7 +22,7 @@ Every design, implementation, and review decision MUST be evaluated against thes
 4. **Trust (auditable + deterministic).** Rule-based detectors preferred over neural for precise classes. Neural is an addon (safety net, free-text NER), not the floor. Every token emission traceable to a rule or recognizer. Typed exceptions + closed error-variant set. No silent mismatches.
 5. **Adopter ergonomics.** Low-friction integration (Laravel adapter pattern, clear TOML policy, sane defaults). Framework adapters pave the 80% case; library API serves the 20% power case. Adopter can pick Gaze up in under a day without deep PII domain expertise.
 
-Full rationale, reframes of active decisions, what the north star rejects, and drift-measurement protocol live in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+All design, implementation, and review decisions in this repo are evaluated against the five axes above. If a decision weakens any axis, call it out in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 
 ## Workspace shape (v0.6)
 
