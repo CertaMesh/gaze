@@ -7,11 +7,10 @@
 # network and no local ONNX export happen in the gaze binary; the binary only
 # consumes the pinned local artifacts produced by this script.
 #
-# Checksums are embedded below, pinned to HF_COMMIT_SHA. Update them whenever
-# the model pin changes.
+# Checksums are published as SHA256SUMS.ner in each Gaze GitHub release.
 #
 # Usage:
-#   scripts/fetch-ner-model.sh [dest_dir]
+#   scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 #
 # Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
 
@@ -21,6 +20,7 @@ set -euo pipefail
 
 HF_REPO="onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
 HF_COMMIT_SHA="cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
+GITHUB_REPO="${GAZE_GITHUB_REPO:-piinuts/gaze}"
 
 # Files that must end up in the destination directory.
 REQUIRED_FILES=(
@@ -36,9 +36,78 @@ REQUIRED_FILES=(
 # ---- Destination ------------------------------------------------------------
 
 DEFAULT_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl"
-DEST="${1:-$DEFAULT_DEST}"
+DEST=""
+GAZE_VERSION=""
 
 log() { printf '[fetch-ner-model] %s\n' "$*"; }
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
+
+Options:
+  --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.ner.
+  -h, --help            Show this help.
+
+Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --gaze-version)
+      if [ "$#" -lt 2 ]; then
+        log "missing value for --gaze-version"
+        exit 2
+      fi
+      GAZE_VERSION="$2"
+      shift 2
+      ;;
+    --gaze-version=*)
+      GAZE_VERSION="${1#--gaze-version=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      log "unknown option: $1"
+      usage
+      exit 2
+      ;;
+    *)
+      if [ -n "$DEST" ]; then
+        log "unexpected extra argument: $1"
+        usage
+        exit 2
+      fi
+      DEST="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -gt 1 ]; then
+    log "unexpected extra argument: $2"
+    usage
+    exit 2
+  fi
+  if [ -n "$DEST" ]; then
+    log "unexpected extra argument: $1"
+    usage
+    exit 2
+  fi
+  DEST="$1"
+fi
+
+DEST="${DEST:-$DEFAULT_DEST}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -58,18 +127,45 @@ if [ ! -f "$LABELS_SOURCE" ]; then
   exit 2
 fi
 
-write_sha256sums() {
-  # Pinned to HF_COMMIT_SHA=cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8
-  # Update whenever the model pin changes.
-  cat > SHA256SUMS <<'SHASUMS'
-1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f  model.onnx
-bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088  tokenizer.json
-470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59  tokenizer_config.json
-8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638  config.json
-b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3  special_tokens_map.json
-fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c  vocab.txt
-8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb  labels.json
-SHASUMS
+detect_gaze_version_from_git() {
+  if command -v git >/dev/null 2>&1; then
+    git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || true
+  fi
+}
+
+detect_latest_gaze_release() {
+  local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  curl -fsSL "$api_url" 2>/dev/null \
+    | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -n 1 \
+    || true
+}
+
+resolve_gaze_version() {
+  local version="$GAZE_VERSION"
+
+  if [ -z "$version" ]; then
+    version="$(detect_gaze_version_from_git)"
+  fi
+
+  if [ -z "$version" ]; then
+    version="$(detect_latest_gaze_release)"
+  fi
+
+  if [ -z "$version" ]; then
+    log "could not determine Gaze release version for SHA256SUMS.ner"
+    log "specify one explicitly: scripts/fetch-ner-model.sh --gaze-version <tag> [dest_dir]"
+    exit 2
+  fi
+
+  printf '%s\n' "$version"
+}
+
+fetch_sha256sums() {
+  local version="$1"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/SHA256SUMS.ner"
+  log "fetching release checksums ${version} -> SHA256SUMS"
+  curl -fL --retry 3 -o SHA256SUMS "$url"
 }
 
 verify_sha256sums() {
@@ -85,6 +181,7 @@ verify_sha256sums() {
 
 mkdir -p "$DEST"
 cd "$DEST"
+GAZE_VERSION="$(resolve_gaze_version)"
 
 # ---- Download pinned HF artifacts ------------------------------------------
 
@@ -110,6 +207,10 @@ fetch_raw "vocab.txt" "vocab.txt"
 log "installing labels.json from assets/ner/labels.davlan-mbert.json"
 cp "$LABELS_SOURCE" labels.json
 
+# ---- Fetch release checksum contract ----------------------------------------
+
+fetch_sha256sums "$GAZE_VERSION"
+
 # ---- Verify checksums -------------------------------------------------------
 
 for f in "${REQUIRED_FILES[@]}"; do
@@ -119,8 +220,7 @@ for f in "${REQUIRED_FILES[@]}"; do
   fi
 done
 
-log "writing and verifying checksums"
-write_sha256sums
+log "verifying checksums"
 verify_sha256sums
 
 log "done. model dir: $DEST"
