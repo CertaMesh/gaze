@@ -17,7 +17,7 @@ pub mod token_shape;
 mod types;
 
 pub use context::{
-    Context, Context as TypedContext, ContextDictionary, ContextError, ContextFieldsRef, RawContext,
+    Context, Context as TypedContext, ContextDictionary, ContextError, ContextFieldsRef,
 };
 pub use detector::{Detection, Detector, PiiClass, BUILTIN_CLASS_NAMES};
 pub use dictionaries::{
