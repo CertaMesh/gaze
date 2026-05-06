@@ -37,19 +37,19 @@ enum Cmd {
         /// Override the persistent session TTL in seconds.
         #[arg(long)]
         session_ttl: Option<u64>,
-        /// Override policy [session].scope.
+        /// Override policy \[session].scope.
         #[arg(long)]
         session_scope: Option<String>,
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
-        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        /// Override policy \[ner] threshold. Must be between 0.0 and 1.0 inclusive.
         #[arg(long)]
         ner_threshold: Option<f32>,
-        /// Override policy [ner].model_dir.
+        /// Override policy \[ner].model_dir.
         #[arg(long)]
         ner_model_dir: Option<PathBuf>,
-        /// Override policy [ner].locale.
+        /// Override policy \[ner].locale.
         #[arg(long)]
         ner_locale: Option<String>,
         /// Override policy.rulepacks.bundled. Comma-separated and repeatable.
