@@ -5,7 +5,7 @@ edition = "2021"
 rust-version = "1.89"
 build = "build.rs"
 license = "Apache-2.0"
-description = "Channel-agnostic GDPR-compliant redaction engine"
+description = "Reversible PII pseudonymization runtime for agentic workflows"
 
 [lib]
 name = "gaze"

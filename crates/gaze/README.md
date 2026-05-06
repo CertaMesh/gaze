@@ -12,7 +12,7 @@ separate crate and plug into the core `Recognizer` surface.
 
 ```toml
 [dependencies]
-gaze = "0.4.4"
+gaze = "0.6.4"
 ```
 
 When developing inside the workspace, use the path dependency:
