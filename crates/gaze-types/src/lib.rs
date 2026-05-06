@@ -648,6 +648,7 @@ pub struct RedactionEntry {
 
 impl RedactionEntry {
     /// Builds a metadata-only redaction log entry.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         source: impl Into<String>,
         class: PiiClass,
@@ -1394,6 +1395,7 @@ pub struct Candidate {
 
 impl Candidate {
     /// Builds a recognizer candidate.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         span: Range<usize>,
         class: PiiClass,
