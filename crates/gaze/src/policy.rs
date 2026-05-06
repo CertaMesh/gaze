@@ -22,7 +22,6 @@ pub struct Policy {
     pub locale: Option<Vec<LocaleTag>>,
 }
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SessionPolicy {
@@ -126,7 +125,6 @@ pub struct RulepackPolicy {
     pub bundled: Vec<String>,
     pub paths: Vec<PathBuf>,
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
