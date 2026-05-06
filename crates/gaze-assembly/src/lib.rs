@@ -22,7 +22,7 @@
 //! let session = Session::new(Scope::Conversation("s1".into()))?;
 //! let CleanDocument::Text(_clean) = core.pipeline().redact(
 //!     &session,
-//!     RawDocument::Text("alice@example.invalid".into()),
+//!     RawDocument::Text("alice@example.invalid".into()), // fixture-cited(crates/gaze-assembly/src/lib.rs:tests::core_pipeline_config_tokenizes_synthetic_email)
 //! )? else {
 //!     panic!("text variant expected");
 //! };

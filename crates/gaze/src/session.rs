@@ -132,7 +132,7 @@ struct SnapshotPayload {
 ///
 /// impl Detector for ExampleEmailDetector {
 ///     fn detect(&self, input: &str) -> Vec<Detection> {
-///         let email = "alice@example.invalid";
+///         let email = "alice@example.invalid"; // fixture-cited(crates/gaze/src/session.rs:session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter)
 ///         input
 ///             .find(email)
 ///             .map(|start| Detection::new(start..start + email.len(), PiiClass::Email, "docs"))
@@ -150,7 +150,7 @@ struct SnapshotPayload {
 ///
 /// let CleanDocument::Text(clean) = pipeline.redact(
 ///     &session,
-///     RawDocument::Text("alice@example.invalid".into()),
+///     RawDocument::Text("alice@example.invalid".into()), // fixture-cited(crates/gaze/src/session.rs:session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter)
 /// )? else {
 ///     panic!("text variant expected");
 /// };
@@ -169,7 +169,7 @@ struct SnapshotPayload {
 ///     last = m.end();
 /// }
 /// restored.push_str(&clean[last..]);
-/// assert_eq!(restored, "alice@example.invalid");
+/// assert_eq!(restored, "alice@example.invalid"); // fixture-cited(crates/gaze/src/session.rs:session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter)
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
