@@ -17,7 +17,7 @@ pub trait Detector: Send + Sync {
 /// The category of a detected PII span.
 ///
 /// Built-in variants: `Email`, `Name`, `Location`, `Organization`. Tenant-specific PII
-/// (order IDs, song titles, internal codes) is carried as `PiiClass::Custom(String)`.
+/// (case references, titles, internal codes) is carried as `PiiClass::Custom(String)`.
 /// **There is no `Phone` variant** -- phone detection is provided by recognizers in
 /// `gaze-recognizers` and surfaces as either a `Custom("phone")` class or a class
 /// defined by a rulepack.
@@ -40,7 +40,7 @@ pub trait Detector: Send + Sync {
 /// ```
 ///
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
-/// and tenant classes are spelled `custom:order_id` (lowercase, snake_case).
+/// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum PiiClass {
