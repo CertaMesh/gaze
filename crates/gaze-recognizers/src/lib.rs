@@ -1,4 +1,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+//! Built-in recognizer backends for the Gaze pseudonymization pipeline.
+//!
+//! ## Feature flags
+//!
+//! | Feature | Default | What it enables |
+//! |---------|---------|-----------------|
+//! | `phone-parser` | yes | Parser-backed E.164 and national phone validation via `phonenumber` |
+//! | `safety-net` | no | `NerSafetyNet` observer pass |
+//! | `safety-net-openai` | no | OpenAI-filter safety net subprocess; also enables `safety-net` |
+//! | `test-support` | no | Fixture helpers for safety-net tests; not for production use |
+//!
+//! With `phone-parser` disabled, parser-backed phone validators fail closed. There is
+//! no silent regex-only fallback, so phone spans that require parser validation are not
+//! detected.
 
 mod anchored_match;
 mod dictionary;

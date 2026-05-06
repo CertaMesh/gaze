@@ -96,6 +96,16 @@ impl NormalizerKind {
     }
 }
 
+/// Regex-backed [`Recognizer`] implementation.
+///
+/// Construct via [`RegexDetector::emails`] for the bundled email recognizer, or
+/// supply a custom pattern through the rulepack mechanism. Patterns use Rust
+/// regex syntax: no lookahead, lookbehind, or backreferences. Prefer TOML
+/// literal strings (`'...'`) in policy files to avoid double-escaping.
+///
+/// [`Candidate::span`] uses byte ranges, not char indices.
+///
+/// [`Candidate::span`]: gaze_types::Candidate::span
 pub struct RegexDetector {
     regex: Regex,
     class: PiiClass,
