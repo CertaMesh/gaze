@@ -9,7 +9,6 @@ Serde-only — no ML, no SQLite, no ONNX. This crate exists so that:
 ## When to depend on this crate directly
 
 Use `gaze-types` instead of `gaze` when building:
-- A restore-side adapter that consumes `SensitiveSnapshot`, calls restore, and does not run detection
 - An audit sink implementing `RedactionLogger`
 - A crate that needs `PiiClass`, `Action`, or `RedactionEntry` without the full pipeline
 
@@ -25,6 +24,7 @@ Otherwise depend on `gaze` — it re-exports the public types from this crate.
 | `CleanDocument` | Cleaned output variant — same shape as `RawDocument` — `#[non_exhaustive]` |
 | `RedactionLogger` | Trait for audit sinks (metadata-only contract) |
 | `RedactionEntry` | One audit row: class, action, span, session, timestamp — no raw PII |
+| `ConflictTier` | Precedence tier for resolving overlapping detections |
 | `SafetyNet` | Observer-only post-clean trait (does not mutate the manifest) |
 | `LeakReport` / `LeakKind` | Suspected-miss report from a `SafetyNet` |
 
