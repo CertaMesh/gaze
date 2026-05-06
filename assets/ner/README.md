@@ -21,8 +21,10 @@ The pinned model source is
 `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`. The runtime `model.onnx` file is
 downloaded from the mirror path `onnx/model_int8.onnx`.
 
-Artifact checksums are embedded in the `gaze-recognizers` crate and verified
-at load time. Any mismatch causes a fail-closed startup error.
+Artifact checksums are published as `SHA256SUMS.ner` in each GitHub release.
+The fetch script downloads that release asset and verifies the installed model
+bundle before reporting success. Any mismatch causes a fail-closed install
+error.
 
 ## Installation
 
