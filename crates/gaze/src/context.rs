@@ -63,6 +63,7 @@ pub struct ContextDictionary {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ContextError {
     #[error("failed to read context JSON: {0}")]
     Io(#[source] std::io::Error),

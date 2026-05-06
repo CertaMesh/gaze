@@ -18,6 +18,7 @@ const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Scope {
     Ephemeral,
     Conversation(String),

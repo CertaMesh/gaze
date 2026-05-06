@@ -366,6 +366,7 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::Validator => "validator",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
+        _ => "unknown",
     }
 }
 
@@ -374,6 +375,7 @@ fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
         LeakKind::Uncovered => "uncovered",
         LeakKind::PartialBleed { .. } => "partial_bleed",
         LeakKind::ClassMismatch { .. } => "class_mismatch",
+        _ => "unknown",
     }
 }
 
@@ -381,6 +383,7 @@ fn leak_kind_pipeline_class(kind: &LeakKind) -> Option<&PiiClass> {
     match kind {
         LeakKind::ClassMismatch { pipeline_class, .. } => Some(pipeline_class),
         LeakKind::Uncovered | LeakKind::PartialBleed { .. } => None,
+        _ => None,
     }
 }
 
@@ -437,6 +440,7 @@ fn pii_class_to_db(class: &PiiClass) -> String {
         PiiClass::Location => "location".to_string(),
         PiiClass::Organization => "organization".to_string(),
         PiiClass::Custom(name) => format!("custom:{name}"),
+        _ => "unknown".to_string(),
     }
 }
 
@@ -467,6 +471,7 @@ fn action_to_db(action: Action) -> &'static str {
         Action::FormatPreserve => "format_preserve",
         Action::Generalize => "generalize",
         Action::Preserve => "preserve",
+        _ => "unknown",
     }
 }
 
@@ -494,6 +499,7 @@ fn document_kind_to_db(kind: &DocumentKind) -> &'static str {
     match kind {
         DocumentKind::Structured => "structured",
         DocumentKind::Text => "text",
+        _ => "unknown",
     }
 }
 

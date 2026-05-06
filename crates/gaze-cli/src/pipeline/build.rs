@@ -183,6 +183,9 @@ fn map_recognizer_error(err: gaze_recognizers::RecognizerError) -> gaze::Error {
         gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
             gaze::Error::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
         }
+        _ => gaze::Error::Rulepack(gaze::RulepackError::UnsupportedMatcher(
+            "unsupported recognizer error variant".to_string(),
+        )),
     }
 }
 

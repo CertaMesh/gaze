@@ -21,6 +21,7 @@ use crate::DictionaryBundle;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
@@ -48,6 +49,12 @@ pub enum Error {
     SafetyNet(#[from] SafetyNetError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
+    #[error("unsupported raw document variant")]
+    UnsupportedRawDocumentVariant,
+    #[error("unsupported structured value variant")]
+    UnsupportedValueVariant,
+    #[error("unsupported policy action variant")]
+    UnsupportedActionVariant,
 }
 
 #[derive(Clone)]
@@ -95,12 +102,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
     ) -> Result<CleanDocument> {
         let dictionaries = DictionaryBundle::default();
-        self.redact_with_detect_context(
-            session,
-            raw,
-            locale_chain,
-            &dictionaries,
-        )
+        self.redact_with_detect_context(session, raw, locale_chain, &dictionaries)
     }
 
     pub fn redact_with_detect_context(
@@ -127,6 +129,7 @@ impl Pipeline {
                 locale_chain,
                 dictionaries,
             )?)),
+            _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }
 
@@ -137,12 +140,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         let dictionaries = DictionaryBundle::default();
-        self.clean_with_safety_net_detect_context(
-            session,
-            raw,
-            locale_chain,
-            &dictionaries,
-        )
+        self.clean_with_safety_net_detect_context(session, raw, locale_chain, &dictionaries)
     }
 
     pub fn clean_with_safety_net_detect_context(
@@ -184,6 +182,7 @@ impl Pipeline {
                 )?;
                 Ok((CleanDocument::Text(clean.text), clean.manifest, report))
             }
+            _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }
 
@@ -279,6 +278,7 @@ impl Pipeline {
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
+                _ => return Err(Error::UnsupportedActionVariant),
             };
 
             let span = detection.detection.span;
@@ -555,6 +555,7 @@ fn redact_structured_value(
             Ok(Value::Object(clean))
         }
         Value::Null | Value::Bool(_) | Value::I64(_) => Ok(value),
+        _ => Err(Error::UnsupportedValueVariant),
     }
 }
 
@@ -675,6 +676,7 @@ fn redact_structured_value_with_safety_net(
             }
             Ok(value)
         }
+        _ => Err(Error::UnsupportedValueVariant),
     }
 }
 
@@ -790,6 +792,7 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
         PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+        _ => "[PII]".to_string(),
     }
 }
 

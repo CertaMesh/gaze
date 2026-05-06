@@ -80,6 +80,11 @@ pub fn build_pipeline(
             }
             RuleSpec::Column { column, action } => builder.rule(ColumnRule::new(column, *action)),
             RuleSpec::Default { action } => builder.rule(DefaultRule::new(*action)),
+            _ => {
+                return Err(
+                    gaze::PolicyError::BadTtl("unsupported rule variant".to_string()).into(),
+                )
+            }
         };
     }
 

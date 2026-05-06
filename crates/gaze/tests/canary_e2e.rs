@@ -39,6 +39,7 @@ fn canary_never_leaks_through_structured_redaction() {
             .expect("tokenized email must be a string")
             .to_string(),
         CleanDocument::Text(_) => panic!("expected structured clean document"),
+        _ => panic!("expected structured clean document"),
     };
 
     assert!(

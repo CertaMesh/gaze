@@ -7,6 +7,7 @@ use sha3::{Digest, Keccak256};
 use crate::{RecognizerError, Result};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ValidatorKind {
     EmailRfc,
     #[cfg(feature = "phone-parser")]
@@ -70,6 +71,7 @@ impl ValidatorKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum NormalizerKind {
     EmailCanonical,
     IbanCanonical,

@@ -12,6 +12,7 @@ pub trait Validator: Send + Sync {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ValidationResult {
     Valid,
     Invalid,

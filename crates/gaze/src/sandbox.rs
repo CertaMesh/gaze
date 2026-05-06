@@ -135,6 +135,7 @@ impl ExecPolicy {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SandboxError {
     #[error("program not allowed: {0}")]
     ProgramNotAllowed(PathBuf),

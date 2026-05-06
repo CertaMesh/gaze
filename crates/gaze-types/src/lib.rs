@@ -14,6 +14,7 @@ pub trait Detector: Send + Sync {
 
 /// PII class vocabulary used by detectors, recognizers, policy, and audit metadata.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -255,6 +256,7 @@ pub struct LeakSuspect {
 
 /// Manifest correlation result for a safety-net suspect.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LeakKind {
     /// No same-class emitted token overlaps the suspect span.
     Uncovered,
@@ -274,6 +276,7 @@ pub enum LeakKind {
 
 /// Stable tag for leak-kind aggregation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum LeakKindTag {
     /// `LeakKind::Uncovered`.
     Uncovered,
@@ -296,6 +299,7 @@ impl LeakKind {
 
 /// Bytes-free telemetry emitted by safety-net orchestration.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LeakReportTelemetry {
     /// Safety net skipped because the session-level locale chain did not match.
     LocaleSkipped {
@@ -455,6 +459,7 @@ impl SafetyNetPiiClass {
 
 /// Exhaustive, closed error set for safety-net execution.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum SafetyNetError {
     /// Safety net was explicitly requested but is unavailable.
     #[error("safety net unavailable: {reason}")]
@@ -498,6 +503,7 @@ pub enum SafetyNetError {
 
 /// Policy action vocabulary for handling detected PII.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Action {
     /// Replace PII with a reversible token.
     Tokenize,
@@ -513,6 +519,7 @@ pub enum Action {
 
 /// Conflict resolution tier that selected or rejected a candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ConflictTier {
     /// No conflict resolution was needed.
     None,
@@ -534,6 +541,7 @@ pub enum ConflictTier {
 
 /// Source document kind for metadata-only audit logging.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DocumentKind {
     /// Structured key/value document.
     Structured,
@@ -566,6 +574,7 @@ pub struct RedactionEntry {
 
 /// Closed error set for redaction log sinks.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
 pub enum RedactionLogError {
     /// SQLite-backed redaction log sink failed.
     #[error("sqlite redaction log error: {0}")]
@@ -583,6 +592,7 @@ pub trait RedactionLogger: Send + Sync {
 
 /// Locale tag recognized by policy and recognizers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum LocaleTag {
     /// Locale-independent recognizer or policy.
     Global,
@@ -745,6 +755,7 @@ impl fmt::Display for LocaleTag {
 
 /// Input document before pseudonymization.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum RawDocument {
     /// Structured document values.
     Structured(BTreeMap<String, Value>),
@@ -755,6 +766,7 @@ pub enum RawDocument {
 /// Cleaned document after pseudonymization.
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum CleanDocument {
     /// Structured document values.
     Structured(BTreeMap<String, Value>),
@@ -765,6 +777,7 @@ pub enum CleanDocument {
 /// Minimal structured value representation that avoids a serde_json dependency.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum Value {
     /// Null value.
     Null,
@@ -822,6 +835,7 @@ pub struct DictionaryEntry {
 
 /// Source of a dictionary entry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DictionarySource {
     /// Dictionary supplied by request context.
     Cli,
@@ -853,6 +867,7 @@ pub struct RulepackDict {
 
 /// Error raised when constructing invalid dictionary entries.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DictionaryLoadError {
     /// Dictionary has no terms.
     Empty { name: String },

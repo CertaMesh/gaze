@@ -141,6 +141,7 @@ fn text(clean: CleanDocument) -> String {
     match clean {
         CleanDocument::Text(text) => text,
         CleanDocument::Structured(_) => panic!("expected text"),
+        _ => panic!("expected text"),
     }
 }
 

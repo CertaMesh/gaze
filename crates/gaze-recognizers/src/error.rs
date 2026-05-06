@@ -1,5 +1,6 @@
 /// Error type for recognizer construction and rulepack field validation.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum RecognizerError {
     /// Regex pattern failed to compile.
     #[error("invalid regex: {0}")]

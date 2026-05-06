@@ -19,6 +19,7 @@ pub struct Rulepack {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct RecognizerSpec {
     pub id: String,
     pub class: PiiClass,
@@ -36,6 +37,7 @@ pub struct RecognizerSpec {
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields, rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum RawMatch {
     Regex {
         #[serde(default)]
@@ -69,6 +71,7 @@ pub enum RawMatch {
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum AnchoredBoundary {
     Punctuation,
     Whitespace,
@@ -85,18 +88,21 @@ pub enum AnchoredBoundary {
 /// (see also `lower_email_header_pattern_template` in pre-v0.4.1 history).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum NameShape {
     PersonName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum CuePosition {
     Before,
     After,
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct ContextSpec {
     pub hotwords: Vec<String>,
     pub window: Option<u16>,
@@ -121,6 +127,7 @@ pub struct ScoringSpec {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct TokenSpec {
     pub family: Option<String>,
     pub format: Option<String>,
@@ -144,12 +151,14 @@ pub struct LocaleBucket {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RulepackSource {
     Embedded(&'static str),
     Path(PathBuf),
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum RulepackError {
     #[error("failed to read rulepack: {0}")]
     Io(#[source] std::io::Error),

@@ -514,6 +514,7 @@ fn class_to_snapshot_string(class: PiiClass) -> String {
         PiiClass::Location => "Location".to_string(),
         PiiClass::Organization => "Organization".to_string(),
         PiiClass::Custom(name) => format!("custom:{name}"),
+        _ => "Unknown".to_string(),
     }
 }
 
