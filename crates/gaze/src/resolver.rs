@@ -18,7 +18,7 @@ pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
     for candidate in candidates {
         insert_candidate(&mut resolved, candidate);
     }
-    resolved.sort_by(|a, b| a.span.start.cmp(&b.span.start));
+    resolved.sort_by_key(|a| a.span.start);
     resolved
 }
 
