@@ -92,7 +92,7 @@ Execution entry points:
 - `Pipeline::redact_with_context(session, raw, locale_chain)` adds locale
   selection.
 - `Pipeline::redact_with_detect_context(session, raw, locale_chain,
-  dictionaries, detect_fields)` adds tenant dictionaries and structured
+  dictionaries)` adds tenant dictionaries and structured
   context fields.
 
 ## LocaleChain
