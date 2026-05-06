@@ -57,6 +57,37 @@ pub enum Error {
     UnsupportedActionVariant,
 }
 
+/// The stateless PII pseudonymization engine.
+///
+/// `Pipeline` owns the recognizer registry, rule set, locale resolver, and optional audit logger.
+/// Construct once per process and share across requests; create one [`Session`] per conversation
+/// or request.
+///
+/// # Fail-closed
+///
+/// Construction fails if a recognizer fails to initialize, a validator name is unknown, or a policy
+/// cannot be parsed. There is no silent degradation to a weaker detection posture.
+///
+/// # Thread safety
+///
+/// `Pipeline` is `Send + Sync`. Share across threads; create one [`Session`] per request.
+///
+/// # Quick example
+///
+/// ```rust,no_run
+/// use gaze::{CleanDocument, Pipeline, RawDocument, Scope, Session};
+///
+/// let pipeline = Pipeline::builder().build()?;
+/// let session = Session::new(Scope::Ephemeral)?;
+/// let CleanDocument::Text(clean) = pipeline.redact(
+///     &session,
+///     RawDocument::Text("test".into()),
+/// )? else {
+///     panic!("expected text variant");
+/// };
+/// # let _ = clean;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Clone)]
 pub struct Pipeline {
     registry: Arc<RecognizerRegistry>,
@@ -406,6 +437,13 @@ struct CleanText {
     manifest: Vec<EmittedTokenSpan>,
 }
 
+/// Builder for [`Pipeline`].
+///
+/// Obtain via [`Pipeline::builder()`]. Chain `.recognizer()`, `.rule()`, optionally
+/// `.redaction_logger()` / `.register_safety_net()`, then call `.build()`.
+///
+/// For bundled defaults (core rulepack + locale-aware recognizers without manual wiring), use
+/// `gaze_assembly::CorePipelineConfig` instead.
 #[derive(Default)]
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
