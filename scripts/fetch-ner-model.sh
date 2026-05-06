@@ -129,7 +129,7 @@ fi
 
 detect_gaze_version_from_git() {
   if command -v git >/dev/null 2>&1; then
-    git -C "$REPO_ROOT" describe --tags --abbrev=0 2>/dev/null || true
+    git -C "$REPO_ROOT" describe --tags --abbrev=0 --exclude '*-*' 2>/dev/null || true
   fi
 }
 
