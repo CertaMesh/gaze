@@ -121,11 +121,19 @@ impl Detection {
     }
 }
 
-/// Observer-only privacy safety net.
+/// Observer-only post-clean check (Pass 3 in the detection pipeline).
 ///
-/// Safety nets run after Gaze has emitted clean text. They can report suspected
-/// missed PII, but the contract intentionally has no return channel for
-/// replacement text.
+/// Runs against already-tokenized output. May report suspected missed PII via
+/// [`LeakReport`] but **must not** mutate the token manifest, the `CleanDocument`,
+/// or the restore path. Safety nets are additive defense-in-depth, not a replacement
+/// for Pass 1/2 detection.
+///
+/// Activate at runtime with `Pipeline::with_safety_net` (post-build) or
+/// `PipelineBuilder::register_safety_net` (during build), or via the CLI
+/// `--safety-net=<name>` flag.
+///
+/// If a safety net reports a suspected miss, the caller decides the response; the
+/// pipeline never silently re-cleans based on safety net output.
 pub trait SafetyNet: Send + Sync {
     /// Stable backend identifier used in telemetry and audit rows.
     fn id(&self) -> &str;
@@ -325,7 +333,9 @@ impl LeakSuspect {
     }
 }
 
-/// Manifest correlation result for a safety-net suspect.
+/// The category of a suspected missed PII span.
+///
+/// `LeakKind` is `#[non_exhaustive]`. Match with a wildcard for forward compatibility.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LeakKind {
@@ -399,7 +409,11 @@ pub struct LeakReportStats {
     pub locale_skipped_count: usize,
 }
 
-/// Safety-net report for one pipeline run.
+/// A suspected missed PII span reported by a [`SafetyNet`].
+///
+/// The safety net is not authoritative; a `LeakReport` is a signal, not a confirmed
+/// leak. False positives are expected. Review reports and adjust policy or recognizer
+/// thresholds.
 #[derive(Debug, Clone, Default, PartialEq)]
 #[non_exhaustive]
 pub struct LeakReport {
@@ -624,7 +638,15 @@ pub enum DocumentKind {
     Text,
 }
 
-/// Metadata-only audit entry for a redaction decision.
+/// One row of redaction metadata emitted to a [`RedactionLogger`].
+///
+/// Fields identify the PII class, action taken, session ID, source document kind,
+/// conflict-resolution metadata, and timestamp. Does **not** contain the original PII
+/// value, the token string, or any identifiable content beyond what a compliance audit
+/// requires.
+///
+/// `RedactionEntry` is `#[non_exhaustive]`; adopters must construct via the public
+/// constructor or destructure with a wildcard pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct RedactionEntry {
@@ -688,7 +710,35 @@ pub enum RedactionLogError {
     Backend(String),
 }
 
-/// Sink trait for metadata-only redaction log entries.
+/// Trait for audit sinks that receive redaction metadata.
+///
+/// Implement this for custom audit backends (remote telemetry, structured JSON logs).
+/// For SQLite-backed persistence, use `gaze_audit::SqliteLogger`.
+///
+/// # Contract
+///
+/// The logger receives **metadata only**: class, action, session ID, timestamp, and
+/// other bytes-free audit labels. It never receives the original PII value or the token
+/// value. A custom impl that augments entries with raw document text violates the audit
+/// isolation contract and will be flagged by the `gaze_module_isolation` Dylint lint
+/// when it lives in the wrong crate.
+///
+/// # Example
+///
+/// ```rust
+/// use std::sync::atomic::{AtomicUsize, Ordering};
+/// use gaze_types::{RedactionEntry, RedactionLogError, RedactionLogger};
+///
+/// #[derive(Default)]
+/// struct CountLogger(AtomicUsize);
+///
+/// impl RedactionLogger for CountLogger {
+///     fn log(&self, _entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+///         self.0.fetch_add(1, Ordering::Relaxed);
+///         Ok(())
+///     }
+/// }
+/// ```
 pub trait RedactionLogger: Send + Sync {
     /// Records a metadata-only redaction entry.
     fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError>;
