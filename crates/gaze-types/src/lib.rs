@@ -14,7 +14,33 @@ pub trait Detector: Send + Sync {
     fn detect(&self, input: &str) -> Vec<Detection>;
 }
 
-/// PII class vocabulary used by detectors, recognizers, policy, and audit metadata.
+/// The category of a detected PII span.
+///
+/// Built-in variants: `Email`, `Name`, `Location`, `Organization`. Tenant-specific PII
+/// (order IDs, song titles, internal codes) is carried as `PiiClass::Custom(String)`.
+/// **There is no `Phone` variant** -- phone detection is provided by recognizers in
+/// `gaze-recognizers` and surfaces as either a `Custom("phone")` class or a class
+/// defined by a rulepack.
+///
+/// `PiiClass` is `#[non_exhaustive]`. Always include a wildcard arm:
+///
+/// ```rust
+/// use gaze_types::PiiClass;
+///
+/// fn label(class: &PiiClass) -> &'static str {
+///     match class {
+///         PiiClass::Email        => "email",
+///         PiiClass::Name         => "name",
+///         PiiClass::Location     => "location",
+///         PiiClass::Organization => "org",
+///         PiiClass::Custom(_)    => "pii",
+///         _                      => "pii",
+///     }
+/// }
+/// ```
+///
+/// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
+/// and tenant classes are spelled `custom:order_id` (lowercase, snake_case).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum PiiClass {
@@ -590,7 +616,19 @@ pub enum SafetyNetError {
     },
 }
 
-/// Policy action vocabulary for handling detected PII.
+/// Disposition applied to a detected PII span.
+///
+/// | Variant | Restorable | Output shape |
+/// |---------|------------|--------------|
+/// | `Tokenize` | Yes | Opaque token: `<hex:Class_N>` |
+/// | `FormatPreserve` | Yes | Realistic-looking pseudonym (e.g., `email1.hex@gaze-fake.invalid`) |
+/// | `Redact` | No | Literal `[REDACTED]` -- original value is gone |
+/// | `Generalize` | No | Class label (e.g., `[Email]`) -- original value is gone |
+/// | `Preserve` | - | Passes through unchanged |
+///
+/// `Action` is `#[non_exhaustive]`. Use a wildcard arm in exhaustive matches.
+/// When restore is required, use `Tokenize` or `FormatPreserve` -- `Redact` and
+/// `Generalize` are irreversible.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Action {
@@ -908,7 +946,15 @@ impl fmt::Display for LocaleTag {
     }
 }
 
-/// Input document before pseudonymization.
+/// The input document submitted for pseudonymization.
+///
+/// `RawDocument::Text(String)` for plain or semi-structured text (most LLM workflows).
+/// `RawDocument::Structured(BTreeMap<String, Value>)` for JSON-shaped data where
+/// column-aware rules apply -- `ColumnRule`s only take effect on structured input.
+///
+/// `Detection::span` and recognizer candidate spans use **byte** ranges, not char indices.
+///
+/// `RawDocument` is `#[non_exhaustive]`. Match with a wildcard arm.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum RawDocument {
@@ -918,7 +964,24 @@ pub enum RawDocument {
     Text(String),
 }
 
-/// Cleaned document after pseudonymization.
+/// The pseudonymized output from `Pipeline::redact`.
+///
+/// Mirrors the shape of `RawDocument`: `CleanDocument::Text(String)` or
+/// `CleanDocument::Structured(BTreeMap<String, Value>)`. Destructure with a `let`-else
+/// or `match`; **there is no `.text()` accessor**.
+///
+/// ```rust
+/// use gaze_types::CleanDocument;
+///
+/// fn unwrap_text(doc: CleanDocument) -> Option<String> {
+///     if let CleanDocument::Text(t) = doc { Some(t) } else { None }
+/// }
+/// ```
+///
+/// Contains only tokens or redacted placeholders -- no original PII values.
+/// Send this (or its inner string) to the LLM; never send the original `RawDocument`.
+///
+/// `CleanDocument` is `#[non_exhaustive]`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 #[non_exhaustive]

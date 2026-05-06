@@ -10,6 +10,16 @@ use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 
+/// Loaded redaction policy from a TOML configuration file.
+///
+/// Defines which rulepacks activate, which recognizers are enabled, and the locale chain.
+/// Load with [`Policy::load`] for library use or [`Policy::load_for_cli`] for CLI hosts.
+/// Both signatures take `&std::path::Path`.
+///
+/// Production deployments **must** use a policy -- the no-policy builder path is for
+/// development smoke-testing only and has an unauditable detection posture.
+///
+/// See `docs/policy.md` in the repository for the full TOML schema reference.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[non_exhaustive]
 pub struct Policy {
