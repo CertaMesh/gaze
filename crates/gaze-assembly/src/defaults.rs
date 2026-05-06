@@ -3,8 +3,7 @@ use std::path::PathBuf;
 
 use gaze::{
     Action, CleanDocument, Context, LocaleChain, LocaleTag, PiiClass, Pipeline, Policy,
-    PolicyError, RawDocument, RuleSpec, Rulepack, RulepackPolicy, RulepackSource, Session,
-    SessionPolicy, SessionScope,
+    PolicyError, RawDocument, RuleSpec, Rulepack, RulepackSource, Session,
 };
 
 use crate::{build_pipeline, BuildError};
@@ -152,19 +151,8 @@ fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
 }
 
 fn default_policy(locale: Option<Vec<LocaleTag>>, rules: Vec<RuleSpec>) -> Policy {
-    Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
-        },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules,
-        ner: None,
-        rulepacks: RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        },
-        locale,
-    }
+    let mut policy = Policy::default();
+    policy.rules = rules;
+    policy.locale = locale;
+    policy
 }

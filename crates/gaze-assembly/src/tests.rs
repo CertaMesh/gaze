@@ -35,21 +35,7 @@ fn empty_context() -> Context {
 }
 
 fn empty_policy() -> gaze::Policy {
-    gaze::Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
-        },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules: Vec::new(),
-        ner: None,
-        rulepacks: gaze::RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        },
-        locale: None,
-    }
+    gaze::Policy::default()
 }
 
 fn embedded_rulepack(name: &str) -> Rulepack {
@@ -147,11 +133,7 @@ pattern = '''alice@example\.invalid'''
 #[test]
 fn build_pipeline_ner_without_model_dir_returns_no_recognizers() {
     let mut policy = empty_policy();
-    policy.ner = Some(NerPolicy {
-        model_dir: None,
-        locale: None,
-        threshold: gaze::DEFAULT_NER_THRESHOLD,
-    });
+    policy.ner = Some(NerPolicy::default());
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let err = match build_pipeline(&policy, &empty_context(), &[], &active_locales, None) {
         Ok(_) => panic!("threshold-only NER must fail closed"),
@@ -198,7 +180,6 @@ fn build_pipeline_context_only_still_succeeds() {
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
             &dictionaries,
-            &serde_json::Map::new(),
         )
         .expect("redact");
 
