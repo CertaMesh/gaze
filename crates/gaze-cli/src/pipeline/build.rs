@@ -167,7 +167,7 @@ pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<Loc
     locales
 }
 
-/// Stub pipeline used until the policy.toml loader (solo #3) lands.
+/// Stub pipeline used until the policy.toml loader (issue #3) lands.
 /// Ships only a regex email detector + tokenize rule so the CLI contract can
 /// be exercised end-to-end; richer detectors arrive with the loader.
 pub(crate) fn build_stub_pipeline(logger: Arc<dyn RedactionLogger>) -> GazeResult<Pipeline> {
