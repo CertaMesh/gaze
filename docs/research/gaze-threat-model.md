@@ -2,7 +2,7 @@
 
 **Status:** Draft
 **Date:** 2026-04-15
-**Scope:** v0.2 read-side + v0.5 operations proxy
+**Scope:** v0.2 read-side + v0.5 operations proxy (future)
 
 ---
 
@@ -48,7 +48,7 @@
 **Goal (v0.5 action side):** Trick Gaze into executing unauthorized actions; exfiltrate data via action side-effects (send email to attacker-controlled address using legitimate Token).
 
 **Mitigations (in scope for v0.2):**
-- Policy-level allowlists for tables/columns in external MCP consumers such as [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens), formerly the in-tree `debug-proxy`.
+- Policy-level allowlists for tables/columns in external MCP consumers such as [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens).
 - Query budgets + k-anonymity thresholds (open issues #1, #2 — deferred to v0.3, documented here as known gap).
 - Filter translation validated: agent-supplied tokens go through `session.restore()` with **fail-closed** semantics on unknown tokens (action-phase; read-phase may warn + pass through).
 - All detector output goes through pipeline; no raw PII path bypasses redaction.
@@ -115,7 +115,7 @@
 | A2 (malicious agent, v0.2) | k-anonymity / cardinality guards | Issue #1 — deferred to v0.3 |
 | A2 (compositional attack) | per-session query budget | Issue #2 — deferred to v0.3 |
 | A3 (at-rest) | audit log must not enable reversal | Issue #3 — **closed by core Auditor contract** (v0.2) |
-| A5 (prompt injection into ghostwriter) | typed terms for customer-specific values | Issue #4 — IndexDetector in v0.2 |
+| A5 (prompt injection via tenant-specific vocabulary) | typed terms for custom entity types | Issue #4 — IndexDetector in v0.2 |
 
 ## Review Cadence
 
