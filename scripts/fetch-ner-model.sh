@@ -7,11 +7,10 @@
 # network and no local ONNX export happen in the gaze binary; the binary only
 # consumes the pinned local artifacts produced by this script.
 #
-# SHA256SUMS is checked in at the repository root so adopters can copy or curl
-# it from a known-stable Gaze revision and fail closed on byte drift.
+# Checksums are published as SHA256SUMS.ner in each Gaze GitHub release.
 #
 # Usage:
-#   scripts/fetch-ner-model.sh [dest_dir]
+#   scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 #
 # Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
 
@@ -21,6 +20,7 @@ set -euo pipefail
 
 HF_REPO="onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
 HF_COMMIT_SHA="cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
+GITHUB_REPO="${GAZE_GITHUB_REPO:-piinuts/gaze}"
 
 # Files that must end up in the destination directory.
 REQUIRED_FILES=(
@@ -31,15 +31,83 @@ REQUIRED_FILES=(
   "special_tokens_map.json"
   "vocab.txt"
   "labels.json"
-  "SHA256SUMS"
 )
 
 # ---- Destination ------------------------------------------------------------
 
 DEFAULT_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl"
-DEST="${1:-$DEFAULT_DEST}"
+DEST=""
+GAZE_VERSION=""
 
 log() { printf '[fetch-ner-model] %s\n' "$*"; }
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
+
+Options:
+  --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.ner.
+  -h, --help            Show this help.
+
+Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
+USAGE
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --gaze-version)
+      if [ "$#" -lt 2 ]; then
+        log "missing value for --gaze-version"
+        exit 2
+      fi
+      GAZE_VERSION="$2"
+      shift 2
+      ;;
+    --gaze-version=*)
+      GAZE_VERSION="${1#--gaze-version=}"
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      log "unknown option: $1"
+      usage
+      exit 2
+      ;;
+    *)
+      if [ -n "$DEST" ]; then
+        log "unexpected extra argument: $1"
+        usage
+        exit 2
+      fi
+      DEST="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ "$#" -gt 0 ]; then
+  if [ "$#" -gt 1 ]; then
+    log "unexpected extra argument: $2"
+    usage
+    exit 2
+  fi
+  if [ -n "$DEST" ]; then
+    log "unexpected extra argument: $1"
+    usage
+    exit 2
+  fi
+  DEST="$1"
+fi
+
+DEST="${DEST:-$DEFAULT_DEST}"
 
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -52,17 +120,53 @@ require_cmd curl
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ROOT_SHA256SUMS="${REPO_ROOT}/SHA256SUMS"
 LABELS_SOURCE="${REPO_ROOT}/assets/ner/labels.davlan-mbert.json"
 
-if [ ! -f "$ROOT_SHA256SUMS" ]; then
-  log "missing repository checksum manifest: ${ROOT_SHA256SUMS}"
-  exit 2
-fi
 if [ ! -f "$LABELS_SOURCE" ]; then
   log "missing Gaze NER labels contract: ${LABELS_SOURCE}"
   exit 2
 fi
+
+detect_gaze_version_from_git() {
+  if command -v git >/dev/null 2>&1; then
+    git -C "$REPO_ROOT" describe --tags --abbrev=0 --exclude '*-*' 2>/dev/null || true
+  fi
+}
+
+detect_latest_gaze_release() {
+  local api_url="https://api.github.com/repos/${GITHUB_REPO}/releases/latest"
+  curl -fsSL "$api_url" 2>/dev/null \
+    | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+    | head -n 1 \
+    || true
+}
+
+resolve_gaze_version() {
+  local version="$GAZE_VERSION"
+
+  if [ -z "$version" ]; then
+    version="$(detect_gaze_version_from_git)"
+  fi
+
+  if [ -z "$version" ]; then
+    version="$(detect_latest_gaze_release)"
+  fi
+
+  if [ -z "$version" ]; then
+    log "could not determine Gaze release version for SHA256SUMS.ner"
+    log "specify one explicitly: scripts/fetch-ner-model.sh --gaze-version <tag> [dest_dir]"
+    exit 2
+  fi
+
+  printf '%s\n' "$version"
+}
+
+fetch_sha256sums() {
+  local version="$1"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/SHA256SUMS.ner"
+  log "fetching release checksums ${version} -> SHA256SUMS"
+  curl -fL --retry 3 -o SHA256SUMS "$url"
+}
 
 verify_sha256sums() {
   if command -v shasum >/dev/null 2>&1; then
@@ -77,6 +181,7 @@ verify_sha256sums() {
 
 mkdir -p "$DEST"
 cd "$DEST"
+GAZE_VERSION="$(resolve_gaze_version)"
 
 # ---- Download pinned HF artifacts ------------------------------------------
 
@@ -102,10 +207,11 @@ fetch_raw "vocab.txt" "vocab.txt"
 log "installing labels.json from assets/ner/labels.davlan-mbert.json"
 cp "$LABELS_SOURCE" labels.json
 
-log "installing SHA256SUMS from repository root"
-cp "$ROOT_SHA256SUMS" SHA256SUMS
+# ---- Fetch release checksum contract ----------------------------------------
 
-# ---- Verify SHA256SUMS ------------------------------------------------------
+fetch_sha256sums "$GAZE_VERSION"
+
+# ---- Verify checksums -------------------------------------------------------
 
 for f in "${REQUIRED_FILES[@]}"; do
   if [ ! -f "$f" ]; then
@@ -114,7 +220,7 @@ for f in "${REQUIRED_FILES[@]}"; do
   fi
 done
 
-log "verifying SHA256SUMS"
+log "verifying checksums"
 verify_sha256sums
 
 log "done. model dir: $DEST"

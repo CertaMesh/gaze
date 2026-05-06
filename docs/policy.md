@@ -10,9 +10,9 @@ parser lives at [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs);
 the CLI wiring (argument parsing, context envelope assembly, policy-error
 mapping) is in [`crates/gaze-cli/src/main.rs`](../crates/gaze-cli/src/main.rs).
 Recognizer backends (regex, dictionary, NER) live in
-[`crates/gaze-recognizers`](../crates/gaze-recognizers). For roadmap context,
-including the consolidated CLI and host-integration history, see
-[`ROADMAP.md`](../ROADMAP.md).
+[`crates/gaze-recognizers`](../crates/gaze-recognizers). For version history,
+including shipped CLI and host-integration changes, see
+[`CHANGELOG.md`](../CHANGELOG.md).
 
 ## What `policy.toml` is for
 
@@ -969,8 +969,8 @@ and is summarised here.
 
 ## See also
 
-- [`ROADMAP.md`](../ROADMAP.md) — consolidated roadmap, including shipped CLI
-  and host-integration history.
+- [`CHANGELOG.md`](../CHANGELOG.md) — version history, including shipped CLI
+  and host-integration changes.
 - [`README.md`](../README.md) — install, build, NER model runtime.
 - [`crates/gaze/src/policy.rs`](../crates/gaze/src/policy.rs) — canonical
   parser; the source of truth for every field on this page.

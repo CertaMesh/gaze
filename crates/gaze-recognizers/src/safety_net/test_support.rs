@@ -109,15 +109,15 @@ impl SafetyNet for MockSafetyNet {
             .iter()
             .filter_map(|raw| {
                 let kind = context.manifest.diff_against(&raw.span, &raw.class)?;
-                Some(LeakSuspect {
-                    span: raw.span.clone(),
-                    class: raw.class.clone(),
-                    safety_net_id: self.id.clone(),
-                    score: raw.score,
+                Some(LeakSuspect::new(
+                    raw.span.clone(),
+                    raw.class.clone(),
+                    self.id.clone(),
+                    raw.score,
                     kind,
-                    raw_label: raw.raw_label.clone(),
-                    field_path: context.field_path.map(str::to_string),
-                })
+                    raw.raw_label.clone(),
+                    context.field_path.map(str::to_string),
+                ))
             })
             .collect())
     }

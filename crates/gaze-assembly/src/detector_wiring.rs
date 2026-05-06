@@ -50,6 +50,11 @@ pub(crate) fn register_policy_detectors(
             DetectorKind::Unknown(kind) => {
                 return Err(PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into())
             }
+            _ => {
+                return Err(
+                    PolicyError::BadTtl("unsupported detector.kind variant".to_string()).into(),
+                )
+            }
         };
     }
 
@@ -215,6 +220,7 @@ pub(crate) fn register_rulepack_recognizers(
                     recognizer.scoring.priority,
                 ));
             }
+            _ => return Err(RulepackError::UnsupportedMatcher("unknown".to_string()).into()),
         }
     }
 

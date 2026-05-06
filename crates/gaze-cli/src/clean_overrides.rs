@@ -35,26 +35,25 @@ impl CleanOverrides {
             .map(|ner| ner.threshold)
             .unwrap_or(DEFAULT_NER_THRESHOLD);
         resolved.ner = if policy_ner.is_some() || ner_model_dir.is_some() || ner_locale.is_some() {
-            Some(NerPolicy {
-                model_dir: ner_model_dir,
-                locale: ner_locale,
-                threshold: ner_threshold,
-            })
+            let mut ner = NerPolicy::default();
+            ner.model_dir = ner_model_dir;
+            ner.locale = ner_locale;
+            ner.threshold = ner_threshold;
+            Some(ner)
         } else {
             None
         };
 
-        resolved.rulepacks = RulepackPolicy {
-            bundled: self
-                .rulepack_bundled
-                .clone()
-                .or(Some(policy.rulepacks.bundled.clone()))
-                .unwrap_or_else(|| vec!["core".to_string()]),
-            paths: if self.rulepack_paths.is_empty() {
-                policy.rulepacks.paths.clone()
-            } else {
-                self.rulepack_paths.clone()
-            },
+        resolved.rulepacks = RulepackPolicy::default();
+        resolved.rulepacks.bundled = self
+            .rulepack_bundled
+            .clone()
+            .or(Some(policy.rulepacks.bundled.clone()))
+            .unwrap_or_else(|| vec!["core".to_string()]);
+        resolved.rulepacks.paths = if self.rulepack_paths.is_empty() {
+            policy.rulepacks.paths.clone()
+        } else {
+            self.rulepack_paths.clone()
         };
         resolved
     }
@@ -66,27 +65,26 @@ mod tests {
     use gaze::{Action, RuleSpec, SessionPolicy};
 
     fn policy() -> Policy {
-        Policy {
-            session: SessionPolicy {
-                scope: SessionScope::Conversation,
-                ttl_secs: None,
-            },
-            detectors: Vec::new(),
-            dictionaries: Vec::new(),
-            rules: vec![RuleSpec::Default {
-                action: Action::Preserve,
-            }],
-            ner: Some(NerPolicy {
-                model_dir: Some(PathBuf::from("/policy/model")),
-                locale: Some("de-DE".to_string()),
-                threshold: 0.7,
-            }),
-            rulepacks: RulepackPolicy {
-                bundled: vec!["locale-de".to_string()],
-                paths: vec![PathBuf::from("/policy/rulepack.toml")],
-            },
-            locale: None,
-        }
+        let mut session = SessionPolicy::default();
+        session.scope = SessionScope::Conversation;
+
+        let mut ner = NerPolicy::default();
+        ner.model_dir = Some(PathBuf::from("/policy/model"));
+        ner.locale = Some("de-DE".to_string());
+        ner.threshold = 0.7;
+
+        let mut rulepacks = RulepackPolicy::default();
+        rulepacks.bundled = vec!["locale-de".to_string()];
+        rulepacks.paths = vec![PathBuf::from("/policy/rulepack.toml")];
+
+        let mut policy = Policy::default();
+        policy.session = session;
+        policy.rules = vec![RuleSpec::Default {
+            action: Action::Preserve,
+        }];
+        policy.ner = Some(ner);
+        policy.rulepacks = rulepacks;
+        policy
     }
 
     #[test]

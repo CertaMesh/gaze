@@ -39,17 +39,19 @@ impl Recognizer for NerRecognizer {
             Ok(spans) => spans
                 .into_iter()
                 .filter(|span| span.score >= self.detector.threshold)
-                .map(|span| Candidate {
-                    span: span.span,
-                    class: span.class,
-                    recognizer_id: self.id().to_string(),
-                    score: span.score,
-                    priority: 0,
-                    canonical_form: None,
-                    token_family: self.token_family().to_string(),
-                    source: format!("ner/{}", self.detector.backend_kind.as_str()),
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
+                .map(|span| {
+                    Candidate::new(
+                        span.span,
+                        span.class,
+                        self.id(),
+                        span.score,
+                        0,
+                        None,
+                        self.token_family(),
+                        format!("ner/{}", self.detector.backend_kind.as_str()),
+                        ConflictTier::None,
+                        Vec::new(),
+                    )
                 })
                 .collect(),
             Err(err) => {

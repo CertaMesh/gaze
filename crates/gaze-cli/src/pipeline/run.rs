@@ -12,8 +12,8 @@ use serde::Serialize;
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
     LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, Policy, RawDocument, RedactionEntry,
-    RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackPolicy,
-    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
+    RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackSource,
+    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
 use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
@@ -26,9 +26,8 @@ use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
     build_context_pipeline, build_pipeline_from_policy, build_stub_pipeline,
-    dictionary_terms_from_rulepacks, empty_fields, load_rulepacks, map_pipeline_error,
-    map_policy_error, merged_rulepack_default_locales, resolve_ner_threshold,
-    validate_ner_threshold, ArcLogger,
+    dictionary_terms_from_rulepacks, load_rulepacks, map_pipeline_error, map_policy_error,
+    merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold, ArcLogger,
 };
 
 pub(crate) struct CleanOptions<'a> {
@@ -146,10 +145,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     }
     .map_err(|_| CliError::Pipeline)?;
 
-    let detect_fields = match &context {
-        Some(context) => &context.fields,
-        None => empty_fields(),
-    };
     let (clean_doc, leak_report) = if options.safety_net.is_some() {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_detect_context(
@@ -157,7 +152,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
-                detect_fields,
             )
             .map_err(map_safety_net_pipeline_error)?;
         (doc, _report)
@@ -168,7 +162,6 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
-                detect_fields,
             )
             .map_err(|_| CliError::Pipeline)?;
         (doc, LeakReport::default())
@@ -185,6 +178,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 "clean submits only RawDocument::Text; library cannot produce Structured output from Text input"
             )
         }
+        _ => unreachable!(
+            "clean submits only RawDocument::Text; library cannot produce unknown output from Text input"
+        ),
     };
 
     let snapshot: SensitiveSnapshot = session.export().map_err(|_| CliError::Pipeline)?;
@@ -316,6 +312,7 @@ fn map_safety_net_error(err: gaze::SafetyNetError) -> CliError {
         gaze::SafetyNetError::InvalidOutput { .. } => CliError::SafetyNetFailure {
             variant: "InvalidOutput",
         },
+        _ => CliError::SafetyNetFailure { variant: "Unknown" },
     }
 }
 
@@ -361,21 +358,13 @@ fn policy_for_rulepack_overrides(
     rules.push(RuleSpec::Default {
         action: Action::Preserve,
     });
-    let base = Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Persistent,
-            ttl_secs: Some(86_400),
-        },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules,
-        ner: None,
-        rulepacks: RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        },
-        locale: None,
-    };
+    let mut session = SessionPolicy::default();
+    session.scope = SessionScope::Persistent;
+    session.ttl_secs = Some(86_400);
+
+    let mut base = Policy::default();
+    base.session = session;
+    base.rules = rules;
     Ok(clean_overrides.apply_to(&base))
 }
 
@@ -406,6 +395,9 @@ fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u
         SessionScope::Ephemeral => Scope::Ephemeral,
         SessionScope::Conversation => Scope::Conversation("cli".to_string()),
         SessionScope::Persistent => Scope::Persistent {
+            ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
+        },
+        _ => Scope::Persistent {
             ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
         },
     }
@@ -507,6 +499,7 @@ impl From<gaze::DictionaryStats> for LoadedDictionaryStats {
         let source = match stats.source {
             DictionarySource::Cli => "cli",
             DictionarySource::Rulepack => "rulepack",
+            _ => "unknown",
         };
         Self {
             name: stats.name,
@@ -582,6 +575,7 @@ impl From<&gaze::LeakSuspect> for LeakSuspectResponse {
             LeakKind::ClassMismatch { pipeline_class, .. } => {
                 ("class_mismatch", Some(pipeline_class.class_name()))
             }
+            _ => ("unknown", None),
         };
         Self {
             safety_net_id: suspect.safety_net_id.clone(),
@@ -619,6 +613,11 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
                 document_kind: document_kind_label(*document_kind).to_string(),
                 field_path: field_path.clone(),
             },
+            _ => Self::LocaleSkipped {
+                safety_net_id: "unknown".to_string(),
+                document_kind: "unknown".to_string(),
+                field_path: None,
+            },
         }
     }
 }
@@ -627,6 +626,7 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
     match kind {
         DocumentKind::Structured => "structured",
         DocumentKind::Text => "text",
+        _ => "unknown",
     }
 }
 
@@ -661,27 +661,24 @@ mod tests {
     use crate::pipeline::build::resolve_ner_threshold;
 
     fn policy_with_ner_threshold(threshold: f32) -> Policy {
-        Policy {
-            session: gaze::SessionPolicy {
-                scope: gaze::SessionScope::Persistent,
-                ttl_secs: Some(86_400),
-            },
-            detectors: Vec::new(),
-            dictionaries: Vec::new(),
-            rules: vec![gaze::RuleSpec::Default {
-                action: gaze::Action::Preserve,
-            }],
-            ner: Some(gaze::NerPolicy {
-                model_dir: None,
-                locale: None,
-                threshold,
-            }),
-            rulepacks: gaze::RulepackPolicy {
-                bundled: vec!["core".to_string()],
-                paths: Vec::new(),
-            },
-            locale: None,
-        }
+        let mut session = gaze::SessionPolicy::default();
+        session.scope = gaze::SessionScope::Persistent;
+        session.ttl_secs = Some(86_400);
+
+        let mut ner = gaze::NerPolicy::default();
+        ner.threshold = threshold;
+
+        let mut rulepacks = gaze::RulepackPolicy::default();
+        rulepacks.bundled = vec!["core".to_string()];
+
+        let mut policy = Policy::default();
+        policy.session = session;
+        policy.rules = vec![gaze::RuleSpec::Default {
+            action: gaze::Action::Preserve,
+        }];
+        policy.ner = Some(ner);
+        policy.rulepacks = rulepacks;
+        policy
     }
 
     #[test]

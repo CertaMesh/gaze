@@ -24,7 +24,7 @@ Verbatim user directive (2026-04-24): *"set a north star to be focused on never 
 
 All design, implementation, and review decisions in this repo must be evaluated against these axes. If a decision weakens any axis, call it out in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 
-Full rationale (including what the north star rejects and how drift is measured) lives in [docs/research/gaze-first-principles-vision.md](docs/research/gaze-first-principles-vision.md#north-star-locked-2026-04-24).
+North-star rationale and the five-axis summary live in [AGENTS.md](./AGENTS.md).
 
 ## Pre-push hook discipline
 

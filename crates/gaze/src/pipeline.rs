@@ -21,6 +21,7 @@ use crate::DictionaryBundle;
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum Error {
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
@@ -48,6 +49,12 @@ pub enum Error {
     SafetyNet(#[from] SafetyNetError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
+    #[error("unsupported raw document variant")]
+    UnsupportedRawDocumentVariant,
+    #[error("unsupported structured value variant")]
+    UnsupportedValueVariant,
+    #[error("unsupported policy action variant")]
+    UnsupportedActionVariant,
 }
 
 #[derive(Clone)]
@@ -56,6 +63,12 @@ pub struct Pipeline {
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
+}
+
+impl std::fmt::Debug for Pipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pipeline").finish_non_exhaustive()
+    }
 }
 
 impl Pipeline {
@@ -95,13 +108,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
     ) -> Result<CleanDocument> {
         let dictionaries = DictionaryBundle::default();
-        self.redact_with_detect_context(
-            session,
-            raw,
-            locale_chain,
-            &dictionaries,
-            &serde_json::Map::new(),
-        )
+        self.redact_with_detect_context(session, raw, locale_chain, &dictionaries)
     }
 
     pub fn redact_with_detect_context(
@@ -110,7 +117,6 @@ impl Pipeline {
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        detect_fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<CleanDocument> {
         match raw {
             RawDocument::Structured(structured_fields) => redact_structured(
@@ -120,7 +126,6 @@ impl Pipeline {
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
                 session,
@@ -129,8 +134,8 @@ impl Pipeline {
                 DocumentKind::Text,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?)),
+            _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }
 
@@ -141,13 +146,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         let dictionaries = DictionaryBundle::default();
-        self.clean_with_safety_net_detect_context(
-            session,
-            raw,
-            locale_chain,
-            &dictionaries,
-            &serde_json::Map::new(),
-        )
+        self.clean_with_safety_net_detect_context(session, raw, locale_chain, &dictionaries)
     }
 
     pub fn clean_with_safety_net_detect_context(
@@ -156,7 +155,6 @@ impl Pipeline {
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        detect_fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         match raw {
             RawDocument::Structured(structured_fields) => {
@@ -167,7 +165,6 @@ impl Pipeline {
                     structured_fields,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                     &mut report,
                 )?;
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
@@ -180,7 +177,6 @@ impl Pipeline {
                     DocumentKind::Text,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                 )?;
                 let report = self.run_safety_nets(
                     session,
@@ -192,6 +188,7 @@ impl Pipeline {
                 )?;
                 Ok((CleanDocument::Text(clean.text), clean.manifest, report))
             }
+            _ => Err(Error::UnsupportedRawDocumentVariant),
         }
     }
 
@@ -204,7 +201,6 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<String> {
         Ok(self
             .redact_text_with_manifest(
@@ -214,7 +210,6 @@ impl Pipeline {
                 document_kind,
                 locale_chain,
                 dictionaries,
-                _fields,
             )?
             .text)
     }
@@ -228,16 +223,10 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        _fields: &serde_json::Map<String, serde_json::Value>,
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
-        let ctx = DetectContext {
-            locale_chain,
-            dictionaries,
-            fields: &(),
-            degraded: std::cell::Cell::new(false),
-        };
+        let ctx = DetectContext::new(locale_chain, dictionaries);
         let resolved = self
             .registry
             .detect_all_resolved(&normalized.text, &ctx)
@@ -290,6 +279,7 @@ impl Pipeline {
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
+                _ => return Err(Error::UnsupportedActionVariant),
             };
 
             let span = detection.detection.span;
@@ -300,11 +290,11 @@ impl Pipeline {
                 Some(replacement) => {
                     let clean_start = out.len();
                     out.push_str(&replacement);
-                    emitted.push(EmittedTokenSpan {
-                        clean_span: clean_start..out.len(),
-                        raw_span: span.clone(),
-                        class: detection.detection.class,
-                    });
+                    emitted.push(EmittedTokenSpan::new(
+                        clean_start..out.len(),
+                        span.clone(),
+                        detection.detection.class,
+                    ));
                 }
                 None => out.push_str(&text[span.clone()]),
             }
@@ -347,13 +337,13 @@ impl Pipeline {
                 continue;
             }
 
-            let context = SafetyNetContext {
+            let context = SafetyNetContext::new(
                 manifest,
                 locale_chain,
                 document_kind,
-                session_id: Some(session.audit_session_id()),
+                Some(session.audit_session_id()),
                 field_path,
-            };
+            );
             let mut reported = net.check(clean_text, context)?;
             if let Some(path) = field_path {
                 for suspect in &mut reported {
@@ -384,17 +374,17 @@ impl Pipeline {
         action: Action,
         conflict_loser: bool,
     ) -> Result<()> {
-        let entry = RedactionEntry {
-            source: detection.detection.source.clone(),
-            class: detection.detection.class.clone(),
+        let entry = RedactionEntry::new(
+            detection.detection.source.clone(),
+            detection.detection.class.clone(),
             action,
-            field_name: field_name.map(str::to_string),
+            field_name.map(str::to_string),
             document_kind,
             conflict_loser,
-            decided_by: detection.decided_by,
-            created_at: crate::redaction_log::current_epoch_ms(),
-            session_id: Some(session.audit_session_id().to_string()),
-        };
+            detection.decided_by,
+            crate::redaction_log::current_epoch_ms(),
+            Some(session.audit_session_id().to_string()),
+        );
 
         for logger in &self.redaction_loggers {
             logger.log(&entry)?;
@@ -487,7 +477,6 @@ fn redact_structured(
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<CleanDocument> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
@@ -503,7 +492,6 @@ fn redact_structured(
                 document_kind,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?,
         );
     }
@@ -520,7 +508,6 @@ fn redact_structured_value(
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Value> {
     match value {
         Value::String(text) => Ok(Value::String(pipeline.redact_text(
@@ -530,7 +517,6 @@ fn redact_structured_value(
             document_kind,
             locale_chain,
             dictionaries,
-            detect_fields,
         )?)),
         Value::Array(values) => values
             .into_iter()
@@ -545,7 +531,6 @@ fn redact_structured_value(
                     document_kind,
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                 )
             })
             .collect::<Result<Vec<_>>>()
@@ -565,13 +550,13 @@ fn redact_structured_value(
                         document_kind,
                         locale_chain,
                         dictionaries,
-                        detect_fields,
                     )?,
                 );
             }
             Ok(Value::Object(clean))
         }
         Value::Null | Value::Bool(_) | Value::I64(_) => Ok(value),
+        _ => Err(Error::UnsupportedValueVariant),
     }
 }
 
@@ -582,7 +567,6 @@ fn redact_structured_with_safety_net(
     fields: BTreeMap<String, Value>,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
     report: &mut LeakReport,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
@@ -598,7 +582,6 @@ fn redact_structured_with_safety_net(
                 &path,
                 locale_chain,
                 dictionaries,
-                detect_fields,
                 report,
             )?,
         );
@@ -615,7 +598,6 @@ fn redact_structured_value_with_safety_net(
     field_path: &str,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    detect_fields: &serde_json::Map<String, serde_json::Value>,
     report: &mut LeakReport,
 ) -> Result<Value> {
     match value {
@@ -630,7 +612,6 @@ fn redact_structured_value_with_safety_net(
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
-                detect_fields,
             )?;
             // For RawDocument::Structured, locale gating uses the session-level
             // locale chain across all fields; fields have no locale annotations.
@@ -657,7 +638,6 @@ fn redact_structured_value_with_safety_net(
                     &format!("{field_path}[{idx}]"),
                     locale_chain,
                     dictionaries,
-                    detect_fields,
                     report,
                 )
             })
@@ -677,7 +657,6 @@ fn redact_structured_value_with_safety_net(
                         &child_path,
                         locale_chain,
                         dictionaries,
-                        detect_fields,
                         report,
                     )?,
                 );
@@ -698,11 +677,12 @@ fn redact_structured_value_with_safety_net(
             }
             Ok(value)
         }
+        _ => Err(Error::UnsupportedValueVariant),
     }
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
-    translate_span(candidate.span, spans).map(|span| Candidate { span, ..candidate })
+    translate_span(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
 }
 
 fn translate_span(
@@ -723,11 +703,11 @@ fn merged_losers(resolved: &[Candidate]) -> Vec<IndexedDetection> {
         .iter()
         .flat_map(|winner| {
             winner.merged_sources.iter().map(|source| IndexedDetection {
-                detection: Detection {
-                    span: winner.span.clone(),
-                    class: winner.class.clone(),
-                    source: source.clone(),
-                },
+                detection: Detection::new(
+                    winner.span.clone(),
+                    winner.class.clone(),
+                    source.clone(),
+                ),
                 decided_by: if winner.decided_by == ConflictTier::Merged {
                     ConflictTier::Merged
                 } else {
@@ -742,11 +722,7 @@ fn merged_losers(resolved: &[Candidate]) -> Vec<IndexedDetection> {
 impl From<Candidate> for IndexedDetection {
     fn from(candidate: Candidate) -> Self {
         Self {
-            detection: Detection {
-                span: candidate.span,
-                class: candidate.class,
-                source: candidate.source,
-            },
+            detection: Detection::new(candidate.span, candidate.class, candidate.source),
             decided_by: candidate.decided_by,
             family: candidate.token_family,
         }
@@ -785,18 +761,18 @@ where
             .into_iter()
             .map(|detection| {
                 let source = detection.source;
-                Candidate {
-                    span: detection.span,
-                    class: detection.class,
-                    recognizer_id: source.clone(),
-                    score: 1.0,
-                    priority: 0,
-                    canonical_form: None,
-                    token_family: "counter".to_string(),
+                Candidate::new(
+                    detection.span,
+                    detection.class,
+                    source.clone(),
+                    1.0,
+                    0,
+                    None,
+                    "counter",
                     source,
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
-                }
+                    ConflictTier::None,
+                    Vec::new(),
+                )
             })
             .collect()
     }
@@ -813,6 +789,7 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
         PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
+        _ => "[PII]".to_string(),
     }
 }
 
@@ -870,16 +847,8 @@ mod tests {
     fn stacked_ner_detectors_resolve_via_span_conflict() {
         // Input: "Alice Smith works here" — byte spans: Alice=0..5, full name=0..11.
         let text = "Alice Smith works here";
-        let short_detection = Detection {
-            span: 0..5,
-            class: PiiClass::Name,
-            source: "ner/bert".to_string(),
-        };
-        let long_detection = Detection {
-            span: 0..11,
-            class: PiiClass::Name,
-            source: "ner/gliner".to_string(),
-        };
+        let short_detection = Detection::new(0..5, PiiClass::Name, "ner/bert");
+        let long_detection = Detection::new(0..11, PiiClass::Name, "ner/gliner");
 
         let bert = detector_with_detections("ner/bert", vec![short_detection]);
         let gliner = detector_with_detections("ner/gliner", vec![long_detection]);
@@ -926,16 +895,8 @@ mod tests {
     #[test]
     fn stacked_detectors_both_win_when_spans_disjoint() {
         let text = "Alice visited Berlin";
-        let alice = Detection {
-            span: 0..5,
-            class: PiiClass::Name,
-            source: "ner/bert".to_string(),
-        };
-        let berlin = Detection {
-            span: 14..20,
-            class: PiiClass::Location,
-            source: "ner/gliner".to_string(),
-        };
+        let alice = Detection::new(0..5, PiiClass::Name, "ner/bert");
+        let berlin = Detection::new(14..20, PiiClass::Location, "ner/gliner");
 
         let bert = detector_with_detections("ner/bert", vec![alice]);
         let gliner = detector_with_detections("ner/gliner", vec![berlin]);
@@ -978,11 +939,7 @@ mod tests {
             fn detect(&self, input: &str) -> Vec<Detection> {
                 self.0
                     .find_iter(input)
-                    .map(|m| Detection {
-                        span: m.range(),
-                        class: PiiClass::Email,
-                        source: "regex".to_string(),
-                    })
+                    .map(|m| Detection::new(m.range(), PiiClass::Email, "regex"))
                     .collect()
             }
         }
@@ -1031,18 +988,18 @@ mod tests {
                     return Vec::new();
                 };
                 let end = start + "Dr. Schmidt".len();
-                vec![Candidate {
-                    span: start..end,
-                    class: PiiClass::Name,
-                    recognizer_id: self.id().to_string(),
-                    score: 1.0,
-                    priority: 0,
-                    canonical_form: None,
-                    token_family: self.token_family().to_string(),
-                    source: self.id().to_string(),
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
-                }]
+                vec![Candidate::new(
+                    start..end,
+                    PiiClass::Name,
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    self.token_family(),
+                    self.id(),
+                    ConflictTier::None,
+                    Vec::new(),
+                )]
             }
 
             fn token_family(&self) -> &str {

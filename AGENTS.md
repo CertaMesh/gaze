@@ -2,7 +2,7 @@
 
 **All AI coding agents operating on this repo (Codex, Claude, Cursor, Gemini, etc.) should read this file at session start and apply the rules below.**
 
-This file is the canonical agent-context for Gaze. `CLAUDE.md` and `GEMINI.md` defer to it for shared rules and add only agent-specific addenda.
+This file is the canonical agent-context for Gaze. `CLAUDE.md` defers to it for shared rules and adds only agent-specific addenda.
 
 ## Project north star
 
@@ -43,20 +43,9 @@ Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTIN
 1. **Never weaken an axis without an explicit PR-body note.** If a change regresses reliability, reversibility, agentic fit, trust, or adopter ergonomics — say so in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 2. **Never leak PII in examples, tests, or fixtures.** Use `alice@example.invalid` / `Dr. Schmidt` / `<Email_1>` — never real PII, even in docs. Phone numbers MUST come from documented synthetic-non-reachable ranges: NANPA `+1-555-01xx` for US, Ofcom `+44-7700-900xxx` for UK, and `+49 1555 0112233`-style mobile shapes for DE (the parser-backed v0.4.5 S2 national-phone recognizers accept these without using real BNetzA-assigned ranges). See [`CONTRIBUTING.md`](./CONTRIBUTING.md#phone-number-fixtures) for the canonical rule + rationale.
 3. **Commit discipline:** `[agent]` prefix on every commit. Stage specific files by name. No `git add -A` or `git add .`. No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
-4. **Anvil worktree or fresh branch per task.** Don't edit the main working tree directly except for tiny prose/docs fixes the orchestrator explicitly approves.
+4. **Branch per task.** Work on a dedicated branch; keep `main` clean.
 5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.
-
-## Session memory
-
-Gaze uses MemPalace (MCP) for cross-session durable memory. At session start, search `mempalace_search wing=gaze` for relevant decisions before implementing. Locked-decisions drawers live under `room=decisions`; architecture findings under `room=architecture`.
-
-Key active drawers (as of 2026-04-24):
-
-- `drawer_gaze_decisions_ba559e1cf1fbca5c1098b12f` — north star (this doc's source of truth)
-- `session-2026-04-24-q7.1-relocked-Y` — v0.4 Phase 1 grammar lock (session-scoped tokens)
-- `session-2026-04-24-44-direction-locked` — #44 scope-isolation direction
-- `session-2026-04-24-orchestrate-dont-manage-prs` — PR-merge delegation rule
 
 ## Source of truth
 
-This file is the canonical agent-context for Gaze. `CLAUDE.md` and `GEMINI.md` defer to it for shared rules and add only agent-specific addenda.
+This file is the canonical agent-context for Gaze. `CLAUDE.md` defers to it for shared rules and adds only agent-specific addenda.

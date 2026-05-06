@@ -4,3 +4,12 @@
 *.db
 *.db-journal
 .DS_Store
+
+# Internal agent tooling (not for contributors)
+.agents/
+.claude/skills/
+.scribe.yaml
+LEAN-CTX.md
+GEMINI.md
+.cursorrules
+.cursor/

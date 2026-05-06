@@ -85,6 +85,7 @@ mod tests {
             PiiClass::Location => "Dublin",
             PiiClass::Organization => "Acme Inc",
             PiiClass::Custom(_) => "42",
+            _ => "42",
         }
     }
 

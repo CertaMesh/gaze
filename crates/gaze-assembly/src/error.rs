@@ -29,6 +29,9 @@ impl From<gaze_recognizers::RecognizerError> for BuildError {
             gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
                 Self::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
             }
+            _ => Self::Rulepack(gaze::RulepackError::UnsupportedMatcher(
+                "unsupported recognizer error variant".to_string(),
+            )),
         }
     }
 }

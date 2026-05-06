@@ -123,21 +123,23 @@ impl Recognizer for DictionaryRecognizer {
 
         automaton
             .find_iter(input)
-            .map(|m| Candidate {
-                canonical_form: Some(input[m.start()..m.end()].to_string()),
-                span: m.start()..m.end(),
-                class: self.class.clone(),
-                recognizer_id: self.id.clone(),
-                score: self.score,
-                priority: self.priority,
-                token_family: self.token_family.clone(),
-                source: format!(
-                    "dictionary:{}[#{}]",
-                    self.dictionary_name,
-                    m.pattern().as_usize()
-                ),
-                decided_by: ConflictTier::None,
-                merged_sources: Vec::new(),
+            .map(|m| {
+                Candidate::new(
+                    m.start()..m.end(),
+                    self.class.clone(),
+                    self.id.clone(),
+                    self.score,
+                    self.priority,
+                    Some(input[m.start()..m.end()].to_string()),
+                    self.token_family.clone(),
+                    format!(
+                        "dictionary:{}[#{}]",
+                        self.dictionary_name,
+                        m.pattern().as_usize()
+                    ),
+                    ConflictTier::None,
+                    Vec::new(),
+                )
             })
             .collect()
     }
@@ -153,7 +155,6 @@ impl Recognizer for DictionaryRecognizer {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::Cell;
     use std::collections::HashMap;
 
     use gaze::{
@@ -177,13 +178,7 @@ mod tests {
             fields: Map::new(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
-        let fields = ();
-        let detect_context = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &bundle,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/dict_alpha",
             PiiClass::Custom("class_alpha".to_string()),
@@ -212,13 +207,7 @@ mod tests {
             fields: Map::new(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
-        let fields = ();
-        let detect_context = DetectContext {
-            locale_chain: &[LocaleTag::EnUs],
-            dictionaries: &bundle,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let detect_context = DetectContext::new(&[LocaleTag::EnUs], &bundle);
         let recognizer = DictionaryRecognizer::with_rulepack_fields(
             "dict/songs",
             PiiClass::Custom("song".to_string()),
@@ -253,13 +242,7 @@ mod tests {
             fields: Map::new(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
-        let fields = ();
-        let detect_context = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &bundle,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/songs",
             PiiClass::Custom("song".to_string()),
@@ -305,13 +288,7 @@ mod tests {
             fields: Map::new(),
         };
         let bundle = dictionary_bundle_from_context(&ctx);
-        let fields = ();
-        let detect_context = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &bundle,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
         let recognizer = DictionaryRecognizer::new(
             "dict/songs",
             PiiClass::Custom("song".to_string()),

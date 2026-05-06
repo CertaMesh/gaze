@@ -10,18 +10,18 @@ use crate::PiiClass;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RawContext {
-    pub dictionaries: HashMap<String, RawContextDictionary>,
-    pub class_map: HashMap<String, String>,
-    pub fields: Map<String, Value>,
+pub(crate) struct RawContext {
+    pub(crate) dictionaries: HashMap<String, RawContextDictionary>,
+    pub(crate) class_map: HashMap<String, String>,
+    pub(crate) fields: Map<String, Value>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RawContextDictionary {
-    pub terms: Vec<String>,
+pub(crate) struct RawContextDictionary {
+    pub(crate) terms: Vec<String>,
     #[serde(default)]
-    pub case_sensitive: bool,
+    pub(crate) case_sensitive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +63,7 @@ pub struct ContextDictionary {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum ContextError {
     #[error("failed to read context JSON: {0}")]
     Io(#[source] std::io::Error),
@@ -81,19 +82,19 @@ pub enum ContextError {
 impl Context {
     pub fn load(path: &Path) -> Result<Self, ContextError> {
         let raw = fs::read_to_string(path).map_err(ContextError::Io)?;
-        let raw = serde_json::from_str::<RawContext>(&raw).map_err(ContextError::Json)?;
-        Self::try_from(raw)
+        Self::from_json_str(&raw)
+    }
+
+    pub fn from_json_str(raw: &str) -> Result<Self, ContextError> {
+        let raw = serde_json::from_str::<RawContext>(raw).map_err(ContextError::Json)?;
+        Self::from_raw(raw)
     }
 
     pub fn fields_typed(&self) -> ContextFieldsRef<'_> {
         ContextFieldsRef(&self.fields)
     }
-}
 
-impl TryFrom<RawContext> for Context {
-    type Error = ContextError;
-
-    fn try_from(raw: RawContext) -> Result<Self, Self::Error> {
+    fn from_raw(raw: RawContext) -> Result<Self, ContextError> {
         let mut class_map = HashMap::with_capacity(raw.class_map.len());
         for (name, class) in raw.class_map {
             let parsed = PiiClass::from_policy_name(&class)
@@ -132,7 +133,7 @@ mod tests {
 
     #[test]
     fn parses_typed_context_envelope() {
-        let raw = serde_json::from_str::<RawContext>(
+        let ctx = Context::from_json_str(
             r#"{
               "dictionaries": {
                 "dict_alpha": { "terms": ["AAA-12345"], "case_sensitive": true }
@@ -141,9 +142,7 @@ mod tests {
               "fields": { "tenant": "demo" }
             }"#,
         )
-        .expect("raw context");
-
-        let ctx = Context::try_from(raw).expect("context");
+        .expect("context");
         assert_eq!(ctx.dictionaries["dict_alpha"].terms, vec!["AAA-12345"]);
         assert_eq!(
             ctx.class_map["dict_alpha"],
@@ -168,34 +167,30 @@ mod tests {
 
     #[test]
     fn rejects_unicode_case_insensitive_terms() {
-        let raw = serde_json::from_str::<RawContext>(
-            r#"{
+        assert!(matches!(
+            Context::from_json_str(
+                r#"{
               "dictionaries": {
                 "songs": { "terms": ["Beyoncé"], "case_sensitive": false }
               },
               "class_map": { "songs": "custom:song" },
               "fields": {}
             }"#,
-        )
-        .expect("raw context");
-
-        assert!(matches!(
-            Context::try_from(raw),
+            ),
             Err(ContextError::UnicodeInsensitiveDictionaryUnsupported { .. })
         ));
     }
 
     #[test]
     fn context_fields_ref_iter_matches_underlying_map() {
-        let raw = serde_json::from_str::<RawContext>(
+        let ctx = Context::from_json_str(
             r#"{
               "dictionaries": {},
               "class_map": {},
               "fields": { "tenant": "demo", "region": "eu" }
             }"#,
         )
-        .expect("raw context");
-        let ctx = Context::try_from(raw).expect("context");
+        .expect("context");
 
         let typed = ctx.fields_typed();
         let from_ref = typed.iter().collect::<Vec<_>>();
@@ -212,15 +207,14 @@ mod tests {
 
     #[test]
     fn context_fields_ref_borrows_without_clone() {
-        let raw = serde_json::from_str::<RawContext>(
+        let ctx = Context::from_json_str(
             r#"{
               "dictionaries": {},
               "class_map": {},
               "fields": { "tenant": "demo" }
             }"#,
         )
-        .expect("raw context");
-        let ctx = Context::try_from(raw).expect("context");
+        .expect("context");
 
         assert!(std::ptr::eq(ctx.fields_typed().as_map(), &ctx.fields));
     }

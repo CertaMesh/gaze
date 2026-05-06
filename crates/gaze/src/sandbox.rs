@@ -107,7 +107,7 @@ impl ExecPolicy {
                 .keys()
                 .find(|key| !self.allowed_env.contains(*key))
                 .cloned()
-                .expect("rejected env key");
+                .unwrap_or_else(|| unreachable!("env key guaranteed by any check above"));
             return Err(SandboxError::EnvNotAllowed(rejected));
         }
 
@@ -121,7 +121,9 @@ impl ExecPolicy {
 
         if request.cwd.as_deref().is_some_and(|cwd| !cwd.is_absolute()) {
             return Err(SandboxError::RelativeWorkingDirectory(
-                request.cwd.expect("relative cwd"),
+                request
+                    .cwd
+                    .unwrap_or_else(|| unreachable!("cwd guaranteed by is_some_and check above")),
             ));
         }
 
@@ -135,6 +137,7 @@ impl ExecPolicy {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SandboxError {
     #[error("program not allowed: {0}")]
     ProgramNotAllowed(PathBuf),

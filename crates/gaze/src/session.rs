@@ -18,6 +18,7 @@ const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum Scope {
     Ephemeral,
     Conversation(String),
@@ -74,6 +75,7 @@ struct SnapshotPayload {
     next_by_class: Vec<(PiiClass, usize)>,
 }
 
+// intentionally not Debug: contains session signing key and token manifest
 pub struct Session {
     scope: Scope,
     session_hex: [u8; 4],

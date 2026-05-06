@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
@@ -12,6 +11,7 @@ pub trait Validator: Send + Sync {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ValidationResult {
     Valid,
     Invalid,
@@ -26,6 +26,12 @@ pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
+}
+
+impl std::fmt::Debug for RecognizerRegistry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RecognizerRegistry").finish_non_exhaustive()
+    }
 }
 
 #[cfg(test)]
@@ -47,18 +53,18 @@ mod tests {
         }
 
         fn detect(&self, _input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-            vec![Candidate {
-                span: 0..5,
-                class: self.class.clone(),
-                recognizer_id: self.id().to_string(),
-                score: 1.0,
-                priority: 0,
-                canonical_form: Some("canonical".to_string()),
-                token_family: self.token_family().to_string(),
-                source: "test".to_string(),
-                decided_by: ConflictTier::None,
-                merged_sources: Vec::new(),
-            }]
+            vec![Candidate::new(
+                0..5,
+                self.class.clone(),
+                self.id(),
+                1.0,
+                0,
+                Some("canonical".to_string()),
+                self.token_family(),
+                "test",
+                ConflictTier::None,
+                Vec::new(),
+            )]
         }
 
         fn token_family(&self) -> &str {
@@ -74,13 +80,7 @@ mod tests {
             })
             .build();
         let dictionaries = DictionaryBundle::default();
-        let fields = ();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
         let candidates = registry.detect_all("input", &ctx);
         assert_eq!(candidates.len(), 1);
@@ -117,18 +117,18 @@ mod tests {
             }
 
             fn detect(&self, _input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-                vec![Candidate {
-                    span: 0..5,
-                    class: PiiClass::Email,
-                    recognizer_id: self.id().to_string(),
-                    score: 1.0,
-                    priority: 0,
-                    canonical_form: None,
-                    token_family: "counter".to_string(),
-                    source: self.id().to_string(),
-                    decided_by: ConflictTier::None,
-                    merged_sources: Vec::new(),
-                }]
+                vec![Candidate::new(
+                    0..5,
+                    PiiClass::Email,
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    "counter",
+                    self.id(),
+                    ConflictTier::None,
+                    Vec::new(),
+                )]
             }
 
             fn token_family(&self) -> &str {
@@ -146,13 +146,7 @@ mod tests {
             })
             .build();
         let dictionaries = DictionaryBundle::default();
-        let fields = ();
-        let ctx = DetectContext {
-            locale_chain: &[LocaleTag::EnUs, LocaleTag::Global],
-            dictionaries: &dictionaries,
-            fields: &fields,
-            degraded: Cell::new(false),
-        };
+        let ctx = DetectContext::new(&[LocaleTag::EnUs, LocaleTag::Global], &dictionaries);
 
         assert!(registry.detect_all("input", &ctx).is_empty());
     }
@@ -183,12 +177,8 @@ impl RecognizerRegistry {
 
         for class in classes {
             for locale in ctx.locale_chain {
-                let locale_ctx = DetectContext {
-                    locale_chain: std::slice::from_ref(locale),
-                    dictionaries: ctx.dictionaries,
-                    fields: ctx.fields,
-                    degraded: Cell::new(ctx.degraded.get()),
-                };
+                let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
+                locale_ctx.degraded.set(ctx.degraded.get());
                 let class_candidates = self
                     .entries
                     .iter()

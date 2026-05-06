@@ -106,15 +106,15 @@ fn raw_span_to_suspect(
         return Ok(None);
     };
 
-    Ok(Some(LeakSuspect {
+    Ok(Some(LeakSuspect::new(
         span,
         class,
-        safety_net_id: backend.id().to_string(),
-        score: raw.score,
+        backend.id(),
+        raw.score,
         kind,
-        raw_label: raw.label,
-        field_path: context.field_path.map(str::to_string),
-    }))
+        raw.label,
+        context.field_path.map(str::to_string),
+    )))
 }
 
 #[cfg(test)]
@@ -126,13 +126,14 @@ mod tests {
     #[test]
     fn empty_command_failure_is_cached() {
         let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new(""));
-        let context = SafetyNetContext {
-            manifest: &Manifest::default(),
-            locale_chain: &[LocaleTag::Global],
-            document_kind: DocumentKind::Text,
-            session_id: None,
-            field_path: None,
-        };
+        let manifest = Manifest::default();
+        let context = SafetyNetContext::new(
+            &manifest,
+            &[LocaleTag::Global],
+            DocumentKind::Text,
+            None,
+            None,
+        );
 
         let first = net.check("clean", context).unwrap_err();
         let second = net.check("clean", context).unwrap_err();

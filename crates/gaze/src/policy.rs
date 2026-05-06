@@ -10,7 +10,8 @@ use crate::{Action, LocaleTag, PiiClass, RulepackDict};
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct Policy {
     pub session: SessionPolicy,
     pub detectors: Vec<DetectorSpec>,
@@ -22,12 +23,23 @@ pub struct Policy {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SessionPolicy {
     pub scope: SessionScope,
     pub ttl_secs: Option<u64>,
 }
 
+impl Default for SessionPolicy {
+    fn default() -> Self {
+        Self {
+            scope: SessionScope::Ephemeral,
+            ttl_secs: None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SessionScope {
     Ephemeral,
     Conversation,
@@ -56,6 +68,7 @@ impl FromStr for SessionScope {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DetectorSpec {
     pub kind: DetectorKind,
     pub name: String,
@@ -66,7 +79,22 @@ pub struct DetectorSpec {
     pub token_family: String,
 }
 
+impl Default for DetectorSpec {
+    fn default() -> Self {
+        Self {
+            kind: DetectorKind::Regex,
+            name: String::new(),
+            pattern: None,
+            class: PiiClass::Email,
+            dictionary_name: None,
+            case_sensitive: false,
+            token_family: "counter".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum DetectorKind {
     Regex,
     Dictionary,
@@ -74,19 +102,32 @@ pub enum DetectorKind {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct NerPolicy {
     pub model_dir: Option<PathBuf>,
     pub locale: Option<String>,
     pub threshold: f32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+impl Default for NerPolicy {
+    fn default() -> Self {
+        Self {
+            model_dir: None,
+            locale: None,
+            threshold: DEFAULT_NER_THRESHOLD,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct RulepackPolicy {
     pub bundled: Vec<String>,
     pub paths: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RuleSpec {
     Class { class: PiiClass, action: Action },
     Column { column: String, action: Action },
@@ -94,6 +135,7 @@ pub enum RuleSpec {
 }
 
 #[derive(Debug, Error)]
+#[non_exhaustive]
 pub enum PolicyError {
     #[error("failed to parse policy.toml: {0}")]
     TomlParse(#[source] toml::de::Error),
@@ -434,11 +476,11 @@ fn parse_dictionary_detector(
                         .to_string(),
             });
         }
-        Some(RulepackDict {
-            name: dictionary_name.clone(),
+        Some(RulepackDict::new(
+            dictionary_name.clone(),
             terms,
-            case_sensitive: raw.case_sensitive,
-        })
+            raw.case_sensitive,
+        ))
     };
 
     Ok((

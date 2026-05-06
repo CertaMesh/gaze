@@ -487,17 +487,17 @@ fn sqlite_logger_persists_entries() {
     let logger = SqliteLogger::new(temp.path()).expect("sqlite logger");
 
     logger
-        .log(&RedactionEntry {
-            source: "regex".to_string(),
-            class: PiiClass::Email,
-            action: Action::Tokenize,
-            field_name: Some("email".to_string()),
-            document_kind: gaze::DocumentKind::Structured,
-            conflict_loser: false,
-            decided_by: gaze::ConflictTier::None,
-            created_at: 0,
-            session_id: None,
-        })
+        .log(&RedactionEntry::new(
+            "regex",
+            PiiClass::Email,
+            Action::Tokenize,
+            Some("email".to_string()),
+            gaze::DocumentKind::Structured,
+            false,
+            gaze::ConflictTier::None,
+            0,
+            None,
+        ))
         .expect("log entry");
 
     let rows = logger.entries().expect("read entries");
@@ -529,17 +529,17 @@ fn sqlite_logger_migrates_legacy_tables_and_purges_by_created_at() {
 
     let logger = SqliteLogger::new(temp.path()).expect("migrated sqlite logger");
     logger
-        .log(&RedactionEntry {
-            source: "regex".to_string(),
-            class: PiiClass::Email,
-            action: Action::Tokenize,
-            field_name: None,
-            document_kind: gaze::DocumentKind::Text,
-            conflict_loser: false,
-            decided_by: gaze::ConflictTier::None,
-            created_at: 1_767_225_600_000,
-            session_id: None,
-        })
+        .log(&RedactionEntry::new(
+            "regex",
+            PiiClass::Email,
+            Action::Tokenize,
+            None,
+            gaze::DocumentKind::Text,
+            false,
+            gaze::ConflictTier::None,
+            1_767_225_600_000,
+            None,
+        ))
         .expect("log entry");
 
     assert_eq!(logger.count_before(4_102_444_800_000).unwrap(), 1);

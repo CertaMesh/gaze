@@ -63,7 +63,7 @@ Gaze serves both German (primary market) and English (broad relevance). Three mo
 
 ## Gaps No Library Covers
 
-General NER focuses on PER/ORG/LOC (CoNLL 4-class). **Business identifiers** (order IDs, song titles, artist names, internal ticket keys, customer numbers) are not NER output. Handle with dedicated `IndexDetector` / pattern-dictionary detectors per Gaze's existing design.
+General NER focuses on PER/ORG/LOC (CoNLL 4-class). **Tenant-specific identifiers** (custom entity types specific to your application) are not NER output. Handle with dedicated `IndexDetector` / pattern-dictionary detectors per Gaze's existing design.
 
 **Recommended hybrid layering:**
 1. Pre-filter — Aho-Corasick / RegexSet for likely PII triggers.
@@ -104,6 +104,7 @@ General NER focuses on PER/ORG/LOC (CoNLL 4-class). **Business identifiers** (or
 The runtime `NerDetector` consumes a pinned local artifact set. No network
 at runtime. Artifacts are produced by `scripts/fetch-ner-model.sh` against
 the pinned HF commit and installed at the runtime model directory.
+See `scripts/fetch-ner-model.sh` for the current pinned checksums.
 
 | Field | Value |
 |---|---|
@@ -142,8 +143,8 @@ first sign-off run of `scripts/fetch-ner-model.sh`.
   copy the resulting `SHA256SUMS` into this section and into
   `crates/gaze/testdata/ner/SHA256SUMS.example` (shape only; placeholder
   hashes remain there for unit-test fixtures).
-- TODO: open a follow-up issue tracking the pinned-artifact review by
-  Datenschutz (model-license + weight provenance).
+- TODO: open a follow-up issue tracking the pinned-artifact data protection
+  review (model-license + weight provenance).
 - TODO: decide whether `MISC` stays as `drop` by default or is opted into
   a new `PiiClass` for deployments where Wikipedia-entity MISC recall is
   useful. Currently the label map ships `MISC → drop`.

@@ -233,15 +233,15 @@ fn safety_net_audit_query_filters_structured_field_path() {
     let dir = tempdir().unwrap();
     let db = dir.path().join("audit.sqlite");
     let logger = SqliteLogger::new(&db).unwrap();
-    let suspect = LeakSuspect {
-        span: 0..5,
-        class: PiiClass::Email,
-        safety_net_id: "openai-privacy-filter-subprocess".to_string(),
-        score: Some(0.9),
-        kind: LeakKind::Uncovered,
-        raw_label: "private_email".to_string(),
-        field_path: Some("$.user.email".to_string()),
-    };
+    let suspect = LeakSuspect::new(
+        0..5,
+        PiiClass::Email,
+        "openai-privacy-filter-subprocess",
+        Some(0.9),
+        LeakKind::Uncovered,
+        "private_email",
+        Some("$.user.email".to_string()),
+    );
     let entry = LeakSuspectLogEntry::from_suspect(
         &suspect,
         gaze::DocumentKind::Structured,

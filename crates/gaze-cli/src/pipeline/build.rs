@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use gaze::{
     Action, ClassRule, DefaultRule, LocaleChain, LocaleTag, PiiClass, Pipeline, Policy,
@@ -140,19 +140,14 @@ pub(crate) fn dictionary_terms_from_rulepacks(
                             .to_string(),
                 }));
             }
-            dictionaries.push(RulepackDict {
-                name: recognizer.id.clone(),
-                terms: all_terms,
-                case_sensitive: *case_sensitive,
-            });
+            dictionaries.push(RulepackDict::new(
+                recognizer.id.clone(),
+                all_terms,
+                *case_sensitive,
+            ));
         }
     }
     Ok(dictionaries)
-}
-
-pub(crate) fn empty_fields() -> &'static serde_json::Map<String, serde_json::Value> {
-    static EMPTY_FIELDS: OnceLock<serde_json::Map<String, serde_json::Value>> = OnceLock::new();
-    EMPTY_FIELDS.get_or_init(serde_json::Map::new)
 }
 
 pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<LocaleTag> {
@@ -167,7 +162,7 @@ pub(crate) fn merged_rulepack_default_locales(rulepacks: &[Rulepack]) -> Vec<Loc
     locales
 }
 
-/// Stub pipeline used until the policy.toml loader (solo #3) lands.
+/// Stub pipeline used until the policy.toml loader (issue #3) lands.
 /// Ships only a regex email detector + tokenize rule so the CLI contract can
 /// be exercised end-to-end; richer detectors arrive with the loader.
 pub(crate) fn build_stub_pipeline(logger: Arc<dyn RedactionLogger>) -> GazeResult<Pipeline> {
@@ -188,6 +183,9 @@ fn map_recognizer_error(err: gaze_recognizers::RecognizerError) -> gaze::Error {
         gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
             gaze::Error::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
         }
+        _ => gaze::Error::Rulepack(gaze::RulepackError::UnsupportedMatcher(
+            "unsupported recognizer error variant".to_string(),
+        )),
     }
 }
 

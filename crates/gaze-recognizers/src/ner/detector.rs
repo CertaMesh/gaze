@@ -112,10 +112,12 @@ impl Detector for NerDetector {
         match self.backend.detect(input) {
             Ok(detections) => detections
                 .into_iter()
-                .map(|span| Detection {
-                    span: span.span,
-                    class: span.class,
-                    source: format!("ner/{}", self.backend_kind.as_str()),
+                .map(|span| {
+                    Detection::new(
+                        span.span,
+                        span.class,
+                        format!("ner/{}", self.backend_kind.as_str()),
+                    )
                 })
                 .collect(),
             Err(err) => {

@@ -189,17 +189,17 @@ impl SqliteLogger {
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
-                Ok(RedactionEntry {
-                    source: row.get(0)?,
-                    class: pii_class_from_db(&row.get::<_, String>(1)?)?,
-                    action: action_from_db(&row.get::<_, String>(2)?)?,
-                    field_name: row.get(3)?,
-                    document_kind: document_kind_from_db(&row.get::<_, String>(4)?)?,
-                    conflict_loser: row.get::<_, i64>(5)? != 0,
-                    decided_by: conflict_tier_from_db(&row.get::<_, String>(6)?)?,
-                    created_at: row.get::<_, Option<i64>>(7)?.unwrap_or(0),
-                    session_id: row.get(8)?,
-                })
+                Ok(RedactionEntry::new(
+                    row.get::<_, String>(0)?,
+                    pii_class_from_db(&row.get::<_, String>(1)?)?,
+                    action_from_db(&row.get::<_, String>(2)?)?,
+                    row.get(3)?,
+                    document_kind_from_db(&row.get::<_, String>(4)?)?,
+                    row.get::<_, i64>(5)? != 0,
+                    conflict_tier_from_db(&row.get::<_, String>(6)?)?,
+                    row.get::<_, Option<i64>>(7)?.unwrap_or(0),
+                    row.get(8)?,
+                ))
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
 
@@ -366,6 +366,7 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::Validator => "validator",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {tier:?}"),
     }
 }
 
@@ -374,6 +375,7 @@ fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
         LeakKind::Uncovered => "uncovered",
         LeakKind::PartialBleed { .. } => "partial_bleed",
         LeakKind::ClassMismatch { .. } => "class_mismatch",
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {kind:?}"),
     }
 }
 
@@ -381,6 +383,7 @@ fn leak_kind_pipeline_class(kind: &LeakKind) -> Option<&PiiClass> {
     match kind {
         LeakKind::ClassMismatch { pipeline_class, .. } => Some(pipeline_class),
         LeakKind::Uncovered | LeakKind::PartialBleed { .. } => None,
+        _ => None,
     }
 }
 
@@ -437,6 +440,7 @@ fn pii_class_to_db(class: &PiiClass) -> String {
         PiiClass::Location => "location".to_string(),
         PiiClass::Organization => "organization".to_string(),
         PiiClass::Custom(name) => format!("custom:{name}"),
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {class:?}"),
     }
 }
 
@@ -467,6 +471,7 @@ fn action_to_db(action: Action) -> &'static str {
         Action::FormatPreserve => "format_preserve",
         Action::Generalize => "generalize",
         Action::Preserve => "preserve",
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {action:?}"),
     }
 }
 
@@ -494,6 +499,7 @@ fn document_kind_to_db(kind: &DocumentKind) -> &'static str {
     match kind {
         DocumentKind::Structured => "structured",
         DocumentKind::Text => "text",
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {kind:?}"),
     }
 }
 
@@ -524,17 +530,17 @@ mod tests {
         {
             let logger = SqliteLogger::new(temp_db.path()).unwrap();
             logger
-                .log(&RedactionEntry {
-                    source: "regex".to_string(),
-                    class: PiiClass::Email,
-                    action: Action::Tokenize,
-                    field_name: None,
-                    document_kind: DocumentKind::Text,
-                    conflict_loser: false,
-                    decided_by: ConflictTier::None,
-                    created_at: 0,
-                    session_id: None,
-                })
+                .log(&RedactionEntry::new(
+                    "regex",
+                    PiiClass::Email,
+                    Action::Tokenize,
+                    None,
+                    DocumentKind::Text,
+                    false,
+                    ConflictTier::None,
+                    0,
+                    None,
+                ))
                 .unwrap();
         }
 

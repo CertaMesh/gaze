@@ -34,25 +34,15 @@ fn build_recognizer(term_count: usize) -> (DictionaryRecognizer, DictionaryBundl
 
 fn dictionary_baseline(c: &mut Criterion) {
     let (recognizer_15k, bundle_15k) = build_recognizer(15_000);
-    let fields = ();
-    let ctx_15k = DetectContext {
-        locale_chain: &[LocaleTag::Global],
-        dictionaries: &bundle_15k,
-        fields: &fields,
-        degraded: std::cell::Cell::new(false),
-    };
+    let locale_chain = [LocaleTag::Global];
+    let ctx_15k = DetectContext::new(&locale_chain, &bundle_15k);
     let input_1kb = "Customer referenced TERM-14999. ".repeat(32);
     c.bench_function("dictionary_15k_terms_1kb", |b| {
         b.iter(|| recognizer_15k.detect(black_box(&input_1kb), &ctx_15k))
     });
 
     let (recognizer_50k, bundle_50k) = build_recognizer(50_000);
-    let ctx_50k = DetectContext {
-        locale_chain: &[LocaleTag::Global],
-        dictionaries: &bundle_50k,
-        fields: &fields,
-        degraded: std::cell::Cell::new(false),
-    };
+    let ctx_50k = DetectContext::new(&locale_chain, &bundle_50k);
     let input_10kb = "Customer referenced TERM-49999. ".repeat(320);
     c.bench_function("dictionary_50k_terms_10kb", |b| {
         b.iter(|| recognizer_50k.detect(black_box(&input_10kb), &ctx_50k))

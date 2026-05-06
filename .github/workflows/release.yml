@@ -89,10 +89,52 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v6
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+      - name: Generate NER checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          hf_repo="$(sed -n 's/^HF_REPO="\([^"]*\)"/\1/p' scripts/fetch-ner-model.sh)"
+          hf_commit_sha="$(sed -n 's/^HF_COMMIT_SHA="\([^"]*\)"/\1/p' scripts/fetch-ner-model.sh)"
+
+          if [ -z "$hf_repo" ] || [ -z "$hf_commit_sha" ]; then
+            echo "failed to read HF_REPO/HF_COMMIT_SHA from scripts/fetch-ner-model.sh" >&2
+            exit 2
+          fi
+
+          work_dir="$(mktemp -d)"
+          trap 'rm -rf "$work_dir"' EXIT
+          cd "$work_dir"
+
+          fetch_raw() {
+            local source_file="$1"
+            local dest_file="$2"
+            local url="https://huggingface.co/${hf_repo}/resolve/${hf_commit_sha}/${source_file}"
+            curl -fL --retry 3 -o "$dest_file" "$url"
+          }
+
+          fetch_raw "onnx/model_int8.onnx" "model.onnx"
+          fetch_raw "tokenizer.json" "tokenizer.json"
+          fetch_raw "tokenizer_config.json" "tokenizer_config.json"
+          fetch_raw "config.json" "config.json"
+          fetch_raw "special_tokens_map.json" "special_tokens_map.json"
+          fetch_raw "vocab.txt" "vocab.txt"
+          cp "${GITHUB_WORKSPACE}/assets/ner/labels.davlan-mbert.json" labels.json
+
+          shasum -a 256 \
+            model.onnx \
+            tokenizer.json \
+            tokenizer_config.json \
+            config.json \
+            special_tokens_map.json \
+            vocab.txt \
+            labels.json \
+            > "${GITHUB_WORKSPACE}/dist/SHA256SUMS.ner"
       - uses: softprops/action-gh-release@v2
         with:
           files: dist/*

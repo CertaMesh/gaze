@@ -3,7 +3,7 @@ use crate::{detector_wiring::derive_source_short_label, template::lower_pattern_
 use gaze::{
     Action, CleanDocument, ConflictTier, DetectorKind, LocaleTag, NerPolicy, PiiClass, PolicyError,
     RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RulepackError, Scope, Session,
-    SessionPolicy, SessionScope,
+    SessionPolicy,
 };
 use gaze_recognizers::{
     AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
@@ -11,29 +11,19 @@ use gaze_recognizers::{
 use std::sync::{Arc, Mutex};
 
 fn policy() -> gaze::Policy {
-    gaze::Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::Name,
+            action: Action::Tokenize,
         },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules: vec![
-            RuleSpec::Class {
-                class: PiiClass::Name,
-                action: Action::Tokenize,
-            },
-            RuleSpec::Default {
-                action: Action::Preserve,
-            },
-        ],
-        ner: None,
-        rulepacks: gaze::RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
+        RuleSpec::Default {
+            action: Action::Preserve,
         },
-        locale: Some(vec![LocaleTag::DeDe]),
-    }
+    ];
+    policy.locale = Some(vec![LocaleTag::DeDe]);
+    policy
 }
 
 fn empty_context() -> Context {
@@ -45,21 +35,7 @@ fn empty_context() -> Context {
 }
 
 fn empty_policy() -> gaze::Policy {
-    gaze::Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
-        },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules: Vec::new(),
-        ner: None,
-        rulepacks: gaze::RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        },
-        locale: None,
-    }
+    gaze::Policy::default()
 }
 
 fn embedded_rulepack(name: &str) -> Rulepack {
@@ -157,11 +133,7 @@ pattern = '''alice@example\.invalid'''
 #[test]
 fn build_pipeline_ner_without_model_dir_returns_no_recognizers() {
     let mut policy = empty_policy();
-    policy.ner = Some(NerPolicy {
-        model_dir: None,
-        locale: None,
-        threshold: gaze::DEFAULT_NER_THRESHOLD,
-    });
+    policy.ner = Some(NerPolicy::default());
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let err = match build_pipeline(&policy, &empty_context(), &[], &active_locales, None) {
         Ok(_) => panic!("threshold-only NER must fail closed"),
@@ -208,7 +180,6 @@ fn build_pipeline_context_only_still_succeeds() {
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
             &dictionaries,
-            &serde_json::Map::new(),
         )
         .expect("redact");
 
@@ -382,29 +353,18 @@ impl RedactionLogger for MemoryLogger {
 }
 
 fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
-    gaze::Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
-        },
-        detectors: vec![gaze::DetectorSpec {
-            kind: DetectorKind::Dictionary,
-            name: "alpha".to_string(),
-            pattern: None,
-            class: PiiClass::custom("foo"),
-            dictionary_name: Some("dict_alpha".to_string()),
-            case_sensitive: true,
-            token_family: "counter".to_string(),
-        }],
-        dictionaries: Vec::new(),
-        rules,
-        ner: None,
-        rulepacks: gaze::RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
-        },
-        locale: Some(vec![LocaleTag::Global]),
-    }
+    let mut detector = gaze::DetectorSpec::default();
+    detector.kind = DetectorKind::Dictionary;
+    detector.name = "alpha".to_string();
+    detector.class = PiiClass::custom("foo");
+    detector.dictionary_name = Some("dict_alpha".to_string());
+    detector.case_sensitive = true;
+
+    let mut policy = gaze::Policy::default();
+    policy.detectors = vec![detector];
+    policy.rules = rules;
+    policy.locale = Some(vec![LocaleTag::Global]);
+    policy
 }
 
 fn context_with_alpha_override() -> Context {
@@ -439,7 +399,6 @@ fn t20_context_class_map_overrides_policy_dict_class() {
     let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
     let pipeline = build_pipeline(&policy, &context, &[], &active_locales, None).expect("pipeline");
     let dictionaries = gaze::dictionary_bundle_from_context(&context);
-    let fields = serde_json::Map::new();
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline
         .redact_with_detect_context(
@@ -447,7 +406,6 @@ fn t20_context_class_map_overrides_policy_dict_class() {
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
             &dictionaries,
-            &fields,
         )
         .expect("redact");
 
@@ -493,29 +451,17 @@ fn t20a_class_map_override_fails_closed_when_action_rule_uncovered() {
 
 #[test]
 fn t20b_rulepack_context_dict_override_fails_closed_when_uncovered() {
-    let policy = gaze::Policy {
-        session: SessionPolicy {
-            scope: SessionScope::Ephemeral,
-            ttl_secs: None,
+    let mut policy = gaze::Policy::default();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("foo"),
+            action: Action::Tokenize,
         },
-        detectors: Vec::new(),
-        dictionaries: Vec::new(),
-        rules: vec![
-            RuleSpec::Class {
-                class: PiiClass::custom("foo"),
-                action: Action::Tokenize,
-            },
-            RuleSpec::Default {
-                action: Action::Preserve,
-            },
-        ],
-        ner: None,
-        rulepacks: gaze::RulepackPolicy {
-            bundled: Vec::new(),
-            paths: Vec::new(),
+        RuleSpec::Default {
+            action: Action::Preserve,
         },
-        locale: Some(vec![LocaleTag::Global]),
-    };
+    ];
+    policy.locale = Some(vec![LocaleTag::Global]);
     let context = context_with_alpha_override();
     let rulepack = Rulepack::parse(
         r#"
