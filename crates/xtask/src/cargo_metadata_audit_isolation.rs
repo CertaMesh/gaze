@@ -5,10 +5,13 @@ use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
 const AUDIT_PACKAGE: &str = "gaze-audit";
-const SAFETY_NET_BASE_FEATURES: &[(&str, &str)] =
-    &[("gaze", "safety-net"), ("gaze-recognizers", "safety-net")];
+const CORE_PACKAGE: &str = "gaze-pii";
+const SAFETY_NET_BASE_FEATURES: &[(&str, &str)] = &[
+    (CORE_PACKAGE, "safety-net"),
+    ("gaze-recognizers", "safety-net"),
+];
 const SAFETY_NET_OPENAI_SUBPROCESS_FEATURES: &[(&str, &str)] = &[
-    ("gaze", "safety-net"),
+    (CORE_PACKAGE, "safety-net"),
     ("gaze-recognizers", "safety-net"),
     ("gaze-recognizers", "safety-net-openai"),
 ];
@@ -196,10 +199,10 @@ fn check_graph(
 
     if policy.expect_gaze_audit_from_gaze {
         let gaze_id = workspace_members
-            .get("gaze")
-            .context("workspace metadata did not include gaze")?;
+            .get(CORE_PACKAGE)
+            .with_context(|| format!("workspace metadata did not include {CORE_PACKAGE}"))?;
         let Some(path) = path_to_package(gaze_id, &audit_id, &graph) else {
-            bail!("{label}: expected gaze feature graph to resolve {AUDIT_PACKAGE}");
+            bail!("{label}: expected {CORE_PACKAGE} feature graph to resolve {AUDIT_PACKAGE}");
         };
         println!(
             "cargo_metadata_audit_isolation: {label}: confirmed {}",
@@ -461,33 +464,44 @@ mod tests {
 
     #[test]
     fn planned_feature_unknown_name_fails_loud() {
-        let metadata = fixture_metadata_with_features(&["gaze"], &[], &[("gaze", &["safety-net"])]);
+        let metadata = fixture_metadata_with_features(
+            &[CORE_PACKAGE],
+            &[],
+            &[(CORE_PACKAGE, &["safety-net"])],
+        );
 
-        let err = available_planned_features(&metadata, &[("gaze", "typo-safety-net")])
+        let err = available_planned_features(&metadata, &[(CORE_PACKAGE, "typo-safety-net")])
             .expect_err("unknown planned feature must fail loud");
 
         let message = err.to_string();
-        assert!(message.contains("gaze/typo-safety-net"), "{message}");
+        assert!(message.contains("gaze-pii/typo-safety-net"), "{message}");
         assert!(message.contains("Cargo.toml [features]"), "{message}");
     }
 
     #[test]
     fn planned_feature_allowlist_exception_passes_silently() {
-        let metadata = fixture_metadata_with_features(&["gaze"], &[], &[("gaze", &["safety-net"])]);
+        let metadata = fixture_metadata_with_features(
+            &[CORE_PACKAGE],
+            &[],
+            &[(CORE_PACKAGE, &["safety-net"])],
+        );
         let exceptions = [PlannedFeatureAvailabilityException {
-            package: "gaze",
+            package: CORE_PACKAGE,
             feature: "cfg-only-feature",
             reason: "test-only stand-in for a target-specific planned feature",
         }];
 
         let features = available_planned_features_with_exceptions(
             &metadata,
-            &[("gaze", "safety-net"), ("gaze", "cfg-only-feature")],
+            &[
+                (CORE_PACKAGE, "safety-net"),
+                (CORE_PACKAGE, "cfg-only-feature"),
+            ],
             &exceptions,
         )
         .expect("allowlisted planned feature should not fail metadata gate");
 
-        assert_eq!(features, vec!["gaze/safety-net".to_string()]);
+        assert_eq!(features, vec!["gaze-pii/safety-net".to_string()]);
     }
 
     fn graph_category(label: &str) -> GraphCategory {
