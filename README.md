@@ -98,7 +98,7 @@ cargo build --release -p gaze-cli
 
 ```bash
 cargo add --rename gaze gaze-pii
-cargo add gaze-recognizers --features phone-parser
+cargo add --features phone-parser gaze-recognizers
 ```
 
 ### Runtime
