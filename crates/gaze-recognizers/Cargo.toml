@@ -3,8 +3,14 @@ name = "gaze-recognizers"
 version = "0.6.4"
 edition = "2021"
 rust-version = "1.89"
-license = "Apache-2.0"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Built-in recognizers for Gaze"
+readme = "README.md"
+keywords = ["pii", "gaze", "ner", "recognizers"]
+categories = ["text-processing"]
+exclude = ["assets/ner/*.onnx", "assets/ner/*.bin", "assets/ner/*.safetensors"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -37,7 +43,7 @@ unicode-normalization = "0.1"
 
 [dev-dependencies]
 criterion = "0.5"
-gaze = { path = "../gaze" }
+gaze = { path = "../gaze", package = "gaze-pii" }
 serial_test = "3"
 tempfile = "3"
 

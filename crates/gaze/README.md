@@ -12,8 +12,10 @@ separate crate and plug into the core `Recognizer` surface.
 
 ```toml
 [dependencies]
-gaze = "0.6.4"
+gaze-pii = "0.6.4"
 ```
+
+The crate is published as `gaze-pii`; the import path remains `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
 When developing inside the workspace, use the path dependency:
 

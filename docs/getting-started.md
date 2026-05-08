@@ -12,9 +12,11 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 ```toml
 [dependencies]
-gaze = "0.6"
+gaze-pii = "0.6"
 gaze-assembly = "0.6"
 ```
+
+The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
 
 `gaze-assembly` provides `CorePipelineConfig` -- bundled defaults (core rulepack:
 emails, names, locations, organizations, plus optional locale-aware recognizers)

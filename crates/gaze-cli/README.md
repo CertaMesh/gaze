@@ -12,6 +12,12 @@ raw input or backtraces into caller logs.
 
 ## Cargo
 
+Install from crates.io:
+
+```console
+$ cargo install gaze-cli
+```
+
 Build from the workspace root:
 
 ```console

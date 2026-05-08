@@ -3,16 +3,21 @@ name = "gaze-assembly"
 version = "0.6.4"
 edition = "2021"
 rust-version = "1.89"
-license = "Apache-2.0"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Policy-to-pipeline assembly for Gaze"
+readme = "README.md"
+keywords = ["pii", "gaze", "pipeline"]
+categories = ["text-processing"]
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-gaze = { path = "../gaze" }
-gaze-recognizers = { path = "../gaze-recognizers" }
+gaze = { path = "../gaze", version = "0.6.4", package = "gaze-pii" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.4" }
 regex = "1"
 serde_json = "1"
 thiserror = "1"

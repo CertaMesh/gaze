@@ -1,6 +1,6 @@
 # gaze-types
 
-Shared value contracts for the [gaze](https://crates.io/crates/gaze) PII pseudonymization runtime.
+Shared value contracts for the [gaze-pii](https://crates.io/crates/gaze-pii) PII pseudonymization runtime.
 
 Serde-only — no ML, no SQLite, no ONNX. This crate exists so that:
 - Restore-side adapters can take `gaze-types` without pulling in `ort` / `tokenizers` / `ndarray`
