@@ -97,7 +97,7 @@ cargo build --release -p gaze-cli
 ### Library integration
 
 ```bash
-cargo add gaze-pii
+cargo add --rename gaze gaze-pii
 cargo add gaze-recognizers --features phone-parser
 ```
 
