@@ -22,7 +22,8 @@ pub trait Detector: Send + Sync {
 /// `gaze-recognizers` and surfaces as either a `Custom("phone")` class or a class
 /// defined by a rulepack.
 ///
-/// `PiiClass` is `#[non_exhaustive]`. Always include a wildcard arm:
+/// `PiiClass` is exhaustive. Match every variant explicitly so new built-in classes
+/// force call sites to review their handling at compile time:
 ///
 /// ```rust
 /// use gaze_types::PiiClass;
@@ -34,7 +35,6 @@ pub trait Detector: Send + Sync {
 ///         PiiClass::Location     => "location",
 ///         PiiClass::Organization => "org",
 ///         PiiClass::Custom(_)    => "pii",
-///         _                      => "pii",
 ///     }
 /// }
 /// ```
@@ -42,7 +42,6 @@ pub trait Detector: Send + Sync {
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
 /// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[non_exhaustive]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -108,7 +107,7 @@ impl PiiClass {
     pub fn as_custom_name(&self) -> Option<&str> {
         match self {
             Self::Custom(name) => Some(name.as_str()),
-            _ => None,
+            Self::Email | Self::Name | Self::Location | Self::Organization => None,
         }
     }
 
