@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Built-in recognizers for Gaze"
+readme = "README.md"
+keywords = ["pii", "gaze", "ner", "recognizers"]
+categories = ["text-processing"]
 
 [package.metadata.docs.rs]
 all-features = true

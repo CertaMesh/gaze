@@ -8,6 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Passive audit sinks for Gaze metadata-only redaction logs"
 readme = "README.md"
+keywords = ["pii", "gaze", "audit", "sqlite"]
+categories = ["database"]
 
 [package.metadata.docs.rs]
 all-features = true

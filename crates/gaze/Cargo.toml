@@ -8,6 +8,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Reversible PII pseudonymization runtime for agentic workflows"
+readme = "README.md"
+keywords = ["pii", "pseudonymization", "gdpr", "redaction", "agents"]
+categories = ["text-processing", "cryptography"]
 
 [package.metadata.docs.rs]
 all-features = true

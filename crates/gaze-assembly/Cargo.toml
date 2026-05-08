@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Policy-to-pipeline assembly for Gaze"
+readme = "README.md"
+keywords = ["pii", "gaze", "pipeline"]
+categories = ["text-processing"]
 
 [package.metadata.docs.rs]
 all-features = true

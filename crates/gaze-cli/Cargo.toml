@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "Gaze command-line interface"
+readme = "README.md"
+keywords = ["pii", "gaze", "cli"]
+categories = ["command-line-utilities", "text-processing"]
 
 [package.metadata.docs.rs]
 all-features = true
