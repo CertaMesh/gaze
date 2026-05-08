@@ -40,9 +40,10 @@ kind = "regex"
 # BNetzA lists thousands of 2- to 5-digit Ortsnetzkennzahlen; this broad
 # candidate shape delegates final validity to the E164PhoneNational(De)
 # parser-backed validator while preserving identifier-attached rejection.
-# The leading no-capture branches consume known non-phone numeric spans so broad
-# phone candidate scanning cannot tokenize valid DE IBAN fragments or tenant IDs.
-pattern = '''(?x)\bDE89(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b|(?:^|[^[:alnum:]_+])(?:0815[\s./-]*12345)\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
+# Broad candidate scanning stays tenant-agnostic. Leading no-capture branches
+# consume country-neutral 22-character IBAN grouping and short 4+5 numeric ID
+# shapes before phone parsing sees phone-like substrings.
+pattern = '''(?x)\b[A-Z]{2}\d{2}(?:\s?[A-Z0-9]{4}){4}\s?[A-Z0-9]{2}\b|(?:^|[^[:alnum:]_+])0[1-9]\d{2}[\s./-]*\d{5}\b|(?:^|[^[:alnum:]_+])((?:\+49[\s.-]*|0)[1-9]\d{1,4}[\s./-]*\d(?:[\s./-]*\d){4,10})\b'''
 capture_groups = [1]
 
 [recognizers.validator]
