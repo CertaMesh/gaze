@@ -3,7 +3,7 @@ use serde::Serialize;
 
 /// Structured CLI error. Each variant maps to an exit code; only the variant
 /// name reaches stderr so raw input or plaintext blob entries never leak into
-/// caller logs (see `ROADMAP.md` for roadmap context).
+/// caller logs.
 #[derive(Debug)]
 pub(crate) enum CliError {
     StdinParse,

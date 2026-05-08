@@ -1,7 +1,7 @@
 /// Install a panic hook that prints a sanitized error line and exits 3.
 /// Without this, a panic in `ort`, `regex`, or any other dep would leak a raw
-/// backtrace to stderr whenever `RUST_BACKTRACE` is set — violating the
-/// stderr discipline captured in `ROADMAP.md`.
+/// backtrace to stderr whenever `RUST_BACKTRACE` is set, violating the CLI
+/// stderr discipline.
 pub(crate) fn install_panic_hook() {
     std::panic::set_hook(Box::new(|_info| {
         eprintln!(r#"{{"error":"Pipeline","exit":3}}"#);
