@@ -1,0 +1,30 @@
+[package]
+name = "gaze-mcp-rmcp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "rmcp (MCP Rust SDK) transport for gaze-mcp-core. Sink crate. No SemVer guarantee on rmcp re-exports."
+readme = "README.md"
+keywords = ["pii", "mcp", "rmcp", "agent"]
+categories = ["development-tools"]
+
+# NOTE: Phase 1 shell. The `gaze-mcp-core` path dep is added in Phase 2 once the
+# branch is rebased onto `feature/gaze-mcp-core`. See scratchpad 1468 phase plan.
+
+[dependencies]
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "io-std", "macros"] }
+rmcp = { version = "0.2", features = ["server", "macros"] }
+
+[features]
+default = ["transport-stdio"]
+transport-stdio = []
+transport-http = []
+
+[package.metadata.docs.rs]
+all-features = true
