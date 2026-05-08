@@ -10,6 +10,11 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+repository = "https://github.com/EmpireTwo/gaze"
+homepage = "https://github.com/EmpireTwo/gaze"
+license = "Apache-2.0 OR MIT"
+
 [workspace.dependencies]
 gaze-audit = { path = "crates/gaze-audit", version = "0.6.4" }
 gaze-types = { path = "crates/gaze-types", version = "0.6.4" }

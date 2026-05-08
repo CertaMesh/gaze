@@ -3,7 +3,9 @@ name = "gaze-assembly"
 version = "0.6.4"
 edition = "2021"
 rust-version = "1.89"
-license = "Apache-2.0"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Policy-to-pipeline assembly for Gaze"
 
 [package.metadata.docs.rs]
