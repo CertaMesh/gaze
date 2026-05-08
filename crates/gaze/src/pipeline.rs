@@ -883,10 +883,7 @@ mod tests {
     #[test]
     fn generalize_token_custom_class_preserves_identity() {
         // Regression guard: custom classes must not collapse to an indistinct [PII].
-        assert_eq!(
-            generalize_token(&PiiClass::Custom("foo".into())),
-            "[FOO]"
-        );
+        assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
     }
 
     #[test]
