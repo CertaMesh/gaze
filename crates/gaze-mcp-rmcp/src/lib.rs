@@ -13,9 +13,17 @@
 //!
 //! ---
 //!
-//! `gaze-mcp-rmcp` is the rmcp (MCP Rust SDK) transport sink for [`gaze-mcp-core`]. It
-//! exposes a [`RmcpFrontend`] that implements `gaze_mcp_core::Frontend`, wiring rmcp's
+//! `gaze-mcp-rmcp` is the rmcp (MCP Rust SDK) transport sink for [`gaze-mcp-core`]. It will
+//! expose a `RmcpFrontend` implementing `gaze_mcp_core::Frontend`, wiring rmcp's
 //! `tools/list` and `tools/call` flow through the chokepoint runtime.
+//!
+//! ## Phase status
+//!
+//! - **Phase 1 — scaffold + workspace wiring.** Done.
+//! - **Phase 2 — adapter layer.** [`adapter`] translates between rmcp wire types and
+//!   `gaze_mcp_core` contracts (descriptors, args, responses, errors).
+//! - **Phase 3 — `RmcpFrontend` impl.** Pending. Requires `gaze_mcp_core::Frontend` +
+//!   `DispatchHost` traits (core's Phase 7) before it can compile.
 //!
 //! ## Stability
 //!
@@ -23,7 +31,8 @@
 //! re-exports — major rmcp bumps may force breaking releases of `gaze-mcp-rmcp`.
 //!
 //! [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core
-//! [`RmcpFrontend`]: crate::RmcpFrontend
 
-// Phase 1 scaffold: public surface is added in Phase 2+ once the branch is rebased
-// onto feature/gaze-mcp-core. See scratchpad 1468 for the per-phase plan.
+pub mod adapter;
+pub mod error;
+
+pub use crate::error::RmcpFrontendError;
