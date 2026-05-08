@@ -68,8 +68,41 @@ fn ensure_matrix_contract() -> Result<()> {
 
 fn run_command(command: MatrixCommand) -> Result<()> {
     println!("ci_feature_matrix: running {}", command.label);
-    let status = ProcessCommand::new(command.program)
-        .args(command.args)
+    let mut cmd = ProcessCommand::new(command.program);
+    cmd.args(command.args);
+    cmd.env_clear();
+    // Keep matrix children deterministic: no caller Cargo/Rust pollution, only
+    // process basics Cargo/rustup need to find toolchains and temp storage.
+    for var in [
+        "PATH",
+        "HOME",
+        "USER",
+        "SHELL",
+        "TMPDIR",
+        "CARGO_HOME",
+        "RUSTUP_HOME",
+        "RUSTUP_TOOLCHAIN",
+        "LANG",
+        "LC_ALL",
+        "CI",
+        "GITHUB_ACTIONS",
+        "TERM",
+        "COLORTERM",
+    ] {
+        if let Ok(value) = std::env::var(var) {
+            cmd.env(var, value);
+        }
+    }
+    if std::env::var_os("CARGO_HOME").is_none() {
+        cmd.env(
+            "CARGO_HOME",
+            std::env::current_dir()
+                .context("failed to resolve workspace for clean CARGO_HOME")?
+                .join("target/ci-feature-matrix-cargo-home"),
+        );
+    }
+
+    let status = cmd
         .status()
         .with_context(|| format!("failed to run {}", command.label))?;
     if !status.success() {
