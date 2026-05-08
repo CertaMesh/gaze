@@ -827,7 +827,7 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
         PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
-        _ => "[PII]".to_string(),
+        _ => format!("[{}]", class.class_name().to_ascii_uppercase()),
     }
 }
 
