@@ -1,5 +1,5 @@
 [package]
-name = "gaze"
+name = "gaze-pii"
 version = "0.6.4"
 edition = "2021"
 rust-version = "1.89"
@@ -25,7 +25,7 @@ anyhow = "1"
 base64 = "0.22"
 dashmap = "6"
 ed25519-dalek = "2"
-gaze-recognizers = { path = "../gaze-recognizers", optional = true }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.4", optional = true }
 gaze-types = { workspace = true }
 hex = "0.4"
 libc = "0.2"

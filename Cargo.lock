@@ -717,7 +717,52 @@ dependencies = [
 ]
 
 [[package]]
-name = "gaze"
+name = "gaze-assembly"
+version = "0.6.4"
+dependencies = [
+ "gaze-pii",
+ "gaze-recognizers",
+ "regex",
+ "serde_json",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "gaze-audit"
+version = "0.6.4"
+dependencies = [
+ "gaze-types",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
+name = "gaze-cli"
+version = "0.6.4"
+dependencies = [
+ "assert_cmd",
+ "base64 0.22.1",
+ "chrono",
+ "clap",
+ "gaze-assembly",
+ "gaze-audit",
+ "gaze-pii",
+ "gaze-recognizers",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+]
+
+[[package]]
+name = "gaze-pii"
 version = "0.6.4"
 dependencies = [
  "anyhow",
@@ -747,57 +792,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "gaze-assembly"
-version = "0.6.4"
-dependencies = [
- "gaze",
- "gaze-recognizers",
- "regex",
- "serde_json",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "gaze-audit"
-version = "0.6.4"
-dependencies = [
- "gaze-types",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
-name = "gaze-cli"
-version = "0.6.4"
-dependencies = [
- "assert_cmd",
- "base64 0.22.1",
- "chrono",
- "clap",
- "gaze",
- "gaze-assembly",
- "gaze-audit",
- "gaze-recognizers",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "tempfile",
- "tracing",
-]
-
-[[package]]
 name = "gaze-recognizers"
 version = "0.6.4"
 dependencies = [
  "aho-corasick",
  "criterion",
- "gaze",
+ "gaze-pii",
  "gaze-types",
  "hex",
  "ndarray 0.16.1",
@@ -2906,7 +2906,7 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
- "gaze",
+ "gaze-pii",
  "serde",
  "serde_json",
  "sha2",
@@ -2944,3 +2944,11 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
+
+[[patch.unused]]
+name = "gaze"
+version = "0.6.4"
+
+[[patch.unused]]
+name = "gaze-recognizers"
+version = "0.6.4"

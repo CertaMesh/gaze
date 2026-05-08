@@ -11,8 +11,8 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-gaze = { path = "../gaze" }
-gaze-recognizers = { path = "../gaze-recognizers" }
+gaze = { path = "../gaze", version = "0.6.4", package = "gaze-pii" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.4" }
 regex = "1"
 serde_json = "1"
 thiserror = "1"
