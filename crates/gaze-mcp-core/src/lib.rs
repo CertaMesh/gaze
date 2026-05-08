@@ -28,3 +28,9 @@
 
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
+
+pub mod manifest;
+
+pub use crate::manifest::{
+    BeginCallContext, CallHandle, FailureReason, ManifestError, ManifestStore, SnapshotRef,
+};
