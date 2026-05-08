@@ -22,7 +22,7 @@ The workspace has seven crates:
 - `crates/gaze-cli` — the `gaze clean` / `gaze restore` binary adopters invoke from language adapters.
 - `crates/xtask` — internal repository gate runner.
 
-External consumer: [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
+External consumer: [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
 
 ## Project north star
 
@@ -45,19 +45,19 @@ Every design, implementation, and review decision is evaluated against these fiv
 Apple Silicon macOS via release asset:
 
 ```bash
-curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-aarch64-apple-darwin
+curl -L -o gaze https://github.com/EmpireTwo/gaze/releases/latest/download/gaze-aarch64-apple-darwin
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
 
-Homebrew tap installation is not yet available. The formula source exists at `dist/homebrew/gaze.rb`, but no `piinuts/tap` or `piinuts/homebrew-tap` formula is published yet. Maintainers can smoke the formula by staging it into a scratch local tap; direct `brew install piinuts/tap/gaze` is not supported yet.
+Homebrew tap installation is not yet available. The formula source exists at `dist/homebrew/gaze.rb`, but no `EmpireTwo/tap` or `EmpireTwo/homebrew-tap` formula is published yet. Maintainers can smoke the formula by staging it into a scratch local tap; direct `brew install EmpireTwo/tap/gaze` is not supported yet.
 
-`brew install piinuts/tap/gaze` will be documented once a public tap exists and the release process publishes to it.
+`brew install EmpireTwo/tap/gaze` will be documented once a public tap exists and the release process publishes to it.
 
 Linux x86_64 binary download from the release assets:
 
 ```bash
-curl -L -o gaze https://github.com/PIInuts/gaze/releases/latest/download/gaze-x86_64-linux-gnu
+curl -L -o gaze https://github.com/EmpireTwo/gaze/releases/latest/download/gaze-x86_64-linux-gnu
 chmod +x gaze
 mv gaze /usr/local/bin/gaze
 ```
@@ -72,9 +72,9 @@ Intel macOS binaries are not published; build from source with `cargo build --re
 
 | Platform | Status | Notes |
 |---|---|---|
-| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/piinuts/gaze/releases). Homebrew is repo-local at `dist/homebrew/gaze.rb`; no public tap is published yet. |
+| **macOS aarch64 (Apple Silicon)** | ✅ Supported | Download from [releases](https://github.com/EmpireTwo/gaze/releases). Homebrew is repo-local at `dist/homebrew/gaze.rb`; no public tap is published yet. |
 | **Linux x86_64 (glibc)** | ✅ Supported | **Requires glibc 2.39+** (Ubuntu 24.04, Debian 13, RHEL 10, or newer). The bundled ONNX Runtime needs C23 symbols (`__isoc23_strtoll` etc.) introduced in glibc 2.39. Older distributions: build from source. |
-| **Linux aarch64 / musl** | ❌ Not shipped | Adopter-driven; [open an issue](https://github.com/piinuts/gaze/issues/new) if needed. |
+| **Linux aarch64 / musl** | ❌ Not shipped | Adopter-driven; [open an issue](https://github.com/EmpireTwo/gaze/issues/new) if needed. |
 | **macOS x86_64 (Intel)** | ❌ Not shipped | Apple Silicon focus. Build from source if needed. |
 | **Windows** | ❌ Not shipped | Linux/WSL2 recommended. |
 
@@ -88,7 +88,7 @@ All platforms supported via `cargo`:
   - `phone-parser` (default-on for `gaze-recognizers` and therefore `gaze-cli`): pulls `phonenumber` crate for parser-backed E.164 phone validation. Disable with `--no-default-features` for raw recognizer-library use without phone deps.
 
 ```bash
-git clone https://github.com/piinuts/gaze
+git clone https://github.com/EmpireTwo/gaze
 cd gaze
 cargo build --release -p gaze-cli
 ./target/release/gaze --version
@@ -245,7 +245,7 @@ See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and
 
 ### External MCP Consumer
 
-The former in-tree `debug-proxy` MCP consumer now lives in [piinuts/gaze-lens](https://github.com/PIInuts/gaze-lens). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
+The former in-tree `debug-proxy` MCP consumer now lives in [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
 
 ## Build
 
