@@ -183,6 +183,8 @@ pub enum RulepackError {
     UnsupportedValidator { kind: String },
     #[error("unsupported normalizer kind: {kind}")]
     UnsupportedNormalizer { kind: String },
+    #[error("unsupported rule spec variant: {variant}")]
+    UnsupportedRuleSpec { variant: String },
     #[error("duplicate recognizer id '{id}' in rulepacks '{first_pack}' and '{second_pack}'")]
     DuplicateId {
         id: String,
