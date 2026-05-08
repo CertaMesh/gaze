@@ -240,15 +240,15 @@ impl Session {
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(None, class, raw, |index| match class {
             PiiClass::Email => format!("email{index}.{}@gaze-fake.invalid", self.session_hex()),
-            // Lowercasing preserves the dedicated `custom:` sentinel namespace
-            // for format-preserving fakes, so restore can detect them too.
-            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
-            _ => format!(
+            PiiClass::Name | PiiClass::Location | PiiClass::Organization => format!(
                 "{}:{}_{}",
                 self.session_hex(),
                 class.class_name().to_ascii_lowercase(),
                 index
             ),
+            // Lowercasing preserves the dedicated `custom:` sentinel namespace
+            // for format-preserving fakes, so restore can detect them too.
+            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
         })
     }
 

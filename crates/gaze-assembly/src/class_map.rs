@@ -12,7 +12,7 @@ pub(crate) fn class_for_dictionary(
     if override_class == &original_class {
         return Ok(original_class);
     }
-    if class_has_tokenize_or_stricter_action(&policy.rules, override_class) {
+    if class_has_tokenize_or_stricter_action(&policy.rules, override_class)? {
         Ok(override_class.clone())
     } else {
         Err(RulepackError::ClassMapOverrideClash {
@@ -27,22 +27,31 @@ pub(crate) fn class_for_dictionary(
     }
 }
 
-fn class_has_tokenize_or_stricter_action(rules: &[RuleSpec], class: &PiiClass) -> bool {
+fn class_has_tokenize_or_stricter_action(
+    rules: &[RuleSpec],
+    class: &PiiClass,
+) -> Result<bool, RulepackError> {
     for rule in rules {
         let action = match rule {
             RuleSpec::Class {
                 class: rule_class,
                 action,
             } if rule_class == class => Some(action),
+            RuleSpec::Class { .. } => None,
+            RuleSpec::Column { .. } => None,
             RuleSpec::Default { action } => Some(action),
-            _ => None,
+            _ => {
+                return Err(RulepackError::UnsupportedRuleSpec {
+                    variant: format!("{:?}", rule),
+                })
+            }
         };
         if let Some(action) = action {
-            return matches!(
+            return Ok(matches!(
                 action,
                 Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize
-            );
+            ));
         }
     }
-    false
+    Ok(false)
 }

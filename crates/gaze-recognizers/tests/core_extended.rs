@@ -917,6 +917,10 @@ fn every_phase1_recognizer_round_trips_through_restore() {
         ("Host 192.168.1.1", LocaleTag::EnUs),
         ("Loopback ::1", LocaleTag::EnUs),
         ("Host 2001:db8::1", LocaleTag::EnUs),
+        (
+            "Wallet 0x52908400098527886E0F7030069857D2E4169EE7",
+            LocaleTag::EnUs,
+        ),
         ("Berlin 10115", LocaleTag::DeDe),
         ("ZIP 94103-1234", LocaleTag::EnUs),
     ] {
