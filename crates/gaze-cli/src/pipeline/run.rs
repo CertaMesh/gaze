@@ -120,8 +120,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             context.as_ref(),
             &locale_chain,
             resolved_ner_threshold,
-        )
-        .map_err(map_pipeline_error)?
+        )?
         .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
         None if context.is_some() => build_context_pipeline(
             context.as_ref().expect("checked context"),
