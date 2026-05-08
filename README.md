@@ -4,24 +4,33 @@
 
 Gaze sits between your data and the LLM. It swaps PII for stable, session-scoped tokens on the way out, and restores the originals on the way back. The agent never sees raw personal data; the data owner never loses the ability to read the agent's reply.
 
-```rust
-use gaze::{CleanDocument, Scope, Session};
-use gaze_assembly::CorePipelineConfig;
-
-let core = CorePipelineConfig::new().build()?;
-let session = Session::new(Scope::Conversation("conv-42".into()))?;
-
-let CleanDocument::Text(clean) = core.redact_text(
-    &session,
-    "Email alice@example.invalid about ORD-789012.",
-)? else { unreachable!() };
-// "Email <{session_hex}:Email_1> about ORD-789012."
-
-// Send `clean` to the LLM. Persist `session.export()?` server-side, encrypted,
-// keyed to the conversation. On reply, scan the response with
-// `gaze::token_shape::pattern()` and call `session.restore_strict(token)`
-// to recover the original.
+```sh
+cargo install gaze-cli
+echo 'Email alice@example.invalid about ORD-789012.' | gaze clean
 ```
+
+```json
+{
+  "clean_text": "Email <{session_hex}:Email_1> about ORD-789012.",
+  "session_blob": "<base64>",
+  "stats": {"detections": 1}
+}
+```
+
+Send `clean_text` to the LLM. Keep `session_blob` server-side — it is the signed restore manifest, and it must never reach the model.
+
+Round-trip the model's reply through restore on the same manifest:
+
+```sh
+echo '{"session_blob":"<base64>","text":"Confirmation sent to <{session_hex}:Email_1>."}' \
+  | gaze restore
+```
+
+```json
+{"text":"Confirmation sent to alice@example.invalid."}
+```
+
+Full CLI surface — flags, structured-document mode, audit logging, policy TOML — is in [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md).
 
 ## Why this exists
 
@@ -42,36 +51,13 @@ Gaze takes a fourth path: deterministic, rule-based detection with a signed rest
 
 ## Install
 
-Library:
-
-```toml
-[dependencies]
-gaze-pii = "0.6"
-gaze-assembly = "0.6"
-```
-
-The crate is published as `gaze-pii`; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
-
-CLI (for adapters that shell out instead of linking):
-
 ```sh
 cargo install gaze-cli
 ```
 
 Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: build from source with `cargo build --release -p gaze-cli`.
 
-## Quickstart
-
-The five-minute path:
-
-1. `cargo add gaze-pii gaze-assembly`.
-2. `CorePipelineConfig::new().build()?` builds a pipeline from the bundled `core` rulepack: emails, names, locations, organizations, plus locale-aware cues for forwarded headers and reply preambles.
-3. Open a `Session::new(Scope::Conversation(id))`. The session owns the reversible map.
-4. `core.redact_text(&session, input)` returns the clean output. Send only that to the LLM.
-5. `session.export()?` produces a signed `SensitiveSnapshot`. Persist it encrypted at rest, keyed to the conversation. **Never send it to the LLM.**
-6. On the reply, scan for tokens with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match.
-
-Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
+For library use — linking the Rust runtime directly instead of shelling out — see [Use from Rust](#use-from-rust) below.
 
 ## Pipeline shape
 
@@ -155,6 +141,21 @@ Five axes are evaluated on every PR: reliability, reversibility, agentic-first d
 - `--rulepack-bundled core-extended` without a policy activates `phone.national.de`, `phone.national.us`, `postal.us`, `postal.de`. Adopters wanting narrower scope must supply a policy or pass `--locale=global`.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries shipped today; build from source.
+
+## Use from Rust
+
+The CLI is a process boundary around the Rust runtime; you can link the runtime directly:
+
+```toml
+[dependencies]
+gaze-pii = "0.6"
+gaze-assembly = "0.6"
+```
+
+The crate is published as `gaze-pii` because the bare `gaze` name is in transfer; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
+
+- Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [`crates.io/crates/gaze-pii`](https://crates.io/crates/gaze-pii)).
+- Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
 
 ## Contributing
 
