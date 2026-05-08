@@ -446,7 +446,7 @@ for the same list with its design notes.
 
 - README catch-up for v0.4.2-v0.4.4 (PR #60).
 - README Requirements section with per-OS support matrix (PR #62).
-- Org transfer URL sweep `Naoray/gaze` -> `piinuts/gaze` (PR #63).
+- Org transfer URL sweep from the original org to the then-current org (PR #63).
 - New `docs/architecture/xtask.md` documenting `audit_metadata_only` gate coverage, known limitations, and v0.5 roadmap.
 - New `docs/research/v0.5-dylint-audit-gate.md` stub.
 
@@ -725,19 +725,19 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/piinuts/gaze/compare/v0.6.4...HEAD
-[0.6.4]: https://github.com/piinuts/gaze/compare/v0.6.3...v0.6.4
-[0.6.3]: https://github.com/piinuts/gaze/compare/v0.6.2...v0.6.3
-[0.6.2]: https://github.com/piinuts/gaze/compare/v0.6.1...v0.6.2
-[0.6.1]: https://github.com/piinuts/gaze/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/piinuts/gaze/compare/v0.5.1...v0.6.0
-[0.4.6]: https://github.com/piinuts/gaze/compare/v0.4.5...v0.4.6
-[0.4.5]: https://github.com/piinuts/gaze/compare/v0.4.4...v0.4.5
-[0.4.4]: https://github.com/piinuts/gaze/compare/v0.4.3...v0.4.4
-[0.4.3]: https://github.com/piinuts/gaze/compare/v0.4.2...v0.4.3
-[0.4.2]: https://github.com/piinuts/gaze/compare/v0.4.0-rc.1...v0.4.2
-[0.4.0-rc.1]: https://github.com/piinuts/gaze/releases/tag/v0.4.0-rc.1
-[v0.3.1]: https://github.com/piinuts/gaze/releases/tag/v0.3.1
-[0.3.0]: https://github.com/piinuts/gaze/releases/tag/v0.3.0
-[0.3.0-rc.2]: https://github.com/piinuts/gaze/releases/tag/v0.3.0-rc.2
-[0.3.0-rc.1]: https://github.com/piinuts/gaze/releases/tag/v0.3.0-rc.1
+[Unreleased]: https://github.com/EmpireTwo/gaze/compare/v0.6.4...HEAD
+[0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4
+[0.6.3]: https://github.com/EmpireTwo/gaze/compare/v0.6.2...v0.6.3
+[0.6.2]: https://github.com/EmpireTwo/gaze/compare/v0.6.1...v0.6.2
+[0.6.1]: https://github.com/EmpireTwo/gaze/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/EmpireTwo/gaze/compare/v0.5.1...v0.6.0
+[0.4.6]: https://github.com/EmpireTwo/gaze/compare/v0.4.5...v0.4.6
+[0.4.5]: https://github.com/EmpireTwo/gaze/compare/v0.4.4...v0.4.5
+[0.4.4]: https://github.com/EmpireTwo/gaze/compare/v0.4.3...v0.4.4
+[0.4.3]: https://github.com/EmpireTwo/gaze/compare/v0.4.2...v0.4.3
+[0.4.2]: https://github.com/EmpireTwo/gaze/compare/v0.4.0-rc.1...v0.4.2
+[0.4.0-rc.1]: https://github.com/EmpireTwo/gaze/releases/tag/v0.4.0-rc.1
+[v0.3.1]: https://github.com/EmpireTwo/gaze/releases/tag/v0.3.1
+[0.3.0]: https://github.com/EmpireTwo/gaze/releases/tag/v0.3.0
+[0.3.0-rc.2]: https://github.com/EmpireTwo/gaze/releases/tag/v0.3.0-rc.2
+[0.3.0-rc.1]: https://github.com/EmpireTwo/gaze/releases/tag/v0.3.0-rc.1
