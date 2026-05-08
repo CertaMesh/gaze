@@ -380,29 +380,6 @@ pub enum LeakKind {
     },
 }
 
-/// Stable tag for leak-kind aggregation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[non_exhaustive]
-pub enum LeakKindTag {
-    /// `LeakKind::Uncovered`.
-    Uncovered,
-    /// `LeakKind::PartialBleed`.
-    PartialBleed,
-    /// `LeakKind::ClassMismatch`.
-    ClassMismatch,
-}
-
-impl LeakKind {
-    /// Returns the stable aggregation tag.
-    pub fn tag(&self) -> LeakKindTag {
-        match self {
-            Self::Uncovered => LeakKindTag::Uncovered,
-            Self::PartialBleed { .. } => LeakKindTag::PartialBleed,
-            Self::ClassMismatch { .. } => LeakKindTag::ClassMismatch,
-        }
-    }
-}
-
 /// Bytes-free telemetry emitted by safety-net orchestration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]

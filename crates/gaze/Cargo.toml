@@ -23,7 +23,7 @@ path = "src/lib.rs"
 [features]
 default = ["bundled-recognizers"]
 bundled-recognizers = ["dep:gaze-recognizers"]
-safety-net = []
+safety-net = ["gaze-recognizers/safety-net"]
 
 [dependencies]
 anyhow = "1"

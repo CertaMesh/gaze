@@ -881,6 +881,12 @@ mod tests {
     }
 
     #[test]
+    fn generalize_token_custom_class_preserves_identity() {
+        // Regression guard: custom classes must not collapse to an indistinct [PII].
+        assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
+    }
+
+    #[test]
     fn stacked_ner_detectors_resolve_via_span_conflict() {
         // Input: "Alice Smith works here" — byte spans: Alice=0..5, full name=0..11.
         let text = "Alice Smith works here";
