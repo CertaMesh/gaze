@@ -4,14 +4,102 @@ use anyhow::{bail, Context, Result};
 
 const FEATURE_MATRIX: &[MatrixCommand] = &[
     MatrixCommand {
+        label: "cargo fmt --all -- --check",
+        program: "cargo",
+        args: &["fmt", "--all", "--", "--check"],
+    },
+    MatrixCommand {
+        label: "cargo clippy --workspace --all-features --all-targets -- -D warnings",
+        program: "cargo",
+        args: &[
+            "clippy",
+            "--workspace",
+            "--all-features",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- bundle-tokenization-drift",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "bundle-tokenization-drift"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- bundle-tokenization-drift --verify-ack",
+        program: "cargo",
+        args: &[
+            "run",
+            "-p",
+            "xtask",
+            "--",
+            "bundle-tokenization-drift",
+            "--verify-ack",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- cargo-metadata-audit-isolation",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "cargo-metadata-audit-isolation"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- class-map-override-safety",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "class-map-override-safety"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- fixture-citation-lint",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "fixture-citation-lint"],
+    },
+    MatrixCommand {
         label: "cargo test -p gaze-recognizers --no-default-features",
         program: "cargo",
         args: &["test", "-p", "gaze-recognizers", "--no-default-features"],
+    },
+    // The removed hook called `xtask ci-feature-matrix`; omit it here to avoid
+    // recursive self-execution while preserving the actual gate coverage.
+    MatrixCommand {
+        label: "cargo run -p xtask -- no-tenant-knowledge",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "no-tenant-knowledge"],
     },
     MatrixCommand {
         label: "cargo run -p xtask -- safety-net-sanity",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "safety-net-sanity"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- symmetric-potemkin",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "symmetric-potemkin"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- recognizer-composition-validator",
+        program: "cargo",
+        args: &[
+            "run",
+            "-p",
+            "xtask",
+            "--",
+            "recognizer-composition-validator",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- dylint-gate",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "dylint-gate"],
+    },
+    MatrixCommand {
+        label: "cargo test --workspace --all-features",
+        program: "cargo",
+        args: &["test", "--workspace", "--all-features"],
+    },
+    MatrixCommand {
+        label: "cargo test --workspace --all-targets",
+        program: "cargo",
+        args: &["test", "--workspace", "--all-targets"],
     },
 ];
 
