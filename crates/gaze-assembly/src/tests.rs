@@ -6,7 +6,8 @@ use gaze::{
     SessionPolicy,
 };
 use gaze_recognizers::{
-    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
+    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RecognizerError,
+    RegexDetector,
 };
 use std::sync::{Arc, Mutex};
 
@@ -329,6 +330,20 @@ fn unknown_bundled_rulepack_fails_closed() {
         BuildError::Policy(PolicyError::BundledRulepackUnknown { value })
             if value == "missing-core-addon"
     ));
+}
+
+#[test]
+fn recognizer_error_passthrough_preserves_non_matcher_variant() {
+    let err = BuildError::from(RecognizerError::UnsupportedValidator {
+        kind: "future_model_loader".to_string(),
+    });
+
+    match err {
+        BuildError::Recognizer(RecognizerError::UnsupportedValidator { kind }) => {
+            assert_eq!(kind, "future_model_loader");
+        }
+        other => panic!("expected recognizer passthrough, got {other:?}"),
+    }
 }
 
 #[derive(Clone, Default)]
