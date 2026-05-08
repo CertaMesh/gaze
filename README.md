@@ -22,8 +22,6 @@ The workspace has seven crates:
 - `crates/gaze-cli` — the `gaze clean` / `gaze restore` binary adopters invoke from language adapters.
 - `crates/xtask` — internal repository gate runner.
 
-External consumer: [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens), formerly the in-tree `debug-proxy` crate, provides the MCP debug server built on top of Gaze.
-
 ## Project north star
 
 > **Gaze is the most reliable, reversible PII pseudonymization runtime for agentic workflows. Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.**
@@ -242,10 +240,6 @@ Required files:
 - `SHA256SUMS`
 
 See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](docs/research/ner-library-evaluation.md).
-
-### External MCP Consumer
-
-The former in-tree `debug-proxy` MCP consumer now lives in [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens). Keep Gaze changes focused on the pseudonymization runtime, recognizers, assembly layer, CLI, and repository gates.
 
 ## Build
 
