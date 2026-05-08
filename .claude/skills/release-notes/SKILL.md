@@ -1,17 +1,17 @@
 ---
 name: release-notes
-description: Use when drafting GitHub release notes for EmpireTwo/gaze, gaze-lens, or gaze-laravel — including new releases, RC pre-releases, and re-writes of auto-generated notes. Enforces the curated-narrative voice destilled from v0.4.5 (TL;DR → Highlights → Known limitations → Adopter notes → Download → CHANGELOG link), past-tense PR-anchored prose, and a North-Star tie. Counter-pattern: auto-generated Keep-a-Changelog dumps with Added/Changed bullets are NOT acceptable as release-notes voice (they are fine in CHANGELOG.md only). Trigger phrases: "draft release notes", "release notes for vX.Y.Z", "rewrite the release body", "publish v…".
+description: Use when drafting GitHub release notes for piinuts/gaze, gaze-lens, or gaze-laravel — including new releases, RC pre-releases, and re-writes of auto-generated notes. Enforces the curated-narrative voice destilled from v0.4.5 (TL;DR → Highlights → Known limitations → Adopter notes → Download → CHANGELOG link), past-tense PR-anchored prose, and a North-Star tie. Counter-pattern: auto-generated Keep-a-Changelog dumps with Added/Changed bullets are NOT acceptable as release-notes voice (they are fine in CHANGELOG.md only). Trigger phrases: "draft release notes", "release notes for vX.Y.Z", "rewrite the release body", "publish v…".
 ---
 
-# Release Notes — Voice & Structure for EmpireTwo/gaze
+# Release Notes — Voice & Structure for piinuts/gaze
 
-Canonical voice, locked 2026-04-29 by Naoray. Reference release: [v0.4.5](https://github.com/EmpireTwo/gaze/releases/tag/v0.4.5). Counter-example (do NOT imitate): [v0.5.2](https://github.com/EmpireTwo/gaze/releases/tag/v0.5.2) — auto-generated Keep-a-Changelog dump with Added/Changed bullets and backslash-escaped backticks.
+Canonical voice, locked 2026-04-29 by Naoray. Reference release: [v0.4.5](https://github.com/piinuts/gaze/releases/tag/v0.4.5). Counter-example (do NOT imitate): [v0.5.2](https://github.com/piinuts/gaze/releases/tag/v0.5.2) — auto-generated Keep-a-Changelog dump with Added/Changed bullets and backslash-escaped backticks.
 
 This skill applies to release notes published on GitHub Releases. It does NOT replace `CHANGELOG.md` — that file stays in Keep-a-Changelog format. Release notes are the curated narrative on top of the changelog.
 
 ## When to use
 
-- Drafting GitHub release notes for any `EmpireTwo/*` repo (gaze, gaze-lens, gaze-laravel, future siblings).
+- Drafting GitHub release notes for any `piinuts/*` repo (gaze, gaze-lens, gaze-laravel, future siblings).
 - Rewriting auto-generated release bodies that arrived as raw CHANGELOG dumps.
 - Reviewing a release-notes PR before publish — gate against this skill's checklist.
 
@@ -81,7 +81,7 @@ Bullet list. Per platform: binary URL, then SHA256 sidecar URL. Order by adopter
 Single line, single link. Anchor to the release section in `CHANGELOG.md`:
 
 ```
-https://github.com/EmpireTwo/gaze/blob/main/CHANGELOG.md#045
+https://github.com/piinuts/gaze/blob/main/CHANGELOG.md#045
 ```
 
 ## Voice rules (quick reference)
@@ -131,14 +131,14 @@ Copy the block below into the GitHub release body and fill in. Keep the section 
 
 ## Download
 
-- Apple Silicon macOS: https://github.com/EmpireTwo/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin
-- Apple Silicon macOS SHA256: https://github.com/EmpireTwo/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin.sha256
-- Linux x86_64: https://github.com/EmpireTwo/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu
-- Linux x86_64 SHA256: https://github.com/EmpireTwo/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu.sha256
+- Apple Silicon macOS: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin
+- Apple Silicon macOS SHA256: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-aarch64-apple-darwin.sha256
+- Linux x86_64: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu
+- Linux x86_64 SHA256: https://github.com/piinuts/gaze/releases/download/vX.Y.Z/gaze-x86_64-unknown-linux-gnu.sha256
 
 ## Full CHANGELOG
 
-https://github.com/EmpireTwo/gaze/blob/main/CHANGELOG.md#XYZ
+https://github.com/piinuts/gaze/blob/main/CHANGELOG.md#XYZ
 ```
 
 ## Annotated reference — v0.4.5 (the canonical example)
