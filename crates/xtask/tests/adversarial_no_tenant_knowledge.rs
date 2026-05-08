@@ -60,6 +60,8 @@ fn allow_marker_hard_fails_in_production_but_passes_outside_production_scope() {
         "gate output must identify allow-marker policy failure: {output}"
     );
 
+    fs::write(src_dir.join("lib.rs"), "pub fn production_code() {}\n")
+        .expect("write benign production fixture");
     let test_dir = temp.path().join("crates/gaze/tests");
     fs::create_dir_all(&test_dir).expect("create mock tests dir");
     let test_fixture = test_dir.join("fixture.rs");

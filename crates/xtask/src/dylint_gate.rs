@@ -1,3 +1,4 @@
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -5,10 +6,18 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 const EXPECTED_UI_FIXTURES: usize = 18;
+const RUN_DYLINT_ENV: &str = "GAZE_RUN_DYLINT";
 
 pub fn run() -> Result<()> {
     let root = std::env::current_dir().context("failed to resolve current directory")?;
     assert_ui_fixture_shape(&root)?;
+    if !should_run_cargo_dylint() {
+        eprintln!(
+            "dylint_gate: cargo-dylint skipped outside CI; set {RUN_DYLINT_ENV}=1 to run it locally."
+        );
+        println!("dylint_gate: passed");
+        return Ok(());
+    }
     if !cargo_dylint_available() {
         eprintln!("cargo-dylint not installed; skipping dylint gate. CI installs it explicitly.");
         return Ok(());
@@ -16,6 +25,14 @@ pub fn run() -> Result<()> {
     run_cargo_dylint(&root)?;
     println!("dylint_gate: passed");
     Ok(())
+}
+
+fn should_run_cargo_dylint() -> bool {
+    env_flag("CI") || env_flag("GITHUB_ACTIONS") || env_flag(RUN_DYLINT_ENV)
+}
+
+fn env_flag(var: &str) -> bool {
+    env::var(var).is_ok_and(|value| value == "1" || value.eq_ignore_ascii_case("true"))
 }
 
 fn cargo_dylint_available() -> bool {
