@@ -239,7 +239,7 @@ Required files:
 - `tokenizer.json`
 - `config.json`
 - `labels.json`
-- `SHA256SUMS`
+- `SHA256SUMS.ner` release artifact, installed locally by the fetch script as `SHA256SUMS`
 
 See [crates/gaze/testdata/ner/README.md](crates/gaze/testdata/ner/README.md) and [docs/research/ner-library-evaluation.md](docs/research/ner-library-evaluation.md).
 
