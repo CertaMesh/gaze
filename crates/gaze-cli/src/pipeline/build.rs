@@ -55,8 +55,8 @@ pub(crate) fn build_pipeline_from_policy(
         gaze_assembly::BuildError::UnknownLocaleBucket { bucket, .. } => {
             map_policy_error(PolicyError::UnknownLocaleBucket { name: bucket })
         }
-        gaze_assembly::BuildError::UnknownRecognizerError { variant } => {
-            CliError::PolicyConfigDetail(format!("unknown recognizer error variant: {variant}"))
+        gaze_assembly::BuildError::Recognizer(err) => {
+            CliError::PolicyConfigDetail(format!("recognizer error: {err}"))
         }
     })
 }
