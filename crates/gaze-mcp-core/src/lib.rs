@@ -29,8 +29,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+pub mod auth;
 pub mod manifest;
+pub mod session_id;
 
+pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
 pub use crate::manifest::{
     BeginCallContext, CallHandle, FailureReason, ManifestError, ManifestStore, SnapshotRef,
 };
+pub use crate::session_id::{SessionIdError, SessionIdFormat, SessionIdPolicy};
