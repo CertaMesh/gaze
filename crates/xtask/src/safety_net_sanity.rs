@@ -43,7 +43,7 @@ fn suites() -> Vec<Suite> {
     vec![
         Suite {
             label: "core safety-net manifest and structured behavior",
-            package: "gaze",
+            package: "gaze-pii",
             test_target: "safety_net",
             features: &["safety-net"],
             required_tests: &[
