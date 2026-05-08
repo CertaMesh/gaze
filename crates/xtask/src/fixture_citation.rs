@@ -7,7 +7,7 @@ use std::{
 };
 
 const PRODUCTION_CRATES: &[&str] = &[
-    "gaze",
+    "gaze-pii",
     "gaze-types",
     "gaze-recognizers",
     "gaze-assembly",
@@ -28,6 +28,7 @@ pub enum FixtureCitationError {
     MissingCitation { violations: Vec<Violation> },
     MissingTest { violations: Vec<Violation> },
     InvalidMarker { violations: Vec<Violation> },
+    EmptyScan,
     Io { path: PathBuf, message: String },
 }
 
@@ -60,8 +61,10 @@ pub fn scan_root_with_tests(root: impl AsRef<Path>, listed_tests: &HashSet<Strin
     let mut missing_citation = Vec::new();
     let mut missing_test = Vec::new();
     let mut invalid_marker = Vec::new();
+    let mut cases_checked = 0usize;
 
     for file in production_files(root)? {
+        cases_checked += 1;
         let content = fs::read_to_string(&file).map_err(|error| io_error(&file, error))?;
         let active_lines = active_production_lines(&content);
         for (line_index, line) in active_lines.iter().enumerate() {
@@ -85,6 +88,10 @@ pub fn scan_root_with_tests(root: impl AsRef<Path>, listed_tests: &HashSet<Strin
                 missing_test.push(violation(&file, line_number, pattern, line, Some(citation)));
             }
         }
+    }
+
+    if cases_checked == 0 {
+        return Err(FixtureCitationError::EmptyScan);
     }
 
     if !invalid_marker.is_empty() {
@@ -135,7 +142,10 @@ pub fn parse_test_list(output: &str) -> HashSet<String> {
 fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for crate_name in PRODUCTION_CRATES {
-        let src = root.join("crates").join(crate_name).join("src");
+        let src = root
+            .join("crates")
+            .join(package_source_dir(crate_name))
+            .join("src");
         if !src.exists() {
             continue;
         }
@@ -143,6 +153,13 @@ fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     files.sort();
     Ok(files)
+}
+
+fn package_source_dir(package_name: &str) -> &str {
+    match package_name {
+        "gaze-pii" => "gaze",
+        _ => package_name,
+    }
 }
 
 fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
@@ -299,6 +316,9 @@ impl fmt::Display for FixtureCitationError {
             FixtureCitationError::InvalidMarker { violations } => {
                 writeln!(formatter, "FixtureCitationInvalidMarker")?;
                 write_violations(formatter, violations)
+            }
+            FixtureCitationError::EmptyScan => {
+                write!(formatter, "fixture_citation_lint: no cases iterated")
             }
             FixtureCitationError::Io { path, message } => {
                 write!(formatter, "{}: {}", path.display(), message)

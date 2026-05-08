@@ -5,7 +5,7 @@ use std::{
 };
 
 const PRODUCTION_CRATES: &[&str] = &[
-    "gaze",
+    "gaze-pii",
     "gaze-types",
     "gaze-recognizers",
     "gaze-assembly",
@@ -27,6 +27,7 @@ const DENYLIST: &[&str] = &[
 pub enum TenantKnowledgeError {
     DenylistHit { violations: Vec<Violation> },
     AllowMarkerInProductionScope { violations: Vec<Violation> },
+    EmptyScan,
     Io { path: PathBuf, message: String },
 }
 
@@ -50,8 +51,10 @@ pub fn scan_root(root: impl AsRef<Path>) -> Result<()> {
     let root = root.as_ref();
     let mut allow_marker_violations = Vec::new();
     let mut denylist_violations = Vec::new();
+    let mut cases_checked = 0usize;
 
     for file in production_files(root)? {
+        cases_checked += 1;
         let content = fs::read_to_string(&file).map_err(|error| io_error(&file, error))?;
         for (line_index, line) in content.lines().enumerate() {
             if line.contains(ALLOW_MARKER) {
@@ -73,6 +76,10 @@ pub fn scan_root(root: impl AsRef<Path>) -> Result<()> {
         }
     }
 
+    if cases_checked == 0 {
+        return Err(TenantKnowledgeError::EmptyScan);
+    }
+
     if !allow_marker_violations.is_empty() {
         return Err(TenantKnowledgeError::AllowMarkerInProductionScope {
             violations: allow_marker_violations,
@@ -91,7 +98,10 @@ pub fn scan_root(root: impl AsRef<Path>) -> Result<()> {
 fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
     for crate_name in PRODUCTION_CRATES {
-        let src = root.join("crates").join(crate_name).join("src");
+        let src = root
+            .join("crates")
+            .join(package_source_dir(crate_name))
+            .join("src");
         if !src.exists() {
             continue;
         }
@@ -99,6 +109,13 @@ fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
     }
     files.sort();
     Ok(files)
+}
+
+fn package_source_dir(package_name: &str) -> &str {
+    match package_name {
+        "gaze-pii" => "gaze",
+        _ => package_name,
+    }
 }
 
 fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
@@ -138,6 +155,9 @@ impl fmt::Display for TenantKnowledgeError {
             TenantKnowledgeError::AllowMarkerInProductionScope { violations } => {
                 writeln!(formatter, "AllowMarkerInProductionScope")?;
                 write_violations(formatter, violations)
+            }
+            TenantKnowledgeError::EmptyScan => {
+                write!(formatter, "no_tenant_knowledge: no cases iterated")
             }
             TenantKnowledgeError::Io { path, message } => {
                 write!(formatter, "{}: {}", path.display(), message)
