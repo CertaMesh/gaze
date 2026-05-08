@@ -10,7 +10,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! gaze = { version = "0.6", package = "gaze-pii" }
+//! gaze = "0.6"
 //! gaze-assembly = "0.6"
 //! ```
 //!
