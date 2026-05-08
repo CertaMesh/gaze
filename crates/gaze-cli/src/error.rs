@@ -16,6 +16,7 @@ pub(crate) enum CliError {
     SafetyNetFailure { variant: &'static str },
     AuditPurgeIso8601 { input: String },
     UnknownToken { token: String },
+    UnsupportedSessionScope { variant: String },
     InvalidSignature,
     InvalidBlobVersion,
     BlobExpired,
@@ -31,6 +32,7 @@ impl CliError {
             Self::PolicyConfig | Self::PolicyConfigDetail(_) | Self::AuditPurgeIso8601 { .. } => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
+            | Self::UnsupportedSessionScope { .. }
             | Self::InvalidSignature
             | Self::InvalidBlobVersion
             | Self::BlobExpired
@@ -50,6 +52,7 @@ impl CliError {
             Self::SafetyNetFailure { .. } => "SafetyNet",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
+            Self::UnsupportedSessionScope { .. } => "UnsupportedSessionScope",
             Self::InvalidSignature => "InvalidSignature",
             Self::InvalidBlobVersion => "InvalidBlobVersion",
             Self::BlobExpired => "BlobExpired",
@@ -97,6 +100,16 @@ impl CliError {
                 self.exit_code(),
                 variant
             ),
+            Self::UnsupportedSessionScope { variant } => {
+                let variant = serde_json::to_string(variant)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"variant":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    variant
+                )
+            }
             _ => eprintln!(
                 r#"{{"error":"{}","exit":{}}}"#,
                 self.variant_name(),

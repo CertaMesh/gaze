@@ -141,7 +141,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         None => Session::new(scope_for_cli_without_policy(
             clean_overrides.session_scope.as_ref(),
             options.session_ttl,
-        )),
+        )?),
     }
     .map_err(|_| CliError::Pipeline)?;
 
@@ -390,16 +390,19 @@ fn class_rules_for_bundled_overrides(
         .collect())
 }
 
-fn scope_for_cli_without_policy(scope: Option<&SessionScope>, ttl_secs: Option<u64>) -> Scope {
+fn scope_for_cli_without_policy(
+    scope: Option<&SessionScope>,
+    ttl_secs: Option<u64>,
+) -> std::result::Result<Scope, CliError> {
     match scope.unwrap_or(&SessionScope::Persistent) {
-        SessionScope::Ephemeral => Scope::Ephemeral,
-        SessionScope::Conversation => Scope::Conversation("cli".to_string()),
-        SessionScope::Persistent => Scope::Persistent {
+        SessionScope::Ephemeral => Ok(Scope::Ephemeral),
+        SessionScope::Conversation => Ok(Scope::Conversation("cli".to_string())),
+        SessionScope::Persistent => Ok(Scope::Persistent {
             ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
-        },
-        _ => Scope::Persistent {
-            ttl: Duration::from_secs(ttl_secs.unwrap_or(86_400)),
-        },
+        }),
+        _ => Err(CliError::UnsupportedSessionScope {
+            variant: format!("{:?}", scope.unwrap_or(&SessionScope::Persistent)),
+        }),
     }
 }
 
