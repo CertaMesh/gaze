@@ -32,6 +32,7 @@
 pub mod auth;
 pub mod ctx;
 pub mod manifest;
+pub mod registry;
 pub mod session_id;
 pub mod tool;
 
@@ -40,5 +41,6 @@ pub use crate::ctx::{SessionHandle, ToolCtx};
 pub use crate::manifest::{
     BeginCallContext, CallHandle, FailureReason, ManifestError, ManifestStore, SnapshotRef,
 };
+pub use crate::registry::{ToolRegistry, ToolRegistryError};
 pub use crate::session_id::{SessionIdError, SessionIdFormat, SessionIdPolicy};
 pub use crate::tool::{Tool, ToolDescriptor, ToolError, ToolResponse, ToolTier};
