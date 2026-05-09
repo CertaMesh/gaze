@@ -1,6 +1,6 @@
 # Gaze
 
-[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![CI](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
+[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/EmpireTwo/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
 
 **Reversible PII pseudonymization for agentic LLM workflows.**
 
