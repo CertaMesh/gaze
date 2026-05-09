@@ -27,6 +27,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.5] - 2026-05-09
+
+### Added
+
+- `SECURITY.md` — vulnerability disclosure policy with scoped in/out-of-scope
+  criteria for the chokepoint runtime, audit-sink isolation, and recognizer
+  fail-open regressions.
+- `CODE_OF_CONDUCT.md` — Contributor Covenant 2.1.
+- `.github/workflows/publish-crates.yml` — crates.io trusted-publisher OIDC
+  workflow, with no long-lived token, for workspace publishes on tag push or
+  manual dry-run dispatch.
+- README badges for crates.io, license, docs.rs, CI, and GitHub stars, plus an
+  "Available on crates.io" section listing all published workspace crate names.
+- Placeholder publishes on crates.io at 0.6.5 for `gaze-pii`, `gaze-types`,
+  `gaze-audit`, `gaze-recognizers`, `gaze-assembly`, `gaze-cli`,
+  `gaze-mcp-core`, and `gaze-mcp-rmcp` to reserve namespace ahead of the v0.7
+  real publish. Each placeholder mirrors the canonical project README and
+  declares the same internal dependency topology the real workspace will
+  publish.
+
+### Changed
+
+- README rewrite: tighter lede, copy-paste build-from-source install snippet
+  until v0.7, token format example matched to runtime output, license section,
+  and no v0.7 roadmap language in install instructions.
+- Repo description changed from "GDPR-compliant debugging proxy between AI
+  agents and production data" to "Reversible PII pseudonymization runtime for
+  agentic LLM workflows."
+- Adopter attribution in CHANGELOG and the `gaze-recognizers` NER module docs
+  now uses neutral "an adopter" phrasing instead of named individuals.
+- Repository visibility changed from private to public.
+
+### Notes
+
+- No code changes in this release. Detection contracts, audit-sink isolation,
+  and recognizer behavior are identical to v0.6.4. Adopters pinned to `^0.6.4`
+  resolve to v0.6.5 with no behavioral diff.
+- v0.7.0 is the next functional release; it introduces `gaze-mcp-core`
+  (chokepoint runtime) and `gaze-mcp-rmcp` (rmcp transport adapter) as full
+  implementations.
+
 ## [0.6.4] - 2026-04-30
 
 ### Added
