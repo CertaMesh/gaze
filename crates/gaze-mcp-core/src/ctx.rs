@@ -45,7 +45,6 @@ pub struct SessionHandle<'a> {
 impl<'a> SessionHandle<'a> {
     /// Construct a handle. The dispatcher is the only public caller; adopters
     /// never build a `SessionHandle` directly.
-    #[allow(dead_code)] // wired up in Phase 6 (PiiEnvelope::dispatch).
     pub(crate) fn new(audit_session_id: &'a str) -> Self {
         Self {
             audit_session_id,
@@ -83,7 +82,6 @@ impl<'a> ToolCtx<'a> {
     /// Construct a `ToolCtx`. `pub(crate)` — the dispatcher in
     /// [`crate::dispatch`] is the only call site. Verified at compile time by
     /// the trybuild fixtures in `tests/tool_ctx_seal.rs`.
-    #[allow(dead_code)] // wired up in Phase 6 (PiiEnvelope::dispatch).
     pub(crate) fn new(
         session: SessionHandle<'a>,
         redacted_args: serde_json::Value,

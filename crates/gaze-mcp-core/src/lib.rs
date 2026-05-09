@@ -31,6 +31,7 @@
 
 pub mod auth;
 pub mod ctx;
+pub mod dispatch;
 pub mod manifest;
 pub mod registry;
 pub mod session_id;
@@ -38,6 +39,7 @@ pub mod tool;
 
 pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
 pub use crate::ctx::{SessionHandle, ToolCtx};
+pub use crate::dispatch::{DispatchError, PiiEnvelope};
 pub use crate::manifest::{
     BeginCallContext, CallHandle, FailureReason, ManifestError, ManifestStore, SnapshotRef,
 };
