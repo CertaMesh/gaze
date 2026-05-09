@@ -18,8 +18,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Optional: add `environment: crates-io-publish` if that environment was
-    # configured on the crates.io trusted publisher.
+    environment: crates-io-publish
     steps:
       - uses: actions/checkout@v6
 
