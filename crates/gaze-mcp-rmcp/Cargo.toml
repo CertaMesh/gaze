@@ -21,6 +21,10 @@ tokio-util = "0.7"
 rmcp = { version = "0.2", features = ["server", "macros", "transport-io"] }
 axum = { version = "0.8", optional = true }
 
+[dev-dependencies]
+gaze = { package = "gaze-pii", path = "../gaze", version = "=0.6.4" }
+rmcp = { version = "0.2", features = ["client", "server", "macros", "transport-async-rw"] }
+
 [features]
 default = ["transport-stdio"]
 transport-stdio = []

@@ -153,6 +153,11 @@ impl RmcpFrontend {
     pub fn config(&self) -> &RmcpFrontendConfig {
         &self.config
     }
+
+    #[doc(hidden)]
+    pub fn into_server_handler(self, host: Arc<dyn DispatchHost>) -> impl ServerHandler {
+        RmcpServer::new(host, self.config.principal_resolver)
+    }
 }
 
 #[cfg(feature = "transport-stdio")]
