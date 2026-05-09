@@ -37,6 +37,17 @@ pub mod manifest;
 pub mod registry;
 pub mod session_id;
 pub mod tool;
+pub mod tools;
+
+#[cfg(feature = "core-tools")]
+pub mod core_tools {
+    //! Re-exports of the default agent-tier tools (feature `core-tools`).
+    pub use crate::tools::clean::CleanTool;
+    pub use crate::tools::safety_net::SafetyNetCheckTool;
+    pub use crate::tools::tokenize::TokenizeFieldTool;
+}
+
+// `operator_tools` re-export module lands in commit 8b.
 
 pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
 pub use crate::ctx::{SessionHandle, ToolCtx};
