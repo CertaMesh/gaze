@@ -5,7 +5,12 @@
 Gaze sits between your data and the LLM. It swaps PII for stable, session-scoped tokens on the way out, and restores the originals on the way back. The agent never sees raw personal data; the data owner never loses the ability to read the agent's reply.
 
 ```sh
-cargo install gaze-cli
+# Until v0.7 publishes to crates.io, build from source:
+git clone https://github.com/EmpireTwo/gaze.git
+cd gaze
+cargo install --path crates/gaze-cli
+
+# Then run:
 echo 'Email alice@example.invalid about ORD-789012.' | gaze clean
 ```
 
@@ -52,7 +57,10 @@ Gaze takes a fourth path: deterministic, rule-based detection with a signed rest
 ## Install
 
 ```sh
-cargo install gaze-cli
+# Until v0.7 publishes to crates.io, build from source:
+git clone https://github.com/EmpireTwo/gaze.git
+cd gaze
+cargo install --path crates/gaze-cli
 ```
 
 Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: build from source with `cargo build --release -p gaze-cli`.
