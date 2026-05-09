@@ -38,8 +38,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `.github/workflows/publish-crates.yml` — crates.io trusted-publisher OIDC
   workflow, with no long-lived token, for workspace publishes on tag push or
   manual dry-run dispatch.
-- README badges for crates.io, license, docs.rs, CI, and GitHub stars, plus an
+- README badges for crates.io, license, docs.rs, tests, and GitHub stars, plus an
   "Available on crates.io" section listing all published workspace crate names.
+- `.github/workflows/test.yml` — fmt + clippy + workspace test suite on PRs
+  and main push.
 - Placeholder publishes on crates.io at 0.6.5 for `gaze-pii`, `gaze-types`,
   `gaze-audit`, `gaze-recognizers`, `gaze-assembly`, `gaze-cli`,
   `gaze-mcp-core`, and `gaze-mcp-rmcp` to reserve namespace ahead of the v0.7
