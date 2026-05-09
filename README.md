@@ -156,6 +156,13 @@ The crate is published as `gaze-pii` because the bare `gaze` name is in transfer
 - Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [`crates.io/crates/gaze-pii`](https://crates.io/crates/gaze-pii)).
 - Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
 
+## Publishing
+
+The workspace publishes via the `publish-crates.yml` GitHub Actions workflow using crates.io trusted-publisher OIDC auth; it does not need a long-lived `CARGO_REGISTRY_TOKEN` secret.
+
+- **Tag push** (`git tag v<version> && git push --tags`) runs a real publish on every workspace crate in topological order.
+- **Manual dispatch** with `dry_run=true` packages each crate without publishing, useful for catching metadata or dependency issues before a release tag.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Repository gates (xtask + Dylint) enforce the contracts in [`docs/architecture/`](docs/architecture/). Run them locally before pushing:
