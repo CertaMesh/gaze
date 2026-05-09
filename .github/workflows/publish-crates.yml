@@ -29,11 +29,11 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1.0.4
         id: cargo-auth
 
-      - name: Publish workspace crates (topological order)
+      - name: Publish workspace crates (topological order, skip already-published)
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.cargo-auth.outputs.token }}
         run: |
-          set -eux
+          set -eu
           DRY_RUN=""
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
             DRY_RUN="--dry-run"
@@ -43,7 +43,17 @@ jobs:
           # published as gaze-pii while its library target remains `gaze`.
           for crate in gaze-types gaze-audit gaze-recognizers gaze-pii gaze-assembly gaze-cli; do
             echo "=== publishing $crate ==="
-            cargo publish $DRY_RUN -p "$crate" --locked
+            rc=0
+            out=$(cargo publish $DRY_RUN -p "$crate" --locked 2>&1) || rc=$? && rc=${rc:-0}
+            echo "$out"
+            if [ "$rc" -ne 0 ]; then
+              if echo "$out" | grep -qiE "crate version .* is already uploaded|already exists|version .* has already been published"; then
+                echo "  [warn] $crate already on crates.io at this version; skipping (not a failure)"
+              else
+                echo "  [error] $crate publish failed (exit $rc), aborting"
+                exit "$rc"
+              fi
+            fi
             # Give the crates.io index time to propagate before publishing
             # dependents. Dry-runs do not touch the index.
             [ -z "$DRY_RUN" ] && sleep 30 || true

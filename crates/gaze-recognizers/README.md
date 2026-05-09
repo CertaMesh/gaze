@@ -1,6 +1,12 @@
 # gaze-recognizers
 
-Built-in recognizer backends and bundled rulepacks for Gaze.
+[![Crates.io](https://img.shields.io/crates/v/gaze-recognizers.svg)](https://crates.io/crates/gaze-recognizers)
+[![docs.rs](https://docs.rs/gaze-recognizers/badge.svg)](https://docs.rs/gaze-recognizers)
+[![License](https://img.shields.io/crates/l/gaze-recognizers.svg)](https://github.com/EmpireTwo/gaze#license)
+
+Built-in recognizers for Gaze
+
+Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 This crate depends on `gaze` and implements concrete `gaze::Recognizer`
 backends. Keeping it separate lets the core crate expose a small, stable
@@ -11,8 +17,8 @@ tokenizer dependencies.
 
 ```toml
 [dependencies]
-gaze-pii = "0.6.4"
-gaze-recognizers = "0.6.4"
+gaze-pii = "0.6.5"
+gaze-recognizers = "0.6.5"
 ```
 
 Library users that need parser-backed E.164 phone validation must opt in to the
@@ -20,7 +26,7 @@ Library users that need parser-backed E.164 phone validation must opt in to the
 
 ```toml
 [dependencies]
-gaze-recognizers = { version = "0.6.4", features = ["phone-parser"] }
+gaze-recognizers = { version = "0.6.5", features = ["phone-parser"] }
 ```
 
 `gaze-cli` enables `phone-parser` by default. Without the feature, the

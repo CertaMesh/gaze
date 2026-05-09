@@ -1,10 +1,10 @@
 # Gaze
 
+[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![CI](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
+
 **Reversible PII pseudonymization for agentic LLM workflows.**
 
 Gaze sits between your data and the LLM. It swaps PII for stable, session-scoped tokens on the way out, and restores the originals on the way back. The agent never sees raw personal data; the data owner never loses the ability to read the agent's reply.
-
-[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![CI](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
 
 ```sh
 git clone https://github.com/EmpireTwo/gaze.git
@@ -130,7 +130,7 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 ## Status
 
-- **Version:** v0.6.4 (2026-05).
+- **Version:** v0.6.5 (2026-05).
 - **MSRV:** Rust 1.89.
 - **License:** dual `Apache-2.0 OR MIT`.
 - **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.

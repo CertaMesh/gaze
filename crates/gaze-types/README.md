@@ -1,6 +1,12 @@
 # gaze-types
 
-Shared value contracts for the [gaze-pii](https://crates.io/crates/gaze-pii) PII pseudonymization runtime.
+[![Crates.io](https://img.shields.io/crates/v/gaze-types.svg)](https://crates.io/crates/gaze-types)
+[![docs.rs](https://docs.rs/gaze-types/badge.svg)](https://docs.rs/gaze-types)
+[![License](https://img.shields.io/crates/l/gaze-types.svg)](https://github.com/EmpireTwo/gaze#license)
+
+Shared value contracts for Gaze
+
+Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 Serde-only — no ML, no SQLite, no ONNX. This crate exists so that:
 - Restore-side adapters can take `gaze-types` without pulling in `ort` / `tokenizers` / `ndarray`

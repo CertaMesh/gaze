@@ -718,7 +718,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-assembly"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "gaze-pii",
  "gaze-recognizers",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-audit"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "gaze-types",
  "rusqlite",
@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "assert_cmd",
  "base64 0.22.1",
@@ -763,7 +763,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-pii"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -793,7 +793,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "aho-corasick",
  "criterion",
@@ -818,7 +818,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-types"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "serde",
  "thiserror 1.0.69",
