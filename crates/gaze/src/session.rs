@@ -590,7 +590,7 @@ fn advise_dontdump(_ptr: *const u8, _len: usize) {
         }
         let page_size = page_size as usize;
         let start = (ptr as usize) & !(page_size - 1);
-        let end = ((ptr as usize + len + page_size - 1) / page_size) * page_size;
+        let end = (ptr as usize + len).div_ceil(page_size) * page_size;
         let aligned_len = end.saturating_sub(start);
         if aligned_len == 0 {
             return;
