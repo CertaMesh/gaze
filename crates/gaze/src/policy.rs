@@ -159,6 +159,14 @@ pub enum PolicyError {
         #[source]
         source: regex::Error,
     },
+    #[error(
+        "custom recognizer '{recognizer_id}' regex matches emitted token shape '{shadowed_shape}'"
+    )]
+    TokenShapeShadow {
+        recognizer_id: String,
+        offending_pattern: String,
+        shadowed_shape: String,
+    },
     #[error("invalid dictionary detector '{name}': {reason}")]
     BadDictionary { name: String, reason: String },
     #[error("session.ttl_secs is required when session.scope = \"persistent\"")]
@@ -414,9 +422,16 @@ fn parse_regex_detector(
         name: raw.name.clone(),
         reason: "regex recognizers require pattern".to_string(),
     })?;
-    regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
+    let compiled = regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
         name: raw.name.clone(),
         source,
+    })?;
+    crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.name).map_err(|shadow| {
+        PolicyError::TokenShapeShadow {
+            recognizer_id: shadow.recognizer_id,
+            offending_pattern: shadow.offending_pattern,
+            shadowed_shape: shadow.shadowed_shape,
+        }
     })?;
 
     Ok((
@@ -750,6 +765,36 @@ action = "preserve"
         assert!(matches!(
             err,
             PolicyError::SessionScopeUnknown { value } if value == "forever"
+        ));
+    }
+
+    #[test]
+    fn policy_load_rejects_custom_recognizer_regex_matching_token_shape() {
+        let raw = r#"
+[session]
+scope = "ephemeral"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "token_shadow"
+pattern = "<Email_\\d+>"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let err = Policy::try_from(raw).unwrap_err();
+
+        assert!(matches!(
+            err,
+            PolicyError::TokenShapeShadow {
+                recognizer_id,
+                shadowed_shape,
+                ..
+            } if recognizer_id == "token_shadow" && shadowed_shape == "<Email_1>"
         ));
     }
 

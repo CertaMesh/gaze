@@ -220,6 +220,14 @@ pub enum RulepackError {
         recognizer_ids: Vec<String>,
         locale_overlap: Vec<LocaleTag>,
     },
+    #[error(
+        "custom recognizer '{recognizer_id}' regex matches emitted token shape '{shadowed_shape}'"
+    )]
+    TokenShapeShadow {
+        recognizer_id: String,
+        offending_pattern: String,
+        shadowed_shape: String,
+    },
 }
 
 impl Rulepack {
@@ -520,6 +528,17 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
         } => {
             if pattern.is_some() == pattern_template.is_some() {
                 return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+            }
+            if let Some(pattern) = pattern {
+                let compiled = regex::Regex::new(pattern)
+                    .map_err(|_| RulepackError::RegexPatternChoice { id: raw.id.clone() })?;
+                crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.id).map_err(
+                    |shadow| RulepackError::TokenShapeShadow {
+                        recognizer_id: shadow.recognizer_id,
+                        offending_pattern: shadow.offending_pattern,
+                        shadowed_shape: shadow.shadowed_shape,
+                    },
+                )?;
             }
         }
         RawMatch::AnchoredMatch {
@@ -1164,6 +1183,36 @@ kind = "regex"
         assert!(matches!(
             err,
             RulepackError::RegexPatternChoice { id } if id == "bad.email"
+        ));
+    }
+
+    #[test]
+    fn rulepack_load_rejects_custom_regex_matching_token_shape() {
+        let raw = r#"
+schema_version = "0.1.0"
+rulepack_id = "bad-token-shadow"
+rulepack_version = "0.7.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "token.shadow"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "<Email_\\d+>"
+"#;
+
+        let err = Rulepack::parse(raw).expect_err("token shape shadow must fail closed");
+
+        assert!(matches!(
+            err,
+            RulepackError::TokenShapeShadow {
+                recognizer_id,
+                shadowed_shape,
+                ..
+            } if recognizer_id == "token.shadow" && shadowed_shape == "<Email_1>"
         ));
     }
 

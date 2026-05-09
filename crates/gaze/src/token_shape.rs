@@ -27,20 +27,44 @@ pub fn sample_token_shapes() -> &'static [&'static str] {
         "<deadbeef:Name_1>",
         "<deadbeef:Location_1>",
         "<deadbeef:Organization_1>",
-        "<deadbeef:Custom:customer_id_1>",
+        "<deadbeef:Custom:class_alpha_1>",
         "email1.deadbeef@gaze-fake.invalid",
         "deadbeef:email_1",
-        "deadbeef:custom:customer_id_1",
+        "deadbeef:custom:class_alpha_1",
         "<Email_1>",
         "<email_1>",
-        "<Custom:customer_id_1>",
-        "<custom:customer_id_1>",
+        "<Custom:class_alpha_1>",
+        "<custom:class_alpha_1>",
         "Email_1",
         "email_1",
-        "custom:customer_id_1",
+        "custom:class_alpha_1",
         "email1@example.test",
         "email1@gaze-fake.invalid",
     ]
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TokenShapeShadow {
+    pub recognizer_id: String,
+    pub offending_pattern: String,
+    pub shadowed_shape: String,
+}
+
+pub fn reject_if_shadows_token_shape(
+    compiled: &Regex,
+    recognizer_id: &str,
+) -> Result<(), TokenShapeShadow> {
+    for sample in sample_token_shapes() {
+        if compiled.is_match(sample) {
+            return Err(TokenShapeShadow {
+                recognizer_id: recognizer_id.to_string(),
+                offending_pattern: compiled.as_str().to_string(),
+                shadowed_shape: (*sample).to_string(),
+            });
+        }
+    }
+    Ok(())
 }
 
 pub fn starts_with_session_prefix(s: &str) -> bool {
