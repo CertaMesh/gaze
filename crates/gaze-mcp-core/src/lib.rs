@@ -47,7 +47,13 @@ pub mod core_tools {
     pub use crate::tools::tokenize::TokenizeFieldTool;
 }
 
-// `operator_tools` re-export module lands in commit 8b.
+#[cfg(feature = "operator-tier")]
+pub mod operator_tools {
+    //! Re-exports of the operator-tier tools (feature `operator-tier`).
+    pub use crate::tools::export::ExportManifestTool;
+    pub use crate::tools::restore::RestoreTool;
+    pub use crate::tools::restore_strict::RestoreStrictTool;
+}
 
 pub use crate::auth::{AuthError, AuthHook, DenyAllAuthHook, Principal};
 pub use crate::ctx::{SessionHandle, ToolCtx};

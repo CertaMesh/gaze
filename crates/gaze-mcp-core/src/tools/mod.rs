@@ -31,4 +31,9 @@ pub mod safety_net;
 #[cfg(feature = "core-tools")]
 pub mod tokenize;
 
-// operator-tier modules land in commit 8b.
+#[cfg(feature = "operator-tier")]
+pub mod export;
+#[cfg(feature = "operator-tier")]
+pub mod restore;
+#[cfg(feature = "operator-tier")]
+pub mod restore_strict;
