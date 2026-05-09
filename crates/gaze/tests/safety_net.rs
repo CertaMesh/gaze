@@ -387,3 +387,71 @@ fn structured_field_error_fails_closed_at_doc_level() {
         gaze::Error::SafetyNet(SafetyNetError::Runtime { .. })
     ));
 }
+
+#[test]
+fn scan_safety_nets_does_not_mutate_session() {
+    let net = MockNet::new(Some(0.."alice@example.invalid".len()), PiiClass::Email);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+    let before = session.tokens().len();
+
+    let result = pipeline
+        .scan_safety_nets(
+            &session,
+            "alice@example.invalid",
+            &[gaze::LocaleTag::Global],
+        )
+        .expect("observer-only scan");
+
+    assert_eq!(result.nets_run, 1);
+    assert_eq!(result.report.stats.suspect_count, 1);
+    assert_eq!(session.tokens().len(), before);
+}
+
+#[test]
+fn scan_safety_nets_structured_does_not_mutate_session() {
+    let net = MockNet::new(Some(0.."alice@example.invalid".len()), PiiClass::Email)
+        .with_field_path("profile.email");
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+    let document = BTreeMap::from([(
+        "profile".to_string(),
+        Value::Object(BTreeMap::from([(
+            "email".to_string(),
+            Value::String("alice@example.invalid".to_string()),
+        )])),
+    )]);
+    let before = session.tokens().len();
+
+    let result = pipeline
+        .scan_safety_nets_structured(&session, &document, &[gaze::LocaleTag::Global])
+        .expect("observer-only structured scan");
+
+    assert_eq!(result.nets_run, 1);
+    assert_eq!(result.report.stats.suspect_count, 1);
+    assert_eq!(
+        result.report.suspects[0].field_path.as_deref(),
+        Some("profile.email")
+    );
+    assert_eq!(session.tokens().len(), before);
+}
+
+#[test]
+fn scan_safety_nets_structured_covers_scalar_leaves() {
+    let net =
+        MockNet::new(Some(0..2), PiiClass::custom("customer_id")).with_field_path("customer_id");
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+    let document = BTreeMap::from([("customer_id".to_string(), Value::I64(42))]);
+
+    let result = pipeline
+        .scan_safety_nets_structured(&session, &document, &[gaze::LocaleTag::Global])
+        .expect("structured scalar scan");
+
+    assert_eq!(result.nets_run, 1);
+    assert_eq!(result.report.stats.suspect_count, 1);
+    assert_eq!(
+        result.report.suspects[0].field_path.as_deref(),
+        Some("customer_id")
+    );
+}

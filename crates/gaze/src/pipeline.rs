@@ -98,6 +98,16 @@ pub struct Pipeline {
     rules: Vec<Arc<dyn Rule>>,
 }
 
+/// Observer-only safety-net scan result.
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct SafetyNetResult {
+    /// Number of safety nets registered for this pipeline.
+    pub nets_run: usize,
+    /// Metadata-only leak report aggregated across scanned leaves.
+    pub report: LeakReport,
+}
+
 impl std::fmt::Debug for Pipeline {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pipeline").finish_non_exhaustive()
@@ -223,6 +233,52 @@ impl Pipeline {
             }
             _ => Err(Error::UnsupportedRawDocumentVariant),
         }
+    }
+
+    pub fn scan_safety_nets(
+        &self,
+        session: &Session,
+        clean_text: &str,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<SafetyNetResult> {
+        let nets_run = self.safety_nets.len();
+        if nets_run == 0 {
+            return Ok(SafetyNetResult {
+                nets_run,
+                report: LeakReport::default(),
+            });
+        }
+
+        let report = self.run_safety_nets(
+            session,
+            clean_text,
+            &Manifest::default(),
+            DocumentKind::Text,
+            locale_chain,
+            None,
+        )?;
+        Ok(SafetyNetResult { nets_run, report })
+    }
+
+    pub fn scan_safety_nets_structured(
+        &self,
+        session: &Session,
+        document: &BTreeMap<String, Value>,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<SafetyNetResult> {
+        let nets_run = self.safety_nets.len();
+        if nets_run == 0 {
+            return Ok(SafetyNetResult {
+                nets_run,
+                report: LeakReport::default(),
+            });
+        }
+
+        let mut report = LeakReport::default();
+        for (key, value) in document {
+            walk_value_for_safety_net_scan(self, session, value, key, locale_chain, &mut report)?;
+        }
+        Ok(SafetyNetResult { nets_run, report })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -719,6 +775,71 @@ fn redact_structured_value_with_safety_net(
         }
         _ => Err(Error::UnsupportedValueVariant),
     }
+}
+
+fn walk_value_for_safety_net_scan(
+    pipeline: &Pipeline,
+    session: &Session,
+    value: &Value,
+    field_path: &str,
+    locale_chain: &[crate::LocaleTag],
+    report: &mut LeakReport,
+) -> Result<()> {
+    match value {
+        Value::String(text) => {
+            if !text.is_empty() {
+                let field_report = pipeline.run_safety_nets(
+                    session,
+                    text,
+                    &Manifest::default(),
+                    DocumentKind::Structured,
+                    locale_chain,
+                    Some(field_path),
+                )?;
+                report.extend(field_report);
+            }
+        }
+        Value::Null => {}
+        Value::Bool(_) | Value::I64(_) => {
+            if let Some(scalar) = value.scalar_to_safety_net_string() {
+                let field_report = pipeline.run_safety_nets(
+                    session,
+                    &scalar,
+                    &Manifest::default(),
+                    DocumentKind::Structured,
+                    locale_chain,
+                    Some(field_path),
+                )?;
+                report.extend(field_report);
+            }
+        }
+        Value::Array(values) => {
+            for (idx, value) in values.iter().enumerate() {
+                walk_value_for_safety_net_scan(
+                    pipeline,
+                    session,
+                    value,
+                    &format!("{field_path}[{idx}]"),
+                    locale_chain,
+                    report,
+                )?;
+            }
+        }
+        Value::Object(fields) => {
+            for (key, value) in fields {
+                walk_value_for_safety_net_scan(
+                    pipeline,
+                    session,
+                    value,
+                    &format!("{field_path}.{key}"),
+                    locale_chain,
+                    report,
+                )?;
+            }
+        }
+        _ => return Err(Error::UnsupportedValueVariant),
+    }
+    Ok(())
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
