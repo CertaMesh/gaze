@@ -624,7 +624,7 @@ fn merged_vocab_for_en_us_loads_only_locale_en_buckets() {
 }
 
 #[test]
-fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
+fn adopter_default_pipeline_repro_locks_in_v0_6_closure() {
     let policy = name_email_policy(vec![LocaleTag::DeDe]);
     let fixtures = [
         (
