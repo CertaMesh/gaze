@@ -34,5 +34,10 @@
 
 pub mod adapter;
 pub mod error;
+pub mod frontend;
 
 pub use crate::error::RmcpFrontendError;
+pub use crate::frontend::{
+    FixedPrincipalResolver, PrincipalResolver, RmcpFrontend, RmcpFrontendConfig,
+    RmcpPrincipalError, RmcpTransport,
+};

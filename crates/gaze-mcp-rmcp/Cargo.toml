@@ -16,13 +16,15 @@ gaze-mcp-core = { path = "../gaze-mcp-core", version = "=0.1.0" }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt-multi-thread", "io-std", "macros"] }
-rmcp = { version = "0.2", features = ["server", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "io-std", "macros", "net", "time"] }
+tokio-util = "0.7"
+rmcp = { version = "0.2", features = ["server", "macros", "transport-io"] }
+axum = { version = "0.8", optional = true }
 
 [features]
 default = ["transport-stdio"]
 transport-stdio = []
-transport-http = []
+transport-http = ["dep:axum", "rmcp/transport-streamable-http-server", "rmcp/transport-worker"]
 
 [package.metadata.docs.rs]
 all-features = true
