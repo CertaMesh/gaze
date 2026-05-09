@@ -209,6 +209,12 @@ priority = 80
 
 [recognizers.token]
 
+# Postal collision warning (research-855 §Collision matrix conclusion):
+# `postal.de` and `postal.us` both accept naked five-digit numeric strings.
+# This is safe only when active locale chains keep DE and US projections apart.
+# Avoid broad chains such as [global, en-US, de-DE] for postal-only workflows.
+# Prefer a single active country locale, or split processing by locale_chain.
+# Loader lint warns or fails strict mode when this collision class can co-fire.
 [[recognizers]]
 id = "postal.de"
 class = "custom:postal_code"
@@ -226,6 +232,12 @@ priority = 70
 
 [recognizers.token]
 
+# Postal collision warning (research-855 §Collision matrix conclusion):
+# `postal.de` and `postal.us` both accept naked five-digit numeric strings.
+# This is safe only when active locale chains keep DE and US projections apart.
+# Avoid broad chains such as [global, en-US, de-DE] for postal-only workflows.
+# Prefer a single active country locale, or split processing by locale_chain.
+# Loader lint warns or fails strict mode when this collision class can co-fire.
 [[recognizers]]
 id = "postal.us"
 class = "custom:postal_code"
