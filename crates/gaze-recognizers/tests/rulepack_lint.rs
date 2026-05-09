@@ -44,6 +44,52 @@ pattern = '''\b\d{{5}}(-\d{{4}})?\b'''
     )
 }
 
+fn prefixed_shape_rulepack(
+    class: &str,
+    first_id: &str,
+    first_pattern: &str,
+    second_id: &str,
+    second_pattern: &str,
+    strict: bool,
+) -> String {
+    let lint = if strict {
+        "[recognizers.lint]\nstrict_locale_overlap = true\n"
+    } else {
+        ""
+    };
+    format!(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "prefixed-shape-test"
+rulepack_version = "0.6.5"
+default_locales = ["global", "de-DE", "fr-FR"]
+
+{lint}
+[[recognizers]]
+id = "{first_id}"
+class = "{class}"
+cooperates_with = ["{second_id}"]
+enabled = true
+locales = ["de-DE"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''{first_pattern}'''
+
+[[recognizers]]
+id = "{second_id}"
+class = "{class}"
+cooperates_with = ["{first_id}"]
+enabled = true
+locales = ["fr-FR"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''{second_pattern}'''
+"#
+    )
+}
+
 fn capture_rulepack_parse_logs(raw: &str) -> (Result<Rulepack, RulepackError>, Vec<String>) {
     let logs = Arc::new(Mutex::new(Vec::new()));
     let subscriber = CaptureSubscriber { logs: logs.clone() };
@@ -129,6 +175,68 @@ fn lint_strict_mode_rejects_overlap() {
             && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
             && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::EnUs]
     ));
+}
+
+#[test]
+#[serial]
+fn lint_does_not_fire_on_same_class_different_shape_pair() {
+    let raw = prefixed_shape_rulepack(
+        "custom:postal_code",
+        "postal.de",
+        r"\bDE\d{5}\b",
+        "postal.fr",
+        r"\bFR\d{5}\b",
+        false,
+    );
+    let (result, logs) = capture_rulepack_parse_logs(&raw);
+
+    result.expect("country-prefixed shapes should not warn");
+    assert!(
+        logs.iter()
+            .all(|line| !line.contains("recognizers share class with naked-shape regex")),
+        "unexpected postal collision warning in logs: {logs:?}"
+    );
+
+    let strict_raw = prefixed_shape_rulepack(
+        "custom:postal_code",
+        "postal.de",
+        r"\bDE\d{5}\b",
+        "postal.fr",
+        r"\bFR\d{5}\b",
+        true,
+    );
+    Rulepack::parse(&strict_raw).expect("strict mode should allow prefixed shapes");
+}
+
+#[test]
+#[serial]
+fn lint_does_not_fire_on_anchored_iban_shape_pair() {
+    let raw = prefixed_shape_rulepack(
+        "custom:iban",
+        "iban.de",
+        r"\bDE\d{2}[A-Z0-9]+\b",
+        "iban.fr",
+        r"\bFR\d{2}[A-Z0-9]+\b",
+        false,
+    );
+    let (result, logs) = capture_rulepack_parse_logs(&raw);
+
+    result.expect("country-prefixed IBAN shapes should not warn");
+    assert!(
+        logs.iter()
+            .all(|line| !line.contains("recognizers share class with naked-shape regex")),
+        "unexpected IBAN collision warning in logs: {logs:?}"
+    );
+
+    let strict_raw = prefixed_shape_rulepack(
+        "custom:iban",
+        "iban.de",
+        r"\bDE\d{2}[A-Z0-9]+\b",
+        "iban.fr",
+        r"\bFR\d{2}[A-Z0-9]+\b",
+        true,
+    );
+    Rulepack::parse(&strict_raw).expect("strict mode should allow prefixed IBAN shapes");
 }
 
 #[test]

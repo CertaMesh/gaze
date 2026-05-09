@@ -673,6 +673,9 @@ fn lint_locale_projection_collisions(
         let Some(first_shape) = regex_structural_shape(&first.matcher) else {
             continue;
         };
+        if !is_truly_naked_numeric(&first.matcher) {
+            continue;
+        }
         let first_projection = locale_projection(&first.locales, active_locales);
         if first_projection.is_empty() {
             continue;
@@ -680,6 +683,9 @@ fn lint_locale_projection_collisions(
 
         for second in recognizers.iter().skip(index + 1) {
             if !second.enabled || first.class != second.class {
+                continue;
+            }
+            if !is_truly_naked_numeric(&second.matcher) {
                 continue;
             }
             if regex_structural_shape(&second.matcher).as_ref() != Some(&first_shape) {
@@ -763,6 +769,28 @@ fn regex_structural_shape(matcher: &RawMatch) -> Option<RegexStructuralShape> {
         minimum_match_len,
         character_class: RegexCharacterClass::Digit,
     })
+}
+
+fn is_truly_naked_numeric(matcher: &RawMatch) -> bool {
+    let RawMatch::Regex {
+        pattern: Some(pattern),
+        ..
+    } = matcher
+    else {
+        return false;
+    };
+
+    let mut chars = pattern.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            chars.next();
+            continue;
+        }
+        if ch.is_ascii_alphabetic() {
+            return false;
+        }
+    }
+    true
 }
 
 fn has_unescaped_line_anchor(pattern: &str) -> bool {
