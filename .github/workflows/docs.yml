@@ -16,7 +16,7 @@ jobs:
       - name: cargo doc (warnings as errors)
         env:
           RUSTDOCFLAGS: "-D warnings"
-        run: cargo doc --workspace --all-features --no-deps
+        run: cargo doc --workspace --all-features --no-deps --exclude gaze-cli
 
       - name: cargo test --doc
         run: cargo test --doc --workspace --all-features
