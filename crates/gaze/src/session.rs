@@ -315,6 +315,8 @@ impl Session {
         &self.audit_session_id
     }
 
+    // Original byte spans are preserved by recognizer normalizers per
+    // research-855 §Rulepack > Normalization (axis-2 invariant).
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)
