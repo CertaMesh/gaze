@@ -241,7 +241,7 @@ mod tests {
     /// Regression: adopters who follow `labels.example.json` ship labels.json
     /// keyed by full BIO tags (`B-PER`, `I-PER`, …). Until v0.3.1 the
     /// post-process only looked up the stripped entity (`PER`), so every
-    /// detection silently dropped — reported by Markus (lord-eagle) against
+    /// detection silently dropped — reported by an adopter against
     /// v0.3.0 aarch64-apple-darwin. Both shapes must emit detections.
     #[test]
     fn merge_bio_accepts_bio_prefixed_label_keys() {
