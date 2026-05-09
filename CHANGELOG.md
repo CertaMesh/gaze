@@ -140,7 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to the dotted form. No detection or token-shape change.
 - **v0.6 adopter migration for GH#24:** v0.5.1 adopters can load
   `["core", "locale-de"]` under `[locale].active = ["de-DE"]` to tokenize the
-  Markus prompt/header/footer leak shapes without changing existing custom
+  prompt/header/footer leak shapes reported by adopters without changing existing custom
   recognizers. Mixed German/English templates can load
   `["core", "locale-de", "locale-en"]`; per-tenant cue additions should live in
   custom locale/rulepack data.
@@ -474,7 +474,7 @@ for the same list with its design notes.
 ### Deferred to v0.4.5
 
 - `--session` audit filtering, deferred from v0.4.4 until the session identifier storage type design is locked.
-- DOB-scoped Date recognizer, per the S4 memo and only if Markus or another adopter provides a concrete DOB leak fixture.
+- DOB-scoped Date recognizer, per the S4 memo and only if an adopter provides a concrete DOB leak fixture.
 - S3b national phone recognizers for DE and US, deferred from v0.4.4 due to scope budget.
 - ClassMapOverrideSafety coverage for other class-rule paths.
 - Audit retention and auto-purge, now unblocked by the v0.4.4 `created_at` foundation.
@@ -548,7 +548,7 @@ for the same list with its design notes.
 
 ### Fixed
 
-- Markus adopter dogfood gap closed: locale-aware email-header recognizer (`Von:` / `An:` plus English defaults) tokenizes header display names and restores them round-trip. See GH #24.
+- Adopter-reported gap closed: locale-aware email-header recognizer (`Von:` / `An:` plus English defaults) tokenizes header display names and restores them round-trip. See GH #24.
 - `[ner] threshold` knob un-deferred from v0.4.2 so adopters can tune the NER confidence floor for prompt-preamble PII.
 - Template lowering now preserves regex quantifiers such as `{0,3}` and keeps locale-header alternation non-capturing, so capture-group span narrowing remains stable.
 
@@ -652,7 +652,7 @@ Same contents as rc.1 — only the release workflow matrix changed
 (x86_64-apple-darwin dropped). rc.1 was tagged but its workflow never
 published a release: the `macos-13` Intel runner pool could not
 allocate a runner for the x86_64 build, leaving the release job blocked
-on an unmet dependency. Markus is on Apple Silicon, so dropping x86_64
+on an unmet dependency. Adopter target is Apple Silicon, so dropping x86_64
 for rc unblocks the adapter retarget immediately; Intel + Linux return
 in a later rc when runner strategy is worked out.
 
@@ -721,7 +721,7 @@ parallel — the CLI protocol is the stable seam.
 
 - **Linux x86_64 binary not built.** The `ort` (ONNX runtime)
   dependency needs bundled system libraries; folded into a later rc
-  to avoid blocking Markus on the adapter retarget.
+  to avoid blocking adopters on the adapter retarget.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 

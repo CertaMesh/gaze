@@ -1,154 +1,87 @@
-# gaze
+# gaze-pii
 
-Core reversible PII pseudonymization library for Gaze.
+**Reversible PII pseudonymization for agentic LLM workflows.**
 
-This crate owns the contracts that must remain stable for adopters:
-`Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, `LocaleChain`, the
-rulepack schema, token shapes, restore, and audit logging. It deliberately
-does not depend on `gaze-recognizers`; concrete recognizer backends live in a
-separate crate and plug into the core `Recognizer` surface.
-
-## Cargo
-
-```toml
-[dependencies]
-gaze-pii = "0.6.4"
-```
+`gaze-pii` is the runtime crate for [Gaze](https://github.com/EmpireTwo/gaze). It owns the contracts that must stay stable for adopters: `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
 
 The crate is published as `gaze-pii`; the import path remains `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
-When developing inside the workspace, use the path dependency:
+## Install
 
 ```toml
 [dependencies]
-gaze = { path = "../gaze" }
+gaze-pii = "0.6"
+gaze-assembly = "0.6"
+gaze-recognizers = "0.6"
 ```
 
-## Public entry points
+`gaze-assembly` provides `CorePipelineConfig` — bundled defaults so you don't hand-wire the `core` rulepack (emails, names, locations, organizations, locale cues).
 
-The public surface is re-exported from [`src/lib.rs`](src/lib.rs).
+## Minimal example
+
+```rust
+use gaze::{CleanDocument, Scope, Session};
+use gaze_assembly::CorePipelineConfig;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let core = CorePipelineConfig::new().build()?;
+    let session = Session::new(Scope::Conversation("conv-42".into()))?;
+
+    let CleanDocument::Text(clean) = core.redact_text(
+        &session,
+        "Email alice@example.invalid about ORD-789012.",
+    )? else { unreachable!() };
+    // "Email <{session_hex}:Email_1> about ORD-789012."
+
+    // Persist `session.export()?` server-side, encrypted, keyed to the
+    // conversation. Send only `clean` to the LLM.
+    let _snapshot = session.export()?;
+
+    Ok(())
+}
+```
+
+For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/getting-started.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/getting-started.md).
+
+## What this crate owns
 
 | Area | Types |
 |------|-------|
 | Pipeline execution | `Pipeline`, `PipelineBuilder`, `Error`, `Result` |
 | Sessions and restore | `Session`, `Scope`, `SensitiveSnapshot` |
-| Policy model | `Policy`, `PolicyError`, `DetectorSpec`, `DetectorKind`, `RuleSpec`, `RulepackPolicy`, `NerPolicy`, `SessionPolicy`, `SessionScope`, `DEFAULT_NER_THRESHOLD` |
-| Recognizer API | `Recognizer`, `RecognizerRegistry`, `RecognizerRegistryBuilder`, `DetectContext`, `Candidate`, `Validator`, `ValidationResult`, `Canonicalizer` |
+| Policy model | `Policy`, `PolicyError`, `RuleSpec`, `RulepackPolicy`, `NerPolicy`, `SessionPolicy`, `SessionScope` |
+| Recognizer API | `Recognizer`, `RecognizerRegistry`, `DetectContext`, `Candidate`, `Validator`, `Canonicalizer` |
 | Locale chain | `LocaleChain`, `LocaleTag`, `LocaleError` |
-| Rulepacks | `Rulepack`, `RulepackSource`, `RulepackError`, `RecognizerSpec`, `RawMatch`, `ContextSpec`, `TokenSpec`, `LocaleData`, `recognizer_composition_validator` |
-| Rules and classes | `PiiClass`, `BUILTIN_CLASS_NAMES`, `Action`, `ClassRule`, `ColumnRule`, `DefaultRule`, `Rule`, `RuleContext` |
+| Rulepacks | `Rulepack`, `RulepackSource`, `RulepackError`, `RecognizerSpec`, `TokenSpec`, `LocaleData` |
+| Rules and classes | `PiiClass`, `Action`, `ClassRule`, `ColumnRule`, `DefaultRule`, `Rule` |
 | Documents | `RawDocument`, `CleanDocument`, `Value` |
-| Context dictionaries | `Context`, `TypedContext`, `ContextDictionary`, `ContextFieldsRef`, `DictionaryBundle`, `DictionaryEntry`, `DictionarySource`, `RulepackDict` |
-| Audit logging | `RedactionLogger`, `RedactionEntry` (carries `created_at` epoch ms since v0.4.4), `ConflictTier`, `DocumentKind`; concrete SQLite sinks live in `gaze-audit` |
-| Sandbox contracts | `Sandbox`, `SandboxPlan`, `ExecPolicy`, `UntrustedExecRequest`, `ValidatedExecRequest`, `SandboxError` |
+| Audit logging | `RedactionLogger`, `RedactionEntry`, `ConflictTier`, `DocumentKind` (concrete SQLite sink: `gaze-audit`) |
 
-## Minimal library flow
+The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 
-```rust
-use gaze::{Action, ClassRule, PiiClass, Pipeline, RawDocument, Scope, Session};
-use gaze_recognizers::RegexDetector;
+## What this crate does not own
 
-let pipeline = Pipeline::builder()
-    .recognizer(RegexDetector::emails()?)
-    .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-    .build()?;
+- **Concrete recognizers.** Regex/dictionary/NER backends and bundled rulepacks live in `gaze-recognizers`.
+- **Policy-to-pipeline assembly.** `CorePipelineConfig` and `build_pipeline` live in `gaze-assembly`.
+- **SQLite audit sink.** `SqliteLogger` and the read-side audit query API live in `gaze-audit`. `gaze-pii` carries no `rusqlite` dependency in any feature graph.
+- **CLI.** The `gaze` binary lives in `gaze-cli`.
 
-let session = Session::new(Scope::Conversation("example-session".to_string()))?;
-let clean = pipeline.redact(
-    &session,
-    RawDocument::Text("alice@example.invalid".to_string()),
-)?;
-```
+## Guarantees
 
-The example uses `gaze-recognizers` for a built-in recognizer. The core crate
-only requires an implementation of `gaze::Recognizer` or the legacy
-`gaze::Detector` adapter accepted by `PipelineBuilder::detector`.
+- **Fail closed** on unknown rulepack validators or normalizers — typed errors at load, no silent degradation.
+- **Reversible by design.** Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
+- **Deterministic detection** as the floor. NER and the OpenAI-filter SafetyNet are opt-in observers and cannot mutate the manifest.
+- **Auditable.** Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
 
-## Policy and sessions
+Full project north star + five-axis contract: [AGENTS.md](https://github.com/EmpireTwo/gaze/blob/main/AGENTS.md#project-north-star).
 
-`Policy::load_for_cli(path)` parses `policy.toml` with fail-closed validation.
-`Session::from_policy(policy)` and `Session::from_policy_with_ttl_override`
-construct the corresponding `Scope`.
+## Features
 
-The session owns the reversible mapping between raw values and emitted tokens.
-Use `Session::export()` to create a signed `SensitiveSnapshot`, and
-`Session::import(snapshot)` to restore it later. Ephemeral sessions cannot be
-exported.
+| Feature | Default | Effect |
+|---------|---------|--------|
+| `bundled-recognizers` | on | Re-exports `gaze-recognizers` so adopters can register built-in detectors without an extra dependency. Disable for a recognizer-trait-only build. |
+| `safety-net` | off | Compiles the Pass-3 SafetyNet observer surface. Activation also requires `gaze-cli`'s `safety-net-openai` feature for the OpenAI-filter subprocess device. |
 
-## Pipeline execution
+## License
 
-Use `Pipeline::builder()` to register recognizers, rules, and optional
-redaction loggers:
-
-```rust
-let pipeline = Pipeline::builder()
-    .recognizer(my_recognizer)
-    .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-    .redaction_logger(my_logger)
-    .build()?;
-```
-
-Execution entry points:
-
-- `Pipeline::redact(session, raw)` uses the default `global` locale chain.
-- `Pipeline::redact_with_context(session, raw, locale_chain)` adds locale
-  selection.
-- `Pipeline::redact_with_detect_context(session, raw, locale_chain,
-  dictionaries)` adds tenant dictionaries and structured
-  context fields.
-
-## LocaleChain
-
-`LocaleChain` resolves recognizer eligibility from ordered locale tags. The
-CLI path merges CLI, policy, rulepack default, and system default in that
-precedence order. See [docs/architecture/locale-chain.md](../../docs/architecture/locale-chain.md).
-
-## RecognizerRegistry
-
-`RecognizerRegistry` runs recognizers through `DetectContext` and resolves
-candidate conflicts before redaction. Implement `Recognizer` directly when a
-backend needs locale eligibility, scores, priorities, token families, or
-context dictionaries. Use `PipelineBuilder::recognizer` for the modern path.
-
-Use `PipelineBuilder::detector` only for simple detector implementations that
-emit `Detection` values without the full recognizer metadata.
-
-## Validators and bundled rulepacks (v0.4.2+)
-
-Validators and normalizers are closed enums declared in `gaze-recognizers`. The
-core crate parses validator names from rulepack TOML and dispatches into those
-enums; unknown names fail closed at rulepack load time with
-`RulepackError::UnsupportedValidator` or `RulepackError::UnsupportedNormalizer`.
-
-The rulepack schema currently accepts:
-
-- validators: `email_rfc`, `e164_phone` (gated behind `phone-parser` feature),
-  `luhn`, `iban_mod97`
-- normalizers: `email_canonical`, `iban_canonical`
-
-The shipped bundled rulepacks are `core` (always-on email + email-header
-recognizers) and `core-extended` (opt-in shape-only phone, IPv4/IPv6, postal
-codes plus validator-backed IBAN and credit card).
-
-## Audit schema v2 (v0.4.4)
-
-`RedactionEntry` carries a `created_at: i64` epoch-millisecond timestamp.
-`SqliteLogger` opens with an `ALTER TABLE` migration so legacy v0.4.3 audit
-databases without `created_at` remain queryable through a NULL default. Time
-filtering is exposed through the CLI; see `crates/gaze-cli/README.md`.
-
-## What belongs here
-
-Put code in this crate when it is part of the reversible core contract:
-
-- token grammar and restore
-- session scope and snapshot validation
-- policy parsing and typed policy errors
-- recognizer traits and registry behavior
-- locale matching
-- rulepack schema and validation
-- redaction-log contracts
-- sandbox contracts
-
-Concrete built-in backends belong in `gaze-recognizers`, and policy-to-pipeline
-assembly that imports those backends belongs in `gaze-assembly`.
+Dual-licensed under either of [Apache-2.0](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-MIT), at your option.
