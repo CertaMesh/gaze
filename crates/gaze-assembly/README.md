@@ -1,6 +1,12 @@
 # gaze-assembly
 
-Policy-to-pipeline assembly for Gaze.
+[![Crates.io](https://img.shields.io/crates/v/gaze-assembly.svg)](https://crates.io/crates/gaze-assembly)
+[![docs.rs](https://docs.rs/gaze-assembly/badge.svg)](https://docs.rs/gaze-assembly)
+[![License](https://img.shields.io/crates/l/gaze-assembly.svg)](https://github.com/EmpireTwo/gaze#license)
+
+Policy-to-pipeline assembly for Gaze
+
+Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 This crate joins the core `gaze` policy model with the built-in recognizers
 from `gaze-recognizers`. It exists to keep the dependency direction clean:
@@ -16,9 +22,9 @@ adopter, or every consumer would need to duplicate policy assembly logic.
 
 ```toml
 [dependencies]
-gaze-pii = "0.6.4"
-gaze-assembly = "0.6.4"
-gaze-recognizers = "0.6.4"
+gaze-pii = "0.6.5"
+gaze-assembly = "0.6.5"
+gaze-recognizers = "0.6.5"
 serde_json = "1"
 ```
 

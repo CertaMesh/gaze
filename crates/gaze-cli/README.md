@@ -1,6 +1,12 @@
 # gaze-cli
 
-Command-line interface for Gaze.
+[![Crates.io](https://img.shields.io/crates/v/gaze-cli.svg)](https://crates.io/crates/gaze-cli)
+[![docs.rs](https://docs.rs/gaze-cli/badge.svg)](https://docs.rs/gaze-cli)
+[![License](https://img.shields.io/crates/l/gaze-cli.svg)](https://github.com/EmpireTwo/gaze#license)
+
+Gaze command-line interface
+
+Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 This crate publishes the `gaze` binary. It is the process boundary used by
 shell integrations and language adapters that should not link the Rust library

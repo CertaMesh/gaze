@@ -1,6 +1,12 @@
 # gaze-pii
 
-**Reversible PII pseudonymization for agentic LLM workflows.**
+[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii)
+[![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii)
+[![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license)
+
+Reversible PII pseudonymization runtime for agentic workflows
+
+Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 `gaze-pii` is the runtime crate for [Gaze](https://github.com/EmpireTwo/gaze). It owns the contracts that must stay stable for adopters: `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
 
