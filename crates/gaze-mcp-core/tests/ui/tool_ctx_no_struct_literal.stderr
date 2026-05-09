@@ -1,0 +1,23 @@
+error[E0624]: associated function `new` is private
+  --> tests/ui/tool_ctx_no_struct_literal.rs:13:35
+   |
+13 |     let _session = SessionHandle::new("audit-id");
+   |                                   ^^^ private associated function
+   |
+  ::: src/ctx.rs
+   |
+   |     pub(crate) fn new(audit_session_id: &'a str) -> Self {
+   |     ---------------------------------------------------- private associated function defined here
+
+error[E0639]: cannot create non-exhaustive struct using struct expression
+  --> tests/ui/tool_ctx_no_struct_literal.rs:14:16
+   |
+14 |       let _ctx = ToolCtx {
+   |  ________________^
+15 | |         session: _session,
+16 | |         redacted_args: Value::Null,
+17 | |         call_id: Ulid::new(),
+...  |
+20 | |         _life: PhantomData,
+21 | |     };
+   | |_____^

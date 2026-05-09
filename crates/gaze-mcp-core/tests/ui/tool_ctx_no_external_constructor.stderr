@@ -1,0 +1,27 @@
+error[E0624]: associated function `new` is private
+  --> tests/ui/tool_ctx_no_external_constructor.rs:11:35
+   |
+11 |     let _session = SessionHandle::new("audit-id");
+   |                                   ^^^ private associated function
+   |
+  ::: src/ctx.rs
+   |
+   |     pub(crate) fn new(audit_session_id: &'a str) -> Self {
+   |     ---------------------------------------------------- private associated function defined here
+
+error[E0624]: associated function `new` is private
+  --> tests/ui/tool_ctx_no_external_constructor.rs:12:25
+   |
+12 |       let _ctx = ToolCtx::new(_session, Value::Null, Ulid::new(), "tool", "principal");
+   |                           ^^^ private associated function
+   |
+  ::: src/ctx.rs
+   |
+   | /     pub(crate) fn new(
+   | |         session: SessionHandle<'a>,
+   | |         redacted_args: serde_json::Value,
+   | |         call_id: Ulid,
+   | |         tool_name: &'a str,
+   | |         principal_id: &'a str,
+   | |     ) -> Self {
+   | |_____________- private associated function defined here
