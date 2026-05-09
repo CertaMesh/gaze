@@ -827,7 +827,6 @@ fn generalize_token(class: &PiiClass) -> String {
         PiiClass::Location => "[LOCATION]".to_string(),
         PiiClass::Organization => "[ORGANIZATION]".to_string(),
         PiiClass::Custom(name) => format!("[{}]", name.to_ascii_uppercase()),
-        _ => "[PII]".to_string(),
     }
 }
 
@@ -879,6 +878,12 @@ mod tests {
             self.entries.lock().unwrap().push(entry.clone());
             Ok(())
         }
+    }
+
+    #[test]
+    fn generalize_token_custom_class_preserves_identity() {
+        // Regression guard: custom classes must not collapse to an indistinct [PII].
+        assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
     }
 
     #[test]

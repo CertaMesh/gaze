@@ -499,7 +499,6 @@ fn pii_class_to_db(class: &PiiClass) -> String {
         PiiClass::Location => "location".to_string(),
         PiiClass::Organization => "organization".to_string(),
         PiiClass::Custom(name) => format!("custom:{name}"),
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {class:?}"),
     }
 }
 

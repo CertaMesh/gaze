@@ -34,7 +34,7 @@ pub(crate) fn build_pipeline_from_policy(
     context: Option<&TypedContext>,
     locale_chain: &LocaleChain,
     ner_threshold: f32,
-) -> GazeResult<Pipeline> {
+) -> std::result::Result<Pipeline, CliError> {
     let empty_context = TypedContext {
         dictionaries: std::collections::HashMap::new(),
         class_map: std::collections::HashMap::new(),
@@ -48,12 +48,15 @@ pub(crate) fn build_pipeline_from_policy(
         Some(ner_threshold),
     )
     .map_err(|err| match err {
-        gaze_assembly::BuildError::NoRecognizers => gaze::Error::Policy(PolicyError::NoDetectors),
-        gaze_assembly::BuildError::Policy(err) => gaze::Error::Policy(err),
-        gaze_assembly::BuildError::Rulepack(err) => gaze::Error::Rulepack(err),
-        gaze_assembly::BuildError::Pipeline(err) => err,
+        gaze_assembly::BuildError::NoRecognizers => map_policy_error(PolicyError::NoDetectors),
+        gaze_assembly::BuildError::Policy(err) => map_policy_error(err),
+        gaze_assembly::BuildError::Rulepack(err) => map_pipeline_error(gaze::Error::Rulepack(err)),
+        gaze_assembly::BuildError::Pipeline(err) => map_pipeline_error(err),
         gaze_assembly::BuildError::UnknownLocaleBucket { bucket, .. } => {
-            gaze::Error::Policy(PolicyError::UnknownLocaleBucket { name: bucket })
+            map_policy_error(PolicyError::UnknownLocaleBucket { name: bucket })
+        }
+        gaze_assembly::BuildError::Recognizer(err) => {
+            CliError::PolicyConfigDetail(format!("recognizer error: {err}"))
         }
     })
 }

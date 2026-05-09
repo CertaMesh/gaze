@@ -216,7 +216,6 @@ fn class_priority(class: &PiiClass) -> u8 {
         PiiClass::Organization => 70,
         PiiClass::Location => 60,
         PiiClass::Custom(_) => 50,
-        _ => 50,
     }
 }
 

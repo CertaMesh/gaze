@@ -129,12 +129,6 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 - **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.
 - **Contract surface:** `Pipeline`, `Session`, `Policy`, rulepack schema, and token shape are stable across the v0.6 line. SafetyNet contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
-## North star
-
-> Zero PII leaks between the agent and the data owner — ever. Any byte of PII that reaches an LLM outside the manifest contract is a critical defect.
-
-Five axes are evaluated on every PR: reliability, reversibility, agentic-first design, trust (auditable + deterministic), and adopter ergonomics. Correctness axes always beat performance. Full text: [AGENTS.md](AGENTS.md#project-north-star).
-
 ## Limits
 
 - Bundled detection is strongest for emails, names, locations, organizations, IBANs, credit cards, IPv4/IPv6, and DACH/EN postal + phone shapes. Tenant-specific PII needs a custom recognizer.

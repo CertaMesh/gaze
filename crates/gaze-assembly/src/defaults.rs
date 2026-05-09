@@ -136,6 +136,8 @@ fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
         .flat_map(|rulepack| rulepack.recognizers.iter())
         .filter(|recognizer| recognizer.enabled)
     {
+        // note: MED-3 investigated 2026-05-08; loaded rulepack recognizer classes,
+        // including core-extended custom classes, receive explicit Tokenize rules here.
         if seen.insert(recognizer.class.clone()) {
             rules.push(RuleSpec::Class {
                 class: recognizer.class.clone(),

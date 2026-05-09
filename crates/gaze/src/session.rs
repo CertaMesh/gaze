@@ -240,15 +240,15 @@ impl Session {
     pub fn format_preserving_fake(&self, class: &PiiClass, raw: &str) -> Result<String> {
         self.intern_mapping(None, class, raw, |index| match class {
             PiiClass::Email => format!("email{index}.{}@gaze-fake.invalid", self.session_hex()),
-            // Lowercasing preserves the dedicated `custom:` sentinel namespace
-            // for format-preserving fakes, so restore can detect them too.
-            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
-            _ => format!(
+            PiiClass::Name | PiiClass::Location | PiiClass::Organization => format!(
                 "{}:{}_{}",
                 self.session_hex(),
                 class.class_name().to_ascii_lowercase(),
                 index
             ),
+            // Lowercasing preserves the dedicated `custom:` sentinel namespace
+            // for format-preserving fakes, so restore can detect them too.
+            PiiClass::Custom(name) => format!("{}:custom:{name}_{index}", self.session_hex()),
         })
     }
 
@@ -288,7 +288,7 @@ impl Session {
     ///
     /// Intended for restore-side callers that need to build an exact-literal
     /// alternation regex over the session map (Pass 1 of the two-pass restore
-    /// strategy documented in `ROADMAP.md`): replacing token-shaped strings via
+    /// strategy): replacing token-shaped strings via
     /// a class-shape regex alone is unsafe because it either (a) straddles
     /// word boundaries into adjacent text, or (b) misses lowercase
     /// FormatPreserve shapes like `location_1`. Feeding these exact strings
@@ -315,6 +315,8 @@ impl Session {
         &self.audit_session_id
     }
 
+    // Original byte spans are preserved by recognizer normalizers per
+    // research-855 §Rulepack > Normalization (axis-2 invariant).
     pub fn restore_strict(&self, token: &str) -> Result<String> {
         self.value_by_token
             .get(token)

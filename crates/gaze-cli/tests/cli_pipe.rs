@@ -2670,7 +2670,11 @@ fn rulepack_rejects_unknown_validator_kind() {
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(
         parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
+        json!({
+            "error": "PolicyConfig",
+            "exit": 2,
+            "detail": "recognizer error: unsupported validator: iban_modxx"
+        })
     );
 }
 
@@ -2689,7 +2693,11 @@ fn rulepack_rejects_unknown_normalizer_kind() {
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(
         parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
+        json!({
+            "error": "PolicyConfig",
+            "exit": 2,
+            "detail": "recognizer error: unsupported normalizer: iban_canonicalx"
+        })
     );
 }
 
@@ -2708,7 +2716,11 @@ fn rulepack_rejects_typo_validator_kind() {
     assert_eq!(out.status.code(), Some(2));
     assert_eq!(
         parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
+        json!({
+            "error": "PolicyConfig",
+            "exit": 2,
+            "detail": "recognizer error: unsupported validator: email_rfx"
+        })
     );
 }
 

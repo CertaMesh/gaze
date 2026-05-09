@@ -22,7 +22,8 @@ pub trait Detector: Send + Sync {
 /// `gaze-recognizers` and surfaces as either a `Custom("phone")` class or a class
 /// defined by a rulepack.
 ///
-/// `PiiClass` is `#[non_exhaustive]`. Always include a wildcard arm:
+/// `PiiClass` is exhaustive. Match every variant explicitly so new built-in classes
+/// force call sites to review their handling at compile time:
 ///
 /// ```rust
 /// use gaze_types::PiiClass;
@@ -34,7 +35,6 @@ pub trait Detector: Send + Sync {
 ///         PiiClass::Location     => "location",
 ///         PiiClass::Organization => "org",
 ///         PiiClass::Custom(_)    => "pii",
-///         _                      => "pii",
 ///     }
 /// }
 /// ```
@@ -42,7 +42,6 @@ pub trait Detector: Send + Sync {
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
 /// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[non_exhaustive]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -108,7 +107,7 @@ impl PiiClass {
     pub fn as_custom_name(&self) -> Option<&str> {
         match self {
             Self::Custom(name) => Some(name.as_str()),
-            _ => None,
+            Self::Email | Self::Name | Self::Location | Self::Organization => None,
         }
     }
 
@@ -379,29 +378,6 @@ pub enum LeakKind {
         /// Class reported by the safety net.
         safety_net_class: PiiClass,
     },
-}
-
-/// Stable tag for leak-kind aggregation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[non_exhaustive]
-pub enum LeakKindTag {
-    /// `LeakKind::Uncovered`.
-    Uncovered,
-    /// `LeakKind::PartialBleed`.
-    PartialBleed,
-    /// `LeakKind::ClassMismatch`.
-    ClassMismatch,
-}
-
-impl LeakKind {
-    /// Returns the stable aggregation tag.
-    pub fn tag(&self) -> LeakKindTag {
-        match self {
-            Self::Uncovered => LeakKindTag::Uncovered,
-            Self::PartialBleed { .. } => LeakKindTag::PartialBleed,
-            Self::ClassMismatch { .. } => LeakKindTag::ClassMismatch,
-        }
-    }
 }
 
 /// Bytes-free telemetry emitted by safety-net orchestration.

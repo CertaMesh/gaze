@@ -2,8 +2,7 @@
 
 //! Gaze CLI — pipe-mode `clean` / `restore` for LLM-facing integrations.
 //!
-//! See `ROADMAP.md` for consolidated roadmap context and host-side
-//! integration history.
+//! See the changelog for shipped integration history.
 
 use std::process::ExitCode;
 

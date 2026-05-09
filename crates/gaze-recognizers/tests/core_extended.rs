@@ -259,11 +259,17 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         // unambiguously non-routable.
         ("Phone 0221 0000 0000", "0221 0000 0000"),
         ("Phone 0711 0000 0000", "0711 0000 0000"),
+        ("Phone 0201 0000 0000", "0201 0000 0000"),
+        ("Phone 0421 0000 0000", "0421 0000 0000"),
+        ("Phone 0202 0000 0000", "0202 0000 0000"),
+        ("Phone 0251 0000 0000", "0251 0000 0000"),
+        ("Phone 0521 0000 0000", "0521 0000 0000"),
         ("Phone 0211 0000 0000", "0211 0000 0000"),
         ("Phone 0911 0000 0000", "0911 0000 0000"),
         ("Phone +49 221 0000 000", "+49 221 0000 000"),
         ("Phone 0341 0000 0000", "0341 0000 0000"),
         ("Phone 02202 0000 000", "02202 0000 000"),
+        ("Phone 0911 1234", "0911 1234"),
     ] {
         assert_eq!(
             detect_recognizer(&rulepack, "phone.national.de", input, LocaleTag::DeDe),
@@ -475,7 +481,11 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         "Build at 2026-04-30 0040 12345",
         "Customer_4915550112233",
         "Order_4915550112233",
-        "0911 1234",
+        "Order_15551234567",
+        "Steuer-ID 12345678901",
+        "Steuer-ID 12 345 678 901",
+        "IBAN fragment 3704 0044 0532",
+        "Postal code 10115",
         "IBAN DE89 3704 0044 0532 0130 00",
     ] {
         assert!(
@@ -917,6 +927,10 @@ fn every_phase1_recognizer_round_trips_through_restore() {
         ("Host 192.168.1.1", LocaleTag::EnUs),
         ("Loopback ::1", LocaleTag::EnUs),
         ("Host 2001:db8::1", LocaleTag::EnUs),
+        (
+            "Wallet 0x52908400098527886E0F7030069857D2E4169EE7",
+            LocaleTag::EnUs,
+        ),
         ("Berlin 10115", LocaleTag::DeDe),
         ("ZIP 94103-1234", LocaleTag::EnUs),
     ] {

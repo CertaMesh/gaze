@@ -6,7 +6,8 @@ use gaze::{
     SessionPolicy,
 };
 use gaze_recognizers::{
-    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
+    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RecognizerError,
+    RegexDetector,
 };
 use std::sync::{Arc, Mutex};
 
@@ -331,6 +332,20 @@ fn unknown_bundled_rulepack_fails_closed() {
     ));
 }
 
+#[test]
+fn recognizer_error_passthrough_preserves_non_matcher_variant() {
+    let err = BuildError::from(RecognizerError::UnsupportedValidator {
+        kind: "future_model_loader".to_string(),
+    });
+
+    match err {
+        BuildError::Recognizer(RecognizerError::UnsupportedValidator { kind }) => {
+            assert_eq!(kind, "future_model_loader");
+        }
+        other => panic!("expected recognizer passthrough, got {other:?}"),
+    }
+}
+
 #[derive(Clone, Default)]
 struct MemoryLogger {
     entries: Arc<Mutex<Vec<RedactionEntry>>>,
@@ -609,7 +624,7 @@ fn merged_vocab_for_en_us_loads_only_locale_en_buckets() {
 }
 
 #[test]
-fn markus_default_pipeline_repro_locks_in_v0_6_closure() {
+fn adopter_default_pipeline_repro_locks_in_v0_6_closure() {
     let policy = name_email_policy(vec![LocaleTag::DeDe]);
     let fixtures = [
         (

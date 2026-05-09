@@ -183,6 +183,8 @@ pub enum RulepackError {
     UnsupportedValidator { kind: String },
     #[error("unsupported normalizer kind: {kind}")]
     UnsupportedNormalizer { kind: String },
+    #[error("unsupported rule spec variant: {variant}")]
+    UnsupportedRuleSpec { variant: String },
     #[error("duplicate recognizer id '{id}' in rulepacks '{first_pack}' and '{second_pack}'")]
     DuplicateId {
         id: String,
@@ -210,6 +212,14 @@ pub enum RulepackError {
         recognizer_a: String,
         recognizer_b: String,
     },
+    #[error(
+        "recognizers {recognizer_ids:?} share class {class:?} with equivalent regex shape and overlapping locale projection {locale_overlap:?}"
+    )]
+    ConflictingLocaleProjection {
+        class: PiiClass,
+        recognizer_ids: Vec<String>,
+        locale_overlap: Vec<LocaleTag>,
+    },
 }
 
 impl Rulepack {
@@ -224,8 +234,9 @@ impl Rulepack {
     }
 
     pub fn parse(raw: &str) -> Result<Rulepack, RulepackError> {
-        let raw: RawRulepack = toml::from_str(raw).map_err(RulepackError::Toml)?;
-        raw.try_into()
+        let (raw, lint) = extract_recognizer_lint_config(raw);
+        let raw: RawRulepack = toml::from_str(&raw).map_err(RulepackError::Toml)?;
+        RawRulepackWithLint { raw, lint }.try_into()
     }
 
     pub fn activated_classes(&self) -> BTreeSet<PiiClass> {
@@ -249,6 +260,17 @@ struct RawRulepack {
     locale: Option<RawLocaleData>,
     #[serde(default)]
     recognizers: Vec<RawRecognizerSpec>,
+}
+
+#[derive(Debug, Default)]
+struct RawRecognizerLintConfig {
+    strict_locale_overlap: bool,
+}
+
+#[derive(Debug)]
+struct RawRulepackWithLint {
+    raw: RawRulepack,
+    lint: RawRecognizerLintConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -347,6 +369,19 @@ impl TryFrom<RawRulepack> for Rulepack {
     type Error = RulepackError;
 
     fn try_from(raw: RawRulepack) -> Result<Self, Self::Error> {
+        RawRulepackWithLint {
+            raw,
+            lint: RawRecognizerLintConfig::default(),
+        }
+        .try_into()
+    }
+}
+
+impl TryFrom<RawRulepackWithLint> for Rulepack {
+    type Error = RulepackError;
+
+    fn try_from(raw_with_lint: RawRulepackWithLint) -> Result<Self, Self::Error> {
+        let raw = raw_with_lint.raw;
         if !raw.schema_version.starts_with(SUPPORTED_SCHEMA_MAJOR_MINOR) {
             return Err(RulepackError::SchemaVersion {
                 found: raw.schema_version,
@@ -360,7 +395,7 @@ impl TryFrom<RawRulepack> for Rulepack {
             .into_iter()
             .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
-        recognizer_composition_validator(&recognizers)?;
+        validate_rulepack_recognizers(&recognizers, &default_locales, &raw_with_lint.lint)?;
         let locale = raw.locale.map(LocaleData::from);
         reject_anchored_match_ellipsis_cues(&recognizers, locale.as_ref())?;
 
@@ -373,6 +408,35 @@ impl TryFrom<RawRulepack> for Rulepack {
             recognizers,
         })
     }
+}
+
+fn extract_recognizer_lint_config(raw: &str) -> (String, RawRecognizerLintConfig) {
+    let mut sanitized = String::with_capacity(raw.len());
+    let mut lint = RawRecognizerLintConfig::default();
+    let mut in_lint = false;
+
+    for line in raw.lines() {
+        let trimmed = line.trim();
+        if trimmed == "[recognizers.lint]" {
+            in_lint = true;
+            continue;
+        }
+        if in_lint && trimmed.starts_with('[') {
+            in_lint = false;
+        }
+        if in_lint {
+            if let Some((key, value)) = trimmed.split_once('=') {
+                if key.trim() == "strict_locale_overlap" {
+                    lint.strict_locale_overlap = value.trim().eq_ignore_ascii_case("true");
+                }
+            }
+            continue;
+        }
+        sanitized.push_str(line);
+        sanitized.push('\n');
+    }
+
+    (sanitized, lint)
 }
 
 impl From<RawLocaleData> for LocaleData {
@@ -584,6 +648,218 @@ pub fn recognizer_composition_validator(
         }
     }
     Ok(())
+}
+
+fn validate_rulepack_recognizers(
+    recognizers: &[RecognizerSpec],
+    active_locales: &[LocaleTag],
+    lint: &RawRecognizerLintConfig,
+) -> Result<(), RulepackError> {
+    recognizer_composition_validator(recognizers)?;
+    lint_locale_projection_collisions(recognizers, active_locales, lint)?;
+    lint_global_naked_patterns(recognizers);
+    Ok(())
+}
+
+fn lint_locale_projection_collisions(
+    recognizers: &[RecognizerSpec],
+    active_locales: &[LocaleTag],
+    lint: &RawRecognizerLintConfig,
+) -> Result<(), RulepackError> {
+    for (index, first) in recognizers.iter().enumerate() {
+        if !first.enabled {
+            continue;
+        }
+        let Some(first_shape) = regex_structural_shape(&first.matcher) else {
+            continue;
+        };
+        if !is_truly_naked_numeric(&first.matcher) {
+            continue;
+        }
+        let first_projection = locale_projection(&first.locales, active_locales);
+        if first_projection.is_empty() {
+            continue;
+        }
+
+        for second in recognizers.iter().skip(index + 1) {
+            if !second.enabled || first.class != second.class {
+                continue;
+            }
+            if !is_truly_naked_numeric(&second.matcher) {
+                continue;
+            }
+            if regex_structural_shape(&second.matcher).as_ref() != Some(&first_shape) {
+                continue;
+            }
+            let second_projection = locale_projection(&second.locales, active_locales);
+            if second_projection.is_empty() {
+                continue;
+            }
+
+            let recognizer_ids = vec![first.id.clone(), second.id.clone()];
+            let locale_overlap = merged_locale_projection(&first_projection, &second_projection);
+            if lint.strict_locale_overlap {
+                return Err(RulepackError::ConflictingLocaleProjection {
+                    class: first.class.clone(),
+                    recognizer_ids,
+                    locale_overlap,
+                });
+            }
+            tracing::warn!(
+                class = %first.class.class_name(),
+                recognizer_ids = ?recognizer_ids,
+                locale_overlap = ?locale_overlap,
+                "recognizers share class with naked-shape regex and non-disjoint locale projection"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn lint_global_naked_patterns(recognizers: &[RecognizerSpec]) {
+    for recognizer in recognizers {
+        if !recognizer.enabled || recognizer.locales != [LocaleTag::Global] {
+            continue;
+        }
+        let Some(shape) = regex_structural_shape(&recognizer.matcher) else {
+            continue;
+        };
+        let RawMatch::Regex {
+            pattern: Some(pattern),
+            ..
+        } = &recognizer.matcher
+        else {
+            continue;
+        };
+        if shape.minimum_match_len < 6 && !has_regex_separator(pattern) {
+            tracing::warn!(
+                recognizer_id = %recognizer.id,
+                class = %recognizer.class.class_name(),
+                minimum_match_len = shape.minimum_match_len,
+                "global recognizer uses short naked regex shape"
+            );
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RegexStructuralShape {
+    minimum_match_len: usize,
+    character_class: RegexCharacterClass,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RegexCharacterClass {
+    Digit,
+}
+
+fn regex_structural_shape(matcher: &RawMatch) -> Option<RegexStructuralShape> {
+    let RawMatch::Regex {
+        pattern: Some(pattern),
+        pattern_template: None,
+        ..
+    } = matcher
+    else {
+        return None;
+    };
+    if has_unescaped_line_anchor(pattern) {
+        return None;
+    }
+    digit_quantifier_minimum(pattern).map(|minimum_match_len| RegexStructuralShape {
+        minimum_match_len,
+        character_class: RegexCharacterClass::Digit,
+    })
+}
+
+fn is_truly_naked_numeric(matcher: &RawMatch) -> bool {
+    let RawMatch::Regex {
+        pattern: Some(pattern),
+        ..
+    } = matcher
+    else {
+        return false;
+    };
+
+    let mut chars = pattern.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            chars.next();
+            continue;
+        }
+        if ch.is_ascii_alphabetic() {
+            return false;
+        }
+    }
+    true
+}
+
+fn has_unescaped_line_anchor(pattern: &str) -> bool {
+    let mut escaped = false;
+    let mut in_class = false;
+    for ch in pattern.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match ch {
+            '\\' => escaped = true,
+            '[' => in_class = true,
+            ']' => in_class = false,
+            '^' | '$' if !in_class => return true,
+            _ => {}
+        }
+    }
+    false
+}
+
+fn digit_quantifier_minimum(pattern: &str) -> Option<usize> {
+    find_digit_quantifier(pattern, r"\d{")
+        .or_else(|| find_digit_quantifier(pattern, "[0-9]{"))
+        .or_else(|| find_digit_quantifier(pattern, "[[:digit:]]{"))
+}
+
+fn find_digit_quantifier(pattern: &str, needle: &str) -> Option<usize> {
+    let start = pattern.find(needle)? + needle.len();
+    let rest = &pattern[start..];
+    let digits = rest
+        .chars()
+        .take_while(|ch| ch.is_ascii_digit())
+        .collect::<String>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+fn locale_projection(locales: &[LocaleTag], active_locales: &[LocaleTag]) -> Vec<LocaleTag> {
+    let mut projection = Vec::new();
+    for locale in locales {
+        if *locale == LocaleTag::Global {
+            projection.push(LocaleTag::Global);
+        } else if active_locales.iter().any(|active| active == locale) {
+            projection.push(locale.clone());
+        }
+    }
+    projection
+}
+
+fn merged_locale_projection(left: &[LocaleTag], right: &[LocaleTag]) -> Vec<LocaleTag> {
+    let mut merged = Vec::new();
+    for locale in left.iter().chain(right) {
+        if !merged.iter().any(|existing| existing == locale) {
+            merged.push(locale.clone());
+        }
+    }
+    merged
+}
+
+fn has_regex_separator(pattern: &str) -> bool {
+    pattern.contains('-')
+        || pattern.contains('/')
+        || pattern.contains('.')
+        || pattern.contains('+')
+        || pattern.contains("\\s")
+        || pattern.contains("[:space:]")
 }
 
 pub fn parse_class(input: &str) -> Result<PiiClass, RulepackError> {

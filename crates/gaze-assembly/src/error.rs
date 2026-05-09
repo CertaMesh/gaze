@@ -15,6 +15,8 @@ pub enum BuildError {
         recognizer_id: String,
         bucket: String,
     },
+    #[error("recognizer error: {0}")]
+    Recognizer(gaze_recognizers::RecognizerError),
 }
 
 impl From<gaze_recognizers::RecognizerError> for BuildError {
@@ -23,15 +25,7 @@ impl From<gaze_recognizers::RecognizerError> for BuildError {
             gaze_recognizers::RecognizerError::InvalidRegex(err) => {
                 Self::Pipeline(gaze::Error::InvalidRegex(err))
             }
-            gaze_recognizers::RecognizerError::UnsupportedValidator { kind } => {
-                Self::Rulepack(gaze::RulepackError::UnsupportedValidator { kind })
-            }
-            gaze_recognizers::RecognizerError::UnsupportedNormalizer { kind } => {
-                Self::Rulepack(gaze::RulepackError::UnsupportedNormalizer { kind })
-            }
-            _ => Self::Rulepack(gaze::RulepackError::UnsupportedMatcher(
-                "unsupported recognizer error variant".to_string(),
-            )),
+            err => Self::Recognizer(err),
         }
     }
 }

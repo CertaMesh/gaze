@@ -64,17 +64,17 @@ struct BehavioralTest {
 //    subset can mask the missing behavioral contract. Revert the rename.
 const SYMMETRIC_POTEMKIN_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "pipeline::tests::t21d_token_family_threads_from_recognizer_to_session",
     },
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter",
     },
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "session::tests::import_v0_4_0_snapshot_version_2_succeeds_with_default_family",
     },
@@ -109,7 +109,7 @@ const SYMMETRIC_POTEMKIN_TESTS: &[BehavioralTest] = &[
         name: "ner::tests::ner_recognizer_filters_below_threshold",
     },
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "policy::tests::rejects_ner_threshold_out_of_range",
     },
@@ -137,12 +137,12 @@ const SYMMETRIC_POTEMKIN_TESTS: &[BehavioralTest] = &[
 
 const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "rulepack::tests::rulepack_load_fails_when_two_name_recognizers_omit_cooperates_with",
     },
     BehavioralTest {
-        package: "gaze",
+        package: "gaze-pii",
         test_target: None,
         name: "rulepack::tests::rulepack_load_accepts_same_class_pair_with_cooperates_with",
     },
