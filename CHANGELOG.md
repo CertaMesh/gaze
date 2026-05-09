@@ -27,6 +27,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.6.6] - 2026-05-09
+
+### Fixed
+
+- Each crates.io page for `gaze-pii`, `gaze-types`, `gaze-audit`, `gaze-recognizers`, `gaze-assembly`, and `gaze-cli` now renders its own per-crate README. Previously, the v0.6.5 placeholder publish mirrored the project root README to all 8 placeholder stubs, so adopters landing on `crates.io/crates/gaze-types` saw the umbrella project README instead of the gaze-types-specific content.
+
+### Changed
+
+- Real workspace crates publish to crates.io at v0.6.6 via the trusted-publisher OIDC workflow. Placeholder stubs at v0.6.5 remain as version history.
+
+### Notes
+
+- `gaze-mcp-core` and `gaze-mcp-rmcp` stay at v0.6.5 placeholder content until their feature branches merge in v0.7. The v0.7.0 release publishes both as real crates with their own per-crate READMEs.
+- No code changes vs v0.6.5. Detection contracts, audit-sink isolation, and recognizer behavior are identical.
+
 ## [0.6.5] - 2026-05-09
 
 ### Added

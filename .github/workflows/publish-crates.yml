@@ -43,17 +43,27 @@ jobs:
           # published as gaze-pii while its library target remains `gaze`.
           for crate in gaze-types gaze-audit gaze-recognizers gaze-pii gaze-assembly gaze-cli; do
             echo "=== publishing $crate ==="
-            rc=0
-            out=$(cargo publish $DRY_RUN -p "$crate" --locked 2>&1) || rc=$? && rc=${rc:-0}
-            echo "$out"
-            if [ "$rc" -ne 0 ]; then
+            attempt=1
+            while true; do
+              rc=0
+              out=$(cargo publish $DRY_RUN -p "$crate" --locked 2>&1) || rc=$? && rc=${rc:-0}
+              echo "$out"
+              if [ "$rc" -eq 0 ]; then
+                break
+              fi
               if echo "$out" | grep -qiE "crate version .* is already uploaded|already exists|version .* has already been published"; then
                 echo "  [warn] $crate already on crates.io at this version; skipping (not a failure)"
+                break
+              fi
+              if [ -z "$DRY_RUN" ] && [ "$attempt" -lt 10 ] && echo "$out" | grep -qiE "failed to select a version|could not find .* in registry|no matching package named"; then
+                echo "  [warn] crates.io index not ready for $crate dependencies; retrying in 30s ($attempt/10)"
+                attempt=$((attempt + 1))
+                sleep 30
               else
                 echo "  [error] $crate publish failed (exit $rc), aborting"
                 exit "$rc"
               fi
-            fi
+            done
             # Give the crates.io index time to propagate before publishing
             # dependents. Dry-runs do not touch the index.
             [ -z "$DRY_RUN" ] && sleep 30 || true
