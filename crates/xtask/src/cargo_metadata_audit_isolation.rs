@@ -167,7 +167,7 @@ fn available_planned_features_with_exceptions(
                 continue;
             }
             bail!(
-                "planned cargo-metadata-audit-isolation feature {package_name}/{feature_name} is not declared in {package_name} Cargo.toml [features]"
+                "planned feature '{feature_name}' not found on package '{package_name}' - likely a stale rename"
             );
         }
         features.push(format!("{package_name}/{feature_name}"));
@@ -470,12 +470,14 @@ mod tests {
             &[(CORE_PACKAGE, &["safety-net"])],
         );
 
-        let err = available_planned_features(&metadata, &[(CORE_PACKAGE, "typo-safety-net")])
-            .expect_err("unknown planned feature must fail loud");
+        let err =
+            available_planned_features(&metadata, &[(CORE_PACKAGE, "nonexistent-feature-xyz")])
+                .expect_err("unknown planned feature must fail loud");
 
         let message = err.to_string();
-        assert!(message.contains("gaze-pii/typo-safety-net"), "{message}");
-        assert!(message.contains("Cargo.toml [features]"), "{message}");
+        assert!(message.contains("nonexistent-feature-xyz"), "{message}");
+        assert!(message.contains(CORE_PACKAGE), "{message}");
+        assert!(message.contains("likely a stale rename"), "{message}");
     }
 
     #[test]
