@@ -8,6 +8,8 @@ It does not merely redact. It replaces PII with stable, reversible tokens, so th
 
 **Clean in. Safe out. Restore when needed. No silent leaks.**
 
+[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![CI](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/docs.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
+
 ## What Gaze is
 
 Gaze is a reversible PII pseudonymization runtime that lets AI agents work with production data without ever seeing the real personal data.
@@ -324,6 +326,25 @@ contract live in [`docs/architecture/xtask.md`](docs/architecture/xtask.md).
 - **Audit time filters** — `gaze audit query` / `gaze audit export` accept ISO 8601 timestamps via `--from` and `--to`. Legacy audit DBs without `created_at` are still queryable, but time-filtered queries exclude their NULL timestamp rows by SQL semantics.
 - **Audit retention** — there is no policy-level retention default and no background auto-purge. Adopters who need retention drive it via `gaze audit purge --before <iso8601>` (preview with `--dry-run` or `--count`).
 - **Tenant-class fixture discipline** — production code in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/` may not contain tenant-specific patterns such as `order_id`, `Order_42`, `Song_42`, `User_7`. The `cargo run -p xtask -- no-tenant-knowledge` gate enforces this in CI. See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Available on crates.io
+
+The Gaze workspace publishes 8 crates. All current versions point at this repository as their canonical source.
+
+| Crate | Purpose |
+|---|---|
+| [`gaze-pii`](https://crates.io/crates/gaze-pii) | Umbrella runtime — pipeline, sessions, policy, manifest. The crate adopters typically depend on. |
+| [`gaze-types`](https://crates.io/crates/gaze-types) | Shared value contracts; serde-only, no ML/SQL deps. |
+| [`gaze-recognizers`](https://crates.io/crates/gaze-recognizers) | Detection backends (regex / dictionary / NER) and bundled rulepacks. |
+| [`gaze-audit`](https://crates.io/crates/gaze-audit) | Passive SQLite audit sink, isolated from core. |
+| [`gaze-assembly`](https://crates.io/crates/gaze-assembly) | Policy-to-pipeline builder shared by CLI-style adopters. |
+| [`gaze-cli`](https://crates.io/crates/gaze-cli) | Command-line `gaze clean` / `gaze restore` binary. |
+| [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | MCP chokepoint runtime — Tool / ToolCtx / PiiEnvelope dispatch. |
+| [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | rmcp transport adapter for `gaze-mcp-core`. |
+
+```sh
+cargo add gaze-pii
+```
 
 ## License
 
