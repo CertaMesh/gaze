@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
+use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -193,6 +194,20 @@ pub enum RulepackError {
     },
     #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
     RegexPatternChoice { id: String },
+    #[error("invalid regex for recognizer '{id}': {source}")]
+    RegexCompile {
+        id: String,
+        #[source]
+        source: regex::Error,
+    },
+    #[error(
+        "regex recognizer '{id}' shadows Gaze token shape sample '{shadowed_shape}' with pattern '{pattern}'"
+    )]
+    TokenShapeShadow {
+        id: String,
+        pattern: String,
+        shadowed_shape: String,
+    },
     #[error("unknown pattern_template placeholder '{placeholder}' in recognizer '{id}'")]
     UnknownPatternTemplatePlaceholder { id: String, placeholder: String },
     #[error(
@@ -528,6 +543,20 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
         } => {
             if pattern.is_some() == pattern_template.is_some() {
                 return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+            }
+            if let Some(pattern) = pattern {
+                let compiled =
+                    Regex::new(pattern).map_err(|source| RulepackError::RegexCompile {
+                        id: raw.id.clone(),
+                        source,
+                    })?;
+                crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.id).map_err(
+                    |shadow| RulepackError::TokenShapeShadow {
+                        id: shadow.recognizer_id,
+                        pattern: shadow.offending_pattern,
+                        shadowed_shape: shadow.shadowed_shape,
+                    },
+                )?;
             }
         }
         RawMatch::AnchoredMatch {

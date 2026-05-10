@@ -159,6 +159,14 @@ pub enum PolicyError {
         #[source]
         source: regex::Error,
     },
+    #[error(
+        "regex detector '{name}' shadows Gaze token shape sample '{shadowed_shape}' with pattern '{pattern}'"
+    )]
+    TokenShapeShadow {
+        name: String,
+        pattern: String,
+        shadowed_shape: String,
+    },
     #[error("invalid dictionary detector '{name}': {reason}")]
     BadDictionary { name: String, reason: String },
     #[error("session.ttl_secs is required when session.scope = \"persistent\"")]
@@ -414,9 +422,16 @@ fn parse_regex_detector(
         name: raw.name.clone(),
         reason: "regex recognizers require pattern".to_string(),
     })?;
-    regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
+    let compiled = regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
         name: raw.name.clone(),
         source,
+    })?;
+    crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.name).map_err(|shadow| {
+        PolicyError::TokenShapeShadow {
+            name: shadow.recognizer_id,
+            pattern: shadow.offending_pattern,
+            shadowed_shape: shadow.shadowed_shape,
+        }
     })?;
 
     Ok((

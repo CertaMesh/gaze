@@ -4,6 +4,14 @@ use regex::Regex;
 
 use crate::detector::BUILTIN_CLASS_NAMES;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TokenShapeShadow {
+    pub recognizer_id: String,
+    pub offending_pattern: String,
+    pub shadowed_shape: String,
+}
+
 pub fn pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| Regex::new(&build_pattern()).expect("token shape regex must compile"))
@@ -41,6 +49,23 @@ pub fn sample_token_shapes() -> &'static [&'static str] {
         "email1@example.test",
         "email1@gaze-fake.invalid",
     ]
+}
+
+pub fn reject_if_shadows_token_shape(
+    compiled: &Regex,
+    recognizer_id: &str,
+) -> Result<(), TokenShapeShadow> {
+    for sample in sample_token_shapes() {
+        if compiled.is_match(sample) {
+            return Err(TokenShapeShadow {
+                recognizer_id: recognizer_id.to_string(),
+                offending_pattern: compiled.as_str().to_string(),
+                shadowed_shape: (*sample).to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 pub fn starts_with_session_prefix(s: &str) -> bool {
