@@ -235,14 +235,6 @@ pub enum RulepackError {
         recognizer_ids: Vec<String>,
         locale_overlap: Vec<LocaleTag>,
     },
-    #[error(
-        "custom recognizer '{recognizer_id}' regex matches emitted token shape '{shadowed_shape}'"
-    )]
-    TokenShapeShadow {
-        recognizer_id: String,
-        offending_pattern: String,
-        shadowed_shape: String,
-    },
 }
 
 impl Rulepack {

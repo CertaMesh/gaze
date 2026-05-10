@@ -16,10 +16,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-gaze = { path = "../gaze", version = "0.6.4", package = "gaze-pii" }
+gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
 gaze-types = { workspace = true }
-gaze-assembly = { path = "../gaze-assembly", version = "0.6.4" }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.4" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.7.0" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
 async-trait = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
