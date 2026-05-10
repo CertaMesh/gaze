@@ -350,8 +350,8 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`], which keeps the v3 snapshot envelope; document-extended
-    /// snapshots emit v4 so older readers fail closed before restore.
+    /// should use [`Session::export`]. Current snapshots emit v5 so older readers fail closed
+    /// before restore while the signature binds the emitted envelope bytes.
     ///
     /// ```rust
     /// use gaze::{
@@ -379,7 +379,7 @@ impl Session {
     ///     .build()?;
     ///
     /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
-    /// # assert_eq!(manifest_bin[0], 4);
+    /// # assert_eq!(manifest_bin[0], 5);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
