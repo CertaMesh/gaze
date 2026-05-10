@@ -7,7 +7,7 @@
 //! 4. Redacts raw args through the gaze pipeline.
 //! 5. Opens a manifest entry via [`ManifestStore::begin_call`].
 //! 6. Builds the sealed [`ToolCtx`] (only construction site).
-//! 7. Drives [`Tool::invoke`] to completion.
+//! 7. Drives [`crate::tool::Tool::invoke`] to completion.
 //! 8. Redacts the tool response.
 //! 9. Finalizes the manifest entry via `finish_call` or `fail_call`.
 //! 10. Returns the redacted response.

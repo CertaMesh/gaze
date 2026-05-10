@@ -7,7 +7,7 @@
 //!   These are agent-tier tools that demonstrate the chokepoint pattern
 //!   against existing gaze pipeline functionality.
 //! - `operator-tier` (opt-in) exposes [`restore::RestoreTool`],
-//!   [`restore_strict::RestoreStrictTool`], [`export::ExportManifestTool`].
+//!   [`restore_strict::RestoreStrictTool`], [`export::ExportSessionTokensTool`].
 //!   These are operator-tier tools gated by
 //!   [`crate::auth::AuthHook::authorize_operator`]; default builds intentionally
 //!   do NOT link them so an adopter who skips wiring auth cannot accidentally
