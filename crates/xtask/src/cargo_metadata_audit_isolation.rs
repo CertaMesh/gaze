@@ -31,6 +31,15 @@ const SAFETY_NET_LEGACY_NER_EXEMPTIONS: &[LegacyNerExemption] = &[LegacyNerExemp
     reason: "legacy NER `ort` downloader edge; Phase 0 bans new safety-net network clients only",
 }];
 
+// Workspace members that legitimately depend on packages prohibited from the
+// safety-net subgraph (e.g. tokio, hyper) but are not themselves part of the
+// safety-net code path. Each entry must carry an explicit reason so future
+// additions cannot silently widen the chokepoint surface.
+const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[WorkspaceMemberExemption {
+    workspace_member: "gaze-mcp-rmcp",
+    reason: "rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline",
+}];
+
 // No current workspace feature is allowed to disappear silently. Keep this
 // table explicit so future cfg-gated feature plans must carry a reason beside
 // the exception instead of reintroducing fail-open metadata gates.
@@ -111,6 +120,12 @@ struct GraphPolicy {
 struct LegacyNerExemption {
     package: &'static str,
     required_path_member: &'static str,
+    reason: &'static str,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct WorkspaceMemberExemption {
+    workspace_member: &'static str,
     reason: &'static str,
 }
 
@@ -254,6 +269,15 @@ fn check_safety_net_prohibited_packages(
                 );
                 continue;
             }
+            if let Some(exemption) = matching_member_exemption(workspace_name) {
+                println!(
+                    "cargo_metadata_audit_isolation: {label}: allowed {} for {workspace_name}: {} ({})",
+                    package,
+                    format_path(&path, metadata),
+                    exemption.reason
+                );
+                continue;
+            }
             bail!(
                 "{label}: safety-net graph resolves prohibited package {package} from {workspace_name}: {}",
                 format_path(&path, metadata)
@@ -277,6 +301,12 @@ fn matching_legacy_ner_exemption<'a>(
                     .is_some_and(|name| name == exemption.required_path_member)
             })
     })
+}
+
+fn matching_member_exemption(workspace_name: &str) -> Option<&'static WorkspaceMemberExemption> {
+    SAFETY_NET_MEMBER_EXEMPTIONS
+        .iter()
+        .find(|exemption| exemption.workspace_member == workspace_name)
 }
 
 fn cargo_metadata(args: &[&str]) -> Result<Metadata> {
@@ -460,6 +490,28 @@ mod tests {
 
         check_graph(graph.label, &metadata, &workspace_members, graph.policy)
             .expect("legacy NER ort -> ureq path should remain narrowly exempt");
+    }
+
+    #[test]
+    fn safety_net_member_exemption_allows_listed_workspace_members() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(&["gaze-mcp-rmcp"], &[("gaze-mcp-rmcp", &["tokio"])]);
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect("gaze-mcp-rmcp is allowlisted as a transport sink, not a safety-net component");
+    }
+
+    #[test]
+    fn safety_net_member_exemption_does_not_extend_to_unlisted_members() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(&["gaze-types"], &[("gaze-types", &["tokio"])]);
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        let err = check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect_err("non-allowlisted workspace members must still fail closed on tokio");
+        assert!(err.to_string().contains("tokio"));
+        assert!(err.to_string().contains("gaze-types"));
     }
 
     #[test]

@@ -80,6 +80,45 @@ The `gaze_dylint` protected-path lint
 any future change attempting to pull `gaze_audit::*` (or other
 `forbidden_items`) into the chokepoint runtime is rejected at build time.
 
+## rmcp transport sink
+
+`gaze-mcp-rmcp` is the rmcp-backed transport adapter for this runtime. It
+implements `Frontend` as `RmcpFrontend` and translates only wire-level objects:
+
+- `ToolDescriptor` -> rmcp `Tool` for `tools/list`.
+- rmcp `CallToolRequestParam` -> `(tool_name, raw_args, external_session_id)`.
+- `ToolResponse` -> rmcp `CallToolResult`.
+
+The adapter never receives `PiiEnvelope` internals. It sees only
+`Arc<dyn DispatchHost>`, so every `tools/call` request still returns through
+`PiiEnvelope::dispatch` when adopters use the core host wrapper. The rmcp smoke
+tests exercise this via an in-process rmcp client/server transport, and the
+manifest-persistence test routes through a real `PiiEnvelope` with a failing
+`ManifestStore::finish_call`; the client receives an error result instead of
+the tool payload.
+
+Transports:
+
+- `transport-stdio` (default): process stdio, standard for local agent hosts.
+- `transport-http`: rmcp streamable HTTP served via axum at `/mcp`.
+
+`PrincipalResolver` is adopter-supplied and maps rmcp request context to
+`Principal`. `FixedPrincipalResolver` exists for local stdio servers and tests.
+The adapter filters operator-tier tool descriptors from `tools/list` unless the
+resolved principal has the `operator` role, but this is not the authorization
+boundary. Authorization still happens inside `PiiEnvelope::dispatch` through
+`AuthHook`.
+
+rmcp 0.2 has no dedicated Gaze session-id carrier, so the adapter reserves a
+top-level `_session_id` argument key. It removes that key before dispatch and
+passes the value as `external_session_id`; `SessionIdPolicy` validates it before
+the manifest opens.
+
+The `mcp-tier-isolation` xtask gate covers `gaze-mcp-rmcp` under
+`transport-stdio`, `transport-stdio,transport-http`, and `--no-default-features`
+graphs so transport feature changes do not accidentally pull in an operator
+surface by default.
+
 ## Manifest contract
 
 `ManifestStore` (in [`crates/gaze-mcp-core/src/manifest.rs`](../../crates/gaze-mcp-core/src/manifest.rs))

@@ -25,10 +25,10 @@ use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
 
-const PACKAGE: &str = "gaze-mcp-core";
-const TEST_TARGET: &str = "tier_isolation";
+const CORE_PACKAGE: &str = "gaze-mcp-core";
+const CORE_TEST_TARGET: &str = "tier_isolation";
 
-const FEATURE_GRAPHS: &[FeatureGraph] = &[
+const CORE_FEATURE_GRAPHS: &[FeatureGraph] = &[
     FeatureGraph {
         label: "default",
         cargo_args: &[],
@@ -47,6 +47,26 @@ const FEATURE_GRAPHS: &[FeatureGraph] = &[
     },
 ];
 
+const RMCP_PACKAGE: &str = "gaze-mcp-rmcp";
+const RMCP_FEATURE_GRAPHS: &[FeatureGraph] = &[
+    FeatureGraph {
+        label: "transport-stdio",
+        cargo_args: &["--no-default-features", "--features", "transport-stdio"],
+    },
+    FeatureGraph {
+        label: "transport-stdio+transport-http",
+        cargo_args: &[
+            "--no-default-features",
+            "--features",
+            "transport-stdio,transport-http",
+        ],
+    },
+    FeatureGraph {
+        label: "no-default-features",
+        cargo_args: &["--no-default-features"],
+    },
+];
+
 #[derive(Clone, Copy)]
 struct FeatureGraph {
     label: &'static str,
@@ -55,34 +75,71 @@ struct FeatureGraph {
 
 pub fn run() -> Result<()> {
     println!(
-        "mcp_tier_isolation: running {test} integration tests across {n} feature graphs",
-        test = TEST_TARGET,
-        n = FEATURE_GRAPHS.len()
+        "mcp_tier_isolation: running {test} integration tests across {n} core feature graphs",
+        test = CORE_TEST_TARGET,
+        n = CORE_FEATURE_GRAPHS.len()
     );
-    for graph in FEATURE_GRAPHS {
-        run_under(*graph)?;
+    for graph in CORE_FEATURE_GRAPHS {
+        run_core_under(*graph)?;
+    }
+    println!(
+        "mcp_tier_isolation: checking {package} across {n} transport feature graphs",
+        package = RMCP_PACKAGE,
+        n = RMCP_FEATURE_GRAPHS.len()
+    );
+    for graph in RMCP_FEATURE_GRAPHS {
+        run_rmcp_under(*graph)?;
     }
     println!("mcp_tier_isolation: passed");
     Ok(())
 }
 
-fn run_under(graph: FeatureGraph) -> Result<()> {
-    println!("mcp_tier_isolation: graph={}", graph.label);
+fn run_core_under(graph: FeatureGraph) -> Result<()> {
+    println!(
+        "mcp_tier_isolation: package={CORE_PACKAGE} graph={}",
+        graph.label
+    );
     let mut cmd = ProcessCommand::new("cargo");
     cmd.arg("test")
         .arg("-p")
-        .arg(PACKAGE)
+        .arg(CORE_PACKAGE)
         .arg("--test")
-        .arg(TEST_TARGET);
+        .arg(CORE_TEST_TARGET);
     cmd.args(graph.cargo_args);
-    let status = cmd
-        .status()
-        .with_context(|| format!("failed to spawn cargo test for graph={}", graph.label))?;
+    let status = cmd.status().with_context(|| {
+        format!(
+            "failed to spawn cargo test for {CORE_PACKAGE} graph={}",
+            graph.label
+        )
+    })?;
     if !status.success() {
         bail!(
-            "mcp_tier_isolation: graph={}: {} integration tests failed",
+            "mcp_tier_isolation: {CORE_PACKAGE} graph={}: {} integration tests failed",
             graph.label,
-            TEST_TARGET
+            CORE_TEST_TARGET
+        );
+    }
+    Ok(())
+}
+
+fn run_rmcp_under(graph: FeatureGraph) -> Result<()> {
+    println!(
+        "mcp_tier_isolation: package={RMCP_PACKAGE} graph={}",
+        graph.label
+    );
+    let mut cmd = ProcessCommand::new("cargo");
+    cmd.arg("check").arg("-p").arg(RMCP_PACKAGE);
+    cmd.args(graph.cargo_args);
+    let status = cmd.status().with_context(|| {
+        format!(
+            "failed to spawn cargo check for {RMCP_PACKAGE} graph={}",
+            graph.label
+        )
+    })?;
+    if !status.success() {
+        bail!(
+            "mcp_tier_isolation: {RMCP_PACKAGE} graph={}: cargo check failed",
+            graph.label
         );
     }
     Ok(())

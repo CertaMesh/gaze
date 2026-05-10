@@ -1,0 +1,34 @@
+[package]
+name = "gaze-mcp-rmcp"
+version = "0.7.0"
+edition = "2024"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "rmcp (MCP Rust SDK) transport for gaze-mcp-core. Sink crate. No SemVer guarantee on rmcp re-exports."
+readme = "README.md"
+keywords = ["pii", "mcp", "rmcp", "agent"]
+categories = ["development-tools"]
+
+[dependencies]
+gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.1.0" }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt-multi-thread", "io-std", "macros", "net", "time"] }
+tokio-util = "0.7"
+rmcp = { version = "1.6.0", features = ["server", "macros", "transport-io"] }
+axum = { version = "0.8", optional = true }
+
+[dev-dependencies]
+gaze = { package = "gaze-pii", path = "../gaze", version = "0.7.0" }
+rmcp = { version = "1.6.0", features = ["client", "server", "macros", "transport-async-rw"] }
+
+[features]
+default = ["transport-stdio"]
+transport-stdio = []
+transport-http = ["dep:axum", "rmcp/transport-streamable-http-server", "rmcp/transport-worker"]
+
+[package.metadata.docs.rs]
+all-features = true
