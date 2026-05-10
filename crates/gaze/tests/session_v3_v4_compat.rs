@@ -60,15 +60,18 @@ fn document_extension_signed_envelope_binds_bundle_files() {
 }
 
 #[test]
-fn text_only_export_stays_v3_and_document_export_moves_to_v4() {
+fn current_exports_use_v5_and_legacy_readers_fail_closed() {
     let session = Session::new(Scope::Conversation("compat".to_string())).expect("session");
     let token = session
         .tokenize(&gaze::PiiClass::Email, "alice@example.invalid")
         .expect("token");
 
     let text_only = session.export().expect("text-only export").into_bytes();
-    assert_eq!(text_only[0], 3);
-    assert!(v0_6_reader_accepts_only_v2_or_v3(&text_only).is_ok());
+    assert_eq!(text_only[0], 5);
+    assert!(matches!(
+        v0_6_reader_accepts_only_v2_or_v3(&text_only),
+        Err(Error::InvalidSnapshotVersion(5))
+    ));
 
     let document = session
         .export_with_extension(
@@ -83,14 +86,14 @@ fn text_only_export_stays_v3_and_document_export_moves_to_v4() {
         )
         .expect("document export")
         .into_bytes();
-    assert_eq!(document[0], 4);
+    assert_eq!(document[0], 5);
     assert!(matches!(
         v0_6_reader_accepts_only_v2_or_v3(&document),
-        Err(Error::InvalidSnapshotVersion(4))
+        Err(Error::InvalidSnapshotVersion(5))
     ));
 
     let imported =
-        Session::import(SensitiveSnapshot::from(document)).expect("current reader imports v4");
+        Session::import(SensitiveSnapshot::from(document)).expect("current reader imports v5");
     assert_eq!(
         imported.restore(&token).as_deref(),
         Some("alice@example.invalid")

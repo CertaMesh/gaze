@@ -2,12 +2,11 @@
 //!
 //! `Session::export().into_bytes()` includes a fresh signing key, Ed25519 signature, session id,
 //! and `issued_at`, so the public API cannot produce byte-identical snapshots across runs without
-//! a test-only deterministic session constructor. This test therefore pins a checked-in v3
-//! `manifest.bin` fixture and verifies the stable text-only contract that matters to v0.6/v0.7
-//! adopters: v3 envelope byte, no `document` extension, importable token map, and unchanged
-//! canonical payload field shape.
+//! a test-only deterministic session constructor. This test therefore pins a checked-in legacy v3
+//! `manifest.bin` fixture and verifies it remains importable while current exports use the v5
+//! envelope that binds the emitted version byte into the signed preimage.
 //!
-//! Regenerate only when the v3 text-only payload contract intentionally changes:
+//! Regenerate only when the current text-only payload contract intentionally changes:
 //! `GAZE_REGENERATE_SESSION_SNAPSHOT_FIXTURE=1 cargo test -p gaze-pii --test session_snapshot_byte_stability`.
 
 use gaze::{PiiClass, Scope, SensitiveSnapshot, Session};
@@ -46,14 +45,14 @@ fn checked_in_v3_text_only_snapshot_fixture_stays_importable_and_payload_shape_s
 }
 
 #[test]
-fn current_text_only_export_stays_v3_and_omits_document_extension() {
+fn current_text_only_export_uses_v5_and_omits_document_extension() {
     let session = Session::new(Scope::Conversation("byte-stability".to_string())).expect("session");
     let _ = session
         .tokenize(&PiiClass::Name, "Dr. Schmidt")
         .expect("token");
 
     let bytes = session.export().expect("text-only export").into_bytes();
-    assert_eq!(bytes[0], 3);
+    assert_eq!(bytes[0], 5);
 
     let payload: Value = serde_json::from_slice(&bytes[97..]).expect("snapshot payload json");
     assert!(payload.get("document").is_none());
