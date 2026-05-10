@@ -18,7 +18,7 @@ The crate is published as `gaze-pii`; the import path remains `use gaze::...` be
 [dependencies]
 gaze-pii = "0.7"
 gaze-assembly = "0.7"
-gaze-recognizers = "0.6"
+gaze-recognizers = "0.7"
 ```
 
 `gaze-assembly` provides `CorePipelineConfig` — bundled defaults so you don't hand-wire the `core` rulepack (emails, names, locations, organizations, locale cues).
