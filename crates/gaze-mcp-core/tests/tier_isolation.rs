@@ -13,9 +13,15 @@ fn core_tools_module_is_present_with_core_tools_feature() {
     use gaze_mcp_core::core_tools::{CleanTool, SafetyNetCheckTool, TokenizeFieldTool};
     use gaze_mcp_core::tool::{Tool, ToolTier};
 
-    assert_eq!(CleanTool::new().descriptor().tier, ToolTier::Agent);
-    assert_eq!(TokenizeFieldTool::new().descriptor().tier, ToolTier::Agent);
-    assert_eq!(SafetyNetCheckTool::new().descriptor().tier, ToolTier::Agent);
+    assert_eq!(CleanTool::new().descriptor().tier(), ToolTier::Agent);
+    assert_eq!(
+        TokenizeFieldTool::new().descriptor().tier(),
+        ToolTier::Agent
+    );
+    assert_eq!(
+        SafetyNetCheckTool::new().descriptor().tier(),
+        ToolTier::Agent
+    );
 }
 
 #[cfg(feature = "operator-tier")]
@@ -24,13 +30,13 @@ fn operator_tools_module_is_present_with_operator_tier_feature() {
     use gaze_mcp_core::operator_tools::{ExportManifestTool, RestoreStrictTool, RestoreTool};
     use gaze_mcp_core::tool::{Tool, ToolTier};
 
-    assert_eq!(RestoreTool::new().descriptor().tier, ToolTier::Operator);
+    assert_eq!(RestoreTool::new().descriptor().tier(), ToolTier::Operator);
     assert_eq!(
-        RestoreStrictTool::new().descriptor().tier,
+        RestoreStrictTool::new().descriptor().tier(),
         ToolTier::Operator
     );
     assert_eq!(
-        ExportManifestTool::new().descriptor().tier,
+        ExportManifestTool::new().descriptor().tier(),
         ToolTier::Operator
     );
 }

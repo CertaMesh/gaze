@@ -48,6 +48,15 @@ The behavioral cousins — that the manifest store actually receives
 `begin_call` before `invoke`, and `finish_call` / `fail_call` before the
 response escapes — are checked in `tests/chokepoint_ordering.rs`.
 
+Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 ||
+payload_bytes)`. This is an integrity marker for audit lookup, not a secret
+commitment scheme. Threat model: anyone who can read audit rows and guess the
+exact response payload can verify that guess offline. Current v0.7 beta accepts
+that risk because audit readers are already trusted with manifest metadata and
+operator-tier deployments must protect snapshot storage. If that trust boundary
+changes, replace the hash input with keyed HMAC material owned by the
+`ManifestStore` implementation.
+
 ## Adopter quickstart
 
 ```rust
@@ -122,7 +131,7 @@ registry.register(gaze_mcp_core::core_tools::CleanTool::new()).unwrap();
 let manifest = MyManifest {};
 let auth = MyAuth;
 let policy = SessionIdPolicy::default_strict();
-let _envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+let _envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &[], &policy);
 ```
 
 The transport sink (e.g. `gaze-mcp-rmcp::RmcpFrontend`) wraps the envelope

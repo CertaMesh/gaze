@@ -28,6 +28,8 @@ use std::marker::PhantomData;
 
 use ulid::Ulid;
 
+use crate::ManifestStore;
+
 /// Audit-correlation handle exposed to a [`crate::tool::Tool`] implementation.
 ///
 /// The handle deliberately exposes only the external session id. The actual
@@ -61,16 +63,74 @@ impl<'a> SessionHandle<'a> {
     }
 }
 
+/// Borrowed backend handles available to tool bodies during one dispatch.
+#[non_exhaustive]
+pub struct ToolResources<'a> {
+    pipeline: &'a gaze::Pipeline,
+    session: &'a gaze::Session,
+    manifest: &'a dyn ManifestStore,
+    locale_chain: &'a [gaze::LocaleTag],
+    _life: PhantomData<&'a ()>,
+}
+
+impl<'a> ToolResources<'a> {
+    pub(crate) fn new(
+        pipeline: &'a gaze::Pipeline,
+        session: &'a gaze::Session,
+        manifest: &'a dyn ManifestStore,
+        locale_chain: &'a [gaze::LocaleTag],
+    ) -> Self {
+        Self {
+            pipeline,
+            session,
+            manifest,
+            locale_chain,
+            _life: PhantomData,
+        }
+    }
+
+    /// Gaze pipeline backing this dispatch.
+    pub fn pipeline(&self) -> &'a gaze::Pipeline {
+        self.pipeline
+    }
+
+    /// Session backing this dispatch.
+    pub fn session(&self) -> &'a gaze::Session {
+        self.session
+    }
+
+    /// Manifest store backing this dispatch.
+    pub fn manifest(&self) -> &'a dyn ManifestStore {
+        self.manifest
+    }
+
+    /// Locale chain configured for observer-only tool operations.
+    pub fn locale_chain(&self) -> &'a [gaze::LocaleTag] {
+        self.locale_chain
+    }
+}
+
+impl std::fmt::Debug for ToolResources<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolResources")
+            .field("pipeline", &"<gaze::Pipeline>")
+            .field("session", &"<gaze::Session>")
+            .field("manifest", &"<dyn ManifestStore>")
+            .field("locale_chain", &self.locale_chain)
+            .finish()
+    }
+}
+
 /// Sealed tool-invocation context. See module docs for the full invariant.
 ///
 /// The `'a` lifetime binds the context to the dispatcher's stack frame so a
 /// tool implementation cannot store the context past the call. Fields are
 /// `pub(crate)` and `#[non_exhaustive]` so external crates cannot construct
 /// a `ToolCtx` via struct literal or `..Default::default()`.
-#[derive(Debug)]
 #[non_exhaustive]
 pub struct ToolCtx<'a> {
     pub(crate) session: SessionHandle<'a>,
+    pub(crate) resources: ToolResources<'a>,
     pub(crate) redacted_args: serde_json::Value,
     pub(crate) call_id: Ulid,
     pub(crate) tool_name: &'a str,
@@ -82,8 +142,9 @@ impl<'a> ToolCtx<'a> {
     /// Construct a `ToolCtx`. `pub(crate)` — the dispatcher in
     /// [`crate::dispatch`] is the only call site. Verified at compile time by
     /// the trybuild fixtures in `tests/tool_ctx_seal.rs`.
-    pub(crate) fn new(
+    pub(crate) fn new_with_resources(
         session: SessionHandle<'a>,
+        resources: ToolResources<'a>,
         redacted_args: serde_json::Value,
         call_id: Ulid,
         tool_name: &'a str,
@@ -91,6 +152,7 @@ impl<'a> ToolCtx<'a> {
     ) -> Self {
         Self {
             session,
+            resources,
             redacted_args,
             call_id,
             tool_name,
@@ -109,6 +171,11 @@ impl<'a> ToolCtx<'a> {
     /// Audit-correlation handle (see [`SessionHandle`]).
     pub fn session(&self) -> &SessionHandle<'a> {
         &self.session
+    }
+
+    /// Borrowed backend handles for tool bodies that need Gaze internals.
+    pub fn resources(&self) -> &ToolResources<'a> {
+        &self.resources
     }
 
     /// Stable identifier for this tool call. Same value the dispatcher passes
@@ -130,5 +197,18 @@ impl<'a> ToolCtx<'a> {
     /// re-check.
     pub fn principal_id(&self) -> &'a str {
         self.principal_id
+    }
+}
+
+impl std::fmt::Debug for ToolCtx<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ToolCtx")
+            .field("session", &self.session)
+            .field("resources", &self.resources)
+            .field("redacted_args", &self.redacted_args)
+            .field("call_id", &self.call_id)
+            .field("tool_name", &self.tool_name)
+            .field("principal_id", &self.principal_id)
+            .finish()
     }
 }

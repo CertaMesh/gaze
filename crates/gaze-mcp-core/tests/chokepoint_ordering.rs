@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 use serde_json::json;
 
+use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass};
 use gaze_mcp_core::auth::DenyAllAuthHook;
 use gaze_mcp_core::ctx::ToolCtx;
 use gaze_mcp_core::manifest::{
@@ -17,15 +18,25 @@ use gaze_mcp_core::manifest::{
 };
 use gaze_mcp_core::registry::ToolRegistry;
 use gaze_mcp_core::session_id::SessionIdPolicy;
-use gaze_mcp_core::tool::{Tool, ToolDescriptor, ToolError, ToolResponse};
+use gaze_mcp_core::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolResponse};
 use gaze_mcp_core::{AuthError, AuthHook, PiiEnvelope, Principal};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Event {
-    Begin { tool: String },
-    Invoke { tool: String },
-    Finish { handle: CallHandle },
-    Fail { handle: CallHandle, class: String },
+    Begin {
+        tool: String,
+    },
+    Invoke {
+        tool: String,
+    },
+    Finish {
+        handle: CallHandle,
+        snapshot: SnapshotRef,
+    },
+    Fail {
+        handle: CallHandle,
+        class: String,
+    },
 }
 
 #[derive(Default)]
@@ -45,9 +56,12 @@ impl ManifestStore for RecordingManifest {
     async fn finish_call(
         &self,
         handle: CallHandle,
-        _snapshot: SnapshotRef,
+        snapshot: SnapshotRef,
     ) -> Result<(), ManifestError> {
-        self.events.lock().unwrap().push(Event::Finish { handle });
+        self.events
+            .lock()
+            .unwrap()
+            .push(Event::Finish { handle, snapshot });
         Ok(())
     }
 
@@ -82,6 +96,7 @@ struct RecordingTool {
 #[derive(Clone)]
 enum ToolBehavior {
     EchoArgs,
+    ReturnPayload(serde_json::Value),
     ReturnError,
 }
 
@@ -95,8 +110,9 @@ impl Tool for RecordingTool {
         self.events.lock().unwrap().push(Event::Invoke {
             tool: ctx.tool_name().to_string(),
         });
-        match self.behavior {
+        match &self.behavior {
             ToolBehavior::EchoArgs => Ok(ToolResponse::json(ctx.redacted_args().clone())),
+            ToolBehavior::ReturnPayload(payload) => Ok(ToolResponse::json(payload.clone())),
             ToolBehavior::ReturnError => Err(ToolError::InvalidArgs("test".into())),
         }
     }
@@ -125,8 +141,57 @@ impl AuthHook for AllowAllAgentHook {
     }
 }
 
+struct AllowOperatorAuthHook;
+
+#[async_trait]
+impl AuthHook for AllowOperatorAuthHook {
+    async fn authorize_agent(
+        &self,
+        _principal: &Principal,
+        _tool_name: &str,
+    ) -> Result<(), AuthError> {
+        Err(AuthError::Denied("operator-only test hook".into()))
+    }
+
+    async fn authorize_operator(
+        &self,
+        _principal: &Principal,
+        _tool_name: &str,
+    ) -> Result<(), AuthError> {
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+struct FixedDetector;
+
+impl Detector for FixedDetector {
+    fn detect(&self, input: &str) -> Vec<Detection> {
+        input
+            .find("alice@example.invalid")
+            .map(|start| {
+                Detection::new(
+                    start..start + "alice@example.invalid".len(),
+                    PiiClass::Email,
+                    "fixed",
+                )
+            })
+            .into_iter()
+            .collect()
+    }
+}
+
 fn make_pipeline() -> gaze::Pipeline {
     gaze::Pipeline::builder().build().expect("pipeline build")
+}
+
+fn tokenizing_pipeline() -> gaze::Pipeline {
+    gaze::Pipeline::builder()
+        .detector(FixedDetector)
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("pipeline build")
 }
 
 fn make_session() -> gaze::Session {
@@ -151,7 +216,15 @@ async fn dispatch_orders_begin_invoke_finish() {
         })
         .unwrap();
 
-    let envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
     let principal = Principal::new("test-principal");
     let response = envelope
         .dispatch(&principal, "clean", json!({"text": "hi"}), None)
@@ -183,6 +256,95 @@ async fn dispatch_orders_begin_invoke_finish() {
 }
 
 #[tokio::test]
+async fn dispatch_redacts_agent_response_payload() {
+    let manifest = RecordingManifest::default();
+    let auth = AllowAllAgentHook;
+    let policy = SessionIdPolicy::default_strict();
+    let pipeline = tokenizing_pipeline();
+    let session = make_session();
+
+    let events_handle = Arc::new(Mutex::new(Vec::<Event>::new()));
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(RecordingTool {
+            descriptor: ToolDescriptor::agent("lookup", json!({"type": "object"})),
+            events: events_handle,
+            behavior: ToolBehavior::ReturnPayload(json!({"email": "alice@example.invalid"})),
+        })
+        .unwrap();
+
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
+    let response = envelope
+        .dispatch(&Principal::new("test"), "lookup", json!({}), None)
+        .await
+        .expect("dispatch ok");
+
+    let email = response.payload["email"]
+        .as_str()
+        .expect("redacted email string");
+    assert!(email.ends_with(":Email_1>"), "unexpected token: {email}");
+    let events = manifest.events.lock().unwrap().clone();
+    assert!(matches!(events.last(), Some(Event::Finish { .. })));
+}
+
+#[tokio::test]
+async fn dispatch_bypasses_response_redaction_for_operator_with_bypass() {
+    let manifest = RecordingManifest::default();
+    let auth = AllowOperatorAuthHook;
+    let policy = SessionIdPolicy::default_strict();
+    let pipeline = tokenizing_pipeline();
+    let session = make_session();
+
+    let events_handle = Arc::new(Mutex::new(Vec::<Event>::new()));
+    let mut registry = ToolRegistry::new();
+    registry
+        .register(RecordingTool {
+            descriptor: ToolDescriptor::operator("restore", json!({"type": "object"}))
+                .with_response_redaction(ResponseRedaction::BypassByOperator),
+            events: events_handle,
+            behavior: ToolBehavior::ReturnPayload(json!({"email": "alice@example.invalid"})),
+        })
+        .unwrap();
+
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
+    let response = envelope
+        .dispatch(&Principal::new("operator"), "restore", json!({}), None)
+        .await
+        .expect("dispatch ok");
+
+    assert_eq!(response.payload, json!({"email": "alice@example.invalid"}));
+    let events = manifest.events.lock().unwrap().clone();
+    let snapshot = match events.last() {
+        Some(Event::Finish { snapshot, .. }) => snapshot,
+        other => panic!("expected finish row, got {other:?}"),
+    };
+    assert_eq!(
+        snapshot.byte_len,
+        br#"{"email":"alice@example.invalid"}"#.len() as u64
+    );
+    assert_ne!(
+        snapshot.sha256_hex,
+        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+}
+
+#[tokio::test]
 async fn dispatch_writes_fail_call_on_tool_error() {
     let manifest = RecordingManifest::default();
     let auth = AllowAllAgentHook;
@@ -200,7 +362,15 @@ async fn dispatch_writes_fail_call_on_tool_error() {
         })
         .unwrap();
 
-    let envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
     let err = envelope
         .dispatch(
             &Principal::new("test"),
@@ -237,7 +407,15 @@ async fn dispatch_rejects_unknown_tool_before_manifest() {
     let session = make_session();
     let registry = ToolRegistry::new();
 
-    let envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
     let err = envelope
         .dispatch(&Principal::new("test"), "absent", json!({}), None)
         .await
@@ -270,7 +448,15 @@ async fn deny_all_hook_blocks_agent_dispatch_pre_manifest() {
         })
         .unwrap();
 
-    let envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
     let err = envelope
         .dispatch(&Principal::new("test"), "clean", json!({}), None)
         .await

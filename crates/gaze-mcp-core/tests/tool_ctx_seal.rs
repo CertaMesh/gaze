@@ -8,5 +8,5 @@
 #[test]
 fn external_construction_is_compile_fail() {
     let t = trybuild::TestCases::new();
-    t.compile_fail("tests/ui/tool_ctx_*.rs");
+    t.compile_fail("tests/ui/*.rs");
 }

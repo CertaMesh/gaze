@@ -83,7 +83,15 @@ async fn operator_tool_dispatch_with_default_hook_returns_missing_hook() {
         })
         .unwrap();
 
-    let envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &policy);
+    let envelope = PiiEnvelope::new(
+        &registry,
+        &auth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[],
+        &policy,
+    );
     let err = envelope
         .dispatch(
             &Principal::new("test"),

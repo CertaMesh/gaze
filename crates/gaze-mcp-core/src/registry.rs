@@ -10,7 +10,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::tool::{Tool, ToolDescriptor};
+use crate::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolTier};
 
 /// Errors returned by [`ToolRegistry::register`].
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -76,11 +76,19 @@ impl ToolRegistry {
     where
         T: Tool + 'static,
     {
-        let name = tool.descriptor().name.clone();
+        let descriptor = tool.descriptor();
+        let name = descriptor.name().to_string();
         if name.is_empty() {
             return Err(ToolRegistryError::InvalidDescriptor(
                 "descriptor.name is empty".into(),
             ));
+        }
+        if descriptor.tier() == ToolTier::Agent
+            && descriptor.response_redaction() == ResponseRedaction::BypassByOperator
+        {
+            return Err(ToolRegistryError::InvalidDescriptor(format!(
+                "agent tool `{name}` cannot bypass response redaction"
+            )));
         }
         if self.tools.contains_key(&name) {
             return Err(ToolRegistryError::DuplicateName(name));
@@ -128,14 +136,11 @@ mod tests {
 
     impl StubTool {
         fn new(name: &str, tier: ToolTier) -> Self {
-            Self {
-                descriptor: ToolDescriptor {
-                    name: name.into(),
-                    tier,
-                    schema: json!({"type": "object"}),
-                    description: None,
-                },
-            }
+            let descriptor = match tier {
+                ToolTier::Agent => ToolDescriptor::agent(name, json!({"type": "object"})),
+                ToolTier::Operator => ToolDescriptor::operator(name, json!({"type": "object"})),
+            };
+            Self { descriptor }
         }
     }
 
@@ -181,13 +186,25 @@ mod tests {
     }
 
     #[test]
+    fn agent_tool_cannot_bypass_response_redaction() {
+        let mut reg = ToolRegistry::new();
+        let err = reg
+            .register(StubTool {
+                descriptor: ToolDescriptor::agent("unsafe", json!({"type": "object"}))
+                    .with_response_redaction(ResponseRedaction::BypassByOperator),
+            })
+            .unwrap_err();
+        assert!(matches!(err, ToolRegistryError::InvalidDescriptor(_)));
+    }
+
+    #[test]
     fn list_returns_all_descriptors() {
         let mut reg = ToolRegistry::new();
         reg.register(StubTool::new("clean", ToolTier::Agent))
             .unwrap();
         reg.register(StubTool::new("restore", ToolTier::Operator))
             .unwrap();
-        let mut names: Vec<&str> = reg.list().iter().map(|d| d.name.as_str()).collect();
+        let mut names: Vec<&str> = reg.list().iter().map(|d| d.name()).collect();
         names.sort();
         assert_eq!(names, vec!["clean", "restore"]);
     }

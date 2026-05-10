@@ -25,22 +25,35 @@ pub enum ToolTier {
     Operator,
 }
 
+/// Dispatcher policy for redacting tool response payloads.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum ResponseRedaction {
+    /// Run response JSON through the same redaction chokepoint as arguments.
+    #[default]
+    Apply,
+    /// Operator-tier-only escape hatch for restore/export tools returning raw bytes.
+    BypassByOperator,
+}
+
 /// Static metadata describing a tool. Surfaced to transports via
 /// [`crate::registry::ToolRegistry::list`] for `tools/list`-style endpoints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ToolDescriptor {
     /// Stable wire name (`"clean"`, `"query"`, …). Must be unique per registry.
-    pub name: String,
+    name: String,
     /// Tier — drives both auth-hook routing and feature-flag visibility.
-    pub tier: ToolTier,
+    tier: ToolTier,
     /// JSON-schema document describing the tool's input arguments. The
     /// dispatcher does not re-validate against this — adopter tools are
     /// expected to validate inside the body and return
     /// [`ToolError::InvalidArgs`] on shape errors. Surface-only metadata.
-    pub schema: serde_json::Value,
+    schema: serde_json::Value,
     /// Optional human-readable description for catalog UIs.
-    pub description: Option<String>,
+    description: Option<String>,
+    #[serde(skip)]
+    response_redaction: ResponseRedaction,
 }
 
 impl ToolDescriptor {
@@ -51,6 +64,7 @@ impl ToolDescriptor {
             tier: ToolTier::Agent,
             schema,
             description: None,
+            response_redaction: ResponseRedaction::Apply,
         }
     }
 
@@ -61,6 +75,7 @@ impl ToolDescriptor {
             tier: ToolTier::Operator,
             schema,
             description: None,
+            response_redaction: ResponseRedaction::Apply,
         }
     }
 
@@ -68,6 +83,37 @@ impl ToolDescriptor {
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
+    }
+
+    /// Override response-redaction posture. Registry rejects agent-tier bypasses.
+    pub fn with_response_redaction(mut self, response_redaction: ResponseRedaction) -> Self {
+        self.response_redaction = response_redaction;
+        self
+    }
+
+    /// Stable wire name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Tool auth/feature tier.
+    pub fn tier(&self) -> ToolTier {
+        self.tier
+    }
+
+    /// JSON-schema metadata for input arguments.
+    pub fn schema(&self) -> &serde_json::Value {
+        &self.schema
+    }
+
+    /// Optional catalog description.
+    pub fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    /// Dispatcher response-redaction posture.
+    pub fn response_redaction(&self) -> ResponseRedaction {
+        self.response_redaction
     }
 }
 

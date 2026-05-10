@@ -397,11 +397,14 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
             });
         }
 
+        let allow_token_shape_shadow = raw.rulepack_id == "gaze-core";
         let default_locales = parse_locales(raw.default_locales)?;
         let recognizers = raw
             .recognizers
             .into_iter()
-            .map(|recognizer| parse_recognizer(recognizer, &default_locales))
+            .map(|recognizer| {
+                parse_recognizer(recognizer, &default_locales, allow_token_shape_shadow)
+            })
             .collect::<Result<Vec<_>, _>>()?;
         validate_rulepack_recognizers(&recognizers, &default_locales, &raw_with_lint.lint)?;
         let locale = raw.locale.map(LocaleData::from);
@@ -469,9 +472,10 @@ impl From<RawLocaleData> for LocaleData {
 fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
+    allow_token_shape_shadow: bool,
 ) -> Result<RecognizerSpec, RulepackError> {
     reject_unshipped_fields(&raw)?;
-    validate_matcher(&raw)?;
+    validate_matcher(&raw, allow_token_shape_shadow)?;
     let locales = if raw.locales.is_empty() {
         default_locales.to_vec()
     } else {
@@ -519,7 +523,10 @@ fn parse_recognizer(
     })
 }
 
-fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
+fn validate_matcher(
+    raw: &RawRecognizerSpec,
+    allow_token_shape_shadow: bool,
+) -> Result<(), RulepackError> {
     match &raw.matcher {
         RawMatch::Regex {
             pattern,
@@ -529,7 +536,7 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
             if pattern.is_some() == pattern_template.is_some() {
                 return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
             }
-            if let Some(pattern) = pattern {
+            if let (false, Some(pattern)) = (allow_token_shape_shadow, pattern) {
                 let compiled = regex::Regex::new(pattern)
                     .map_err(|_| RulepackError::RegexPatternChoice { id: raw.id.clone() })?;
                 crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.id).map_err(

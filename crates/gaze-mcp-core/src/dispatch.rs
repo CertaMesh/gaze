@@ -22,13 +22,13 @@ use sha2::{Digest, Sha256};
 use ulid::Ulid;
 
 use crate::auth::{AuthError, AuthHook, Principal};
-use crate::ctx::{SessionHandle, ToolCtx};
+use crate::ctx::{SessionHandle, ToolCtx, ToolResources};
 use crate::manifest::{
     BeginCallContext, CallHandle, FailureReason, ManifestError, ManifestStore, SnapshotRef,
 };
 use crate::registry::ToolRegistry;
 use crate::session_id::{SessionIdError, SessionIdPolicy};
-use crate::tool::{ToolError, ToolResponse, ToolTier};
+use crate::tool::{ResponseRedaction, ToolError, ToolResponse, ToolTier};
 
 /// Errors returned by [`PiiEnvelope::dispatch`]. Each variant maps onto a
 /// distinct manifest [`FailureReason`] (or, on the success path, no failure
@@ -85,6 +85,8 @@ pub struct PiiEnvelope<'a> {
     pub pipeline: &'a gaze::Pipeline,
     /// Gaze session that holds the per-conversation token manifest.
     pub session: &'a gaze::Session,
+    /// Locale chain available to tool bodies that need observer-only checks.
+    pub locale_chain: &'a [gaze::LocaleTag],
     /// Transport-supplied session id validation policy.
     pub session_id_policy: &'a SessionIdPolicy,
 }
@@ -99,6 +101,7 @@ impl<'a> PiiEnvelope<'a> {
         manifest: &'a dyn ManifestStore,
         pipeline: &'a gaze::Pipeline,
         session: &'a gaze::Session,
+        locale_chain: &'a [gaze::LocaleTag],
         session_id_policy: &'a SessionIdPolicy,
     ) -> Self {
         Self {
@@ -107,6 +110,7 @@ impl<'a> PiiEnvelope<'a> {
             manifest,
             pipeline,
             session,
+            locale_chain,
             session_id_policy,
         }
     }
@@ -140,7 +144,7 @@ impl<'a> PiiEnvelope<'a> {
             .get(tool_name)
             .ok_or_else(|| DispatchError::UnknownTool(tool_name.to_string()))?;
         let descriptor = tool.descriptor();
-        let tier = descriptor.tier;
+        let tier = descriptor.tier();
 
         // 3. Authorize. Errors here MUST NOT have written a manifest row —
         //    auth failures are pre-manifest by design (matches the plan's
@@ -179,8 +183,15 @@ impl<'a> PiiEnvelope<'a> {
             None => call_id.to_string(),
         };
         let session_handle = SessionHandle::new(&audit_session_id_owned);
-        let ctx = ToolCtx::new(
+        let resources = ToolResources::new(
+            self.pipeline,
+            self.session,
+            self.manifest,
+            self.locale_chain,
+        );
+        let ctx = ToolCtx::new_with_resources(
             session_handle,
+            resources,
             redacted_args.clone(),
             call_id,
             tool_name,
@@ -203,24 +214,38 @@ impl<'a> PiiEnvelope<'a> {
             }
         };
 
-        // 8. Redact the response payload. Same fail-closed handling as the
-        //    invoke error path.
-        let redacted_payload = match redact_json(self.pipeline, self.session, &raw_response.payload)
-        {
-            Ok(value) => value,
-            Err(e) => {
-                let reason = FailureReason::RedactionFailed {
-                    message: e.to_string(),
+        // 8. Redact the response payload unless an operator-tier descriptor
+        //    explicitly opted out for restore/export semantics.
+        let response_payload = match (tier, descriptor.response_redaction()) {
+            (ToolTier::Agent, ResponseRedaction::BypassByOperator) => {
+                let reason = FailureReason::Other {
+                    message: "agent tool with BypassByOperator reached dispatch".to_string(),
                 };
                 self.manifest.fail_call(handle, reason).await?;
-                return Err(DispatchError::Redaction(e.to_string()));
+                return Err(DispatchError::Redaction(
+                    "agent tool cannot bypass response redaction".to_string(),
+                ));
             }
+            (_, ResponseRedaction::Apply) => {
+                match redact_json(self.pipeline, self.session, &raw_response.payload) {
+                    Ok(value) => value,
+                    Err(e) => {
+                        let reason = FailureReason::RedactionFailed {
+                            message: e.to_string(),
+                        };
+                        self.manifest.fail_call(handle, reason).await?;
+                        return Err(DispatchError::Redaction(e.to_string()));
+                    }
+                }
+            }
+            (ToolTier::Operator, ResponseRedaction::BypassByOperator) => raw_response.payload,
         };
 
         // 9. Compute SnapshotRef on the redacted bytes (out-of-row metadata
         //    only — adopters who want byte-level persistence wrap their
         //    ManifestStore impl with their own snapshot store).
-        let snapshot = match build_snapshot_ref(call_id, &redacted_payload) {
+        let snapshot = match build_snapshot_ref(&audit_session_id_owned, call_id, &response_payload)
+        {
             Ok(snap) => snap,
             Err(e) => {
                 let reason = FailureReason::Other {
@@ -239,7 +264,7 @@ impl<'a> PiiEnvelope<'a> {
         //     response only escape after the manifest row is durable.
         self.manifest.finish_call(handle, snapshot).await?;
 
-        Ok(ToolResponse::json(redacted_payload))
+        Ok(ToolResponse::json(response_payload))
     }
 }
 
@@ -254,21 +279,7 @@ fn redact_json(
 ) -> Result<serde_json::Value, gaze::Error> {
     use serde_json::Value as JsonValue;
     match value {
-        JsonValue::String(s) => {
-            let raw = gaze::RawDocument::Text(s.clone());
-            let clean = pipeline.redact(session, raw)?;
-            let redacted = match clean {
-                gaze::CleanDocument::Text(t) => t,
-                // gaze::Pipeline::redact for a Text input always returns a
-                // Text CleanDocument; if a future variant lands and is hit,
-                // fail closed with the original string passed-through is
-                // wrong (would leak), so surface as an error instead.
-                _ => {
-                    return Err(gaze::Error::UnsupportedRawDocumentVariant);
-                }
-            };
-            Ok(JsonValue::String(redacted))
-        }
+        JsonValue::String(s) => Ok(JsonValue::String(redact_json_string(pipeline, session, s)?)),
         JsonValue::Array(arr) => {
             let mut out = Vec::with_capacity(arr.len());
             for item in arr {
@@ -288,6 +299,48 @@ fn redact_json(
     }
 }
 
+fn redact_json_string(
+    pipeline: &gaze::Pipeline,
+    session: &gaze::Session,
+    value: &str,
+) -> Result<String, gaze::Error> {
+    let mut out = String::with_capacity(value.len());
+    let mut cursor = 0usize;
+    for token in gaze::token_shape::pattern().find_iter(value) {
+        if !session.contains_token(token.as_str()) {
+            continue;
+        }
+        out.push_str(&redact_json_string_segment(
+            pipeline,
+            session,
+            &value[cursor..token.start()],
+        )?);
+        out.push_str(token.as_str());
+        cursor = token.end();
+    }
+    out.push_str(&redact_json_string_segment(
+        pipeline,
+        session,
+        &value[cursor..],
+    )?);
+    Ok(out)
+}
+
+fn redact_json_string_segment(
+    pipeline: &gaze::Pipeline,
+    session: &gaze::Session,
+    segment: &str,
+) -> Result<String, gaze::Error> {
+    if segment.is_empty() {
+        return Ok(String::new());
+    }
+    let clean = pipeline.redact(session, gaze::RawDocument::Text(segment.to_string()))?;
+    match clean {
+        gaze::CleanDocument::Text(text) => Ok(text),
+        _ => Err(gaze::Error::UnsupportedRawDocumentVariant),
+    }
+}
+
 /// Compute a [`SnapshotRef`] over the canonical JSON bytes of `payload`.
 ///
 /// The locator is `"inline-sha256:<hex>"` — we explicitly do NOT write the
@@ -295,11 +348,16 @@ fn redact_json(
 /// scratchpad 1453). Adopters who want byte-level persistence wrap their
 /// `ManifestStore` impl and persist before calling `finish_call`.
 fn build_snapshot_ref(
+    audit_session_id: &str,
     call_id: Ulid,
     payload: &serde_json::Value,
 ) -> Result<SnapshotRef, serde_json::Error> {
     let bytes = serde_json::to_vec(payload)?;
     let mut hasher = Sha256::new();
+    hasher.update(audit_session_id.as_bytes());
+    hasher.update([0u8]);
+    hasher.update(call_id.to_bytes());
+    hasher.update([0u8]);
     hasher.update(&bytes);
     let digest = hasher.finalize();
     let sha256_hex = hex_lower(&digest);
@@ -322,4 +380,81 @@ fn hex_lower(bytes: &[u8]) -> String {
 #[doc(hidden)]
 pub fn _debug_call_handle(handle: CallHandle) -> Ulid {
     handle.id()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, RawDocument};
+    use serde_json::json;
+
+    #[derive(Clone)]
+    struct FixedDetector;
+
+    impl Detector for FixedDetector {
+        fn detect(&self, input: &str) -> Vec<Detection> {
+            input
+                .find("alice@example.invalid")
+                .map(|start| {
+                    Detection::new(
+                        start..start + "alice@example.invalid".len(),
+                        PiiClass::Email,
+                        "fixed",
+                    )
+                })
+                .into_iter()
+                .collect()
+        }
+    }
+
+    fn tokenizing_pipeline() -> gaze::Pipeline {
+        gaze::Pipeline::builder()
+            .detector(FixedDetector)
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline")
+    }
+
+    #[test]
+    fn snapshot_ref_preimage_byte_sequence_exact() {
+        let call_id = Ulid::from_string("01ARZ3NDEKTSV4RRFFQ69G5FAV").expect("ulid");
+        let payload = json!({"email": "alice@example.invalid"});
+
+        let snapshot =
+            build_snapshot_ref("audit-session", call_id, &payload).expect("snapshot ref");
+
+        let payload_bytes = serde_json::to_vec(&payload).expect("payload bytes");
+        let mut hasher = Sha256::new();
+        hasher.update(b"audit-session");
+        hasher.update([0u8]);
+        hasher.update(call_id.to_bytes());
+        hasher.update([0u8]);
+        hasher.update(&payload_bytes);
+        let expected = hex_lower(&hasher.finalize());
+
+        assert_eq!(snapshot.sha256_hex, expected);
+        assert_eq!(snapshot.byte_len, payload_bytes.len() as u64);
+    }
+
+    #[test]
+    fn redact_json_preserves_session_owned_token_shapes() {
+        let pipeline = tokenizing_pipeline();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
+        let tokenized = pipeline
+            .redact(
+                &session,
+                RawDocument::Text("alice@example.invalid".to_string()),
+            )
+            .expect("redact");
+        let token = match tokenized {
+            gaze::CleanDocument::Text(text) => text,
+            _ => panic!("expected text"),
+        };
+
+        let payload = json!(format!("{token}alice@example.invalid"));
+        let redacted = redact_json(&pipeline, &session, &payload).expect("redact json");
+
+        assert_eq!(redacted, json!(format!("{token}{token}")));
+    }
 }

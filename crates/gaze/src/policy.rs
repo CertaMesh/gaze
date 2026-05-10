@@ -320,6 +320,7 @@ impl TryFrom<RawPolicy> for Policy {
             custom_recognizers,
         } = policy_tables;
 
+        let ner = raw.ner.map(parse_ner).transpose()?;
         let mut detectors = Vec::with_capacity(custom_recognizers.len());
         let mut dictionaries = Vec::new();
         for detector in custom_recognizers {
@@ -349,7 +350,6 @@ impl TryFrom<RawPolicy> for Policy {
             return Err(PolicyError::NoRules);
         }
 
-        let ner = raw.ner.map(parse_ner).transpose()?;
         let locale = raw.locale.map(parse_locale_policy).transpose()?.flatten();
 
         Ok(Self {

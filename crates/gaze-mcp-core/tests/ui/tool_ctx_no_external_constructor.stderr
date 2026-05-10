@@ -9,19 +9,8 @@ error[E0624]: associated function `new` is private
    |     pub(crate) fn new(audit_session_id: &'a str) -> Self {
    |     ---------------------------------------------------- private associated function defined here
 
-error[E0624]: associated function `new` is private
+error[E0599]: no function or associated item named `new` found for struct `ToolCtx<'a>` in the current scope
   --> tests/ui/tool_ctx_no_external_constructor.rs:12:25
    |
-12 |       let _ctx = ToolCtx::new(_session, Value::Null, Ulid::new(), "tool", "principal");
-   |                           ^^^ private associated function
-   |
-  ::: src/ctx.rs
-   |
-   | /     pub(crate) fn new(
-   | |         session: SessionHandle<'a>,
-   | |         redacted_args: serde_json::Value,
-   | |         call_id: Ulid,
-   | |         tool_name: &'a str,
-   | |         principal_id: &'a str,
-   | |     ) -> Self {
-   | |_____________- private associated function defined here
+12 |     let _ctx = ToolCtx::new(_session, Value::Null, Ulid::new(), "tool", "principal");
+   |                         ^^^ function or associated item not found in `ToolCtx<'_>`
