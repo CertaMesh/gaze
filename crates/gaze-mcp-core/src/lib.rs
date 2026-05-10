@@ -11,6 +11,15 @@
 //! For that axis, see `gaze-proxy` (planned for v0.8 — multi-vendor reverse proxy
 //! supporting Anthropic, OpenAI, Gemini).
 //!
+//! # Session ownership boundary
+//!
+//! A single `gaze::Session` MUST cover exactly one authorization domain.
+//! The operator-tier `export_session_tokens` tool dumps the full
+//! per-Session token↔raw map. Hosts that share one `Session` across
+//! conversations leak the union of all conversations' tokens through
+//! that tool. See `README.md` §"Session ownership boundary" for the
+//! full pattern.
+//!
 //! ---
 //!
 //! Transport-free MCP-shaped runtime that enforces the Gaze chokepoint contract:
