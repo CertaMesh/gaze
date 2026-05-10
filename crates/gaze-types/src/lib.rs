@@ -424,6 +424,27 @@ pub struct DocumentExtension {
     pub schema_version: u16,
     /// Provenance for the text handed to the PII pipeline.
     pub text_origin: TextOrigin,
+    /// SHA-256 of `clean.md` NFC-normalized bytes.
+    #[serde(default)]
+    pub clean_md_sha256: [u8; 32],
+    /// SHA-256 of canonical `layout.json` bytes.
+    #[serde(default)]
+    pub layout_json_sha256: [u8; 32],
+    /// SHA-256 of canonical `report.json` bytes.
+    #[serde(default)]
+    pub report_json_sha256: [u8; 32],
+    /// SHA-256 of `preview-redacted.png` bytes when a preview is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_png_sha256: Option<[u8; 32]>,
+    /// Page count reported for the source document.
+    #[serde(default)]
+    pub page_count: u32,
+    /// Audit session id mirrored from the writing session for cross-pane correlation.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub audit_session_id: String,
+    /// Signed clean.md byte spans for every emitted token.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clean_spans: Vec<EmittedTokenSpan>,
     /// Codec audit rows for the decode path that produced this document extension.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub codec_audit: Vec<CodecAuditRow>,
@@ -435,6 +456,13 @@ impl DocumentExtension {
         Self {
             schema_version,
             text_origin,
+            clean_md_sha256: [0; 32],
+            layout_json_sha256: [0; 32],
+            report_json_sha256: [0; 32],
+            preview_png_sha256: None,
+            page_count: 0,
+            audit_session_id: String::new(),
+            clean_spans: Vec::new(),
             codec_audit: Vec::new(),
         }
     }
@@ -1384,11 +1412,37 @@ mod document_extension_tests {
         row.options_hash_hex = Some("00".repeat(32));
         row.engine_provenance = Some("tesseract@5.3.4".to_string());
         let mut extension = DocumentExtension::new(1, TextOrigin::Ocr);
+        extension.clean_md_sha256 = [1; 32];
+        extension.layout_json_sha256 = [2; 32];
+        extension.report_json_sha256 = [3; 32];
+        extension.preview_png_sha256 = Some([4; 32]);
+        extension.page_count = 2;
+        extension.audit_session_id = "018f0000-0000-7000-8000-000000000000".to_string();
+        extension.clean_spans = vec![EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email)];
         extension.codec_audit = vec![row];
 
         let json = serde_json::to_value(&extension).expect("serialize document extension");
 
         assert_eq!(json["schema_version"], 1);
+        assert_eq!(json["clean_md_sha256"].as_array().expect("hash").len(), 32);
+        assert_eq!(
+            json["layout_json_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(
+            json["report_json_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(
+            json["preview_png_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(json["page_count"], 2);
+        assert_eq!(
+            json["audit_session_id"],
+            "018f0000-0000-7000-8000-000000000000"
+        );
+        assert_eq!(json["clean_spans"].as_array().expect("spans").len(), 1);
         assert!(json.get("clean_schema_version").is_none());
         assert!(json.get("layout_schema_version").is_none());
         assert!(json.get("report_schema_version").is_none());
@@ -1397,6 +1451,36 @@ mod document_extension_tests {
         let decoded: DocumentExtension =
             serde_json::from_value(json).expect("deserialize document extension");
         assert_eq!(decoded, extension);
+    }
+
+    #[test]
+    fn document_extension_carries_full_integrity_set() {
+        let mut extension = DocumentExtension::new(1, TextOrigin::Hybrid);
+        extension.clean_md_sha256 = [10; 32];
+        extension.layout_json_sha256 = [11; 32];
+        extension.report_json_sha256 = [12; 32];
+        extension.preview_png_sha256 = Some([13; 32]);
+        extension.page_count = 7;
+        extension.audit_session_id = "018f0000-0000-7000-8000-000000000001".to_string();
+        extension.clean_spans = vec![EmittedTokenSpan::new(5..14, 20..34, PiiClass::Name)];
+        extension.codec_audit = vec![audit_row()];
+
+        let json = serde_json::to_string(&extension).expect("serialize document extension");
+        let decoded: DocumentExtension =
+            serde_json::from_str(&json).expect("deserialize document extension");
+
+        assert_eq!(decoded, extension);
+        assert_eq!(decoded.clean_md_sha256, [10; 32]);
+        assert_eq!(decoded.layout_json_sha256, [11; 32]);
+        assert_eq!(decoded.report_json_sha256, [12; 32]);
+        assert_eq!(decoded.preview_png_sha256, Some([13; 32]));
+        assert_eq!(decoded.page_count, 7);
+        assert_eq!(
+            decoded.audit_session_id,
+            "018f0000-0000-7000-8000-000000000001"
+        );
+        assert_eq!(decoded.clean_spans.len(), 1);
+        assert_eq!(decoded.codec_audit.len(), 1);
     }
 
     #[test]
