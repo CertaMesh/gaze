@@ -7,6 +7,7 @@ mod bundle_tokenization_drift;
 mod cargo_metadata_audit_isolation;
 mod ci_feature_matrix;
 mod class_map_override_safety;
+mod coverage_corpus;
 mod dylint_gate;
 mod fixture_citation;
 mod no_tenant_knowledge;
@@ -29,6 +30,7 @@ enum Command {
     CargoMetadataAuditIsolation,
     DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
+    CoverageCorpus(coverage_corpus::Args),
     CiFeatureMatrix,
     SafetyNetSanity,
 }
@@ -44,6 +46,7 @@ fn main() -> Result<()> {
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
         Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
+        Command::CoverageCorpus(args) => coverage_corpus::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),
     }
