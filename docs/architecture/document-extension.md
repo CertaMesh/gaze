@@ -23,6 +23,11 @@ files must be safe to upload to an LLM workspace as a unit.
 `<base>-agent/` is the agent-shippable directory. `<base>-owner/manifest.bin` is
 owner-only restore material produced by `Session::export_with_extension`.
 
+> v0.7.0 Phase 1 followup: runtime enforcement of `<base>-agent/` vs
+> `<base>-owner/` separation lands in `Bundle::write` (v0.7.0 Phase 1 PR,
+> tracked by Solo todo 751). No raw byte may land in `<base>-agent/` except via
+> tokenization.
+
 ## File Shapes
 
 ### clean.md
