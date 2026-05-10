@@ -147,7 +147,7 @@ fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
     }
 
     rules.push(RuleSpec::Default {
-        action: Action::Preserve,
+        action: Action::Tokenize,
     });
     rules
 }
@@ -157,4 +157,29 @@ fn default_policy(locale: Option<Vec<LocaleTag>>, rules: Vec<RuleSpec>) -> Polic
     policy.rules = rules;
     policy.locale = locale;
     policy
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_policy_unseen_class_does_not_preserve() {
+        let core = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded(CORE_BUNDLED_RULEPACK).expect("core rulepack"),
+        ))
+        .expect("core loads");
+        let policy = default_policy(None, class_rules_from_rulepacks(&[core]));
+        let default_action = policy
+            .rules
+            .iter()
+            .find_map(|rule| match rule {
+                RuleSpec::Default { action } => Some(*action),
+                _ => None,
+            })
+            .expect("default rule");
+
+        assert_eq!(default_action, Action::Tokenize);
+        assert_ne!(default_action, Action::Preserve);
+    }
 }
