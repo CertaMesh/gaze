@@ -564,7 +564,7 @@ pub struct CodecAuditRow {
     /// Text provenance reported by the codec.
     pub text_origin: TextOrigin,
     /// Codec-output schema version, decoupled from bundle schema version.
-    pub output_schema_version: u16,
+    pub codec_output_schema_version: u16,
     /// Hash of canonical codec options, never the options themselves.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub options_hash_hex: Option<String>,
@@ -584,7 +584,7 @@ impl CodecAuditRow {
         advertised: CodecCapabilitySet,
         delivered: CodecCapabilitySet,
         text_origin: TextOrigin,
-        output_schema_version: u16,
+        codec_output_schema_version: u16,
         extraction_density_policy: ExtractionDensityPolicy,
     ) -> Self {
         Self {
@@ -594,7 +594,7 @@ impl CodecAuditRow {
             advertised,
             delivered,
             text_origin,
-            output_schema_version,
+            codec_output_schema_version,
             options_hash_hex: None,
             engine_provenance: None,
             extraction_density_policy,
