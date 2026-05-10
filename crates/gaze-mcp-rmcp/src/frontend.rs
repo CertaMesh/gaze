@@ -76,6 +76,7 @@ pub trait PrincipalResolver: Send + Sync {
 
 /// Static resolver useful for local stdio servers and tests.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct FixedPrincipalResolver {
     principal: Principal,
 }
@@ -125,6 +126,7 @@ impl RmcpPrincipalError {
 
 /// rmcp transport sink for `gaze-mcp-core`.
 #[derive(Clone)]
+#[non_exhaustive]
 pub struct RmcpFrontend {
     config: RmcpFrontendConfig,
 }

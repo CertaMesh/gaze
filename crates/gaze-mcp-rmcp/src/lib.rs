@@ -13,21 +13,13 @@
 //!
 //! ---
 //!
-//! `gaze-mcp-rmcp` is the rmcp (MCP Rust SDK) transport sink for [`gaze-mcp-core`]. It will
-//! expose a `RmcpFrontend` implementing `gaze_mcp_core::Frontend`, wiring rmcp's
+//! `gaze-mcp-rmcp` is the rmcp (MCP Rust SDK) transport sink for [`gaze-mcp-core`]. It
+//! exposes a `RmcpFrontend` implementing `gaze_mcp_core::Frontend`, wiring rmcp's
 //! `tools/list` and `tools/call` flow through the chokepoint runtime.
-//!
-//! ## Phase status
-//!
-//! - **Phase 1 — scaffold + workspace wiring.** Done.
-//! - **Phase 2 — adapter layer.** [`adapter`] translates between rmcp wire types and
-//!   `gaze_mcp_core` contracts (descriptors, args, responses, errors).
-//! - **Phase 3 — `RmcpFrontend` impl.** Pending. Requires `gaze_mcp_core::Frontend` +
-//!   `DispatchHost` traits (core's Phase 7) before it can compile.
 //!
 //! ## Stability
 //!
-//! This crate re-exports types from `rmcp 0.2`. There is **no SemVer guarantee** on rmcp
+//! This crate re-exports types from `rmcp 1.x`. There is **no SemVer guarantee** on rmcp
 //! re-exports — major rmcp bumps may force breaking releases of `gaze-mcp-rmcp`.
 //!
 //! [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core

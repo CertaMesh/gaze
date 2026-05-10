@@ -8,8 +8,6 @@
 
 `gaze-mcp-rmcp` is the [rmcp](https://crates.io/crates/rmcp) transport sink for [`gaze-mcp-core`]. It exposes `RmcpFrontend`, a `gaze_mcp_core::Frontend` implementation that wires rmcp `tools/list` and `tools/call` requests to a `DispatchHost`.
 
-**v0.7 held.** This crate is being authored for the v0.7 release window and is not yet published. It depends on the companion `gaze-mcp-core` PR.
-
 ## Feature Flags
 
 - `transport-stdio` (default): MCP over process stdio, the standard agent-host integration path.
@@ -22,7 +20,7 @@
 ```toml
 [dependencies]
 gaze-mcp-core = "0.1"
-gaze-mcp-rmcp = "0.1"
+gaze-mcp-rmcp = "0.7"
 ```
 
 ```rust
@@ -66,6 +64,6 @@ The adapter removes `_session_id` before dispatching tool args and passes it as 
 
 ## rmcp Version Policy
 
-This crate builds on `rmcp 0.2`. There is **no SemVer guarantee** on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
+This crate builds on `rmcp 1.x`. There is **no SemVer guarantee** on rmcp re-exports or transport internals; major rmcp bumps may force breaking releases of `gaze-mcp-rmcp` even within otherwise stable Gaze cycles.
 
 [`gaze-mcp-core`]: https://crates.io/crates/gaze-mcp-core

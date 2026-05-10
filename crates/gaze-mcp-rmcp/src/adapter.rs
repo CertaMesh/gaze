@@ -73,6 +73,7 @@ pub fn descriptor_visible_to(descriptor: &ToolDescriptor, principal_tier: ToolTi
 /// `session_id`, if present, is supplied as the dispatch's external session
 /// identifier and validated by `SessionIdPolicy` before the chokepoint runs.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DispatchArgs {
     pub tool_name: String,
     pub args: Value,
