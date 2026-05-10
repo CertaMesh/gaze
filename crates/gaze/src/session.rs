@@ -124,6 +124,10 @@ struct SnapshotPayload {
 /// There is no `Pipeline::restore_text` method - full-text restore is performed by scanning tokens
 /// with [`crate::token_shape::pattern`] and calling `restore_strict` per token.
 ///
+/// Document workflows use the same restore root. Call [`Session::export_with_extension`] only when
+/// writing a `gaze-document` bundle that needs signed integrity hashes and codec provenance; plain
+/// text adopters should keep using [`Session::export`].
+///
 /// # Round-trip example
 ///
 /// ```rust
@@ -338,6 +342,50 @@ impl Session {
         self.export_payload(None)
     }
 
+    /// Export a document-extended snapshot for `gaze-document` bundle manifests.
+    ///
+    /// Use this instead of [`Session::export`] when writing a document bundle with
+    /// `<base>-agent/` files (`clean.md`, `layout.json`, `report.json`, optional
+    /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
+    /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
+    /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
+    /// should use [`Session::export`], which keeps the v3 snapshot envelope; document-extended
+    /// snapshots emit v4 so older readers fail closed before restore.
+    ///
+    /// ```rust
+    /// use gaze::{
+    ///     CodecAuditRow, CodecCapabilitySet, DocumentExtension, ExtractionDensityPolicy, Scope,
+    ///     Session, TextOrigin,
+    /// };
+    ///
+    /// let session = Session::new(Scope::Conversation("doc-1".to_string()))?;
+    /// let mut extension = DocumentExtension::new(1);
+    /// extension.clean_md_sha256 = [1; 32];
+    /// extension.layout_json_sha256 = [2; 32];
+    /// extension.report_json_sha256 = [3; 32];
+    /// extension.page_count = 4;
+    /// extension.audit_session_id = session.audit_session_id().to_string();
+    /// extension.codec_audit.push(CodecAuditRow::new(
+    ///     "gaze.codec.pdf",
+    ///     "0.7.0",
+    ///     "application/pdf",
+    ///     CodecCapabilitySet::new(true, true, true, false),
+    ///     CodecCapabilitySet::new(true, true, false, false),
+    ///     TextOrigin::Hybrid,
+    ///     1,
+    ///     ExtractionDensityPolicy::Required(1.0),
+    /// ));
+    ///
+    /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
+    /// # assert_eq!(manifest_bin[0], 4);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Failure modes match [`Session::export`]: ephemeral sessions return
+    /// [`Error::ExportForbidden`], JSON encoding failures return [`Error::SnapshotDecode`], and
+    /// callers must treat the returned [`SensitiveSnapshot`] as owner-only because it carries the
+    /// full token-to-PII restore map. Bundle layout details live in
+    /// `docs/architecture/document-extension.md`.
     pub fn export_with_extension(&self, extension: DocumentExtension) -> Result<SensitiveSnapshot> {
         self.export_payload(Some(extension))
     }
