@@ -422,8 +422,6 @@ pub struct LeakReportStats {
 pub struct DocumentExtension {
     /// Bundle-level schema version shared by clean, layout, preview, report, and manifest files.
     pub schema_version: u16,
-    /// Provenance for the text handed to the PII pipeline.
-    pub text_origin: TextOrigin,
     /// SHA-256 of `clean.md` NFC-normalized bytes.
     #[serde(default)]
     pub clean_md_sha256: [u8; 32],
@@ -451,11 +449,10 @@ pub struct DocumentExtension {
 }
 
 impl DocumentExtension {
-    /// Builds a document extension for one bundle schema version and text origin.
-    pub fn new(schema_version: u16, text_origin: TextOrigin) -> Self {
+    /// Builds a document extension for one bundle schema version.
+    pub fn new(schema_version: u16) -> Self {
         Self {
             schema_version,
-            text_origin,
             clean_md_sha256: [0; 32],
             layout_json_sha256: [0; 32],
             report_json_sha256: [0; 32],
@@ -470,7 +467,7 @@ impl DocumentExtension {
 
 impl Default for DocumentExtension {
     fn default() -> Self {
-        Self::new(1, TextOrigin::EmbeddedText)
+        Self::new(1)
     }
 }
 
@@ -1411,7 +1408,7 @@ mod document_extension_tests {
         let mut row = audit_row();
         row.options_hash_hex = Some("00".repeat(32));
         row.engine_provenance = Some("tesseract@5.3.4".to_string());
-        let mut extension = DocumentExtension::new(1, TextOrigin::Ocr);
+        let mut extension = DocumentExtension::new(1);
         extension.clean_md_sha256 = [1; 32];
         extension.layout_json_sha256 = [2; 32];
         extension.report_json_sha256 = [3; 32];
@@ -1455,7 +1452,7 @@ mod document_extension_tests {
 
     #[test]
     fn document_extension_carries_full_integrity_set() {
-        let mut extension = DocumentExtension::new(1, TextOrigin::Hybrid);
+        let mut extension = DocumentExtension::new(1);
         extension.clean_md_sha256 = [10; 32];
         extension.layout_json_sha256 = [11; 32];
         extension.report_json_sha256 = [12; 32];

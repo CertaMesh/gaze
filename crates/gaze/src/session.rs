@@ -947,7 +947,7 @@ mod tests {
         let token = session
             .tokenize(&PiiClass::Name, "Dr. Schmidt")
             .expect("token");
-        let extension = DocumentExtension::new(1, gaze_types::TextOrigin::EmbeddedText);
+        let extension = DocumentExtension::new(1);
 
         let snapshot = session
             .export_with_extension(extension.clone())
@@ -989,7 +989,7 @@ mod tests {
         let payload = snapshot_payload_json(&snapshot);
 
         assert_eq!(payload["document"]["schema_version"], 1);
-        assert_eq!(payload["document"]["text_origin"], "embedded_text");
+        assert!(payload["document"].get("text_origin").is_none());
         assert_eq!(
             payload["document"]["clean_md_sha256"]
                 .as_array()

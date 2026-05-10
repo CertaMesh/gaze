@@ -29,7 +29,7 @@ fn document_extension_signed_envelope_binds_bundle_files() {
     let report_json = br#"{"schema_version":1,"status":"ok"}"#;
     let preview_png = b"\x89PNG\r\n\x1a\npreview";
 
-    let mut extension = DocumentExtension::new(1, gaze::TextOrigin::EmbeddedText);
+    let mut extension = DocumentExtension::new(1);
     extension.clean_md_sha256 = sha256(clean_md.as_bytes());
     extension.layout_json_sha256 = sha256(layout_json);
     extension.report_json_sha256 = sha256(report_json);

@@ -64,20 +64,16 @@ versions because spans and integrity data cross file boundaries.
 ## Rust Hook
 
 ```rust
-use gaze::{DocumentExtension, Scope, Session, TextOrigin};
+use gaze::{DocumentExtension, Scope, Session};
 
 let session = Session::new(Scope::Conversation("doc-1".to_string()))?;
-let extension = DocumentExtension {
-    schema_version: 1,
-    text_origin: TextOrigin::EmbeddedText,
-    codec_audit: Vec::new(),
-};
+let extension = DocumentExtension::new(1);
 
 let manifest_bin = session.export_with_extension(extension)?.into_bytes();
 ```
 
 `Session::export()` remains unchanged for text-only adopters. `Session::import`
-continues to restore both plain and document-extended v3 snapshots.
+continues to restore both plain v3 and document-extended v4 snapshots.
 
 ## v0.7.1 Adapter Path
 
