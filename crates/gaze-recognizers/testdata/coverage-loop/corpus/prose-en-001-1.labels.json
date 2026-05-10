@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-001-1",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 36,
+      "byte_end": 56,
+      "class_id": "Email",
+      "raw_label": "reinhold@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 9725809699673436575,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 102,
+      "byte_end": 124,
+      "class_id": "custom:iban",
+      "raw_label": "DE24985997452020357576",
+      "generator_id": "iban_de",
+      "generator_seed": 6221812987713058154,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-001",
+    "template_seed": 5111637571594254893
+  }
+}

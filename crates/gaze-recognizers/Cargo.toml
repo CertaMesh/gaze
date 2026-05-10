@@ -44,8 +44,12 @@ unicode-normalization = "0.1"
 [dev-dependencies]
 criterion = "0.5"
 gaze = { path = "../gaze", package = "gaze-pii" }
+gaze-assembly = { path = "../gaze-assembly" }
 serial_test = "3"
 tempfile = "3"
+
+[[test]]
+name = "coverage_loop"
 
 [[test]]
 name = "context_sensitivity_v0_6"

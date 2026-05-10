@@ -1,0 +1,8 @@
+{
+  "id": "prose-en-001",
+  "context": "prose-en",
+  "locale_chain": ["en-US", "global"],
+  "body": "The account owner can be reached at {{Email}}. Compliance confirmed the settlement IBAN as {{custom:iban}} for the synthetic review packet.",
+  "expected_classes": ["Email", "custom:iban"],
+  "notes": "Phase 1 prose-en template exercising one safe-domain email and one generated DE IBAN."
+}

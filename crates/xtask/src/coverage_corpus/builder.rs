@@ -1,0 +1,234 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use anyhow::{bail, Context, Result};
+use clap::Parser;
+use serde::Serialize;
+use sha2::{Digest, Sha256};
+
+use super::generators::GeneratorRegistry;
+use super::templates::{self, Template};
+
+#[derive(Debug, Parser)]
+pub struct Args {
+    #[arg(long)]
+    regenerate: bool,
+    #[arg(long, default_value_t = 0)]
+    seed: u64,
+    #[arg(long)]
+    only: Option<String>,
+}
+
+pub fn run(args: Args) -> Result<()> {
+    if !args.regenerate {
+        bail!("coverage-corpus requires --regenerate");
+    }
+
+    let templates = templates::phase_1_templates().context("load coverage corpus templates")?;
+    let templates = filter_templates(templates, args.only.as_deref())?;
+    let registry = GeneratorRegistry::default_phase_1();
+    let corpus_dir = repo_root()?.join("crates/gaze-recognizers/testdata/coverage-loop/corpus");
+    fs::create_dir_all(&corpus_dir).context("create coverage corpus directory")?;
+
+    let mut fixture_count = 0_usize;
+    for template in templates {
+        for fixture_idx in 0..5 {
+            build_fixture(&registry, &template, args.seed, fixture_idx, &corpus_dir)?;
+            fixture_count += 1;
+        }
+    }
+
+    println!(
+        "built {fixture_count} fixtures across Phase 1 templates with seed {}",
+        args.seed
+    );
+    Ok(())
+}
+
+fn filter_templates(templates: Vec<Template>, only: Option<&str>) -> Result<Vec<Template>> {
+    let Some(only) = only else {
+        return Ok(templates);
+    };
+    let selected = templates
+        .into_iter()
+        .filter(|template| template.context == only)
+        .collect::<Vec<_>>();
+    if selected.is_empty() {
+        bail!("no coverage corpus templates found for context {only:?}");
+    }
+    Ok(selected)
+}
+
+fn build_fixture(
+    registry: &GeneratorRegistry,
+    template: &Template,
+    global_seed: u64,
+    fixture_idx: usize,
+    corpus_dir: &Path,
+) -> Result<()> {
+    validate_template(template)?;
+
+    let fixture_id = format!("{}-{fixture_idx}", template.id);
+    let template_seed = mixed_seed(global_seed, &template.id, fixture_idx, "template");
+    let mut body = String::new();
+    let mut spans = Vec::new();
+    let mut cursor = 0_usize;
+    let mut slot_idx = 0_usize;
+
+    while let Some(open_rel) = template.body[cursor..].find("{{") {
+        let open = cursor + open_rel;
+        let close_rel = template.body[open + 2..]
+            .find("}}")
+            .with_context(|| format!("unclosed placeholder in template {}", template.id))?;
+        let close = open + 2 + close_rel;
+        body.push_str(&template.body[cursor..open]);
+
+        let slot = &template.body[open + 2..close];
+        let class_id = slot.split('#').next().unwrap_or(slot).trim();
+        let locale = template.locale_chain.first().map(String::as_str);
+        let generator = registry.lookup(class_id, locale).with_context(|| {
+            format!(
+                "no generator for class {class_id:?} and locale {:?} in template {}",
+                locale, template.id
+            )
+        })?;
+        let generator_seed = mixed_seed(global_seed, &template.id, fixture_idx, slot);
+        let raw_label = generator.generate(generator_seed);
+        let byte_start = body.len();
+        body.push_str(&raw_label);
+        let byte_end = body.len();
+
+        spans.push(LabelSpan {
+            byte_start,
+            byte_end,
+            class_id: class_id.to_string(),
+            raw_label,
+            generator_id: generator.id(),
+            generator_seed,
+            license_origin: "synthetic-rust-generator",
+        });
+
+        slot_idx += 1;
+        cursor = close + 2;
+    }
+
+    body.push_str(&template.body[cursor..]);
+    if slot_idx == 0 {
+        bail!("template {} has no placeholders", template.id);
+    }
+
+    for span in &spans {
+        if !body.is_char_boundary(span.byte_start) || !body.is_char_boundary(span.byte_end) {
+            bail!("fixture {fixture_id} produced non-UTF-8-boundary span");
+        }
+    }
+
+    let labels = Labels {
+        schema_version: 1,
+        fixture_id: fixture_id.clone(),
+        context: template.context.clone(),
+        locale_chain: template.locale_chain.clone(),
+        spans,
+        metadata: LabelMetadata {
+            template_id: template.id.clone(),
+            template_seed,
+        },
+    };
+
+    write_atomic(
+        &corpus_dir.join(format!("{fixture_id}.txt")),
+        body.as_bytes(),
+    )?;
+    write_atomic(
+        &corpus_dir.join(format!("{fixture_id}.labels.json")),
+        serde_json::to_string_pretty(&labels)
+            .context("serialize fixture labels")?
+            .as_bytes(),
+    )?;
+
+    Ok(())
+}
+
+fn validate_template(template: &Template) -> Result<()> {
+    if template.id.trim().is_empty() {
+        bail!("coverage corpus template id must not be empty");
+    }
+    if template.context.trim().is_empty() {
+        bail!(
+            "coverage corpus template {} context must not be empty",
+            template.id
+        );
+    }
+    if template.locale_chain.is_empty() {
+        bail!(
+            "coverage corpus template {} locale_chain must not be empty",
+            template.id
+        );
+    }
+    if template.expected_classes.is_empty() {
+        bail!(
+            "coverage corpus template {} expected_classes must not be empty",
+            template.id
+        );
+    }
+    let _ = &template.notes;
+    Ok(())
+}
+
+fn mixed_seed(global_seed: u64, template_id: &str, fixture_idx: usize, slot: &str) -> u64 {
+    let mut hasher = Sha256::new();
+    hasher.update(global_seed.to_le_bytes());
+    hasher.update(template_id.as_bytes());
+    hasher.update(fixture_idx.to_le_bytes());
+    hasher.update(slot.as_bytes());
+    let digest = hasher.finalize();
+    u64::from_le_bytes(digest[..8].try_into().expect("sha256 digest has 32 bytes"))
+}
+
+fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
+    let tmp = tmp_path(path);
+    fs::write(&tmp, contents).with_context(|| format!("write temp file {}", tmp.display()))?;
+    fs::rename(&tmp, path)
+        .with_context(|| format!("rename {} to {}", tmp.display(), path.display()))
+}
+
+fn tmp_path(path: &Path) -> PathBuf {
+    let mut tmp = path.as_os_str().to_os_string();
+    tmp.push(".tmp");
+    PathBuf::from(tmp)
+}
+
+fn repo_root() -> Result<PathBuf> {
+    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .context("resolve workspace root from xtask manifest dir")?
+        .to_path_buf())
+}
+
+#[derive(Debug, Serialize)]
+struct Labels {
+    schema_version: u8,
+    fixture_id: String,
+    context: String,
+    locale_chain: Vec<String>,
+    spans: Vec<LabelSpan>,
+    metadata: LabelMetadata,
+}
+
+#[derive(Debug, Serialize)]
+struct LabelSpan {
+    byte_start: usize,
+    byte_end: usize,
+    class_id: String,
+    raw_label: String,
+    generator_id: &'static str,
+    generator_seed: u64,
+    license_origin: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+struct LabelMetadata {
+    template_id: String,
+    template_seed: u64,
+}

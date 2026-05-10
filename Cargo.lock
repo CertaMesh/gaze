@@ -560,6 +560,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deunicode"
+version = "1.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
+
+[[package]]
 name = "difflib"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -638,6 +644,16 @@ name = "esaxx-rs"
 version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d817e038c30374a4bcb22f94d0a8a0e216958d4c3dcde369b1439fec4bdda6e6"
+
+[[package]]
+name = "fake"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d391ba4af7f1d93f01fcf7b2f29e2bc9348e109dfdbf4dcbdc51dfa38dab0b6"
+dependencies = [
+ "deunicode",
+ "rand 0.8.6",
+]
 
 [[package]]
 name = "fallible-iterator"
@@ -797,6 +813,7 @@ version = "0.6.6"
 dependencies = [
  "aho-corasick",
  "criterion",
+ "gaze-assembly",
  "gaze-pii",
  "gaze-types",
  "hex",
@@ -2906,7 +2923,9 @@ version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap",
+ "fake",
  "gaze-pii",
+ "rand 0.8.6",
  "serde",
  "serde_json",
  "sha2",
