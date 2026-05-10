@@ -1,6 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::path::PathBuf;
 
+use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -193,6 +194,20 @@ pub enum RulepackError {
     },
     #[error("regex recognizer '{id}' must define exactly one of pattern or pattern_template")]
     RegexPatternChoice { id: String },
+    #[error("invalid regex for recognizer '{id}': {source}")]
+    RegexCompile {
+        id: String,
+        #[source]
+        source: regex::Error,
+    },
+    #[error(
+        "regex recognizer '{id}' shadows Gaze token shape sample '{shadowed_shape}' with pattern '{pattern}'"
+    )]
+    TokenShapeShadow {
+        id: String,
+        pattern: String,
+        shadowed_shape: String,
+    },
     #[error("unknown pattern_template placeholder '{placeholder}' in recognizer '{id}'")]
     UnknownPatternTemplatePlaceholder { id: String, placeholder: String },
     #[error(
@@ -520,6 +535,20 @@ fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
         } => {
             if pattern.is_some() == pattern_template.is_some() {
                 return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
+            }
+            if let Some(pattern) = pattern {
+                let compiled =
+                    Regex::new(pattern).map_err(|source| RulepackError::RegexCompile {
+                        id: raw.id.clone(),
+                        source,
+                    })?;
+                crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.id).map_err(
+                    |shadow| RulepackError::TokenShapeShadow {
+                        id: shadow.recognizer_id,
+                        pattern: shadow.offending_pattern,
+                        shadowed_shape: shadow.shadowed_shape,
+                    },
+                )?;
             }
         }
         RawMatch::AnchoredMatch {
@@ -922,7 +951,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'''
+pattern = '''(?i)\b[a-z0-9._%+\-]+@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.(?:com|org|net|edu|gov|de|uk|fr|nl|io|ai|co))\b'''
 
 [recognizers.context]
 exclusions = ["example.com"]
@@ -1168,6 +1197,30 @@ kind = "regex"
     }
 
     #[test]
+    fn rulepack_load_accepts_fixture_email_regex() {
+        let raw = r#"
+schema_version = "0.1.0"
+rulepack_id = "custom-email"
+rulepack_version = "0.7.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "custom.email"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#;
+
+        let rulepack = Rulepack::parse(raw).expect("standard email regex should load");
+
+        assert_eq!(rulepack.recognizers.len(), 1);
+        assert_eq!(rulepack.recognizers[0].id, "custom.email");
+    }
+
+    #[test]
     fn anchored_match_accepts_valid_schema() {
         let rulepack = Rulepack::parse(&anchored_match_rulepack("")).expect("anchored_match");
         assert!(matches!(
@@ -1388,7 +1441,7 @@ enabled = true
 
 [recognizers.match]
 kind = "regex"
-pattern = ".+"
+pattern = "BAD_EMAIL_FIXTURE"
 
 {extra}
 "#

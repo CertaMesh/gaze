@@ -1,0 +1,15 @@
+error[E0624]: associated function `new` is private
+ --> tests/ui/tool_resources_no_external_constructor.rs:4:28
+  |
+4 |       let _ = ToolResources::new;
+  |                              ^^^ private associated function
+  |
+ ::: src/ctx.rs
+  |
+  | /     pub(crate) fn new(
+  | |         pipeline: &'a gaze::Pipeline,
+  | |         session: &'a gaze::Session,
+  | |         manifest: &'a dyn ManifestStore,
+  | |         locale_chain: &'a [gaze::LocaleTag],
+  | |     ) -> Self {
+  | |_____________- private associated function defined here

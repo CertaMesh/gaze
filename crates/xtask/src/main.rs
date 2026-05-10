@@ -10,6 +10,7 @@ mod class_map_override_safety;
 mod coverage_corpus;
 mod dylint_gate;
 mod fixture_citation;
+mod mcp_tier_isolation;
 mod no_tenant_knowledge;
 mod safety_net_sanity;
 
@@ -33,6 +34,7 @@ enum Command {
     CoverageCorpus(coverage_corpus::Args),
     CiFeatureMatrix,
     SafetyNetSanity,
+    McpTierIsolation,
 }
 
 fn main() -> Result<()> {
@@ -49,6 +51,7 @@ fn main() -> Result<()> {
         Command::CoverageCorpus(args) => coverage_corpus::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),
+        Command::McpTierIsolation => mcp_tier_isolation::run(),
     }
 }
 

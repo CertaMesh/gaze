@@ -83,6 +83,8 @@ fn safety_args(command: &Path, checkpoint: &Path) -> Vec<String> {
         command.display().to_string(),
         "--openai-filter-checkpoint".to_string(),
         checkpoint.display().to_string(),
+        "--safety-net-timeout-ms".to_string(),
+        "30000".to_string(),
     ]
 }
 

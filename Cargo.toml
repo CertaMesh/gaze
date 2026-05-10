@@ -6,6 +6,7 @@ members = [
     "crates/gaze-recognizers",
     "crates/gaze-types",
     "crates/gaze-cli",
+    "crates/gaze-mcp-core",
     "crates/xtask",
 ]
 resolver = "2"

@@ -4,6 +4,14 @@ use regex::Regex;
 
 use crate::detector::BUILTIN_CLASS_NAMES;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TokenShapeShadow {
+    pub recognizer_id: String,
+    pub offending_pattern: String,
+    pub shadowed_shape: String,
+}
+
 pub fn pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| Regex::new(&build_pattern()).expect("token shape regex must compile"))
@@ -19,6 +27,45 @@ pub fn find_token(s: &str) -> Option<&str> {
 
 pub fn find_tokens(s: &str) -> impl Iterator<Item = &str> {
     pattern().find_iter(s).map(|m| m.as_str())
+}
+
+pub fn sample_token_shapes() -> &'static [&'static str] {
+    &[
+        "<deadbeef:Email_1>",
+        "<deadbeef:Name_1>",
+        "<deadbeef:Location_1>",
+        "<deadbeef:Organization_1>",
+        "<deadbeef:Custom:class_alpha_1>",
+        "email1.deadbeef@gaze-fake.invalid",
+        "deadbeef:email_1",
+        "deadbeef:custom:class_alpha_1",
+        "<Email_1>",
+        "<email_1>",
+        "<Custom:class_alpha_1>",
+        "<custom:class_alpha_1>",
+        "Email_1",
+        "email_1",
+        "custom:class_alpha_1",
+        "email1@example.test",
+        "email1@gaze-fake.invalid",
+    ]
+}
+
+pub fn reject_if_shadows_token_shape(
+    compiled: &Regex,
+    recognizer_id: &str,
+) -> Result<(), TokenShapeShadow> {
+    for sample in sample_token_shapes() {
+        if compiled.is_match(sample) {
+            return Err(TokenShapeShadow {
+                recognizer_id: recognizer_id.to_string(),
+                offending_pattern: compiled.as_str().to_string(),
+                shadowed_shape: (*sample).to_string(),
+            });
+        }
+    }
+
+    Ok(())
 }
 
 pub fn starts_with_session_prefix(s: &str) -> bool {
@@ -116,6 +163,16 @@ mod tests {
         {
             assert!(contains_token(&tokenized_for(class.clone())));
             assert!(contains_token(&format_preserving_for(class)));
+        }
+    }
+
+    #[test]
+    fn every_sample_matches_pattern_regex() {
+        for sample in sample_token_shapes() {
+            assert!(
+                contains_token(sample),
+                "sample should match token regex: {sample}"
+            );
         }
     }
 

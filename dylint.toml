@@ -2,6 +2,7 @@
 protected_paths = [
     "crates/gaze-cli/src/restore",
     "crates/gaze/src",
+    "crates/gaze-mcp-core/src",
 ]
 forbidden_crates = ["gaze_audit"]
 forbidden_items = [

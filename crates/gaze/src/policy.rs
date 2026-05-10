@@ -159,6 +159,14 @@ pub enum PolicyError {
         #[source]
         source: regex::Error,
     },
+    #[error(
+        "regex detector '{name}' shadows Gaze token shape sample '{shadowed_shape}' with pattern '{pattern}'"
+    )]
+    TokenShapeShadow {
+        name: String,
+        pattern: String,
+        shadowed_shape: String,
+    },
     #[error("invalid dictionary detector '{name}': {reason}")]
     BadDictionary { name: String, reason: String },
     #[error("session.ttl_secs is required when session.scope = \"persistent\"")]
@@ -312,6 +320,7 @@ impl TryFrom<RawPolicy> for Policy {
             custom_recognizers,
         } = policy_tables;
 
+        let ner = raw.ner.map(parse_ner).transpose()?;
         let mut detectors = Vec::with_capacity(custom_recognizers.len());
         let mut dictionaries = Vec::new();
         for detector in custom_recognizers {
@@ -341,7 +350,6 @@ impl TryFrom<RawPolicy> for Policy {
             return Err(PolicyError::NoRules);
         }
 
-        let ner = raw.ner.map(parse_ner).transpose()?;
         let locale = raw.locale.map(parse_locale_policy).transpose()?.flatten();
 
         Ok(Self {
@@ -414,9 +422,16 @@ fn parse_regex_detector(
         name: raw.name.clone(),
         reason: "regex recognizers require pattern".to_string(),
     })?;
-    regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
+    let compiled = regex::Regex::new(&pattern).map_err(|source| PolicyError::BadRegex {
         name: raw.name.clone(),
         source,
+    })?;
+    crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.name).map_err(|shadow| {
+        PolicyError::TokenShapeShadow {
+            name: shadow.recognizer_id,
+            pattern: shadow.offending_pattern,
+            shadowed_shape: shadow.shadowed_shape,
+        }
     })?;
 
     Ok((
@@ -645,7 +660,7 @@ ttl_secs = 86400
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example\.invalid'
 class = "email"
 
 [ner]
@@ -751,6 +766,30 @@ action = "preserve"
             err,
             PolicyError::SessionScopeUnknown { value } if value == "forever"
         ));
+    }
+
+    #[test]
+    fn custom_email_recognizer_loads_under_preservation() {
+        let raw = r#"
+[session]
+scope = "ephemeral"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = 'alice@example\.invalid'
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let policy = Policy::try_from(raw).unwrap();
+
+        assert_eq!(policy.detectors.len(), 1);
+        assert_eq!(policy.detectors[0].name, "emails");
     }
 
     #[test]

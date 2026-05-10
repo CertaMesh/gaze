@@ -1,0 +1,39 @@
+[package]
+name = "gaze-mcp-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Transport-free MCP-shaped chokepoint runtime for Gaze. Enforces redact→manifest→return ordering at the type level."
+readme = "README.md"
+keywords = ["pii", "mcp", "agent", "redaction", "tokenization"]
+categories = ["development-tools", "api-bindings"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
+gaze-types = { workspace = true }
+gaze-assembly = { path = "../gaze-assembly", version = "0.7.0" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
+async-trait = "0.1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "1"
+tracing = "0.1"
+ulid = { version = "1", features = ["serde"] }
+
+[features]
+default = ["core-tools"]
+core-tools = []
+operator-tier = []
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+trybuild = "1"
