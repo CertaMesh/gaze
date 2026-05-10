@@ -13,16 +13,15 @@
 //!   do NOT link them so an adopter who skips wiring auth cannot accidentally
 //!   expose restore.
 //!
-//! ## v0.1 scope
+//! ## Shipped defaults
 //!
-//! The operator-tier tool bodies in this crate are stubs that return
-//! [`crate::tool::ToolError::Internal`] with class `"not-yet-implemented"`.
-//! Their public-API surface (descriptors, tier, feature gating, auth-hook
-//! routing) is wired and tested by the Phase 9 fixtures; the bodies will
-//! land in a follow-up PR before v0.7 release. Adopters who need a
-//! production restore path TODAY can implement [`crate::tool::Tool`]
-//! themselves and register against [`crate::registry::ToolRegistry`] —
-//! these defaults are convenience scaffolding, not the only path.
+//! The default tool bodies for both tiers are implemented. Agent-tier tools
+//! clean, tokenize, and safety-net-check payloads through the pipeline
+//! chokepoint. Operator-tier tools restore text, strictly restore text, and
+//! export manifest inventory after [`crate::auth::AuthHook`] approval. These
+//! defaults remain convenience implementations: adopters can still implement
+//! [`crate::tool::Tool`] themselves and register against
+//! [`crate::registry::ToolRegistry`] for host-specific behavior.
 
 #[cfg(feature = "core-tools")]
 pub mod clean;
