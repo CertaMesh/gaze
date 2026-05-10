@@ -29,6 +29,8 @@ pub enum Error {
     UnknownToken(String),
     #[error("ephemeral sessions cannot be exported")]
     ExportForbidden,
+    #[error("document extension integrity fields cannot be empty")]
+    EmptyDocumentIntegrity,
     #[error("invalid snapshot version: {0}")]
     InvalidSnapshotVersion(u8),
     #[error("snapshot signature verification failed")]

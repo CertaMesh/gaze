@@ -359,12 +359,6 @@ impl Session {
     /// };
     ///
     /// let session = Session::new(Scope::Conversation("doc-1".to_string()))?;
-    /// let mut extension = DocumentExtension::new(1);
-    /// extension.clean_md_sha256 = [1; 32];
-    /// extension.layout_json_sha256 = [2; 32];
-    /// extension.report_json_sha256 = [3; 32];
-    /// extension.page_count = 4;
-    /// extension.audit_session_id = session.audit_session_id().to_string();
     /// let mut codec = CodecAuditRow::new(
     ///     "gaze.codec.pdf",
     ///     "0.7.0",
@@ -374,7 +368,14 @@ impl Session {
     /// codec.advertised = CodecCapabilitySet::new(true, true, true, false);
     /// codec.delivered = CodecCapabilitySet::new(true, true, false, false);
     /// codec.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
-    /// extension.codec_audit.push(codec);
+    /// let extension = DocumentExtension::builder(1)
+    ///     .clean_md_sha256([1; 32])
+    ///     .layout_json_sha256([2; 32])
+    ///     .report_json_sha256([3; 32])
+    ///     .page_count(4)
+    ///     .audit_session_id(session.audit_session_id())
+    ///     .codec_audit(vec![codec])
+    ///     .build()?;
     ///
     /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
     /// # assert_eq!(manifest_bin[0], 4);
@@ -383,10 +384,19 @@ impl Session {
     ///
     /// Failure modes match [`Session::export`]: ephemeral sessions return
     /// [`Error::ExportForbidden`], JSON encoding failures return [`Error::SnapshotDecode`], and
-    /// callers must treat the returned [`SensitiveSnapshot`] as owner-only because it carries the
-    /// full token-to-PII restore map. Bundle layout details live in
-    /// `docs/architecture/document-extension.md`.
+    /// empty integrity-binding hashes or audit session ids return
+    /// [`Error::EmptyDocumentIntegrity`]. `page_count == 0` is allowed because text-only or
+    /// degenerate bundles may have no pages while still binding file hashes. Callers must treat the
+    /// returned [`SensitiveSnapshot`] as owner-only because it carries the full token-to-PII restore
+    /// map. Bundle layout details live in `docs/architecture/document-extension.md`.
     pub fn export_with_extension(&self, extension: DocumentExtension) -> Result<SensitiveSnapshot> {
+        if extension.clean_md_sha256 == [0; 32]
+            || extension.layout_json_sha256 == [0; 32]
+            || extension.report_json_sha256 == [0; 32]
+            || extension.audit_session_id.is_empty()
+        {
+            return Err(Error::EmptyDocumentIntegrity);
+        }
         self.export_payload(Some(extension))
     }
 
@@ -811,6 +821,17 @@ mod tests {
         serde_json::from_slice(&snapshot.0[97..]).expect("snapshot payload json")
     }
 
+    fn document_extension(session: &Session) -> DocumentExtension {
+        DocumentExtension::builder(1)
+            .clean_md_sha256([1; 32])
+            .layout_json_sha256([2; 32])
+            .report_json_sha256([3; 32])
+            .page_count(1)
+            .audit_session_id(session.audit_session_id())
+            .build()
+            .expect("document extension")
+    }
+
     fn legacy_v0_4_0_accepts_only_v2(snapshot: &SensitiveSnapshot) -> Result<()> {
         let bytes = &snapshot.0;
         if bytes.len() < 97 {
@@ -995,7 +1016,7 @@ mod tests {
         let token = session
             .tokenize(&PiiClass::Name, "Dr. Schmidt")
             .expect("token");
-        let extension = DocumentExtension::new(1);
+        let extension = document_extension(&session);
 
         let snapshot = session
             .export_with_extension(extension.clone())
@@ -1018,7 +1039,7 @@ mod tests {
             .expect("token");
 
         let snapshot = session
-            .export_with_extension(DocumentExtension::default())
+            .export_with_extension(document_extension(&session))
             .expect("export with extension");
         let payload = snapshot_payload_json(&snapshot);
         let document_json = serde_json::to_string(&payload["document"]).expect("document json");
@@ -1028,24 +1049,62 @@ mod tests {
     }
 
     #[test]
-    fn export_with_extension_handles_empty_extension() {
+    fn document_extension_zero_clean_md_sha256_rejected() {
         let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.clean_md_sha256 = [0; 32];
 
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_zero_layout_json_sha256_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.layout_json_sha256 = [0; 32];
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_zero_report_json_sha256_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.report_json_sha256 = [0; 32];
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_empty_audit_session_id_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.audit_session_id.clear();
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_with_full_integrity_signs_successfully() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
         let snapshot = session
-            .export_with_extension(DocumentExtension::default())
-            .expect("export with default extension");
+            .export_with_extension(document_extension(&session))
+            .expect("export with full integrity");
         let payload = snapshot_payload_json(&snapshot);
 
         assert_eq!(payload["document"]["schema_version"], 1);
-        assert!(payload["document"].get("text_origin").is_none());
-        assert_eq!(
-            payload["document"]["clean_md_sha256"]
-                .as_array()
-                .expect("clean hash")
-                .len(),
-            32
-        );
-        assert!(payload["document"].get("codec_audit").is_none());
         assert!(Session::import(snapshot).is_ok());
     }
 

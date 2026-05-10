@@ -423,22 +423,17 @@ pub struct DocumentExtension {
     /// Bundle-level schema version shared by clean, layout, preview, report, and manifest files.
     pub schema_version: u16,
     /// SHA-256 of `clean.md` NFC-normalized bytes.
-    #[serde(default)]
     pub clean_md_sha256: [u8; 32],
     /// SHA-256 of canonical `layout.json` bytes.
-    #[serde(default)]
     pub layout_json_sha256: [u8; 32],
     /// SHA-256 of canonical `report.json` bytes.
-    #[serde(default)]
     pub report_json_sha256: [u8; 32],
     /// SHA-256 of `preview-redacted.png` bytes when a preview is present.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub preview_png_sha256: Option<[u8; 32]>,
     /// Page count reported for the source document.
-    #[serde(default)]
     pub page_count: u32,
     /// Audit session id mirrored from the writing session for cross-pane correlation.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub audit_session_id: String,
     /// Signed clean.md byte spans for every emitted token.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -449,26 +444,109 @@ pub struct DocumentExtension {
 }
 
 impl DocumentExtension {
-    /// Builds a document extension for one bundle schema version.
-    pub fn new(schema_version: u16) -> Self {
-        Self {
+    /// Starts a document extension builder for one bundle schema version.
+    pub fn builder(schema_version: u16) -> DocumentExtensionBuilder {
+        DocumentExtensionBuilder {
             schema_version,
-            clean_md_sha256: [0; 32],
-            layout_json_sha256: [0; 32],
-            report_json_sha256: [0; 32],
+            clean_md_sha256: None,
+            layout_json_sha256: None,
+            report_json_sha256: None,
             preview_png_sha256: None,
-            page_count: 0,
-            audit_session_id: String::new(),
+            page_count: None,
+            audit_session_id: None,
             clean_spans: Vec::new(),
             codec_audit: Vec::new(),
         }
     }
 }
 
-impl Default for DocumentExtension {
-    fn default() -> Self {
-        Self::new(1)
+/// Builder for [`DocumentExtension`] that requires signed integrity-binding fields.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct DocumentExtensionBuilder {
+    schema_version: u16,
+    clean_md_sha256: Option<[u8; 32]>,
+    layout_json_sha256: Option<[u8; 32]>,
+    report_json_sha256: Option<[u8; 32]>,
+    preview_png_sha256: Option<[u8; 32]>,
+    page_count: Option<u32>,
+    audit_session_id: Option<String>,
+    clean_spans: Vec<EmittedTokenSpan>,
+    codec_audit: Vec<CodecAuditRow>,
+}
+
+impl DocumentExtensionBuilder {
+    pub fn clean_md_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.clean_md_sha256 = Some(hash);
+        self
     }
+
+    pub fn layout_json_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.layout_json_sha256 = Some(hash);
+        self
+    }
+
+    pub fn report_json_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.report_json_sha256 = Some(hash);
+        self
+    }
+
+    pub fn preview_png_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.preview_png_sha256 = Some(hash);
+        self
+    }
+
+    pub fn page_count(mut self, page_count: u32) -> Self {
+        self.page_count = Some(page_count);
+        self
+    }
+
+    pub fn audit_session_id(mut self, audit_session_id: impl Into<String>) -> Self {
+        self.audit_session_id = Some(audit_session_id.into());
+        self
+    }
+
+    pub fn clean_spans(mut self, clean_spans: Vec<EmittedTokenSpan>) -> Self {
+        self.clean_spans = clean_spans;
+        self
+    }
+
+    pub fn codec_audit(mut self, codec_audit: Vec<CodecAuditRow>) -> Self {
+        self.codec_audit = codec_audit;
+        self
+    }
+
+    pub fn build(self) -> Result<DocumentExtension, DocumentExtensionError> {
+        Ok(DocumentExtension {
+            schema_version: self.schema_version,
+            clean_md_sha256: self
+                .clean_md_sha256
+                .ok_or(DocumentExtensionError::MissingField("clean_md_sha256"))?,
+            layout_json_sha256: self
+                .layout_json_sha256
+                .ok_or(DocumentExtensionError::MissingField("layout_json_sha256"))?,
+            report_json_sha256: self
+                .report_json_sha256
+                .ok_or(DocumentExtensionError::MissingField("report_json_sha256"))?,
+            preview_png_sha256: self.preview_png_sha256,
+            page_count: self
+                .page_count
+                .ok_or(DocumentExtensionError::MissingField("page_count"))?,
+            audit_session_id: self
+                .audit_session_id
+                .ok_or(DocumentExtensionError::MissingField("audit_session_id"))?,
+            clean_spans: self.clean_spans,
+            codec_audit: self.codec_audit,
+        })
+    }
+}
+
+/// Errors returned while building a [`DocumentExtension`].
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum DocumentExtensionError {
+    #[error("missing document extension field: {0}")]
+    MissingField(&'static str),
 }
 
 /// Provenance of text extracted from a document or transcript source.
@@ -1399,20 +1477,26 @@ mod document_extension_tests {
         row
     }
 
+    fn extension_builder() -> DocumentExtensionBuilder {
+        DocumentExtension::builder(1)
+            .clean_md_sha256([1; 32])
+            .layout_json_sha256([2; 32])
+            .report_json_sha256([3; 32])
+            .page_count(2)
+            .audit_session_id("018f0000-0000-7000-8000-000000000000")
+    }
+
     #[test]
     fn document_extension_round_trips_with_bundle_root_schema_version() {
         let mut row = audit_row();
         row.options_hash_hex = Some("00".repeat(32));
         row.engine_provenance = Some("tesseract@5.3.4".to_string());
-        let mut extension = DocumentExtension::new(1);
-        extension.clean_md_sha256 = [1; 32];
-        extension.layout_json_sha256 = [2; 32];
-        extension.report_json_sha256 = [3; 32];
-        extension.preview_png_sha256 = Some([4; 32]);
-        extension.page_count = 2;
-        extension.audit_session_id = "018f0000-0000-7000-8000-000000000000".to_string();
-        extension.clean_spans = vec![EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email)];
-        extension.codec_audit = vec![row];
+        let extension = extension_builder()
+            .preview_png_sha256([4; 32])
+            .clean_spans(vec![EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email)])
+            .codec_audit(vec![row])
+            .build()
+            .expect("document extension");
 
         let json = serde_json::to_value(&extension).expect("serialize document extension");
 
@@ -1448,15 +1532,17 @@ mod document_extension_tests {
 
     #[test]
     fn document_extension_carries_full_integrity_set() {
-        let mut extension = DocumentExtension::new(1);
-        extension.clean_md_sha256 = [10; 32];
-        extension.layout_json_sha256 = [11; 32];
-        extension.report_json_sha256 = [12; 32];
-        extension.preview_png_sha256 = Some([13; 32]);
-        extension.page_count = 7;
-        extension.audit_session_id = "018f0000-0000-7000-8000-000000000001".to_string();
-        extension.clean_spans = vec![EmittedTokenSpan::new(5..14, 20..34, PiiClass::Name)];
-        extension.codec_audit = vec![audit_row()];
+        let extension = DocumentExtension::builder(1)
+            .clean_md_sha256([10; 32])
+            .layout_json_sha256([11; 32])
+            .report_json_sha256([12; 32])
+            .preview_png_sha256([13; 32])
+            .page_count(7)
+            .audit_session_id("018f0000-0000-7000-8000-000000000001")
+            .clean_spans(vec![EmittedTokenSpan::new(5..14, 20..34, PiiClass::Name)])
+            .codec_audit(vec![audit_row()])
+            .build()
+            .expect("document extension");
 
         let json = serde_json::to_string(&extension).expect("serialize document extension");
         let decoded: DocumentExtension =
@@ -1474,6 +1560,23 @@ mod document_extension_tests {
         );
         assert_eq!(decoded.clean_spans.len(), 1);
         assert_eq!(decoded.codec_audit.len(), 1);
+    }
+
+    #[test]
+    fn document_extension_builder_requires_integrity_fields() {
+        assert_eq!(
+            DocumentExtension::builder(1).build(),
+            Err(DocumentExtensionError::MissingField("clean_md_sha256"))
+        );
+        assert_eq!(
+            DocumentExtension::builder(1)
+                .clean_md_sha256([1; 32])
+                .layout_json_sha256([2; 32])
+                .report_json_sha256([3; 32])
+                .page_count(1)
+                .build(),
+            Err(DocumentExtensionError::MissingField("audit_session_id"))
+        );
     }
 
     #[test]

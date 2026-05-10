@@ -29,18 +29,20 @@ fn document_extension_signed_envelope_binds_bundle_files() {
     let report_json = br#"{"schema_version":1,"status":"ok"}"#;
     let preview_png = b"\x89PNG\r\n\x1a\npreview";
 
-    let mut extension = DocumentExtension::new(1);
-    extension.clean_md_sha256 = sha256(clean_md.as_bytes());
-    extension.layout_json_sha256 = sha256(layout_json);
-    extension.report_json_sha256 = sha256(report_json);
-    extension.preview_png_sha256 = Some(sha256(preview_png));
-    extension.page_count = 1;
-    extension.audit_session_id = session.audit_session_id().to_string();
-    extension.clean_spans = vec![EmittedTokenSpan::new(
-        10..10 + token.len(),
-        10..21,
-        PiiClass::Name,
-    )];
+    let extension = DocumentExtension::builder(1)
+        .clean_md_sha256(sha256(clean_md.as_bytes()))
+        .layout_json_sha256(sha256(layout_json))
+        .report_json_sha256(sha256(report_json))
+        .preview_png_sha256(sha256(preview_png))
+        .page_count(1)
+        .audit_session_id(session.audit_session_id())
+        .clean_spans(vec![EmittedTokenSpan::new(
+            10..10 + token.len(),
+            10..21,
+            PiiClass::Name,
+        )])
+        .build()
+        .expect("document extension");
 
     let snapshot = session
         .export_with_extension(extension.clone())
@@ -69,7 +71,16 @@ fn text_only_export_stays_v3_and_document_export_moves_to_v4() {
     assert!(v0_6_reader_accepts_only_v2_or_v3(&text_only).is_ok());
 
     let document = session
-        .export_with_extension(DocumentExtension::default())
+        .export_with_extension(
+            DocumentExtension::builder(1)
+                .clean_md_sha256([1; 32])
+                .layout_json_sha256([2; 32])
+                .report_json_sha256([3; 32])
+                .page_count(1)
+                .audit_session_id(session.audit_session_id())
+                .build()
+                .expect("document extension"),
+        )
         .expect("document export")
         .into_bytes();
     assert_eq!(document[0], 4);
