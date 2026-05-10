@@ -1449,7 +1449,7 @@ enabled = true
 
 [recognizers.match]
 kind = "regex"
-pattern = ".+"
+pattern = "BAD_EMAIL_FIXTURE"
 
 {extra}
 "#
