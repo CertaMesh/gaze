@@ -136,7 +136,7 @@ ttl_secs = 86400
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [[rule]]
@@ -1468,7 +1468,7 @@ session = "0196758d-5f00-7a8a-9a4c-6b1347a1f0d2"
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [[rule]]
@@ -3295,7 +3295,7 @@ ttl_secs = 3600
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [[rule]]
@@ -3340,7 +3340,7 @@ ttl_secs = 3600
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [[rule]]
@@ -3391,7 +3391,7 @@ ttl_secs = 3600
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{{2,}}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [ner]
@@ -3438,7 +3438,7 @@ ttl_secs = 3600
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example[.]com'
 class = "email"
 
 [[rule]]
