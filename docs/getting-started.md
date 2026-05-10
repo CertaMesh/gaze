@@ -12,8 +12,8 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 ```toml
 [dependencies]
-gaze-pii = "0.6"
-gaze-assembly = "0.6"
+gaze-pii = "0.7"
+gaze-assembly = "0.7"
 ```
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.

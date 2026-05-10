@@ -72,7 +72,13 @@ versions because spans and integrity data cross file boundaries.
 use gaze::{DocumentExtension, Scope, Session};
 
 let session = Session::new(Scope::Conversation("doc-1".to_string()))?;
-let extension = DocumentExtension::new(1);
+let extension = DocumentExtension::builder(1)
+    .clean_md_sha256([1; 32])
+    .layout_json_sha256([2; 32])
+    .report_json_sha256([3; 32])
+    .page_count(1)
+    .audit_session_id(session.audit_session_id())
+    .build()?;
 
 let manifest_bin = session.export_with_extension(extension)?.into_bytes();
 ```
