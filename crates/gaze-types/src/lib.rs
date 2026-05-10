@@ -418,6 +418,7 @@ pub struct LeakReportStats {
 /// non-sensitive mirrors. The single `schema_version` is bundle-level; sub-files
 /// do not carry independent schema versions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct DocumentExtension {
     /// Bundle-level schema version shared by clean, layout, preview, report, and manifest files.
     pub schema_version: u16,
@@ -428,13 +429,20 @@ pub struct DocumentExtension {
     pub codec_audit: Vec<CodecAuditRow>,
 }
 
-impl Default for DocumentExtension {
-    fn default() -> Self {
+impl DocumentExtension {
+    /// Builds a document extension for one bundle schema version and text origin.
+    pub fn new(schema_version: u16, text_origin: TextOrigin) -> Self {
         Self {
-            schema_version: 1,
-            text_origin: TextOrigin::EmbeddedText,
+            schema_version,
+            text_origin,
             codec_audit: Vec::new(),
         }
+    }
+}
+
+impl Default for DocumentExtension {
+    fn default() -> Self {
+        Self::new(1, TextOrigin::EmbeddedText)
     }
 }
 
@@ -455,6 +463,7 @@ pub enum TextOrigin {
 
 /// Orthogonal document codec capabilities delivered or advertised by a codec.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CodecCapabilitySet {
     /// Codec can emit text.
     pub text: bool,
@@ -474,6 +483,16 @@ impl CodecCapabilitySet {
         confidence: false,
         timestamps: false,
     };
+
+    /// Builds a codec capability bitset.
+    pub const fn new(text: bool, layout: bool, confidence: bool, timestamps: bool) -> Self {
+        Self {
+            text,
+            layout,
+            confidence,
+            timestamps,
+        }
+    }
 
     /// Returns true when this set contains every requested capability bit.
     pub fn contains(self, requested: Self) -> bool {
@@ -505,6 +524,7 @@ impl Default for ExtractionDensityPolicy {
 
 /// Metadata-only audit row emitted by a document codec.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CodecAuditRow {
     /// Stable codec id, such as `gaze.codec.tesseract`.
     pub codec_id: String,
@@ -528,6 +548,33 @@ pub struct CodecAuditRow {
     pub engine_provenance: Option<String>,
     /// Extraction density policy declared by the codec for this MIME.
     pub extraction_density_policy: ExtractionDensityPolicy,
+}
+
+impl CodecAuditRow {
+    /// Builds a metadata-only codec audit row.
+    pub fn new(
+        codec_id: impl Into<String>,
+        codec_version: impl Into<String>,
+        accepted_mime: impl Into<String>,
+        advertised: CodecCapabilitySet,
+        delivered: CodecCapabilitySet,
+        text_origin: TextOrigin,
+        output_schema_version: u16,
+        extraction_density_policy: ExtractionDensityPolicy,
+    ) -> Self {
+        Self {
+            codec_id: codec_id.into(),
+            codec_version: codec_version.into(),
+            accepted_mime: accepted_mime.into(),
+            advertised,
+            delivered,
+            text_origin,
+            output_schema_version,
+            options_hash_hex: None,
+            engine_provenance: None,
+            extraction_density_policy,
+        }
+    }
 }
 
 /// A suspected missed PII span reported by a [`SafetyNet`].
@@ -1319,28 +1366,16 @@ mod document_extension_tests {
     use super::*;
 
     fn audit_row() -> CodecAuditRow {
-        CodecAuditRow {
-            codec_id: "gaze.codec.tesseract".to_string(),
-            codec_version: "gaze-codec-tesseract@0.7.1".to_string(),
-            accepted_mime: "image/png".to_string(),
-            advertised: CodecCapabilitySet {
-                text: true,
-                layout: true,
-                confidence: true,
-                timestamps: false,
-            },
-            delivered: CodecCapabilitySet {
-                text: true,
-                layout: true,
-                confidence: false,
-                timestamps: false,
-            },
-            text_origin: TextOrigin::Ocr,
-            output_schema_version: 1,
-            options_hash_hex: None,
-            engine_provenance: None,
-            extraction_density_policy: ExtractionDensityPolicy::Required(1.0),
-        }
+        CodecAuditRow::new(
+            "gaze.codec.tesseract",
+            "gaze-codec-tesseract@0.7.1",
+            "image/png",
+            CodecCapabilitySet::new(true, true, true, false),
+            CodecCapabilitySet::new(true, true, false, false),
+            TextOrigin::Ocr,
+            1,
+            ExtractionDensityPolicy::Required(1.0),
+        )
     }
 
     #[test]
@@ -1348,11 +1383,8 @@ mod document_extension_tests {
         let mut row = audit_row();
         row.options_hash_hex = Some("00".repeat(32));
         row.engine_provenance = Some("tesseract@5.3.4".to_string());
-        let extension = DocumentExtension {
-            schema_version: 1,
-            text_origin: TextOrigin::Ocr,
-            codec_audit: vec![row],
-        };
+        let mut extension = DocumentExtension::new(1, TextOrigin::Ocr);
+        extension.codec_audit = vec![row];
 
         let json = serde_json::to_value(&extension).expect("serialize document extension");
 
@@ -1397,12 +1429,7 @@ mod document_extension_tests {
 
     #[test]
     fn codec_capability_set_round_trips_and_contains_requested_bits() {
-        let delivered = CodecCapabilitySet {
-            text: true,
-            layout: true,
-            confidence: false,
-            timestamps: false,
-        };
+        let delivered = CodecCapabilitySet::new(true, true, false, false);
 
         let json = serde_json::to_string(&delivered).expect("serialize capabilities");
         let decoded: CodecCapabilitySet =
@@ -1410,12 +1437,7 @@ mod document_extension_tests {
 
         assert_eq!(decoded, delivered);
         assert!(decoded.contains(CodecCapabilitySet::TEXT_ONLY));
-        assert!(!decoded.contains(CodecCapabilitySet {
-            text: true,
-            layout: true,
-            confidence: true,
-            timestamps: false,
-        }));
+        assert!(!decoded.contains(CodecCapabilitySet::new(true, true, true, false)));
     }
 
     #[test]
