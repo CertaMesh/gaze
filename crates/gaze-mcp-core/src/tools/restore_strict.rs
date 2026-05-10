@@ -2,8 +2,11 @@
 //! restorations — every token in the input string must be in the manifest
 //! or the call fails.
 //!
-//! v0.1 scope: stub body. See [`crate::tools::restore`] for the full
-//! deferred-design rationale.
+//! The body takes a `text` argument, scans it with `gaze::token_shape::pattern`,
+//! and delegates restoration to the private `restore_strict_text` helper below.
+//! If any token-shaped span is not owned by the session, the whole call fails
+//! closed with `ToolError::NotFound`; otherwise the response bypasses agent
+//! redaction under the operator-tier contract.
 
 use async_trait::async_trait;
 use serde_json::json;

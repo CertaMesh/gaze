@@ -1,24 +1,22 @@
 //! `restore` operator-tier tool. Inverts the manifest: takes a redacted
 //! string and returns the original PII for an authenticated operator.
 //!
-//! ## v0.1 scope
+//! ## Body behavior
 //!
-//! Body is a stub returning `ToolError::Internal` with class
-//! `"not-yet-implemented"`. The descriptor + tier + auth-hook routing is
-//! wired and exercised by the Phase 9 fixtures, so adopters can register
-//! the tool today and the upgraded body lands in a follow-up before v0.7
-//! release.
+//! The dispatcher classifies this tool as operator-tier and its response as
+//! [`ResponseRedaction::BypassByOperator`]. The body reads a single `token`
+//! argument from the redacted tool args, restores it through the shared
+//! `gaze::Session` map, and returns the raw value plus the token class. Unknown
+//! tokens fail closed with `ToolError::NotFound`.
 //!
-//! ## Why restore is hard inside the chokepoint
+//! ## Chokepoint invariant
 //!
 //! `PiiEnvelope::dispatch` redacts the tool's args BEFORE invoke. A naive
 //! restore tool would receive `{ "token": "<re-redacted>" }` — pointless,
-//! because the original token has been mapped to a fresh token by the
-//! incoming pass. Production restore therefore requires either (a) a
-//! dispatcher path that opts out of arg-redaction for operator-tier tools,
-//! or (b) an out-of-band channel for the token-to-restore. Locking that
-//! design is the deferred work; everything else (tier gating, auth-hook
-//! routing, fail-closed manifest) is solid and tested.
+//! because the original token would map to a fresh token during the incoming
+//! pass. The dispatcher preserves session-owned token shapes during argument
+//! redaction, so restore receives the original token while surrounding text
+//! remains protected.
 
 use async_trait::async_trait;
 use serde_json::json;
