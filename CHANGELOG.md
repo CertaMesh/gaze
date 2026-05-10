@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Coverage feedback loop (Phase 2-5): full synthetic corpus plus info-only trend gate.
+
 ### Changed
 
 ### Deprecated

@@ -1,0 +1,14 @@
+{
+  "id": "prose-de-004",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Der technische Hinweis nennt {{custom:ip_address}} und die Adresse {{Email}}.",
+  "expected_classes": [
+    "custom:ip_address",
+    "Email"
+  ],
+  "notes": "German prose with IP and email."
+}

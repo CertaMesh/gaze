@@ -1,0 +1,13 @@
+{
+  "id": "ocr-output-007",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 07  WALLET {{custom:eth_address}}  CARD {{custom:credit_card}}",
+  "expected_classes": [
+    "custom:eth_address",
+    "custom:credit_card"
+  ],
+  "notes": "OCR output with ETH and card."
+}

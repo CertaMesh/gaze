@@ -1,0 +1,15 @@
+{
+  "id": "support-email-de-009",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Von: \"{{Name}}\" <{{Email}}>\nZahlungsmittel: {{custom:credit_card}}",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:credit_card"
+  ],
+  "notes": "DE support email with card."
+}

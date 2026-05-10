@@ -1,0 +1,14 @@
+{
+  "id": "prose-de-005",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Rueckmeldung von {{Name}} kam ueber {{Email}} zum Fall.",
+  "expected_classes": [
+    "Name",
+    "Email"
+  ],
+  "notes": "German prose with name and email."
+}

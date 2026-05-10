@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-010-0",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 39,
+      "byte_end": 56,
+      "class_id": "Email",
+      "raw_label": "kevon@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 10686208889803959306,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 76,
+      "byte_end": 84,
+      "class_id": "custom:phone",
+      "raw_label": "555-0178",
+      "generator_id": "phone_national_us",
+      "generator_seed": 4180409824004518021,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-010",
+    "template_seed": 8209560295513464773
+  }
+}

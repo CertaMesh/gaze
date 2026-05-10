@@ -1,0 +1,15 @@
+{
+  "id": "support-email-de-006",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Von: {{Email}} ({{Name}})\nIBAN im Anhang: {{custom:iban}}",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "custom:iban"
+  ],
+  "notes": "DE support email with IBAN."
+}

@@ -1,0 +1,14 @@
+{
+  "id": "prose-de-008",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Der Beleg zeigt Karte {{custom:credit_card}} und Netzwerkadresse {{custom:ip_address}}.",
+  "expected_classes": [
+    "custom:credit_card",
+    "custom:ip_address"
+  ],
+  "notes": "German prose with card and IP."
+}

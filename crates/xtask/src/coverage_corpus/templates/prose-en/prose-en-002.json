@@ -1,0 +1,14 @@
+{
+  "id": "prose-en-002",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "Please forward the packet to {{Name}} before checking card {{custom:credit_card}} against the customer note.",
+  "expected_classes": [
+    "Name",
+    "custom:credit_card"
+  ],
+  "notes": "English prose with cue-anchored name and Luhn card."
+}

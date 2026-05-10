@@ -1,0 +1,15 @@
+{
+  "id": "prose-en-009",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "Please ask {{Name}} to verify wallet {{custom:eth_address}} and card {{custom:credit_card}}.",
+  "expected_classes": [
+    "Name",
+    "custom:eth_address",
+    "custom:credit_card"
+  ],
+  "notes": "English prose with three structural classes."
+}

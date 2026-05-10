@@ -1,0 +1,1 @@
+{"tool":"audit_wallet","args":{"wallet":"0xDdAbe23A71932ee9B87Ff8bCa20B6aCe8Dd6652A","ip":"2001:db8:25bc:688::1917"}}

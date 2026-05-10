@@ -1,0 +1,2 @@
+Von: hudson@example.com (Max Meyer)
+Wallet-Adresse: 0x8F39c6566967605e87af6857d3AA755172D87bC7

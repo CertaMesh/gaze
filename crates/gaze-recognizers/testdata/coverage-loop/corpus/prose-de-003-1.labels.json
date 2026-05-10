@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-de-003-1",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 9,
+      "byte_end": 21,
+      "class_id": "Name",
+      "raw_label": "Max Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 2507921232945924970,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 49,
+      "byte_end": 68,
+      "class_id": "custom:credit_card",
+      "raw_label": "4595 9674 5828 8894",
+      "generator_id": "card_luhn",
+      "generator_seed": 8360087289089524385,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-de-003",
+    "template_seed": 13758676065713976469
+  }
+}

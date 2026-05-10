@@ -1,0 +1,12 @@
+{
+  "id": "ocr-output-004",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 04  SRC {{custom:ip_address}}  DST {{custom:ip_address#2}}",
+  "expected_classes": [
+    "custom:ip_address"
+  ],
+  "notes": "OCR output with repeated IP slots."
+}

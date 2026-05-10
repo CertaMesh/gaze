@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool-call-json-008-1",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 37,
+      "byte_end": 59,
+      "class_id": "custom:iban",
+      "raw_label": "DE14735655697052345775",
+      "generator_id": "iban_de",
+      "generator_seed": 9860608375995374455,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 69,
+      "byte_end": 88,
+      "class_id": "custom:credit_card",
+      "raw_label": "4843 9281 2114 2140",
+      "generator_id": "card_luhn",
+      "generator_seed": 4440505794147021540,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool-call-json-008",
+    "template_seed": 16083158535910877656
+  }
+}

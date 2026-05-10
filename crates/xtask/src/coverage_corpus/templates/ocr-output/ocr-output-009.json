@@ -1,0 +1,13 @@
+{
+  "id": "ocr-output-009",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 09  EMAIL {{Email}}  CARD {{custom:credit_card}}",
+  "expected_classes": [
+    "Email",
+    "custom:credit_card"
+  ],
+  "notes": "OCR output with email and card."
+}

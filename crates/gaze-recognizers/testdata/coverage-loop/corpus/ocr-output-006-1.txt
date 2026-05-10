@@ -1,0 +1,1 @@
+SCAN LINE 06  MAIL thalia@example.com  HOST 2001:db8:e63f:a401::d40f

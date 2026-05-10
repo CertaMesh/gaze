@@ -1,0 +1,14 @@
+{
+  "id": "prose-en-006",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "The wallet {{custom:eth_address}} appears beside email {{Email}} in the synthetic handoff.",
+  "expected_classes": [
+    "custom:eth_address",
+    "Email"
+  ],
+  "notes": "English prose with ETH and email."
+}

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "support-email-de-006-1",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 5,
+      "byte_end": 24,
+      "class_id": "Email",
+      "raw_label": "leilani@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 1590288367712121306,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 26,
+      "byte_end": 38,
+      "class_id": "Name",
+      "raw_label": "Jonas Wagner",
+      "generator_id": "name_de",
+      "generator_seed": 2200937926989963235,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 56,
+      "byte_end": 78,
+      "class_id": "custom:iban",
+      "raw_label": "DE33863507564696353219",
+      "generator_id": "iban_de",
+      "generator_seed": 2982465022348451231,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "support-email-de-006",
+    "template_seed": 6062775919588165952
+  }
+}

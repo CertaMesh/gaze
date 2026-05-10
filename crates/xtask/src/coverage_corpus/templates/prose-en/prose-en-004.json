@@ -1,0 +1,15 @@
+{
+  "id": "prose-en-004",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "Agent note: {{Name}} confirmed email {{Email}} after the IPv4 audit found {{custom:ip_address}}.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:ip_address"
+  ],
+  "notes": "English prose combining name, email, and IP."
+}

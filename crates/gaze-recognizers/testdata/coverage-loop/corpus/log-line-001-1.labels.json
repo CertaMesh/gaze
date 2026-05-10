@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "log-line-001-1",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 33,
+      "byte_end": 50,
+      "class_id": "Email",
+      "raw_label": "allie@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 9269695912200143346,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 56,
+      "byte_end": 78,
+      "class_id": "custom:iban",
+      "raw_label": "DE52631866068261812901",
+      "generator_id": "iban_de",
+      "generator_seed": 1682147982065747473,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "log-line-001",
+    "template_seed": 26700809024738162
+  }
+}

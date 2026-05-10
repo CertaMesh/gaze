@@ -1,0 +1,13 @@
+{
+  "id": "tool-call-json-008",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "{\"tool\":\"settlement\",\"args\":{\"iban\":\"{{custom:iban}}\",\"card\":\"{{custom:credit_card}}\"}}",
+  "expected_classes": [
+    "custom:iban",
+    "custom:credit_card"
+  ],
+  "notes": "Tool call JSON with IBAN and card."
+}

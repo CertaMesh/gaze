@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool-call-json-007-0",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 41,
+      "byte_end": 57,
+      "class_id": "Email",
+      "raw_label": "asha@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 9316500324064332042,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 65,
+      "byte_end": 89,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:1246:75b1::cf2b",
+      "generator_id": "ip_v6",
+      "generator_seed": 5455987577297504096,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool-call-json-007",
+    "template_seed": 12555452774050325810
+  }
+}

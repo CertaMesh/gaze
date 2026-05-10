@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-006-1",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 19,
+      "byte_end": 37,
+      "class_id": "Email",
+      "raw_label": "thalia@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 15754828526356261638,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 44,
+      "byte_end": 68,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:e63f:a401::d40f",
+      "generator_id": "ip_v6",
+      "generator_seed": 11663770261422980048,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-006",
+    "template_seed": 1437693285600508005
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "tool-call-json-009",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "{\"tool\":\"wallet_notify\",\"args\":{\"wallet\":\"{{custom:eth_address}}\",\"mail\":\"{{Email}}\"}}",
+  "expected_classes": [
+    "custom:eth_address",
+    "Email"
+  ],
+  "notes": "Tool call JSON with ETH and email."
+}

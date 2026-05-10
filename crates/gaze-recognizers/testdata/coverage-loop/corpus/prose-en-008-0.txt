@@ -1,0 +1,1 @@
+The scanner returned 2001:db8:58d1:cd94::eb11 near ZIP 62832-1028 in the document footer.

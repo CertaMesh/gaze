@@ -2926,10 +2926,12 @@ dependencies = [
  "clap",
  "fake",
  "gaze-pii",
+ "phonenumber",
  "rand 0.8.6",
  "serde",
  "serde_json",
  "sha2",
+ "sha3",
  "tempfile",
 ]
 

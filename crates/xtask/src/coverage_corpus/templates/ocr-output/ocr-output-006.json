@@ -1,0 +1,13 @@
+{
+  "id": "ocr-output-006",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 06  MAIL {{Email}}  HOST {{custom:ip_address}}",
+  "expected_classes": [
+    "Email",
+    "custom:ip_address"
+  ],
+  "notes": "OCR output with email and IP."
+}

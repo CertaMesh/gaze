@@ -1,0 +1,1 @@
+{"tool":"charge_card","args":{"card":"4565 4737 1993 3606","receipt":"anna@example.com"}}

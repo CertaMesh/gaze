@@ -29,17 +29,39 @@ pub fn run(args: Args) -> Result<()> {
     let registry = GeneratorRegistry::default_phase_1();
     let corpus_dir = repo_root()?.join("crates/gaze-recognizers/testdata/coverage-loop/corpus");
     fs::create_dir_all(&corpus_dir).context("create coverage corpus directory")?;
+    remove_generated_corpus_files(&corpus_dir)?;
 
     let mut fixture_count = 0_usize;
+    let mut manifest_entries = Vec::new();
     for template in templates {
-        for fixture_idx in 0..5 {
-            build_fixture(&registry, &template, args.seed, fixture_idx, &corpus_dir)?;
+        for fixture_idx in 0..fixture_variants(&template) {
+            manifest_entries.push(build_fixture(
+                &registry,
+                &template,
+                args.seed,
+                fixture_idx,
+                &corpus_dir,
+            )?);
             fixture_count += 1;
         }
     }
 
+    manifest_entries.sort_by(|left, right| left.fixture_id.cmp(&right.fixture_id));
+    write_atomic(
+        &repo_root()?.join("crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json"),
+        serde_json::to_string_pretty(&BuildManifest {
+            schema_version: 1,
+            seed: args.seed,
+            fixture_count,
+            corpus_sha256: corpus_sha256(&manifest_entries),
+            fixtures: manifest_entries,
+        })
+        .context("serialize coverage corpus build manifest")?
+        .as_bytes(),
+    )?;
+
     println!(
-        "built {fixture_count} fixtures across Phase 1 templates with seed {}",
+        "built {fixture_count} fixtures across coverage-loop templates with seed {}",
         args.seed
     );
     Ok(())
@@ -65,7 +87,7 @@ fn build_fixture(
     global_seed: u64,
     fixture_idx: usize,
     corpus_dir: &Path,
-) -> Result<()> {
+) -> Result<BuildManifestEntry> {
     validate_template(template)?;
 
     let fixture_id = format!("{}-{fixture_idx}", template.id);
@@ -134,6 +156,12 @@ fn build_fixture(
             template_seed,
         },
     };
+    let body_sha256 = hex_sha256(body.as_bytes());
+    let generator_ids = labels
+        .spans
+        .iter()
+        .map(|span| span.generator_id)
+        .collect::<Vec<_>>();
 
     write_atomic(
         &corpus_dir.join(format!("{fixture_id}.txt")),
@@ -146,7 +174,15 @@ fn build_fixture(
             .as_bytes(),
     )?;
 
-    Ok(())
+    Ok(BuildManifestEntry {
+        fixture_id,
+        template_id: template.id.clone(),
+        fixture_idx,
+        seed: global_seed,
+        template_seed,
+        generator_ids,
+        body_sha256,
+    })
 }
 
 fn validate_template(template: &Template) -> Result<()> {
@@ -183,6 +219,43 @@ fn mixed_seed(global_seed: u64, template_id: &str, fixture_idx: usize, slot: &st
     hasher.update(slot.as_bytes());
     let digest = hasher.finalize();
     u64::from_le_bytes(digest[..8].try_into().expect("sha256 digest has 32 bytes"))
+}
+
+fn fixture_variants(template: &Template) -> usize {
+    if template.id == "prose-en-001" {
+        5
+    } else {
+        2
+    }
+}
+
+fn remove_generated_corpus_files(corpus_dir: &Path) -> Result<()> {
+    for entry in fs::read_dir(corpus_dir).context("read coverage corpus directory")? {
+        let path = entry?.path();
+        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if name.ends_with(".txt") || name.ends_with(".labels.json") {
+            fs::remove_file(&path)
+                .with_context(|| format!("remove stale corpus file {}", path.display()))?;
+        }
+    }
+    Ok(())
+}
+
+fn hex_sha256(contents: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(contents);
+    format!("{:x}", hasher.finalize())
+}
+
+fn corpus_sha256(entries: &[BuildManifestEntry]) -> String {
+    let mut hasher = Sha256::new();
+    for entry in entries {
+        hasher.update(entry.fixture_id.as_bytes());
+        hasher.update(entry.body_sha256.as_bytes());
+    }
+    format!("{:x}", hasher.finalize())
 }
 
 fn write_atomic(path: &Path, contents: &[u8]) -> Result<()> {
@@ -231,4 +304,24 @@ struct LabelSpan {
 struct LabelMetadata {
     template_id: String,
     template_seed: u64,
+}
+
+#[derive(Debug, Serialize)]
+struct BuildManifest {
+    schema_version: u8,
+    seed: u64,
+    fixture_count: usize,
+    corpus_sha256: String,
+    fixtures: Vec<BuildManifestEntry>,
+}
+
+#[derive(Debug, Serialize)]
+struct BuildManifestEntry {
+    fixture_id: String,
+    template_id: String,
+    fixture_idx: usize,
+    seed: u64,
+    template_seed: u64,
+    generator_ids: Vec<&'static str>,
+    body_sha256: String,
 }

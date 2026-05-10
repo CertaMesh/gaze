@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-007-1",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 11,
+      "byte_end": 22,
+      "class_id": "Name",
+      "raw_label": "Evan Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 2798281700785108080,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 43,
+      "byte_end": 65,
+      "class_id": "custom:iban",
+      "raw_label": "DE62210399096186665775",
+      "generator_id": "iban_de",
+      "generator_seed": 260548198109357674,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-007",
+    "template_seed": 4155508075470490954
+  }
+}

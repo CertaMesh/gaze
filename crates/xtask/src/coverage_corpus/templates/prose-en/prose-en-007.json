@@ -1,0 +1,14 @@
+{
+  "id": "prose-en-007",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "Forward to {{Name}}: settlement account {{custom:iban}} still needs review.",
+  "expected_classes": [
+    "Name",
+    "custom:iban"
+  ],
+  "notes": "English forward-marker cue with IBAN."
+}

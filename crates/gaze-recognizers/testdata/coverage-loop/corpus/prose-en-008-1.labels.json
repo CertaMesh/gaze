@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-008-1",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 21,
+      "byte_end": 45,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:bbe5:49dd::c886",
+      "generator_id": "ip_v6",
+      "generator_seed": 16791818202810605808,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 55,
+      "byte_end": 65,
+      "class_id": "custom:postal_code",
+      "raw_label": "26684-2622",
+      "generator_id": "postal_us",
+      "generator_seed": 8932280823657260637,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-008",
+    "template_seed": 14256300201381225687
+  }
+}

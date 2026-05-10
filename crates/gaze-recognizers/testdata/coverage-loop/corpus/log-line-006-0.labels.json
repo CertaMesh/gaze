@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "log-line-006-0",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 36,
+      "byte_end": 54,
+      "class_id": "Email",
+      "raw_label": "bethel@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 17831811939133589507,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 62,
+      "byte_end": 104,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x24184c4029e5EaaC1860ab63BFC69820e36051c2",
+      "generator_id": "eth_eip55",
+      "generator_seed": 1085179671364145122,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "log-line-006",
+    "template_seed": 646775044328620630
+  }
+}

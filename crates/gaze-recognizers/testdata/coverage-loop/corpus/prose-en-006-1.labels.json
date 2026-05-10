@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-006-1",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 11,
+      "byte_end": 53,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x020538DB688C961515B4a968E7DfB15C1623E470",
+      "generator_id": "eth_eip55",
+      "generator_seed": 8142592378119388735,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 75,
+      "byte_end": 93,
+      "class_id": "Email",
+      "raw_label": "arlene@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 15974372807417611279,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-006",
+    "template_seed": 608541607601427655
+  }
+}
