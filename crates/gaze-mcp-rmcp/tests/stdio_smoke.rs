@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use gaze_mcp_core::{DispatchError, DispatchHost, Principal, ToolDescriptor, ToolResponse};
 use gaze_mcp_rmcp::{FixedPrincipalResolver, RmcpFrontend};
 use rmcp::ServiceExt;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use tokio::io::duplex;
 
@@ -70,16 +70,15 @@ async fn stdio_dispatch_lists_and_calls_tools() {
     assert_eq!(tools.tools.len(), 1);
     assert_eq!(tools.tools[0].name, "clean");
 
+    let args = json!({
+        "text": "hello",
+        "_session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
+    })
+    .as_object()
+    .cloned()
+    .expect("arguments are object");
     let result = client
-        .call_tool(CallToolRequestParam {
-            name: "clean".into(),
-            arguments: json!({
-                "text": "hello",
-                "_session_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV"
-            })
-            .as_object()
-            .cloned(),
-        })
+        .call_tool(CallToolRequestParams::new("clean").with_arguments(args))
         .await
         .expect("tool call succeeds");
 

@@ -15,8 +15,8 @@ use gaze_mcp_core::{
 };
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParam, CallToolResult, Content, ErrorData, Implementation, ListToolsResult,
-    PaginatedRequestParam, ServerCapabilities, ServerInfo,
+    CallToolRequestParams, CallToolResult, Content, ErrorData, Implementation, ListToolsResult,
+    PaginatedRequestParams, ServerCapabilities, ServerInfo,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use tokio_util::sync::CancellationToken;
@@ -214,19 +214,14 @@ impl RmcpServer {
 
 impl ServerHandler for RmcpServer {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo {
-            capabilities: ServerCapabilities::builder().enable_tools().build(),
-            server_info: Implementation {
-                name: "gaze-mcp-rmcp".to_string(),
-                version: env!("CARGO_PKG_VERSION").to_string(),
-            },
-            ..ServerInfo::default()
-        }
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_server_info(
+            Implementation::new("gaze-mcp-rmcp", env!("CARGO_PKG_VERSION")),
+        )
     }
 
     async fn list_tools(
         &self,
-        _request: Option<PaginatedRequestParam>,
+        _request: Option<PaginatedRequestParams>,
         context: RequestContext<RoleServer>,
     ) -> Result<ListToolsResult, ErrorData> {
         let principal = self.principal(&context).await?;
@@ -239,15 +234,12 @@ impl ServerHandler for RmcpServer {
             .map(|descriptor| descriptor_to_rmcp_tool(&descriptor))
             .collect();
 
-        Ok(ListToolsResult {
-            tools,
-            next_cursor: None,
-        })
+        Ok(ListToolsResult::with_all_items(tools))
     }
 
     async fn call_tool(
         &self,
-        request: CallToolRequestParam,
+        request: CallToolRequestParams,
         context: RequestContext<RoleServer>,
     ) -> Result<CallToolResult, ErrorData> {
         let principal = self.principal(&context).await?;

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use gaze_mcp_core::{ToolDescriptor, ToolError, ToolResponse, ToolTier};
 use rmcp::model::{
-    AnnotateAble, CallToolRequestParam, CallToolResult, Content, JsonObject, RawContent, Tool,
+    AnnotateAble, CallToolRequestParams, CallToolResult, Content, JsonObject, RawContent, Tool,
 };
 use serde_json::Value;
 
@@ -35,12 +35,17 @@ pub const SESSION_ID_ARG_KEY: &str = "_session_id";
 /// responsible for filtering operator-tier descriptors out of `list_tools`
 /// for unauthorized principals.
 pub fn descriptor_to_rmcp_tool(descriptor: &ToolDescriptor) -> Tool {
-    Tool {
-        name: Cow::Owned(descriptor.name.clone()),
-        description: descriptor.description.clone().map(Cow::Owned),
-        input_schema: Arc::new(json_value_to_object(&descriptor.schema)),
-        annotations: None,
+    let mut tool = Tool::new_with_raw(
+        descriptor.name().to_string(),
+        descriptor
+            .description()
+            .map(|description| Cow::Owned::<str>(description.to_string())),
+        Arc::new(json_value_to_object(descriptor.schema())),
+    );
+    if let Some(output_schema) = descriptor.output_schema() {
+        tool = tool.with_raw_output_schema(Arc::new(json_value_to_object(output_schema)));
     }
+    tool
 }
 
 /// Whether a descriptor should be visible on the wire to a given tier.
@@ -49,7 +54,7 @@ pub fn descriptor_to_rmcp_tool(descriptor: &ToolDescriptor) -> Tool {
 /// principals. The dispatch path still enforces tier through `AuthHook`,
 /// but list filtering avoids advertising tools the principal cannot call.
 pub fn descriptor_visible_to(descriptor: &ToolDescriptor, principal_tier: ToolTier) -> bool {
-    match (descriptor.tier, principal_tier) {
+    match (descriptor.tier(), principal_tier) {
         (ToolTier::Agent, _) => true,
         (ToolTier::Operator, ToolTier::Operator) => true,
         (ToolTier::Operator, ToolTier::Agent) => false,
@@ -74,16 +79,18 @@ pub struct DispatchArgs {
     pub session_id: Option<String>,
 }
 
-/// Translate an rmcp `CallToolRequestParam` into the inputs `DispatchHost::dispatch` expects.
+/// Translate an rmcp `CallToolRequestParams` into the inputs `DispatchHost::dispatch` expects.
 ///
 /// The argument map is converted into a `serde_json::Value::Object` so the
 /// tool implementation sees the same shape it would see when accepting JSON
 /// directly. If the request omits `arguments`, the call is treated as having
 /// an empty object, which is what rmcp's spec implies.
 pub fn rmcp_args_to_dispatch_args(
-    request: CallToolRequestParam,
+    request: CallToolRequestParams,
 ) -> Result<DispatchArgs, RmcpFrontendError> {
-    let CallToolRequestParam { name, arguments } = request;
+    let CallToolRequestParams {
+        name, arguments, ..
+    } = request;
     let mut map = arguments.unwrap_or_default();
     let session_id = match map.remove(SESSION_ID_ARG_KEY) {
         Some(Value::String(s)) => Some(s),
@@ -170,6 +177,7 @@ fn json_kind(value: &Value) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gaze_mcp_core::ResponseRedaction;
     use serde_json::json;
 
     fn make_descriptor() -> ToolDescriptor {
@@ -199,6 +207,29 @@ mod tests {
     }
 
     #[test]
+    fn descriptor_preserves_output_schema_without_response_redaction_wire_field() {
+        let d = ToolDescriptor::operator("restore", json!({ "type": "object" }))
+            .with_output_schema(json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" }
+                }
+            }))
+            .with_response_redaction(ResponseRedaction::BypassByOperator);
+        let t = descriptor_to_rmcp_tool(&d);
+        assert_eq!(
+            t.output_schema
+                .as_ref()
+                .and_then(|schema| schema.get("type")),
+            Some(&json!("object"))
+        );
+
+        let wire = serde_json::to_value(&t).expect("tool serializes");
+        assert!(wire.get("outputSchema").is_some());
+        assert!(wire.get("responseRedaction").is_none());
+    }
+
+    #[test]
     fn descriptor_visibility_filters_operator_for_agent_principals() {
         let agent = ToolDescriptor::agent("a", json!({}));
         let operator = ToolDescriptor::operator("o", json!({}));
@@ -216,10 +247,7 @@ mod tests {
             SESSION_ID_ARG_KEY.to_string(),
             json!("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
         );
-        let req = CallToolRequestParam {
-            name: Cow::Borrowed("clean"),
-            arguments: Some(args),
-        };
+        let req = CallToolRequestParams::new("clean").with_arguments(args);
         let out = rmcp_args_to_dispatch_args(req).expect("translation should succeed");
         assert_eq!(out.tool_name, "clean");
         assert_eq!(
@@ -231,10 +259,7 @@ mod tests {
 
     #[test]
     fn rmcp_args_default_to_empty_object_when_arguments_missing() {
-        let req = CallToolRequestParam {
-            name: Cow::Borrowed("clean"),
-            arguments: None,
-        };
+        let req = CallToolRequestParams::new("clean");
         let out = rmcp_args_to_dispatch_args(req).unwrap();
         assert_eq!(out.session_id, None);
         assert_eq!(out.args, json!({}));
@@ -244,10 +269,7 @@ mod tests {
     fn rmcp_args_reject_non_string_session_id() {
         let mut args = JsonObject::new();
         args.insert(SESSION_ID_ARG_KEY.to_string(), json!(42));
-        let req = CallToolRequestParam {
-            name: Cow::Borrowed("clean"),
-            arguments: Some(args),
-        };
+        let req = CallToolRequestParams::new("clean").with_arguments(args);
         let err = rmcp_args_to_dispatch_args(req).expect_err("number sid must be rejected");
         assert!(matches!(err, RmcpFrontendError::MalformedRequest(_)));
         assert_eq!(err.class(), "malformed-request");

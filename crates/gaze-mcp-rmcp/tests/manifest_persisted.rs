@@ -12,7 +12,7 @@ use gaze_mcp_core::tool::{Tool, ToolDescriptor, ToolError, ToolResponse};
 use gaze_mcp_core::{AuthError, AuthHook, DispatchError, DispatchHost, PiiEnvelope, Principal};
 use gaze_mcp_rmcp::{FixedPrincipalResolver, RmcpFrontend};
 use rmcp::ServiceExt;
-use rmcp::model::CallToolRequestParam;
+use rmcp::model::CallToolRequestParams;
 use serde_json::json;
 use tokio::io::duplex;
 
@@ -40,6 +40,7 @@ impl DispatchHost for EnvelopeHost {
             &self.manifest,
             &self.pipeline,
             &self.session,
+            &[],
             &self.session_id_policy,
         );
         envelope
@@ -155,11 +156,12 @@ async fn finish_call_failure_returns_error_instead_of_tool_response() {
     });
 
     let client = ().serve(client_stream).await.expect("client initializes");
+    let args = json!({ "text": "hello" })
+        .as_object()
+        .cloned()
+        .expect("arguments are object");
     let result = client
-        .call_tool(CallToolRequestParam {
-            name: "echo".into(),
-            arguments: json!({ "text": "hello" }).as_object().cloned(),
-        })
+        .call_tool(CallToolRequestParams::new("echo").with_arguments(args))
         .await
         .expect("tool call returns rmcp result");
 
