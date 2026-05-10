@@ -95,7 +95,7 @@ impl AuthError {
 /// agent surface (`authorize_agent`) is invoked for default-tier tools
 /// (`clean`, `tokenize`, `safety_net_check`, custom registrations); the
 /// operator surface (`authorize_operator`) is invoked for the operator-tier
-/// tools (`restore`, `restore_strict`, `export_manifest`). The dispatcher
+/// tools (`restore`, `restore_strict`, `export_session_tokens`). The dispatcher
 /// decides which to call based on the tool's [`crate::tool::ToolDescriptor`]
 /// metadata — adopters do not opt in to operator-tier semantics by accident.
 #[async_trait]

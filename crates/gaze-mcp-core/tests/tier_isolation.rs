@@ -27,7 +27,7 @@ fn core_tools_module_is_present_with_core_tools_feature() {
 #[cfg(feature = "operator-tier")]
 #[test]
 fn operator_tools_module_is_present_with_operator_tier_feature() {
-    use gaze_mcp_core::operator_tools::{ExportManifestTool, RestoreStrictTool, RestoreTool};
+    use gaze_mcp_core::operator_tools::{ExportSessionTokensTool, RestoreStrictTool, RestoreTool};
     use gaze_mcp_core::tool::{Tool, ToolTier};
 
     assert_eq!(RestoreTool::new().descriptor().tier(), ToolTier::Operator);
@@ -36,7 +36,7 @@ fn operator_tools_module_is_present_with_operator_tier_feature() {
         ToolTier::Operator
     );
     assert_eq!(
-        ExportManifestTool::new().descriptor().tier(),
+        ExportSessionTokensTool::new().descriptor().tier(),
         ToolTier::Operator
     );
 }

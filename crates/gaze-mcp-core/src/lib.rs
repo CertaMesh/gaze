@@ -50,7 +50,7 @@ pub mod core_tools {
 #[cfg(feature = "operator-tier")]
 pub mod operator_tools {
     //! Re-exports of the operator-tier tools (feature `operator-tier`).
-    pub use crate::tools::export::ExportManifestTool;
+    pub use crate::tools::export::ExportSessionTokensTool;
     pub use crate::tools::restore::RestoreTool;
     pub use crate::tools::restore_strict::RestoreStrictTool;
 }
