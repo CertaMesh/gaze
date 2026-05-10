@@ -9,6 +9,7 @@ use crate::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolRespon
 
 /// `export_session_tokens` operator-tier tool. See module docs.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct ExportSessionTokensTool {
     descriptor: ToolDescriptor,
 }

@@ -26,6 +26,7 @@ use crate::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolRespon
 
 /// `restore` operator-tier tool. See module docs.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RestoreTool {
     descriptor: ToolDescriptor,
 }

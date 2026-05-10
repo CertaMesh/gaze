@@ -22,6 +22,7 @@ use crate::tool::{Tool, ToolDescriptor, ToolError, ToolResponse};
 
 /// `clean` agent-tier tool. See module docs.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct CleanTool {
     descriptor: ToolDescriptor,
 }

@@ -9,6 +9,7 @@ use crate::tool::{Tool, ToolDescriptor, ToolError, ToolResponse};
 
 /// `tokenize_field` agent-tier tool. See module docs.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct TokenizeFieldTool {
     descriptor: ToolDescriptor,
 }

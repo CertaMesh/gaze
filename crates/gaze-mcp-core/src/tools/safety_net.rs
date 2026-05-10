@@ -10,6 +10,7 @@ use crate::tool::{Tool, ToolDescriptor, ToolError, ToolResponse};
 
 /// `safety_net_check` agent-tier tool. See module docs.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct SafetyNetCheckTool {
     descriptor: ToolDescriptor,
 }
