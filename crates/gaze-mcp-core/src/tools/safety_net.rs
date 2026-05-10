@@ -32,7 +32,23 @@ impl SafetyNetCheckTool {
                     }
                 }),
             )
-            .with_description("Run the gaze safety-net pass against text and report residual PII."),
+            .with_description("Run the gaze safety-net pass against text and report residual PII.")
+            .with_output_schema(json!({
+                "type": "object",
+                "properties": {
+                    "ok": {
+                        "oneOf": [
+                            { "type": "boolean" },
+                            { "type": "string", "const": "unconfigured" }
+                        ]
+                    },
+                    "nets_run": { "type": "integer", "minimum": 0 },
+                    "leak_count": { "type": "integer", "minimum": 0 },
+                    "leaks": { "type": "array" },
+                    "stats": { "type": "object" }
+                },
+                "required": ["ok", "nets_run", "leak_count", "leaks", "stats"]
+            })),
         }
     }
 }
@@ -264,6 +280,22 @@ mod tests {
             "safety_net_check",
             "principal",
         )
+    }
+
+    #[test]
+    fn safety_net_check_descriptor_declares_ok_oneof_response_schema() {
+        let tool = SafetyNetCheckTool::new();
+        let schema = tool
+            .descriptor()
+            .output_schema()
+            .expect("output schema should be declared");
+
+        assert_eq!(schema["properties"]["ok"]["oneOf"][0]["type"], "boolean");
+        assert_eq!(schema["properties"]["ok"]["oneOf"][1]["type"], "string");
+        assert_eq!(
+            schema["properties"]["ok"]["oneOf"][1]["const"],
+            "unconfigured"
+        );
     }
 
     #[tokio::test]

@@ -52,6 +52,12 @@ pub struct ToolDescriptor {
     schema: serde_json::Value,
     /// Optional human-readable description for catalog UIs.
     description: Option<String>,
+    /// Optional JSON-schema document describing the tool's response payload.
+    /// Output schemas are surface metadata for transports and generated
+    /// clients; the dispatcher still treats the tool body as authoritative and
+    /// redacts the actual response according to `response_redaction`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_schema: Option<serde_json::Value>,
     #[serde(skip)]
     response_redaction: ResponseRedaction,
 }
@@ -64,6 +70,7 @@ impl ToolDescriptor {
             tier: ToolTier::Agent,
             schema,
             description: None,
+            output_schema: None,
             response_redaction: ResponseRedaction::Apply,
         }
     }
@@ -75,6 +82,7 @@ impl ToolDescriptor {
             tier: ToolTier::Operator,
             schema,
             description: None,
+            output_schema: None,
             response_redaction: ResponseRedaction::Apply,
         }
     }
@@ -88,6 +96,12 @@ impl ToolDescriptor {
     /// Override response-redaction posture. Registry rejects agent-tier bypasses.
     pub fn with_response_redaction(mut self, response_redaction: ResponseRedaction) -> Self {
         self.response_redaction = response_redaction;
+        self
+    }
+
+    /// Builder-style response schema override.
+    pub fn with_output_schema(mut self, output_schema: serde_json::Value) -> Self {
+        self.output_schema = Some(output_schema);
         self
     }
 
@@ -109,6 +123,11 @@ impl ToolDescriptor {
     /// Optional catalog description.
     pub fn description(&self) -> Option<&str> {
         self.description.as_deref()
+    }
+
+    /// Optional JSON-schema metadata for response payloads.
+    pub fn output_schema(&self) -> Option<&serde_json::Value> {
+        self.output_schema.as_ref()
     }
 
     /// Dispatcher response-redaction posture.
