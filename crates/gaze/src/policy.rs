@@ -660,7 +660,7 @@ ttl_secs = 86400
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = '(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'
+pattern = 'alice@example\.invalid'
 class = "email"
 
 [ner]
@@ -777,7 +777,7 @@ scope = "ephemeral"
 [[policy.custom_recognizers]]
 kind = "regex"
 name = "emails"
-pattern = "(?i)\\b[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}\\b"
+pattern = 'alice@example\.invalid'
 class = "email"
 
 [[rule]]

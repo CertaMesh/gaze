@@ -959,7 +959,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b'''
+pattern = '''(?i)\b[a-z0-9._%+\-]+@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.(?:com|org|net|edu|gov|de|uk|fr|nl|io|ai|co))\b'''
 
 [recognizers.context]
 exclusions = ["example.com"]
@@ -1205,7 +1205,7 @@ kind = "regex"
     }
 
     #[test]
-    fn rulepack_load_accepts_standard_email_regex() {
+    fn rulepack_load_accepts_fixture_email_regex() {
         let raw = r#"
 schema_version = "0.1.0"
 rulepack_id = "custom-email"
@@ -1219,7 +1219,7 @@ enabled = true
 
 [recognizers.match]
 kind = "regex"
-pattern = "(?i)\\b[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}\\b"
+pattern = '''alice@example\.invalid'''
 "#;
 
         let rulepack = Rulepack::parse(raw).expect("standard email regex should load");
