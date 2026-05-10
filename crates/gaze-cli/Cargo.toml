@@ -1,6 +1,6 @@
 [package]
 name = "gaze-cli"
-version = "0.6.6"
+version = "0.7.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -27,10 +27,10 @@ path = "src/main.rs"
 base64 = "0.22"
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
-gaze = { path = "../gaze", version = "0.6.6", package = "gaze-pii" }
-gaze-assembly = { path = "../gaze-assembly", version = "0.6.6" }
+gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.7.0" }
 gaze-audit = { workspace = true }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.6" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -40,7 +40,7 @@ tracing = "0.1"
 assert_cmd = "2"
 base64 = "0.22"
 gaze-audit = { workspace = true }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.6.6", features = ["test-support"] }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0", features = ["test-support"] }
 rusqlite = { workspace = true }
 serde_json = "1"
 tempfile = "3"

@@ -27,7 +27,7 @@ Do **not** use the audit log to restore PII. The restore contract lives in `Sens
 
 ```toml
 [dependencies]
-gaze-pii = "0.6"
+gaze-pii = "0.7"
 gaze-audit = "0.6"
 ```
 

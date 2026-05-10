@@ -11,7 +11,7 @@
 //! ```toml
 //! [dependencies]
 //! gaze = "0.6"
-//! gaze-assembly = "0.6"
+//! gaze-assembly = "0.7"
 //! ```
 //!
 //! ```rust,no_run

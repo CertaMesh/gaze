@@ -102,6 +102,8 @@ Six published crates. Pick the smallest surface that does the job.
 
 Crate boundaries and the audit-isolation gate: [`docs/architecture/crates.md`](docs/architecture/crates.md).
 
+Document extension for v0.7.1+ codec adapters: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
+
 ## Detection coverage
 
 Bundled rulepacks (composable through `CorePipelineConfig::with_bundled_rulepack` or `[policy.rulepacks]`):
@@ -130,11 +132,11 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 ## Status
 
-- **Version:** v0.6.5 (2026-05).
+- **Version:** v0.7.0 (2026-05).
 - **MSRV:** Rust 1.89.
 - **License:** dual `Apache-2.0 OR MIT`.
 - **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.
-- **Contract surface:** `Pipeline`, `Session`, `Policy`, rulepack schema, and token shape are stable across the v0.6 line. SafetyNet contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+- **Contract surface:** `Pipeline`, `Session`, `Policy`, rulepack schema, and token shape are stable across the v0.7 line. SafetyNet contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
 ## Limits
 
@@ -149,8 +151,8 @@ The CLI is a process boundary around the Rust runtime; you can link the runtime 
 
 ```toml
 [dependencies]
-gaze-pii = "0.6"
-gaze-assembly = "0.6"
+gaze-pii = "0.7"
+gaze-assembly = "0.7"
 ```
 
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
