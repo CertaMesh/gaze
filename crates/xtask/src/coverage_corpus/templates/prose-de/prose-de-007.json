@@ -1,0 +1,15 @@
+{
+  "id": "prose-de-007",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Bitte {{Name}} wegen Telefon {{custom:phone}} und PLZ {{custom:postal_code}} kontaktieren.",
+  "expected_classes": [
+    "Name",
+    "custom:phone",
+    "custom:postal_code"
+  ],
+  "notes": "German prose with name, phone, postal."
+}

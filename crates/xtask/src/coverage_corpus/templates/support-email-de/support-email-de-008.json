@@ -1,0 +1,15 @@
+{
+  "id": "support-email-de-008",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Von: {{Email}} ({{Name}})\nPostleitzahl {{custom:postal_code}} im Formular.",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "custom:postal_code"
+  ],
+  "notes": "DE support email with postal code."
+}

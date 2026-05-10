@@ -1,0 +1,14 @@
+{
+  "id": "prose-de-010",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Im synthetischen Briefkopf steht {{custom:phone}} als Hotline fuer {{Name}}.",
+  "expected_classes": [
+    "custom:phone",
+    "Name"
+  ],
+  "notes": "German prose with phone and name."
+}

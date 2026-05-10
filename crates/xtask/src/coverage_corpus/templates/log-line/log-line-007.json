@@ -1,0 +1,13 @@
+{
+  "id": "log-line-007",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:06:00Z] TRACE ip={{custom:ip_address}} email={{Email}}",
+  "expected_classes": [
+    "custom:ip_address",
+    "Email"
+  ],
+  "notes": "Log line with IP and email."
+}

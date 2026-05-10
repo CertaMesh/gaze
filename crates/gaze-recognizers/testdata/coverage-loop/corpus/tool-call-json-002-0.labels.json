@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool-call-json-002-0",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 38,
+      "byte_end": 57,
+      "class_id": "custom:credit_card",
+      "raw_label": "4565 4737 1993 3606",
+      "generator_id": "card_luhn",
+      "generator_seed": 3986219585844300720,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 70,
+      "byte_end": 86,
+      "class_id": "Email",
+      "raw_label": "anna@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 4366522450910943794,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool-call-json-002",
+    "template_seed": 16389313964635123374
+  }
+}

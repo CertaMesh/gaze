@@ -1,0 +1,1 @@
+{"tool":"risk_score","args":{"card":"4907 8187 5169 9688","wallet":"0x6B2349A1298DEd83aC3b9AeF174c6452158315B2"}}

@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "fixture_id": "support-email-de-003-0",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 6,
+      "byte_end": 17,
+      "class_id": "Name",
+      "raw_label": "Jonas Weber",
+      "generator_id": "name_de",
+      "generator_seed": 1100152436128297062,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 20,
+      "byte_end": 38,
+      "class_id": "Email",
+      "raw_label": "janick@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 2969314998545646749,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 45,
+      "byte_end": 50,
+      "class_id": "custom:postal_code",
+      "raw_label": "78769",
+      "generator_id": "postal_de",
+      "generator_seed": 603700766302066844,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 58,
+      "byte_end": 77,
+      "class_id": "custom:credit_card",
+      "raw_label": "4049 5029 6512 2757",
+      "generator_id": "card_luhn",
+      "generator_seed": 543233144514706827,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "support-email-de-003",
+    "template_seed": 9681961838727488610
+  }
+}

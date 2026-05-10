@@ -1,0 +1,13 @@
+{
+  "id": "tool-call-json-007",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "{\"tool\":\"ticket_update\",\"args\":{\"email\":\"{{Email}}\",\"ip\":\"{{custom:ip_address}}\"}}",
+  "expected_classes": [
+    "Email",
+    "custom:ip_address"
+  ],
+  "notes": "Tool call JSON with email and IP."
+}

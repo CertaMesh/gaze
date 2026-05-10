@@ -1,0 +1,13 @@
+{
+  "id": "ocr-output-003",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 03  WALLET {{custom:eth_address}}  MAIL {{Email}}",
+  "expected_classes": [
+    "custom:eth_address",
+    "Email"
+  ],
+  "notes": "OCR output with ETH and email."
+}

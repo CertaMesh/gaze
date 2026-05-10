@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "log-line-008-1",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 33,
+      "byte_end": 52,
+      "class_id": "custom:credit_card",
+      "raw_label": "4369 2335 5620 7029",
+      "generator_id": "card_luhn",
+      "generator_seed": 16253035720393761320,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 60,
+      "byte_end": 102,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xcf50E782EE6dc16e7Ec16497bb5C6A021FbeE25a",
+      "generator_id": "eth_eip55",
+      "generator_seed": 16138615102174414222,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "log-line-008",
+    "template_seed": 14281119615354035405
+  }
+}

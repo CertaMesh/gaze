@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool-call-json-004-1",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 38,
+      "byte_end": 61,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:52aa:6ef1::1d7",
+      "generator_id": "ip_v6",
+      "generator_seed": 1187717758928856632,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 73,
+      "byte_end": 96,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:238a:f7c::1f7f",
+      "generator_id": "ip_v6",
+      "generator_seed": 10838417580363765288,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool-call-json-004",
+    "template_seed": 8651818790830996644
+  }
+}

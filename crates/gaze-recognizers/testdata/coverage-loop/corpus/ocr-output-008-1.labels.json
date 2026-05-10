@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-008-1",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 19,
+      "byte_end": 41,
+      "class_id": "custom:iban",
+      "raw_label": "DE83744397015509608049",
+      "generator_id": "iban_de",
+      "generator_seed": 17206811750559327225,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 50,
+      "byte_end": 92,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xb495d042D6198657022f79e5Ee4fd4117834EE30",
+      "generator_id": "eth_eip55",
+      "generator_seed": 2359826100670906337,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-008",
+    "template_seed": 11193702478571235213
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-de-008-0",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 22,
+      "byte_end": 41,
+      "class_id": "custom:credit_card",
+      "raw_label": "4440 4266 1666 5045",
+      "generator_id": "card_luhn",
+      "generator_seed": 10958621914248418889,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 62,
+      "byte_end": 86,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:5517:c192::6d35",
+      "generator_id": "ip_v6",
+      "generator_seed": 9806257533386701880,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-de-008",
+    "template_seed": 1663378621933649540
+  }
+}

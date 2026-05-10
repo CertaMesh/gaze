@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-en-002-0",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 29,
+      "byte_end": 41,
+      "class_id": "Name",
+      "raw_label": "Blair Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 16821105451025088126,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 63,
+      "byte_end": 82,
+      "class_id": "custom:credit_card",
+      "raw_label": "4446 5252 5076 0089",
+      "generator_id": "card_luhn",
+      "generator_seed": 12451203069034258075,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-en-002",
+    "template_seed": 2343220467697607327
+  }
+}

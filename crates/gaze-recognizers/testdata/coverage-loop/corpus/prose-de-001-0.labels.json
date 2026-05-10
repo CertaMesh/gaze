@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-de-001-0",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 6,
+      "byte_end": 16,
+      "class_id": "Name",
+      "raw_label": "Mara Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 13364071678085175814,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 40,
+      "byte_end": 62,
+      "class_id": "custom:iban",
+      "raw_label": "DE66259291658388344800",
+      "generator_id": "iban_de",
+      "generator_seed": 18297821156883572980,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-de-001",
+    "template_seed": 15117123811501171207
+  }
+}

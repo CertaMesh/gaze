@@ -1,0 +1,12 @@
+{
+  "id": "log-line-004",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:03:00Z] DEBUG src={{custom:ip_address}} dst={{custom:ip_address#2}} result=ok",
+  "expected_classes": [
+    "custom:ip_address"
+  ],
+  "notes": "Log line with repeated IP slots."
+}

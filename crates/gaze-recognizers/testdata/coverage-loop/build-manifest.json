@@ -1,0 +1,1516 @@
+{
+  "schema_version": 1,
+  "seed": 0,
+  "fixture_count": 123,
+  "corpus_sha256": "730c0fc3ac1f195276731a6708879bfc705427010d3207caf652de2bd37cb94e",
+  "fixtures": [
+    {
+      "fixture_id": "log-line-001-0",
+      "template_id": "log-line-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 11195364149856353658,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "ba28e6addf7350772a8434289aa0cd5780dfd2649192f0068cf9f955c99c6828"
+    },
+    {
+      "fixture_id": "log-line-001-1",
+      "template_id": "log-line-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 26700809024738162,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "d36f86c7c89d09ed9eb675230a47f980689d1fbcaa881bedc4f3d3f36b75e0d0"
+    },
+    {
+      "fixture_id": "log-line-002-0",
+      "template_id": "log-line-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 15111982971058207645,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "1bef8b5dcfcfbc07508c87de8f5511c5c3e318ff70e5f34a53fc625d4ecc857e"
+    },
+    {
+      "fixture_id": "log-line-002-1",
+      "template_id": "log-line-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17311894412717681616,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "6661619ebdf17cc45061b9821f168444eaa4188f683ebc94adf2de744195f1e9"
+    },
+    {
+      "fixture_id": "log-line-003-0",
+      "template_id": "log-line-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 11369496880463334049,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "66328bf5207d54b1165c166dd00243c49965378f5d11e60f1f5d69338d38819d"
+    },
+    {
+      "fixture_id": "log-line-003-1",
+      "template_id": "log-line-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 1961112541758026078,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "d60be3e367cbc530995a3ebeb3ba3c652731b3a7834e0aa02f2683166f83580c"
+    },
+    {
+      "fixture_id": "log-line-004-0",
+      "template_id": "log-line-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 690485291132767626,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "25b66c0b4eb4c82d0f9434051b68a66eb2e40149a827eb0cb043bd54739e062e"
+    },
+    {
+      "fixture_id": "log-line-004-1",
+      "template_id": "log-line-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 511578322779575924,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "778432981797acd62ee5c66d3bee36669a2dfc3a9462bb86df2e0b900751d5e7"
+    },
+    {
+      "fixture_id": "log-line-005-0",
+      "template_id": "log-line-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 415797493852906144,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "597dcbf6aa2de9f7dbc403ab69ba830860df4cc4367bc615031cb55a0016ca31"
+    },
+    {
+      "fixture_id": "log-line-005-1",
+      "template_id": "log-line-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 9363525594675445924,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "2a75b01f91c21f6482b93e6d9352a25c95c39c67911b8c6424a3b19e9a07f0b3"
+    },
+    {
+      "fixture_id": "log-line-006-0",
+      "template_id": "log-line-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 646775044328620630,
+      "generator_ids": [
+        "email_global",
+        "eth_eip55"
+      ],
+      "body_sha256": "cd009fe3f96c0a1c4cdfc113d297478b02eb1775bf0c43a3c64f55e8c406f9ff"
+    },
+    {
+      "fixture_id": "log-line-006-1",
+      "template_id": "log-line-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 5860177070356162015,
+      "generator_ids": [
+        "email_global",
+        "eth_eip55"
+      ],
+      "body_sha256": "0f385a9649949e310fb38426495bd9ee0ea817f5aff564c5bee908439ddcdecc"
+    },
+    {
+      "fixture_id": "log-line-007-0",
+      "template_id": "log-line-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 4953343040582234128,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "a375a319b75cc4e88c0bb0b45952d616dfdd6664230c6ccb9387b5c7b35f0641"
+    },
+    {
+      "fixture_id": "log-line-007-1",
+      "template_id": "log-line-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 633414836582032962,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "e91e3b488bad402d504af840f958a5f0983272aebbd9af82e7a225c4b46b8e8f"
+    },
+    {
+      "fixture_id": "log-line-008-0",
+      "template_id": "log-line-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 1541411213684779574,
+      "generator_ids": [
+        "card_luhn",
+        "eth_eip55"
+      ],
+      "body_sha256": "312d074d0068e4c2e768b13c9e60ddc254781dbf079def88d7864e98879f3e9c"
+    },
+    {
+      "fixture_id": "log-line-008-1",
+      "template_id": "log-line-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 14281119615354035405,
+      "generator_ids": [
+        "card_luhn",
+        "eth_eip55"
+      ],
+      "body_sha256": "57d0a25f9454ffc79f472b0f1fae95cccf2adbaaeccba229491cdf64151fad76"
+    },
+    {
+      "fixture_id": "log-line-009-0",
+      "template_id": "log-line-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 6442007023307485536,
+      "generator_ids": [
+        "iban_de",
+        "email_global"
+      ],
+      "body_sha256": "9fc34f6d47bf73ea0e3896676c0b584a31c38f4bddc77c49c82b0b61a018ca61"
+    },
+    {
+      "fixture_id": "log-line-009-1",
+      "template_id": "log-line-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 16500793366742497342,
+      "generator_ids": [
+        "iban_de",
+        "email_global"
+      ],
+      "body_sha256": "c1b21476370b4aae506890a738ea90931b518353884a2aec181531c98e8b13a0"
+    },
+    {
+      "fixture_id": "log-line-010-0",
+      "template_id": "log-line-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 12679328885381681139,
+      "generator_ids": [
+        "ip_v6",
+        "card_luhn"
+      ],
+      "body_sha256": "90e61f5a73ac14d71ed0032019e1c3b4ac72355fe0c8ed80b57293d73ed100ea"
+    },
+    {
+      "fixture_id": "log-line-010-1",
+      "template_id": "log-line-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17007478260523286888,
+      "generator_ids": [
+        "ip_v6",
+        "card_luhn"
+      ],
+      "body_sha256": "f694f5961904780e029bf97dabbc2a6d0e0ac747c511e9937115ff4faa496f58"
+    },
+    {
+      "fixture_id": "ocr-output-001-0",
+      "template_id": "ocr-output-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 522402877418935304,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "2490a0b85b0410d7fc8d1ce5ef2fb9190348bf79c8373b0a9c0184d642bad9f2"
+    },
+    {
+      "fixture_id": "ocr-output-001-1",
+      "template_id": "ocr-output-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 16257190845168873878,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "e7166cf1ce148a26235537e0f3aa0e4ce8fa945172c78a81384d80d94c3775ec"
+    },
+    {
+      "fixture_id": "ocr-output-002-0",
+      "template_id": "ocr-output-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 5652405447492269151,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "007c62dc36d55bd14d787537e611c5e7ddb6d2ef37a54dad1c45ee8a325ed0c8"
+    },
+    {
+      "fixture_id": "ocr-output-002-1",
+      "template_id": "ocr-output-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 8159025104551914577,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "9396d2d824137c973d1cba93a7499cd32b981b8ec18463bdd565399c39341b9c"
+    },
+    {
+      "fixture_id": "ocr-output-003-0",
+      "template_id": "ocr-output-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 16795243296850420304,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "02c50a95824e4753ba67a22a6eced2b4ad39c20636198176425cefd215460d2f"
+    },
+    {
+      "fixture_id": "ocr-output-003-1",
+      "template_id": "ocr-output-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 873126717969969041,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "2dcd86d12f268d21672f4c818828aa69b93898a866a8ab2e2505cdfb0c86d301"
+    },
+    {
+      "fixture_id": "ocr-output-004-0",
+      "template_id": "ocr-output-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 1748874326886336724,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "4aa24759ad0ce229ad19a4ca11639928784a1212372df93ab78cebeda3eda2de"
+    },
+    {
+      "fixture_id": "ocr-output-004-1",
+      "template_id": "ocr-output-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 15166345334304507292,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "6fae522457ec188f1dd2568869124ce9b16ed892af9a6f716d4bfb1dc4a44536"
+    },
+    {
+      "fixture_id": "ocr-output-005-0",
+      "template_id": "ocr-output-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 11310352495518677403,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "b99707d2afe3dd290614d1054f2f6261ca6877da2a922010e61945fd645f6965"
+    },
+    {
+      "fixture_id": "ocr-output-005-1",
+      "template_id": "ocr-output-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 10044626130059052828,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "41b4b525fae4670408c58063bbdac0f5824f55adffd5df4ba594204c425ba5cc"
+    },
+    {
+      "fixture_id": "ocr-output-006-0",
+      "template_id": "ocr-output-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 4859616997052100367,
+      "generator_ids": [
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "208c8921b1e2993b7d724d183512c847c9804755c8d713c72b956d9012af7388"
+    },
+    {
+      "fixture_id": "ocr-output-006-1",
+      "template_id": "ocr-output-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 1437693285600508005,
+      "generator_ids": [
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "ed9df4503d3c535171b340cba851088b583ec4f980568ceeb0de8d2b58cc5101"
+    },
+    {
+      "fixture_id": "ocr-output-007-0",
+      "template_id": "ocr-output-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 12967090486326944917,
+      "generator_ids": [
+        "eth_eip55",
+        "card_luhn"
+      ],
+      "body_sha256": "83baa5934e5f36dc5d47623e3c8101c8da4b0ae5fa2f5e7624c16c457a193b6b"
+    },
+    {
+      "fixture_id": "ocr-output-007-1",
+      "template_id": "ocr-output-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 12772690446162604703,
+      "generator_ids": [
+        "eth_eip55",
+        "card_luhn"
+      ],
+      "body_sha256": "a7cfebcca5190386fcd6967bb9d311b250a99c3f3c4874c13e3f0b0196e79666"
+    },
+    {
+      "fixture_id": "ocr-output-008-0",
+      "template_id": "ocr-output-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 10871479687874350113,
+      "generator_ids": [
+        "iban_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "38fcbab1e30c654a8f13d4af00d5945c81b6f4a12e28279b56ac8623185e8924"
+    },
+    {
+      "fixture_id": "ocr-output-008-1",
+      "template_id": "ocr-output-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 11193702478571235213,
+      "generator_ids": [
+        "iban_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "901c0a998fc2aa65505a961efcb2220da02ed9ca898fb8069c60181c68532906"
+    },
+    {
+      "fixture_id": "ocr-output-009-0",
+      "template_id": "ocr-output-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 6242188715893683896,
+      "generator_ids": [
+        "email_global",
+        "card_luhn"
+      ],
+      "body_sha256": "a62887a7c2cfce9f538c5b5b24418754e7ef5dba01dc9478263fdd00d51dadfb"
+    },
+    {
+      "fixture_id": "ocr-output-009-1",
+      "template_id": "ocr-output-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 11238406405928029460,
+      "generator_ids": [
+        "email_global",
+        "card_luhn"
+      ],
+      "body_sha256": "5eedb611d7bc6be8f9474ae37fa95e585f3a87ad8bcb6023cddec88c9d728b84"
+    },
+    {
+      "fixture_id": "ocr-output-010-0",
+      "template_id": "ocr-output-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 6217771431263314632,
+      "generator_ids": [
+        "ip_v6",
+        "iban_de"
+      ],
+      "body_sha256": "a84e504ce18aa44c6ee1783ce035035adc6ae7c4ba005e42c4980d5e47b26f04"
+    },
+    {
+      "fixture_id": "ocr-output-010-1",
+      "template_id": "ocr-output-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 6135963274023210218,
+      "generator_ids": [
+        "ip_v6",
+        "iban_de"
+      ],
+      "body_sha256": "06b15384f8f250ecdd4beea4bfc560f6ab3dedbf469aa56b4633efd73665e339"
+    },
+    {
+      "fixture_id": "prose-de-001-0",
+      "template_id": "prose-de-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 15117123811501171207,
+      "generator_ids": [
+        "name_de",
+        "iban_de"
+      ],
+      "body_sha256": "d69f8351fa4497928c6817933c7e9b19e61ad40ffd89bd6f0c5d3977431d9584"
+    },
+    {
+      "fixture_id": "prose-de-001-1",
+      "template_id": "prose-de-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 3880416085069590656,
+      "generator_ids": [
+        "name_de",
+        "iban_de"
+      ],
+      "body_sha256": "48a6fcdc3d3425cec47133cd06bd41ff197b68ac28d3ad4377e725848ee832b7"
+    },
+    {
+      "fixture_id": "prose-de-002-0",
+      "template_id": "prose-de-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 5929204528629402182,
+      "generator_ids": [
+        "phone_national_de",
+        "postal_de"
+      ],
+      "body_sha256": "a5f2c1f625ad2122b5918ff4e1d404d81ed14c8697b59b91485a416ec89dab09"
+    },
+    {
+      "fixture_id": "prose-de-002-1",
+      "template_id": "prose-de-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 1022261205998117426,
+      "generator_ids": [
+        "phone_national_de",
+        "postal_de"
+      ],
+      "body_sha256": "0c219e4948d8d582e018eb2eed178be22fcdcd7111273faac532bbaa31221a81"
+    },
+    {
+      "fixture_id": "prose-de-003-0",
+      "template_id": "prose-de-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 6252822647227736616,
+      "generator_ids": [
+        "name_de",
+        "card_luhn"
+      ],
+      "body_sha256": "1327c1a6b18c1e3450dab77f076458500db91390879f5064702410852d426571"
+    },
+    {
+      "fixture_id": "prose-de-003-1",
+      "template_id": "prose-de-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 13758676065713976469,
+      "generator_ids": [
+        "name_de",
+        "card_luhn"
+      ],
+      "body_sha256": "d72cc76755c60dd9dd05e91ee8dfe8943d89996b4f0eb93fc0eae4f8b360ab10"
+    },
+    {
+      "fixture_id": "prose-de-004-0",
+      "template_id": "prose-de-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 13078964429668213393,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "98b4b9aba2a27ab8c37796c8ac87d1abe955a7e02520a0992868fbd7cffd09ee"
+    },
+    {
+      "fixture_id": "prose-de-004-1",
+      "template_id": "prose-de-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 5179610835296664738,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "344c637e2114afff3268cd87b1278d8accf53d28e959583e5f3f03e44b15d6bf"
+    },
+    {
+      "fixture_id": "prose-de-005-0",
+      "template_id": "prose-de-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 8679244925984401937,
+      "generator_ids": [
+        "name_de",
+        "email_global"
+      ],
+      "body_sha256": "e5f3b789106ade108bec108df9319864f39deeb4b2274813822e4b536c4fd064"
+    },
+    {
+      "fixture_id": "prose-de-005-1",
+      "template_id": "prose-de-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 10916053621595220741,
+      "generator_ids": [
+        "name_de",
+        "email_global"
+      ],
+      "body_sha256": "3c39988beb80461314b67e3247995889c730867b8698d099ec07ae812be0e717"
+    },
+    {
+      "fixture_id": "prose-de-006-0",
+      "template_id": "prose-de-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 205023113859771910,
+      "generator_ids": [
+        "eth_eip55",
+        "iban_de"
+      ],
+      "body_sha256": "1db6ec83e3ab23b5af879082c3163ebc296aace2ca6655fd232a3d90993651ac"
+    },
+    {
+      "fixture_id": "prose-de-006-1",
+      "template_id": "prose-de-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17794871935596056422,
+      "generator_ids": [
+        "eth_eip55",
+        "iban_de"
+      ],
+      "body_sha256": "ae52e66b0620d8bd41c8cd4cfb7c57deee1ddd75b20328bef81f72cf24d771a5"
+    },
+    {
+      "fixture_id": "prose-de-007-0",
+      "template_id": "prose-de-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 12452899920059306398,
+      "generator_ids": [
+        "name_de",
+        "phone_national_de",
+        "postal_de"
+      ],
+      "body_sha256": "53334094c52bee7150a01b39a763e31e8af8a4f69f757100703a3719af3959ea"
+    },
+    {
+      "fixture_id": "prose-de-007-1",
+      "template_id": "prose-de-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 10388117809250785365,
+      "generator_ids": [
+        "name_de",
+        "phone_national_de",
+        "postal_de"
+      ],
+      "body_sha256": "63d1e82fa365d20c8b401c5291f263762c1496c855fa20676a7c07944704dbb7"
+    },
+    {
+      "fixture_id": "prose-de-008-0",
+      "template_id": "prose-de-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 1663378621933649540,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "90bc097816b67f00accbe07cc72704df5d891ff496239021f341a224c7c8feb7"
+    },
+    {
+      "fixture_id": "prose-de-008-1",
+      "template_id": "prose-de-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 11640552130752637478,
+      "generator_ids": [
+        "card_luhn",
+        "ip_v6"
+      ],
+      "body_sha256": "3ca1e0903d692ce83f291e9b75132144706501f3a1a26904b359ee1afdf4f0fe"
+    },
+    {
+      "fixture_id": "prose-de-009-0",
+      "template_id": "prose-de-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 1518167085922055794,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "d4a94cd0127bb407581b440deb1eb2bd5c99d6df0c5139e65ad406aab2356d73"
+    },
+    {
+      "fixture_id": "prose-de-009-1",
+      "template_id": "prose-de-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 6257060977247440130,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "c11eba5a085524c2d8a9248aada654efd77db04bc50ba3ae6b30e32a0d130628"
+    },
+    {
+      "fixture_id": "prose-de-010-0",
+      "template_id": "prose-de-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 4113447682792613774,
+      "generator_ids": [
+        "phone_national_de",
+        "name_de"
+      ],
+      "body_sha256": "063871658a7a3c7d3b3add42cfe7541c7572579f08801065c362e0389d698873"
+    },
+    {
+      "fixture_id": "prose-de-010-1",
+      "template_id": "prose-de-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 897144843735093696,
+      "generator_ids": [
+        "phone_national_de",
+        "name_de"
+      ],
+      "body_sha256": "224f8b9bc62dbd74b1dcd9f0d091a142bd18a02d7dbc28e83aefe0796d39d706"
+    },
+    {
+      "fixture_id": "prose-en-001-0",
+      "template_id": "prose-en-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 2642609574569991406,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "90e26193e621ee068dc599ecd5a40a121a18840d7f538ab789224e2052d715fe"
+    },
+    {
+      "fixture_id": "prose-en-001-1",
+      "template_id": "prose-en-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 5111637571594254893,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "197e0d981c6a3bb50a17631600b37bac832b17c141113fbad9d4549907bee8b5"
+    },
+    {
+      "fixture_id": "prose-en-001-2",
+      "template_id": "prose-en-001",
+      "fixture_idx": 2,
+      "seed": 0,
+      "template_seed": 15290466999042228993,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "2b0f5691b683d7d3875008e4c9a81cca7a07d5ec9f26795fbdb4b99c068044da"
+    },
+    {
+      "fixture_id": "prose-en-001-3",
+      "template_id": "prose-en-001",
+      "fixture_idx": 3,
+      "seed": 0,
+      "template_seed": 6523361673822060835,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "257c8c6f6e980b7178891b922f94c8dd930526132038f304fc0bbf7a73dd778c"
+    },
+    {
+      "fixture_id": "prose-en-001-4",
+      "template_id": "prose-en-001",
+      "fixture_idx": 4,
+      "seed": 0,
+      "template_seed": 17210765919031787089,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "9d806eaf5c1a0829baa00980808bcd536b789f6593f40f334dc011bbbb3d7a87"
+    },
+    {
+      "fixture_id": "prose-en-002-0",
+      "template_id": "prose-en-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 2343220467697607327,
+      "generator_ids": [
+        "name_en",
+        "card_luhn"
+      ],
+      "body_sha256": "de54cffa4df5000b6f0b4397c9d6cbf4f4941577275c873e0a0f395e6a79e8b1"
+    },
+    {
+      "fixture_id": "prose-en-002-1",
+      "template_id": "prose-en-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 12517454329715106640,
+      "generator_ids": [
+        "name_en",
+        "card_luhn"
+      ],
+      "body_sha256": "1dc00e30247bf3c718146e00c9c5ab54de514941cf7b0fa79453ce59c196b21b"
+    },
+    {
+      "fixture_id": "prose-en-003-0",
+      "template_id": "prose-en-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 15449333471297926660,
+      "generator_ids": [
+        "phone_national_us",
+        "postal_us"
+      ],
+      "body_sha256": "40f9daad86b0263deb9153c7ff980b2c7c287d58149d4f75cf2df8dfff9d6f41"
+    },
+    {
+      "fixture_id": "prose-en-003-1",
+      "template_id": "prose-en-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 11164214317258743474,
+      "generator_ids": [
+        "phone_national_us",
+        "postal_us"
+      ],
+      "body_sha256": "5e425f4e2cb076a77a55b11aee4017fe90d08ae12857d156bdc42f54802e3db1"
+    },
+    {
+      "fixture_id": "prose-en-004-0",
+      "template_id": "prose-en-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 9934184664222740950,
+      "generator_ids": [
+        "name_en",
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "05f4839095f244b548ae0e2f160b1bbd24da26bda849c5a6fc5e73b7269fa29e"
+    },
+    {
+      "fixture_id": "prose-en-004-1",
+      "template_id": "prose-en-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 7739547547963764082,
+      "generator_ids": [
+        "name_en",
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "83c0929a6df2c8e03dc92ef0791b8ca4e43e40410d040dab8911c3f4769c5446"
+    },
+    {
+      "fixture_id": "prose-en-005-0",
+      "template_id": "prose-en-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 11493476002003169769,
+      "generator_ids": [
+        "card_luhn",
+        "phone_national_us"
+      ],
+      "body_sha256": "459358a485dd38fdcfc3a6a087963b8b153d432d948c5c99033a93f8473166f9"
+    },
+    {
+      "fixture_id": "prose-en-005-1",
+      "template_id": "prose-en-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 18313840999950904438,
+      "generator_ids": [
+        "card_luhn",
+        "phone_national_us"
+      ],
+      "body_sha256": "f1f4c3302abdf3b573483334ccad7ba84abf7eaf11c398d6dd3bcb1ddc94cc15"
+    },
+    {
+      "fixture_id": "prose-en-006-0",
+      "template_id": "prose-en-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 3936960428355093851,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "0888738746bc03ad0a000910b4f18eb769d288410efabffc43159957034d7753"
+    },
+    {
+      "fixture_id": "prose-en-006-1",
+      "template_id": "prose-en-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 608541607601427655,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "cc5ebf3efbcb2f5d71e996c183434b7a90a8570ad3dc95f239c07a60ca1e2120"
+    },
+    {
+      "fixture_id": "prose-en-007-0",
+      "template_id": "prose-en-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 13104150706055187555,
+      "generator_ids": [
+        "name_en",
+        "iban_de"
+      ],
+      "body_sha256": "65be37d53da06b4053638836dcff35330f291b8577ff4c5cbcc6d47a3a6bacc5"
+    },
+    {
+      "fixture_id": "prose-en-007-1",
+      "template_id": "prose-en-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 4155508075470490954,
+      "generator_ids": [
+        "name_en",
+        "iban_de"
+      ],
+      "body_sha256": "350853beeeafa477faa9d19489a0c04a7e46530c614160cd31561a716ffccce0"
+    },
+    {
+      "fixture_id": "prose-en-008-0",
+      "template_id": "prose-en-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 1057678161790767893,
+      "generator_ids": [
+        "ip_v6",
+        "postal_us"
+      ],
+      "body_sha256": "c55acd680df8ac36a85ecf3833b7641681add1509b9a276f1e2632fcf80f3236"
+    },
+    {
+      "fixture_id": "prose-en-008-1",
+      "template_id": "prose-en-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 14256300201381225687,
+      "generator_ids": [
+        "ip_v6",
+        "postal_us"
+      ],
+      "body_sha256": "3b6357eaf08cea92bc70e64c4f81639b9b028cb586e09772f908855223f9316f"
+    },
+    {
+      "fixture_id": "prose-en-009-0",
+      "template_id": "prose-en-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 17911924053143082046,
+      "generator_ids": [
+        "name_en",
+        "eth_eip55",
+        "card_luhn"
+      ],
+      "body_sha256": "b5c5b6cf43de02178d8e7aa191ee72cdf6ff0cfe01596238c4eaabf5fba0e298"
+    },
+    {
+      "fixture_id": "prose-en-009-1",
+      "template_id": "prose-en-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17568051595003318800,
+      "generator_ids": [
+        "name_en",
+        "eth_eip55",
+        "card_luhn"
+      ],
+      "body_sha256": "ca7e602437330a224fea5d760bb6e4bce0c736027452769f1d1694564ac3a139"
+    },
+    {
+      "fixture_id": "prose-en-010-0",
+      "template_id": "prose-en-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 8209560295513464773,
+      "generator_ids": [
+        "email_global",
+        "phone_national_us"
+      ],
+      "body_sha256": "3657fd1cbe751f30f534a5d374a3100c3fbf4f2b5c3352438c52edf6b0f06e0d"
+    },
+    {
+      "fixture_id": "prose-en-010-1",
+      "template_id": "prose-en-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 18241382092343100964,
+      "generator_ids": [
+        "email_global",
+        "phone_national_us"
+      ],
+      "body_sha256": "d12cdacafdd9a8a98561d4986b7003a5af10203b3028311dbbf227d319da7e35"
+    },
+    {
+      "fixture_id": "support-email-de-001-0",
+      "template_id": "support-email-de-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 7618310543021934189,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "82bd28d85fbd7996204635803783ea437f6a03749c77d20a6e5c8eef844771e1"
+    },
+    {
+      "fixture_id": "support-email-de-001-1",
+      "template_id": "support-email-de-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 309574596165695283,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "83e0d31ab81ea7d9a3ec770784e229dc4cd9f06be6a947fb7bf9fc1ea8861179"
+    },
+    {
+      "fixture_id": "support-email-de-002-0",
+      "template_id": "support-email-de-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 7047391274596845447,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "phone_national_de"
+      ],
+      "body_sha256": "6cf7b26db6c279ce37762e36c60f56916421554b660cb9bb81ad454ccb3ca676"
+    },
+    {
+      "fixture_id": "support-email-de-002-1",
+      "template_id": "support-email-de-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 9034806731832091601,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "phone_national_de"
+      ],
+      "body_sha256": "4bd76779eb9892acd7ad06dd2801480812df94b42c79ffa1c2bcf92c304f67cb"
+    },
+    {
+      "fixture_id": "support-email-de-003-0",
+      "template_id": "support-email-de-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 9681961838727488610,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "postal_de",
+        "card_luhn"
+      ],
+      "body_sha256": "632bf9bab0ae88fed686f80d339aa4311a3717a04ceb1bb54e273678b6d906e2"
+    },
+    {
+      "fixture_id": "support-email-de-003-1",
+      "template_id": "support-email-de-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17072271604279872977,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "postal_de",
+        "card_luhn"
+      ],
+      "body_sha256": "fc4ddee93a77bb38aa1089a73abb3b60cb86fa9f3355451d1397610bffe7f957"
+    },
+    {
+      "fixture_id": "support-email-de-004-0",
+      "template_id": "support-email-de-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 16432941842896012404,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55",
+        "ip_v6"
+      ],
+      "body_sha256": "37316fffe2011d57758cd26b1ed1f5e6c1cef3cd8e9aecd594d9395ed48e382f"
+    },
+    {
+      "fixture_id": "support-email-de-004-1",
+      "template_id": "support-email-de-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 4789368107141910469,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55",
+        "ip_v6"
+      ],
+      "body_sha256": "4f3529c63ac14492b3b57048d99bbc93a154c8db914c3aef2d07d40e9b799327"
+    },
+    {
+      "fixture_id": "support-email-de-005-0",
+      "template_id": "support-email-de-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 16509787746077617998,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "phone_national_de"
+      ],
+      "body_sha256": "52191879307f1cefb8c6d7cba352ec4be0e8e58faf6543ff9e41ec2c11697385"
+    },
+    {
+      "fixture_id": "support-email-de-005-1",
+      "template_id": "support-email-de-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 10527939158449138354,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "phone_national_de"
+      ],
+      "body_sha256": "31a901e1e889bff14ed5089a7c8768c9e24b3523885c66f16e8bd051594ed400"
+    },
+    {
+      "fixture_id": "support-email-de-006-0",
+      "template_id": "support-email-de-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 13774771068310494557,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "iban_de"
+      ],
+      "body_sha256": "0bf9f757892416c8a5b9c4da49e04ad9e6e88d7644f37977164e47558c543b92"
+    },
+    {
+      "fixture_id": "support-email-de-006-1",
+      "template_id": "support-email-de-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 6062775919588165952,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "iban_de"
+      ],
+      "body_sha256": "c9a2ccf7f71ff472a263251f3b7ef8b81cd2cd297ce7e9ce89d5ba6fde6ebf03"
+    },
+    {
+      "fixture_id": "support-email-de-007-0",
+      "template_id": "support-email-de-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 4607873651334476313,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "808d2cb8237d6c3a371a89ca1e44cc93f10074e8114d978715d6191212f6412f"
+    },
+    {
+      "fixture_id": "support-email-de-007-1",
+      "template_id": "support-email-de-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 14052983029742397020,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "c64becef7c50a53b378ae1962c9899c37802c9e193d933c6706a62eb54224a07"
+    },
+    {
+      "fixture_id": "support-email-de-008-0",
+      "template_id": "support-email-de-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 196353338175947246,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "postal_de"
+      ],
+      "body_sha256": "73656edfc7be329386d910c6dc246b7086400662edcb9371b7aad0d9d49e5d8f"
+    },
+    {
+      "fixture_id": "support-email-de-008-1",
+      "template_id": "support-email-de-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 13594638332005587266,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "postal_de"
+      ],
+      "body_sha256": "e41cdf8169b9570fbabf4cbd752047b1502f0b5e6a29ad4fc23e7953691efa52"
+    },
+    {
+      "fixture_id": "support-email-de-009-0",
+      "template_id": "support-email-de-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 10901599811534177871,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "card_luhn"
+      ],
+      "body_sha256": "93f8a32ff2c55017f969653ad6f9aaf048e8b88465d68e48ee9c93c5be30df20"
+    },
+    {
+      "fixture_id": "support-email-de-009-1",
+      "template_id": "support-email-de-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 4589113772030553320,
+      "generator_ids": [
+        "name_de",
+        "email_global",
+        "card_luhn"
+      ],
+      "body_sha256": "9b04515225a8095ed2639cf0bea2f37d998dce0fe6c2ab2ad98944b0e3d473df"
+    },
+    {
+      "fixture_id": "support-email-de-010-0",
+      "template_id": "support-email-de-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 9883072389714772965,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "07fea3190f84bd420990c2297673a553570037f9b95651728cc4219e299604a9"
+    },
+    {
+      "fixture_id": "support-email-de-010-1",
+      "template_id": "support-email-de-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 1997784841692363692,
+      "generator_ids": [
+        "email_global",
+        "name_de",
+        "eth_eip55"
+      ],
+      "body_sha256": "7963880c8388872221c6ed80e51832ba98b9c598582bba9ca709afe65d317927"
+    },
+    {
+      "fixture_id": "tool-call-json-001-0",
+      "template_id": "tool-call-json-001",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 9095116047161779822,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "b35fb601df573c41daf7787fe779657f01a4392754f30af61dec1a2c86c604f3"
+    },
+    {
+      "fixture_id": "tool-call-json-001-1",
+      "template_id": "tool-call-json-001",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 10235368243877699242,
+      "generator_ids": [
+        "email_global",
+        "iban_de"
+      ],
+      "body_sha256": "2afb153abf02209a69c1ae343e68509761565ce6188363bbb6aebe6c2c936c1d"
+    },
+    {
+      "fixture_id": "tool-call-json-002-0",
+      "template_id": "tool-call-json-002",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 16389313964635123374,
+      "generator_ids": [
+        "card_luhn",
+        "email_global"
+      ],
+      "body_sha256": "8e352279e908fc3a51aaf1e7b6d6feaa17da73012423a9d952c02e6542cba940"
+    },
+    {
+      "fixture_id": "tool-call-json-002-1",
+      "template_id": "tool-call-json-002",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 2106287511301973730,
+      "generator_ids": [
+        "card_luhn",
+        "email_global"
+      ],
+      "body_sha256": "4beadfdcb4cbc75414e91f1e611da264dcbd472d137d8c47dd7f3a2135255170"
+    },
+    {
+      "fixture_id": "tool-call-json-003-0",
+      "template_id": "tool-call-json-003",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 5981488634411967043,
+      "generator_ids": [
+        "eth_eip55",
+        "ip_v6"
+      ],
+      "body_sha256": "fda83da75699e67c99800f99e59a58911f0c7e26abf9ec662a9f827ace3ce3e8"
+    },
+    {
+      "fixture_id": "tool-call-json-003-1",
+      "template_id": "tool-call-json-003",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 17781059622939263827,
+      "generator_ids": [
+        "eth_eip55",
+        "ip_v6"
+      ],
+      "body_sha256": "9c0ff936037e386db8701f19c4702425fd9a6380f8fa975ae3b5e437be61717f"
+    },
+    {
+      "fixture_id": "tool-call-json-004-0",
+      "template_id": "tool-call-json-004",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 4070101972578879492,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "b1847c8cf24c61bd09ed1f8b093a1e3b85e3f89a49c9c7354a29204a531e69fc"
+    },
+    {
+      "fixture_id": "tool-call-json-004-1",
+      "template_id": "tool-call-json-004",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 8651818790830996644,
+      "generator_ids": [
+        "ip_v6",
+        "ip_v6"
+      ],
+      "body_sha256": "7318ac242e4dcb9591480735e22ea6d9076cab5dc20e1153787c64c132f7ee90"
+    },
+    {
+      "fixture_id": "tool-call-json-005-0",
+      "template_id": "tool-call-json-005",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 3830729330471060173,
+      "generator_ids": [
+        "iban_de",
+        "email_global"
+      ],
+      "body_sha256": "9151bd3bd91342fd079587b1a1c4459b4f3a1379d80e29c4b575d7c43a4cc4b1"
+    },
+    {
+      "fixture_id": "tool-call-json-005-1",
+      "template_id": "tool-call-json-005",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 8007710662404680159,
+      "generator_ids": [
+        "iban_de",
+        "email_global"
+      ],
+      "body_sha256": "a7dc9c13bae499d6a8228817d923d03890ee2a7d8cefde13c36b6065cbb3045e"
+    },
+    {
+      "fixture_id": "tool-call-json-006-0",
+      "template_id": "tool-call-json-006",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 13846071970162435098,
+      "generator_ids": [
+        "card_luhn",
+        "eth_eip55"
+      ],
+      "body_sha256": "634f415f67c098ef2fa5e6eaef2969ad6717dabe6451549c66e9f1c97d85bfa9"
+    },
+    {
+      "fixture_id": "tool-call-json-006-1",
+      "template_id": "tool-call-json-006",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 8665027637288201641,
+      "generator_ids": [
+        "card_luhn",
+        "eth_eip55"
+      ],
+      "body_sha256": "aa8441aef9ccfd13655d58a55bb9f3f73c54d9f2e27959489ab6e0d388b8cb8a"
+    },
+    {
+      "fixture_id": "tool-call-json-007-0",
+      "template_id": "tool-call-json-007",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 12555452774050325810,
+      "generator_ids": [
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "d753f54caec87a98d5752b66bf11177722b8ce666b0e9661ffdb83802ee819e0"
+    },
+    {
+      "fixture_id": "tool-call-json-007-1",
+      "template_id": "tool-call-json-007",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 2045570014038378959,
+      "generator_ids": [
+        "email_global",
+        "ip_v6"
+      ],
+      "body_sha256": "826916301f49a58fad620ffa0a7bac35976c50f1e2ffc85ef159eb18eaad5217"
+    },
+    {
+      "fixture_id": "tool-call-json-008-0",
+      "template_id": "tool-call-json-008",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 13080855868911900071,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "58ea49becf9cdd1c1d2476e6a40c8643f4aece8d7881976e9fe17f0cd8c1371b"
+    },
+    {
+      "fixture_id": "tool-call-json-008-1",
+      "template_id": "tool-call-json-008",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 16083158535910877656,
+      "generator_ids": [
+        "iban_de",
+        "card_luhn"
+      ],
+      "body_sha256": "f9b9e44cf913722d9c64a5d491f6c973d14680b3d27f30963fc8f3fd3210d593"
+    },
+    {
+      "fixture_id": "tool-call-json-009-0",
+      "template_id": "tool-call-json-009",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 17404733707095677344,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "c5945d99a0af6742c8919f0eed4be96c187aee58ccb789d8d035e22ae37fd378"
+    },
+    {
+      "fixture_id": "tool-call-json-009-1",
+      "template_id": "tool-call-json-009",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 14779661936956686237,
+      "generator_ids": [
+        "eth_eip55",
+        "email_global"
+      ],
+      "body_sha256": "34bbcaf99fdb8eb438a97452fe1768cde48e7485a108e41767bff46b89724c97"
+    },
+    {
+      "fixture_id": "tool-call-json-010-0",
+      "template_id": "tool-call-json-010",
+      "fixture_idx": 0,
+      "seed": 0,
+      "template_seed": 11240402622118640376,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "9a8bba5db876f55cc8bbf1d078a8142ef5fc3893b41c238919ea599517ed7d7a"
+    },
+    {
+      "fixture_id": "tool-call-json-010-1",
+      "template_id": "tool-call-json-010",
+      "fixture_idx": 1,
+      "seed": 0,
+      "template_seed": 11958574525768744706,
+      "generator_ids": [
+        "ip_v6",
+        "email_global"
+      ],
+      "body_sha256": "4417d1d4279da89b1cc8eb3a33969d42da0ab59b000128a30e3b1610b90f5076"
+    }
+  ]
+}

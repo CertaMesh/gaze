@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-002-0",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 19,
+      "byte_end": 38,
+      "class_id": "custom:credit_card",
+      "raw_label": "4215 4787 6090 0184",
+      "generator_id": "card_luhn",
+      "generator_seed": 8866177996687125815,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 43,
+      "byte_end": 69,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::e9e5:192.0.2.125",
+      "generator_id": "ip_v6",
+      "generator_seed": 13215798987505988979,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-002",
+    "template_seed": 5652405447492269151
+  }
+}

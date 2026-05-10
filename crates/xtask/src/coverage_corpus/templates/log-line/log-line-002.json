@@ -1,0 +1,13 @@
+{
+  "id": "log-line-002",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:01:00Z] WARN card={{custom:credit_card}} ip={{custom:ip_address}} action=review",
+  "expected_classes": [
+    "custom:credit_card",
+    "custom:ip_address"
+  ],
+  "notes": "Log line with card and IP."
+}

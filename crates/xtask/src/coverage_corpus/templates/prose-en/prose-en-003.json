@@ -1,0 +1,14 @@
+{
+  "id": "prose-en-003",
+  "context": "prose-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "body": "The support trace lists phone {{custom:phone}} and ZIP {{custom:postal_code}} for the synthetic address review.",
+  "expected_classes": [
+    "custom:phone",
+    "custom:postal_code"
+  ],
+  "notes": "English prose with US phone and postal generators."
+}

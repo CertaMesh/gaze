@@ -1,0 +1,1 @@
+{"tool":"bank_check","args":{"account":"DE42616173419261649553","notify":"isom@example.net"}}

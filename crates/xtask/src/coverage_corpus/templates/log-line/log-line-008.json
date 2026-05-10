@@ -1,0 +1,13 @@
+{
+  "id": "log-line-008",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:07:00Z] WARN card={{custom:credit_card}} wallet={{custom:eth_address}}",
+  "expected_classes": [
+    "custom:credit_card",
+    "custom:eth_address"
+  ],
+  "notes": "Log line with card and ETH."
+}

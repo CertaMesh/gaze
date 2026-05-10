@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-de-002-0",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 29,
+      "byte_end": 40,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 466556102201867695,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 66,
+      "byte_end": 71,
+      "class_id": "custom:postal_code",
+      "raw_label": "94757",
+      "generator_id": "postal_de",
+      "generator_seed": 1753744513672351820,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-de-002",
+    "template_seed": 5929204528629402182
+  }
+}

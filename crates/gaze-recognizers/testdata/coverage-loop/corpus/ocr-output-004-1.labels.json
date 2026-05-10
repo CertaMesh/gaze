@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-004-1",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 18,
+      "byte_end": 42,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:f301:5864::ba4d",
+      "generator_id": "ip_v6",
+      "generator_seed": 10913481571005639136,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 48,
+      "byte_end": 74,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::51fa:192.0.2.171",
+      "generator_id": "ip_v6",
+      "generator_seed": 18269289520908998037,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-004",
+    "template_seed": 15166345334304507292
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "ocr-output-010",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "SCAN LINE 10  IP {{custom:ip_address}}  IBAN {{custom:iban}}",
+  "expected_classes": [
+    "custom:ip_address",
+    "custom:iban"
+  ],
+  "notes": "OCR output with IP and IBAN."
+}

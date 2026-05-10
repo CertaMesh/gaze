@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose-de-009-0",
+  "context": "prose-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 11,
+      "byte_end": 27,
+      "class_id": "Email",
+      "raw_label": "dale@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 15888340848337875705,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 44,
+      "byte_end": 58,
+      "class_id": "Name",
+      "raw_label": "Laura Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 17188715160073339455,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 70,
+      "byte_end": 112,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xB93E352642feCE3A8fD65B5bf8548f3D1A1d933f",
+      "generator_id": "eth_eip55",
+      "generator_seed": 5583118943793483419,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose-de-009",
+    "template_seed": 1518167085922055794
+  }
+}

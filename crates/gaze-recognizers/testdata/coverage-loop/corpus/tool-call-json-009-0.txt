@@ -1,0 +1,1 @@
+{"tool":"wallet_notify","args":{"wallet":"0xD39839778aC01c9F0B3C00be7562b07189E5CecA","mail":"jadyn@example.net"}}

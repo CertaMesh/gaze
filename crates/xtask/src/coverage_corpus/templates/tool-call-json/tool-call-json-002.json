@@ -1,0 +1,13 @@
+{
+  "id": "tool-call-json-002",
+  "context": "tool-call-json",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "{\"tool\":\"charge_card\",\"args\":{\"card\":\"{{custom:credit_card}}\",\"receipt\":\"{{Email}}\"}}",
+  "expected_classes": [
+    "custom:credit_card",
+    "Email"
+  ],
+  "notes": "Tool call JSON with card and email."
+}

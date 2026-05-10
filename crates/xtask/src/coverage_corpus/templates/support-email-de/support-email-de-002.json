@@ -1,0 +1,15 @@
+{
+  "id": "support-email-de-002",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Von: {{Email}} ({{Name}})\nAn: team@example.invalid\nTelefon: {{custom:phone}}",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "custom:phone"
+  ],
+  "notes": "DE support email with paren name and phone."
+}

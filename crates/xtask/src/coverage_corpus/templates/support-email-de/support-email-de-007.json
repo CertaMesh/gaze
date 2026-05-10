@@ -1,0 +1,15 @@
+{
+  "id": "support-email-de-007",
+  "context": "support-email-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "body": "Von: \"{{Name}}\" <{{Email}}>\nNetzwerkadresse: {{custom:ip_address}}",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:ip_address"
+  ],
+  "notes": "DE support email with IP."
+}

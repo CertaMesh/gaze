@@ -1,0 +1,13 @@
+{
+  "id": "log-line-003",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:02:00Z] INFO wallet={{custom:eth_address}} recipient={{Email}}",
+  "expected_classes": [
+    "custom:eth_address",
+    "Email"
+  ],
+  "notes": "Log line with ETH and email."
+}

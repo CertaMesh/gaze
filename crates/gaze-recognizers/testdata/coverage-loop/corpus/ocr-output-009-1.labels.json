@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-009-1",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 20,
+      "byte_end": 36,
+      "class_id": "Email",
+      "raw_label": "zoey@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 1217774963224779581,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 43,
+      "byte_end": 62,
+      "class_id": "custom:credit_card",
+      "raw_label": "4079 1222 3680 1288",
+      "generator_id": "card_luhn",
+      "generator_seed": 1868600820368636938,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-009",
+    "template_seed": 11238406405928029460
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "id": "log-line-009",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "body": "[2026-04-29T12:08:00Z] INFO account={{custom:iban}} notify={{Email}}",
+  "expected_classes": [
+    "custom:iban",
+    "Email"
+  ],
+  "notes": "Log line with IBAN and email."
+}
