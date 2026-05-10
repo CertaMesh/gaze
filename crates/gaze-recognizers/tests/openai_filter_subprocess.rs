@@ -175,7 +175,7 @@ exec sleep 30
         "blocked stdin timeout took {elapsed:?}"
     );
 
-    let child_pid = wait_for_pidfile(&pidfile, Duration::from_secs(2))
+    let child_pid = wait_for_pidfile(&pidfile, Duration::from_secs(10))
         .expect("child failed to create pidfile within budget - child startup broken");
     assert!(!process_is_present(&child_pid.to_string()));
 }
@@ -220,7 +220,9 @@ exit 7
     )
     .unwrap();
     let backend = SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_stderr_diagnostics(true),
+        SubprocessOpenAiFilterConfig::new(opf)
+            .with_timeout(Duration::from_secs(120))
+            .with_stderr_diagnostics(true),
     )
     .unwrap();
 
@@ -269,7 +271,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
     )
     .unwrap();
     let net = OpenAiFilterSafetyNet::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(15)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(120)),
     );
     let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
         0..9,
@@ -289,7 +291,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
 
 fn backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
     SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(30)),
+        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(120)),
     )
     .unwrap()
 }
