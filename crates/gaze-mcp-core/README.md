@@ -57,6 +57,43 @@ operator-tier deployments must protect snapshot storage. If that trust boundary
 changes, replace the hash input with keyed HMAC material owned by the
 `ManifestStore` implementation.
 
+## Session ownership boundary
+
+> ⚠️ **One `gaze::Session` per authorization boundary.** A `Session`
+> tracks the entire token↔raw map for its lifetime in a single
+> `DashMap` (`crates/gaze/src/session.rs:299-304`). The operator-tier
+> tool `export_session_tokens` (Tool 3) dumps that **entire** map in
+> the clear — every token from every conversation that ever shared the
+> Session is exposed in one call. There is no per-call provenance
+> filter on `Session::tokens()` in v0.7.
+>
+> If your host process serves multiple agents or users concurrently,
+> your code MUST construct a fresh `Session` per authorization domain
+> and supply it to `PiiEnvelope::new`. Sharing a single `Session`
+> across conversations is a critical leak: agent B's operator-tier
+> principal calling `export_session_tokens` reads agent A's PII
+> inventory.
+>
+> Type-level enforcement of this boundary is deferred to v0.8.
+
+## Operator-tier tools and audit storage
+
+Operator-tier tools (`restore`, `restore_strict`, `export_session_tokens`)
+are privileged by design. Their descriptors set
+`ResponseRedaction::BypassByOperator`, so the dispatcher returns their raw
+payloads to an operator principal after `AuthHook::authorize_operator`
+passes. Agent-tier tools cannot opt into this posture; registry validation
+rejects it and the dispatcher fails closed if that invariant is ever broken.
+
+Successful operator-tier responses are still committed through
+`ManifestStore::finish_call` before returning. For these tools, the response
+snapshot can contain raw PII: restored values or the complete session token
+inventory. `ManifestStore` implementations that persist snapshots must protect
+those bytes with encryption at rest and operator-only read access. Audit rows
+record snapshot locators plus the salted SHA-256 integrity marker described
+above; audit readers are trusted to see manifest metadata and to verify guessed
+payloads offline under the v0.7 beta threat model.
+
 ## Adopter quickstart
 
 ```rust
@@ -156,7 +193,7 @@ A reference adapter for rmcp's `tools/list` + `tools/call` shape lives in
 | Feature | Default | Adds |
 |---|---|---|
 | `core-tools` | yes | `core_tools::{CleanTool, TokenizeFieldTool, SafetyNetCheckTool}` registrations. |
-| `operator-tier` | no | `operator_tools::{RestoreTool, RestoreStrictTool, ExportManifestTool}`. Tools route through `AuthHook::authorize_operator`. |
+| `operator-tier` | no | `operator_tools::{RestoreTool, RestoreStrictTool, ExportSessionTokensTool}`. Tools route through `AuthHook::authorize_operator`. |
 
 The `operator-tier` feature is opt-in. Default builds expose only the
 agent surface, so an adopter who skips wiring auth hits
@@ -165,16 +202,6 @@ exposing restore.
 
 ## Open items
 
-- The default operator-tier tool bodies (`restore`, `restore_strict`,
-  `export_manifest`) are v0.1 stubs that return `ToolError::Internal`
-  with class `"not-yet-implemented"`. The dispatcher path through them
-  (auth gating, fail-closed manifest persistence) is fully wired and
-  tested; the bodies land in a follow-up before v0.7 release. Adopters
-  who need a production restore path TODAY implement `Tool` themselves.
-- `SafetyNetCheckTool` is a v0.1 stub for the same reason — wiring
-  `gaze::Pipeline::clean_with_safety_net` requires a dispatcher-level
-  decision about safety-net configuration that is deferred to a
-  follow-up.
 - `gaze-mcp-rmcp` ships in a companion PR (`feature/gaze-mcp-rmcp`).
   Both are held for v0.7.
 - `gaze-proxy` (the user-input axis sibling, multi-vendor LLM API
