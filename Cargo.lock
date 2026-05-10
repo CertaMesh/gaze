@@ -821,6 +821,7 @@ name = "gaze-types"
 version = "0.6.6"
 dependencies = [
  "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 
