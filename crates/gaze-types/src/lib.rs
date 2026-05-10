@@ -418,7 +418,6 @@ pub struct LeakReportStats {
 /// non-sensitive mirrors. The single `schema_version` is bundle-level; sub-files
 /// do not carry independent schema versions.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct DocumentExtension {
     /// Bundle-level schema version shared by clean, layout, preview, report, and manifest files.
     pub schema_version: u16,
@@ -456,7 +455,6 @@ pub enum TextOrigin {
 
 /// Orthogonal document codec capabilities delivered or advertised by a codec.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct CodecCapabilitySet {
     /// Codec can emit text.
     pub text: bool,
@@ -507,7 +505,6 @@ impl Default for ExtractionDensityPolicy {
 
 /// Metadata-only audit row emitted by a document codec.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct CodecAuditRow {
     /// Stable codec id, such as `gaze.codec.tesseract`.
     pub codec_id: String,
