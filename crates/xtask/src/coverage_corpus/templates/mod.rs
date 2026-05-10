@@ -1,10 +1,16 @@
-#[allow(dead_code)]
-#[derive(Debug, Clone)]
+use serde::Deserialize;
+
+#[derive(Debug, Clone, Deserialize)]
 pub struct Template {
-    pub id: &'static str,
+    pub id: String,
+    pub context: String,
+    pub locale_chain: Vec<String>,
+    pub body: String,
+    pub expected_classes: Vec<String>,
+    pub notes: String,
 }
 
-#[allow(dead_code)]
-pub fn phase_1_templates() -> &'static [Template] {
-    &[]
+pub fn phase_1_templates() -> serde_json::Result<Vec<Template>> {
+    let raw = include_str!("prose-en/prose-en-001.json");
+    serde_json::from_str(raw).map(|template| vec![template])
 }

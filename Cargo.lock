@@ -813,6 +813,7 @@ version = "0.6.6"
 dependencies = [
  "aho-corasick",
  "criterion",
+ "gaze-assembly",
  "gaze-pii",
  "gaze-types",
  "hex",
