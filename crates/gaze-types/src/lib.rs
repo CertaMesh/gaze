@@ -212,7 +212,7 @@ impl<'a> SafetyNetContext<'a> {
 }
 
 /// A replacement emitted by the pseudonymization pipeline.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct EmittedTokenSpan {
     /// Byte span in the clean text.
@@ -235,7 +235,7 @@ impl EmittedTokenSpan {
 }
 
 /// Set of emitted token spans for one clean text segment.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Manifest {
     /// Spans sorted by `clean_span.start`.
@@ -396,7 +396,7 @@ pub enum LeakReportTelemetry {
 }
 
 /// Aggregate leak report statistics.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct LeakReportStats {
     /// Number of suspects reported.
@@ -409,6 +409,271 @@ pub struct LeakReportStats {
     pub class_mismatch_count: usize,
     /// Number of locale-skip telemetry events.
     pub locale_skipped_count: usize,
+}
+
+/// Signed document-context metadata carried inside a session snapshot envelope.
+///
+/// This extension is the v0.7 bridge for `gaze-document`: it is safe to serialize
+/// inside the owner-only snapshot envelope, while agent-facing files keep using
+/// non-sensitive mirrors. The single `schema_version` is bundle-level; sub-files
+/// do not carry independent schema versions.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct DocumentExtension {
+    /// Bundle-level schema version shared by clean, layout, preview, report, and manifest files.
+    pub schema_version: u16,
+    /// SHA-256 of `clean.md` NFC-normalized bytes.
+    pub clean_md_sha256: [u8; 32],
+    /// SHA-256 of canonical `layout.json` bytes.
+    pub layout_json_sha256: [u8; 32],
+    /// SHA-256 of canonical `report.json` bytes.
+    pub report_json_sha256: [u8; 32],
+    /// SHA-256 of `preview-redacted.png` bytes when a preview is present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_png_sha256: Option<[u8; 32]>,
+    /// Page count reported for the source document.
+    pub page_count: u32,
+    /// Audit session id mirrored from the writing session for cross-pane correlation.
+    pub audit_session_id: String,
+    /// Signed clean.md byte spans for every emitted token.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clean_spans: Vec<EmittedTokenSpan>,
+    /// Codec audit rows for the decode path that produced this document extension.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub codec_audit: Vec<CodecAuditRow>,
+}
+
+impl DocumentExtension {
+    /// Starts a document extension builder for one bundle schema version.
+    pub fn builder(schema_version: u16) -> DocumentExtensionBuilder {
+        DocumentExtensionBuilder {
+            schema_version,
+            clean_md_sha256: None,
+            layout_json_sha256: None,
+            report_json_sha256: None,
+            preview_png_sha256: None,
+            page_count: None,
+            audit_session_id: None,
+            clean_spans: Vec::new(),
+            codec_audit: Vec::new(),
+        }
+    }
+}
+
+/// Builder for [`DocumentExtension`] that requires signed integrity-binding fields.
+#[derive(Debug, Clone)]
+#[must_use]
+pub struct DocumentExtensionBuilder {
+    schema_version: u16,
+    clean_md_sha256: Option<[u8; 32]>,
+    layout_json_sha256: Option<[u8; 32]>,
+    report_json_sha256: Option<[u8; 32]>,
+    preview_png_sha256: Option<[u8; 32]>,
+    page_count: Option<u32>,
+    audit_session_id: Option<String>,
+    clean_spans: Vec<EmittedTokenSpan>,
+    codec_audit: Vec<CodecAuditRow>,
+}
+
+impl DocumentExtensionBuilder {
+    pub fn clean_md_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.clean_md_sha256 = Some(hash);
+        self
+    }
+
+    pub fn layout_json_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.layout_json_sha256 = Some(hash);
+        self
+    }
+
+    pub fn report_json_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.report_json_sha256 = Some(hash);
+        self
+    }
+
+    pub fn preview_png_sha256(mut self, hash: [u8; 32]) -> Self {
+        self.preview_png_sha256 = Some(hash);
+        self
+    }
+
+    pub fn page_count(mut self, page_count: u32) -> Self {
+        self.page_count = Some(page_count);
+        self
+    }
+
+    pub fn audit_session_id(mut self, audit_session_id: impl Into<String>) -> Self {
+        self.audit_session_id = Some(audit_session_id.into());
+        self
+    }
+
+    pub fn clean_spans(mut self, clean_spans: Vec<EmittedTokenSpan>) -> Self {
+        self.clean_spans = clean_spans;
+        self
+    }
+
+    pub fn codec_audit(mut self, codec_audit: Vec<CodecAuditRow>) -> Self {
+        self.codec_audit = codec_audit;
+        self
+    }
+
+    pub fn build(self) -> Result<DocumentExtension, DocumentExtensionError> {
+        Ok(DocumentExtension {
+            schema_version: self.schema_version,
+            clean_md_sha256: self
+                .clean_md_sha256
+                .ok_or(DocumentExtensionError::MissingField("clean_md_sha256"))?,
+            layout_json_sha256: self
+                .layout_json_sha256
+                .ok_or(DocumentExtensionError::MissingField("layout_json_sha256"))?,
+            report_json_sha256: self
+                .report_json_sha256
+                .ok_or(DocumentExtensionError::MissingField("report_json_sha256"))?,
+            preview_png_sha256: self.preview_png_sha256,
+            page_count: self
+                .page_count
+                .ok_or(DocumentExtensionError::MissingField("page_count"))?,
+            audit_session_id: self
+                .audit_session_id
+                .ok_or(DocumentExtensionError::MissingField("audit_session_id"))?,
+            clean_spans: self.clean_spans,
+            codec_audit: self.codec_audit,
+        })
+    }
+}
+
+/// Errors returned while building a [`DocumentExtension`].
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum DocumentExtensionError {
+    #[error("missing document extension field: {0}")]
+    MissingField(&'static str),
+}
+
+/// Provenance of text extracted from a document or transcript source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum TextOrigin {
+    /// Text came from OCR over pixels.
+    Ocr,
+    /// Text came from an embedded text layer.
+    EmbeddedText,
+    /// Text came from an audio/video transcript.
+    Transcript,
+    /// Text came from multiple extraction paths.
+    Hybrid,
+}
+
+/// Orthogonal document codec capabilities delivered or advertised by a codec.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CodecCapabilitySet {
+    /// Codec can emit text.
+    pub text: bool,
+    /// Codec can emit layout geometry.
+    pub layout: bool,
+    /// Codec can emit confidence buckets.
+    pub confidence: bool,
+    /// Codec can emit timestamps.
+    pub timestamps: bool,
+}
+
+impl CodecCapabilitySet {
+    /// Text-only capability set.
+    pub const TEXT_ONLY: Self = Self {
+        text: true,
+        layout: false,
+        confidence: false,
+        timestamps: false,
+    };
+
+    /// Builds a codec capability bitset.
+    pub const fn new(text: bool, layout: bool, confidence: bool, timestamps: bool) -> Self {
+        Self {
+            text,
+            layout,
+            confidence,
+            timestamps,
+        }
+    }
+
+    /// Returns true when this set contains every requested capability bit.
+    pub fn contains(self, requested: Self) -> bool {
+        (!requested.text || self.text)
+            && (!requested.layout || self.layout)
+            && (!requested.confidence || self.confidence)
+            && (!requested.timestamps || self.timestamps)
+    }
+}
+
+/// Per-codec declaration for text extraction density checks.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ExtractionDensityPolicy {
+    /// Require at least this many extracted text bytes per source KiB.
+    Required(f32),
+    /// Explicit exemption with an audit-visible reason.
+    Exempt { reason: String },
+}
+
+impl Default for ExtractionDensityPolicy {
+    fn default() -> Self {
+        Self::Exempt {
+            reason: "calibration_pending".to_string(),
+        }
+    }
+}
+
+/// Metadata-only audit row emitted by a document codec.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct CodecAuditRow {
+    /// Stable codec id, such as `gaze.codec.tesseract`.
+    pub codec_id: String,
+    /// Adapter crate version, distinct from engine provenance.
+    pub codec_version: String,
+    /// Accepted MIME type for the decode.
+    pub accepted_mime: String,
+    /// Capabilities advertised by the codec.
+    pub advertised: CodecCapabilitySet,
+    /// Capabilities delivered for this decode.
+    pub delivered: CodecCapabilitySet,
+    /// Text provenance reported by the codec.
+    pub text_origin: TextOrigin,
+    /// Codec-output schema version, decoupled from bundle schema version.
+    pub codec_output_schema_version: u16,
+    /// Hash of canonical codec options, never the options themselves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options_hash_hex: Option<String>,
+    /// Engine provenance string, without paths or raw source text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub engine_provenance: Option<String>,
+    /// Extraction density policy declared by the codec for this MIME.
+    pub extraction_density_policy: ExtractionDensityPolicy,
+}
+
+impl CodecAuditRow {
+    /// Builds a metadata-only codec audit row.
+    pub fn new(
+        codec_id: impl Into<String>,
+        codec_version: impl Into<String>,
+        accepted_mime: impl Into<String>,
+        text_origin: TextOrigin,
+    ) -> Self {
+        Self {
+            codec_id: codec_id.into(),
+            codec_version: codec_version.into(),
+            accepted_mime: accepted_mime.into(),
+            advertised: CodecCapabilitySet::default(),
+            delivered: CodecCapabilitySet::default(),
+            text_origin,
+            codec_output_schema_version: 1,
+            options_hash_hex: None,
+            engine_provenance: None,
+            extraction_density_policy: ExtractionDensityPolicy::default(),
+        }
+    }
 }
 
 /// A suspected missed PII span reported by a [`SafetyNet`].
@@ -1192,6 +1457,207 @@ impl DictionaryEntry {
     /// Returns configured dictionary terms.
     pub fn terms(&self) -> &[String] {
         &self.terms
+    }
+}
+
+#[cfg(test)]
+mod document_extension_tests {
+    use super::*;
+
+    fn audit_row() -> CodecAuditRow {
+        let mut row = CodecAuditRow::new(
+            "gaze.codec.tesseract",
+            "gaze-codec-tesseract@0.7.1",
+            "image/png",
+            TextOrigin::Ocr,
+        );
+        row.advertised = CodecCapabilitySet::new(true, true, true, false);
+        row.delivered = CodecCapabilitySet::new(true, true, false, false);
+        row.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
+        row
+    }
+
+    fn extension_builder() -> DocumentExtensionBuilder {
+        DocumentExtension::builder(1)
+            .clean_md_sha256([1; 32])
+            .layout_json_sha256([2; 32])
+            .report_json_sha256([3; 32])
+            .page_count(2)
+            .audit_session_id("018f0000-0000-7000-8000-000000000000")
+    }
+
+    #[test]
+    fn document_extension_round_trips_with_bundle_root_schema_version() {
+        let mut row = audit_row();
+        row.options_hash_hex = Some("00".repeat(32));
+        row.engine_provenance = Some("tesseract@5.3.4".to_string());
+        let extension = extension_builder()
+            .preview_png_sha256([4; 32])
+            .clean_spans(vec![EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email)])
+            .codec_audit(vec![row])
+            .build()
+            .expect("document extension");
+
+        let json = serde_json::to_value(&extension).expect("serialize document extension");
+
+        assert_eq!(json["schema_version"], 1);
+        assert_eq!(json["clean_md_sha256"].as_array().expect("hash").len(), 32);
+        assert_eq!(
+            json["layout_json_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(
+            json["report_json_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(
+            json["preview_png_sha256"].as_array().expect("hash").len(),
+            32
+        );
+        assert_eq!(json["page_count"], 2);
+        assert_eq!(
+            json["audit_session_id"],
+            "018f0000-0000-7000-8000-000000000000"
+        );
+        assert_eq!(json["clean_spans"].as_array().expect("spans").len(), 1);
+        assert!(json.get("clean_schema_version").is_none());
+        assert!(json.get("layout_schema_version").is_none());
+        assert!(json.get("report_schema_version").is_none());
+        assert!(json.get("manifest_schema_version").is_none());
+
+        let decoded: DocumentExtension =
+            serde_json::from_value(json).expect("deserialize document extension");
+        assert_eq!(decoded, extension);
+    }
+
+    #[test]
+    fn document_extension_carries_full_integrity_set() {
+        let extension = DocumentExtension::builder(1)
+            .clean_md_sha256([10; 32])
+            .layout_json_sha256([11; 32])
+            .report_json_sha256([12; 32])
+            .preview_png_sha256([13; 32])
+            .page_count(7)
+            .audit_session_id("018f0000-0000-7000-8000-000000000001")
+            .clean_spans(vec![EmittedTokenSpan::new(5..14, 20..34, PiiClass::Name)])
+            .codec_audit(vec![audit_row()])
+            .build()
+            .expect("document extension");
+
+        let json = serde_json::to_string(&extension).expect("serialize document extension");
+        let decoded: DocumentExtension =
+            serde_json::from_str(&json).expect("deserialize document extension");
+
+        assert_eq!(decoded, extension);
+        assert_eq!(decoded.clean_md_sha256, [10; 32]);
+        assert_eq!(decoded.layout_json_sha256, [11; 32]);
+        assert_eq!(decoded.report_json_sha256, [12; 32]);
+        assert_eq!(decoded.preview_png_sha256, Some([13; 32]));
+        assert_eq!(decoded.page_count, 7);
+        assert_eq!(
+            decoded.audit_session_id,
+            "018f0000-0000-7000-8000-000000000001"
+        );
+        assert_eq!(decoded.clean_spans.len(), 1);
+        assert_eq!(decoded.codec_audit.len(), 1);
+    }
+
+    #[test]
+    fn document_extension_builder_requires_integrity_fields() {
+        assert_eq!(
+            DocumentExtension::builder(1).build(),
+            Err(DocumentExtensionError::MissingField("clean_md_sha256"))
+        );
+        assert_eq!(
+            DocumentExtension::builder(1)
+                .clean_md_sha256([1; 32])
+                .layout_json_sha256([2; 32])
+                .report_json_sha256([3; 32])
+                .page_count(1)
+                .build(),
+            Err(DocumentExtensionError::MissingField("audit_session_id"))
+        );
+    }
+
+    #[test]
+    fn codec_audit_row_round_trips_without_raw_pii_fields() {
+        let row = audit_row();
+        let json = serde_json::to_string(&row).expect("serialize codec audit row");
+
+        assert!(json.contains("\"codec_id\""));
+        assert!(!json.contains("alice@example.invalid"));
+        assert!(!json.contains("\"raw\""));
+        assert_eq!(
+            serde_json::from_str::<CodecAuditRow>(&json).expect("deserialize codec audit row"),
+            row
+        );
+    }
+
+    #[test]
+    fn text_origin_round_trips() {
+        for origin in [
+            TextOrigin::Ocr,
+            TextOrigin::EmbeddedText,
+            TextOrigin::Transcript,
+            TextOrigin::Hybrid,
+        ] {
+            let json = serde_json::to_string(&origin).expect("serialize text origin");
+            let decoded: TextOrigin = serde_json::from_str(&json).expect("deserialize text origin");
+            assert_eq!(decoded, origin);
+        }
+    }
+
+    #[test]
+    fn codec_capability_set_round_trips_and_contains_requested_bits() {
+        let delivered = CodecCapabilitySet::new(true, true, false, false);
+
+        let json = serde_json::to_string(&delivered).expect("serialize capabilities");
+        let decoded: CodecCapabilitySet =
+            serde_json::from_str(&json).expect("deserialize capabilities");
+
+        assert_eq!(decoded, delivered);
+        assert!(decoded.contains(CodecCapabilitySet::TEXT_ONLY));
+        assert!(!decoded.contains(CodecCapabilitySet::new(true, true, true, false)));
+    }
+
+    #[test]
+    fn extraction_density_policy_round_trips_closed_variants() {
+        for policy in [
+            ExtractionDensityPolicy::Required(1.25),
+            ExtractionDensityPolicy::Exempt {
+                reason: "text_only".to_string(),
+            },
+        ] {
+            let json = serde_json::to_string(&policy).expect("serialize density policy");
+            let decoded: ExtractionDensityPolicy =
+                serde_json::from_str(&json).expect("deserialize density policy");
+            assert_eq!(decoded, policy);
+        }
+    }
+
+    #[test]
+    fn manifest_stats_round_trip_for_document_report_mirrors() {
+        let manifest =
+            Manifest::from_spans(vec![EmittedTokenSpan::new(0..15, 0..19, PiiClass::Email)]);
+        let stats = LeakReportStats {
+            suspect_count: 1,
+            uncovered_count: 0,
+            partial_bleed_count: 0,
+            class_mismatch_count: 0,
+            locale_skipped_count: 0,
+        };
+
+        let manifest_json = serde_json::to_string(&manifest).expect("serialize manifest");
+        let stats_json = serde_json::to_string(&stats).expect("serialize stats");
+
+        assert_eq!(
+            serde_json::from_str::<Manifest>(&manifest_json).expect("deserialize manifest"),
+            manifest
+        );
+        assert_eq!(
+            serde_json::from_str::<LeakReportStats>(&stats_json).expect("deserialize stats"),
+            stats
+        );
     }
 }
 

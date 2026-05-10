@@ -22,9 +22,9 @@ adopter, or every consumer would need to duplicate policy assembly logic.
 
 ```toml
 [dependencies]
-gaze-pii = "0.6.5"
-gaze-assembly = "0.6.5"
-gaze-recognizers = "0.6.5"
+gaze-pii = "0.7"
+gaze-assembly = "0.7"
+gaze-recognizers = "0.7"
 serde_json = "1"
 ```
 

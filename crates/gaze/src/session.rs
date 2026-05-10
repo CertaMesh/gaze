@@ -11,11 +11,13 @@ use serde_json::Value as JsonValue;
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
 use crate::{Error, Result};
+use gaze_types::DocumentExtension;
 
 const DEFAULT_PERSISTENT_TTL_SECS: u64 = 86_400;
 const DEFAULT_COUNTER_FAMILY: &str = "counter";
 const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
+const SNAPSHOT_VERSION_V4: u8 = 4;
 
 /// Lifetime scope of a [`Session`]'s token manifest.
 ///
@@ -98,6 +100,8 @@ struct SnapshotPayload {
     issued_at: u64,
     #[serde(default)]
     next_by_class: Vec<(PiiClass, usize)>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    document: Option<DocumentExtension>,
 }
 
 /// Owns the token manifest for one conversation or request.
@@ -119,6 +123,10 @@ struct SnapshotPayload {
 ///
 /// There is no `Pipeline::restore_text` method - full-text restore is performed by scanning tokens
 /// with [`crate::token_shape::pattern`] and calling `restore_strict` per token.
+///
+/// Document workflows use the same restore root. Call [`Session::export_with_extension`] only when
+/// writing a `gaze-document` bundle that needs signed integrity hashes and codec provenance; plain
+/// text adopters should keep using [`Session::export`].
 ///
 /// # Round-trip example
 ///
@@ -331,6 +339,68 @@ impl Session {
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
+        self.export_payload(None)
+    }
+
+    /// Export a document-extended snapshot for `gaze-document` bundle manifests.
+    ///
+    /// Use this instead of [`Session::export`] when writing a document bundle with
+    /// `<base>-agent/` files (`clean.md`, `layout.json`, `report.json`, optional
+    /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
+    /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
+    /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
+    /// should use [`Session::export`], which keeps the v3 snapshot envelope; document-extended
+    /// snapshots emit v4 so older readers fail closed before restore.
+    ///
+    /// ```rust
+    /// use gaze::{
+    ///     CodecAuditRow, CodecCapabilitySet, DocumentExtension, ExtractionDensityPolicy, Scope,
+    ///     Session, TextOrigin,
+    /// };
+    ///
+    /// let session = Session::new(Scope::Conversation("doc-1".to_string()))?;
+    /// let mut codec = CodecAuditRow::new(
+    ///     "gaze.codec.pdf",
+    ///     "0.7.0",
+    ///     "application/pdf",
+    ///     TextOrigin::Hybrid,
+    /// );
+    /// codec.advertised = CodecCapabilitySet::new(true, true, true, false);
+    /// codec.delivered = CodecCapabilitySet::new(true, true, false, false);
+    /// codec.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
+    /// let extension = DocumentExtension::builder(1)
+    ///     .clean_md_sha256([1; 32])
+    ///     .layout_json_sha256([2; 32])
+    ///     .report_json_sha256([3; 32])
+    ///     .page_count(4)
+    ///     .audit_session_id(session.audit_session_id())
+    ///     .codec_audit(vec![codec])
+    ///     .build()?;
+    ///
+    /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
+    /// # assert_eq!(manifest_bin[0], 4);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// Failure modes match [`Session::export`]: ephemeral sessions return
+    /// [`Error::ExportForbidden`], JSON encoding failures return [`Error::SnapshotDecode`], and
+    /// empty integrity-binding hashes or audit session ids return
+    /// [`Error::EmptyDocumentIntegrity`]. `page_count == 0` is allowed because text-only or
+    /// degenerate bundles may have no pages while still binding file hashes. Callers must treat the
+    /// returned [`SensitiveSnapshot`] as owner-only because it carries the full token-to-PII restore
+    /// map. Bundle layout details live in `docs/architecture/document-extension.md`.
+    pub fn export_with_extension(&self, extension: DocumentExtension) -> Result<SensitiveSnapshot> {
+        if extension.clean_md_sha256 == [0; 32]
+            || extension.layout_json_sha256 == [0; 32]
+            || extension.report_json_sha256 == [0; 32]
+            || extension.audit_session_id.is_empty()
+        {
+            return Err(Error::EmptyDocumentIntegrity);
+        }
+        self.export_payload(Some(extension))
+    }
+
+    fn export_payload(&self, document: Option<DocumentExtension>) -> Result<SensitiveSnapshot> {
         if matches!(self.scope, Scope::Ephemeral) {
             return Err(Error::ExportForbidden);
         }
@@ -361,14 +431,20 @@ impl Session {
                 .map(|entry| (entry.key().clone(), *entry.value()))
                 .collect(),
             issued_at,
+            document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let signing_key = self.signing_key.signing_key();
         let signature = signing_key.sign(&payload_bytes);
         let verifying_key = signing_key.verifying_key();
 
+        let version = if payload.document.is_some() {
+            SNAPSHOT_VERSION_V4
+        } else {
+            SNAPSHOT_VERSION_V3
+        };
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
-        snapshot.push(SNAPSHOT_VERSION_V3);
+        snapshot.push(version);
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
@@ -381,7 +457,10 @@ impl Session {
             return Err(Error::InvalidSnapshotSignature);
         }
         let version = bytes[0];
-        if version != SNAPSHOT_VERSION_V2 && version != SNAPSHOT_VERSION_V3 {
+        if version != SNAPSHOT_VERSION_V2
+            && version != SNAPSHOT_VERSION_V3
+            && version != SNAPSHOT_VERSION_V4
+        {
             return Err(Error::InvalidSnapshotVersion(version));
         }
 
@@ -738,6 +817,21 @@ mod tests {
         SensitiveSnapshot::from(snapshot)
     }
 
+    fn snapshot_payload_json(snapshot: &SensitiveSnapshot) -> JsonValue {
+        serde_json::from_slice(&snapshot.0[97..]).expect("snapshot payload json")
+    }
+
+    fn document_extension(session: &Session) -> DocumentExtension {
+        DocumentExtension::builder(1)
+            .clean_md_sha256([1; 32])
+            .layout_json_sha256([2; 32])
+            .report_json_sha256([3; 32])
+            .page_count(1)
+            .audit_session_id(session.audit_session_id())
+            .build()
+            .expect("document extension")
+    }
+
     fn legacy_v0_4_0_accepts_only_v2(snapshot: &SensitiveSnapshot) -> Result<()> {
         let bytes = &snapshot.0;
         if bytes.len() < 97 {
@@ -775,6 +869,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: now,
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(Session::import(snapshot).is_ok());
@@ -788,6 +883,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: 0,
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(matches!(
@@ -804,6 +900,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: 0,
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(matches!(
@@ -825,6 +922,7 @@ mod tests {
             }],
             issued_at: 0,
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(matches!(
@@ -845,6 +943,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: now.saturating_sub(11),
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(matches!(
@@ -864,6 +963,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: 0,
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(Session::import(snapshot).is_ok());
@@ -911,6 +1011,104 @@ mod tests {
     }
 
     #[test]
+    fn export_with_extension_round_trips_clean() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let token = session
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("token");
+        let extension = document_extension(&session);
+
+        let snapshot = session
+            .export_with_extension(extension.clone())
+            .expect("export with extension");
+        let payload = snapshot_payload_json(&snapshot);
+
+        let document: DocumentExtension =
+            serde_json::from_value(payload["document"].clone()).expect("document extension");
+        assert_eq!(document, extension);
+
+        let imported = Session::import(snapshot).expect("import extended snapshot");
+        assert_eq!(imported.restore(&token).as_deref(), Some("Dr. Schmidt"));
+    }
+
+    #[test]
+    fn export_with_extension_no_pii_leak() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let _ = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("token");
+
+        let snapshot = session
+            .export_with_extension(document_extension(&session))
+            .expect("export with extension");
+        let payload = snapshot_payload_json(&snapshot);
+        let document_json = serde_json::to_string(&payload["document"]).expect("document json");
+
+        assert!(!document_json.contains("alice@example.invalid"));
+        assert!(!document_json.contains("\"raw\""));
+    }
+
+    #[test]
+    fn document_extension_zero_clean_md_sha256_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.clean_md_sha256 = [0; 32];
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_zero_layout_json_sha256_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.layout_json_sha256 = [0; 32];
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_zero_report_json_sha256_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.report_json_sha256 = [0; 32];
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_empty_audit_session_id_rejected() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let mut extension = document_extension(&session);
+        extension.audit_session_id.clear();
+
+        assert!(matches!(
+            session.export_with_extension(extension),
+            Err(Error::EmptyDocumentIntegrity)
+        ));
+    }
+
+    #[test]
+    fn document_extension_with_full_integrity_signs_successfully() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        let snapshot = session
+            .export_with_extension(document_extension(&session))
+            .expect("export with full integrity");
+        let payload = snapshot_payload_json(&snapshot);
+
+        assert_eq!(payload["document"]["schema_version"], 1);
+        assert!(Session::import(snapshot).is_ok());
+    }
+
+    #[test]
     fn import_rejects_forward_dated_persistent_snapshot() {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -922,6 +1120,7 @@ mod tests {
             entries: Vec::new(),
             issued_at: now.saturating_add(3_600),
             next_by_class: Vec::new(),
+            document: None,
         });
 
         assert!(matches!(

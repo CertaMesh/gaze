@@ -27,9 +27,11 @@ pub use dictionaries::{
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
 pub use gaze_types::{
-    EmittedTokenSpan, LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect,
-    Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
-    SafetyNetError, SafetyNetPiiClass,
+    CodecAuditRow, CodecCapabilitySet, DocumentExtension, DocumentExtensionBuilder,
+    DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy, LeakKind, LeakReport,
+    LeakReportStats, LeakReportTelemetry, LeakSuspect, Manifest, OpenAiPrivateLabel,
+    RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
+    SafetyNetPiiClass, TextOrigin,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};

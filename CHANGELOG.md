@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.7.0] - 2026-05-10
+
+### Added
+
+- `gaze_pii::Session::export_with_extension(DocumentExtension) -> Result<SensitiveSnapshot>` — opt-in document mode for OCR/PDF/transcript bundles. (#177)
+- `gaze_types::DocumentExtension` (signed-envelope-bound integrity hashes for `<base>-agent/` files). (#177)
+- `gaze_types::TextOrigin`, `CodecAuditRow`, `CodecCapabilitySet`, `ExtractionDensityPolicy`. (#177)
+- `docs/architecture/document-extension.md` — bundle contract + two-dir layout reference. (#177)
+- Coverage feedback loop Phase 0+1: xtask `coverage-corpus` + 5-fixture integration test skeleton. (#176)
 - `Ipv4Parse`, `Ipv6Parse`, and `EthEip55` validator kinds for parser-backed
   IP address validation and EIP-55 Ethereum address checksums. Closes #440.
 - `eth.address` in `core-extended`, emitting `custom:eth_address` for
@@ -17,13 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Snapshot envelope: text-only `Session::export()` stays v3; document-extended `Session::export_with_extension()` emits v4. v0.6.x readers fail closed on v4. (#177)
+- Workspace bumped 0.6.6 → 0.7.0.
 - [bundle-tokenization-drift] `eth.address` and parser-backed IP validator fixtures refreshed `core` and `core-extended` no-policy snapshots.
+
+### Fixed
+
+- `gaze_pii::default_policy` falls back to `Tokenize` (axis-1 fail-closed). (#175)
 
 ### Deprecated
 
 ### Removed
-
-### Fixed
 
 ### Security
 
