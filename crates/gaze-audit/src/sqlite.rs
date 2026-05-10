@@ -9,6 +9,7 @@ use thiserror::Error;
 
 use crate::query::{
     build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
+    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
 };
 
 pub type Result<T> = std::result::Result<T, AuditError>;
@@ -140,7 +141,10 @@ impl SqliteLogger {
                 conflict_loser INTEGER NOT NULL,
                 decided_by TEXT NOT NULL DEFAULT 'none',
                 created_at INTEGER NULL,
-                session_id TEXT NULL
+                session_id TEXT NULL,
+                snapshot_scheme TEXT NOT NULL DEFAULT 'gaze.snapshot.v1.sha256-salted',
+                snapshot_alg TEXT NOT NULL DEFAULT 'SHA-256',
+                snapshot_key_version INTEGER NULL
             );
 
             CREATE TABLE IF NOT EXISTS safety_net_log (
@@ -195,6 +199,36 @@ impl SqliteLogger {
         if !columns.iter().any(|column| column == "session_id") {
             conn.execute(
                 "ALTER TABLE redaction_log ADD COLUMN session_id TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "snapshot_scheme") {
+            conn.execute(
+                &format!(
+                    "ALTER TABLE redaction_log ADD COLUMN snapshot_scheme TEXT NOT NULL DEFAULT '{}'",
+                    DEFAULT_SNAPSHOT_SCHEME
+                ),
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "snapshot_alg") {
+            conn.execute(
+                &format!(
+                    "ALTER TABLE redaction_log ADD COLUMN snapshot_alg TEXT NOT NULL DEFAULT '{}'",
+                    DEFAULT_SNAPSHOT_ALG
+                ),
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns
+            .iter()
+            .any(|column| column == "snapshot_key_version")
+        {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN snapshot_key_version INTEGER NULL",
                 [],
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -270,8 +304,18 @@ impl SqliteLogger {
         let has_decided_by = table_has_column(&conn, "decided_by")?;
         let has_created_at = table_has_column(&conn, "created_at")?;
         let has_session_id = table_has_column(&conn, "session_id")?;
-        let (sql, values) =
-            build_audit_query_sql(filter, has_decided_by, has_created_at, has_session_id);
+        let has_snapshot_scheme = table_has_column(&conn, "snapshot_scheme")?;
+        let has_snapshot_alg = table_has_column(&conn, "snapshot_alg")?;
+        let has_snapshot_key_version = table_has_column(&conn, "snapshot_key_version")?;
+        let (sql, values) = build_audit_query_sql(
+            filter,
+            has_decided_by,
+            has_created_at,
+            has_session_id,
+            has_snapshot_scheme,
+            has_snapshot_alg,
+            has_snapshot_key_version,
+        );
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -287,6 +331,9 @@ impl SqliteLogger {
                     decided_by: row.get(6)?,
                     created_at: row.get(7)?,
                     session_id: row.get(8)?,
+                    snapshot_scheme: row.get(9)?,
+                    snapshot_alg: row.get(10)?,
+                    snapshot_key_version: row.get(11)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -581,6 +628,105 @@ fn document_kind_from_db(value: &str) -> std::result::Result<DocumentKind, rusql
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn create_legacy_redaction_log(path: &Path) {
+        let conn = Connection::open(path).expect("legacy sqlite");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE redaction_log (
+                source TEXT NOT NULL,
+                class TEXT NOT NULL,
+                action TEXT NOT NULL,
+                field_name TEXT NULL,
+                document_kind TEXT NOT NULL,
+                conflict_loser INTEGER NOT NULL,
+                decided_by TEXT NOT NULL DEFAULT 'none',
+                created_at INTEGER NULL,
+                session_id TEXT NULL
+            );
+            INSERT INTO redaction_log
+                (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id)
+            VALUES
+                ('regex', 'email', 'tokenize', 'contact.email', 'structured', 0, 'none', 100, 'session-a');
+            "#,
+        )
+        .expect("legacy schema");
+    }
+
+    fn redaction_log_columns(path: &Path) -> Vec<String> {
+        let conn = Connection::open(path).expect("sqlite");
+        let mut stmt = conn
+            .prepare("PRAGMA table_info(redaction_log)")
+            .expect("table info");
+        stmt.query_map([], |row| row.get::<_, String>(1))
+            .expect("columns")
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .expect("column names")
+    }
+
+    #[test]
+    fn migration_adds_snapshot_metadata_defaults_to_existing_rows() {
+        let temp_db = tempfile::NamedTempFile::new().unwrap();
+        create_legacy_redaction_log(temp_db.path());
+
+        let _logger = SqliteLogger::new(temp_db.path()).expect("migrate audit db");
+
+        let conn = Connection::open(temp_db.path()).expect("sqlite");
+        let (scheme, alg, key_version): (String, String, Option<i64>) = conn
+            .query_row(
+                "SELECT snapshot_scheme, snapshot_alg, snapshot_key_version FROM redaction_log",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .expect("snapshot metadata");
+
+        assert_eq!(scheme, DEFAULT_SNAPSHOT_SCHEME);
+        assert_eq!(alg, DEFAULT_SNAPSHOT_ALG);
+        assert_eq!(key_version, None);
+    }
+
+    #[test]
+    fn migration_is_idempotent_and_preserves_existing_rows() {
+        let temp_db = tempfile::NamedTempFile::new().unwrap();
+        create_legacy_redaction_log(temp_db.path());
+
+        let _first = SqliteLogger::new(temp_db.path()).expect("first migration");
+        drop(_first);
+        let columns_after_first = redaction_log_columns(temp_db.path());
+
+        let _second = SqliteLogger::new(temp_db.path()).expect("second migration");
+        drop(_second);
+        let columns_after_second = redaction_log_columns(temp_db.path());
+
+        assert_eq!(columns_after_second, columns_after_first);
+        assert_eq!(
+            columns_after_second
+                .iter()
+                .filter(|column| column.as_str() == "snapshot_scheme")
+                .count(),
+            1
+        );
+        assert_eq!(
+            columns_after_second
+                .iter()
+                .filter(|column| column.as_str() == "snapshot_alg")
+                .count(),
+            1
+        );
+        assert_eq!(
+            columns_after_second
+                .iter()
+                .filter(|column| column.as_str() == "snapshot_key_version")
+                .count(),
+            1
+        );
+
+        let conn = Connection::open(temp_db.path()).expect("sqlite");
+        let row_count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
+            .expect("row count");
+        assert_eq!(row_count, 1);
+    }
 
     #[test]
     fn s4_audit_query_db_is_readonly() {

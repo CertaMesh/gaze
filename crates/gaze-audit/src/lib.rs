@@ -10,6 +10,7 @@ mod sqlite;
 
 pub use query::{
     build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
-    AUDIT_RESTRICTED_COLUMNS, SAFETY_NET_RESTRICTED_COLUMNS,
+    AUDIT_RESTRICTED_COLUMNS, DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
+    SAFETY_NET_RESTRICTED_COLUMNS,
 };
 pub use sqlite::{AuditError, LeakSuspectLogEntry, LeakSuspectLogger, Result, SqliteLogger};

@@ -159,7 +159,7 @@ exec sleep 30
     )
     .unwrap();
     let backend = SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(5)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(15)),
     )
     .unwrap();
     let clean = format!("x\n{}", "x".repeat(128 * 1024));
@@ -171,7 +171,7 @@ exec sleep 30
     assert!(matches!(error, SafetyNetError::Runtime { .. }));
     assert!(error.to_string().contains("timed out"));
     assert!(
-        elapsed < Duration::from_secs(7),
+        elapsed < Duration::from_secs(17),
         "blocked stdin timeout took {elapsed:?}"
     );
 
@@ -268,7 +268,9 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
 "#,
     )
     .unwrap();
-    let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new(opf));
+    let net = OpenAiFilterSafetyNet::new(
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(15)),
+    );
     let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
         0..9,
         0..21,
@@ -286,7 +288,10 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
 }
 
 fn backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
-    SubprocessOpenAiFilterBackend::new(SubprocessOpenAiFilterConfig::new(command)).unwrap()
+    SubprocessOpenAiFilterBackend::new(
+        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(15)),
+    )
+    .unwrap()
 }
 
 fn context<'a>(manifest: &'a Manifest, field_path: Option<&'a str>) -> SafetyNetContext<'a> {

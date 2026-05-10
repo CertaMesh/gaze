@@ -247,6 +247,29 @@ fn snapshot_import_rejects_tampering() {
 }
 
 #[test]
+fn snapshot_import_rejects_emitted_version_tampering() {
+    let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
+    let token = session
+        .tokenize(&PiiClass::Email, "alice@example.invalid")
+        .expect("tokenize");
+
+    let bytes = session.export().expect("export snapshot").into_bytes();
+    let imported = Session::import(bytes.clone().into()).expect("import snapshot");
+    assert_eq!(
+        imported.restore_strict(&token).expect("restore"),
+        "alice@example.invalid"
+    );
+
+    let mut tampered = bytes;
+    tampered[0] = 3;
+
+    assert!(matches!(
+        Session::import(tampered.into()),
+        Err(gaze::Error::InvalidSnapshotSignature)
+    ));
+}
+
+#[test]
 fn ephemeral_session_cannot_export() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     assert!(session.export().is_err());

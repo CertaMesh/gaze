@@ -18,6 +18,7 @@ const DEFAULT_COUNTER_FAMILY: &str = "counter";
 const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 const SNAPSHOT_VERSION_V4: u8 = 4;
+const SNAPSHOT_VERSION_V5: u8 = 5;
 
 /// Lifetime scope of a [`Session`]'s token manifest.
 ///
@@ -349,8 +350,8 @@ impl Session {
     /// `preview-redacted.png`) plus owner-only `<base>-owner/manifest.bin`. The supplied
     /// [`DocumentExtension`] is serialized inside the signed snapshot payload, so its hashes and
     /// codec audit rows become the integrity root for the agent-facing files. Text-only adopters
-    /// should use [`Session::export`], which keeps the v3 snapshot envelope; document-extended
-    /// snapshots emit v4 so older readers fail closed before restore.
+    /// should use [`Session::export`]. Current snapshots emit v5 so older readers fail closed
+    /// before restore while the signature binds the emitted envelope bytes.
     ///
     /// ```rust
     /// use gaze::{
@@ -378,7 +379,7 @@ impl Session {
     ///     .build()?;
     ///
     /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
-    /// # assert_eq!(manifest_bin[0], 4);
+    /// # assert_eq!(manifest_bin[0], 5);
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
     ///
@@ -434,18 +435,17 @@ impl Session {
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
+        let version = SNAPSHOT_VERSION_V5;
         let signing_key = self.signing_key.signing_key();
-        let signature = signing_key.sign(&payload_bytes);
         let verifying_key = signing_key.verifying_key();
+        let verifying_key_bytes = verifying_key.to_bytes();
+        let signing_preimage =
+            snapshot_signing_preimage(version, &verifying_key_bytes, &payload_bytes);
+        let signature = signing_key.sign(&signing_preimage);
 
-        let version = if payload.document.is_some() {
-            SNAPSHOT_VERSION_V4
-        } else {
-            SNAPSHOT_VERSION_V3
-        };
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
         snapshot.push(version);
-        snapshot.extend_from_slice(&verifying_key.to_bytes());
+        snapshot.extend_from_slice(&verifying_key_bytes);
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
         Ok(SensitiveSnapshot(snapshot))
@@ -460,6 +460,7 @@ impl Session {
         if version != SNAPSHOT_VERSION_V2
             && version != SNAPSHOT_VERSION_V3
             && version != SNAPSHOT_VERSION_V4
+            && version != SNAPSHOT_VERSION_V5
         {
             return Err(Error::InvalidSnapshotVersion(version));
         }
@@ -476,8 +477,19 @@ impl Session {
                 .map_err(|_| Error::InvalidSnapshotSignature)?,
         );
         let payload_bytes = &bytes[97..];
+        let verify_preimage;
+        let signed_bytes = if version >= SNAPSHOT_VERSION_V5 {
+            let verifying_key_bytes: [u8; 32] = bytes[1..33]
+                .try_into()
+                .map_err(|_| Error::InvalidSnapshotSignature)?;
+            verify_preimage =
+                snapshot_signing_preimage(version, &verifying_key_bytes, payload_bytes);
+            verify_preimage.as_slice()
+        } else {
+            payload_bytes
+        };
         verifying_key
-            .verify(payload_bytes, &signature)
+            .verify(signed_bytes, &signature)
             .map_err(|_| Error::InvalidSnapshotSignature)?;
 
         let payload = decode_snapshot_payload(payload_bytes)?;
@@ -782,6 +794,18 @@ fn parse_token_index(token: &str) -> Option<usize> {
     suffix.parse().ok()
 }
 
+fn snapshot_signing_preimage(
+    version: u8,
+    verifying_key_bytes: &[u8; 32],
+    payload_bytes: &[u8],
+) -> Vec<u8> {
+    let mut preimage = Vec::with_capacity(1 + verifying_key_bytes.len() + payload_bytes.len());
+    preimage.push(version);
+    preimage.extend_from_slice(verifying_key_bytes);
+    preimage.extend_from_slice(payload_bytes);
+    preimage
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1006,7 +1030,59 @@ mod tests {
 
         assert!(matches!(
             legacy_v0_4_0_accepts_only_v2(&snapshot),
-            Err(Error::InvalidSnapshotVersion(3))
+            Err(Error::InvalidSnapshotVersion(SNAPSHOT_VERSION_V5))
+        ));
+    }
+
+    #[test]
+    fn snapshot_signature_binds_emitted_envelope_version() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        session
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("token");
+
+        let mut bytes = session.export().expect("snapshot").into_bytes();
+        assert_eq!(bytes[0], SNAPSHOT_VERSION_V5);
+        bytes[0] = SNAPSHOT_VERSION_V3;
+
+        assert!(matches!(
+            Session::import(SensitiveSnapshot::from(bytes)),
+            Err(Error::InvalidSnapshotSignature)
+        ));
+    }
+
+    #[test]
+    fn snapshot_signature_uses_final_envelope_preimage() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("token");
+
+        let bytes = session.export().expect("snapshot").into_bytes();
+        let version = bytes[0];
+        let verifying_key_bytes: [u8; 32] = bytes[1..33].try_into().expect("verifying key bytes");
+        let verifying_key = VerifyingKey::from_bytes(&verifying_key_bytes).expect("verifying key");
+        let signature = Signature::from_bytes(&bytes[33..97].try_into().expect("signature bytes"));
+        let payload_bytes = &bytes[97..];
+        let preimage = snapshot_signing_preimage(version, &verifying_key_bytes, payload_bytes);
+
+        assert!(verifying_key.verify(&preimage, &signature).is_ok());
+        assert!(verifying_key.verify(payload_bytes, &signature).is_err());
+    }
+
+    #[test]
+    fn snapshot_import_rejects_signature_slot_mutation() {
+        let session = Session::new(Scope::Conversation("test".to_string())).expect("session");
+        session
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("token");
+
+        let mut bytes = session.export().expect("snapshot").into_bytes();
+        bytes[33] ^= 0x01;
+
+        assert!(matches!(
+            Session::import(SensitiveSnapshot::from(bytes)),
+            Err(Error::InvalidSnapshotSignature)
         ));
     }
 
@@ -1201,7 +1277,7 @@ mod tests {
         assert!(beta.ends_with(":Name_2>"));
 
         let snapshot = session.export().expect("snapshot");
-        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V3);
+        assert_eq!(snapshot.0[0], SNAPSHOT_VERSION_V5);
         let imported = Session::import(snapshot).expect("import");
 
         assert_eq!(imported.restore(&alpha).as_deref(), Some("Dr. Schmidt"));
