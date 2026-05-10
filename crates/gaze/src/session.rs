@@ -365,16 +365,16 @@ impl Session {
     /// extension.report_json_sha256 = [3; 32];
     /// extension.page_count = 4;
     /// extension.audit_session_id = session.audit_session_id().to_string();
-    /// extension.codec_audit.push(CodecAuditRow::new(
+    /// let mut codec = CodecAuditRow::new(
     ///     "gaze.codec.pdf",
     ///     "0.7.0",
     ///     "application/pdf",
-    ///     CodecCapabilitySet::new(true, true, true, false),
-    ///     CodecCapabilitySet::new(true, true, false, false),
     ///     TextOrigin::Hybrid,
-    ///     1,
-    ///     ExtractionDensityPolicy::Required(1.0),
-    /// ));
+    /// );
+    /// codec.advertised = CodecCapabilitySet::new(true, true, true, false);
+    /// codec.delivered = CodecCapabilitySet::new(true, true, false, false);
+    /// codec.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
+    /// extension.codec_audit.push(codec);
     ///
     /// let manifest_bin = session.export_with_extension(extension)?.into_bytes();
     /// # assert_eq!(manifest_bin[0], 4);

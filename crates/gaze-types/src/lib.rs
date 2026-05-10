@@ -581,23 +581,19 @@ impl CodecAuditRow {
         codec_id: impl Into<String>,
         codec_version: impl Into<String>,
         accepted_mime: impl Into<String>,
-        advertised: CodecCapabilitySet,
-        delivered: CodecCapabilitySet,
         text_origin: TextOrigin,
-        codec_output_schema_version: u16,
-        extraction_density_policy: ExtractionDensityPolicy,
     ) -> Self {
         Self {
             codec_id: codec_id.into(),
             codec_version: codec_version.into(),
             accepted_mime: accepted_mime.into(),
-            advertised,
-            delivered,
+            advertised: CodecCapabilitySet::default(),
+            delivered: CodecCapabilitySet::default(),
             text_origin,
-            codec_output_schema_version,
+            codec_output_schema_version: 1,
             options_hash_hex: None,
             engine_provenance: None,
-            extraction_density_policy,
+            extraction_density_policy: ExtractionDensityPolicy::default(),
         }
     }
 }
@@ -1391,16 +1387,16 @@ mod document_extension_tests {
     use super::*;
 
     fn audit_row() -> CodecAuditRow {
-        CodecAuditRow::new(
+        let mut row = CodecAuditRow::new(
             "gaze.codec.tesseract",
             "gaze-codec-tesseract@0.7.1",
             "image/png",
-            CodecCapabilitySet::new(true, true, true, false),
-            CodecCapabilitySet::new(true, true, false, false),
             TextOrigin::Ocr,
-            1,
-            ExtractionDensityPolicy::Required(1.0),
-        )
+        );
+        row.advertised = CodecCapabilitySet::new(true, true, true, false);
+        row.delivered = CodecCapabilitySet::new(true, true, false, false);
+        row.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
+        row
     }
 
     #[test]
