@@ -9,12 +9,10 @@ use thiserror::Error;
 
 use crate::query::{
     build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
+    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
 };
 
 pub type Result<T> = std::result::Result<T, AuditError>;
-
-const DEFAULT_SNAPSHOT_SCHEME: &str = "gaze.snapshot.v1.sha256-salted";
-const DEFAULT_SNAPSHOT_ALG: &str = "SHA-256";
 
 #[derive(Debug, Error)]
 pub enum AuditError {
@@ -306,8 +304,18 @@ impl SqliteLogger {
         let has_decided_by = table_has_column(&conn, "decided_by")?;
         let has_created_at = table_has_column(&conn, "created_at")?;
         let has_session_id = table_has_column(&conn, "session_id")?;
-        let (sql, values) =
-            build_audit_query_sql(filter, has_decided_by, has_created_at, has_session_id);
+        let has_snapshot_scheme = table_has_column(&conn, "snapshot_scheme")?;
+        let has_snapshot_alg = table_has_column(&conn, "snapshot_alg")?;
+        let has_snapshot_key_version = table_has_column(&conn, "snapshot_key_version")?;
+        let (sql, values) = build_audit_query_sql(
+            filter,
+            has_decided_by,
+            has_created_at,
+            has_session_id,
+            has_snapshot_scheme,
+            has_snapshot_alg,
+            has_snapshot_key_version,
+        );
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -323,6 +331,9 @@ impl SqliteLogger {
                     decided_by: row.get(6)?,
                     created_at: row.get(7)?,
                     session_id: row.get(8)?,
+                    snapshot_scheme: row.get(9)?,
+                    snapshot_alg: row.get(10)?,
+                    snapshot_key_version: row.get(11)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;

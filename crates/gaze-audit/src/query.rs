@@ -1,5 +1,8 @@
 use rusqlite::types::Value;
 
+pub const DEFAULT_SNAPSHOT_SCHEME: &str = "gaze.snapshot.v1.sha256-salted";
+pub const DEFAULT_SNAPSHOT_ALG: &str = "SHA-256";
+
 /// Query filter for [`crate::SqliteLogger::query`] and
 /// [`crate::SqliteLogger::query_safety_net`].
 ///
@@ -17,6 +20,9 @@ pub struct AuditFilter {
     pub from_epoch_ms: Option<i64>,
     pub to_epoch_ms: Option<i64>,
     pub session_id: Option<String>,
+    pub snapshot_scheme: Option<String>,
+    pub snapshot_alg: Option<String>,
+    pub snapshot_key_version: Option<i64>,
 }
 
 /// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
@@ -35,6 +41,9 @@ pub struct AuditLogRow {
     pub decided_by: String,
     pub created_at: Option<i64>,
     pub session_id: Option<String>,
+    pub snapshot_scheme: String,
+    pub snapshot_alg: String,
+    pub snapshot_key_version: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -75,6 +84,9 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "decided_by",
     "created_at",
     "session_id",
+    "snapshot_scheme",
+    "snapshot_alg",
+    "snapshot_key_version",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -105,6 +117,9 @@ pub fn build_audit_query_sql(
     has_decided_by: bool,
     has_created_at: bool,
     has_session_id: bool,
+    has_snapshot_scheme: bool,
+    has_snapshot_alg: bool,
+    has_snapshot_key_version: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -121,8 +136,23 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS session_id"
     };
+    let snapshot_scheme_column = if has_snapshot_scheme {
+        "snapshot_scheme".to_string()
+    } else {
+        format!("'{DEFAULT_SNAPSHOT_SCHEME}' AS snapshot_scheme")
+    };
+    let snapshot_alg_column = if has_snapshot_alg {
+        "snapshot_alg".to_string()
+    } else {
+        format!("'{DEFAULT_SNAPSHOT_ALG}' AS snapshot_alg")
+    };
+    let snapshot_key_version_column = if has_snapshot_key_version {
+        "snapshot_key_version"
+    } else {
+        "NULL AS snapshot_key_version"
+    };
     let mut sql = format!(
-        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column} FROM redaction_log"
+        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -165,6 +195,30 @@ pub fn build_audit_query_sql(
             predicates.push("NULL = ?");
         }
         values.push(Value::Text(session_id.clone()));
+    }
+    if let Some(snapshot_scheme) = &filter.snapshot_scheme {
+        if has_snapshot_scheme {
+            predicates.push("snapshot_scheme = ?");
+        } else {
+            predicates.push("'gaze.snapshot.v1.sha256-salted' = ?");
+        }
+        values.push(Value::Text(snapshot_scheme.clone()));
+    }
+    if let Some(snapshot_alg) = &filter.snapshot_alg {
+        if has_snapshot_alg {
+            predicates.push("snapshot_alg = ?");
+        } else {
+            predicates.push("'SHA-256' = ?");
+        }
+        values.push(Value::Text(snapshot_alg.clone()));
+    }
+    if let Some(snapshot_key_version) = filter.snapshot_key_version {
+        if has_snapshot_key_version {
+            predicates.push("snapshot_key_version = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Integer(snapshot_key_version));
     }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");

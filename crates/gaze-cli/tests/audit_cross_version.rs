@@ -1,5 +1,7 @@
 use assert_cmd::Command;
-use gaze_audit::{build_audit_query_sql, AuditFilter};
+use gaze_audit::{
+    build_audit_query_sql, AuditFilter, DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
+};
 use rusqlite::{types::Value as SqlValue, Connection};
 use serde_json::Value;
 use tempfile::tempdir;
@@ -87,6 +89,9 @@ fn v0_4_3_shape_without_created_at_is_queryable_but_time_filters_omit_nulls() {
     assert_eq!(row["decided_by"], "recognizer_id");
     assert_eq!(row["created_at"], Value::Null);
     assert_eq!(row["session_id"], Value::Null);
+    assert_eq!(row["snapshot_scheme"], DEFAULT_SNAPSHOT_SCHEME);
+    assert_eq!(row["snapshot_alg"], DEFAULT_SNAPSHOT_ALG);
+    assert_eq!(row["snapshot_key_version"], Value::Null);
 }
 
 #[test]
@@ -145,6 +150,9 @@ fn v0_4_4_shape_with_created_at_is_queryable_and_time_filtered() {
     assert_eq!(rows[0]["source"], "email.global");
     assert_eq!(rows[0]["created_at"], 1700000000000_i64);
     assert_eq!(rows[0]["session_id"], Value::Null);
+    assert_eq!(rows[0]["snapshot_scheme"], DEFAULT_SNAPSHOT_SCHEME);
+    assert_eq!(rows[0]["snapshot_alg"], DEFAULT_SNAPSHOT_ALG);
+    assert_eq!(rows[0]["snapshot_key_version"], Value::Null);
 }
 
 #[test]
@@ -268,7 +276,7 @@ fn legacy_schema_without_decided_by_is_queryable() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\n"
     ));
     assert!(
         stdout.contains("dictionary:audit_terms[#0]\tcustom:term\ttokenize\t\ttext\tfalse\tnone")
@@ -287,8 +295,11 @@ fn audit_sql_uses_restricted_column_set() {
         from_epoch_ms: Some(1_700_000_000_000),
         to_epoch_ms: Some(1_700_000_010_000),
         session_id: Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
+        snapshot_scheme: Some(DEFAULT_SNAPSHOT_SCHEME.to_string()),
+        snapshot_alg: Some(DEFAULT_SNAPSHOT_ALG.to_string()),
+        snapshot_key_version: None,
     };
-    let (current_sql, values) = build_audit_query_sql(&filter, true, true, true);
+    let (current_sql, values) = build_audit_query_sql(&filter, true, true, true, true, true, true);
     assert_eq!(
         values,
         [
@@ -299,6 +310,8 @@ fn audit_sql_uses_restricted_column_set() {
             SqlValue::Integer(1_700_000_000_000),
             SqlValue::Integer(1_700_000_010_000),
             SqlValue::Text("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
+            SqlValue::Text(DEFAULT_SNAPSHOT_SCHEME.to_string()),
+            SqlValue::Text(DEFAULT_SNAPSHOT_ALG.to_string()),
         ]
         .into_iter()
         .collect::<Vec<_>>()
@@ -307,28 +320,42 @@ fn audit_sql_uses_restricted_column_set() {
     assert!(current_sql.contains("created_at >= ?"));
     assert!(current_sql.contains("created_at <= ?"));
     assert!(current_sql.contains("session_id = ?"));
+    assert!(current_sql.contains("snapshot_scheme = ?"));
+    assert!(current_sql.contains("snapshot_alg = ?"));
     assert!(!current_sql.contains("created_at IS NULL"));
 
     let legacy_filter = AuditFilter {
         from_epoch_ms: Some(1_700_000_000_000),
         to_epoch_ms: Some(1_700_000_010_000),
         session_id: Some("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
+        snapshot_scheme: Some(DEFAULT_SNAPSHOT_SCHEME.to_string()),
+        snapshot_alg: Some(DEFAULT_SNAPSHOT_ALG.to_string()),
+        snapshot_key_version: Some(1),
         ..AuditFilter::default()
     };
-    let (legacy_sql, legacy_values) = build_audit_query_sql(&legacy_filter, false, false, false);
+    let (legacy_sql, legacy_values) =
+        build_audit_query_sql(&legacy_filter, false, false, false, false, false, false);
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
     assert!(legacy_sql.contains("NULL AS created_at"));
     assert!(legacy_sql.contains("NULL AS session_id"));
+    assert!(legacy_sql.contains("'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme"));
+    assert!(legacy_sql.contains("'SHA-256' AS snapshot_alg"));
+    assert!(legacy_sql.contains("NULL AS snapshot_key_version"));
     assert!(legacy_sql.contains("NULL >= ?"));
     assert!(legacy_sql.contains("NULL <= ?"));
     assert!(legacy_sql.contains("NULL = ?"));
+    assert!(legacy_sql.contains("'gaze.snapshot.v1.sha256-salted' = ?"));
+    assert!(legacy_sql.contains("'SHA-256' = ?"));
     assert_eq!(
         legacy_values,
         [
             SqlValue::Integer(1_700_000_000_000),
             SqlValue::Integer(1_700_000_010_000),
             SqlValue::Text("018bcfe5-6800-7a2f-9d1b-47b7565b2d10".to_string()),
+            SqlValue::Text(DEFAULT_SNAPSHOT_SCHEME.to_string()),
+            SqlValue::Text(DEFAULT_SNAPSHOT_ALG.to_string()),
+            SqlValue::Integer(1),
         ]
         .into_iter()
         .collect::<Vec<_>>()

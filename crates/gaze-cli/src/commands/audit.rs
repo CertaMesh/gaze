@@ -58,7 +58,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
@@ -69,7 +69,12 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.created_at
                 .map(|created_at| created_at.to_string())
                 .unwrap_or_default(),
-            row.session_id.unwrap_or_default()
+            row.session_id.unwrap_or_default(),
+            row.snapshot_scheme,
+            row.snapshot_alg,
+            row.snapshot_key_version
+                .map(|version| version.to_string())
+                .unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -156,6 +161,9 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         from_epoch_ms,
         to_epoch_ms,
         session_id: args.session_id.clone(),
+        snapshot_scheme: None,
+        snapshot_alg: None,
+        snapshot_key_version: None,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -175,6 +183,9 @@ fn read_safety_net_rows(
         from_epoch_ms,
         to_epoch_ms,
         session_id: None,
+        snapshot_scheme: None,
+        snapshot_alg: None,
+        snapshot_key_version: None,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -233,6 +244,9 @@ struct JsonlRow {
     decided_by: String,
     created_at: Option<i64>,
     session_id: Option<String>,
+    snapshot_scheme: String,
+    snapshot_alg: String,
+    snapshot_key_version: Option<i64>,
 }
 
 impl From<AuditLogRow> for JsonlRow {
@@ -247,6 +261,9 @@ impl From<AuditLogRow> for JsonlRow {
             decided_by: row.decided_by,
             created_at: row.created_at,
             session_id: row.session_id,
+            snapshot_scheme: row.snapshot_scheme,
+            snapshot_alg: row.snapshot_alg,
+            snapshot_key_version: row.snapshot_key_version,
         }
     }
 }

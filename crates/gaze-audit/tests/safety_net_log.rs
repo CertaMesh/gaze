@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use gaze_audit::{
     AuditFilter, AuditLogRow, LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger,
-    SAFETY_NET_RESTRICTED_COLUMNS,
+    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME, SAFETY_NET_RESTRICTED_COLUMNS,
 };
 use gaze_types::{
     Action, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass, RedactionEntry,
@@ -150,6 +150,9 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             from_epoch_ms: Some(150),
             to_epoch_ms: Some(250),
             session_id: Some("session-b".to_string()),
+            snapshot_scheme: None,
+            snapshot_alg: None,
+            snapshot_key_version: None,
         },
     )
     .expect("filtered query");
@@ -263,6 +266,9 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             decided_by: "none".to_string(),
             created_at: Some(100),
             session_id: Some("session-a".to_string()),
+            snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
+            snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
+            snapshot_key_version: None,
         },
         AuditLogRow {
             source: "dictionary".to_string(),
@@ -274,6 +280,9 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             decided_by: "class_priority".to_string(),
             created_at: Some(200),
             session_id: None,
+            snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
+            snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
+            snapshot_key_version: None,
         },
     ]
 }
