@@ -17,6 +17,7 @@ const DEFAULT_PERSISTENT_TTL_SECS: u64 = 86_400;
 const DEFAULT_COUNTER_FAMILY: &str = "counter";
 const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
+const SNAPSHOT_VERSION_V4: u8 = 4;
 
 /// Lifetime scope of a [`Session`]'s token manifest.
 ///
@@ -379,8 +380,13 @@ impl Session {
         let signature = signing_key.sign(&payload_bytes);
         let verifying_key = signing_key.verifying_key();
 
+        let version = if payload.document.is_some() {
+            SNAPSHOT_VERSION_V4
+        } else {
+            SNAPSHOT_VERSION_V3
+        };
         let mut snapshot = Vec::with_capacity(1 + 32 + 64 + payload_bytes.len());
-        snapshot.push(SNAPSHOT_VERSION_V3);
+        snapshot.push(version);
         snapshot.extend_from_slice(&verifying_key.to_bytes());
         snapshot.extend_from_slice(&signature.to_bytes());
         snapshot.extend_from_slice(&payload_bytes);
@@ -393,7 +399,10 @@ impl Session {
             return Err(Error::InvalidSnapshotSignature);
         }
         let version = bytes[0];
-        if version != SNAPSHOT_VERSION_V2 && version != SNAPSHOT_VERSION_V3 {
+        if version != SNAPSHOT_VERSION_V2
+            && version != SNAPSHOT_VERSION_V3
+            && version != SNAPSHOT_VERSION_V4
+        {
             return Err(Error::InvalidSnapshotVersion(version));
         }
 
