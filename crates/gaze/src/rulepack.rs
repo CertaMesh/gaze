@@ -397,14 +397,11 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
             });
         }
 
-        let allow_token_shape_shadow = raw.rulepack_id == "gaze-core";
         let default_locales = parse_locales(raw.default_locales)?;
         let recognizers = raw
             .recognizers
             .into_iter()
-            .map(|recognizer| {
-                parse_recognizer(recognizer, &default_locales, allow_token_shape_shadow)
-            })
+            .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
         validate_rulepack_recognizers(&recognizers, &default_locales, &raw_with_lint.lint)?;
         let locale = raw.locale.map(LocaleData::from);
@@ -472,10 +469,9 @@ impl From<RawLocaleData> for LocaleData {
 fn parse_recognizer(
     raw: RawRecognizerSpec,
     default_locales: &[LocaleTag],
-    allow_token_shape_shadow: bool,
 ) -> Result<RecognizerSpec, RulepackError> {
     reject_unshipped_fields(&raw)?;
-    validate_matcher(&raw, allow_token_shape_shadow)?;
+    validate_matcher(&raw)?;
     let locales = if raw.locales.is_empty() {
         default_locales.to_vec()
     } else {
@@ -523,10 +519,7 @@ fn parse_recognizer(
     })
 }
 
-fn validate_matcher(
-    raw: &RawRecognizerSpec,
-    allow_token_shape_shadow: bool,
-) -> Result<(), RulepackError> {
+fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
     match &raw.matcher {
         RawMatch::Regex {
             pattern,
@@ -535,17 +528,6 @@ fn validate_matcher(
         } => {
             if pattern.is_some() == pattern_template.is_some() {
                 return Err(RulepackError::RegexPatternChoice { id: raw.id.clone() });
-            }
-            if let (false, Some(pattern)) = (allow_token_shape_shadow, pattern) {
-                let compiled = regex::Regex::new(pattern)
-                    .map_err(|_| RulepackError::RegexPatternChoice { id: raw.id.clone() })?;
-                crate::token_shape::reject_if_shadows_token_shape(&compiled, &raw.id).map_err(
-                    |shadow| RulepackError::TokenShapeShadow {
-                        recognizer_id: shadow.recognizer_id,
-                        offending_pattern: shadow.offending_pattern,
-                        shadowed_shape: shadow.shadowed_shape,
-                    },
-                )?;
             }
         }
         RawMatch::AnchoredMatch {
@@ -1194,33 +1176,27 @@ kind = "regex"
     }
 
     #[test]
-    fn rulepack_load_rejects_custom_regex_matching_token_shape() {
+    fn rulepack_load_accepts_standard_email_regex() {
         let raw = r#"
 schema_version = "0.1.0"
-rulepack_id = "bad-token-shadow"
+rulepack_id = "custom-email"
 rulepack_version = "0.7.0"
 default_locales = ["global"]
 
 [[recognizers]]
-id = "token.shadow"
+id = "custom.email"
 class = "Email"
 enabled = true
 
 [recognizers.match]
 kind = "regex"
-pattern = "<Email_\\d+>"
+pattern = "(?i)\\b[a-z0-9._%+\\-]+@[a-z0-9.\\-]+\\.[a-z]{2,}\\b"
 "#;
 
-        let err = Rulepack::parse(raw).expect_err("token shape shadow must fail closed");
+        let rulepack = Rulepack::parse(raw).expect("standard email regex should load");
 
-        assert!(matches!(
-            err,
-            RulepackError::TokenShapeShadow {
-                recognizer_id,
-                shadowed_shape,
-                ..
-            } if recognizer_id == "token.shadow" && shadowed_shape == "<Email_1>"
-        ));
+        assert_eq!(rulepack.recognizers.len(), 1);
+        assert_eq!(rulepack.recognizers[0].id, "custom.email");
     }
 
     #[test]

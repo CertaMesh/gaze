@@ -43,30 +43,6 @@ pub fn sample_token_shapes() -> &'static [&'static str] {
     ]
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct TokenShapeShadow {
-    pub recognizer_id: String,
-    pub offending_pattern: String,
-    pub shadowed_shape: String,
-}
-
-pub fn reject_if_shadows_token_shape(
-    compiled: &Regex,
-    recognizer_id: &str,
-) -> Result<(), TokenShapeShadow> {
-    for sample in sample_token_shapes() {
-        if compiled.is_match(sample) {
-            return Err(TokenShapeShadow {
-                recognizer_id: recognizer_id.to_string(),
-                offending_pattern: compiled.as_str().to_string(),
-                shadowed_shape: (*sample).to_string(),
-            });
-        }
-    }
-    Ok(())
-}
-
 pub fn starts_with_session_prefix(s: &str) -> bool {
     let bytes = s.as_bytes();
     let is_lower_hex = |b: u8| b.is_ascii_digit() || (b'a'..=b'f').contains(&b);
