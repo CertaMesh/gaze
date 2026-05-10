@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::env;
 use std::error::Error;
 use std::fs;
 use std::ops::Range;
@@ -18,9 +19,10 @@ fn coverage_loop_reports_labels_against_core_pipeline() -> Result<(), Box<dyn Er
         "coverage-loop corpus must not be empty"
     );
 
-    let mut report = CoverageReport::default();
+    let mut report = CoverageReport::new();
 
     for fixture in fixtures {
+        report.record_fixture();
         let locale_chain = fixture
             .labels
             .locale_chain
@@ -68,6 +70,7 @@ fn coverage_loop_reports_labels_against_core_pipeline() -> Result<(), Box<dyn Er
     )?;
 
     println!("{}", report.to_markdown());
+    enforce_trend_gate(&root.join("baseline.json"), &report)?;
     Ok(())
 }
 
@@ -150,6 +153,37 @@ fn workspace_target_dir() -> PathBuf {
         .join("target")
 }
 
+fn enforce_trend_gate(
+    baseline_path: &Path,
+    current: &CoverageReport,
+) -> Result<(), Box<dyn Error>> {
+    if env::var("GAZE_COVERAGE_LOOP_INFO_ONLY")
+        .map(|value| value == "1")
+        .unwrap_or(true)
+    {
+        return Ok(());
+    }
+    if !baseline_path.exists() {
+        eprintln!(
+            "coverage-loop baseline missing at {}; trend gate remains informational",
+            baseline_path.display()
+        );
+        return Ok(());
+    }
+
+    let baseline = serde_json::from_str::<CoverageReport>(&fs::read_to_string(baseline_path)?)?;
+    let regressions = current.uncovered_regressions(&baseline);
+    if regressions.is_empty() {
+        return Ok(());
+    }
+
+    Err(format!(
+        "coverage-loop uncovered regressions:\n{}",
+        regressions.join("\n")
+    )
+    .into())
+}
+
 #[derive(Debug)]
 struct Fixture {
     body: String,
@@ -171,32 +205,70 @@ struct LabelSpan {
     license_origin: String,
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CoverageReport {
-    buckets: BTreeMap<String, BTreeMap<String, BucketCounts>>,
+    schema_version: u8,
+    phase: String,
+    generated_at_utc: String,
+    rulepack_versions: BTreeMap<String, String>,
+    oracle: String,
+    leak_set: BTreeMap<String, BTreeMap<String, BucketCounts>>,
+    totals: ReportTotals,
 }
 
 impl CoverageReport {
+    fn new() -> Self {
+        Self {
+            schema_version: 1,
+            phase: "2-5".to_string(),
+            generated_at_utc: "2026-05-10T00:00:00Z".to_string(),
+            rulepack_versions: BTreeMap::from([
+                ("core".to_string(), "0.5.1".to_string()),
+                ("core-extended".to_string(), "0.5.1".to_string()),
+            ]),
+            oracle: "labels.json (Phase 2-5 synthetic corpus)".to_string(),
+            leak_set: BTreeMap::new(),
+            totals: ReportTotals::default(),
+        }
+    }
+
+    fn record_fixture(&mut self) {
+        self.totals.fixture_count += 1;
+    }
+
     fn record(&mut self, class_id: &str, locale: &str, verdict: Verdict) {
         let counts = self
-            .buckets
+            .leak_set
             .entry(class_id.to_string())
             .or_default()
             .entry(locale.to_string())
             .or_default();
         match verdict {
-            Verdict::Covered => counts.covered += 1,
-            Verdict::Uncovered => counts.uncovered += 1,
-            Verdict::PartialBleed => counts.partial_bleed += 1,
-            Verdict::ClassMismatch => counts.class_mismatch += 1,
+            Verdict::Covered => {
+                counts.covered += 1;
+                self.totals.covered_total += 1;
+            }
+            Verdict::Uncovered => {
+                counts.uncovered += 1;
+                self.totals.uncovered_total += 1;
+            }
+            Verdict::PartialBleed => {
+                counts.partial_bleed += 1;
+                self.totals.partial_bleed_total += 1;
+            }
+            Verdict::ClassMismatch => {
+                counts.class_mismatch += 1;
+                self.totals.class_mismatch_total += 1;
+            }
         }
+        self.totals.labeled_span_total += 1;
     }
 
     fn to_markdown(&self) -> String {
         let mut output = String::from(
             "# Coverage Loop Report\n\n| Class | Locale | Covered | Uncovered | PartialBleed | ClassMismatch |\n|---|---:|---:|---:|---:|---:|\n",
         );
-        for (class_id, locales) in &self.buckets {
+        for (class_id, locales) in &self.leak_set {
             for (locale, counts) in locales {
                 output.push_str(&format!(
                     "| {class_id} | {locale} | {} | {} | {} | {} |\n",
@@ -206,14 +278,45 @@ impl CoverageReport {
         }
         output
     }
+
+    fn uncovered_regressions(&self, baseline: &CoverageReport) -> Vec<String> {
+        let mut regressions = Vec::new();
+        for (class_id, locales) in &self.leak_set {
+            for (locale, current) in locales {
+                let baseline_uncovered = baseline
+                    .leak_set
+                    .get(class_id)
+                    .and_then(|baseline_locales| baseline_locales.get(locale))
+                    .map(|counts| counts.uncovered)
+                    .unwrap_or(0);
+                if current.uncovered > baseline_uncovered {
+                    regressions.push(format!(
+                        "{class_id}/{locale}: uncovered {} > baseline {}",
+                        current.uncovered, baseline_uncovered
+                    ));
+                }
+            }
+        }
+        regressions
+    }
 }
 
-#[derive(Debug, Default, Serialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 struct BucketCounts {
     covered: usize,
     uncovered: usize,
     partial_bleed: usize,
     class_mismatch: usize,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+struct ReportTotals {
+    fixture_count: usize,
+    labeled_span_total: usize,
+    uncovered_total: usize,
+    partial_bleed_total: usize,
+    class_mismatch_total: usize,
+    covered_total: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -232,5 +335,19 @@ mod selfcheck {
     fn classifier_returns_uncovered_for_unmatched_span() {
         let verdict = classify_label(0..5, &PiiClass::Email, &[]);
         assert_eq!(verdict, Verdict::Uncovered);
+    }
+
+    #[test]
+    fn trend_gate_flags_uncovered_regression() {
+        let mut baseline = CoverageReport::new();
+        baseline.record("Email", "global", Verdict::Covered);
+
+        let mut current = CoverageReport::new();
+        current.record("Email", "global", Verdict::Uncovered);
+
+        assert_eq!(
+            current.uncovered_regressions(&baseline),
+            vec!["Email/global: uncovered 1 > baseline 0"]
+        );
     }
 }

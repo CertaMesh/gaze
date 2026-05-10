@@ -1,0 +1,162 @@
+{
+  "schema_version": 1,
+  "phase": "2-5",
+  "generated_at_utc": "2026-05-10T00:00:00Z",
+  "rulepack_versions": {
+    "core": "0.5.1",
+    "core-extended": "0.5.1"
+  },
+  "oracle": "labels.json (Phase 2-5 synthetic corpus)",
+  "leak_set": {
+    "Email": {
+      "de-DE": {
+        "covered": 20,
+        "uncovered": 6,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 10,
+        "uncovered": 1,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 19,
+        "uncovered": 11,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "Name": {
+      "de-DE": {
+        "covered": 0,
+        "uncovered": 32,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 0,
+        "uncovered": 8,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:credit_card": {
+      "de-DE": {
+        "covered": 6,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 2
+      },
+      "en-US": {
+        "covered": 6,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 22,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:eth_address": {
+      "de-DE": {
+        "covered": 8,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 4,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 18,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:iban": {
+      "de-DE": {
+        "covered": 8,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 7,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 20,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:ip_address": {
+      "de-DE": {
+        "covered": 8,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 4,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 30,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:phone": {
+      "de-DE": {
+        "covered": 10,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 0,
+        "uncovered": 6,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
+    "custom:postal_code": {
+      "de-DE": {
+        "covered": 8,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 4,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    }
+  },
+  "totals": {
+    "fixture_count": 123,
+    "labeled_span_total": 278,
+    "uncovered_total": 64,
+    "partial_bleed_total": 0,
+    "class_mismatch_total": 2,
+    "covered_total": 212
+  }
+}
