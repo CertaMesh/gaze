@@ -289,7 +289,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
 
 fn backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
     SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(15)),
+        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(30)),
     )
     .unwrap()
 }
