@@ -92,6 +92,23 @@ pub struct CollisionMembership {
     pub mandatory_anchor: Option<String>,
 }
 
+impl CollisionMembership {
+    /// Builds collision-family membership metadata.
+    pub fn new(
+        family: impl Into<String>,
+        variant: impl Into<String>,
+        precedence: u32,
+        mandatory_anchor: Option<String>,
+    ) -> Self {
+        Self {
+            family: family.into(),
+            variant: variant.into(),
+            precedence,
+            mandatory_anchor,
+        }
+    }
+}
+
 impl PiiClass {
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {

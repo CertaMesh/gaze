@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{LocaleTag, PiiClass};
+use crate::{CollisionMembership, LocaleTag, PiiClass};
 
 const SUPPORTED_SCHEMA_MAJOR_MINOR: &str = "0.1.";
 
@@ -25,6 +25,7 @@ pub struct RecognizerSpec {
     pub id: String,
     pub class: PiiClass,
     pub cooperates_with: Vec<String>,
+    pub collision: Option<CollisionMembership>,
     pub enabled: bool,
     pub locales: Vec<LocaleTag>,
     pub matcher: RawMatch,
@@ -235,6 +236,32 @@ pub enum RulepackError {
         recognizer_ids: Vec<String>,
         locale_overlap: Vec<LocaleTag>,
     },
+    #[error("recognizer '{recognizer_id}' has invalid collision {field} '{value}'")]
+    InvalidCollisionName {
+        recognizer_id: String,
+        field: &'static str,
+        value: String,
+    },
+    #[error(
+        "recognizers '{first_recognizer_id}' and '{second_recognizer_id}' declare collision family '{family}' variant '{variant}' with inconsistent precedence {first_precedence} and {second_precedence}"
+    )]
+    InconsistentCollisionVariant {
+        family: String,
+        variant: String,
+        first_recognizer_id: String,
+        first_precedence: u32,
+        second_recognizer_id: String,
+        second_precedence: u32,
+    },
+    #[error(
+        "collision family '{family}' variants '{first_variant}' and '{second_variant}' share ambiguous precedence {precedence}"
+    )]
+    AmbiguousFamilyPrecedence {
+        family: String,
+        first_variant: String,
+        second_variant: String,
+        precedence: u32,
+    },
 }
 
 impl Rulepack {
@@ -307,6 +334,8 @@ struct RawRecognizerSpec {
     class: String,
     #[serde(default)]
     cooperates_with: Vec<String>,
+    #[serde(default)]
+    collision: Option<RawCollisionSpec>,
     #[serde(default = "default_true")]
     enabled: bool,
     #[serde(default)]
@@ -361,6 +390,17 @@ struct RawScoringSpec {
     priority: i32,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RawCollisionSpec {
+    family: String,
+    variant: String,
+    #[serde(default = "default_collision_precedence")]
+    precedence: u32,
+    #[serde(default)]
+    mandatory_anchor: Option<String>,
+}
+
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawTokenSpec {
@@ -405,11 +445,13 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
         }
 
         let default_locales = parse_locales(raw.default_locales)?;
-        let recognizers = raw
+        let mut recognizers = raw
             .recognizers
             .into_iter()
             .map(|recognizer| parse_recognizer(recognizer, &default_locales))
             .collect::<Result<Vec<_>, _>>()?;
+        validate_collision_memberships(&recognizers)?;
+        apply_collision_family_cooperation(&mut recognizers);
         validate_rulepack_recognizers(&recognizers, &default_locales, &raw_with_lint.lint)?;
         let locale = raw.locale.map(LocaleData::from);
         reject_anchored_match_ellipsis_cues(&recognizers, locale.as_ref())?;
@@ -484,11 +526,16 @@ fn parse_recognizer(
     } else {
         parse_locales(raw.locales)?
     };
+    let collision = raw
+        .collision
+        .map(|collision| parse_collision_membership(&raw.id, collision))
+        .transpose()?;
 
     Ok(RecognizerSpec {
         id: raw.id,
         class: parse_class(&raw.class)?,
         cooperates_with: raw.cooperates_with,
+        collision,
         enabled: raw.enabled,
         locales,
         matcher: raw.matcher,
@@ -524,6 +571,119 @@ fn parse_recognizer(
             license: source.license,
         }),
     })
+}
+
+pub(crate) fn parse_collision_membership(
+    recognizer_id: &str,
+    raw: RawCollisionSpec,
+) -> Result<CollisionMembership, RulepackError> {
+    validate_collision_name(recognizer_id, "family", &raw.family)?;
+    validate_collision_name(recognizer_id, "variant", &raw.variant)?;
+    Ok(CollisionMembership::new(
+        raw.family,
+        raw.variant,
+        raw.precedence,
+        raw.mandatory_anchor,
+    ))
+}
+
+fn validate_collision_name(
+    recognizer_id: &str,
+    field: &'static str,
+    value: &str,
+) -> Result<(), RulepackError> {
+    let valid = !value.is_empty()
+        && value.len() <= 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-');
+    if valid {
+        Ok(())
+    } else {
+        Err(RulepackError::InvalidCollisionName {
+            recognizer_id: recognizer_id.to_string(),
+            field,
+            value: value.to_string(),
+        })
+    }
+}
+
+fn validate_collision_memberships(recognizers: &[RecognizerSpec]) -> Result<(), RulepackError> {
+    let mut variant_precedence: HashMap<(&str, &str), (&str, u32)> = HashMap::new();
+    let mut family_precedence: HashMap<(&str, u32), &str> = HashMap::new();
+
+    for recognizer in recognizers {
+        let Some(collision) = &recognizer.collision else {
+            continue;
+        };
+
+        if let Some((first_id, first_precedence)) =
+            variant_precedence.get(&(collision.family.as_str(), collision.variant.as_str()))
+        {
+            if *first_precedence != collision.precedence {
+                return Err(RulepackError::InconsistentCollisionVariant {
+                    family: collision.family.clone(),
+                    variant: collision.variant.clone(),
+                    first_recognizer_id: (*first_id).to_string(),
+                    first_precedence: *first_precedence,
+                    second_recognizer_id: recognizer.id.clone(),
+                    second_precedence: collision.precedence,
+                });
+            }
+        } else {
+            variant_precedence.insert(
+                (collision.family.as_str(), collision.variant.as_str()),
+                (recognizer.id.as_str(), collision.precedence),
+            );
+        }
+
+        if let Some(first_variant) =
+            family_precedence.get(&(collision.family.as_str(), collision.precedence))
+        {
+            if *first_variant != collision.variant {
+                return Err(RulepackError::AmbiguousFamilyPrecedence {
+                    family: collision.family.clone(),
+                    first_variant: (*first_variant).to_string(),
+                    second_variant: collision.variant.clone(),
+                    precedence: collision.precedence,
+                });
+            }
+        } else {
+            family_precedence.insert(
+                (collision.family.as_str(), collision.precedence),
+                collision.variant.as_str(),
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn apply_collision_family_cooperation(recognizers: &mut [RecognizerSpec]) {
+    let mut family_members: HashMap<String, Vec<String>> = HashMap::new();
+    for recognizer in recognizers.iter() {
+        let Some(collision) = &recognizer.collision else {
+            continue;
+        };
+        family_members
+            .entry(collision.family.clone())
+            .or_default()
+            .push(recognizer.id.clone());
+    }
+
+    for recognizer in recognizers {
+        let Some(collision) = &recognizer.collision else {
+            continue;
+        };
+        let Some(siblings) = family_members.get(&collision.family) else {
+            continue;
+        };
+        for sibling in siblings {
+            if sibling != &recognizer.id && !recognizer.cooperates_with.contains(sibling) {
+                recognizer.cooperates_with.push(sibling.clone());
+            }
+        }
+    }
 }
 
 fn validate_matcher(raw: &RawRecognizerSpec) -> Result<(), RulepackError> {
@@ -930,6 +1090,10 @@ fn default_base_score() -> f32 {
     0.70
 }
 
+fn default_collision_precedence() -> u32 {
+    100
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1105,6 +1269,101 @@ priority = 1
             rulepack.recognizers[0].token.family.as_deref(),
             Some("email.formatpreserve")
         );
+    }
+
+    #[test]
+    fn rulepack_accepts_collision_membership_and_extends_family_cooperation() {
+        let rulepack = Rulepack::parse(&collision_rulepack(
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+"#,
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "beta"
+precedence = 20
+"#,
+        ))
+        .expect("collision membership should parse");
+
+        assert_eq!(
+            rulepack.recognizers[0].collision,
+            Some(CollisionMembership::new(
+                "tenant-document",
+                "alpha",
+                10,
+                None,
+            ))
+        );
+        assert_eq!(rulepack.recognizers[0].cooperates_with, vec!["tenant.beta"]);
+        assert_eq!(
+            rulepack.recognizers[1].cooperates_with,
+            vec!["tenant.alpha"]
+        );
+    }
+
+    #[test]
+    fn rulepack_rejects_inconsistent_collision_variant_precedence() {
+        let err = Rulepack::parse(&collision_rulepack(
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+"#,
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 20
+"#,
+        ))
+        .expect_err("same variant must use one precedence");
+
+        assert!(matches!(
+            err,
+            RulepackError::InconsistentCollisionVariant {
+                family,
+                variant,
+                first_precedence: 10,
+                second_precedence: 20,
+                ..
+            } if family == "tenant-document" && variant == "alpha"
+        ));
+    }
+
+    #[test]
+    fn rulepack_rejects_ambiguous_family_precedence() {
+        let err = Rulepack::parse(&collision_rulepack(
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+"#,
+            r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "beta"
+precedence = 10
+"#,
+        ))
+        .expect_err("distinct variants cannot share precedence");
+
+        assert!(matches!(
+            err,
+            RulepackError::AmbiguousFamilyPrecedence {
+                family,
+                first_variant,
+                second_variant,
+                precedence: 10,
+            } if family == "tenant-document"
+                && first_variant == "alpha"
+                && second_variant == "beta"
+        ));
     }
 
     #[test]
@@ -1444,6 +1703,39 @@ kind = "regex"
 pattern = "BAD_EMAIL_FIXTURE"
 
 {extra}
+"#
+        )
+    }
+
+    fn collision_rulepack(first_collision: &str, second_collision: &str) -> String {
+        format!(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "collision-test"
+rulepack_version = "0.7.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "tenant.alpha"
+class = "custom:tenant_alpha"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "ALPHA-[0-9]+"
+
+{first_collision}
+
+[[recognizers]]
+id = "tenant.beta"
+class = "custom:tenant_beta"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "BETA-[0-9]+"
+
+{second_collision}
 "#
         )
     }
