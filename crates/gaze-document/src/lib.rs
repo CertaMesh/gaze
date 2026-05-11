@@ -42,6 +42,9 @@
 pub mod bundle;
 pub mod extract;
 pub mod layout;
+#[cfg(feature = "mcp")]
+#[cfg_attr(docsrs, doc(cfg(feature = "mcp")))]
+pub mod mcp;
 pub mod ocr;
 pub mod render;
 
