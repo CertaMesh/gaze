@@ -186,6 +186,70 @@ impl<'de> Deserialize<'de> for PiiClass {
     }
 }
 
+/// A candidate recognizer/class pair that lost ambiguity resolution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct LosingCandidate {
+    /// PII class proposed by the losing recognizer.
+    pub class: PiiClass,
+    /// Stable recognizer identifier for traceability.
+    pub recognizer_id: String,
+}
+
+impl LosingCandidate {
+    /// Builds a losing ambiguity candidate.
+    pub fn new(class: PiiClass, recognizer_id: impl Into<String>) -> Self {
+        Self {
+            class,
+            recognizer_id: recognizer_id.into(),
+        }
+    }
+}
+
+/// Structured metadata describing an ambiguity outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AmbiguityRecord {
+    /// The family-level class assigned when disambiguation failed.
+    pub ambiguity_class: PiiClass,
+    /// Variants that could not be disambiguated.
+    ///
+    /// Producers must keep this list stable by sorting `recognizer_id` ascending.
+    pub losing_candidates: Vec<LosingCandidate>,
+    /// Why disambiguation failed.
+    pub reason: AmbiguityReason,
+}
+
+impl AmbiguityRecord {
+    /// Builds a structured ambiguity record.
+    pub fn new(
+        ambiguity_class: PiiClass,
+        losing_candidates: Vec<LosingCandidate>,
+        reason: AmbiguityReason,
+    ) -> Self {
+        Self {
+            ambiguity_class,
+            losing_candidates,
+            reason,
+        }
+    }
+}
+
+/// Closed set of ambiguity outcomes recorded by the audit side-channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum AmbiguityReason {
+    /// Span matched a multi-recognizer family and no anchor cue resolved it.
+    NoAnchor,
+    /// Multiple validator-stage recognizers remained viable for the same span.
+    ValidatorIndeterminate,
+    /// Span matched recognizers across two or more distinct PII class families.
+    MultiFamilyMatch,
+    /// Multiple variants had the same precedence and no discriminator resolved them.
+    PrecedenceTie,
+}
+
 /// A detected span and its class/source metadata.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
