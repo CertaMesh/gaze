@@ -235,6 +235,80 @@ fn v0_4_5_shape_with_session_id_is_queryable_and_session_filtered() {
 }
 
 #[test]
+fn pre_spike_4_shape_without_ambiguity_columns_is_queryable() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("pre-spike-4.sqlite");
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE redaction_log (
+            source TEXT NOT NULL,
+            class TEXT NOT NULL,
+            action TEXT NOT NULL,
+            field_name TEXT NULL,
+            document_kind TEXT NOT NULL,
+            conflict_loser INTEGER NOT NULL,
+            decided_by TEXT NOT NULL DEFAULT 'none',
+            created_at INTEGER NULL,
+            session_id TEXT NULL,
+            snapshot_scheme TEXT NOT NULL DEFAULT 'gaze.snapshot.v1.sha256-salted',
+            snapshot_alg TEXT NOT NULL DEFAULT 'SHA-256',
+            snapshot_key_version INTEGER NULL
+        );
+        INSERT INTO redaction_log
+            (source, class, action, field_name, document_kind, conflict_loser, decided_by,
+             created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version)
+        VALUES
+            ('email.global', 'email', 'tokenize', NULL, 'text', 0, 'recognizer_id',
+             1700000000000, 'session-a', 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL);
+        "#,
+    )
+    .unwrap();
+
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--class",
+            "email",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let row: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(row["validator_fail_reason"], Value::Null);
+    assert_eq!(row["ambiguity_record"], Value::Null);
+    assert_eq!(row["collision_family"], Value::Null);
+    assert_eq!(row["collision_variant"], Value::Null);
+
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--has-ambiguity",
+        ])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn legacy_schema_without_decided_by_is_queryable() {
     let dir = tempdir().unwrap();
     let audit_path = dir.path().join("legacy.sqlite");
