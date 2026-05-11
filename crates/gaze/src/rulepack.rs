@@ -393,12 +393,12 @@ struct RawScoringSpec {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct RawCollisionSpec {
-    family: String,
-    variant: String,
+    pub(crate) family: String,
+    pub(crate) variant: String,
     #[serde(default = "default_collision_precedence")]
-    precedence: u32,
+    pub(crate) precedence: u32,
     #[serde(default)]
-    mandatory_anchor: Option<String>,
+    pub(crate) mandatory_anchor: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]

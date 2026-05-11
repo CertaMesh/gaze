@@ -6,7 +6,9 @@ use std::str::FromStr;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{Action, LocaleTag, PiiClass, RulepackDict};
+use crate::{
+    Action, CollisionMembership, LocaleTag, PiiClass, RulepackDict, RESERVED_BUNDLED_FAMILIES,
+};
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 
@@ -87,6 +89,7 @@ pub struct DetectorSpec {
     pub dictionary_name: Option<String>,
     pub case_sensitive: bool,
     pub token_family: String,
+    pub collision: Option<CollisionMembership>,
 }
 
 impl Default for DetectorSpec {
@@ -99,6 +102,7 @@ impl Default for DetectorSpec {
             dictionary_name: None,
             case_sensitive: false,
             token_family: "counter".to_string(),
+            collision: None,
         }
     }
 }
@@ -193,6 +197,10 @@ pub enum PolicyError {
     BundledRulepackUnknown { value: String },
     #[error("unknown locale bucket: {name}")]
     UnknownLocaleBucket { name: String },
+    #[error("reserved collision family '{family}' cannot be used by policy custom recognizers")]
+    ReservedCollisionFamily { family: String },
+    #[error("invalid collision metadata for custom recognizer '{name}': {reason}")]
+    InvalidCollisionMetadata { name: String, reason: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
 }
@@ -257,6 +265,8 @@ struct RawDetectorSpec {
     #[serde(default)]
     case_sensitive: bool,
     token_family: Option<String>,
+    #[serde(default)]
+    collision: Option<crate::rulepack::RawCollisionSpec>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -396,9 +406,10 @@ fn parse_detector(
     raw: RawDetectorSpec,
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     let class = parse_class(&raw.class)?;
+    let collision = parse_detector_collision(&raw)?;
     match raw.kind.as_str() {
-        "regex" => parse_regex_detector(raw, class),
-        "dictionary" => parse_dictionary_detector(raw, class),
+        "regex" => parse_regex_detector(raw, class, collision),
+        "dictionary" => parse_dictionary_detector(raw, class, collision),
         other => Ok((
             DetectorSpec {
                 kind: DetectorKind::Unknown(other.to_string()),
@@ -408,15 +419,39 @@ fn parse_detector(
                 dictionary_name: None,
                 case_sensitive: raw.case_sensitive,
                 token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
+                collision,
             },
             None,
         )),
     }
 }
 
+fn parse_detector_collision(
+    raw: &RawDetectorSpec,
+) -> Result<Option<CollisionMembership>, PolicyError> {
+    let Some(collision) = raw.collision.clone() else {
+        return Ok(None);
+    };
+    if RESERVED_BUNDLED_FAMILIES
+        .iter()
+        .any(|family| *family == collision.family)
+    {
+        return Err(PolicyError::ReservedCollisionFamily {
+            family: collision.family,
+        });
+    }
+    crate::rulepack::parse_collision_membership(&raw.name, collision)
+        .map(Some)
+        .map_err(|err| PolicyError::InvalidCollisionMetadata {
+            name: raw.name.clone(),
+            reason: err.to_string(),
+        })
+}
+
 fn parse_regex_detector(
     raw: RawDetectorSpec,
     class: PiiClass,
+    collision: Option<CollisionMembership>,
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     let pattern = raw.pattern.ok_or_else(|| PolicyError::BadDictionary {
         name: raw.name.clone(),
@@ -443,6 +478,7 @@ fn parse_regex_detector(
             dictionary_name: None,
             case_sensitive: false,
             token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
+            collision,
         },
         None,
     ))
@@ -451,6 +487,7 @@ fn parse_regex_detector(
 fn parse_dictionary_detector(
     raw: RawDetectorSpec,
     class: PiiClass,
+    collision: Option<CollisionMembership>,
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     if raw.pattern.is_some() {
         return Err(PolicyError::BadDictionary {
@@ -517,6 +554,7 @@ fn parse_dictionary_detector(
             dictionary_name: Some(dictionary_name),
             case_sensitive: raw.case_sensitive,
             token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
+            collision,
         },
         dictionary,
     ))
@@ -790,6 +828,69 @@ action = "preserve"
 
         assert_eq!(policy.detectors.len(), 1);
         assert_eq!(policy.detectors[0].name, "emails");
+    }
+
+    #[test]
+    fn policy_with_custom_collision_family_parses() {
+        let raw = r#"
+[session]
+scope = "ephemeral"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.order"
+pattern = 'ORD-[0-9]+'
+class = "custom:order_id"
+
+[policy.custom_recognizers.collision]
+family = "tenant-orders"
+variant = "order-id"
+precedence = 50
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let policy = Policy::try_from(raw).unwrap();
+
+        let collision = policy.detectors[0].collision.as_ref().expect("collision");
+        assert_eq!(collision.family, "tenant-orders");
+        assert_eq!(collision.variant, "order-id");
+        assert_eq!(collision.precedence, 50);
+    }
+
+    #[test]
+    fn policy_with_reserved_family_rejected() {
+        let raw = r#"
+[session]
+scope = "ephemeral"
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.card"
+pattern = '[0-9]+'
+class = "custom:tenant_card"
+
+[policy.custom_recognizers.collision]
+family = "payment-card-or-iban"
+variant = "tenant-card"
+precedence = 50
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#;
+
+        let raw = toml::from_str::<RawPolicy>(raw).unwrap();
+        let err = Policy::try_from(raw).unwrap_err();
+
+        assert!(matches!(
+            err,
+            PolicyError::ReservedCollisionFamily { family }
+                if family == "payment-card-or-iban"
+        ));
     }
 
     #[test]
