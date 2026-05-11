@@ -46,16 +46,17 @@ impl SafeBundle {
 /// Concrete shape lands with the layout-extraction PR. For now it is an
 /// empty newtype reserved on the public surface.
 #[non_exhaustive]
-#[derive(Default)]
 pub struct LayoutSummary {
     _private: (),
 }
 
 impl LayoutSummary {
-    /// Reserved constructor. Returns an empty summary; concrete fields land later.
-    #[must_use]
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Reserved constructor. Fails loud until concrete fields land.
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`] in the scaffold.
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented("LayoutSummary::new"))
     }
 }
 
@@ -63,15 +64,16 @@ impl LayoutSummary {
 ///
 /// Concrete shape lands alongside the OCR/extract adapters.
 #[non_exhaustive]
-#[derive(Default)]
 pub struct BundleReport {
     _private: (),
 }
 
 impl BundleReport {
-    /// Reserved constructor. Returns an empty report; concrete fields land later.
-    #[must_use]
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Reserved constructor. Fails loud until concrete fields land.
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`] in the scaffold.
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented("BundleReport::new"))
     }
 }

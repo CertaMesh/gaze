@@ -11,7 +11,6 @@ use crate::DocumentError;
 /// Pre-0.1 placeholder. Eventual shape encodes per-page block sequencing
 /// so OCR + layout can be reassembled into deterministic Markdown.
 #[non_exhaustive]
-#[derive(Default)]
 pub struct ReadingOrder {
     _private: (),
 }
@@ -19,11 +18,12 @@ pub struct ReadingOrder {
 impl ReadingOrder {
     /// Reserved constructor.
     ///
-    /// Returns an empty handle today; concrete inference lives in
-    /// [`ReadingOrder::infer`].
-    #[must_use]
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Concrete inference lives in [`ReadingOrder::infer`].
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`] in the scaffold.
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented("ReadingOrder::new"))
     }
 
     /// Infer reading order from raw page payloads.

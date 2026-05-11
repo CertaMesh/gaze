@@ -26,16 +26,17 @@ pub trait OcrAdapter {
 /// call returns [`DocumentError::NotImplemented`] so accidental wiring is
 /// caught at the call site (Axis-1 fail-closed).
 #[non_exhaustive]
-#[derive(Default)]
 pub struct PendingOcrAdapter {
     _private: (),
 }
 
 impl PendingOcrAdapter {
-    /// Build the fail-loud adapter. Always succeeds; calls error.
-    #[must_use]
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Build the fail-loud adapter.
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`] in the scaffold.
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented("PendingOcrAdapter::new"))
     }
 }
 
