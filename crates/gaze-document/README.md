@@ -116,6 +116,59 @@ Stdout carries a one-line JSON summary so callers can pipe it.
   fields are SemVer-safe. Includes OCR confidence, per-class PII counts,
   PDF metadata, and the source kind.
 
+## OCR brittleness + normalization
+
+OCR is a lossy stage. Tesseract — like every engine — sometimes inserts
+spurious whitespace between adjacent glyphs that share kerning. The most
+common artifact in practice (and the most dangerous for axis-1
+reliability) is a single space inserted next to the `@` of an email:
+
+```text
+jane.doe@example.com   →   "jane.doe @example.com"
+```
+
+The corrupted form is still unmistakably an email to a human or LLM but
+slips past strict `\S+@\S+` recognizers. To keep the bundle safe to hand
+to a model, `gaze-document` applies a narrow normalization pass between
+the OCR adapter and the redact pipeline.
+
+### Normalization rules
+
+The full rule set is documented in source at
+`crates/gaze-document/src/ocr/normalize.rs`. Today there is exactly one
+rule:
+
+* **Email separator repair.** Collapse intra-line horizontal whitespace
+  immediately adjacent to `@` when both sides are non-whitespace.
+  Pattern: `(\S)[ \t]*@[ \t]*(\S)` → `$1@$2`. Newline-adjacent `@`
+  remains untouched.
+
+Additional rules will land here as additional artifact classes are
+discovered. Every rule lives next to the others in
+`ocr::normalize`, doc-commented with its trigger, scope, and a worked
+example.
+
+### Brittleness limit
+
+`gaze-document` assumes **mostly-clean OCR** — text where most glyphs
+are recognized, line breaks are preserved, and only the documented
+narrow artifacts (currently: whitespace around `@`) intrude on PII
+shapes. Bundles produced from low-DPI rasterization, heavy noise, or
+non-Latin scripts without the right `--lang` setting may still leak.
+Two mitigations land at the test boundary so future drift fails loudly:
+
+* The `tests/e2e.rs` fixtures assert with belt-and-braces negative
+  substring checks (`!contains("@example.com")`, `!contains("Jane Doe")`,
+  `!contains("555-0142")`) **in addition** to the positive `:Email_`,
+  `:Name_`, `:Custom:phone_` token assertions.
+* `BundleReport.ocr_mean_confidence` is always surfaced to adopters
+  unmodified — no silent floor — so downstream gates can route
+  low-confidence bundles for human review.
+
+If you observe a new artifact class slipping through, file an issue
+with the OCR output and the expected normalization shape; the fix
+belongs in `ocr::normalize` alongside the existing rules.
+
 ## Feature flags
 
 | Feature           | Default | What it enables                                      |
