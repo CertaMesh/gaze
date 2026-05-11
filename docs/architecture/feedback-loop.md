@@ -73,6 +73,33 @@ Blocking mode loads
 `crates/gaze-recognizers/testdata/coverage-loop/baseline.json` and fails if any
 current `Uncovered` count exceeds baseline for the same class and locale.
 
+## Corpus Realism
+
+The v0.7.x corpus extends the original short-snippet set with deterministic
+longer-form synthetic templates. The committed corpus now covers:
+
+- Conversational support/email prose with greetings, filler, and signoffs.
+- Code-mixed inputs with stack traces, fenced blocks, tool-call JSON, and PII
+  embedded in args.
+- High-density blocks with 5+ labeled spans in a compact paragraph.
+- Distractor-heavy prose where example-domain, reserved-address, role-name, and
+  placeholder-number bait appears beside generated labels.
+- Threaded conversations with `>` quoted replies, `On ... wrote:` markers, and
+  `Am ... schrieb ...:` markers.
+
+Template metadata carries `length_tier`:
+
+- `snippet`: short one-line or paragraph fixtures; existing templates default to
+  this tier.
+- `page`: longer support-ticket style fixtures with more surrounding context.
+- `multi-page`: threaded fixtures that repeat context through quoted prior
+  replies.
+
+The builder keeps old snippet fixture counts byte-compatible and uses larger
+variant counts for `page` and `multi-page` tiers. All spans still use
+`synthetic-rust-generator`; no production traffic or LLM-generated prose is
+allowed in the oracle.
+
 ## Adding Coverage
 
 1. Add a generator under `crates/xtask/src/coverage_corpus/generators/`.
@@ -96,4 +123,3 @@ This loop complements existing gates rather than replacing them:
 
 The coverage loop is narrower: committed synthetic labels versus emitted
 manifest spans.
-
