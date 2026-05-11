@@ -144,9 +144,6 @@ impl Recognizer for RegexDetector {
             })
             .filter_map(|(span, matched)| {
                 let canonical_form = self.canonical_form(matched);
-                if self.validator_kind.is_some() && canonical_form.is_none() {
-                    return None;
-                }
                 Some(Candidate::new(
                     span,
                     self.class.clone(),

@@ -5,7 +5,7 @@ use gaze::{
     Rulepack, RulepackError, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
-use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
+use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome};
 
 fn core_extended() -> Rulepack {
     Rulepack::load(RulepackSource::Embedded(
@@ -63,8 +63,18 @@ fn detect_recognizer(
         .unwrap_or_else(|| panic!("missing recognizer {recognizer_id}"));
     let detector = regex_from_spec(spec);
 
+    let validator_kind = detector.validator_kind();
+
     Recognizer::detect(&detector, input, &ctx)
         .into_iter()
+        .filter(|candidate| {
+            validator_kind.is_none_or(|kind| {
+                matches!(
+                    kind.validate(&input[candidate.span.clone()]),
+                    ValidatorOutcome::Pass { .. } | ValidatorOutcome::NotApplicable
+                )
+            })
+        })
         .map(|candidate| input[candidate.span].to_string())
         .collect()
 }
@@ -85,8 +95,18 @@ fn detect_recognizer_canonical_forms(
         .unwrap_or_else(|| panic!("missing recognizer {recognizer_id}"));
     let detector = regex_from_spec(spec);
 
+    let validator_kind = detector.validator_kind();
+
     Recognizer::detect(&detector, input, &ctx)
         .into_iter()
+        .filter(|candidate| {
+            validator_kind.is_none_or(|kind| {
+                matches!(
+                    kind.validate(&input[candidate.span.clone()]),
+                    ValidatorOutcome::Pass { .. } | ValidatorOutcome::NotApplicable
+                )
+            })
+        })
         .map(|candidate| candidate.canonical_form)
         .collect()
 }
