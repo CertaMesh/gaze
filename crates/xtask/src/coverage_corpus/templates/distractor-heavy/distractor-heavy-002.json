@@ -1,0 +1,18 @@
+{
+  "id": "distractor-heavy-002",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Im Text stehen zuerst Ablenkungen: 000-00-0000 ist ein Platzhalter, test@example.invalid ist Doku, und 203.0.113.5 gehoert zu Beispielnetzen. Die generierte Person ist {{Name}}, die echte synthetische Adresse im Fixture lautet {{Email}}, und die Rueckrufnummer ist {{custom:phone}}. Fuer Zahlung und Versand gelten {{custom:iban}} sowie {{custom:postal_code}}. Andere Zahlen wie 42 und 2026-05 bleiben normale Kontextwerte.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:postal_code"
+  ],
+  "notes": "Distractor-heavy DE template with example-domain and reserved-address bait."
+}

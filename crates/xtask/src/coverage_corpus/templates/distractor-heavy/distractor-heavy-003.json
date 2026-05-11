@@ -1,0 +1,17 @@
+{
+  "id": "distractor-heavy-003",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Security memo: do not label localhost, 127.0.0.1, 0.0.0.0, or user@example.invalid from the documentation block. The actual generated network label is {{custom:ip_address}}, paired with generated email {{Email}} and generated wallet {{custom:eth_address}}. A fake card 4111 1111 1111 1111 appears in prose as bait; the labeled card value is {{custom:credit_card}}. The generated IBAN is {{custom:iban}}.",
+  "expected_classes": [
+    "custom:ip_address",
+    "Email",
+    "custom:eth_address",
+    "custom:credit_card",
+    "custom:iban"
+  ],
+  "notes": "Distractor-heavy global template with network/payment bait and real generated labels."
+}

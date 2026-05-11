@@ -1,0 +1,18 @@
+{
+  "id": "distractor-heavy-004",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "A reviewer wrote that names like Root, Admin, Null, and Main are role words in this fixture, not people. The generated person span is {{Name}}. Values like support@example.invalid and 555-0100 appear only in instructions, while generated contact labels are {{Email}} and {{custom:phone}}. The generated postal clue is {{custom:postal_code}}, and the generated source address is {{custom:ip_address}}. This makes name-like and contact-like distractors explicit.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:postal_code",
+    "custom:ip_address"
+  ],
+  "notes": "Distractor-heavy EN template with role-name and contact-shape bait."
+}

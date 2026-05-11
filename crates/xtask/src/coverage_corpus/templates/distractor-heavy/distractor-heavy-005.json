@@ -1,0 +1,18 @@
+{
+  "id": "distractor-heavy-005",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Ablenkende Begriffe wie Herr Muster, Frau Beispiel und Kontakt Test stehen nur als Rollentext im Absatz. Der generierte Name ist {{Name}}, die generierte Mail ist {{Email}}, und die generierte Telefonnummer ist {{custom:phone}}. Daneben stehen harmlose Kennzeichen AB-123-CD und Zeitwerte 08:00 sowie 17:30. Die markierten Zahlungs- und Netzwerte sind {{custom:iban}} und {{custom:ip_address}}.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:ip_address"
+  ],
+  "notes": "Distractor-heavy DE template with person-like bait and generated spans."
+}

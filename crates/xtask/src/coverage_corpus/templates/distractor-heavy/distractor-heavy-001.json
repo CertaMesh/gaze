@@ -1,0 +1,18 @@
+{
+  "id": "distractor-heavy-001",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "The ticket contains bait values before the real labels: 123-45-6789 is a training code, admin@example.invalid is documentation text, and 192.0.2.10 is a reserved example address. The generated requester is {{Name}}, the actual generated mailbox is {{Email}}, and the generated callback is {{custom:phone}}. Later text says postal route {{custom:postal_code}} and payment route {{custom:iban}}. The goal is to surround true synthetic labels with plausible but unlabeled patterns.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:postal_code",
+    "custom:iban"
+  ],
+  "notes": "Distractor-heavy EN template with reserved/example bait beside generated labels."
+}

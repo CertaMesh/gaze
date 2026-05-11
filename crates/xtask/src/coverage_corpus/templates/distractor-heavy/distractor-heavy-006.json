@@ -1,0 +1,17 @@
+{
+  "id": "distractor-heavy-006",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "The pasted form has many tempting shapes: order 999999999, placeholder IBAN DE00 0000 0000 0000 0000 00, example email nobody@example.invalid, and reserved address 198.51.100.8. The generated labels are {{Email}}, {{custom:iban}}, {{custom:ip_address}}, {{custom:credit_card}}, and {{custom:eth_address}}. This fixture keeps unlabeled bait near real generated spans to stress false-positive handling.",
+  "expected_classes": [
+    "Email",
+    "custom:iban",
+    "custom:ip_address",
+    "custom:credit_card",
+    "custom:eth_address"
+  ],
+  "notes": "Distractor-heavy global form with payment/network bait."
+}
