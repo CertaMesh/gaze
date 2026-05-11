@@ -2,9 +2,12 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use gaze_types::{
-    Action, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass, RedactionEntry,
+    Action, AmbiguityRecord, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass,
+    RedactionEntry, ValidatorFailReason,
 };
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use thiserror::Error;
 
 use crate::query::{
@@ -105,7 +108,7 @@ impl LeakSuspectLogEntry {
         Self {
             safety_net_id: suspect.safety_net_id.clone(),
             raw_label: suspect.raw_label.clone(),
-            mapped_class: pii_class_to_db(&suspect.class),
+            mapped_class: suspect.class.to_canonical_str(),
             leak_kind: leak_kind_to_db(&suspect.kind).to_string(),
             span_len: suspect.span.end.saturating_sub(suspect.span.start) as i64,
             document_kind: document_kind_to_db(&document_kind).to_string(),
@@ -113,7 +116,7 @@ impl LeakSuspectLogEntry {
             score: suspect.score.map(f64::from),
             created_at,
             session_id,
-            pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(pii_class_to_db),
+            pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(PiiClass::to_canonical_str),
             safety_net_replay_hash,
             backend_id: None,
             backend_version: None,
@@ -144,7 +147,11 @@ impl SqliteLogger {
                 session_id TEXT NULL,
                 snapshot_scheme TEXT NOT NULL DEFAULT 'gaze.snapshot.v1.sha256-salted',
                 snapshot_alg TEXT NOT NULL DEFAULT 'SHA-256',
-                snapshot_key_version INTEGER NULL
+                snapshot_key_version INTEGER NULL,
+                validator_fail_reason TEXT NULL,
+                ambiguity_record TEXT NULL,
+                collision_family TEXT NULL,
+                collision_variant TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS safety_net_log (
@@ -233,21 +240,54 @@ impl SqliteLogger {
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         }
+        if !columns
+            .iter()
+            .any(|column| column == "validator_fail_reason")
+        {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN validator_fail_reason TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "ambiguity_record") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN ambiguity_record TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "collision_family") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN collision_family TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns.iter().any(|column| column == "collision_variant") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN collision_variant TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
     }
 
     pub fn log(&self, entry: &RedactionEntry) -> Result<()> {
+        let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
+        let ambiguity_record = serialize_json_column(entry.ambiguity_record.as_ref())?;
         let conn = self
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 entry.source,
-                pii_class_to_db(&entry.class),
+                entry.class.to_canonical_str(),
                 action_to_db(entry.action),
                 entry.field_name,
                 document_kind_to_db(&entry.document_kind),
@@ -255,6 +295,10 @@ impl SqliteLogger {
                 conflict_tier_to_db(entry.decided_by),
                 entry.created_at,
                 entry.session_id,
+                validator_fail_reason,
+                ambiguity_record,
+                Option::<String>::None,
+                Option::<String>::None,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -268,12 +312,12 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id FROM redaction_log",
+                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
-                Ok(RedactionEntry::new(
+                let mut entry = RedactionEntry::new(
                     row.get::<_, String>(0)?,
                     pii_class_from_db(&row.get::<_, String>(1)?)?,
                     action_from_db(&row.get::<_, String>(2)?)?,
@@ -283,7 +327,17 @@ impl SqliteLogger {
                     conflict_tier_from_db(&row.get::<_, String>(6)?)?,
                     row.get::<_, Option<i64>>(7)?.unwrap_or(0),
                     row.get(8)?,
-                ))
+                );
+                if let Some(reason) =
+                    deserialize_json_column::<ValidatorFailReason>(row.get(9)?, 9)?
+                {
+                    entry = entry.with_validator_fail_reason(reason);
+                }
+                if let Some(record) = deserialize_json_column::<AmbiguityRecord>(row.get(10)?, 10)?
+                {
+                    entry = entry.with_ambiguity_record(record);
+                }
+                Ok(entry)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
 
@@ -307,6 +361,10 @@ impl SqliteLogger {
         let has_snapshot_scheme = table_has_column(&conn, "snapshot_scheme")?;
         let has_snapshot_alg = table_has_column(&conn, "snapshot_alg")?;
         let has_snapshot_key_version = table_has_column(&conn, "snapshot_key_version")?;
+        let has_validator_fail_reason = table_has_column(&conn, "validator_fail_reason")?;
+        let has_ambiguity_record = table_has_column(&conn, "ambiguity_record")?;
+        let has_collision_family = table_has_column(&conn, "collision_family")?;
+        let has_collision_variant = table_has_column(&conn, "collision_variant")?;
         let (sql, values) = build_audit_query_sql(
             filter,
             has_decided_by,
@@ -315,6 +373,10 @@ impl SqliteLogger {
             has_snapshot_scheme,
             has_snapshot_alg,
             has_snapshot_key_version,
+            has_validator_fail_reason,
+            has_ambiguity_record,
+            has_collision_family,
+            has_collision_variant,
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -334,6 +396,10 @@ impl SqliteLogger {
                     snapshot_scheme: row.get(9)?,
                     snapshot_alg: row.get(10)?,
                     snapshot_key_version: row.get(11)?,
+                    validator_fail_reason: row.get(12)?,
+                    ambiguity_record: row.get(13)?,
+                    collision_family: row.get(14)?,
+                    collision_variant: row.get(15)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -539,34 +605,41 @@ fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusql
     })
 }
 
-fn pii_class_to_db(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "email".to_string(),
-        PiiClass::Name => "name".to_string(),
-        PiiClass::Location => "location".to_string(),
-        PiiClass::Organization => "organization".to_string(),
-        PiiClass::Custom(name) => format!("custom:{name}"),
-    }
+fn pii_class_from_db(value: &str) -> std::result::Result<PiiClass, rusqlite::Error> {
+    PiiClass::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            1,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown class {value}"),
+            )),
+        )
+    })
 }
 
-fn pii_class_from_db(value: &str) -> std::result::Result<PiiClass, rusqlite::Error> {
-    Ok(match value {
-        "email" => PiiClass::Email,
-        "name" => PiiClass::Name,
-        "location" => PiiClass::Location,
-        "organization" => PiiClass::Organization,
-        custom if custom.starts_with("custom:") => PiiClass::Custom(custom[7..].to_string()),
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                1,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown class {other}"),
-                )),
-            ))
-        }
-    })
+fn serialize_json_column<T: Serialize>(value: Option<&T>) -> Result<Option<String>> {
+    value
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|err| AuditError::Sqlite(err.to_string()))
+}
+
+fn deserialize_json_column<T: DeserializeOwned>(
+    value: Option<String>,
+    column: usize,
+) -> std::result::Result<Option<T>, rusqlite::Error> {
+    value
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|err| {
+                rusqlite::Error::FromSqlConversionFailure(
+                    column,
+                    rusqlite::types::Type::Text,
+                    Box::new(err),
+                )
+            })
+        })
+        .transpose()
 }
 
 fn action_to_db(action: Action) -> &'static str {

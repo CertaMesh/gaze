@@ -961,6 +961,7 @@ dependencies = [
  "gaze-audit",
  "gaze-pii",
  "gaze-recognizers",
+ "gaze-types",
  "regex",
  "rusqlite",
  "serde",
@@ -1065,7 +1066,6 @@ name = "gaze-types"
 version = "0.7.0"
 dependencies = [
  "serde",
- "serde_json",
  "thiserror 1.0.69",
 ]
 

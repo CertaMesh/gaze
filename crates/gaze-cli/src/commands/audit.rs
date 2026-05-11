@@ -8,6 +8,8 @@ use gaze_audit::{
     AuditFilter, AuditLogRow, LeakSuspectRow, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
     SAFETY_NET_RESTRICTED_COLUMNS,
 };
+use gaze_types::{AmbiguityRecord, ValidatorFailReason};
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::error::CliError;
@@ -21,6 +23,10 @@ pub(crate) struct Args {
     pub(crate) from_iso8601: Option<String>,
     pub(crate) to_iso8601: Option<String>,
     pub(crate) session_id: Option<String>,
+    pub(crate) has_ambiguity: bool,
+    pub(crate) ambiguity_reason: Option<String>,
+    pub(crate) collision_family: Option<String>,
+    pub(crate) collision_variant: Option<String>,
 }
 
 pub(crate) struct PurgeArgs {
@@ -54,11 +60,16 @@ struct PurgeResponse {
 pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     let rows = read_rows(&args)?;
     let mut stdout = io::stdout().lock();
-    writeln!(stdout, "{}", AUDIT_RESTRICTED_COLUMNS.join("\t")).map_err(|_| CliError::Io)?;
+    let include_ambiguity = rows.iter().any(|row| row.ambiguity_record.is_some());
+    if include_ambiguity {
+        writeln!(stdout, "{}\tambiguity", AUDIT_RESTRICTED_COLUMNS.join("\t"))
+            .map_err(|_| CliError::Io)?;
+    } else {
+        writeln!(stdout, "{}", AUDIT_RESTRICTED_COLUMNS.join("\t")).map_err(|_| CliError::Io)?;
+    }
     for row in rows {
-        writeln!(
-            stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+        let base = format!(
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
@@ -74,9 +85,22 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.snapshot_alg,
             row.snapshot_key_version
                 .map(|version| version.to_string())
-                .unwrap_or_default()
-        )
-        .map_err(|_| CliError::Io)?;
+                .unwrap_or_default(),
+            row.validator_fail_reason.as_deref().unwrap_or(""),
+            row.ambiguity_record.as_deref().unwrap_or(""),
+            row.collision_family.as_deref().unwrap_or(""),
+            row.collision_variant.as_deref().unwrap_or("")
+        );
+        if include_ambiguity {
+            writeln!(
+                stdout,
+                "{base}\t{}",
+                ambiguity_display(&row.ambiguity_record)?
+            )
+            .map_err(|_| CliError::Io)?;
+        } else {
+            writeln!(stdout, "{base}").map_err(|_| CliError::Io)?;
+        }
     }
     Ok(())
 }
@@ -164,6 +188,13 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         snapshot_scheme: None,
         snapshot_alg: None,
         snapshot_key_version: None,
+        has_ambiguity: args.has_ambiguity.then_some(true),
+        ambiguity_reason: args
+            .ambiguity_reason
+            .as_deref()
+            .map(normalize_kebab_variant),
+        collision_family: args.collision_family.clone(),
+        collision_variant: args.collision_variant.clone(),
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -186,6 +217,10 @@ fn read_safety_net_rows(
         snapshot_scheme: None,
         snapshot_alg: None,
         snapshot_key_version: None,
+        has_ambiguity: None,
+        ambiguity_reason: None,
+        collision_family: None,
+        collision_variant: None,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -226,11 +261,47 @@ fn write_jsonl(
         None => Box::new(io::stdout().lock()),
     };
     for row in rows {
-        let row = JsonlRow::from(row);
+        let row = JsonlRow::try_from(row)?;
         serde_json::to_writer(&mut writer, &row).map_err(|_| CliError::Io)?;
         writer.write_all(b"\n").map_err(|_| CliError::Io)?;
     }
     writer.flush().map_err(|_| CliError::Io)
+}
+
+fn normalize_kebab_variant(value: &str) -> String {
+    value.replace('-', "_")
+}
+
+fn parse_json_opt<T: DeserializeOwned>(value: Option<String>) -> Result<Option<T>, CliError> {
+    value
+        .map(|json| serde_json::from_str(&json).map_err(|_| CliError::Pipeline))
+        .transpose()
+}
+
+fn ambiguity_display(value: &Option<String>) -> Result<String, CliError> {
+    let Some(json) = value else {
+        return Ok(String::new());
+    };
+    let record: AmbiguityRecord = serde_json::from_str(json).map_err(|_| CliError::Pipeline)?;
+    let losing = record
+        .losing_candidates
+        .iter()
+        .map(|candidate| {
+            format!(
+                "{}:{}",
+                candidate.class.to_canonical_str(),
+                candidate.recognizer_id
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let reason = serde_json::to_string(&record.reason).map_err(|_| CliError::Pipeline)?;
+    Ok(format!(
+        "class={} reason={} losing=[{}]",
+        record.ambiguity_class.to_canonical_str(),
+        reason.trim_matches('"'),
+        losing
+    ))
 }
 
 #[derive(Serialize)]
@@ -247,11 +318,17 @@ struct JsonlRow {
     snapshot_scheme: String,
     snapshot_alg: String,
     snapshot_key_version: Option<i64>,
+    validator_fail_reason: Option<ValidatorFailReason>,
+    ambiguity_record: Option<AmbiguityRecord>,
+    collision_family: Option<String>,
+    collision_variant: Option<String>,
 }
 
-impl From<AuditLogRow> for JsonlRow {
-    fn from(row: AuditLogRow) -> Self {
-        Self {
+impl TryFrom<AuditLogRow> for JsonlRow {
+    type Error = CliError;
+
+    fn try_from(row: AuditLogRow) -> Result<Self, Self::Error> {
+        Ok(Self {
             source: row.source,
             class: row.class,
             action: row.action,
@@ -264,6 +341,10 @@ impl From<AuditLogRow> for JsonlRow {
             snapshot_scheme: row.snapshot_scheme,
             snapshot_alg: row.snapshot_alg,
             snapshot_key_version: row.snapshot_key_version,
-        }
+            validator_fail_reason: parse_json_opt(row.validator_fail_reason)?,
+            ambiguity_record: parse_json_opt(row.ambiguity_record)?,
+            collision_family: row.collision_family,
+            collision_variant: row.collision_variant,
+        })
     }
 }

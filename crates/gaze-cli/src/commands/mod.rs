@@ -139,6 +139,18 @@ enum AuditCmd {
         /// Filter by opaque audit session id.
         #[arg(long = "session")]
         session_id: Option<String>,
+        /// Include only rows with an ambiguity side-channel record.
+        #[arg(long)]
+        has_ambiguity: bool,
+        /// Filter by ambiguity reason, such as `no-anchor`.
+        #[arg(long)]
+        ambiguity_reason: Option<String>,
+        /// Filter by collision family identifier.
+        #[arg(long)]
+        collision_family: Option<String>,
+        /// Filter by collision variant identifier.
+        #[arg(long)]
+        collision_variant: Option<String>,
     },
     /// Export filtered audit metadata rows.
     Export {
@@ -172,6 +184,18 @@ enum AuditCmd {
         /// Filter by opaque audit session id.
         #[arg(long = "session")]
         session_id: Option<String>,
+        /// Include only rows with an ambiguity side-channel record.
+        #[arg(long)]
+        has_ambiguity: bool,
+        /// Filter by ambiguity reason, such as `no-anchor`.
+        #[arg(long)]
+        ambiguity_reason: Option<String>,
+        /// Filter by collision family identifier.
+        #[arg(long)]
+        collision_family: Option<String>,
+        /// Filter by collision variant identifier.
+        #[arg(long)]
+        collision_variant: Option<String>,
     },
     /// Purge audit metadata rows older than an ISO 8601 UTC timestamp.
     Purge {
@@ -335,6 +359,10 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 from_iso8601,
                 to_iso8601,
                 session_id,
+                has_ambiguity,
+                ambiguity_reason,
+                collision_family,
+                collision_variant,
             } => audit::query(audit::Args {
                 audit_db,
                 class: pii_class,
@@ -344,6 +372,10 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 from_iso8601,
                 to_iso8601,
                 session_id,
+                has_ambiguity,
+                ambiguity_reason,
+                collision_family,
+                collision_variant,
             }),
             AuditCmd::Export {
                 audit_db,
@@ -356,6 +388,10 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 from_iso8601,
                 to_iso8601,
                 session_id,
+                has_ambiguity,
+                ambiguity_reason,
+                collision_family,
+                collision_variant,
             } => audit::export(
                 audit::Args {
                     audit_db,
@@ -366,6 +402,10 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     from_iso8601,
                     to_iso8601,
                     session_id,
+                    has_ambiguity,
+                    ambiguity_reason,
+                    collision_family,
+                    collision_variant,
                 },
                 format,
                 output,

@@ -1178,7 +1178,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
     ));
     assert!(
         stdout
@@ -1223,6 +1223,105 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     assert!(row.get("snapshot_scheme").is_some());
     assert!(row.get("snapshot_alg").is_some());
     assert!(row.get("snapshot_key_version").is_some());
+}
+
+#[test]
+fn s4_audit_query_filters_ambiguity_and_collision_metadata() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let conn = Connection::open(&audit_path).unwrap();
+    conn.execute_batch(
+        r#"
+        CREATE TABLE redaction_log (
+            source TEXT NOT NULL,
+            class TEXT NOT NULL,
+            action TEXT NOT NULL,
+            field_name TEXT NULL,
+            document_kind TEXT NOT NULL,
+            conflict_loser INTEGER NOT NULL,
+            decided_by TEXT NOT NULL DEFAULT 'none',
+            created_at INTEGER NULL,
+            session_id TEXT NULL,
+            snapshot_scheme TEXT NOT NULL DEFAULT 'gaze.snapshot.v1.sha256-salted',
+            snapshot_alg TEXT NOT NULL DEFAULT 'SHA-256',
+            snapshot_key_version INTEGER NULL,
+            validator_fail_reason TEXT NULL,
+            ambiguity_record TEXT NULL,
+            collision_family TEXT NULL,
+            collision_variant TEXT NULL
+        );
+        INSERT INTO redaction_log
+            (source, class, action, field_name, document_kind, conflict_loser, decided_by,
+             created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version,
+             validator_fail_reason, ambiguity_record, collision_family, collision_variant)
+        VALUES
+            ('regex', 'email', 'tokenize', NULL, 'text', 0, 'none',
+             100, NULL, 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL,
+             NULL, NULL, NULL, NULL),
+            ('hybrid', 'custom:postal_or_phone_de', 'tokenize', NULL, 'text', 0, 'validator',
+             200, NULL, 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL,
+             '"luhn_failed"',
+             '{"ambiguity_class":"custom:postal_or_phone_de","losing_candidates":[{"class":"custom:postal_de","recognizer_id":"postal-de"}],"reason":"no_anchor"}',
+             'de-postal-phone', 'postal-de');
+        "#,
+    )
+    .unwrap();
+
+    let query = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--has-ambiguity",
+            "--ambiguity-reason",
+            "no-anchor",
+            "--collision-family",
+            "de-postal-phone",
+            "--collision-variant",
+            "postal-de",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        query.status.success(),
+        "audit query failed: {}",
+        String::from_utf8_lossy(&query.stderr)
+    );
+    let stdout = String::from_utf8(query.stdout).unwrap();
+    assert!(stdout.lines().next().unwrap().ends_with("\tambiguity"));
+    assert!(stdout.contains("hybrid\tcustom:postal_or_phone_de"));
+    assert!(!stdout.contains("regex\temail"));
+    assert!(stdout.contains(
+        "class=custom:postal_or_phone_de reason=no_anchor losing=[custom:postal_de:postal-de]"
+    ));
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--has-ambiguity",
+            "--ambiguity-reason",
+            "no-anchor",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    let row: Value = serde_json::from_slice(&export.stdout).unwrap();
+    assert_eq!(row["validator_fail_reason"], "luhn_failed");
+    assert_eq!(row["ambiguity_record"]["reason"], "no_anchor");
+    assert_eq!(row["collision_family"], "de-postal-phone");
+    assert_eq!(row["collision_variant"], "postal-de");
 }
 
 #[test]
@@ -1634,8 +1733,19 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) =
-        build_audit_query_sql(&AuditFilter::default(), true, true, true, true, true, true);
+    let (sql, values) = build_audit_query_sql(
+        &AuditFilter::default(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+    );
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"
@@ -1689,8 +1799,19 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
     // `source` is intentionally present so audit reads can explain the
     // structural family without a schema change.
     assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
-    let (sql, values) =
-        build_audit_query_sql(&AuditFilter::default(), true, true, true, true, true, true);
+    let (sql, values) = build_audit_query_sql(
+        &AuditFilter::default(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+    );
     let conn = Connection::open(&audit_path).unwrap();
     let mut stmt = conn.prepare(&sql).unwrap();
     let rows = stmt

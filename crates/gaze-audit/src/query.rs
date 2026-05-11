@@ -23,6 +23,10 @@ pub struct AuditFilter {
     pub snapshot_scheme: Option<String>,
     pub snapshot_alg: Option<String>,
     pub snapshot_key_version: Option<i64>,
+    pub has_ambiguity: Option<bool>,
+    pub ambiguity_reason: Option<String>,
+    pub collision_family: Option<String>,
+    pub collision_variant: Option<String>,
 }
 
 /// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
@@ -44,6 +48,10 @@ pub struct AuditLogRow {
     pub snapshot_scheme: String,
     pub snapshot_alg: String,
     pub snapshot_key_version: Option<i64>,
+    pub validator_fail_reason: Option<String>,
+    pub ambiguity_record: Option<String>,
+    pub collision_family: Option<String>,
+    pub collision_variant: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +95,10 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "snapshot_scheme",
     "snapshot_alg",
     "snapshot_key_version",
+    "validator_fail_reason",
+    "ambiguity_record",
+    "collision_family",
+    "collision_variant",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -112,6 +124,7 @@ pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
 /// Audit reads are defense-in-depth restricted to metadata columns that are
 /// safe to display. Do not switch this path to `SELECT *`; future schema
 /// additions may include restore material or other sensitive payloads.
+#[allow(clippy::too_many_arguments)]
 pub fn build_audit_query_sql(
     filter: &AuditFilter,
     has_decided_by: bool,
@@ -120,6 +133,10 @@ pub fn build_audit_query_sql(
     has_snapshot_scheme: bool,
     has_snapshot_alg: bool,
     has_snapshot_key_version: bool,
+    has_validator_fail_reason: bool,
+    has_ambiguity_record: bool,
+    has_collision_family: bool,
+    has_collision_variant: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -151,8 +168,28 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS snapshot_key_version"
     };
+    let validator_fail_reason_column = if has_validator_fail_reason {
+        "validator_fail_reason"
+    } else {
+        "NULL AS validator_fail_reason"
+    };
+    let ambiguity_record_column = if has_ambiguity_record {
+        "ambiguity_record"
+    } else {
+        "NULL AS ambiguity_record"
+    };
+    let collision_family_column = if has_collision_family {
+        "collision_family"
+    } else {
+        "NULL AS collision_family"
+    };
+    let collision_variant_column = if has_collision_variant {
+        "collision_variant"
+    } else {
+        "NULL AS collision_variant"
+    };
     let mut sql = format!(
-        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column} FROM redaction_log"
+        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -219,6 +256,45 @@ pub fn build_audit_query_sql(
             predicates.push("NULL = ?");
         }
         values.push(Value::Integer(snapshot_key_version));
+    }
+    if let Some(has_ambiguity) = filter.has_ambiguity {
+        if has_ambiguity_record {
+            predicates.push(if has_ambiguity {
+                "ambiguity_record IS NOT NULL"
+            } else {
+                "ambiguity_record IS NULL"
+            });
+        } else {
+            predicates.push(if has_ambiguity {
+                "NULL IS NOT NULL"
+            } else {
+                "NULL IS NULL"
+            });
+        }
+    }
+    if let Some(reason) = &filter.ambiguity_reason {
+        if has_ambiguity_record {
+            predicates.push("json_extract(ambiguity_record, '$.reason') = ?");
+        } else {
+            predicates.push("json_extract(NULL, '$.reason') = ?");
+        }
+        values.push(Value::Text(reason.clone()));
+    }
+    if let Some(family) = &filter.collision_family {
+        if has_collision_family {
+            predicates.push("collision_family = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(family.clone()));
+    }
+    if let Some(variant) = &filter.collision_variant {
+        if has_collision_variant {
+            predicates.push("collision_variant = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(variant.clone()));
     }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");

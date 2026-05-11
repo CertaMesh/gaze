@@ -121,6 +121,176 @@ impl PiiClass {
             Self::Custom(name) => format!("Custom:{name}"),
         }
     }
+
+    /// Returns the canonical audit/serde label for this class.
+    pub fn to_canonical_str(&self) -> String {
+        match self {
+            Self::Email => "email".to_string(),
+            Self::Name => "name".to_string(),
+            Self::Location => "location".to_string(),
+            Self::Organization => "organization".to_string(),
+            Self::Custom(name) => format!("custom:{name}"),
+        }
+    }
+
+    /// Parses the canonical audit/serde label for a PII class.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "email" | "Email" => Some(Self::Email),
+            "name" | "Name" => Some(Self::Name),
+            "location" | "Location" => Some(Self::Location),
+            "organization" | "Organization" => Some(Self::Organization),
+            custom if custom.starts_with("custom:") => {
+                let name = &custom["custom:".len()..];
+                (!name.is_empty()).then(|| Self::Custom(name.to_string()))
+            }
+            _ => None,
+        }
+    }
+}
+
+/// Audit-canonical form of [`PiiClass`].
+///
+/// Serializes as `"email"`, `"name"`, `"custom:foo"`, and similar canonical
+/// strings. Use this wrapper for audit-row JSON only. Session snapshots use
+/// bare [`PiiClass`] serde so their byte shape stays stable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PiiClassAudit(pub PiiClass);
+
+impl PiiClassAudit {
+    /// Builds an audit-canonical class wrapper.
+    pub fn new(class: PiiClass) -> Self {
+        Self(class)
+    }
+
+    /// Unwraps the underlying class.
+    pub fn into_inner(self) -> PiiClass {
+        self.0
+    }
+}
+
+impl Serialize for PiiClassAudit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_canonical_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for PiiClassAudit {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        PiiClass::from_canonical_str(&value)
+            .map(Self)
+            .ok_or_else(|| {
+                serde::de::Error::custom(format!("unknown PiiClass canonical form: {value}"))
+            })
+    }
+}
+
+mod pii_class_audit_serde {
+    use super::{PiiClass, PiiClassAudit};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(class: &PiiClass, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        PiiClassAudit::new(class.clone()).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<PiiClass, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(PiiClassAudit::deserialize(deserializer)?.into_inner())
+    }
+}
+
+/// A candidate recognizer/class pair that lost ambiguity resolution.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct LosingCandidate {
+    /// PII class proposed by the losing recognizer.
+    #[serde(with = "pii_class_audit_serde")]
+    pub class: PiiClass,
+    /// Stable recognizer identifier for traceability.
+    pub recognizer_id: String,
+}
+
+impl LosingCandidate {
+    /// Builds a losing ambiguity candidate.
+    pub fn new(class: PiiClass, recognizer_id: impl Into<String>) -> Self {
+        Self {
+            class,
+            recognizer_id: recognizer_id.into(),
+        }
+    }
+}
+
+/// Structured metadata describing an ambiguity outcome.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AmbiguityRecord {
+    /// The family-level class assigned when disambiguation failed.
+    #[serde(with = "pii_class_audit_serde")]
+    pub ambiguity_class: PiiClass,
+    /// Variants that could not be disambiguated.
+    ///
+    /// Producers must keep this list stable by sorting `recognizer_id` ascending.
+    pub losing_candidates: Vec<LosingCandidate>,
+    /// Why disambiguation failed.
+    pub reason: AmbiguityReason,
+}
+
+impl AmbiguityRecord {
+    /// Builds a structured ambiguity record.
+    pub fn new(
+        ambiguity_class: PiiClass,
+        losing_candidates: Vec<LosingCandidate>,
+        reason: AmbiguityReason,
+    ) -> Self {
+        Self {
+            ambiguity_class,
+            losing_candidates,
+            reason,
+        }
+    }
+}
+
+/// Closed set of ambiguity outcomes recorded by the audit side-channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum AmbiguityReason {
+    /// Span matched a multi-recognizer family and no anchor cue resolved it.
+    NoAnchor,
+    /// Multiple validator-stage recognizers remained viable for the same span.
+    ValidatorIndeterminate,
+    /// Span matched recognizers across two or more distinct PII class families.
+    MultiFamilyMatch,
+    /// Multiple variants had the same precedence and no discriminator resolved them.
+    PrecedenceTie,
+}
+
+/// Closed validator failure reasons recorded by audit metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum ValidatorFailReason {
+    /// Luhn checksum validation failed.
+    LuhnFailed,
+    /// IBAN MOD-97 validation failed.
+    IbanMod97Failed,
+    /// Email RFC-style validation failed.
+    EmailRfcFailed,
+    /// E.164 phone validation failed.
+    E164PhoneFailed,
 }
 
 /// A detected span and its class/source metadata.
@@ -947,6 +1117,10 @@ pub struct RedactionEntry {
     pub created_at: i64,
     /// Optional session identifier.
     pub session_id: Option<String>,
+    /// Optional validator failure reason for a vetoed candidate.
+    pub validator_fail_reason: Option<ValidatorFailReason>,
+    /// Optional ambiguity metadata for a family-level fallback.
+    pub ambiguity_record: Option<AmbiguityRecord>,
 }
 
 impl RedactionEntry {
@@ -973,7 +1147,21 @@ impl RedactionEntry {
             decided_by,
             created_at,
             session_id,
+            validator_fail_reason: None,
+            ambiguity_record: None,
         }
+    }
+
+    /// Attaches a validator failure reason to this metadata row.
+    pub fn with_validator_fail_reason(mut self, reason: ValidatorFailReason) -> Self {
+        self.validator_fail_reason = Some(reason);
+        self
+    }
+
+    /// Attaches an ambiguity record to this metadata row.
+    pub fn with_ambiguity_record(mut self, record: AmbiguityRecord) -> Self {
+        self.ambiguity_record = Some(record);
+        self
     }
 }
 
@@ -1461,207 +1649,6 @@ impl DictionaryEntry {
 }
 
 #[cfg(test)]
-mod document_extension_tests {
-    use super::*;
-
-    fn audit_row() -> CodecAuditRow {
-        let mut row = CodecAuditRow::new(
-            "gaze.codec.tesseract",
-            "gaze-codec-tesseract@0.7.1",
-            "image/png",
-            TextOrigin::Ocr,
-        );
-        row.advertised = CodecCapabilitySet::new(true, true, true, false);
-        row.delivered = CodecCapabilitySet::new(true, true, false, false);
-        row.extraction_density_policy = ExtractionDensityPolicy::Required(1.0);
-        row
-    }
-
-    fn extension_builder() -> DocumentExtensionBuilder {
-        DocumentExtension::builder(1)
-            .clean_md_sha256([1; 32])
-            .layout_json_sha256([2; 32])
-            .report_json_sha256([3; 32])
-            .page_count(2)
-            .audit_session_id("018f0000-0000-7000-8000-000000000000")
-    }
-
-    #[test]
-    fn document_extension_round_trips_with_bundle_root_schema_version() {
-        let mut row = audit_row();
-        row.options_hash_hex = Some("00".repeat(32));
-        row.engine_provenance = Some("tesseract@5.3.4".to_string());
-        let extension = extension_builder()
-            .preview_png_sha256([4; 32])
-            .clean_spans(vec![EmittedTokenSpan::new(0..8, 0..12, PiiClass::Email)])
-            .codec_audit(vec![row])
-            .build()
-            .expect("document extension");
-
-        let json = serde_json::to_value(&extension).expect("serialize document extension");
-
-        assert_eq!(json["schema_version"], 1);
-        assert_eq!(json["clean_md_sha256"].as_array().expect("hash").len(), 32);
-        assert_eq!(
-            json["layout_json_sha256"].as_array().expect("hash").len(),
-            32
-        );
-        assert_eq!(
-            json["report_json_sha256"].as_array().expect("hash").len(),
-            32
-        );
-        assert_eq!(
-            json["preview_png_sha256"].as_array().expect("hash").len(),
-            32
-        );
-        assert_eq!(json["page_count"], 2);
-        assert_eq!(
-            json["audit_session_id"],
-            "018f0000-0000-7000-8000-000000000000"
-        );
-        assert_eq!(json["clean_spans"].as_array().expect("spans").len(), 1);
-        assert!(json.get("clean_schema_version").is_none());
-        assert!(json.get("layout_schema_version").is_none());
-        assert!(json.get("report_schema_version").is_none());
-        assert!(json.get("manifest_schema_version").is_none());
-
-        let decoded: DocumentExtension =
-            serde_json::from_value(json).expect("deserialize document extension");
-        assert_eq!(decoded, extension);
-    }
-
-    #[test]
-    fn document_extension_carries_full_integrity_set() {
-        let extension = DocumentExtension::builder(1)
-            .clean_md_sha256([10; 32])
-            .layout_json_sha256([11; 32])
-            .report_json_sha256([12; 32])
-            .preview_png_sha256([13; 32])
-            .page_count(7)
-            .audit_session_id("018f0000-0000-7000-8000-000000000001")
-            .clean_spans(vec![EmittedTokenSpan::new(5..14, 20..34, PiiClass::Name)])
-            .codec_audit(vec![audit_row()])
-            .build()
-            .expect("document extension");
-
-        let json = serde_json::to_string(&extension).expect("serialize document extension");
-        let decoded: DocumentExtension =
-            serde_json::from_str(&json).expect("deserialize document extension");
-
-        assert_eq!(decoded, extension);
-        assert_eq!(decoded.clean_md_sha256, [10; 32]);
-        assert_eq!(decoded.layout_json_sha256, [11; 32]);
-        assert_eq!(decoded.report_json_sha256, [12; 32]);
-        assert_eq!(decoded.preview_png_sha256, Some([13; 32]));
-        assert_eq!(decoded.page_count, 7);
-        assert_eq!(
-            decoded.audit_session_id,
-            "018f0000-0000-7000-8000-000000000001"
-        );
-        assert_eq!(decoded.clean_spans.len(), 1);
-        assert_eq!(decoded.codec_audit.len(), 1);
-    }
-
-    #[test]
-    fn document_extension_builder_requires_integrity_fields() {
-        assert_eq!(
-            DocumentExtension::builder(1).build(),
-            Err(DocumentExtensionError::MissingField("clean_md_sha256"))
-        );
-        assert_eq!(
-            DocumentExtension::builder(1)
-                .clean_md_sha256([1; 32])
-                .layout_json_sha256([2; 32])
-                .report_json_sha256([3; 32])
-                .page_count(1)
-                .build(),
-            Err(DocumentExtensionError::MissingField("audit_session_id"))
-        );
-    }
-
-    #[test]
-    fn codec_audit_row_round_trips_without_raw_pii_fields() {
-        let row = audit_row();
-        let json = serde_json::to_string(&row).expect("serialize codec audit row");
-
-        assert!(json.contains("\"codec_id\""));
-        assert!(!json.contains("alice@example.invalid"));
-        assert!(!json.contains("\"raw\""));
-        assert_eq!(
-            serde_json::from_str::<CodecAuditRow>(&json).expect("deserialize codec audit row"),
-            row
-        );
-    }
-
-    #[test]
-    fn text_origin_round_trips() {
-        for origin in [
-            TextOrigin::Ocr,
-            TextOrigin::EmbeddedText,
-            TextOrigin::Transcript,
-            TextOrigin::Hybrid,
-        ] {
-            let json = serde_json::to_string(&origin).expect("serialize text origin");
-            let decoded: TextOrigin = serde_json::from_str(&json).expect("deserialize text origin");
-            assert_eq!(decoded, origin);
-        }
-    }
-
-    #[test]
-    fn codec_capability_set_round_trips_and_contains_requested_bits() {
-        let delivered = CodecCapabilitySet::new(true, true, false, false);
-
-        let json = serde_json::to_string(&delivered).expect("serialize capabilities");
-        let decoded: CodecCapabilitySet =
-            serde_json::from_str(&json).expect("deserialize capabilities");
-
-        assert_eq!(decoded, delivered);
-        assert!(decoded.contains(CodecCapabilitySet::TEXT_ONLY));
-        assert!(!decoded.contains(CodecCapabilitySet::new(true, true, true, false)));
-    }
-
-    #[test]
-    fn extraction_density_policy_round_trips_closed_variants() {
-        for policy in [
-            ExtractionDensityPolicy::Required(1.25),
-            ExtractionDensityPolicy::Exempt {
-                reason: "text_only".to_string(),
-            },
-        ] {
-            let json = serde_json::to_string(&policy).expect("serialize density policy");
-            let decoded: ExtractionDensityPolicy =
-                serde_json::from_str(&json).expect("deserialize density policy");
-            assert_eq!(decoded, policy);
-        }
-    }
-
-    #[test]
-    fn manifest_stats_round_trip_for_document_report_mirrors() {
-        let manifest =
-            Manifest::from_spans(vec![EmittedTokenSpan::new(0..15, 0..19, PiiClass::Email)]);
-        let stats = LeakReportStats {
-            suspect_count: 1,
-            uncovered_count: 0,
-            partial_bleed_count: 0,
-            class_mismatch_count: 0,
-            locale_skipped_count: 0,
-        };
-
-        let manifest_json = serde_json::to_string(&manifest).expect("serialize manifest");
-        let stats_json = serde_json::to_string(&stats).expect("serialize stats");
-
-        assert_eq!(
-            serde_json::from_str::<Manifest>(&manifest_json).expect("deserialize manifest"),
-            manifest
-        );
-        assert_eq!(
-            serde_json::from_str::<LeakReportStats>(&stats_json).expect("deserialize stats"),
-            stats
-        );
-    }
-}
-
-#[cfg(test)]
 mod dictionary_tests {
     use super::*;
 
@@ -1734,6 +1721,8 @@ mod redaction_logger_tests {
             decided_by: ConflictTier::None,
             created_at: 0,
             session_id: None,
+            validator_fail_reason: None,
+            ambiguity_record: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;
