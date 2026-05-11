@@ -33,6 +33,8 @@ pub(crate) enum CliError {
     PolicyOpen,
     #[cfg(feature = "document")]
     DocumentDetail(String),
+    #[cfg(feature = "mcp")]
+    McpDetail(String),
 }
 
 impl CliError {
@@ -50,6 +52,8 @@ impl CliError {
             Self::Io | Self::PolicyOpen => 4,
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => 5,
+            #[cfg(feature = "mcp")]
+            Self::McpDetail(_) => 6,
         }
     }
 
@@ -73,6 +77,8 @@ impl CliError {
             Self::PolicyOpen => "PolicyOpen",
             #[cfg(feature = "document")]
             Self::DocumentDetail(_) => "Document",
+            #[cfg(feature = "mcp")]
+            Self::McpDetail(_) => "Mcp",
         }
     }
 
@@ -116,6 +122,17 @@ impl CliError {
             ),
             #[cfg(feature = "document")]
             Self::DocumentDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
+            #[cfg(feature = "mcp")]
+            Self::McpDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 eprintln!(
