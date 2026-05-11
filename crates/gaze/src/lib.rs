@@ -42,7 +42,7 @@ pub use policy::{
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{
-    Candidate, Canonicalizer, DetectContext, Recognizer, RecognizerRegistry,
+    Candidate, Canonicalizer, DetectContext, FamilyPolicyTable, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,
 };
 pub use resolver::resolve_candidates;

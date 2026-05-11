@@ -93,6 +93,9 @@ pub(crate) fn register_rulepack_recognizers(
         .into_values()
         .filter(|(_, recognizer)| recognizer.enabled)
     {
+        if let Some(collision) = recognizer.collision.clone() {
+            builder = builder.register_collision(recognizer.id.clone(), collision);
+        }
         match recognizer.matcher {
             RawMatch::Regex {
                 pattern,

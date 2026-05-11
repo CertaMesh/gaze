@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use gaze_types::{
-    EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
+    CollisionMembership, EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest,
+    RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
 };
 use thiserror::Error;
 
@@ -545,6 +545,7 @@ struct CleanText {
 #[derive(Default)]
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
+    collision_memberships: Vec<(String, CollisionMembership)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -565,6 +566,16 @@ impl PipelineBuilder {
         R: Recognizer + 'static,
     {
         self.recognizers.push(Arc::new(recognizer));
+        self
+    }
+
+    pub fn register_collision(
+        mut self,
+        recognizer_id: impl Into<String>,
+        membership: CollisionMembership,
+    ) -> Self {
+        self.collision_memberships
+            .push((recognizer_id.into(), membership));
         self
     }
 
@@ -596,6 +607,9 @@ impl PipelineBuilder {
         let mut registry = RecognizerRegistry::builder();
         for recognizer in self.recognizers {
             registry = registry.register_arc(recognizer);
+        }
+        for (recognizer_id, membership) in self.collision_memberships {
+            registry = registry.register_collision(recognizer_id, membership);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
