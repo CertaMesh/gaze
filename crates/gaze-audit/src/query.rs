@@ -124,6 +124,7 @@ pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
 /// Audit reads are defense-in-depth restricted to metadata columns that are
 /// safe to display. Do not switch this path to `SELECT *`; future schema
 /// additions may include restore material or other sensitive payloads.
+#[allow(clippy::too_many_arguments)]
 pub fn build_audit_query_sql(
     filter: &AuditFilter,
     has_decided_by: bool,
