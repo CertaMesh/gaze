@@ -1,0 +1,15 @@
+{
+  "id": "code-mixed-001",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "snippet",
+  "body": "ERROR checkout::reserve failed user={{Email}} source={{IpAddress}} args={iban:\"{{custom:iban}}\", retry:false} trace_id=deadbeef",
+  "expected_classes": [
+    "Email",
+    "IpAddress",
+    "custom:iban"
+  ],
+  "notes": "Snippet code-mixed log line with PII embedded in structured args."
+}

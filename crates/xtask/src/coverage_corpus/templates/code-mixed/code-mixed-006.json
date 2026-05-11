@@ -1,0 +1,19 @@
+{
+  "id": "code-mixed-006",
+  "context": "code-mixed",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Analyse aus dem Testlauf:\n\n```rust\nlet kontakt = \"{{Email}}\";\nlet name = \"{{Name}}\";\nlet rueckruf = \"{{PhoneNumber}}\";\nlet iban = \"{{custom:iban}}\";\nlet quelle = \"{{IpAddress}}\";\n```\n\nDer Kommentar danach beschreibt normale Ablaufdaten, etwa Batch 2026-05, Queue 42 und Status OK. Diese Angaben sind absichtlich nicht markiert. Die echte synthetische Postleitzahl steht spaeter im Freitext: {{PostalCode}}. So ein Ausschnitt prueft, ob laengere Entwicklernotizen mit halb strukturiertem Code und normaler Sprache zusammen funktionieren.",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "PhoneNumber",
+    "custom:iban",
+    "IpAddress",
+    "PostalCode"
+  ],
+  "notes": "Page-tier DE code block plus prose with generated labels."
+}

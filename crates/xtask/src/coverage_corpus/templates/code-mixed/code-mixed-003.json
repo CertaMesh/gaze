@@ -1,0 +1,15 @@
+{
+  "id": "code-mixed-003",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "snippet",
+  "body": "```json\\n{\\\"actor\\\":\\\"{{Email}}\\\",\\\"from\\\":\\\"{{IpAddress}}\\\",\\\"wallet\\\":\\\"{{custom:eth_address}}\\\",\\\"dry_run\\\":true}\\n```",
+  "expected_classes": [
+    "Email",
+    "IpAddress",
+    "custom:eth_address"
+  ],
+  "notes": "Snippet fenced JSON with embedded generated labels."
+}

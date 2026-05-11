@@ -1,0 +1,19 @@
+{
+  "id": "code-mixed-005",
+  "context": "code-mixed",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Incident note for staging run:\n\n```text\nException: PaymentRouteRejected\n  account.email = {{Email}}\n  account.name = {{Name}}\n  account.phone = {{PhoneNumber}}\n  network.remote_addr = {{IpAddress}}\n  payout.iban = {{custom:iban}}\n```\n\nThe surrounding text matters because real agent inputs often paste the trace and then explain it in prose. The engineer says the code path is harmless in dry run, but the same blob still contains generated labels. Extra values like 000-00-0000, port 443, and error 0xDEADBEEF are present as distractors. The final note asks whether postal routing {{PostalCode}} should be compared before or after the retry job.",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "PhoneNumber",
+    "IpAddress",
+    "custom:iban",
+    "PostalCode"
+  ],
+  "notes": "Page-tier code-mixed incident note with fenced trace and prose."
+}

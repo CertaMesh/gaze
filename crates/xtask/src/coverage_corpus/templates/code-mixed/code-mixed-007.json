@@ -1,0 +1,17 @@
+{
+  "id": "code-mixed-007",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Tool transcript:\n\n```json\n{\"tool\":\"refund.preview\",\"args\":{\"email\":\"{{Email}}\",\"iban\":\"{{custom:iban}}\",\"ip\":\"{{IpAddress}}\",\"card\":\"{{CreditCardNumber}}\"}}\n```\n\nThe agent then summarized the result in natural language and mentioned that the ticket number TICKET-1234 is not a sensitive value. A second paragraph adds that the generated wallet {{custom:eth_address}} belongs to the synthetic test case only. This template forces recognizers to cross fenced JSON, prose, payment-like tokens, and ordinary identifiers without using real traffic.",
+  "expected_classes": [
+    "Email",
+    "custom:iban",
+    "IpAddress",
+    "CreditCardNumber",
+    "custom:eth_address"
+  ],
+  "notes": "Page-tier tool transcript with payment and network labels."
+}

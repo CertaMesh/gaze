@@ -99,6 +99,14 @@ const TEMPLATE_JSON: &[&str] = &[
     include_str!("conversational/conversational-004.json"),
     include_str!("conversational/conversational-005.json"),
     include_str!("conversational/conversational-006.json"),
+    include_str!("code-mixed/code-mixed-001.json"),
+    include_str!("code-mixed/code-mixed-002.json"),
+    include_str!("code-mixed/code-mixed-003.json"),
+    include_str!("code-mixed/code-mixed-004.json"),
+    include_str!("code-mixed/code-mixed-005.json"),
+    include_str!("code-mixed/code-mixed-006.json"),
+    include_str!("code-mixed/code-mixed-007.json"),
+    include_str!("code-mixed/code-mixed-008.json"),
 ];
 
 pub fn phase_1_templates() -> serde_json::Result<Vec<Template>> {

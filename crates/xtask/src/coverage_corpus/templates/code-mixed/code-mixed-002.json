@@ -1,0 +1,16 @@
+{
+  "id": "code-mixed-002",
+  "context": "code-mixed",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "snippet",
+  "body": "panic: invalid callback for {{Name}}\\n  at notify(\"{{Email}}\")\\n  at dial(\"{{PhoneNumber}}\")\\n  note: build id 123-45-6789 is fixture noise",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "PhoneNumber"
+  ],
+  "notes": "Snippet stack trace with name, email, and phone in pseudo-code."
+}
