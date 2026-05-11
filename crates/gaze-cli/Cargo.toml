@@ -18,6 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
+document = ["dep:gaze-document"]
 
 [[bin]]
 name = "gaze"
@@ -30,6 +31,7 @@ clap = { version = "4", features = ["derive"] }
 gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
 gaze-assembly = { path = "../gaze-assembly", version = "0.7.0" }
 gaze-audit = { workspace = true }
+gaze-document = { path = "../gaze-document", version = "0.0.1", optional = true }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
 gaze-types = { workspace = true }
 regex = "1"

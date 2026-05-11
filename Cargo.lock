@@ -1025,6 +1025,7 @@ dependencies = [
  "clap",
  "gaze-assembly",
  "gaze-audit",
+ "gaze-document",
  "gaze-pii",
  "gaze-recognizers",
  "gaze-types",

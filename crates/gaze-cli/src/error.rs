@@ -23,6 +23,8 @@ pub(crate) enum CliError {
     Pipeline,
     Io,
     PolicyOpen,
+    #[cfg(feature = "document")]
+    DocumentDetail(String),
 }
 
 impl CliError {
@@ -38,6 +40,8 @@ impl CliError {
             | Self::BlobExpired
             | Self::Pipeline => 3,
             Self::Io | Self::PolicyOpen => 4,
+            #[cfg(feature = "document")]
+            Self::DocumentDetail(_) => 5,
         }
     }
 
@@ -59,6 +63,8 @@ impl CliError {
             Self::Pipeline => "Pipeline",
             Self::Io => "Io",
             Self::PolicyOpen => "PolicyOpen",
+            #[cfg(feature = "document")]
+            Self::DocumentDetail(_) => "Document",
         }
     }
 
@@ -100,6 +106,17 @@ impl CliError {
                 self.exit_code(),
                 variant
             ),
+            #[cfg(feature = "document")]
+            Self::DocumentDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
             Self::UnsupportedSessionScope { variant } => {
                 let variant = serde_json::to_string(variant)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
