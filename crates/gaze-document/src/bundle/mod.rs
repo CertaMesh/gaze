@@ -10,8 +10,7 @@ use crate::DocumentError;
 /// Post-ingestion artifact paired with a Gaze [`gaze::Manifest`].
 ///
 /// Field set is reserved (`#[non_exhaustive]`) until the bundle contract
-/// stabilizes. See scratchpads 1537 and 1561 in the orchestration project
-/// for the locked plan.
+/// stabilizes.
 #[non_exhaustive]
 pub struct SafeBundle {
     /// Tokenized Markdown safe to hand to an LLM.
