@@ -28,13 +28,13 @@
     },
     {
       "recognizer_id": "iban.structural",
-      "class": "custom:iban",
+      "class": "custom:family:payment-card-or-iban",
       "byte_span": {
         "start": 345,
         "len": 22
       },
       "family": "session_custom_counter",
-      "token_shape": "<session:Custom:iban_{N}>",
+      "token_shape": "<session:Custom:family:payment-card-or-iban_{N}>",
       "count": 1
     },
     {
@@ -131,7 +131,7 @@
     "classes": {
       "custom:credit_card": 1,
       "custom:eth_address": 1,
-      "custom:iban": 1,
+      "custom:family:payment-card-or-iban": 1,
       "custom:ip_address": 4,
       "custom:phone": 2,
       "custom:postal_code": 2

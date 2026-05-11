@@ -657,7 +657,11 @@ fn parse_class(input: &str) -> Result<PiiClass, PolicyError> {
             if name.trim().is_empty() {
                 return Err(PolicyError::UnknownClass(input.to_string()));
             }
-            Ok(PiiClass::custom(name))
+            if name.starts_with("family:") {
+                Ok(PiiClass::Custom(name.to_string()))
+            } else {
+                Ok(PiiClass::custom(name))
+            }
         }
         _ => Err(PolicyError::UnknownClass(input.to_string())),
     }

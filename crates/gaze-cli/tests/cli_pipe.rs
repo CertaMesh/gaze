@@ -538,6 +538,11 @@ action = "tokenize"
 
 [[rule]]
 kind = "class"
+class = "custom:family:payment-card-or-iban"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
 class = "custom:credit_card"
 action = "tokenize"
 
@@ -2292,7 +2297,7 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
         "{extended_clean}"
     );
     assert!(
-        extended_clean.contains(":Custom:iban_1>"),
+        extended_clean.contains(":Custom:family:payment-card-or-iban_1>"),
         "{extended_clean}"
     );
     assert!(
@@ -2361,7 +2366,10 @@ fn s2_cli_bundled_smoke_emits_formatted_phase2_tokens() {
     );
     let clean = value["clean_text"].as_str().unwrap();
 
-    assert!(clean.contains("Custom:iban"), "{clean}");
+    assert!(
+        clean.contains("Custom:family:payment-card-or-iban"),
+        "{clean}"
+    );
     assert!(clean.contains("Custom:credit_card"), "{clean}");
     assert!(!clean.contains("3704 0044"), "{clean}");
     assert!(!clean.contains("4111 1111"), "{clean}");
@@ -2607,11 +2615,14 @@ fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
         ("Card 4111111111111111", "credit_card"),
         ("Card 5555555555554444", "credit_card"),
         ("Card 378282246310005", "credit_card"),
-        ("IBAN GB82WEST12345698765432", "iban"),
-        ("IBAN DE89370400440532013000", "iban"),
-        ("IBAN FR1420041010050500013M02606", "iban"),
-        ("IBAN BE68539007547034", "iban"),
-        ("IBAN NL91ABNA0417164300", "iban"),
+        ("IBAN GB82WEST12345698765432", "family:payment-card-or-iban"),
+        ("IBAN DE89370400440532013000", "family:payment-card-or-iban"),
+        (
+            "IBAN FR1420041010050500013M02606",
+            "family:payment-card-or-iban",
+        ),
+        ("IBAN BE68539007547034", "family:payment-card-or-iban"),
+        ("IBAN NL91ABNA0417164300", "family:payment-card-or-iban"),
     ] {
         let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
         let clean = value["clean_text"].as_str().unwrap();

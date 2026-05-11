@@ -290,11 +290,28 @@ impl Rulepack {
     }
 
     pub fn activated_classes(&self) -> BTreeSet<PiiClass> {
-        self.recognizers
+        let mut classes = BTreeSet::new();
+        for recognizer in self
+            .recognizers
             .iter()
             .filter(|recognizer| recognizer.enabled)
-            .map(|recognizer| recognizer.class.clone())
-            .collect()
+        {
+            classes.insert(recognizer.class.clone());
+            if let Some(family_class) = recognizer
+                .collision
+                .as_ref()
+                .and_then(|collision| {
+                    collision
+                        .mandatory_anchor
+                        .as_ref()
+                        .map(|_| &collision.family)
+                })
+                .map(|family| PiiClass::Custom(format!("family:{family}")))
+            {
+                classes.insert(family_class);
+            }
+        }
+        classes
     }
 }
 
@@ -1098,7 +1115,11 @@ pub fn parse_class(input: &str) -> Result<PiiClass, RulepackError> {
             if name.trim().is_empty() {
                 return Err(RulepackError::UnknownClass(input.to_string()));
             }
-            Ok(PiiClass::custom(name))
+            if name.starts_with("family:") {
+                Ok(PiiClass::Custom(name.to_string()))
+            } else {
+                Ok(PiiClass::custom(name))
+            }
         }
         _ => Err(RulepackError::UnknownClass(input.to_string())),
     }
@@ -1277,6 +1298,7 @@ window_chars = 48
             BTreeSet::from([
                 PiiClass::custom("phone"),
                 PiiClass::custom("iban"),
+                PiiClass::Custom("family:payment-card-or-iban".to_string()),
                 PiiClass::custom("credit_card"),
                 PiiClass::custom("ip_address"),
                 PiiClass::custom("eth_address"),
