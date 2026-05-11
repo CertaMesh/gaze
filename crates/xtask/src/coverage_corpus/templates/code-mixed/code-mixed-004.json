@@ -6,12 +6,12 @@
     "global"
   ],
   "length_tier": "snippet",
-  "body": "WARN ZahlungValidator::check kunde={{Name}} iban={{custom:iban}} plz={{PostalCode}} ip={{IpAddress}} status=synthetic",
+  "body": "WARN ZahlungValidator::check kunde={{Name}} iban={{custom:iban}} plz={{custom:postal_code}} ip={{custom:ip_address}} status=synthetic",
   "expected_classes": [
     "Name",
     "custom:iban",
-    "PostalCode",
-    "IpAddress"
+    "custom:postal_code",
+    "custom:ip_address"
   ],
   "notes": "Snippet German-flavored validator log with compact PII args."
 }

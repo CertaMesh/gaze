@@ -5,10 +5,10 @@
     "global"
   ],
   "length_tier": "snippet",
-  "body": "```json\\n{\\\"actor\\\":\\\"{{Email}}\\\",\\\"from\\\":\\\"{{IpAddress}}\\\",\\\"wallet\\\":\\\"{{custom:eth_address}}\\\",\\\"dry_run\\\":true}\\n```",
+  "body": "```json\\n{\\\"actor\\\":\\\"{{Email}}\\\",\\\"from\\\":\\\"{{custom:ip_address}}\\\",\\\"wallet\\\":\\\"{{custom:eth_address}}\\\",\\\"dry_run\\\":true}\\n```",
   "expected_classes": [
     "Email",
-    "IpAddress",
+    "custom:ip_address",
     "custom:eth_address"
   ],
   "notes": "Snippet fenced JSON with embedded generated labels."

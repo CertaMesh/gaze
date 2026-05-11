@@ -6,11 +6,11 @@
     "global"
   ],
   "length_tier": "snippet",
-  "body": "panic: invalid callback for {{Name}}\\n  at notify(\"{{Email}}\")\\n  at dial(\"{{PhoneNumber}}\")\\n  note: build id 123-45-6789 is fixture noise",
+  "body": "panic: invalid callback for {{Name}}\\n  at notify(\"{{Email}}\")\\n  at dial(\"{{custom:phone}}\")\\n  note: build id 123-45-6789 is fixture noise",
   "expected_classes": [
     "Name",
     "Email",
-    "PhoneNumber"
+    "custom:phone"
   ],
   "notes": "Snippet stack trace with name, email, and phone in pseudo-code."
 }

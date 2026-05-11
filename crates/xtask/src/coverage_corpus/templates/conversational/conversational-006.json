@@ -6,14 +6,14 @@
     "global"
   ],
   "length_tier": "page",
-  "body": "Hallo zusammen,\n\nhier ist die zusammengefuehrte Fassung eines laengeren Chats. Der Kontakt nennt {{Name}} und bittet um Antwort an {{Email}}. Danach folgen mehrere Hoeflichkeitsformeln, ein Hinweis auf Wartezeit und eine Beschreibung des Problems ohne weitere Daten. Erst im naechsten Absatz steht die Rueckrufnummer {{PhoneNumber}}.\n\nFuer die Zahlung wurde {{custom:iban}} genannt. Fuer die regionale Pruefung steht {{PostalCode}} im Versandabschnitt. Ausserdem enthaelt das Debug-Protokoll {{IpAddress}}. Daneben gibt es harmlose Muster wie AB-123-CD, 2026-05-11 und Test Konto 0000. Diese Werte sollen zeigen, dass der Generator laengere Unterhaltungen mit Rauschen abdeckt, ohne reale personenbezogene Daten einzubringen.\n\nBeste Gruesse\nSynthetisches Team",
+  "body": "Hallo zusammen,\n\nhier ist die zusammengefuehrte Fassung eines laengeren Chats. Der Kontakt nennt {{Name}} und bittet um Antwort an {{Email}}. Danach folgen mehrere Hoeflichkeitsformeln, ein Hinweis auf Wartezeit und eine Beschreibung des Problems ohne weitere Daten. Erst im naechsten Absatz steht die Rueckrufnummer {{custom:phone}}.\n\nFuer die Zahlung wurde {{custom:iban}} genannt. Fuer die regionale Pruefung steht {{custom:postal_code}} im Versandabschnitt. Ausserdem enthaelt das Debug-Protokoll {{custom:ip_address}}. Daneben gibt es harmlose Muster wie AB-123-CD, 2026-05-11 und Test Konto 0000. Diese Werte sollen zeigen, dass der Generator laengere Unterhaltungen mit Rauschen abdeckt, ohne reale personenbezogene Daten einzubringen.\n\nBeste Gruesse\nSynthetisches Team",
   "expected_classes": [
     "Name",
     "Email",
-    "PhoneNumber",
+    "custom:phone",
     "custom:iban",
-    "PostalCode",
-    "IpAddress"
+    "custom:postal_code",
+    "custom:ip_address"
   ],
   "notes": "Page-tier DE chat summary with conversational noise and synthetic-only spans."
 }

@@ -6,14 +6,14 @@
     "global"
   ],
   "length_tier": "page",
-  "body": "Hi again,\n\nThis is the cleaned version of a long chat. The user first wrote from {{Email}} and signed the note as {{Name}}. A later reply changed tone, added thanks, and asked whether the phone desk could use {{PhoneNumber}} instead of the number stored in the old sandbox. The text also mentions amounts like 42.00 and 100.25, plus a fake form value 111-11-1111 that should remain plain text.\n\nThe payment paragraph says that the synthetic account can receive a reversal through {{custom:iban}}. The shipping paragraph says the region should be checked against {{PostalCode}}. The diagnostics paragraph says the form submission came through {{IpAddress}}. None of this is written in a neat order because real conversations drift from topic to topic, repeat details, and bury the important facts between ordinary sentences.\n\nThanks,\nCase desk",
+  "body": "Hi again,\n\nThis is the cleaned version of a long chat. The user first wrote from {{Email}} and signed the note as {{Name}}. A later reply changed tone, added thanks, and asked whether the phone desk could use {{custom:phone}} instead of the number stored in the old sandbox. The text also mentions amounts like 42.00 and 100.25, plus a fake form value 111-11-1111 that should remain plain text.\n\nThe payment paragraph says that the synthetic account can receive a reversal through {{custom:iban}}. The shipping paragraph says the region should be checked against {{custom:postal_code}}. The diagnostics paragraph says the form submission came through {{custom:ip_address}}. None of this is written in a neat order because real conversations drift from topic to topic, repeat details, and bury the important facts between ordinary sentences.\n\nThanks,\nCase desk",
   "expected_classes": [
     "Email",
     "Name",
-    "PhoneNumber",
+    "custom:phone",
     "custom:iban",
-    "PostalCode",
-    "IpAddress"
+    "custom:postal_code",
+    "custom:ip_address"
   ],
   "notes": "Page-tier EN chat transcript with filler and benign numeric distractors."
 }

@@ -6,14 +6,14 @@
     "global"
   ],
   "length_tier": "page",
-  "body": "Hallo Team,\n\nich fasse den Verlauf noch einmal zusammen, damit nichts aus der Unterhaltung verloren geht. Die anfragende Person ist {{Name}} und nutzt fuer Rueckfragen {{Email}}. Im Chat wurde mehrmals nach der Zahlung gefragt, einmal mit dem Hinweis auf {{custom:iban}} und einmal mit einer alten Referenz aus dem Testhandbuch. Diese alte Referenz sieht wie eine Nummer aus, bleibt aber ohne Label.\n\nIm zweiten Teil der Nachricht ging es um die Zustellung. Bitte prueft den synthetischen Postleitzahlwert {{PostalCode}} zusammen mit der Kontakttelefonnummer {{PhoneNumber}}. Der Kunde schrieb ausserdem, dass der Test um 09:30 begann und spaeter um 13:45 endete; diese Uhrzeiten duerfen nicht als PII behandelt werden. In der internen Kopfzeile steht noch die Pruefadresse {{IpAddress}}, weil das Formular aus der Staging-Umgebung kam.\n\nViele Gruesse\nSupport-Probe",
+  "body": "Hallo Team,\n\nich fasse den Verlauf noch einmal zusammen, damit nichts aus der Unterhaltung verloren geht. Die anfragende Person ist {{Name}} und nutzt fuer Rueckfragen {{Email}}. Im Chat wurde mehrmals nach der Zahlung gefragt, einmal mit dem Hinweis auf {{custom:iban}} und einmal mit einer alten Referenz aus dem Testhandbuch. Diese alte Referenz sieht wie eine Nummer aus, bleibt aber ohne Label.\n\nIm zweiten Teil der Nachricht ging es um die Zustellung. Bitte prueft den synthetischen Postleitzahlwert {{custom:postal_code}} zusammen mit der Kontakttelefonnummer {{custom:phone}}. Der Kunde schrieb ausserdem, dass der Test um 09:30 begann und spaeter um 13:45 endete; diese Uhrzeiten duerfen nicht als PII behandelt werden. In der internen Kopfzeile steht noch die Pruefadresse {{custom:ip_address}}, weil das Formular aus der Staging-Umgebung kam.\n\nViele Gruesse\nSupport-Probe",
   "expected_classes": [
     "Name",
     "Email",
     "custom:iban",
-    "PostalCode",
-    "PhoneNumber",
-    "IpAddress"
+    "custom:postal_code",
+    "custom:phone",
+    "custom:ip_address"
   ],
   "notes": "Page-tier DE conversational email with filler, signoff, and benign time distractors."
 }
