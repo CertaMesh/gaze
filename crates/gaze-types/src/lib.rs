@@ -137,10 +137,10 @@ impl PiiClass {
     /// Parses the canonical audit/serde label for a PII class.
     pub fn from_canonical_str(value: &str) -> Option<Self> {
         match value {
-            "email" => Some(Self::Email),
-            "name" => Some(Self::Name),
-            "location" => Some(Self::Location),
-            "organization" => Some(Self::Organization),
+            "email" | "Email" => Some(Self::Email),
+            "name" | "Name" => Some(Self::Name),
+            "location" | "Location" => Some(Self::Location),
+            "organization" | "Organization" => Some(Self::Organization),
             custom if custom.starts_with("custom:") => {
                 let name = &custom["custom:".len()..];
                 (!name.is_empty()).then(|| Self::Custom(name.to_string()))
@@ -248,6 +248,21 @@ pub enum AmbiguityReason {
     MultiFamilyMatch,
     /// Multiple variants had the same precedence and no discriminator resolved them.
     PrecedenceTie,
+}
+
+/// Closed validator failure reasons recorded by audit metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum ValidatorFailReason {
+    /// Luhn checksum validation failed.
+    LuhnFailed,
+    /// IBAN MOD-97 validation failed.
+    IbanMod97Failed,
+    /// Email RFC-style validation failed.
+    EmailRfcFailed,
+    /// E.164 phone validation failed.
+    E164PhoneFailed,
 }
 
 /// A detected span and its class/source metadata.
@@ -1074,6 +1089,10 @@ pub struct RedactionEntry {
     pub created_at: i64,
     /// Optional session identifier.
     pub session_id: Option<String>,
+    /// Optional validator failure reason for a vetoed candidate.
+    pub validator_fail_reason: Option<ValidatorFailReason>,
+    /// Optional ambiguity metadata for a family-level fallback.
+    pub ambiguity_record: Option<AmbiguityRecord>,
 }
 
 impl RedactionEntry {
@@ -1100,7 +1119,21 @@ impl RedactionEntry {
             decided_by,
             created_at,
             session_id,
+            validator_fail_reason: None,
+            ambiguity_record: None,
         }
+    }
+
+    /// Attaches a validator failure reason to this metadata row.
+    pub fn with_validator_fail_reason(mut self, reason: ValidatorFailReason) -> Self {
+        self.validator_fail_reason = Some(reason);
+        self
+    }
+
+    /// Attaches an ambiguity record to this metadata row.
+    pub fn with_ambiguity_record(mut self, record: AmbiguityRecord) -> Self {
+        self.ambiguity_record = Some(record);
+        self
     }
 }
 
@@ -1861,6 +1894,8 @@ mod redaction_logger_tests {
             decided_by: ConflictTier::None,
             created_at: 0,
             session_id: None,
+            validator_fail_reason: None,
+            ambiguity_record: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

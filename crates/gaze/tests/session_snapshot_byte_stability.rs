@@ -61,10 +61,10 @@ fn current_text_only_export_uses_v5_and_omits_document_extension() {
         serde_json::json!({"Conversation": "byte-stability"})
     );
     assert_eq!(payload["entries"].as_array().expect("entries").len(), 1);
-    assert_eq!(payload["entries"][0]["class"], "Name");
+    assert_eq!(payload["entries"][0]["class"], "name");
     assert_eq!(payload["entries"][0]["raw"], "Dr. Schmidt");
     assert_eq!(payload["entries"][0]["family"], "counter");
-    assert_eq!(payload["next_by_class"], serde_json::json!([["Name", 1]]));
+    assert_eq!(payload["next_by_class"], serde_json::json!([["name", 1]]));
 }
 
 fn regenerate_fixture() {

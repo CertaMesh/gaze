@@ -24,3 +24,9 @@ fn pii_class_rejects_unknown_canonical_form() {
     let err = serde_json::from_str::<PiiClass>("\"unknown\"").unwrap_err();
     assert!(err.to_string().contains("unknown PII class unknown"));
 }
+
+#[test]
+fn pii_class_deserializes_legacy_builtin_names() {
+    let decoded: PiiClass = serde_json::from_str("\"Name\"").expect("deserialize legacy class");
+    assert_eq!(decoded, PiiClass::Name);
+}
