@@ -840,7 +840,7 @@ scope = "ephemeral"
 kind = "regex"
 name = "tenant.order"
 pattern = 'ORD-[0-9]+'
-class = "custom:order_id"
+class = "custom:tenant_ref"
 
 [policy.custom_recognizers.collision]
 family = "tenant-orders"
