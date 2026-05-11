@@ -73,6 +73,11 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         program: "cargo",
         args: &["test", "-p", "gaze-document", "--features", "mcp"],
     },
+    MatrixCommand {
+        label: "cargo test -p gaze-cli --features mcp",
+        program: "cargo",
+        args: &["test", "-p", "gaze-cli", "--features", "mcp"],
+    },
     // The removed hook called `xtask ci-feature-matrix`; omit it here to avoid
     // recursive self-execution while preserving the actual gate coverage.
     MatrixCommand {

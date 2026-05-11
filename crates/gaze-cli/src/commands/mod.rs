@@ -2,6 +2,8 @@ mod audit;
 mod clean;
 #[cfg(feature = "document")]
 mod document;
+#[cfg(feature = "mcp")]
+mod mcp;
 mod restore;
 
 use std::path::PathBuf;
@@ -119,6 +121,14 @@ enum Cmd {
         #[command(subcommand)]
         command: DocumentCmd,
     },
+    /// Install, diagnose, or run the Gaze MCP stdio server.
+    ///
+    /// Requires the binary to be built with `--features mcp`.
+    #[cfg(feature = "mcp")]
+    Mcp {
+        #[command(subcommand)]
+        command: McpCmd,
+    },
 }
 
 #[cfg(feature = "document")]
@@ -132,6 +142,47 @@ enum DocumentCmd {
         /// Output directory. Created if missing.
         #[arg(long)]
         out: PathBuf,
+    },
+}
+
+#[cfg(feature = "mcp")]
+#[derive(Subcommand, Debug)]
+enum McpCmd {
+    /// Install Gaze as an MCP stdio server in a supported client config.
+    Install {
+        /// Client config to update.
+        #[arg(long, value_enum)]
+        client: mcp::Client,
+        /// Agent guidance file to create/update.
+        #[arg(long)]
+        agents_md: Option<PathBuf>,
+        /// Print planned changes without writing files.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip the marker-fenced AGENTS.md skill section.
+        #[arg(long)]
+        skip_agents_md: bool,
+    },
+    /// Diagnose MCP server dependencies and client configuration.
+    Doctor {
+        /// Agent guidance file to check.
+        #[arg(long)]
+        agents_md: Option<PathBuf>,
+        /// Exit non-zero when any warning is present.
+        #[arg(long)]
+        strict: bool,
+        /// Emit machine-readable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Run the Gaze MCP stdio server.
+    Serve {
+        /// Directory where MCP manifest call records are written.
+        #[arg(long)]
+        manifest_dir: Option<PathBuf>,
+        /// Maximum file size accepted by `gaze_read_file`.
+        #[arg(long)]
+        max_file_size: Option<u64>,
     },
 }
 
@@ -468,6 +519,36 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             DocumentCmd::Clean { input, out } => {
                 document::run_clean(document::CleanArgs { input, out })
             }
+        },
+        #[cfg(feature = "mcp")]
+        Cmd::Mcp { command } => match command {
+            McpCmd::Install {
+                client,
+                agents_md,
+                dry_run,
+                skip_agents_md,
+            } => mcp::install(mcp::InstallArgs {
+                client,
+                agents_md,
+                dry_run,
+                skip_agents_md,
+            }),
+            McpCmd::Doctor {
+                agents_md,
+                strict,
+                json,
+            } => mcp::doctor(mcp::DoctorArgs {
+                agents_md,
+                strict,
+                json,
+            }),
+            McpCmd::Serve {
+                manifest_dir,
+                max_file_size,
+            } => mcp::serve(mcp::ServeArgs {
+                manifest_dir,
+                max_file_size,
+            }),
         },
     }
 }
