@@ -1,0 +1,20 @@
+{
+  "id": "high-density-001",
+  "context": "high-density",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Dense support excerpt: {{Name}} wrote from {{Email}}, asked for a callback at {{custom:phone}}, confirmed payout through {{custom:iban}}, and supplied routing ZIP {{custom:postal_code}}. The same paragraph includes network origin {{custom:ip_address}} and card test value {{custom:credit_card}}. Around those labels are ordinary words about queues, retry windows, and staged settlement so the detector sees many classes in a short block instead of a single clean sentence.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:postal_code",
+    "custom:ip_address",
+    "custom:credit_card"
+  ],
+  "notes": "High-density EN block with seven labeled spans in compact prose."
+}

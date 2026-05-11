@@ -1,0 +1,17 @@
+{
+  "id": "high-density-003",
+  "context": "high-density",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Audit packet line one: email {{Email}}, IP {{custom:ip_address}}, IBAN {{custom:iban}}, wallet {{custom:eth_address}}, card {{custom:credit_card}}. Line two adds a second network clue {{custom:ip_address#v6}} and repeats that all values are generated fixture material. The compact form is intentional because production notes often compress many identifiers into a single copied block.",
+  "expected_classes": [
+    "Email",
+    "custom:ip_address",
+    "custom:iban",
+    "custom:eth_address",
+    "custom:credit_card"
+  ],
+  "notes": "High-density global payment and network block."
+}

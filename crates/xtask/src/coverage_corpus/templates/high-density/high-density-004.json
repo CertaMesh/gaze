@@ -1,0 +1,19 @@
+{
+  "id": "high-density-004",
+  "context": "high-density",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Triage note: {{Name}} / {{Email}} / {{custom:phone}} all appear before the first full stop, then the shipping clue {{custom:postal_code}}, login origin {{custom:ip_address}}, and refund IBAN {{custom:iban}} appear in the next clause. The paragraph deliberately stays short, repeats normal ticket language, and includes non-label values such as CASE-77 and 10:15 to keep density high without real data.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:postal_code",
+    "custom:ip_address",
+    "custom:iban"
+  ],
+  "notes": "High-density EN triage paragraph with six labels."
+}

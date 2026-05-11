@@ -107,6 +107,12 @@ const TEMPLATE_JSON: &[&str] = &[
     include_str!("code-mixed/code-mixed-006.json"),
     include_str!("code-mixed/code-mixed-007.json"),
     include_str!("code-mixed/code-mixed-008.json"),
+    include_str!("high-density/high-density-001.json"),
+    include_str!("high-density/high-density-002.json"),
+    include_str!("high-density/high-density-003.json"),
+    include_str!("high-density/high-density-004.json"),
+    include_str!("high-density/high-density-005.json"),
+    include_str!("high-density/high-density-006.json"),
 ];
 
 pub fn phase_1_templates() -> serde_json::Result<Vec<Template>> {

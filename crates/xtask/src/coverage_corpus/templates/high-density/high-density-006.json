@@ -1,0 +1,17 @@
+{
+  "id": "high-density-006",
+  "context": "high-density",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Compact tool memo: primary={{Email}}, backup={{Email#backup}}, route={{custom:iban}}, ip4={{custom:ip_address}}, ip6={{custom:ip_address#v6}}, card={{custom:credit_card}}, wallet={{custom:eth_address}}. The rest of the memo says dry-run only, fixture generated, no real production payload. Multiple labels share the same small block to stress overlap and ordering.",
+  "expected_classes": [
+    "Email",
+    "custom:iban",
+    "custom:ip_address",
+    "custom:credit_card",
+    "custom:eth_address"
+  ],
+  "notes": "High-density global memo with repeated email and IP slots."
+}

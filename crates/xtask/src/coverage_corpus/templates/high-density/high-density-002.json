@@ -1,0 +1,20 @@
+{
+  "id": "high-density-002",
+  "context": "high-density",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Dichter Fallabschnitt: {{Name}} meldet sich mit {{Email}}, nennt fuer Rueckruf {{custom:phone}}, verweist auf {{custom:iban}} und bestaetigt die Postleitzahl {{custom:postal_code}}. Im technischen Teil stehen {{custom:ip_address}} und die synthetische Kartennummer {{custom:credit_card}}. Der restliche Text enthaelt Statuswoerter, Betragsangaben und kurze Kommentare, damit mehrere PII-Klassen nah beieinander stehen.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:postal_code",
+    "custom:ip_address",
+    "custom:credit_card"
+  ],
+  "notes": "High-density DE block with mixed labels in one compact section."
+}

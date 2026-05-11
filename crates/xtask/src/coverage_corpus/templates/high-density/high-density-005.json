@@ -1,0 +1,19 @@
+{
+  "id": "high-density-005",
+  "context": "high-density",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Kurznotiz fuer die Pruefung: Kontakt {{Name}}, Mail {{Email}}, Telefon {{custom:phone}}, PLZ {{custom:postal_code}}, Konto {{custom:iban}}, Quelladresse {{custom:ip_address}}. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:postal_code",
+    "custom:iban",
+    "custom:ip_address"
+  ],
+  "notes": "High-density DE short note with six labels."
+}
