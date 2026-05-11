@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-mcp-core"
-version = "0.1.0"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "gaze-assembly",

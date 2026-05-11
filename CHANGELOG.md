@@ -9,8 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Coverage feedback loop (Phase 2-5): full synthetic corpus plus info-only trend gate.
-
 ### Changed
 
 ### Deprecated
@@ -21,15 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-## [0.7.0] - 2026-05-10
+## [0.7.0] - 2026-05-11
 
 ### Added
 
+- `gaze-mcp-core` — transport-free PII chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, and `SessionIdPolicy`. Public tool structs (`CleanTool`, `TokenizeFieldTool`, `SafetyNetCheckTool`, `ExportSessionTokensTool`, `RestoreTool`, `RestoreStrictTool`) all use `#[non_exhaustive]` with `pub fn new()` constructors per pre-1.0 SemVer policy. (#162)
+- `gaze-mcp-rmcp` — rmcp transport sink that binds `gaze-mcp-core`'s transport-free runtime to the rmcp protocol surface. (#174)
 - `gaze_pii::Session::export_with_extension(DocumentExtension) -> Result<SensitiveSnapshot>` — opt-in document mode for OCR/PDF/transcript bundles. (#177)
 - `gaze_types::DocumentExtension` (signed-envelope-bound integrity hashes for `<base>-agent/` files). (#177)
 - `gaze_types::TextOrigin`, `CodecAuditRow`, `CodecCapabilitySet`, `ExtractionDensityPolicy`. (#177)
 - `docs/architecture/document-extension.md` — bundle contract + two-dir layout reference. (#177)
 - Coverage feedback loop Phase 0+1: xtask `coverage-corpus` + 5-fixture integration test skeleton. (#176)
+- Coverage feedback loop (Phase 2-5): full synthetic corpus plus info-only trend gate. (#178)
+- CC-8 token-shape shadow guard at policy + rulepack regex paths fails closed on patterns that match emitted token samples. `PolicyError::TokenShapeShadow` + `RulepackError::TokenShapeShadow`. (#162)
+- `gaze-audit` columns `snapshot_scheme` (TEXT NOT NULL), `snapshot_alg` (TEXT NOT NULL), `snapshot_key_version` (INTEGER NULL) on the audit row. Pre-existing rows migrate with `"gaze.snapshot.v1.sha256-salted"` / `"SHA-256"` / NULL defaults. Plumbed through `AuditLogRow`, `AuditFilter`, and `build_audit_query_sql`. (#179)
 - `Ipv4Parse`, `Ipv6Parse`, and `EthEip55` validator kinds for parser-backed
   IP address validation and EIP-55 Ethereum address checksums. Closes #440.
 - `eth.address` in `core-extended`, emitting `custom:eth_address` for
@@ -38,6 +41,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `gaze_pii::Session` snapshot reference now binds the final emitted byte sequence rather than an earlier semantic object. Operator-bypass mutations post-snapshot are detectable. Pre-existing audit rows continue to verify under the v1 scheme tag. (#179)
 - Snapshot envelope: text-only `Session::export()` stays v3; document-extended `Session::export_with_extension()` emits v4. v0.6.x readers fail closed on v4. (#177)
 - Workspace bumped 0.6.6 → 0.7.0.
 - [bundle-tokenization-drift] `eth.address` and parser-backed IP validator fixtures refreshed `core` and `core-extended` no-policy snapshots.
