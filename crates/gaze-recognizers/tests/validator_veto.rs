@@ -1,6 +1,6 @@
-use gaze_recognizers::ValidatorKind;
 #[cfg(feature = "phone-parser")]
 use gaze_recognizers::Region;
+use gaze_recognizers::ValidatorKind;
 use gaze_types::{ValidatorFailReason, ValidatorOutcome};
 
 fn assert_pass(kind: ValidatorKind, input: &str) {

@@ -27,13 +27,13 @@ pub use anchored_match::{
 };
 pub use dictionary::DictionaryRecognizer;
 pub use error::{RecognizerError, Result};
+#[cfg(feature = "phone-parser")]
+pub use gaze_types::Region;
+pub use gaze_types::ValidatorKind;
 pub use ner::{
     LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
     VerifiedArtifacts,
 };
-pub use gaze_types::ValidatorKind;
-#[cfg(feature = "phone-parser")]
-pub use gaze_types::Region;
 pub use regex::{NormalizerKind, RegexDetector};
 
 pub fn embedded(name: &str) -> Option<&'static str> {

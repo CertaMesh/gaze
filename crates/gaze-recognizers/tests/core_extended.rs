@@ -5,7 +5,9 @@ use gaze::{
     Rulepack, RulepackError, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
-use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome};
+use gaze_types::{
+    DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome,
+};
 
 fn core_extended() -> Rulepack {
     Rulepack::load(RulepackSource::Embedded(

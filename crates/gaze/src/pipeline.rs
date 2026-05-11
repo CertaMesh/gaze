@@ -316,9 +316,7 @@ impl Pipeline {
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
-        let (resolved, vetoed) = self
-            .registry
-            .detect_all_resolved(&normalized.text, &ctx);
+        let (resolved, vetoed) = self.registry.detect_all_resolved(&normalized.text, &ctx);
         let vetoed = vetoed
             .into_iter()
             .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))

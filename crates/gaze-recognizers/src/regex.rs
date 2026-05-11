@@ -183,7 +183,9 @@ impl RegexDetector {
     fn canonical_form(&self, matched: &str) -> Option<String> {
         match self.validator_kind {
             #[cfg(feature = "phone-parser")]
-            Some(ValidatorKind::E164PhoneNational(_)) => self.validator_kind?.canonical_form(matched),
+            Some(ValidatorKind::E164PhoneNational(_)) => {
+                self.validator_kind?.canonical_form(matched)
+            }
             Some(validator_kind) if validator_kind.validates(matched) => {
                 Some(self.normalizer_kind.map_or_else(
                     || matched.to_string(),
