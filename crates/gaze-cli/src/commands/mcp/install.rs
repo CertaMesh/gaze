@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+#[cfg(target_os = "macos")]
 use directories_next::BaseDirs;
 use serde::Serialize;
 use serde_json::{Map, Value};
