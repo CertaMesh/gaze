@@ -5,8 +5,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::ops::Range;
 
-use serde::de::{self, Visitor};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Shared detector contract for text-only PII detection.
@@ -42,7 +41,7 @@ pub trait Detector: Send + Sync {
 ///
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
 /// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -150,39 +149,66 @@ impl PiiClass {
     }
 }
 
-impl Serialize for PiiClass {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.to_canonical_str())
+/// Audit-canonical form of [`PiiClass`].
+///
+/// Serializes as `"email"`, `"name"`, `"custom:foo"`, and similar canonical
+/// strings. Use this wrapper for audit-row JSON only. Session snapshots use
+/// bare [`PiiClass`] serde so their byte shape stays stable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PiiClassAudit(pub PiiClass);
+
+impl PiiClassAudit {
+    /// Builds an audit-canonical class wrapper.
+    pub fn new(class: PiiClass) -> Self {
+        Self(class)
+    }
+
+    /// Unwraps the underlying class.
+    pub fn into_inner(self) -> PiiClass {
+        self.0
     }
 }
 
-impl<'de> Deserialize<'de> for PiiClass {
+impl Serialize for PiiClassAudit {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.0.to_canonical_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for PiiClassAudit {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = String::deserialize(deserializer)?;
+        PiiClass::from_canonical_str(&value)
+            .map(Self)
+            .ok_or_else(|| {
+                serde::de::Error::custom(format!("unknown PiiClass canonical form: {value}"))
+            })
+    }
+}
+
+mod pii_class_audit_serde {
+    use super::{PiiClass, PiiClassAudit};
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S>(class: &PiiClass, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        PiiClassAudit::new(class.clone()).serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<PiiClass, D::Error>
     where
         D: Deserializer<'de>,
     {
-        struct PiiClassVisitor;
-
-        impl Visitor<'_> for PiiClassVisitor {
-            type Value = PiiClass;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("a canonical PII class string")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-            where
-                E: de::Error,
-            {
-                PiiClass::from_canonical_str(value)
-                    .ok_or_else(|| E::custom(format!("unknown PII class {value}")))
-            }
-        }
-
-        deserializer.deserialize_str(PiiClassVisitor)
+        Ok(PiiClassAudit::deserialize(deserializer)?.into_inner())
     }
 }
 
@@ -191,6 +217,7 @@ impl<'de> Deserialize<'de> for PiiClass {
 #[non_exhaustive]
 pub struct LosingCandidate {
     /// PII class proposed by the losing recognizer.
+    #[serde(with = "pii_class_audit_serde")]
     pub class: PiiClass,
     /// Stable recognizer identifier for traceability.
     pub recognizer_id: String,
@@ -211,6 +238,7 @@ impl LosingCandidate {
 #[non_exhaustive]
 pub struct AmbiguityRecord {
     /// The family-level class assigned when disambiguation failed.
+    #[serde(with = "pii_class_audit_serde")]
     pub ambiguity_class: PiiClass,
     /// Variants that could not be disambiguated.
     ///
