@@ -145,11 +145,29 @@ pub struct SourceSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocaleData {
     pub buckets: HashMap<String, LocaleBucket>,
+    pub cues: HashMap<String, LocaleCueBundle>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleBucket {
     pub names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LocaleCueBundle {
+    pub names: Vec<String>,
+    pub window_chars: Option<u16>,
+}
+
+impl LocaleCueBundle {
+    /// Builds a locale cue bundle used by mandatory-anchor resolution.
+    pub fn new(names: Vec<String>, window_chars: Option<u16>) -> Self {
+        Self {
+            names,
+            window_chars,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -282,11 +300,28 @@ impl Rulepack {
     }
 
     pub fn activated_classes(&self) -> BTreeSet<PiiClass> {
-        self.recognizers
+        let mut classes = BTreeSet::new();
+        for recognizer in self
+            .recognizers
             .iter()
             .filter(|recognizer| recognizer.enabled)
-            .map(|recognizer| recognizer.class.clone())
-            .collect()
+        {
+            classes.insert(recognizer.class.clone());
+            if let Some(family_class) = recognizer
+                .collision
+                .as_ref()
+                .and_then(|collision| {
+                    collision
+                        .mandatory_anchor
+                        .as_ref()
+                        .map(|_| &collision.family)
+                })
+                .map(|family| PiiClass::Custom(format!("family:{family}")))
+            {
+                classes.insert(family_class);
+            }
+        }
+        classes
     }
 }
 
@@ -317,6 +352,8 @@ struct RawRulepackWithLint {
 
 #[derive(Debug, Deserialize)]
 struct RawLocaleData {
+    #[serde(default)]
+    cues: HashMap<String, RawLocaleCueBundle>,
     #[serde(flatten)]
     buckets: HashMap<String, RawLocaleBucket>,
 }
@@ -325,6 +362,14 @@ struct RawLocaleData {
 #[serde(deny_unknown_fields)]
 struct RawLocaleBucket {
     names: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawLocaleCueBundle {
+    names: Vec<String>,
+    #[serde(default)]
+    window_chars: Option<u16>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -508,6 +553,16 @@ impl From<RawLocaleData> for LocaleData {
                         LocaleBucket {
                             names: bucket.names,
                         },
+                    )
+                })
+                .collect(),
+            cues: raw
+                .cues
+                .into_iter()
+                .map(|(name, bundle)| {
+                    (
+                        name,
+                        LocaleCueBundle::new(bundle.names, bundle.window_chars),
                     )
                 })
                 .collect(),
@@ -1067,7 +1122,11 @@ pub fn parse_class(input: &str) -> Result<PiiClass, RulepackError> {
             if name.trim().is_empty() {
                 return Err(RulepackError::UnknownClass(input.to_string()));
             }
-            Ok(PiiClass::custom(name))
+            if name.starts_with("family:") {
+                Ok(PiiClass::Custom(name.to_string()))
+            } else {
+                Ok(PiiClass::custom(name))
+            }
         }
         _ => Err(RulepackError::UnknownClass(input.to_string())),
     }
@@ -1162,6 +1221,42 @@ license = "Apache-2.0"
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
     }
 
+    #[test]
+    fn parses_nested_locale_cue_bundles() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "locale-cues"
+rulepack_version = "0.7.0"
+default_locales = ["en-US"]
+
+[locale.forward_markers]
+names = ["Forwarded message"]
+
+[locale.cues.iban]
+names = ["IBAN:", "Account"]
+window_chars = 48
+"#,
+        )
+        .expect("locale cues rulepack");
+
+        let locale = rulepack.locale.expect("locale data");
+        assert_eq!(
+            locale.buckets["forward_markers"].names,
+            vec!["Forwarded message"]
+        );
+        assert_eq!(locale.cues["iban"].names, vec!["IBAN:", "Account"]);
+        assert_eq!(locale.cues["iban"].window_chars, Some(48));
+    }
+
+    #[test]
+    fn locale_cue_bundle_constructor_builds_public_type() {
+        let bundle = LocaleCueBundle::new(vec!["IBAN".to_string()], Some(64));
+
+        assert_eq!(bundle.names, vec!["IBAN"]);
+        assert_eq!(bundle.window_chars, Some(64));
+    }
+
     #[cfg(feature = "bundled-recognizers")]
     #[test]
     fn embedded_core_activated_classes_match_rulepack_classes() {
@@ -1218,6 +1313,7 @@ license = "Apache-2.0"
             BTreeSet::from([
                 PiiClass::custom("phone"),
                 PiiClass::custom("iban"),
+                PiiClass::Custom("family:payment-card-or-iban".to_string()),
                 PiiClass::custom("credit_card"),
                 PiiClass::custom("ip_address"),
                 PiiClass::custom("eth_address"),

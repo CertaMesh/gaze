@@ -286,6 +286,7 @@ fn core_pipeline_config_extended_tokenizes_synthetic_iban() {
     let core = CorePipelineConfig::new()
         .with_locale(&[LocaleTag::DeDe])
         .with_bundled_rulepack("core-extended")
+        .with_bundled_rulepack("locale-de")
         .build()
         .expect("extended pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");

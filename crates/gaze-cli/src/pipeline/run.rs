@@ -11,9 +11,9 @@ use serde::Serialize;
 
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
-    LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, Policy, RawDocument, RedactionEntry,
-    RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack, RulepackSource,
-    Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
+    LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, PiiClass, Policy, RawDocument,
+    RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack,
+    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
 use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
@@ -379,6 +379,24 @@ fn class_rules_for_bundled_overrides(
         let rulepack = Rulepack::load(RulepackSource::Embedded(contents))
             .map_err(|_| CliError::PolicyConfig)?;
         classes.extend(rulepack.activated_classes());
+        classes.extend(
+            rulepack
+                .recognizers
+                .iter()
+                .filter(|recognizer| recognizer.enabled)
+                .filter_map(|recognizer| {
+                    recognizer
+                        .collision
+                        .as_ref()
+                        .and_then(|collision| {
+                            collision
+                                .mandatory_anchor
+                                .as_ref()
+                                .map(|_| &collision.family)
+                        })
+                        .map(|family| PiiClass::Custom(format!("family:{family}")))
+                }),
+        );
     }
     Ok(classes
         .into_iter()

@@ -433,6 +433,131 @@ fn precedence_tie_emits_family_level_token_and_ambiguity_record() {
     assert_eq!(ambiguity.losing_candidates.len(), 2);
 }
 
+#[test]
+fn mandatory_anchor_missing_emits_family_token_and_no_anchor_ambiguity() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = mandatory_anchor_iban_pipeline(logger.clone());
+
+    let clean = pipeline
+        .redact_with_context(
+            &session,
+            RawDocument::Text("DE89 3704 0044 0532 0130 00".to_string()),
+            &[gaze::LocaleTag::DeDe],
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(
+        clean.contains(":Custom:family:payment-card-or-iban_"),
+        "{clean}"
+    );
+    assert_eq!(
+        session.restore_strict(clean.as_str()).unwrap(),
+        "DE89 3704 0044 0532 0130 00"
+    );
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(
+        winner.class,
+        PiiClass::Custom("family:payment-card-or-iban".to_string())
+    );
+    assert_eq!(winner.decided_by, gaze::ConflictTier::AnchoredContext);
+    assert_eq!(
+        winner.collision_family.as_deref(),
+        Some("payment-card-or-iban")
+    );
+    let ambiguity = winner.ambiguity_record.as_ref().expect("ambiguity");
+    assert_eq!(ambiguity.reason, AmbiguityReason::NoAnchor);
+    assert_eq!(
+        ambiguity.ambiguity_class,
+        PiiClass::Custom("family:payment-card-or-iban".to_string())
+    );
+    assert_eq!(ambiguity.losing_candidates.len(), 1);
+    assert_eq!(
+        ambiguity.losing_candidates[0].recognizer_id,
+        "iban.structural"
+    );
+}
+
+#[test]
+fn mandatory_anchor_present_keeps_variant_token_without_ambiguity() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = mandatory_anchor_iban_pipeline(logger.clone());
+
+    let clean = pipeline
+        .redact_with_context(
+            &session,
+            RawDocument::Text("IBAN: DE89 3704 0044 0532 0130 00".to_string()),
+            &[gaze::LocaleTag::DeDe],
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(clean.contains(":Custom:iban_"), "{clean}");
+    assert!(!clean.contains(":Custom:family:payment-card-or-iban_"));
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.class, PiiClass::Custom("iban".to_string()));
+    assert_eq!(winner.decided_by, gaze::ConflictTier::None);
+    assert!(winner.ambiguity_record.is_none());
+}
+
+fn mandatory_anchor_iban_pipeline(logger: MemoryLogger) -> Pipeline {
+    Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b",
+                PiiClass::Custom("iban".to_string()),
+                "iban.structural",
+                vec![gaze::LocaleTag::Global],
+                0.70,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::IbanMod97),
+                Some(NormalizerKind::IbanCanonical),
+            )
+            .expect("iban detector"),
+        )
+        .register_collision(
+            "iban.structural",
+            CollisionMembership::new("payment-card-or-iban", "iban", 10, Some("iban".to_string())),
+        )
+        .register_anchor_cue_bundle(
+            gaze::LocaleTag::DeDe,
+            "iban",
+            vec!["IBAN:".to_string(), "IBAN".to_string()],
+            Some(64),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom("iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("family:payment-card-or-iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger)
+        .build()
+        .expect("pipeline")
+}
+
 fn payment_collision_pipeline(logger: MemoryLogger) -> Pipeline {
     Pipeline::builder()
         .recognizer(

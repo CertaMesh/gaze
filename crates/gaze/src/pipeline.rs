@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, LeakReport,
-    LeakReportTelemetry, LeakSuspect, LosingCandidate, Manifest, RedactionLogError,
-    RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
+    LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError, RedactionLogger, SafetyNet,
+    SafetyNetContext, SafetyNetError,
 };
 use thiserror::Error;
 
@@ -559,6 +559,7 @@ struct CleanText {
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
     collision_memberships: Vec<(String, CollisionMembership)>,
+    anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -589,6 +590,18 @@ impl PipelineBuilder {
     ) -> Self {
         self.collision_memberships
             .push((recognizer_id.into(), membership));
+        self
+    }
+
+    pub fn register_anchor_cue_bundle(
+        mut self,
+        locale: crate::LocaleTag,
+        anchor_key: impl Into<String>,
+        names: Vec<String>,
+        window_chars: Option<u16>,
+    ) -> Self {
+        self.anchor_cue_bundles
+            .push((locale, anchor_key.into(), names, window_chars));
         self
     }
 
@@ -623,6 +636,9 @@ impl PipelineBuilder {
         }
         for (recognizer_id, membership) in self.collision_memberships {
             registry = registry.register_collision(recognizer_id, membership);
+        }
+        for (locale, anchor_key, names, window_chars) in self.anchor_cue_bundles {
+            registry = registry.register_anchor_cue_bundle(locale, anchor_key, names, window_chars);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
@@ -976,33 +992,16 @@ fn indexed_detection_from_candidate(
     let collision_variant = membership.map(|membership| membership.variant.clone());
     let mut ambiguity_record = None;
 
-    if candidate.decided_by == ConflictTier::CollisionPolicy
-        && candidate.recognizer_id.starts_with("collision-family:")
-    {
-        let family = candidate
-            .recognizer_id
-            .trim_start_matches("collision-family:")
-            .to_string();
-        let class = candidate.class.clone();
-        let mut losing_candidates = candidate
-            .merged_sources
-            .iter()
-            .filter_map(|recognizer_id| {
-                registry.recognizer(recognizer_id).map(|recognizer| {
-                    LosingCandidate::new(
-                        recognizer.supported_class().clone(),
-                        recognizer_id.clone(),
-                    )
-                })
-            })
-            .collect::<Vec<_>>();
-        losing_candidates.sort_by(|a, b| a.recognizer_id.cmp(&b.recognizer_id));
-        ambiguity_record = Some(AmbiguityRecord::new(
-            class.clone(),
-            losing_candidates,
-            AmbiguityReason::PrecedenceTie,
-        ));
-        collision_family = Some(family);
+    let hybrid_reason = match candidate.decided_by {
+        ConflictTier::CollisionPolicy => Some(AmbiguityReason::PrecedenceTie),
+        ConflictTier::AnchoredContext => Some(AmbiguityReason::NoAnchor),
+        _ => None,
+    };
+    if let Some(reason) = hybrid_reason {
+        if let Some(hybrid) = crate::conflict::hybrid_fallback::emit(&candidate, registry, reason) {
+            ambiguity_record = Some(hybrid.ambiguity_record);
+            collision_family = Some(hybrid.collision_family);
+        }
     }
 
     IndexedDetection {

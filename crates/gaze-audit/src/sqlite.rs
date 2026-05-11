@@ -538,6 +538,7 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::Validator => "validator",
         ConflictTier::ValidatorVeto => "validator_veto",
         ConflictTier::CollisionPolicy => "collision_policy",
+        ConflictTier::AnchoredContext => "anchored_context",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
         _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {tier:?}"),
@@ -594,6 +595,7 @@ fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusql
         "validator" => ConflictTier::Validator,
         "validator_veto" => ConflictTier::ValidatorVeto,
         "collision_policy" => ConflictTier::CollisionPolicy,
+        "anchored_context" => ConflictTier::AnchoredContext,
         "recognizer_id" => ConflictTier::RecognizerId,
         "merged" => ConflictTier::Merged,
         other => {

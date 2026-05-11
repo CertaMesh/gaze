@@ -14,8 +14,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   metadata, `ConflictTier::CollisionPolicy` is audit-serializable, adopter
   custom recognizers can declare non-reserved collision families, and
   `xtask family-policy-table-coherence` validates bundled declarations.
+- Mandatory-anchor resolution for collision-family recognizers. Bundled locale
+  cue blocks under `[locale.cues.<key>]` can keep structural candidates on their
+  precise variant; missing anchors emit a family-level
+  `PiiClass::Custom("family:<name>")` token plus `AmbiguityReason::NoAnchor`.
+  `xtask locale-cue-bundle-coherence` validates bundled cue coverage.
 
 ### Changed
+
+- [bundle-tokenization-drift] `core-extended` no-policy snapshot refreshed for
+  mandatory-anchor fallback on structural IBAN candidates without loaded locale
+  cue bundles.
 
 ### Deprecated
 

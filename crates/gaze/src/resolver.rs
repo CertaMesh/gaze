@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use crate::anchor_resolver::{AnchorOutcome, AnchorResolver};
+use crate::LocaleTag;
 use crate::{Candidate, ConflictTier, FamilyPolicyTable, PiiClass};
 
 pub fn resolve_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
@@ -9,6 +11,39 @@ pub fn resolve_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
 pub fn resolve_candidates_with_policy(
     mut candidates: Vec<Candidate>,
     policy: &FamilyPolicyTable,
+) -> Vec<Candidate> {
+    resolve_candidates_inner(&mut candidates, policy, None)
+}
+
+pub(crate) fn resolve_candidates_with_policy_and_anchors(
+    mut candidates: Vec<Candidate>,
+    policy: &FamilyPolicyTable,
+    anchor_resolver: &AnchorResolver,
+    input: &str,
+    locale_chain: &[LocaleTag],
+) -> Vec<Candidate> {
+    resolve_candidates_inner(
+        &mut candidates,
+        policy,
+        Some(AnchorContext {
+            resolver: anchor_resolver,
+            input,
+            locale_chain,
+        }),
+    )
+}
+
+#[derive(Clone, Copy)]
+struct AnchorContext<'a> {
+    resolver: &'a AnchorResolver,
+    input: &'a str,
+    locale_chain: &'a [LocaleTag],
+}
+
+fn resolve_candidates_inner(
+    candidates: &mut Vec<Candidate>,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Vec<Candidate> {
     candidates.sort_by(|a, b| {
         a.span
@@ -22,8 +57,14 @@ pub fn resolve_candidates_with_policy(
     });
 
     let mut resolved: Vec<Candidate> = Vec::new();
-    for candidate in candidates {
-        insert_candidate(&mut resolved, candidate, policy);
+    for candidate in std::mem::take(candidates) {
+        insert_candidate(&mut resolved, candidate, policy, anchor_ctx);
+    }
+    if let Some(anchor_ctx) = anchor_ctx {
+        resolved = resolved
+            .into_iter()
+            .map(|candidate| apply_missing_anchor_fallback(candidate, policy, anchor_ctx))
+            .collect();
     }
     resolved.sort_by_key(|candidate| candidate.span.start);
     resolved
@@ -33,6 +74,7 @@ fn insert_candidate(
     resolved: &mut Vec<Candidate>,
     candidate: Candidate,
     policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) {
     let mut index = 0;
     while index < resolved.len() {
@@ -50,7 +92,8 @@ fn insert_candidate(
                 merge_same_span_same_class(&mut resolved[index], candidate);
                 return;
             }
-            if let Some(tier) = should_replace_same_span_class(&candidate, &resolved[index], policy)
+            if let Some(tier) =
+                should_replace_same_span_class(&candidate, &resolved[index], policy, anchor_ctx)
             {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
@@ -60,7 +103,7 @@ fn insert_candidate(
                 resolved[index] = candidate;
             } else {
                 if let Some(tier) =
-                    should_replace_same_span_class(&resolved[index], &candidate, policy)
+                    should_replace_same_span_class(&resolved[index], &candidate, policy, anchor_ctx)
                 {
                     resolved[index].decided_by = tier;
                 }
@@ -76,7 +119,7 @@ fn insert_candidate(
                 resolved[index] = tie;
                 remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
             } else if let Some(tier) =
-                should_replace_containment(&candidate, &resolved[index], policy)
+                should_replace_containment(&candidate, &resolved[index], policy, anchor_ctx)
             {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
@@ -86,7 +129,8 @@ fn insert_candidate(
                 resolved[index] = candidate;
                 remove_overlaps(resolved, index, tier);
             } else {
-                if let Some(tier) = should_replace_containment(&resolved[index], &candidate, policy)
+                if let Some(tier) =
+                    should_replace_containment(&resolved[index], &candidate, policy, anchor_ctx)
                 {
                     resolved[index].decided_by = tier;
                 }
@@ -99,7 +143,7 @@ fn insert_candidate(
             resolved[index] = tie;
             remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
         } else if let Some(tier) =
-            should_replace_partial_overlap(&candidate, &resolved[index], policy)
+            should_replace_partial_overlap(&candidate, &resolved[index], policy, anchor_ctx)
         {
             let mut candidate = candidate;
             candidate.decided_by = tier;
@@ -109,7 +153,8 @@ fn insert_candidate(
             resolved[index] = candidate;
             remove_overlaps(resolved, index, tier);
         } else {
-            if let Some(tier) = should_replace_partial_overlap(&resolved[index], &candidate, policy)
+            if let Some(tier) =
+                should_replace_partial_overlap(&resolved[index], &candidate, policy, anchor_ctx)
             {
                 resolved[index].decided_by = tier;
             }
@@ -149,14 +194,16 @@ fn should_replace_same_span_class(
     candidate: &Candidate,
     existing: &Candidate,
     policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy)
+    compare_by_spec(candidate, existing, policy, anchor_ctx)
 }
 
 fn should_replace_containment(
     candidate: &Candidate,
     existing: &Candidate,
     policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Option<ConflictTier> {
     if candidate.class == existing.class {
         let candidate_validated = candidate.canonical_form.is_some();
@@ -192,25 +239,40 @@ fn should_replace_containment(
             .then_some(ConflictTier::RecognizerId);
     }
 
-    compare_by_spec(candidate, existing, policy)
+    compare_by_spec(candidate, existing, policy, anchor_ctx)
 }
 
 fn should_replace_partial_overlap(
     candidate: &Candidate,
     existing: &Candidate,
     policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy)
+    compare_by_spec(candidate, existing, policy, anchor_ctx)
 }
 
 fn compare_by_spec(
     candidate: &Candidate,
     existing: &Candidate,
     policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
 ) -> Option<ConflictTier> {
     if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
     {
         return candidate_wins.then_some(ConflictTier::CollisionPolicy);
+    }
+    if let Some(anchor_ctx) = anchor_ctx {
+        match anchor_ctx.resolver.resolve(
+            candidate,
+            anchor_ctx.input,
+            policy,
+            anchor_ctx.locale_chain,
+        ) {
+            AnchorOutcome::Found | AnchorOutcome::Missing { .. } => {
+                return Some(ConflictTier::AnchoredContext);
+            }
+            AnchorOutcome::NotRequired => {}
+        }
     }
     if class_priority(&candidate.class) != class_priority(&existing.class) {
         return (class_priority(&candidate.class) > class_priority(&existing.class))
@@ -258,6 +320,47 @@ fn family_tie_candidate(
         ConflictTier::CollisionPolicy,
         merged_sources,
     ))
+}
+
+fn apply_missing_anchor_fallback(
+    candidate: Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: AnchorContext<'_>,
+) -> Candidate {
+    if candidate.decided_by == ConflictTier::CollisionPolicy {
+        return candidate;
+    }
+    match anchor_ctx.resolver.resolve(
+        &candidate,
+        anchor_ctx.input,
+        policy,
+        anchor_ctx.locale_chain,
+    ) {
+        AnchorOutcome::Missing { family, .. } => {
+            family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext)
+        }
+        AnchorOutcome::Found | AnchorOutcome::NotRequired => candidate,
+    }
+}
+
+fn family_fallback_candidate(
+    candidate: Candidate,
+    family: String,
+    decided_by: ConflictTier,
+) -> Candidate {
+    let original_recognizer_id = candidate.recognizer_id.clone();
+    Candidate::new(
+        candidate.span,
+        PiiClass::Custom(format!("family:{family}")),
+        format!("collision-family:{family}"),
+        candidate.score,
+        candidate.priority,
+        None,
+        format!("collision-family:{family}"),
+        candidate.source,
+        decided_by,
+        vec![original_recognizer_id],
+    )
 }
 
 fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
@@ -362,6 +465,41 @@ mod tests {
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].recognizer_id, "iban");
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+    }
+
+    #[test]
+    fn family_policy_arbitrates_before_mandatory_anchor_resolution() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "pan.structural",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(0..5, PiiClass::Email, 0.70, "pan.structural"),
+                candidate(0..5, PiiClass::custom("iban"), 0.70, "iban.structural"),
+            ],
+            registry.family_policy(),
+            &AnchorResolver::default(),
+            "DE893",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].class, PiiClass::Custom("iban".to_string()));
         assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
     }
 

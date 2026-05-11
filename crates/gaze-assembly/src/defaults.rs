@@ -144,6 +144,24 @@ fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
                 action: Action::Tokenize,
             });
         }
+        if let Some(family_class) = recognizer
+            .collision
+            .as_ref()
+            .and_then(|collision| {
+                collision
+                    .mandatory_anchor
+                    .as_ref()
+                    .map(|_| &collision.family)
+            })
+            .map(|family| PiiClass::Custom(format!("family:{family}")))
+        {
+            if seen.insert(family_class.clone()) {
+                rules.push(RuleSpec::Class {
+                    class: family_class,
+                    action: Action::Tokenize,
+                });
+            }
+        }
     }
 
     rules.push(RuleSpec::Default {

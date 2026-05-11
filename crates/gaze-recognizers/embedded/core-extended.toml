@@ -120,6 +120,7 @@ priority = 80
 family = "payment-card-or-iban"
 variant = "iban"
 precedence = 10
+mandatory_anchor = "iban"
 
 [[recognizers]]
 id = "card.structural"

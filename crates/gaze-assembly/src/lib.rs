@@ -53,7 +53,7 @@ pub use defaults::CorePipeline;
 /// custom recognizer topology or non-bundled rulepack.
 pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
-pub(crate) use locale::merged_locale_vocab;
+pub(crate) use locale::{merged_locale_vocab, register_anchor_cue_bundles};
 
 /// Assemble a pipeline from a loaded [`gaze::Policy`], matching the CLI code path.
 ///
@@ -92,6 +92,7 @@ pub fn build_pipeline(
         context,
         &registered_dictionaries,
     )?;
+    builder = register_anchor_cue_bundles(builder, rulepacks, active_locales);
 
     let has_policy_detector = !policy.detectors.is_empty();
     let has_enabled_rulepack_recognizer = rulepacks.iter().any(|rulepack| {

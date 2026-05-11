@@ -1,5 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+mod anchor_resolver;
+mod conflict;
 mod context;
 mod detector;
 mod dictionaries;
@@ -49,8 +51,8 @@ pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,
-    LocaleData, NameShape, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack, RulepackError,
-    RulepackSource, ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
+    LocaleCueBundle, LocaleData, NameShape, NormalizerSpec, RawMatch, RecognizerSpec, Rulepack,
+    RulepackError, RulepackSource, ScoringSpec, SourceSpec, TokenSpec, ValidatorSpec,
 };
 pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
