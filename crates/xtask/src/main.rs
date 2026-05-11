@@ -11,6 +11,7 @@ mod coverage_corpus;
 mod dylint_gate;
 mod family_policy_coherence;
 mod fixture_citation;
+mod locale_cue_bundle_coherence;
 mod mcp_tier_isolation;
 mod no_tenant_knowledge;
 mod safety_net_sanity;
@@ -33,6 +34,7 @@ enum Command {
     CargoMetadataAuditIsolation,
     DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
+    LocaleCueBundleCoherence,
     CoverageCorpus(coverage_corpus::Args),
     CiFeatureMatrix,
     SafetyNetSanity,
@@ -51,6 +53,7 @@ fn main() -> Result<()> {
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
         Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
+        Command::LocaleCueBundleCoherence => locale_cue_bundle_coherence::run(),
         Command::CoverageCorpus(args) => coverage_corpus::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),

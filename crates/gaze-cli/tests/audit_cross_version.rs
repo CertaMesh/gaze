@@ -264,7 +264,9 @@ fn pre_spike_4_shape_without_ambiguity_columns_is_queryable() {
             ('cards.global', 'credit_card', 'tokenize', NULL, 'text', 1, 'validator_veto',
              1700000000001, 'session-a', 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL),
             ('iban.global', 'custom:iban', 'tokenize', NULL, 'text', 1, 'collision_policy',
-             1700000000002, 'session-a', 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL);
+             1700000000002, 'session-a', 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL),
+            ('iban.anchor', 'custom:family:payment-card-or-iban', 'tokenize', NULL, 'text', 0, 'anchored_context',
+             1700000000003, 'session-a', 'gaze.snapshot.v1.sha256-salted', 'SHA-256', NULL);
         "#,
     )
     .unwrap();
@@ -342,6 +344,30 @@ fn pre_spike_4_shape_without_ambiguity_columns_is_queryable() {
     let row: Value = serde_json::from_str(stdout.trim()).unwrap();
     assert_eq!(row["decided_by"], "collision_policy");
     assert_eq!(row["conflict_loser"], true);
+
+    let output = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+            "--source",
+            "iban.anchor",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let row: Value = serde_json::from_str(stdout.trim()).unwrap();
+    assert_eq!(row["decided_by"], "anchored_context");
+    assert_eq!(row["conflict_loser"], false);
 
     let output = Command::cargo_bin("gaze")
         .unwrap()
