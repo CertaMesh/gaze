@@ -109,10 +109,9 @@ impl core::fmt::Display for DocumentError {
                 f,
                 "gaze-document: tesseract exited with status {status}: {stderr}"
             ),
-            Self::PdfiumNotFound(hint) => write!(
-                f,
-                "gaze-document: pdfium dynamic library not found. {hint}"
-            ),
+            Self::PdfiumNotFound(hint) => {
+                write!(f, "gaze-document: pdfium dynamic library not found. {hint}")
+            }
             Self::PdfRasterFailed(detail) => {
                 write!(f, "gaze-document: pdf rasterization failed: {detail}")
             }
@@ -170,9 +169,7 @@ mod tests {
 
     #[test]
     fn tesseract_not_found_error_includes_hint() {
-        let err = DocumentError::TesseractNotFound(
-            "Install via `brew install tesseract`.".into(),
-        );
+        let err = DocumentError::TesseractNotFound("Install via `brew install tesseract`.".into());
         let msg = err.to_string();
         assert!(msg.contains("tesseract"));
         assert!(msg.contains("brew install"));

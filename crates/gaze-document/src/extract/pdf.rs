@@ -121,9 +121,7 @@ pub fn rasterize_first_page(
         )));
     }
 
-    let page = pages
-        .get(config.page_index)
-        .map_err(map_pdfium_error)?;
+    let page = pages.get(config.page_index).map_err(map_pdfium_error)?;
     let mut render_config = PdfRenderConfig::new().set_target_width(config.width_px as i32);
     if config.height_px > 0 {
         render_config = render_config.set_maximum_height(config.height_px as i32);
@@ -166,7 +164,8 @@ fn pdfium_install_hint() -> String {
          and place `pdfium.dll` on PATH or next to your executable."
             .to_string()
     } else {
-        "Download the pdfium dynamic library from https://github.com/bblanchon/pdfium-binaries.".to_string()
+        "Download the pdfium dynamic library from https://github.com/bblanchon/pdfium-binaries."
+            .to_string()
     }
 }
 

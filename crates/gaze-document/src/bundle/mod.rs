@@ -409,7 +409,10 @@ mod tests {
             &ocr,
             42,
             3,
-            vec![ClassCount::new("email", 2), ClassCount::new("custom:phone", 1)],
+            vec![
+                ClassCount::new("email", 2),
+                ClassCount::new("custom:phone", 1),
+            ],
             None,
             None,
         );

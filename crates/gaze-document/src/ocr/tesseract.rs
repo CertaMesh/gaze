@@ -75,9 +75,7 @@ impl TesseractOcr {
             .stderr(Stdio::piped())
             .output()
             .map_err(|err| match err.kind() {
-                std::io::ErrorKind::NotFound => {
-                    DocumentError::TesseractNotFound(install_hint())
-                }
+                std::io::ErrorKind::NotFound => DocumentError::TesseractNotFound(install_hint()),
                 _ => DocumentError::Io(err),
             })?;
 

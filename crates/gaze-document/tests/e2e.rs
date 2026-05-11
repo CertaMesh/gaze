@@ -83,7 +83,10 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     let manifest: Manifest =
         serde_json::from_slice(&manifest_bytes).expect("manifest deserializes");
     assert!(
-        manifest.spans.iter().any(|s| matches!(s.class, PiiClass::Email)),
+        manifest
+            .spans
+            .iter()
+            .any(|s| matches!(s.class, PiiClass::Email)),
         "manifest missing Email span"
     );
     assert!(
@@ -95,8 +98,7 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     );
 
     let report_bytes = std::fs::read(&report_path).expect("report bytes");
-    let report: BundleReport =
-        serde_json::from_slice(&report_bytes).expect("report deserializes");
+    let report: BundleReport = serde_json::from_slice(&report_bytes).expect("report deserializes");
     assert_eq!(report.bundle_version, BUNDLE_VERSION);
     assert!(report.pii_token_count >= 2);
     assert!(report.clean_char_count > 0);

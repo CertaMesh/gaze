@@ -13,10 +13,18 @@ pub(crate) enum CliError {
     PolicyConfig,
     PolicyConfigDetail(String),
     SafetyNetConfigDetail(String),
-    SafetyNetFailure { variant: &'static str },
-    AuditPurgeIso8601 { input: String },
-    UnknownToken { token: String },
-    UnsupportedSessionScope { variant: String },
+    SafetyNetFailure {
+        variant: &'static str,
+    },
+    AuditPurgeIso8601 {
+        input: String,
+    },
+    UnknownToken {
+        token: String,
+    },
+    UnsupportedSessionScope {
+        variant: String,
+    },
     InvalidSignature,
     InvalidBlobVersion,
     BlobExpired,

@@ -122,10 +122,8 @@ fn build_pdf_bytes() -> Vec<u8> {
         out.extend_from_slice(format!("{:010} 00000 n \n", off).as_bytes());
     }
     out.extend_from_slice(
-        format!(
-            "trailer\n<< /Size {count} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",
-        )
-        .as_bytes(),
+        format!("trailer\n<< /Size {count} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n",)
+            .as_bytes(),
     );
     out
 }
