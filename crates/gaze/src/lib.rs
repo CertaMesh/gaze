@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod anchor_resolver;
+mod conflict;
 mod context;
 mod detector;
 mod dictionaries;
