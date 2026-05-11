@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Collision-family metadata and `FamilyPolicyTable` for cross-class recognizer
+  rivalries. Bundled `core-extended` now declares PAN-vs-IBAN and phone-family
+  metadata, `ConflictTier::CollisionPolicy` is audit-serializable, adopter
+  custom recognizers can declare non-reserved collision families, and
+  `xtask family-policy-table-coherence` validates bundled declarations.
+
 ### Changed
 
 ### Deprecated

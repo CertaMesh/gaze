@@ -599,6 +599,7 @@ class = "email"
 | `terms_from_context` | string    | dictionary | Reads the named dictionary from `--context-json`; cannot be combined with `terms` or `terms_file`. |
 | `case_sensitive`     | boolean   | no       | Dictionary only. Defaults to `false`; non-ASCII insensitive dictionaries fail closed in v0.4.0. |
 | `token_family`       | string    | no       | Defaults to `"counter"`. |
+| `[collision]`        | table     | no       | Cross-class collision-family metadata. See below. |
 
 Dictionary recognizers are registered through the same recognizer registry as
 rulepack recognizers and are gated by the active locale chain when they come
@@ -619,6 +620,34 @@ class = "custom:order_id"
 terms_from_context = "order_ids"
 case_sensitive = true
 ```
+
+#### Custom-recognizer collision metadata
+
+Custom regex and dictionary recognizers may declare a nested collision table
+when they participate in a tenant-defined cross-class rivalry.
+
+```toml
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "tenant.order_id"
+pattern = 'ORD-[0-9]+'
+class = "custom:order_id"
+
+[policy.custom_recognizers.collision]
+family = "tenant-orders"
+variant = "order-id"
+precedence = 50
+```
+
+`family` and `variant` must be non-empty kebab-case identifiers up to 64 bytes.
+Lower `precedence` wins when two variants in the same family overlap. Missing
+`precedence` defaults to `100`.
+
+Policy custom recognizers cannot use reserved bundled family names:
+`us-9-digit-id`, `iberian-id`, `payment-card-or-iban`, `phone-or-imei`,
+`vin-or-serial`, `mac-or-hex`, `passport-or-doc-support`,
+`national-13-digit`, `italian-cf-or-serial`, `german-personalausweis`,
+`swedish-personnummer`, `finnish-hetu`.
 
 `--context-json` can also supply dictionaries without a matching policy
 recognizer. In that mode, Gaze registers one dictionary recognizer per context
