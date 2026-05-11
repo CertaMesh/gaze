@@ -173,6 +173,15 @@ pub enum ToolError {
     /// A resource referenced by the call (table, file, identity) was not found.
     #[error("not found: {0}")]
     NotFound(String),
+    /// The tool rejected work because a documented bound would be exceeded.
+    #[error("limit exceeded: {0}")]
+    LimitExceeded(String),
+    /// A required local backend (OCR engine, rasterizer, database) is unavailable.
+    #[error("backend unavailable: {0}")]
+    BackendUnavailable(String),
+    /// A local backend was available but failed while processing the request.
+    #[error("backend failure: {0}")]
+    BackendFailure(String),
     /// Adopter / backend failure unrelated to argument validation.
     #[error("tool internal error: {0}")]
     Internal(#[source] Box<dyn std::error::Error + Send + Sync>),
@@ -185,6 +194,9 @@ impl ToolError {
         match self {
             Self::InvalidArgs(_) => "invalid-args",
             Self::NotFound(_) => "not-found",
+            Self::LimitExceeded(_) => "limit-exceeded",
+            Self::BackendUnavailable(_) => "backend-unavailable",
+            Self::BackendFailure(_) => "backend-failure",
             Self::Internal(_) => "internal",
         }
     }

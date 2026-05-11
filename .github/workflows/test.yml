@@ -42,5 +42,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
+      - name: cargo test gaze-document mcp feature
+        run: cargo test -p gaze-document --features mcp --no-fail-fast
       - name: cargo test
         run: cargo test --workspace --all-features --no-fail-fast

@@ -140,6 +140,9 @@ pub fn error_to_rmcp_call_tool_result(err: ToolError) -> CallToolResult {
     let message = match err {
         ToolError::InvalidArgs(msg) => msg,
         ToolError::NotFound(msg) => msg,
+        ToolError::LimitExceeded(msg) => msg,
+        ToolError::BackendUnavailable(msg) => msg,
+        ToolError::BackendFailure(msg) => msg,
         ToolError::Internal(source) => source.to_string(),
         // `ToolError` is `#[non_exhaustive]`. Future variants fall back to
         // their `class()` string — the chokepoint contract guarantees a
