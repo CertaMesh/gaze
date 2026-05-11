@@ -10,6 +10,7 @@ description = "Reversible PII pseudonymization for documents — Tesseract OCR +
 readme = "README.md"
 keywords = ["pii", "gaze", "document", "ocr", "bundle"]
 categories = ["text-processing"]
+publish = true
 
 [package.metadata.docs.rs]
 all-features = true

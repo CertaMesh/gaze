@@ -9,8 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- New OSS crate scaffold `gaze-document` for document ingestion → clean
-  Markdown + safe bundle. Empty surface; see todo 728.
+- New OSS crate `gaze-document` for document → safe-bundle generation.
+  Ships with PNG/JPG/PDF input support via Tesseract subprocess OCR (single-page
+  PDF rasterization via pdfium). Output is a `SafeBundle` containing redacted
+  Markdown + a restorable `gaze::Manifest` + an OCR/PII report. New `gaze document
+  clean <input> --out <dir>` subcommand on `gaze-cli` (opt-in via `--features
+  document`). See todo 728.
 - Collision-family metadata and `FamilyPolicyTable` for cross-class recognizer
   rivalries. Bundled `core-extended` now declares PAN-vs-IBAN and phone-family
   metadata, `ConflictTier::CollisionPolicy` is audit-serializable, adopter

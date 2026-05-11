@@ -15,6 +15,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install Tesseract + English language pack (gaze-document)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+      - name: Install pdfium dynamic library (gaze-document PDF input)
+        run: |
+          set -eu
+          curl -sSL -o /tmp/pdfium.tgz \
+            https://github.com/bblanchon/pdfium-binaries/releases/latest/download/pdfium-linux-x64.tgz
+          mkdir -p /tmp/pdfium-extract
+          tar -xzf /tmp/pdfium.tgz -C /tmp/pdfium-extract
+          sudo install -m 0755 /tmp/pdfium-extract/lib/libpdfium.so /usr/local/lib/libpdfium.so
+          sudo ldconfig
       - name: Cache cargo registry + target
         uses: actions/cache@v4
         with:
