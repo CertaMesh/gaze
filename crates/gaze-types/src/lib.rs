@@ -59,6 +59,39 @@ pub enum PiiClass {
 /// Built-in class labels in stable display order.
 pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
+/// Family names reserved for bundled collision-policy rulepacks.
+///
+/// Adopter policy-level custom recognizers cannot claim these names because bundled
+/// families are part of the core disambiguation contract.
+pub const RESERVED_BUNDLED_FAMILIES: &[&str] = &[
+    "us-9-digit-id",
+    "iberian-id",
+    "payment-card-or-iban",
+    "phone-or-imei",
+    "vin-or-serial",
+    "mac-or-hex",
+    "passport-or-doc-support",
+    "national-13-digit",
+    "italian-cf-or-serial",
+    "german-personalausweis",
+    "swedish-personnummer",
+    "finnish-hetu",
+];
+
+/// Collision-family membership metadata for one recognizer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CollisionMembership {
+    /// Cross-class family name.
+    pub family: String,
+    /// Variant name within the family.
+    pub variant: String,
+    /// Lower values win when two variants in the same family overlap.
+    pub precedence: u32,
+    /// Optional anchor variant required by later ambiguity handling.
+    pub mandatory_anchor: Option<String>,
+}
+
 impl PiiClass {
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {
