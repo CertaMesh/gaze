@@ -14,7 +14,7 @@ locally — see the "PR-checks ritual" section below.
 
 ## Workspace shape
 
-As of v0.6.4:
+As of v0.7.0, the workspace has eight published-shape crates plus `xtask`:
 
 | Crate | Role |
 |---|---|
@@ -24,6 +24,8 @@ As of v0.6.4:
 | `crates/gaze-audit` | Passive audit sink: `SqliteLogger`, `AuditFilter`, `AuditLogRow`, `build_audit_query_sql`, `AUDIT_RESTRICTED_COLUMNS`. `rusqlite` is isolated here. New in v0.5 Phase C (PR #75). |
 | `crates/gaze-assembly` | Policy-to-pipeline assembly shared by CLI-style adopters. |
 | `crates/gaze-cli` | Standalone `gaze` binary; the only allowlisted `gaze-audit` consumer outside compatibility tests. |
+| `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. New in v0.7.0. |
+| `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. New in v0.7.0. |
 | `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D). |
 | `xtask/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
 

@@ -8,10 +8,12 @@
 
 ---
 
-This document specifies the runtime contract `gaze-mcp-core` v0.1 ships and
+This document specifies the runtime contract `gaze-mcp-core` v0.7 ships and
 the threat model adopters can rely on. It is the source of truth for the
-type-level chokepoint guarantees. For the architectural rationale and
-per-axis trade-offs see scratchpad 1453 (verdict) and 1471 (scope decision).
+type-level chokepoint guarantees. The architectural rationale, per-axis
+trade-offs, and scope split between `gaze-mcp` (model↔source) and `gaze-proxy`
+(user↔model) are summarized in the boundary statement above and in the v0.7.0
+CHANGELOG entry.
 
 ## The chokepoint
 
@@ -132,8 +134,9 @@ is async + Send + Sync and has three methods:
 string, sha256 hex, byte length. The dispatcher never writes response
 bytes to a side store. Adopters who want byte-level persistence wrap
 their `ManifestStore` impl with their own snapshot store and persist
-before calling `finish_call`. (Lens-eye round-1 TOP_RISK in scratchpad
-1453: inline blobs would defeat encrypted-volume threat models.)
+before calling `finish_call`. Inline blobs were rejected during design
+review because they would defeat encrypted-volume threat models that
+keep response payloads on adopter-controlled storage.
 
 External session id binding (lens's
 `lens_session_id`/`gaze_audit_session_id` pair, gaze-cli's audit ulid)
@@ -188,11 +191,5 @@ gaze-mcp because:
   preprocessor, vendor-agnostic API reverse proxy, or workflow
   discipline) — `gaze-proxy` v0.8.
 
-See scratchpad 1471 for the full scope-decision rationale.
-
-## Provenance
-
-- **Verdict:** scratchpad 1453 (`brainstorm-gaze-mcp-crate-2026-05-08`).
-- **Scope decision:** scratchpad 1471 (`v0.7 + v0.8 scope decision`).
-- **Implementation plan:** scratchpad 1468.
-- **Coordination signal to rmcp worker:** scratchpad 1475.
+The v0.7.0 CHANGELOG entry captures the model↔source vs user↔model
+split and the v0.8 follow-up.

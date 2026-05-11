@@ -19,7 +19,7 @@
 
 ```toml
 [dependencies]
-gaze-mcp-core = "0.1"
+gaze-mcp-core = "0.7"
 gaze-mcp-rmcp = "0.7"
 ```
 

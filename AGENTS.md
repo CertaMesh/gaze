@@ -24,9 +24,9 @@ Every design, implementation, and review decision MUST be evaluated against thes
 
 All design, implementation, and review decisions in this repo are evaluated against the five axes above. If a decision weakens any axis, call it out in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 
-## Workspace shape (v0.6)
+## Workspace shape (v0.7)
 
-As of v0.6.4, the workspace has six published-shape crates plus `xtask`:
+As of v0.7.0, the workspace has eight published-shape crates plus `xtask`:
 
 - `gaze` — core (pipeline, session, policy, registry, locale, rulepack). Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph.
 - `gaze-types` — shared value contracts including the canonical `RedactionLogger` trait (serde-only, no ML/sql deps). Introduced in v0.5 Phase B.
@@ -34,6 +34,8 @@ As of v0.6.4, the workspace has six published-shape crates plus `xtask`:
 - `gaze-audit` — passive SQLite sink + audit-query API. `rusqlite` lives only here. Introduced in v0.5 Phase C.
 - `gaze-assembly` — policy-to-pipeline builder for CLI-style adopters.
 - `gaze-cli` — standalone `gaze` binary; only allowlisted `gaze-audit` consumer outside compatibility tests.
+- `gaze-mcp-core` — transport-free MCP-shaped chokepoint runtime (`Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`). Introduced in v0.7.0.
+- `gaze-mcp-rmcp` — rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. Introduced in v0.7.0.
 - `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 
 Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](./CONTRIBUTING.md#workspace-shape).
