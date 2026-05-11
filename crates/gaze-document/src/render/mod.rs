@@ -32,14 +32,16 @@ pub struct PendingRenderer {
 
 impl PendingRenderer {
     /// Build the fail-loud renderer.
-    pub fn new() -> Self {
-        Self { _private: () }
-    }
-}
-
-impl Default for PendingRenderer {
-    fn default() -> Self {
-        Self::new()
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`]. The placeholder
+    /// exists so adopters wiring a trait object without a concrete
+    /// renderer fail at construction time rather than producing silent
+    /// zero-output (Axis 1 fail-closed).
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented(
+            "PendingRenderer::new (wire a concrete Renderer impl)",
+        ))
     }
 }
 

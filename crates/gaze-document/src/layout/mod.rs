@@ -17,9 +17,17 @@ pub struct ReadingOrder {
 }
 
 impl ReadingOrder {
-    /// Build an empty reading-order handle (no inference performed).
-    pub fn new() -> Self {
-        Self { _private: () }
+    /// Build a reading-order handle.
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`] until the
+    /// multi-page PR lands. Single-page bundles never call this; the
+    /// placeholder fails loudly so adopters cannot stumble into silent
+    /// empty-order output (Axis 1 fail-closed).
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented(
+            "ReadingOrder::new (multi-page deferred to follow-up PR)",
+        ))
     }
 
     /// Infer reading order from raw page payloads.
@@ -31,11 +39,5 @@ impl ReadingOrder {
         Err(DocumentError::NotImplemented(
             "ReadingOrder::infer (multi-page deferred to follow-up PR)",
         ))
-    }
-}
-
-impl Default for ReadingOrder {
-    fn default() -> Self {
-        Self::new()
     }
 }

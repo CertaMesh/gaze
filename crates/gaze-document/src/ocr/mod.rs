@@ -80,14 +80,16 @@ pub struct PendingOcrAdapter {
 
 impl PendingOcrAdapter {
     /// Build the fail-loud adapter.
-    pub fn new() -> Self {
-        Self { _private: () }
-    }
-}
-
-impl Default for PendingOcrAdapter {
-    fn default() -> Self {
-        Self::new()
+    ///
+    /// # Errors
+    /// Always returns [`DocumentError::NotImplemented`]. The placeholder
+    /// exists so adopters wiring a trait object without a concrete backend
+    /// fail at construction time rather than receiving silent zero-output
+    /// (Axis 1 fail-closed).
+    pub fn new() -> Result<Self, DocumentError> {
+        Err(DocumentError::NotImplemented(
+            "PendingOcrAdapter::new (wire a concrete OCR backend)",
+        ))
     }
 }
 
