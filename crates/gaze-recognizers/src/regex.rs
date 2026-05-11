@@ -142,9 +142,9 @@ impl Recognizer for RegexDetector {
                 let matched = &input[span.clone()];
                 (!self.is_excluded(matched)).then_some((span, matched))
             })
-            .filter_map(|(span, matched)| {
+            .map(|(span, matched)| {
                 let canonical_form = self.canonical_form(matched);
-                Some(Candidate::new(
+                Candidate::new(
                     span,
                     self.class.clone(),
                     self.source.clone(),
@@ -155,7 +155,7 @@ impl Recognizer for RegexDetector {
                     self.source.clone(),
                     ConflictTier::None,
                     Vec::new(),
-                ))
+                )
             })
             .collect()
     }
