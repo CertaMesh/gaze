@@ -1433,6 +1433,8 @@ pub enum ConflictTier {
     ValidatorVeto,
     /// Cross-class collision-family policy decided the conflict.
     CollisionPolicy,
+    /// Mandatory-anchor context was missing, so family-level fallback was emitted.
+    AnchoredContext,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
