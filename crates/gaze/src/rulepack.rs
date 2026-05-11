@@ -160,6 +160,16 @@ pub struct LocaleCueBundle {
     pub window_chars: Option<u16>,
 }
 
+impl LocaleCueBundle {
+    /// Builds a locale cue bundle used by mandatory-anchor resolution.
+    pub fn new(names: Vec<String>, window_chars: Option<u16>) -> Self {
+        Self {
+            names,
+            window_chars,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RulepackSource {
@@ -552,10 +562,7 @@ impl From<RawLocaleData> for LocaleData {
                 .map(|(name, bundle)| {
                     (
                         name,
-                        LocaleCueBundle {
-                            names: bundle.names,
-                            window_chars: bundle.window_chars,
-                        },
+                        LocaleCueBundle::new(bundle.names, bundle.window_chars),
                     )
                 })
                 .collect(),
@@ -1240,6 +1247,14 @@ window_chars = 48
         );
         assert_eq!(locale.cues["iban"].names, vec!["IBAN:", "Account"]);
         assert_eq!(locale.cues["iban"].window_chars, Some(48));
+    }
+
+    #[test]
+    fn locale_cue_bundle_constructor_builds_public_type() {
+        let bundle = LocaleCueBundle::new(vec!["IBAN".to_string()], Some(64));
+
+        assert_eq!(bundle.names, vec!["IBAN"]);
+        assert_eq!(bundle.window_chars, Some(64));
     }
 
     #[cfg(feature = "bundled-recognizers")]
