@@ -289,13 +289,13 @@ fn env_path(name: &str) -> Option<PathBuf> {
 fn claude_desktop_config_path() -> Option<PathBuf> {
     #[cfg(target_os = "macos")]
     {
-        return BaseDirs::new().map(|dirs| {
+        BaseDirs::new().map(|dirs| {
             dirs.home_dir()
                 .join("Library")
                 .join("Application Support")
                 .join("Claude")
                 .join("claude_desktop_config.json")
-        });
+        })
     }
     #[cfg(target_os = "windows")]
     {

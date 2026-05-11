@@ -13,11 +13,12 @@ use super::{default_agents_md, Client, DoctorArgs};
 const BEGIN_MARKER: &str = "<!-- BEGIN GAZE MCP -->";
 
 pub(crate) fn run(args: DoctorArgs) -> Result<(), CliError> {
-    let mut checks = Vec::new();
-    checks.push(check_binary_on_path());
-    checks.push(check_tesseract());
-    checks.push(check_pdfium());
-    checks.push(check_manifest_dir(&default_manifest_dir().join("calls")));
+    let mut checks = vec![
+        check_binary_on_path(),
+        check_tesseract(),
+        check_pdfium(),
+        check_manifest_dir(&default_manifest_dir().join("calls")),
+    ];
     for target in targets(Client::All)? {
         checks.push(check_client(target));
     }
