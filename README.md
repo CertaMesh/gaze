@@ -89,7 +89,7 @@ Three deterministic detection passes plus an optional observer pass. The safety 
 
 ## Workspace
 
-Six published crates. Pick the smallest surface that does the job.
+Eight published crates. Pick the smallest surface that does the job.
 
 | Crate | Use when |
 |-------|----------|
@@ -99,6 +99,8 @@ Six published crates. Pick the smallest surface that does the job.
 | [`gaze-audit`](crates/gaze-audit/) | You want SQLite-backed metadata audit logging. Adopt directly; `gaze` core has no `rusqlite` dep in any feature graph. |
 | [`gaze-cli`](crates/gaze-cli/) | You want a process boundary for non-Rust adapters (Laravel, Python, etc.). |
 | [`gaze-types`](crates/gaze-types/) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
+| [`gaze-mcp-core`](crates/gaze-mcp-core/) | You're building an MCP-protocol tool host and want every call to pass through Gaze's redaction chokepoint. |
+| [`gaze-mcp-rmcp`](crates/gaze-mcp-rmcp/) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, optional streamable HTTP). |
 
 Crate boundaries and the audit-isolation gate: [`docs/architecture/crates.md`](docs/architecture/crates.md).
 

@@ -14,6 +14,8 @@ The root [`Cargo.toml`](../../Cargo.toml) is the workspace source of truth.
 | [`gaze-assembly`](../../crates/gaze-assembly) | Policy-to-pipeline builder. Converts loaded policy, context, rulepacks, active locales, and NER threshold into a core `Pipeline`. | `build_pipeline(policy, context, rulepacks, active_locales, ner_threshold)`, `BuildError`. | `gaze`, `gaze-recognizers`. | `gaze-cli`. | Use when you want the same policy/rulepack assembly path as the CLI without copying CLI code. This crate exists so `gaze` does not depend on built-in recognizers. |
 | [`gaze-recognizers`](../../crates/gaze-recognizers) | Built-in recognizer backends, embedded rulepacks, and the v0.6 safety-net adapter. | `RegexDetector`, `DictionaryRecognizer`, `NerRecognizer`, `NerDetector`, `NerOptions`, `NormalizerKind`, `ValidatorKind`, `embedded(name)`; v0.6 adds `OpenAiFilterSafetyNet`, `OpenAiFilterBackend`, `SubprocessOpenAiFilterConfig`, and `class_map` (gated by `safety-net-openai`). | `gaze-types` plus backend dependencies such as `regex`, `aho-corasick`, `ort`, and `tokenizers`; `gaze` only as a dev-dependency for tests. | `gaze-assembly`, `gaze-cli`, and external consumers such as [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens); `gaze` can include it via the default `bundled-recognizers` feature. | Use when an adopter wants the shipped regex, dictionary, or ONNX NER recognizers, or the v0.6 OpenAI Privacy Filter safety net, instead of implementing `gaze::Recognizer` or `gaze_types::SafetyNet` directly. |
 | [`gaze-cli`](../../crates/gaze-cli) | Published `gaze` binary for pipe-mode integrations. | Binary `gaze`; subcommands `clean`, `restore`, `audit query`, `audit export`, `audit purge`, `audit safety-net query`; flags such as `--policy`, `--locale`, `--context-json`, `--audit-db`, `--restore-mode`, `--safety-net`, `--openai-filter-command`, `--openai-filter-checkpoint`, `--safety-net-mode`. | `gaze`, `gaze-assembly`, `gaze-recognizers`, `gaze-audit`. | External host adapters and shell integrations. | Use from language adapters or scripts that need a stable process boundary rather than linking Rust. |
+| [`gaze-mcp-core`](../../crates/gaze-mcp-core) | Transport-free MCP-shaped chokepoint runtime. New in v0.7.0. | `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`, `DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. | `gaze`, `gaze-types`, `gaze-recognizers`, `gaze-assembly`, `gaze-audit`. | `gaze-mcp-rmcp`, adopters writing custom MCP transports. | Use to build an MCP-protocol tool host where every tool call passes through the Gaze pseudonymization chokepoint, independent of transport. See [`mcp-runtime.md`](mcp-runtime.md). |
+| [`gaze-mcp-rmcp`](../../crates/gaze-mcp-rmcp) | rmcp transport sink for `gaze-mcp-core`. New in v0.7.0. | `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. | `gaze-mcp-core`, `rmcp`. | Adopters wiring `gaze-mcp-core` into the rmcp protocol crate. | Use when the host should speak the MCP protocol over rmcp transports without re-implementing message framing. |
 | [`xtask`](../../crates/xtask) | Internal gate runner. Not published. | Binary `xtask`; gates `symmetric-potemkin`, `class-map-override-safety` (active since v0.4.4 and extended for the safety-net OPF label allowlist in v0.6), `recognizer-composition-validator`, `no-tenant-knowledge` (added v0.4.3), `safety-net-sanity` (v0.6). | `anyhow`, `clap`; shells out to `cargo test` or scans production source. | CI and maintainers. | Use when adding or verifying regression gates that must run real behavioral tests. |
 
 ## Dependency direction
@@ -29,6 +31,14 @@ gaze  gaze-recognizers
              ^
              |
           gaze-cli
+
+gaze + gaze-assembly + gaze-recognizers + gaze-audit + gaze-types
+                       ^
+                       |
+                 gaze-mcp-core
+                       ^
+                       |
+                 gaze-mcp-rmcp -> rmcp
 
 xtask -> cargo test subprocesses
 ```
@@ -50,6 +60,8 @@ Published crates:
 - `gaze-assembly`
 - `gaze-recognizers`
 - `gaze-cli`
+- `gaze-mcp-core` (v0.7.0+)
+- `gaze-mcp-rmcp` (v0.7.0+)
 
 Internal crates:
 
@@ -88,12 +100,22 @@ context-file loading, audit database path handling, or restore-mode handling.
 Put code in `xtask` when it is a repository gate. Gates must prove behavior by
 running named tests; see [xtask](xtask.md).
 
+Put code in `gaze-mcp-core` when it is transport-free runtime behavior for the
+MCP-protocol chokepoint: tool registration, envelope dispatch, manifest store,
+auth hooks, session-id policy. Anything that names a specific transport (stdio
+framing, HTTP streaming) does not belong here. See [`mcp-runtime.md`](mcp-runtime.md).
+
+Put code in `gaze-mcp-rmcp` when it bridges `gaze-mcp-core` to the rmcp
+protocol crate: transport selection, principal resolution, server boot. Adopters
+that need a non-rmcp transport implement their own sink against
+`gaze-mcp-core::Frontend` and do not depend on this crate.
+
 The MCP debug consumer formerly housed in `debug-proxy` now lives in
 [EmpireTwo/gaze-lens](https://github.com/EmpireTwo/gaze-lens). Keep consumer-specific
 database/log adapter work there unless the change belongs in Gaze's reusable
 runtime, recognizers, assembly layer, CLI, or gates.
 
-## v0.6 safety-net feature gates
+## Safety-net feature gates (v0.6+)
 
 The OpenAI Privacy Filter safety net is gated off by default so existing
 clean/restore consumers see no dependency-graph change.

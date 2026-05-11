@@ -15,14 +15,10 @@ plug-in points, the `ManifestStore` contract, and the `AuthHook` +
 `SessionIdPolicy` policy surfaces. Transports (rmcp stdio/http, custom
 JSON-RPC, …) live in sink crates that depend on this one.
 
-The architectural rationale + per-axis tradeoffs are locked in scratchpad
-1453 (`brainstorm-gaze-mcp-crate-2026-05-08`); the user-input vs
-data-source axis correction is in scratchpad 1471 (`v0.7 + v0.8 scope
-decision`); the implementation plan is scratchpad 1468.
-
-> **DO NOT MERGE.** This crate is held until the v0.7 release window. The
-> rmcp transport sink ships in the companion PR
-> `feature/gaze-mcp-rmcp`.
+The architectural rationale, per-axis tradeoffs, and the data-source vs
+user-input scope split are summarized in the boundary statement above and
+captured in the v0.7.0 CHANGELOG entry. The transport-free runtime ships
+alongside the `gaze-mcp-rmcp` sink as of v0.7.0.
 
 ## What gets enforced
 
@@ -202,8 +198,8 @@ exposing restore.
 
 ## Open items
 
-- `gaze-mcp-rmcp` ships in a companion PR (`feature/gaze-mcp-rmcp`).
-  Both are held for v0.7.
+- `gaze-mcp-rmcp` ships alongside this crate as the reference rmcp
+  transport sink.
 - `gaze-proxy` (the user-input axis sibling, multi-vendor LLM API
   reverse proxy) is planned for v0.8 — see the `## Scope` boundary
   statement at the top of this README.
