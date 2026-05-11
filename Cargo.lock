@@ -961,6 +961,7 @@ dependencies = [
  "gaze-audit",
  "gaze-pii",
  "gaze-recognizers",
+ "gaze-types",
  "regex",
  "rusqlite",
  "serde",
