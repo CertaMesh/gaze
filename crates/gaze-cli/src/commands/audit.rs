@@ -58,7 +58,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     for row in rows {
         writeln!(
             stdout,
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.class,
             row.action,
@@ -74,7 +74,11 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.snapshot_alg,
             row.snapshot_key_version
                 .map(|version| version.to_string())
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            row.validator_fail_reason.unwrap_or_default(),
+            row.ambiguity_record.unwrap_or_default(),
+            row.collision_family.unwrap_or_default(),
+            row.collision_variant.unwrap_or_default()
         )
         .map_err(|_| CliError::Io)?;
     }
@@ -164,6 +168,10 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         snapshot_scheme: None,
         snapshot_alg: None,
         snapshot_key_version: None,
+        has_ambiguity: None,
+        ambiguity_reason: None,
+        collision_family: None,
+        collision_variant: None,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -186,6 +194,10 @@ fn read_safety_net_rows(
         snapshot_scheme: None,
         snapshot_alg: None,
         snapshot_key_version: None,
+        has_ambiguity: None,
+        ambiguity_reason: None,
+        collision_family: None,
+        collision_variant: None,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -247,6 +259,10 @@ struct JsonlRow {
     snapshot_scheme: String,
     snapshot_alg: String,
     snapshot_key_version: Option<i64>,
+    validator_fail_reason: Option<String>,
+    ambiguity_record: Option<String>,
+    collision_family: Option<String>,
+    collision_variant: Option<String>,
 }
 
 impl From<AuditLogRow> for JsonlRow {
@@ -264,6 +280,10 @@ impl From<AuditLogRow> for JsonlRow {
             snapshot_scheme: row.snapshot_scheme,
             snapshot_alg: row.snapshot_alg,
             snapshot_key_version: row.snapshot_key_version,
+            validator_fail_reason: row.validator_fail_reason,
+            ambiguity_record: row.ambiguity_record,
+            collision_family: row.collision_family,
+            collision_variant: row.collision_variant,
         }
     }
 }

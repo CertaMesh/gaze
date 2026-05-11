@@ -1178,7 +1178,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\n"
+        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
     ));
     assert!(
         stdout
@@ -1634,8 +1634,19 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) =
-        build_audit_query_sql(&AuditFilter::default(), true, true, true, true, true, true);
+    let (sql, values) = build_audit_query_sql(
+        &AuditFilter::default(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+    );
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"
@@ -1689,8 +1700,19 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
     // `source` is intentionally present so audit reads can explain the
     // structural family without a schema change.
     assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
-    let (sql, values) =
-        build_audit_query_sql(&AuditFilter::default(), true, true, true, true, true, true);
+    let (sql, values) = build_audit_query_sql(
+        &AuditFilter::default(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+    );
     let conn = Connection::open(&audit_path).unwrap();
     let mut stmt = conn.prepare(&sql).unwrap();
     let rows = stmt

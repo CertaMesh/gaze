@@ -153,6 +153,10 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             snapshot_scheme: None,
             snapshot_alg: None,
             snapshot_key_version: None,
+            has_ambiguity: None,
+            ambiguity_reason: None,
+            collision_family: None,
+            collision_variant: None,
         },
     )
     .expect("filtered query");
@@ -269,6 +273,10 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
             snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
             snapshot_key_version: None,
+            validator_fail_reason: None,
+            ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         },
         AuditLogRow {
             source: "dictionary".to_string(),
@@ -283,6 +291,10 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             snapshot_scheme: DEFAULT_SNAPSHOT_SCHEME.to_string(),
             snapshot_alg: DEFAULT_SNAPSHOT_ALG.to_string(),
             snapshot_key_version: None,
+            validator_fail_reason: None,
+            ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         },
     ]
 }
