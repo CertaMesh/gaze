@@ -30,15 +30,15 @@ use std::fs;
 #[cfg(feature = "ocr-tesseract")]
 use std::path::Path;
 
-#[cfg(feature = "ocr-tesseract")]
+#[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, LocaleTag, Pipeline, RawDocument, Scope, Session,
 };
-#[cfg(feature = "ocr-tesseract")]
+#[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze_recognizers::{
     AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
 };
-#[cfg(feature = "ocr-tesseract")]
+#[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze_types::{EmittedTokenSpan, PiiClass};
 
 #[cfg(feature = "ocr-tesseract")]
@@ -273,7 +273,7 @@ pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> 
 }
 
 #[cfg(feature = "ocr-tesseract")]
-fn run_ocr(
+pub(crate) fn run_ocr(
     input: &Path,
     kind: InputKind,
 ) -> Result<(OcrResult, Option<i32>, Option<i32>), DocumentError> {
@@ -304,7 +304,8 @@ fn run_ocr(
 }
 
 #[cfg(feature = "ocr-tesseract")]
-fn build_document_pipeline() -> Result<Pipeline, DocumentError> {
+#[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
+pub(crate) fn build_document_pipeline() -> Result<Pipeline, DocumentError> {
     let email = RegexDetector::emails().map_err(|err| pipeline_err("email-regex", err))?;
     // Conservative phone pattern: optional `+CC`, area, exchange, line, with
     // common separators. Synthetic fixture uses `+1-555-0142`-style numbers.
@@ -378,7 +379,7 @@ fn write_bundle(
 }
 
 #[cfg(feature = "ocr-tesseract")]
-fn format_clean_markdown(text: &str, kind: InputKind) -> String {
+pub(crate) fn format_clean_markdown(text: &str, kind: InputKind) -> String {
     let mut out = String::new();
     out.push_str("# gaze-document safe bundle\n\n");
     out.push_str(&format!("Source kind: `{}`\n\n", kind_label(kind)));
@@ -391,7 +392,7 @@ fn format_clean_markdown(text: &str, kind: InputKind) -> String {
 }
 
 #[cfg(feature = "ocr-tesseract")]
-fn kind_label(kind: InputKind) -> &'static str {
+pub(crate) fn kind_label(kind: InputKind) -> &'static str {
     match kind {
         InputKind::Png => "png",
         InputKind::Jpeg => "jpeg",
