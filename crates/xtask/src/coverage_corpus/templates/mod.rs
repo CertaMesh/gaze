@@ -6,7 +6,25 @@ pub struct Template {
     pub locale_chain: Vec<String>,
     pub body: String,
     pub expected_classes: Vec<String>,
+    #[serde(default)]
+    pub length_tier: TemplateLengthTier,
     pub notes: String,
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum TemplateLengthTier {
+    #[default]
+    Snippet,
+    Page,
+    MultiPage,
+}
+
+impl TemplateLengthTier {
+    pub fn new() -> Self {
+        Self::Snippet
+    }
 }
 
 const TEMPLATE_JSON: &[&str] = &[
