@@ -1067,16 +1067,22 @@ name = "gaze-document"
 version = "0.0.1"
 dependencies = [
  "ab_glyph",
+ "async-trait",
+ "gaze-mcp-core",
+ "gaze-mcp-rmcp",
  "gaze-pii",
  "gaze-recognizers",
  "gaze-types",
  "image",
  "imageproc",
  "pdfium-render",
+ "regex",
+ "rmcp",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
