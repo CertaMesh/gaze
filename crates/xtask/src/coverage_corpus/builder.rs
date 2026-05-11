@@ -207,6 +207,7 @@ fn validate_template(template: &Template) -> Result<()> {
             template.id
         );
     }
+    let _ = template.length_tier;
     let _ = &template.notes;
     Ok(())
 }

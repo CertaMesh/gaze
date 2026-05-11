@@ -12,10 +12,9 @@ pub struct Template {
 }
 
 #[non_exhaustive]
-#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TemplateLengthTier {
-    #[default]
     Snippet,
     Page,
     MultiPage,
@@ -24,6 +23,12 @@ pub enum TemplateLengthTier {
 impl TemplateLengthTier {
     pub fn new() -> Self {
         Self::Snippet
+    }
+}
+
+impl Default for TemplateLengthTier {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -88,6 +93,12 @@ const TEMPLATE_JSON: &[&str] = &[
     include_str!("ocr-output/ocr-output-008.json"),
     include_str!("ocr-output/ocr-output-009.json"),
     include_str!("ocr-output/ocr-output-010.json"),
+    include_str!("conversational/conversational-001.json"),
+    include_str!("conversational/conversational-002.json"),
+    include_str!("conversational/conversational-003.json"),
+    include_str!("conversational/conversational-004.json"),
+    include_str!("conversational/conversational-005.json"),
+    include_str!("conversational/conversational-006.json"),
 ];
 
 pub fn phase_1_templates() -> serde_json::Result<Vec<Template>> {

@@ -1,0 +1,19 @@
+{
+  "id": "conversational-001",
+  "context": "conversational",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "page",
+  "body": "Hi support team,\n\nThanks for staying with this thread. I am collecting the account facts in one place because the last two replies split the billing question from the delivery question. The best callback address on the synthetic account is {{Email}}, and the customer profile shows {{Name}} as the requester. The billing note says the reserve transfer should use {{custom:iban}} once the review clears. Please ignore the old ticket number 123-45-6789 in the pasted note below; it is a training reference, not a person identifier.\n\nEarlier message summary: customer asked whether an address update changed card checks, then added a mobile number in a second reply. Current safe synthetic phone is {{PhoneNumber}}. The order comment mentions postal routing {{PostalCode}}, but the user also typed 90210 in a joke about movies. Treat the generated code as the labeled one. There is also an internal reminder that the audit packet was opened from {{IpAddress}} during the staging run.\n\nBest,\nSynthetic agent",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "custom:iban",
+    "PhoneNumber",
+    "PostalCode",
+    "IpAddress"
+  ],
+  "notes": "Page-tier EN conversational support thread with greetings, filler, signoff, and distractor numbers."
+}
