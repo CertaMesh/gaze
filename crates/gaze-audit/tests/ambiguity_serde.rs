@@ -1,5 +1,5 @@
 use gaze_types::{
-    AmbiguityReason, AmbiguityRecord, LosingCandidate, PiiClass, ValidatorFailReason,
+    AmbiguityReason, AmbiguityRecord, LosingCandidate, PiiClass, PiiClassAudit, ValidatorFailReason,
 };
 
 #[test]
@@ -50,6 +50,18 @@ fn losing_candidate_keeps_canonical_class_and_recognizer_id() {
 
     assert_eq!(value["class"], "custom:postal_de");
     assert_eq!(value["recognizer_id"], "postal-de");
+}
+
+#[test]
+fn pii_class_audit_wrapper_uses_canonical_json_without_changing_bare_pii_class() {
+    assert_eq!(
+        serde_json::to_string(&PiiClassAudit::new(PiiClass::Name)).expect("serialize audit class"),
+        "\"name\""
+    );
+    assert_eq!(
+        serde_json::to_string(&PiiClass::Name).expect("serialize bare class"),
+        "\"Name\""
+    );
 }
 
 #[test]
