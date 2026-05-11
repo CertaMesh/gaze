@@ -69,8 +69,12 @@ fn validator_fail_reason_round_trips_all_variants() {
     let reasons = [
         ValidatorFailReason::LuhnFailed,
         ValidatorFailReason::IbanMod97Failed,
-        ValidatorFailReason::EmailRfcFailed,
-        ValidatorFailReason::E164PhoneFailed,
+        ValidatorFailReason::EmailRfcRejected,
+        ValidatorFailReason::PhoneE164Rejected,
+        ValidatorFailReason::PhoneNationalRegionMismatch,
+        ValidatorFailReason::Ipv4ParseFailed,
+        ValidatorFailReason::Ipv6ParseFailed,
+        ValidatorFailReason::EthEip55ChecksumFailed,
     ];
 
     for reason in reasons {

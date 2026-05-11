@@ -288,9 +288,32 @@ pub enum ValidatorFailReason {
     /// IBAN MOD-97 validation failed.
     IbanMod97Failed,
     /// Email RFC-style validation failed.
-    EmailRfcFailed,
+    #[serde(alias = "email_rfc_failed")]
+    EmailRfcRejected,
     /// E.164 phone validation failed.
-    E164PhoneFailed,
+    #[serde(alias = "e164_phone_failed")]
+    PhoneE164Rejected,
+    /// National phone parser accepted the number but region validation failed.
+    PhoneNationalRegionMismatch,
+    /// IPv4 parser rejected the candidate.
+    Ipv4ParseFailed,
+    /// IPv6 parser rejected the candidate.
+    Ipv6ParseFailed,
+    /// EIP-55 Ethereum checksum validation failed.
+    EthEip55ChecksumFailed,
+}
+
+/// Typed validator outcome used by the pre-resolver validator-veto phase.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+#[serde(rename_all = "snake_case")]
+pub enum ValidatorOutcome {
+    /// Candidate passed validation; canonical form may be supplied by the validator.
+    Pass { canonical_form: Option<String> },
+    /// Candidate failed validation with a closed, auditable reason.
+    Fail { reason: ValidatorFailReason },
+    /// Recognizer has no validator for this candidate.
+    NotApplicable,
 }
 
 /// A detected span and its class/source metadata.

@@ -43,7 +43,7 @@ fn spike4_migration_adds_four_columns_and_is_idempotent() {
         200,
         Some("session-b".to_string()),
     )
-    .with_validator_fail_reason(ValidatorFailReason::EmailRfcFailed)
+    .with_validator_fail_reason(ValidatorFailReason::EmailRfcRejected)
     .with_ambiguity_record(record.clone());
     logger.log(&entry).expect("log new row");
 
@@ -51,7 +51,7 @@ fn spike4_migration_adds_four_columns_and_is_idempotent() {
     assert_eq!(entries.len(), 2);
     assert_eq!(
         entries[1].validator_fail_reason,
-        Some(ValidatorFailReason::EmailRfcFailed)
+        Some(ValidatorFailReason::EmailRfcRejected)
     );
     assert_eq!(entries[1].ambiguity_record, Some(record));
 }
