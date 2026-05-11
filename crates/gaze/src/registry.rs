@@ -2,9 +2,10 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
+use crate::anchor_resolver::AnchorResolver;
 use crate::resolver::resolve_candidates_with_policy;
 pub use gaze_types::{Candidate, DetectContext, Recognizer};
-use gaze_types::{CollisionMembership, LocaleChain, PiiClass};
+use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -29,6 +30,7 @@ pub struct RecognizerRegistry {
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     family_policy: FamilyPolicyTable,
+    anchor_resolver: AnchorResolver,
 }
 
 impl std::fmt::Debug for RecognizerRegistry {
@@ -61,7 +63,7 @@ impl FamilyPolicyTable {
         inner: FamilyPolicyTableInner::Empty,
     };
 
-    fn from_memberships(by_recognizer: HashMap<String, CollisionMembership>) -> Self {
+    pub(crate) fn from_memberships(by_recognizer: HashMap<String, CollisionMembership>) -> Self {
         if by_recognizer.is_empty() {
             return Self::EMPTY;
         }
@@ -375,6 +377,10 @@ impl RecognizerRegistry {
     pub fn family_policy(&self) -> &FamilyPolicyTable {
         &self.family_policy
     }
+
+    pub(crate) fn anchor_resolver(&self) -> &AnchorResolver {
+        &self.anchor_resolver
+    }
 }
 
 fn min_score(_class: &PiiClass) -> f32 {
@@ -387,6 +393,7 @@ pub struct RecognizerRegistryBuilder {
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     collision_memberships: HashMap<String, CollisionMembership>,
+    anchor_resolver: AnchorResolver,
 }
 
 impl RecognizerRegistryBuilder {
@@ -410,6 +417,18 @@ impl RecognizerRegistryBuilder {
         self
     }
 
+    pub fn register_anchor_cue_bundle(
+        mut self,
+        locale: LocaleTag,
+        anchor_key: impl Into<String>,
+        names: Vec<String>,
+        window_chars: Option<u16>,
+    ) -> Self {
+        self.anchor_resolver
+            .register(locale, anchor_key, names, window_chars);
+        self
+    }
+
     pub fn build(self) -> RecognizerRegistry {
         let recognizers_by_id = self
             .entries
@@ -422,6 +441,7 @@ impl RecognizerRegistryBuilder {
             validators: self.validators,
             canonicalizers: self.canonicalizers,
             family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
+            anchor_resolver: self.anchor_resolver,
         }
     }
 }

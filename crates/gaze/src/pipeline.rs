@@ -559,6 +559,7 @@ struct CleanText {
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
     collision_memberships: Vec<(String, CollisionMembership)>,
+    anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -589,6 +590,18 @@ impl PipelineBuilder {
     ) -> Self {
         self.collision_memberships
             .push((recognizer_id.into(), membership));
+        self
+    }
+
+    pub fn register_anchor_cue_bundle(
+        mut self,
+        locale: crate::LocaleTag,
+        anchor_key: impl Into<String>,
+        names: Vec<String>,
+        window_chars: Option<u16>,
+    ) -> Self {
+        self.anchor_cue_bundles
+            .push((locale, anchor_key.into(), names, window_chars));
         self
     }
 
@@ -623,6 +636,9 @@ impl PipelineBuilder {
         }
         for (recognizer_id, membership) in self.collision_memberships {
             registry = registry.register_collision(recognizer_id, membership);
+        }
+        for (locale, anchor_key, names, window_chars) in self.anchor_cue_bundles {
+            registry = registry.register_anchor_cue_bundle(locale, anchor_key, names, window_chars);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
