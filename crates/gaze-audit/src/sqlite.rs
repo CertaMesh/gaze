@@ -105,7 +105,7 @@ impl LeakSuspectLogEntry {
         Self {
             safety_net_id: suspect.safety_net_id.clone(),
             raw_label: suspect.raw_label.clone(),
-            mapped_class: pii_class_to_db(&suspect.class),
+            mapped_class: suspect.class.to_canonical_str(),
             leak_kind: leak_kind_to_db(&suspect.kind).to_string(),
             span_len: suspect.span.end.saturating_sub(suspect.span.start) as i64,
             document_kind: document_kind_to_db(&document_kind).to_string(),
@@ -113,7 +113,7 @@ impl LeakSuspectLogEntry {
             score: suspect.score.map(f64::from),
             created_at,
             session_id,
-            pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(pii_class_to_db),
+            pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(PiiClass::to_canonical_str),
             safety_net_replay_hash,
             backend_id: None,
             backend_version: None,
@@ -247,7 +247,7 @@ impl SqliteLogger {
             "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 entry.source,
-                pii_class_to_db(&entry.class),
+                entry.class.to_canonical_str(),
                 action_to_db(entry.action),
                 entry.field_name,
                 document_kind_to_db(&entry.document_kind),
@@ -539,33 +539,16 @@ fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusql
     })
 }
 
-fn pii_class_to_db(class: &PiiClass) -> String {
-    match class {
-        PiiClass::Email => "email".to_string(),
-        PiiClass::Name => "name".to_string(),
-        PiiClass::Location => "location".to_string(),
-        PiiClass::Organization => "organization".to_string(),
-        PiiClass::Custom(name) => format!("custom:{name}"),
-    }
-}
-
 fn pii_class_from_db(value: &str) -> std::result::Result<PiiClass, rusqlite::Error> {
-    Ok(match value {
-        "email" => PiiClass::Email,
-        "name" => PiiClass::Name,
-        "location" => PiiClass::Location,
-        "organization" => PiiClass::Organization,
-        custom if custom.starts_with("custom:") => PiiClass::Custom(custom[7..].to_string()),
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                1,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown class {other}"),
-                )),
-            ))
-        }
+    PiiClass::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            1,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown class {value}"),
+            )),
+        )
     })
 }
 

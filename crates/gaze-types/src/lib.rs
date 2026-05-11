@@ -5,7 +5,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::ops::Range;
 
-use serde::{Deserialize, Serialize};
+use serde::de::{self, Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use thiserror::Error;
 
 /// Shared detector contract for text-only PII detection.
@@ -41,7 +42,7 @@ pub trait Detector: Send + Sync {
 ///
 /// Policy TOML uses the lowercase forms `email` / `name` / `location` / `organization`,
 /// and tenant classes are spelled like `custom:case_ref` (lowercase, snake_case).
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum PiiClass {
     /// Email address class.
     Email,
@@ -120,6 +121,68 @@ impl PiiClass {
             Self::Organization => BUILTIN_CLASS_NAMES[3].to_string(),
             Self::Custom(name) => format!("Custom:{name}"),
         }
+    }
+
+    /// Returns the canonical audit/serde label for this class.
+    pub fn to_canonical_str(&self) -> String {
+        match self {
+            Self::Email => "email".to_string(),
+            Self::Name => "name".to_string(),
+            Self::Location => "location".to_string(),
+            Self::Organization => "organization".to_string(),
+            Self::Custom(name) => format!("custom:{name}"),
+        }
+    }
+
+    /// Parses the canonical audit/serde label for a PII class.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "email" => Some(Self::Email),
+            "name" => Some(Self::Name),
+            "location" => Some(Self::Location),
+            "organization" => Some(Self::Organization),
+            custom if custom.starts_with("custom:") => {
+                let name = &custom["custom:".len()..];
+                (!name.is_empty()).then(|| Self::Custom(name.to_string()))
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Serialize for PiiClass {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_canonical_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for PiiClass {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct PiiClassVisitor;
+
+        impl Visitor<'_> for PiiClassVisitor {
+            type Value = PiiClass;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("a canonical PII class string")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: de::Error,
+            {
+                PiiClass::from_canonical_str(value)
+                    .ok_or_else(|| E::custom(format!("unknown PII class {value}")))
+            }
+        }
+
+        deserializer.deserialize_str(PiiClassVisitor)
     }
 }
 
