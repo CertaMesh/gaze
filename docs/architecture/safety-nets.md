@@ -6,6 +6,10 @@ mutate the [`Manifest`](../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
+Validator-backed self-validation is handled earlier by the deterministic
+[`validator-veto`](validator-veto.md) stage. Safety nets do not veto candidates
+and do not participate in conflict resolution.
+
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
 (`opf`) subprocess adapter; the contract is generic so additional backends

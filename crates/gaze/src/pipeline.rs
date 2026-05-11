@@ -316,9 +316,12 @@ impl Pipeline {
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
-        let resolved = self
-            .registry
-            .detect_all_resolved(&normalized.text, &ctx)
+        let (resolved, vetoed) = self.registry.detect_all_resolved(&normalized.text, &ctx);
+        let vetoed = vetoed
+            .into_iter()
+            .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
+            .collect::<Vec<_>>();
+        let resolved = resolved
             .into_iter()
             .filter_map(|candidate| translate_candidate(candidate, spans))
             .collect::<Vec<_>>();
@@ -336,6 +339,9 @@ impl Pipeline {
                 self.action_for(&loser.detection, &build_context(field_name)),
                 true,
             )?;
+        }
+        for vetoed in &vetoed {
+            self.log_vetoed_entry(session, vetoed, field_name, document_kind)?;
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
@@ -474,6 +480,40 @@ impl Pipeline {
             crate::redaction_log::current_epoch_ms(),
             Some(session.audit_session_id().to_string()),
         );
+
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+
+        Ok(())
+    }
+
+    fn log_vetoed_entry(
+        &self,
+        session: &Session,
+        vetoed: &crate::validator_veto::VetoedCandidate,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+    ) -> Result<()> {
+        let entry = RedactionEntry::new(
+            vetoed.candidate.source.clone(),
+            vetoed.candidate.class.clone(),
+            self.action_for(
+                &Detection::new(
+                    vetoed.candidate.span.clone(),
+                    vetoed.candidate.class.clone(),
+                    vetoed.candidate.source.clone(),
+                ),
+                &build_context(field_name),
+            ),
+            field_name.map(str::to_string),
+            document_kind,
+            true,
+            ConflictTier::ValidatorVeto,
+            crate::redaction_log::current_epoch_ms(),
+            Some(session.audit_session_id().to_string()),
+        )
+        .with_validator_fail_reason(vetoed.reason);
 
         for logger in &self.redaction_loggers {
             logger.log(&entry)?;
@@ -844,6 +884,18 @@ fn walk_value_for_safety_net_scan(
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
     translate_span(candidate.span.clone(), spans).map(|span| candidate.with_span(span))
+}
+
+fn translate_vetoed_candidate(
+    vetoed: crate::validator_veto::VetoedCandidate,
+    spans: &[(usize, usize)],
+) -> Option<crate::validator_veto::VetoedCandidate> {
+    translate_candidate(vetoed.candidate, spans).map(|candidate| {
+        crate::validator_veto::VetoedCandidate {
+            candidate,
+            reason: vetoed.reason,
+        }
+    })
 }
 
 fn translate_span(

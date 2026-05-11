@@ -24,6 +24,7 @@ pub trait Canonicalizer: Send + Sync {
 
 pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
+    recognizers_by_id: HashMap<String, Arc<dyn Recognizer>>,
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
 }
@@ -87,9 +88,10 @@ mod tests {
         assert_eq!(candidates[0].class, PiiClass::Email);
         assert_eq!(candidates[0].token_family, "counter");
 
-        let candidates = registry.detect_all_resolved("input", &ctx);
+        let (candidates, vetoed) = registry.detect_all_resolved("input", &ctx);
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].class, PiiClass::Email);
+        assert!(vetoed.is_empty());
     }
 
     #[test]
@@ -167,7 +169,11 @@ impl RecognizerRegistry {
             .collect()
     }
 
-    pub fn detect_all_resolved(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
+    pub fn detect_all_resolved(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> (Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>) {
         let classes = self
             .entries
             .iter()
@@ -196,7 +202,12 @@ impl RecognizerRegistry {
             }
         }
 
-        resolve_candidates(candidates)
+        let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
+        (resolve_candidates(candidates), vetoed)
+    }
+
+    pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
+        self.recognizers_by_id.get(id)
     }
 
     pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
@@ -231,8 +242,14 @@ impl RecognizerRegistryBuilder {
     }
 
     pub fn build(self) -> RecognizerRegistry {
+        let recognizers_by_id = self
+            .entries
+            .iter()
+            .map(|recognizer| (recognizer.id().to_string(), Arc::clone(recognizer)))
+            .collect();
         RecognizerRegistry {
             entries: self.entries,
+            recognizers_by_id,
             validators: self.validators,
             canonicalizers: self.canonicalizers,
         }

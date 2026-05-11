@@ -1065,7 +1065,9 @@ dependencies = [
 name = "gaze-types"
 version = "0.7.0"
 dependencies = [
+ "phonenumber",
  "serde",
+ "sha3",
  "thiserror 1.0.69",
 ]
 

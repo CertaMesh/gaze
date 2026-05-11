@@ -21,3 +21,16 @@ pub enum RecognizerError {
 
 /// Result alias for recognizer-local operations.
 pub type Result<T> = std::result::Result<T, RecognizerError>;
+
+impl From<gaze_types::ValidatorKindParseError> for RecognizerError {
+    fn from(value: gaze_types::ValidatorKindParseError) -> Self {
+        match value {
+            gaze_types::ValidatorKindParseError::UnsupportedValidator { kind } => {
+                RecognizerError::UnsupportedValidator { kind }
+            }
+            _ => RecognizerError::UnsupportedValidator {
+                kind: value.to_string(),
+            },
+        }
+    }
+}

@@ -12,6 +12,8 @@ use gaze::{
 };
 use gaze_audit::SqliteLogger;
 use gaze_recognizers::RegexDetector;
+use gaze_recognizers::ValidatorKind;
+use gaze_types::ValidatorFailReason;
 use rusqlite::Connection;
 
 #[test]
@@ -201,6 +203,95 @@ impl RedactionLogger for MemoryLogger {
             .push(entry.clone());
         Ok(())
     }
+}
+
+#[test]
+fn invalid_luhn_candidate_is_vetoed_and_audited() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b(?:\d[ -]?){13,19}\b",
+                PiiClass::Custom("credit_card".to_string()),
+                "card.structural",
+                vec![gaze::LocaleTag::Global],
+                0.90,
+                50,
+                "credit_card",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::Luhn),
+                None,
+            )
+            .expect("card detector"),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom("credit_card".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("Card 4111-1111-1111-1112".to_string()),
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+    assert_eq!(clean, "Card 4111-1111-1111-1112");
+
+    let entries = logger.entries();
+    assert_eq!(entries.len(), 1);
+    assert!(entries[0].conflict_loser);
+    assert_eq!(entries[0].decided_by, gaze::ConflictTier::ValidatorVeto);
+    assert_eq!(
+        entries[0].validator_fail_reason,
+        Some(ValidatorFailReason::LuhnFailed)
+    );
+}
+
+#[test]
+fn recognizer_without_validator_flows_without_veto_audit_row() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_source(
+                r"\bDr\. Schmidt\b",
+                PiiClass::Custom("name".to_string()),
+                "name.custom",
+            )
+            .expect("name detector"),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom("name".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("Owner Dr. Schmidt".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+    assert!(clean.starts_with("Owner <"));
+    assert!(clean.ends_with(":Custom:name_1>"));
+
+    let entries = logger.entries();
+    assert_eq!(entries.len(), 1);
+    assert!(entries.iter().all(|entry| {
+        entry.decided_by != gaze::ConflictTier::ValidatorVeto && !entry.conflict_loser
+    }));
 }
 
 struct PrefixSandbox;

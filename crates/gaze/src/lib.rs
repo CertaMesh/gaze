@@ -17,6 +17,7 @@ mod sandbox;
 mod session;
 pub mod token_shape;
 mod types;
+mod validator_veto;
 
 pub use context::{
     Context, Context as TypedContext, ContextDictionary, ContextError, ContextFieldsRef,

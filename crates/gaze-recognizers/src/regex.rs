@@ -1,74 +1,10 @@
 use gaze_types::{
     Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleTag, PiiClass, Recognizer,
+    ValidatorKind,
 };
 use regex::Regex;
-use sha3::{Digest, Keccak256};
 
 use crate::{RecognizerError, Result};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ValidatorKind {
-    EmailRfc,
-    #[cfg(feature = "phone-parser")]
-    E164Phone,
-    #[cfg(feature = "phone-parser")]
-    E164PhoneNational(Region),
-    Luhn,
-    IbanMod97,
-    /// Strict decimal dotted-quad IPv4 parser.
-    Ipv4Parse,
-    /// RFC 4291 / RFC 5952 IPv6 textual parser.
-    Ipv6Parse,
-    /// EIP-55 Ethereum address checksum validator.
-    EthEip55,
-}
-
-#[cfg(feature = "phone-parser")]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Region {
-    De,
-    Us,
-}
-
-impl ValidatorKind {
-    pub fn parse(s: &str) -> Result<Self> {
-        match s {
-            "email_rfc" => Ok(Self::EmailRfc),
-            #[cfg(feature = "phone-parser")]
-            "e164_phone" => Ok(Self::E164Phone),
-            #[cfg(feature = "phone-parser")]
-            "e164_phone_national_de" => Ok(Self::E164PhoneNational(Region::De)),
-            #[cfg(feature = "phone-parser")]
-            "e164_phone_national_us" => Ok(Self::E164PhoneNational(Region::Us)),
-            "luhn" => Ok(Self::Luhn),
-            "iban_mod97" => Ok(Self::IbanMod97),
-            "ipv4_parse" => Ok(Self::Ipv4Parse),
-            "ipv6_parse" => Ok(Self::Ipv6Parse),
-            "eth_eip55" => Ok(Self::EthEip55),
-            // With phone-parser disabled, phone validators fall through here so
-            // rulepack construction fails closed instead of silently dropping candidates.
-            other => Err(RecognizerError::UnsupportedValidator {
-                kind: other.to_string(),
-            }),
-        }
-    }
-
-    pub fn validates(self, input: &str) -> bool {
-        match self {
-            Self::EmailRfc => is_basic_email(input),
-            #[cfg(feature = "phone-parser")]
-            Self::E164Phone => e164_phone_check(input),
-            #[cfg(feature = "phone-parser")]
-            Self::E164PhoneNational(region) => validate_phone_national(region, input).is_some(),
-            Self::Luhn => luhn_check(input),
-            Self::IbanMod97 => iban_mod97_check(input),
-            Self::Ipv4Parse => ipv4_parse_check(input),
-            Self::Ipv6Parse => ipv6_parse_check(input),
-            Self::EthEip55 => eth_eip55_check(input),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -206,12 +142,9 @@ impl Recognizer for RegexDetector {
                 let matched = &input[span.clone()];
                 (!self.is_excluded(matched)).then_some((span, matched))
             })
-            .filter_map(|(span, matched)| {
+            .map(|(span, matched)| {
                 let canonical_form = self.canonical_form(matched);
-                if self.validator_kind.is_some() && canonical_form.is_none() {
-                    return None;
-                }
-                Some(Candidate::new(
+                Candidate::new(
                     span,
                     self.class.clone(),
                     self.source.clone(),
@@ -222,13 +155,17 @@ impl Recognizer for RegexDetector {
                     self.source.clone(),
                     ConflictTier::None,
                     Vec::new(),
-                ))
+                )
             })
             .collect()
     }
 
     fn token_family(&self) -> &str {
         &self.token_family
+    }
+
+    fn validator_kind(&self) -> Option<ValidatorKind> {
+        self.validator_kind
     }
 
     fn locales(&self) -> &[LocaleTag] {
@@ -246,8 +183,8 @@ impl RegexDetector {
     fn canonical_form(&self, matched: &str) -> Option<String> {
         match self.validator_kind {
             #[cfg(feature = "phone-parser")]
-            Some(ValidatorKind::E164PhoneNational(region)) => {
-                validate_phone_national(region, matched)
+            Some(ValidatorKind::E164PhoneNational(_)) => {
+                self.validator_kind?.canonical_form(matched)
             }
             Some(validator_kind) if validator_kind.validates(matched) => {
                 Some(self.normalizer_kind.map_or_else(
@@ -273,173 +210,12 @@ impl RegexDetector {
     }
 }
 
-fn is_basic_email(input: &str) -> bool {
-    let Some((local, domain)) = input.split_once('@') else {
-        return false;
-    };
-    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
-}
-
-#[cfg(feature = "phone-parser")]
-fn e164_phone_check(input: &str) -> bool {
-    phonenumber::parse(None, input).is_ok_and(|phone| phonenumber::is_valid(&phone))
-}
-
-#[cfg(feature = "phone-parser")]
-fn validate_phone_national(region: Region, input: &str) -> Option<String> {
-    let country = match region {
-        Region::De => phonenumber::country::DE,
-        Region::Us => phonenumber::country::US,
-    };
-    let expected_code = match region {
-        Region::De => 49,
-        Region::Us => 1,
-    };
-    let number = phonenumber::parse(Some(country), input).ok()?;
-    if number.country().code() != expected_code {
-        return None;
-    }
-    if number.is_valid() || is_safe_fixture_phone(region, input) {
-        return Some(number.format().mode(phonenumber::Mode::E164).to_string());
-    }
-    None
-}
-
-#[cfg(feature = "phone-parser")]
-fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
-    let digits = input
-        .chars()
-        .filter(char::is_ascii_digit)
-        .collect::<String>();
-    match region {
-        // Source: NANPA 555-LINE Number Reservation.
-        // https://nationalnanpa.com/number_resource_info/555_numbers.html
-        Region::Us => {
-            digits == "15550100"
-                || matches!(digits.strip_prefix('1'), Some(rest) if rest.len() == 10 && rest[3..].starts_with("55501"))
-        }
-        // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
-        // literals chosen for parser-valid + non-routable fixtures.
-        Region::De => matches!(
-            digits.as_str(),
-            "493000000000"
-                | "4915100000000"
-                | "4915550112233"
-                | "015550112233"
-                | "491710000000"
-                | "01710000000"
-        ),
-    }
-}
-
-fn luhn_check(input: &str) -> bool {
-    let mut digits = Vec::new();
-    for byte in input.bytes() {
-        if byte.is_ascii_whitespace() || byte == b'-' {
-            continue;
-        }
-        if !byte.is_ascii_digit() {
-            return false;
-        }
-        digits.push(byte - b'0');
-    }
-    if !(13..=19).contains(&digits.len()) {
-        return false;
-    }
-
-    let sum: u32 = digits
-        .iter()
-        .rev()
-        .enumerate()
-        .map(|(index, digit)| {
-            let mut value = u32::from(*digit);
-            if index % 2 == 1 {
-                value *= 2;
-                if value > 9 {
-                    value -= 9;
-                }
-            }
-            value
-        })
-        .sum();
-    sum.is_multiple_of(10)
-}
-
 fn iban_canonicalize(input: &str) -> String {
     input
         .chars()
         .filter(|ch| !ch.is_ascii_whitespace())
         .flat_map(char::to_uppercase)
         .collect()
-}
-
-fn iban_mod97_check(input: &str) -> bool {
-    let canonical = iban_canonicalize(input);
-    if !(15..=34).contains(&canonical.len()) {
-        return false;
-    }
-    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
-        return false;
-    }
-
-    let mut remainder = 0u32;
-    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
-        match ch {
-            '0'..='9' => {
-                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
-            }
-            'A'..='Z' => {
-                let value = u32::from(ch) - u32::from('A') + 10;
-                remainder = (remainder * 10 + value / 10) % 97;
-                remainder = (remainder * 10 + value % 10) % 97;
-            }
-            _ => return false,
-        }
-    }
-    remainder == 1
-}
-
-fn ipv4_parse_check(input: &str) -> bool {
-    input.parse::<std::net::Ipv4Addr>().is_ok()
-}
-
-fn ipv6_parse_check(input: &str) -> bool {
-    input.parse::<std::net::Ipv6Addr>().is_ok()
-}
-
-fn eth_eip55_check(input: &str) -> bool {
-    let Some(address) = input.strip_prefix("0x") else {
-        return false;
-    };
-    if address.len() != 40 || !address.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return false;
-    }
-    if address
-        .bytes()
-        .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_lowercase())
-        || address
-            .bytes()
-            .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_uppercase())
-    {
-        return true;
-    }
-
-    let lowercase = address.to_ascii_lowercase();
-    let hash = Keccak256::digest(lowercase.as_bytes());
-    for (index, byte) in address.bytes().enumerate() {
-        if byte.is_ascii_digit() {
-            continue;
-        }
-        let hash_nibble = if index % 2 == 0 {
-            hash[index / 2] >> 4
-        } else {
-            hash[index / 2] & 0x0f
-        };
-        if (hash_nibble > 7) != byte.is_ascii_uppercase() {
-            return false;
-        }
-    }
-    true
 }
 
 #[cfg(test)]
@@ -477,11 +253,7 @@ mod tests {
     fn national_phone_validator_kind_accepts_safe_fixtures() {
         let us = ValidatorKind::parse("e164_phone_national_us").expect("US validator");
         assert_eq!(
-            validate_phone_national(
-                match us {
-                    ValidatorKind::E164PhoneNational(region) => region,
-                    _ => panic!("expected phone validator"),
-                },
+            us.canonical_form(
                 // Source: NANPA 555-LINE Number Reservation.
                 // https://nationalnanpa.com/number_resource_info/555_numbers.html
                 "+1 555 0100"
@@ -492,11 +264,7 @@ mod tests {
 
         let de = ValidatorKind::parse("e164_phone_national_de").expect("DE validator");
         assert_eq!(
-            validate_phone_national(
-                match de {
-                    ValidatorKind::E164PhoneNational(region) => region,
-                    _ => panic!("expected phone validator"),
-                },
+            de.canonical_form(
                 // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
                 // literals chosen for parser-valid + non-routable.
                 "+49 30 0000 0000"
@@ -513,7 +281,8 @@ mod tests {
             .expect_err("phone parser feature is disabled");
         assert!(matches!(
             err,
-            RecognizerError::UnsupportedValidator { kind } if kind == "e164_phone_national_us"
+            gaze_types::ValidatorKindParseError::UnsupportedValidator { kind }
+                if kind == "e164_phone_national_us"
         ));
     }
 
