@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `gaze_read_text` Tool impls that route document ingestion through
   `PiiEnvelope::dispatch`. Returns `{ clean_markdown, manifest_id,
   file_metadata }`.
+- `gaze-cli` opt-in `mcp` feature exposes `gaze mcp install --client=<name>`,
+  `gaze mcp doctor`, and `gaze mcp serve` subcommands. Install writes client
+  JSON with the absolute `current_exe()` path and an idempotent marker-fenced
+  skill section in `AGENTS.md`. Ships claude-code, claude-desktop, and cursor
+  at launch.
 
 ### Changed
 

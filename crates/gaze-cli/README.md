@@ -30,6 +30,12 @@ Build from the workspace root:
 $ cargo build -p gaze-cli
 ```
 
+Build with the MCP installer/server surface:
+
+```console
+$ cargo build -p gaze-cli --features mcp
+```
+
 Run from the workspace root:
 
 ```console
@@ -48,9 +54,68 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | `restore` | Reads `{"session_blob","text"}` JSON from stdin and emits restored `{"text"}` JSON, plus `restore_warning` when tolerant restore allows an unknown token. |
 | `audit query` | Prints filtered audit metadata rows from a `--audit-db` SQLite log, opened read-only. |
 | `audit export` | Exports filtered audit metadata rows in JSONL (default) for downstream processing. |
+| `document clean` | OCRs PNG/JPG/PDF input into a SafeBundle. Requires `--features document`. |
+| `mcp install` | Installs `gaze mcp serve` into supported MCP client configs. Requires `--features mcp`. |
+| `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`. |
+| `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`. |
 
 Audit logging is captured on `clean` via `--audit-db <path>`; the
 `audit query` and `audit export` subcommands read the same database back.
+
+## MCP installation
+
+The `mcp` feature embeds the rmcp stdio server into the `gaze` binary and
+registers `gaze-document` tools:
+
+```console
+$ cargo install gaze-cli --features mcp
+$ gaze mcp install --client=claude-code
+$ gaze mcp doctor
+```
+
+`install` always writes the absolute `std::env::current_exe()` path into the
+client config:
+
+```json
+{
+  "mcpServers": {
+    "gaze": {
+      "command": "/absolute/path/to/gaze",
+      "args": ["mcp", "serve"],
+      "env": {}
+    }
+  }
+}
+```
+
+Supported clients:
+
+| Client | Default config path |
+|--------|---------------------|
+| `claude-code` | `./.mcp.json` in the current project. |
+| `claude-desktop` | macOS `~/Library/Application Support/Claude/claude_desktop_config.json`; Windows `%APPDATA%\Claude\claude_desktop_config.json`; Linux config dir fallback. |
+| `cursor` | `./.cursor/mcp.json` in the current project. |
+| `all` | Updates all supported client paths. |
+
+Use `--agents-md <path>` to choose where the marker-fenced Gaze MCP guidance
+section is written. By default, `install` updates `./AGENTS.md`. Use
+`--skip-agents-md` to update only client JSON, and `--dry-run` to preview
+without writing.
+
+`doctor` checks whether the current binary matches client config entries,
+whether `tesseract` and pdfium are available for `gaze_read_file`, whether the
+manifest directory is writable, and whether the AGENTS.md guidance section is
+present. Warnings do not fail by default; `--strict` exits non-zero on warnings.
+Use `--json` for machine-readable output.
+
+`serve` runs the stdio MCP server:
+
+```console
+$ gaze mcp serve --manifest-dir ~/.local/share/gaze/mcp-manifests --max-file-size 26214400
+```
+
+The server covers the data-source to model path only. It does not filter text
+the user pastes directly into a chat UI.
 
 ## `clean`
 

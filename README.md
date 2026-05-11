@@ -66,6 +66,20 @@ Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are at
 
 For library use — linking the Rust runtime directly instead of shelling out — see [Use from Rust](#use-from-rust) below.
 
+For agent hosts that support MCP, build the CLI with the MCP feature and install
+the stdio server into a client config:
+
+```sh
+cargo install --path crates/gaze-cli --features mcp
+gaze mcp install --client=claude-code
+gaze mcp doctor
+```
+
+The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning
+tokenized content plus a `manifest_id` for authorized restore flows. See
+[`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation) for
+Claude Code, Claude Desktop, and Cursor config paths.
+
 ## Pipeline shape
 
 ```text
@@ -89,7 +103,7 @@ Three deterministic detection passes plus an optional observer pass. The safety 
 
 ## Workspace
 
-Eight published crates. Pick the smallest surface that does the job.
+Published crates. Pick the smallest surface that does the job.
 
 | Crate | Use when |
 |-------|----------|
@@ -99,6 +113,7 @@ Eight published crates. Pick the smallest surface that does the job.
 | [`gaze-audit`](crates/gaze-audit/) | You want SQLite-backed metadata audit logging. Adopt directly; `gaze` core has no `rusqlite` dep in any feature graph. |
 | [`gaze-cli`](crates/gaze-cli/) | You want a process boundary for non-Rust adapters (Laravel, Python, etc.). |
 | [`gaze-types`](crates/gaze-types/) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
+| [`gaze-document`](crates/gaze-document/) | You want PNG/JPG/PDF document ingestion into SafeBundles or MCP document-read tools. |
 | [`gaze-mcp-core`](crates/gaze-mcp-core/) | You're building an MCP-protocol tool host and want every call to pass through Gaze's redaction chokepoint. |
 | [`gaze-mcp-rmcp`](crates/gaze-mcp-rmcp/) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, optional streamable HTTP). |
 
@@ -182,7 +197,7 @@ cargo run -p xtask -- ci-feature-matrix
 
 ## Available on crates.io
 
-The Gaze workspace publishes 8 crates. All current versions point at this repository as their canonical source.
+The Gaze workspace publishes crates that point at this repository as their canonical source.
 
 | Crate | Purpose |
 |---|---|
@@ -192,6 +207,7 @@ The Gaze workspace publishes 8 crates. All current versions point at this reposi
 | [`gaze-audit`](https://crates.io/crates/gaze-audit) | Passive SQLite audit sink, isolated from core. |
 | [`gaze-assembly`](https://crates.io/crates/gaze-assembly) | Policy-to-pipeline builder shared by CLI-style adopters. |
 | [`gaze-cli`](https://crates.io/crates/gaze-cli) | Command-line `gaze clean` / `gaze restore` binary. |
+| [`gaze-document`](https://crates.io/crates/gaze-document) | Document SafeBundle pipeline and opt-in MCP document tools. |
 | [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | MCP chokepoint runtime — Tool / ToolCtx / PiiEnvelope dispatch. |
 | [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | rmcp transport adapter for `gaze-mcp-core`. |
 
