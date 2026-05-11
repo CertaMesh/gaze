@@ -1377,10 +1377,12 @@ pub enum ConflictTier {
     Score,
     /// Span length decided the conflict.
     SpanLength,
-    /// Validator result decided the conflict.
+    /// Same-class containment validator result decided the conflict.
     Validator,
     /// Pre-resolver validator veto rejected the candidate.
     ValidatorVeto,
+    /// Cross-class collision-family policy decided the conflict.
+    CollisionPolicy,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
