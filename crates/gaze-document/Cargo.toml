@@ -36,7 +36,7 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 
 [features]
 default = ["ocr-tesseract", "pdf-input"]
-mcp = ["dep:async-trait", "dep:gaze-mcp-core"]
+mcp = ["dep:async-trait", "dep:gaze-mcp-core", "ocr-tesseract", "pdf-input"]
 ocr-tesseract = []
 pdf-input = ["dep:pdfium-render", "dep:image"]
 extract-docling = []
