@@ -1094,6 +1094,8 @@ pub enum ConflictTier {
     SpanLength,
     /// Validator result decided the conflict.
     Validator,
+    /// Pre-resolver validator veto rejected the candidate.
+    ValidatorVeto,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
