@@ -9,6 +9,7 @@ mod ci_feature_matrix;
 mod class_map_override_safety;
 mod coverage_corpus;
 mod dylint_gate;
+mod family_policy_coherence;
 mod fixture_citation;
 mod mcp_tier_isolation;
 mod no_tenant_knowledge;
@@ -28,6 +29,7 @@ enum Command {
     RecognizerCompositionValidator,
     NoTenantKnowledge,
     FixtureCitationLint,
+    FamilyPolicyTableCoherence,
     CargoMetadataAuditIsolation,
     DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
@@ -45,6 +47,7 @@ fn main() -> Result<()> {
         Command::RecognizerCompositionValidator => run_recognizer_composition_validator_gate(),
         Command::NoTenantKnowledge => no_tenant_knowledge::run(),
         Command::FixtureCitationLint => fixture_citation::run(),
+        Command::FamilyPolicyTableCoherence => family_policy_coherence::run(),
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
         Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),

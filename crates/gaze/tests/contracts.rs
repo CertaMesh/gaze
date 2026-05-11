@@ -11,9 +11,10 @@ use gaze::{
     SandboxPlan, Scope, Session, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
 use gaze_audit::SqliteLogger;
+use gaze_recognizers::NormalizerKind;
 use gaze_recognizers::RegexDetector;
 use gaze_recognizers::ValidatorKind;
-use gaze_types::ValidatorFailReason;
+use gaze_types::{AmbiguityReason, CollisionMembership, ValidatorFailReason};
 use rusqlite::Connection;
 
 #[test]
@@ -254,6 +255,238 @@ fn invalid_luhn_candidate_is_vetoed_and_audited() {
         entries[0].validator_fail_reason,
         Some(ValidatorFailReason::LuhnFailed)
     );
+}
+
+#[test]
+fn pan_iban_overlap_iban_wins_via_collision_policy() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = payment_collision_pipeline(logger.clone());
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("IBAN DE70 8807 9565 3194 9631 87".to_string()),
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(clean.starts_with("IBAN <"));
+    assert!(clean.ends_with(":Custom:iban_1>"));
+    assert_eq!(
+        session
+            .restore_strict(clean.trim_start_matches("IBAN "))
+            .unwrap(),
+        "DE70 8807 9565 3194 9631 87"
+    );
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    let loser = entries
+        .iter()
+        .find(|entry| entry.conflict_loser)
+        .expect("loser");
+    assert_eq!(winner.class, PiiClass::Custom("iban".to_string()));
+    assert_eq!(winner.decided_by, gaze::ConflictTier::CollisionPolicy);
+    assert_eq!(loser.decided_by, gaze::ConflictTier::CollisionPolicy);
+    assert_eq!(
+        loser.collision_family.as_deref(),
+        Some("payment-card-or-iban")
+    );
+    assert_eq!(loser.collision_variant.as_deref(), Some("pan"));
+}
+
+#[test]
+fn pan_fails_luhn_never_reaches_family_policy() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let pipeline = payment_collision_pipeline(logger.clone());
+
+    let clean = pipeline
+        .redact(
+            &session,
+            RawDocument::Text("IBAN DE96 7616 4780 7903 5097 45".to_string()),
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(clean.starts_with("IBAN <"));
+    let entries = logger.entries();
+    assert!(entries
+        .iter()
+        .any(|entry| entry.decided_by == gaze::ConflictTier::ValidatorVeto));
+    assert!(entries
+        .iter()
+        .all(|entry| entry.decided_by != gaze::ConflictTier::CollisionPolicy));
+}
+
+#[test]
+fn phone_family_no_change_when_imei_absent() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let phone_class = PiiClass::Custom("phone".to_string());
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_source(r"\+1-555-0100", phone_class.clone(), "phone.structural")
+                .expect("structural phone"),
+        )
+        .register_collision(
+            "phone.structural",
+            CollisionMembership::new("phone-or-imei", "phone", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_source(r"\+1-555-0100", phone_class.clone(), "phone.national.us")
+                .expect("us phone"),
+        )
+        .register_collision(
+            "phone.national.us",
+            CollisionMembership::new("phone-or-imei", "phone", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_source(r"\+1-555-0100", phone_class.clone(), "phone.national.de")
+                .expect("de phone"),
+        )
+        .register_collision(
+            "phone.national.de",
+            CollisionMembership::new("phone-or-imei", "phone", 10, None),
+        )
+        .rule(ClassRule::new(phone_class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("call +1-555-0100".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+    assert!(clean.starts_with("call <"));
+
+    let entries = logger.entries();
+    assert_eq!(entries.len(), 3);
+    assert!(entries
+        .iter()
+        .all(|entry| entry.decided_by != gaze::ConflictTier::CollisionPolicy));
+}
+
+#[test]
+fn precedence_tie_emits_family_level_token_and_ambiguity_record() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let alpha_class = PiiClass::Custom("alpha_doc".to_string());
+    let beta_class = PiiClass::Custom("beta_doc".to_string());
+    let family_class = PiiClass::Custom("family:tenant-document".to_string());
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_source("DOC-[0-9]+", alpha_class.clone(), "doc.alpha")
+                .expect("alpha detector"),
+        )
+        .register_collision(
+            "doc.alpha",
+            CollisionMembership::new("tenant-document", "alpha", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_source("DOC-[0-9]+", beta_class.clone(), "doc.beta")
+                .expect("beta detector"),
+        )
+        .register_collision(
+            "doc.beta",
+            CollisionMembership::new("tenant-document", "beta", 10, None),
+        )
+        .rule(ClassRule::new(family_class.clone(), Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("case DOC-12345".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    let token = clean.trim_start_matches("case ");
+    assert!(token.starts_with('<') && token.contains(":Custom:family:tenant-document_"));
+    assert_eq!(session.restore_strict(token).unwrap(), "DOC-12345");
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.class, family_class);
+    assert_eq!(winner.collision_family.as_deref(), Some("tenant-document"));
+    assert_eq!(winner.collision_variant, None);
+    let ambiguity = winner.ambiguity_record.as_ref().expect("ambiguity record");
+    assert_eq!(ambiguity.reason, AmbiguityReason::PrecedenceTie);
+    assert_eq!(ambiguity.ambiguity_class, family_class);
+    assert_eq!(ambiguity.losing_candidates.len(), 2);
+}
+
+fn payment_collision_pipeline(logger: MemoryLogger) -> Pipeline {
+    Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b",
+                PiiClass::Custom("iban".to_string()),
+                "iban.structural",
+                vec![gaze::LocaleTag::Global],
+                0.70,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::IbanMod97),
+                Some(NormalizerKind::IbanCanonical),
+            )
+            .expect("iban detector"),
+        )
+        .register_collision(
+            "iban.structural",
+            CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b\d(?:[\s-]?\d){12,18}\b",
+                PiiClass::Custom("credit_card".to_string()),
+                "card.structural",
+                vec![gaze::LocaleTag::Global],
+                0.70,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::Luhn),
+                None,
+            )
+            .expect("card detector"),
+        )
+        .register_collision(
+            "card.structural",
+            CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom("iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("credit_card".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger)
+        .build()
+        .expect("pipeline")
 }
 
 #[test]

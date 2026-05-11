@@ -90,6 +90,39 @@ pattern = '''{second_pattern}'''
     )
 }
 
+fn collision_lint_rulepack(first_collision: &str, second_collision: &str) -> String {
+    format!(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "collision-lint"
+rulepack_version = "0.7.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "doc.alpha"
+class = "custom:alpha"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "ALPHA-[0-9]+"
+
+{first_collision}
+
+[[recognizers]]
+id = "doc.beta"
+class = "custom:beta"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = "BETA-[0-9]+"
+
+{second_collision}
+"#
+    )
+}
+
 fn capture_rulepack_parse_logs(raw: &str) -> (Result<Rulepack, RulepackError>, Vec<String>) {
     let logs = Arc::new(Mutex::new(Vec::new()));
     let subscriber = CaptureSubscriber { logs: logs.clone() };
@@ -174,6 +207,61 @@ fn lint_strict_mode_rejects_overlap() {
         } if class == "postal_code"
             && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
             && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::EnUs]
+    ));
+}
+
+#[test]
+fn lint_rejects_ambiguous_collision_family_precedence() {
+    let raw = collision_lint_rulepack(
+        r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+"#,
+        r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "beta"
+precedence = 10
+"#,
+    );
+    let err = Rulepack::parse(&raw).expect_err("same precedence should reject");
+
+    assert!(matches!(
+        err,
+        RulepackError::AmbiguousFamilyPrecedence { family, precedence: 10, .. }
+            if family == "tenant-document"
+    ));
+}
+
+#[test]
+fn lint_rejects_inconsistent_collision_variant_precedence() {
+    let raw = collision_lint_rulepack(
+        r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 10
+"#,
+        r#"
+[recognizers.collision]
+family = "tenant-document"
+variant = "alpha"
+precedence = 20
+"#,
+    );
+    let err = Rulepack::parse(&raw).expect_err("inconsistent variant should reject");
+
+    assert!(matches!(
+        err,
+        RulepackError::InconsistentCollisionVariant {
+            family,
+            variant,
+            first_precedence: 10,
+            second_precedence: 20,
+            ..
+        } if family == "tenant-document" && variant == "alpha"
     ));
 }
 
