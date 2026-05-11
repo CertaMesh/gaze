@@ -1,0 +1,19 @@
+{
+  "id": "threaded-001",
+  "context": "threaded",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "multi-page",
+  "body": "Current reply:\nThanks for the update. The current requester is {{Name}} and the preferred address is {{Email}}. Please use {{custom:phone}} for callback and keep refund routing on {{custom:iban}}.\n\nOn Tue, Support wrote:\n> Previous note listed postal route {{custom:postal_code}} and source address {{custom:ip_address}}.\n> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.\n> We are preserving the quote markers because real inbox threads carry old facts forward.\n\nCurrent closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:postal_code",
+    "custom:ip_address"
+  ],
+  "notes": "Multi-page EN thread with current and quoted generated spans."
+}

@@ -119,6 +119,12 @@ const TEMPLATE_JSON: &[&str] = &[
     include_str!("distractor-heavy/distractor-heavy-004.json"),
     include_str!("distractor-heavy/distractor-heavy-005.json"),
     include_str!("distractor-heavy/distractor-heavy-006.json"),
+    include_str!("threaded/threaded-001.json"),
+    include_str!("threaded/threaded-002.json"),
+    include_str!("threaded/threaded-003.json"),
+    include_str!("threaded/threaded-004.json"),
+    include_str!("threaded/threaded-005.json"),
+    include_str!("threaded/threaded-006.json"),
 ];
 
 pub fn phase_1_templates() -> serde_json::Result<Vec<Template>> {

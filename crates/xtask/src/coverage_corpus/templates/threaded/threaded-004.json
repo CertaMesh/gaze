@@ -1,0 +1,19 @@
+{
+  "id": "threaded-004",
+  "context": "threaded",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "multi-page",
+  "body": "Newest message:\nI spoke with {{Name}} today. They confirmed {{Email}}, {{custom:phone}}, and postal code {{custom:postal_code}}.\n\nOn previous escalation wrote:\n> The refund account remains {{custom:iban}}.\n> The staging request was seen at {{custom:ip_address}}.\n> The old note included Root, Admin, and Main as product roles, not personal names.\n\nFollow-up paragraph: long email threads repeat and reorder facts. This template keeps the quote prefix on old PII so the corpus covers both new and inherited context.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:postal_code",
+    "custom:iban",
+    "custom:ip_address"
+  ],
+  "notes": "Multi-page EN support escalation with quote prefix labels."
+}

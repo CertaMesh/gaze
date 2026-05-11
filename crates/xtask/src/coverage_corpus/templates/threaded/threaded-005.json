@@ -1,0 +1,19 @@
+{
+  "id": "threaded-005",
+  "context": "threaded",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "multi-page",
+  "body": "Neue Nachricht:\nDer Kontakt {{Name}} bittet um Antwort an {{Email}} und Rueckruf unter {{custom:phone}}.\n\nAm vorherigen Tag schrieb das System:\n> Zahlungsziel: {{custom:iban}}\n> Quelladresse: {{custom:ip_address}}\n> Versandbereich: {{custom:postal_code}}\n> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.\n\nNotiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.",
+  "expected_classes": [
+    "Name",
+    "Email",
+    "custom:phone",
+    "custom:iban",
+    "custom:ip_address",
+    "custom:postal_code"
+  ],
+  "notes": "Multi-page DE thread marker with current and quoted spans."
+}

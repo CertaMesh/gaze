@@ -1,0 +1,19 @@
+{
+  "id": "threaded-002",
+  "context": "threaded",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "multi-page",
+  "body": "Aktuelle Antwort:\nBitte nutzt fuer diese Pruefung {{Email}} und den Namen {{Name}}. Die neue Rueckrufnummer lautet {{custom:phone}}.\n\nAm 10.05.2026 schrieb Support:\n> In der vorherigen Nachricht standen {{custom:iban}} fuer die Zahlung und {{custom:postal_code}} fuer die Zustellung.\n> Der technische Header enthielt {{custom:ip_address}}.\n> Weitere Werte wie 000-00-0000, CASE-123 und test@example.invalid waren nur Beispiele.\n\nAbschluss: Die Markierungen in der aktuellen Nachricht und im Zitat bleiben synthetisch und muessen gemeinsam erkannt werden.",
+  "expected_classes": [
+    "Email",
+    "Name",
+    "custom:phone",
+    "custom:iban",
+    "custom:postal_code",
+    "custom:ip_address"
+  ],
+  "notes": "Multi-page DE thread with quoted prior reply markers."
+}

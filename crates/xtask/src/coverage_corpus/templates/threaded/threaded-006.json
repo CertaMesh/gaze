@@ -1,0 +1,17 @@
+{
+  "id": "threaded-006",
+  "context": "threaded",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "multi-page",
+  "body": "Merged tool thread:\nCurrent tool call used {{Email}} and {{custom:ip_address}}.\n\n> Earlier tool call:\n> {\"iban\":\"{{custom:iban}}\",\"card\":\"{{custom:credit_card}}\",\"wallet\":\"{{custom:eth_address}}\"}\n>\n> Earlier prose also mentioned localhost and user@example.invalid as examples.\n\nFinal agent note: preserve labels from both current and quoted sections. The fixture is synthetic, deterministic, and intentionally shaped like copied tool output inside a conversation.",
+  "expected_classes": [
+    "Email",
+    "custom:ip_address",
+    "custom:iban",
+    "custom:credit_card",
+    "custom:eth_address"
+  ],
+  "notes": "Multi-page global threaded tool transcript with quoted JSON-like args."
+}
