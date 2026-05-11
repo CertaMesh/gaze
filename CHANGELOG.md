@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [bundle-tokenization-drift] `core-extended` no-policy snapshot refreshed for
+  mandatory-anchor fallback on structural IBAN candidates without loaded locale
+  cue bundles.
+
 ### Deprecated
 
 ### Removed
