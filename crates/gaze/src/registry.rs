@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use crate::resolver::resolve_candidates;
+use crate::resolver::resolve_candidates_with_policy;
 pub use gaze_types::{Candidate, DetectContext, Recognizer};
 use gaze_types::{CollisionMembership, LocaleChain, PiiClass};
 
@@ -121,6 +121,13 @@ impl FamilyPolicyTable {
             return None;
         };
         by_recognizer.get(recognizer_id)
+    }
+
+    pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
+        let ma = self.membership(a)?;
+        let mb = self.membership(b)?;
+        (ma.family == mb.family && ma.variant != mb.variant && ma.precedence == mb.precedence)
+            .then_some(ma.family.as_str())
     }
 }
 
@@ -347,7 +354,10 @@ impl RecognizerRegistry {
         }
 
         let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
-        (resolve_candidates(candidates), vetoed)
+        (
+            resolve_candidates_with_policy(candidates, self.family_policy()),
+            vetoed,
+        )
     }
 
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {

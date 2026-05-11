@@ -1,8 +1,15 @@
 use std::ops::Range;
 
-use crate::{Candidate, ConflictTier, PiiClass};
+use crate::{Candidate, ConflictTier, FamilyPolicyTable, PiiClass};
 
-pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
+pub fn resolve_candidates(candidates: Vec<Candidate>) -> Vec<Candidate> {
+    resolve_candidates_with_policy(candidates, &FamilyPolicyTable::EMPTY)
+}
+
+pub fn resolve_candidates_with_policy(
+    mut candidates: Vec<Candidate>,
+    policy: &FamilyPolicyTable,
+) -> Vec<Candidate> {
     candidates.sort_by(|a, b| {
         a.span
             .start
@@ -16,13 +23,17 @@ pub fn resolve_candidates(mut candidates: Vec<Candidate>) -> Vec<Candidate> {
 
     let mut resolved: Vec<Candidate> = Vec::new();
     for candidate in candidates {
-        insert_candidate(&mut resolved, candidate);
+        insert_candidate(&mut resolved, candidate, policy);
     }
     resolved.sort_by_key(|candidate| candidate.span.start);
     resolved
 }
 
-fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
+fn insert_candidate(
+    resolved: &mut Vec<Candidate>,
+    candidate: Candidate,
+    policy: &FamilyPolicyTable,
+) {
     let mut index = 0;
     while index < resolved.len() {
         if !overlaps(&resolved[index].span, &candidate.span) {
@@ -31,11 +42,16 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
         }
 
         if resolved[index].span == candidate.span {
+            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
+                resolved[index] = tie;
+                return;
+            }
             if resolved[index].class == candidate.class {
                 merge_same_span_same_class(&mut resolved[index], candidate);
                 return;
             }
-            if let Some(tier) = should_replace_same_span_class(&candidate, &resolved[index]) {
+            if let Some(tier) = should_replace_same_span_class(&candidate, &resolved[index], policy)
+            {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
                 candidate
@@ -43,7 +59,9 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
                     .push(resolved[index].source.clone());
                 resolved[index] = candidate;
             } else {
-                if let Some(tier) = should_replace_same_span_class(&resolved[index], &candidate) {
+                if let Some(tier) =
+                    should_replace_same_span_class(&resolved[index], &candidate, policy)
+                {
                     resolved[index].decided_by = tier;
                 }
                 resolved[index].merged_sources.push(candidate.source);
@@ -54,7 +72,12 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
         if contains(&resolved[index].span, &candidate.span)
             || contains(&candidate.span, &resolved[index].span)
         {
-            if let Some(tier) = should_replace_containment(&candidate, &resolved[index]) {
+            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
+                resolved[index] = tie;
+                remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
+            } else if let Some(tier) =
+                should_replace_containment(&candidate, &resolved[index], policy)
+            {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
                 candidate
@@ -63,7 +86,8 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
                 resolved[index] = candidate;
                 remove_overlaps(resolved, index, tier);
             } else {
-                if let Some(tier) = should_replace_containment(&resolved[index], &candidate) {
+                if let Some(tier) = should_replace_containment(&resolved[index], &candidate, policy)
+                {
                     resolved[index].decided_by = tier;
                 }
                 resolved[index].merged_sources.push(candidate.source);
@@ -71,7 +95,12 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
             return;
         }
 
-        if let Some(tier) = should_replace_partial_overlap(&candidate, &resolved[index]) {
+        if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
+            resolved[index] = tie;
+            remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
+        } else if let Some(tier) =
+            should_replace_partial_overlap(&candidate, &resolved[index], policy)
+        {
             let mut candidate = candidate;
             candidate.decided_by = tier;
             candidate
@@ -80,7 +109,8 @@ fn insert_candidate(resolved: &mut Vec<Candidate>, candidate: Candidate) {
             resolved[index] = candidate;
             remove_overlaps(resolved, index, tier);
         } else {
-            if let Some(tier) = should_replace_partial_overlap(&resolved[index], &candidate) {
+            if let Some(tier) = should_replace_partial_overlap(&resolved[index], &candidate, policy)
+            {
                 resolved[index].decided_by = tier;
             }
             resolved[index].merged_sources.push(candidate.source);
@@ -118,11 +148,16 @@ fn append_unique(existing: &mut String, next: &str) {
 fn should_replace_same_span_class(
     candidate: &Candidate,
     existing: &Candidate,
+    policy: &FamilyPolicyTable,
 ) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing)
+    compare_by_spec(candidate, existing, policy)
 }
 
-fn should_replace_containment(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
+fn should_replace_containment(
+    candidate: &Candidate,
+    existing: &Candidate,
+    policy: &FamilyPolicyTable,
+) -> Option<ConflictTier> {
     if candidate.class == existing.class {
         let candidate_validated = candidate.canonical_form.is_some();
         let existing_validated = existing.canonical_form.is_some();
@@ -157,17 +192,26 @@ fn should_replace_containment(candidate: &Candidate, existing: &Candidate) -> Op
             .then_some(ConflictTier::RecognizerId);
     }
 
-    compare_by_spec(candidate, existing)
+    compare_by_spec(candidate, existing, policy)
 }
 
 fn should_replace_partial_overlap(
     candidate: &Candidate,
     existing: &Candidate,
+    policy: &FamilyPolicyTable,
 ) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing)
+    compare_by_spec(candidate, existing, policy)
 }
 
-fn compare_by_spec(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
+fn compare_by_spec(
+    candidate: &Candidate,
+    existing: &Candidate,
+    policy: &FamilyPolicyTable,
+) -> Option<ConflictTier> {
+    if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
+    {
+        return candidate_wins.then_some(ConflictTier::CollisionPolicy);
+    }
     if class_priority(&candidate.class) != class_priority(&existing.class) {
         return (class_priority(&candidate.class) > class_priority(&existing.class))
             .then_some(ConflictTier::ClassPriority);
@@ -188,6 +232,32 @@ fn compare_by_spec(candidate: &Candidate, existing: &Candidate) -> Option<Confli
         return (candidate_len > existing_len).then_some(ConflictTier::SpanLength);
     }
     (candidate.recognizer_id < existing.recognizer_id).then_some(ConflictTier::RecognizerId)
+}
+
+fn family_tie_candidate(
+    candidate: &Candidate,
+    existing: &Candidate,
+    policy: &FamilyPolicyTable,
+) -> Option<Candidate> {
+    let family = policy.precedence_tie_family(&candidate.recognizer_id, &existing.recognizer_id)?;
+    let mut merged_sources = vec![
+        existing.recognizer_id.clone(),
+        candidate.recognizer_id.clone(),
+    ];
+    merged_sources.sort();
+    merged_sources.dedup();
+    Some(Candidate::new(
+        candidate.span.start.min(existing.span.start)..candidate.span.end.max(existing.span.end),
+        PiiClass::Custom(format!("family:{family}")),
+        format!("collision-family:{family}"),
+        candidate.score.max(existing.score),
+        candidate.priority.max(existing.priority),
+        None,
+        "collision-family",
+        format!("collision-family:{family}"),
+        ConflictTier::CollisionPolicy,
+        merged_sources,
+    ))
 }
 
 fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
@@ -267,6 +337,69 @@ mod tests {
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].class, PiiClass::Email);
+    }
+
+    #[test]
+    fn collision_policy_precedes_class_priority() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "pan",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .register_collision(
+                "iban",
+                crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
+            )
+            .build();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(0..5, PiiClass::Email, 0.70, "pan"),
+                candidate(0..5, PiiClass::custom("iban"), 0.70, "iban"),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban");
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+    }
+
+    #[test]
+    fn precedence_tie_emits_family_level_candidate() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "doc.alpha",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "doc.beta",
+                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .build();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(0..5, PiiClass::custom("alpha"), 0.70, "doc.alpha"),
+                candidate(0..5, PiiClass::custom("beta"), 0.70, "doc.beta"),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::Custom("family:tenant-document".to_string())
+        );
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:tenant-document"
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            resolved[0].merged_sources,
+            vec!["doc.alpha".to_string(), "doc.beta".to_string()]
+        );
     }
 
     #[test]

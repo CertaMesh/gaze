@@ -1483,6 +1483,10 @@ pub struct RedactionEntry {
     pub validator_fail_reason: Option<ValidatorFailReason>,
     /// Optional ambiguity metadata for a family-level fallback.
     pub ambiguity_record: Option<AmbiguityRecord>,
+    /// Collision family that influenced this decision.
+    pub collision_family: Option<String>,
+    /// Collision variant that influenced this decision.
+    pub collision_variant: Option<String>,
 }
 
 impl RedactionEntry {
@@ -1511,6 +1515,8 @@ impl RedactionEntry {
             session_id,
             validator_fail_reason: None,
             ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         }
     }
 
@@ -1523,6 +1529,17 @@ impl RedactionEntry {
     /// Attaches an ambiguity record to this metadata row.
     pub fn with_ambiguity_record(mut self, record: AmbiguityRecord) -> Self {
         self.ambiguity_record = Some(record);
+        self
+    }
+
+    /// Attaches collision-family metadata to this row.
+    pub fn with_collision_metadata(
+        mut self,
+        family: Option<String>,
+        variant: Option<String>,
+    ) -> Self {
+        self.collision_family = family;
+        self.collision_variant = variant;
         self
     }
 }
@@ -2085,6 +2102,8 @@ mod redaction_logger_tests {
             session_id: None,
             validator_fail_reason: None,
             ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

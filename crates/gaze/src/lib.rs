@@ -45,7 +45,7 @@ pub use registry::{
     Candidate, Canonicalizer, DetectContext, FamilyPolicyTable, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,
 };
-pub use resolver::resolve_candidates;
+pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,

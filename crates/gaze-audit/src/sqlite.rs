@@ -297,8 +297,8 @@ impl SqliteLogger {
                 entry.session_id,
                 validator_fail_reason,
                 ambiguity_record,
-                Option::<String>::None,
-                Option::<String>::None,
+                entry.collision_family,
+                entry.collision_variant,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
