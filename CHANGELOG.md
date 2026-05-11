@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Markdown + a restorable `gaze::Manifest` + an OCR/PII report. New `gaze document
   clean <input> --out <dir>` subcommand on `gaze-cli` (opt-in via `--features
   document`). See todo 728.
+- Validator-veto pre-resolver phase for validator-backed recognizer failures.
+  Invalid candidates are rejected before conflict resolution, then logged as
+  loser-only audit rows with `decided_by: ValidatorVeto` and typed
+  `validator_fail_reason` metadata. See
+  `docs/architecture/validator-veto.md`.
 - Collision-family metadata and `FamilyPolicyTable` for cross-class recognizer
   rivalries. Bundled `core-extended` now declares PAN-vs-IBAN and phone-family
   metadata, `ConflictTier::CollisionPolicy` is audit-serializable, adopter
@@ -25,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   precise variant; missing anchors emit a family-level
   `PiiClass::Custom("family:<name>")` token plus `AmbiguityReason::NoAnchor`.
   `xtask locale-cue-bundle-coherence` validates bundled cue coverage.
+- Ambiguity side-channel and bundled audit migration for v0.7.x collision
+  handling. `RedactionEntry` can carry `ValidatorFailReason` and
+  `AmbiguityRecord`; `SqliteLogger` migrates `validator_fail_reason`,
+  `ambiguity_record`, `collision_family`, and `collision_variant`; CLI audit
+  queries can filter ambiguity and collision metadata. See
+  `docs/architecture/ambiguity-side-channel.md`.
 
 ### Changed
 
