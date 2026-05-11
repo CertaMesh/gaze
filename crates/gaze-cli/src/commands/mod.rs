@@ -1,5 +1,7 @@
 mod audit;
 mod clean;
+#[cfg(feature = "document")]
+mod document;
 mod restore;
 
 use std::path::PathBuf;
@@ -108,6 +110,28 @@ enum Cmd {
     Audit {
         #[command(subcommand)]
         command: AuditCmd,
+    },
+    /// Ingest a document (PNG/JPG/PDF) into a SafeBundle (clean.md + manifest + report).
+    ///
+    /// Requires the binary to be built with `--features document`.
+    #[cfg(feature = "document")]
+    Document {
+        #[command(subcommand)]
+        command: DocumentCmd,
+    },
+}
+
+#[cfg(feature = "document")]
+#[derive(Subcommand, Debug)]
+enum DocumentCmd {
+    /// Run OCR + Gaze redact on `<input>`, write `clean.md`, `manifest.json`,
+    /// and `report.json` to `--out`.
+    Clean {
+        /// Source file. Must be `.png`, `.jpg`, `.jpeg`, or `.pdf` (single-page).
+        input: PathBuf,
+        /// Output directory. Created if missing.
+        #[arg(long)]
+        out: PathBuf,
     },
 }
 
@@ -438,6 +462,12 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     to_iso8601,
                 }),
             },
+        },
+        #[cfg(feature = "document")]
+        Cmd::Document { command } => match command {
+            DocumentCmd::Clean { input, out } => {
+                document::run_clean(document::CleanArgs { input, out })
+            }
         },
     }
 }

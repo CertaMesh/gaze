@@ -1,0 +1,51 @@
+[package]
+name = "gaze-document"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.89"
+license = "Apache-2.0"
+repository = "https://github.com/EmpireTwo/gaze"
+homepage = "https://github.com/EmpireTwo/gaze"
+description = "Reversible PII pseudonymization for documents — Tesseract OCR + Gaze redact → SafeBundle (clean Markdown + manifest + report)."
+readme = "README.md"
+keywords = ["pii", "gaze", "document", "ocr", "bundle"]
+categories = ["text-processing"]
+publish = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lib]
+name = "gaze_document"
+path = "src/lib.rs"
+
+[dependencies]
+gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
+gaze-types = { workspace = true }
+regex = "1"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tempfile = "3"
+pdfium-render = { version = "0.9", optional = true }
+image = { version = "0.25", default-features = false, features = ["png"], optional = true }
+
+[features]
+default = ["ocr-tesseract", "pdf-input"]
+ocr-tesseract = []
+pdf-input = ["dep:pdfium-render", "dep:image"]
+extract-docling = []
+render-image = []
+
+[dev-dependencies]
+ab_glyph = "0.2"
+image = { version = "0.25", default-features = false, features = ["png"] }
+imageproc = { version = "0.26", default-features = false, features = ["text"] }
+serde_json = { workspace = true }
+tempfile = "3"
+
+[[example]]
+name = "gen_fixtures"
+path = "examples/gen_fixtures.rs"

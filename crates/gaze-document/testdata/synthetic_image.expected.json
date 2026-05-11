@@ -1,0 +1,16 @@
+{
+  "expected_classes": [
+    "email",
+    "custom:phone",
+    "name"
+  ],
+  "kind": "png",
+  "must_not_contain_substrings": [
+    "jane.doe@example.com",
+    "@example.com",
+    "jane.doe",
+    "Jane Doe",
+    "555-0142"
+  ],
+  "origin": "synthetic-rust-generator"
+}
