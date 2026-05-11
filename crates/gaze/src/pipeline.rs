@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use gaze_types::{
-    EmittedTokenSpan, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
+    AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, LeakReport,
+    LeakReportTelemetry, LeakSuspect, LosingCandidate, Manifest, RedactionLogError,
     RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
 };
 use thiserror::Error;
@@ -325,10 +326,10 @@ impl Pipeline {
             .into_iter()
             .filter_map(|candidate| translate_candidate(candidate, spans))
             .collect::<Vec<_>>();
-        let losers = merged_losers(&resolved);
+        let losers = merged_losers(&resolved, &self.registry);
         let mut detections = resolved
             .into_iter()
-            .map(IndexedDetection::from)
+            .map(|candidate| indexed_detection_from_candidate(candidate, &self.registry))
             .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
@@ -469,7 +470,7 @@ impl Pipeline {
         action: Action,
         conflict_loser: bool,
     ) -> Result<()> {
-        let entry = RedactionEntry::new(
+        let mut entry = RedactionEntry::new(
             detection.detection.source.clone(),
             detection.detection.class.clone(),
             action,
@@ -480,6 +481,15 @@ impl Pipeline {
             crate::redaction_log::current_epoch_ms(),
             Some(session.audit_session_id().to_string()),
         );
+        if let Some(record) = detection.ambiguity_record.clone() {
+            entry = entry.with_ambiguity_record(record);
+        }
+        if detection.collision_family.is_some() || detection.collision_variant.is_some() {
+            entry = entry.with_collision_metadata(
+                detection.collision_family.clone(),
+                detection.collision_variant.clone(),
+            );
+        }
 
         for logger in &self.redaction_loggers {
             logger.log(&entry)?;
@@ -528,6 +538,9 @@ struct IndexedDetection {
     detection: Detection,
     decided_by: ConflictTier,
     family: String,
+    ambiguity_record: Option<AmbiguityRecord>,
+    collision_family: Option<String>,
+    collision_variant: Option<String>,
 }
 
 struct CleanText {
@@ -545,6 +558,7 @@ struct CleanText {
 #[derive(Default)]
 pub struct PipelineBuilder {
     recognizers: Vec<Arc<dyn Recognizer>>,
+    collision_memberships: Vec<(String, CollisionMembership)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     rules: Vec<Arc<dyn Rule>>,
@@ -565,6 +579,16 @@ impl PipelineBuilder {
         R: Recognizer + 'static,
     {
         self.recognizers.push(Arc::new(recognizer));
+        self
+    }
+
+    pub fn register_collision(
+        mut self,
+        recognizer_id: impl Into<String>,
+        membership: CollisionMembership,
+    ) -> Self {
+        self.collision_memberships
+            .push((recognizer_id.into(), membership));
         self
     }
 
@@ -596,6 +620,9 @@ impl PipelineBuilder {
         let mut registry = RecognizerRegistry::builder();
         for recognizer in self.recognizers {
             registry = registry.register_arc(recognizer);
+        }
+        for (recognizer_id, membership) in self.collision_memberships {
+            registry = registry.register_collision(recognizer_id, membership);
         }
         Ok(Pipeline {
             registry: Arc::new(registry.build()),
@@ -911,34 +938,80 @@ fn translate_span(
     Some(start..end)
 }
 
-fn merged_losers(resolved: &[Candidate]) -> Vec<IndexedDetection> {
+fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<IndexedDetection> {
     resolved
         .iter()
         .flat_map(|winner| {
-            winner.merged_sources.iter().map(|source| IndexedDetection {
-                detection: Detection::new(
-                    winner.span.clone(),
-                    winner.class.clone(),
-                    source.clone(),
-                ),
-                decided_by: if winner.decided_by == ConflictTier::Merged {
-                    ConflictTier::Merged
-                } else {
-                    winner.decided_by
-                },
-                family: winner.token_family.clone(),
+            winner.merged_sources.iter().map(|source| {
+                let class = registry
+                    .recognizer(source)
+                    .map(|recognizer| recognizer.supported_class().clone())
+                    .unwrap_or_else(|| winner.class.clone());
+                let membership = registry.family_policy().membership(source);
+                IndexedDetection {
+                    detection: Detection::new(winner.span.clone(), class, source.clone()),
+                    decided_by: if winner.decided_by == ConflictTier::Merged {
+                        ConflictTier::Merged
+                    } else {
+                        winner.decided_by
+                    },
+                    family: winner.token_family.clone(),
+                    ambiguity_record: None,
+                    collision_family: membership.map(|membership| membership.family.clone()),
+                    collision_variant: membership.map(|membership| membership.variant.clone()),
+                }
             })
         })
         .collect()
 }
 
-impl From<Candidate> for IndexedDetection {
-    fn from(candidate: Candidate) -> Self {
-        Self {
-            detection: Detection::new(candidate.span, candidate.class, candidate.source),
-            decided_by: candidate.decided_by,
-            family: candidate.token_family,
-        }
+fn indexed_detection_from_candidate(
+    candidate: Candidate,
+    registry: &RecognizerRegistry,
+) -> IndexedDetection {
+    let membership = registry
+        .family_policy()
+        .membership(&candidate.recognizer_id);
+    let mut collision_family = membership.map(|membership| membership.family.clone());
+    let collision_variant = membership.map(|membership| membership.variant.clone());
+    let mut ambiguity_record = None;
+
+    if candidate.decided_by == ConflictTier::CollisionPolicy
+        && candidate.recognizer_id.starts_with("collision-family:")
+    {
+        let family = candidate
+            .recognizer_id
+            .trim_start_matches("collision-family:")
+            .to_string();
+        let class = candidate.class.clone();
+        let mut losing_candidates = candidate
+            .merged_sources
+            .iter()
+            .filter_map(|recognizer_id| {
+                registry.recognizer(recognizer_id).map(|recognizer| {
+                    LosingCandidate::new(
+                        recognizer.supported_class().clone(),
+                        recognizer_id.clone(),
+                    )
+                })
+            })
+            .collect::<Vec<_>>();
+        losing_candidates.sort_by(|a, b| a.recognizer_id.cmp(&b.recognizer_id));
+        ambiguity_record = Some(AmbiguityRecord::new(
+            class.clone(),
+            losing_candidates,
+            AmbiguityReason::PrecedenceTie,
+        ));
+        collision_family = Some(family);
+    }
+
+    IndexedDetection {
+        detection: Detection::new(candidate.span, candidate.class, candidate.source),
+        decided_by: candidate.decided_by,
+        family: candidate.token_family,
+        ambiguity_record,
+        collision_family,
+        collision_variant,
     }
 }
 

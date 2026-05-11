@@ -28,11 +28,11 @@ pub use dictionaries::{
     DictionaryLoadError, DictionarySource, DictionaryStats, RulepackDict,
 };
 pub use gaze_types::{
-    CodecAuditRow, CodecCapabilitySet, DocumentExtension, DocumentExtensionBuilder,
-    DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy, LeakKind, LeakReport,
-    LeakReportStats, LeakReportTelemetry, LeakSuspect, Manifest, OpenAiPrivateLabel,
-    RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
-    SafetyNetPiiClass, TextOrigin,
+    CodecAuditRow, CodecCapabilitySet, CollisionMembership, DocumentExtension,
+    DocumentExtensionBuilder, DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy,
+    LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, Manifest,
+    OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
+    SafetyNetError, SafetyNetPiiClass, TextOrigin, RESERVED_BUNDLED_FAMILIES,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
@@ -42,10 +42,10 @@ pub use policy::{
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{
-    Candidate, Canonicalizer, DetectContext, Recognizer, RecognizerRegistry,
+    Candidate, Canonicalizer, DetectContext, FamilyPolicyTable, Recognizer, RecognizerRegistry,
     RecognizerRegistryBuilder, ValidationResult, Validator,
 };
-pub use resolver::resolve_candidates;
+pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};
 pub use rulepack::{
     recognizer_composition_validator, AnchoredBoundary, ContextSpec, CuePosition, LocaleBucket,

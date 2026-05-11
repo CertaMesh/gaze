@@ -59,6 +59,56 @@ pub enum PiiClass {
 /// Built-in class labels in stable display order.
 pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
+/// Family names reserved for bundled collision-policy rulepacks.
+///
+/// Adopter policy-level custom recognizers cannot claim these names because bundled
+/// families are part of the core disambiguation contract.
+pub const RESERVED_BUNDLED_FAMILIES: &[&str] = &[
+    "us-9-digit-id",
+    "iberian-id",
+    "payment-card-or-iban",
+    "phone-or-imei",
+    "vin-or-serial",
+    "mac-or-hex",
+    "passport-or-doc-support",
+    "national-13-digit",
+    "italian-cf-or-serial",
+    "german-personalausweis",
+    "swedish-personnummer",
+    "finnish-hetu",
+];
+
+/// Collision-family membership metadata for one recognizer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CollisionMembership {
+    /// Cross-class family name.
+    pub family: String,
+    /// Variant name within the family.
+    pub variant: String,
+    /// Lower values win when two variants in the same family overlap.
+    pub precedence: u32,
+    /// Optional anchor variant required by later ambiguity handling.
+    pub mandatory_anchor: Option<String>,
+}
+
+impl CollisionMembership {
+    /// Builds collision-family membership metadata.
+    pub fn new(
+        family: impl Into<String>,
+        variant: impl Into<String>,
+        precedence: u32,
+        mandatory_anchor: Option<String>,
+    ) -> Self {
+        Self {
+            family: family.into(),
+            variant: variant.into(),
+            precedence,
+            mandatory_anchor,
+        }
+    }
+}
+
 impl PiiClass {
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {
@@ -1377,10 +1427,12 @@ pub enum ConflictTier {
     Score,
     /// Span length decided the conflict.
     SpanLength,
-    /// Validator result decided the conflict.
+    /// Same-class containment validator result decided the conflict.
     Validator,
     /// Pre-resolver validator veto rejected the candidate.
     ValidatorVeto,
+    /// Cross-class collision-family policy decided the conflict.
+    CollisionPolicy,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
@@ -1431,6 +1483,10 @@ pub struct RedactionEntry {
     pub validator_fail_reason: Option<ValidatorFailReason>,
     /// Optional ambiguity metadata for a family-level fallback.
     pub ambiguity_record: Option<AmbiguityRecord>,
+    /// Collision family that influenced this decision.
+    pub collision_family: Option<String>,
+    /// Collision variant that influenced this decision.
+    pub collision_variant: Option<String>,
 }
 
 impl RedactionEntry {
@@ -1459,6 +1515,8 @@ impl RedactionEntry {
             session_id,
             validator_fail_reason: None,
             ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         }
     }
 
@@ -1471,6 +1529,17 @@ impl RedactionEntry {
     /// Attaches an ambiguity record to this metadata row.
     pub fn with_ambiguity_record(mut self, record: AmbiguityRecord) -> Self {
         self.ambiguity_record = Some(record);
+        self
+    }
+
+    /// Attaches collision-family metadata to this row.
+    pub fn with_collision_metadata(
+        mut self,
+        family: Option<String>,
+        variant: Option<String>,
+    ) -> Self {
+        self.collision_family = family;
+        self.collision_variant = variant;
         self
     }
 }
@@ -2033,6 +2102,8 @@ mod redaction_logger_tests {
             session_id: None,
             validator_fail_reason: None,
             ambiguity_record: None,
+            collision_family: None,
+            collision_variant: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

@@ -54,6 +54,11 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "fixture-citation-lint"],
     },
     MatrixCommand {
+        label: "cargo run -p xtask -- family-policy-table-coherence",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "family-policy-table-coherence"],
+    },
+    MatrixCommand {
         label: "cargo test -p gaze-recognizers --no-default-features",
         program: "cargo",
         args: &["test", "-p", "gaze-recognizers", "--no-default-features"],

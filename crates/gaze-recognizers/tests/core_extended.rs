@@ -788,8 +788,20 @@ fn phase2_iban_and_cards_are_universal_and_solo_classes() {
 
     assert_eq!(iban.locales, vec![LocaleTag::Global]);
     assert_eq!(card.locales, vec![LocaleTag::Global]);
-    assert!(iban.cooperates_with.is_empty());
-    assert!(card.cooperates_with.is_empty());
+    assert_eq!(iban.cooperates_with, vec!["card.structural"]);
+    assert_eq!(card.cooperates_with, vec!["iban.structural"]);
+    assert_eq!(
+        iban.collision
+            .as_ref()
+            .map(|collision| collision.family.as_str()),
+        Some("payment-card-or-iban")
+    );
+    assert_eq!(
+        card.collision
+            .as_ref()
+            .map(|collision| collision.family.as_str()),
+        Some("payment-card-or-iban")
+    );
     assert_eq!(
         rulepack
             .recognizers

@@ -3517,6 +3517,7 @@ dependencies = [
  "clap",
  "fake",
  "gaze-pii",
+ "gaze-recognizers",
  "phonenumber",
  "rand 0.8.6",
  "serde",

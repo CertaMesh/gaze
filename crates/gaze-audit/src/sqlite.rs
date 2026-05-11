@@ -297,8 +297,8 @@ impl SqliteLogger {
                 entry.session_id,
                 validator_fail_reason,
                 ambiguity_record,
-                Option::<String>::None,
-                Option::<String>::None,
+                entry.collision_family,
+                entry.collision_variant,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -537,6 +537,7 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::SpanLength => "span_length",
         ConflictTier::Validator => "validator",
         ConflictTier::ValidatorVeto => "validator_veto",
+        ConflictTier::CollisionPolicy => "collision_policy",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
         _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {tier:?}"),
@@ -592,6 +593,7 @@ fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusql
         "span_length" => ConflictTier::SpanLength,
         "validator" => ConflictTier::Validator,
         "validator_veto" => ConflictTier::ValidatorVeto,
+        "collision_policy" => ConflictTier::CollisionPolicy,
         "recognizer_id" => ConflictTier::RecognizerId,
         "merged" => ConflictTier::Merged,
         other => {

@@ -17,6 +17,10 @@ pub(crate) fn register_policy_detectors(
     registered_dictionaries: &mut BTreeSet<String>,
 ) -> Result<PipelineBuilder, BuildError> {
     for detector in &policy.detectors {
+        let recognizer_id = match detector.kind {
+            DetectorKind::Dictionary => format!("dict/{}", detector.name),
+            _ => detector.name.clone(),
+        };
         builder = match &detector.kind {
             DetectorKind::Regex => builder.detector(RegexDetector::with_source(
                 detector
@@ -56,6 +60,9 @@ pub(crate) fn register_policy_detectors(
                 )
             }
         };
+        if let Some(collision) = detector.collision.clone() {
+            builder = builder.register_collision(recognizer_id, collision);
+        }
     }
 
     Ok(builder)
@@ -93,6 +100,9 @@ pub(crate) fn register_rulepack_recognizers(
         .into_values()
         .filter(|(_, recognizer)| recognizer.enabled)
     {
+        if let Some(collision) = recognizer.collision.clone() {
+            builder = builder.register_collision(recognizer.id.clone(), collision);
+        }
         match recognizer.matcher {
             RawMatch::Regex {
                 pattern,

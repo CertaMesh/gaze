@@ -1,9 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use crate::resolver::resolve_candidates;
+use crate::resolver::resolve_candidates_with_policy;
 pub use gaze_types::{Candidate, DetectContext, Recognizer};
-use gaze_types::{LocaleChain, PiiClass};
+use gaze_types::{CollisionMembership, LocaleChain, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -27,11 +28,112 @@ pub struct RecognizerRegistry {
     recognizers_by_id: HashMap<String, Arc<dyn Recognizer>>,
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
+    family_policy: FamilyPolicyTable,
 }
 
 impl std::fmt::Debug for RecognizerRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RecognizerRegistry").finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FamilyPolicyTable {
+    inner: FamilyPolicyTableInner,
+}
+
+#[derive(Debug, Clone)]
+enum FamilyPolicyTableInner {
+    Empty,
+    Populated {
+        by_recognizer: HashMap<String, CollisionMembership>,
+        family_index: HashMap<String, FamilyEntry>,
+    },
+}
+
+#[derive(Debug, Clone, Default)]
+struct FamilyEntry {
+    variants: HashMap<String, u32>,
+}
+
+impl FamilyPolicyTable {
+    pub const EMPTY: Self = Self {
+        inner: FamilyPolicyTableInner::Empty,
+    };
+
+    fn from_memberships(by_recognizer: HashMap<String, CollisionMembership>) -> Self {
+        if by_recognizer.is_empty() {
+            return Self::EMPTY;
+        }
+        let mut family_index = HashMap::<String, FamilyEntry>::new();
+        for membership in by_recognizer.values() {
+            family_index
+                .entry(membership.family.clone())
+                .or_default()
+                .variants
+                .entry(membership.variant.clone())
+                .and_modify(|precedence| *precedence = (*precedence).min(membership.precedence))
+                .or_insert(membership.precedence);
+        }
+        Self {
+            inner: FamilyPolicyTableInner::Populated {
+                by_recognizer,
+                family_index,
+            },
+        }
+    }
+
+    /// Returns `Some(true)` when `a` wins, `Some(false)` when `b` wins, and
+    /// `None` when no family policy applies or precedence is tied.
+    pub fn compare(&self, a: &str, b: &str) -> Option<bool> {
+        let FamilyPolicyTableInner::Populated {
+            by_recognizer,
+            family_index,
+        } = &self.inner
+        else {
+            return None;
+        };
+        let ma = by_recognizer.get(a)?;
+        let mb = by_recognizer.get(b)?;
+        if ma.family != mb.family || ma.variant == mb.variant {
+            return None;
+        }
+        let family = family_index.get(&ma.family)?;
+        let a_precedence = family
+            .variants
+            .get(&ma.variant)
+            .copied()
+            .unwrap_or(ma.precedence);
+        let b_precedence = family
+            .variants
+            .get(&mb.variant)
+            .copied()
+            .unwrap_or(mb.precedence);
+        match a_precedence.cmp(&b_precedence) {
+            Ordering::Less => Some(true),
+            Ordering::Greater => Some(false),
+            Ordering::Equal => None,
+        }
+    }
+
+    pub fn membership(&self, recognizer_id: &str) -> Option<&CollisionMembership> {
+        let FamilyPolicyTableInner::Populated { by_recognizer, .. } = &self.inner else {
+            return None;
+        };
+        by_recognizer.get(recognizer_id)
+    }
+
+    pub(crate) fn precedence_tie_family(&self, a: &str, b: &str) -> Option<&str> {
+        let ma = self.membership(a)?;
+        let mb = self.membership(b)?;
+        (ma.family == mb.family && ma.variant != mb.variant && ma.precedence == mb.precedence)
+            .then_some(ma.family.as_str())
+    }
+}
+
+impl Default for FamilyPolicyTable {
+    fn default() -> Self {
+        Self::EMPTY
     }
 }
 
@@ -152,6 +254,55 @@ mod tests {
 
         assert!(registry.detect_all("input", &ctx).is_empty());
     }
+
+    #[test]
+    fn empty_family_policy_never_applies() {
+        assert_eq!(FamilyPolicyTable::EMPTY.compare("a", "b"), None);
+    }
+
+    #[test]
+    fn registry_builder_compiles_family_policy_table() {
+        let registry = RecognizerRegistry::builder()
+            .register_collision(
+                "tenant.alpha",
+                CollisionMembership::new("tenant-doc", "alpha", 10, None),
+            )
+            .register_collision(
+                "tenant.beta",
+                CollisionMembership::new("tenant-doc", "beta", 20, None),
+            )
+            .register_collision(
+                "tenant.gamma",
+                CollisionMembership::new("other-doc", "gamma", 5, None),
+            )
+            .build();
+
+        assert_eq!(
+            registry
+                .family_policy()
+                .membership("tenant.alpha")
+                .map(|membership| membership.variant.as_str()),
+            Some("alpha")
+        );
+        assert_eq!(
+            registry
+                .family_policy()
+                .compare("tenant.alpha", "tenant.beta"),
+            Some(true)
+        );
+        assert_eq!(
+            registry
+                .family_policy()
+                .compare("tenant.beta", "tenant.alpha"),
+            Some(false)
+        );
+        assert_eq!(
+            registry
+                .family_policy()
+                .compare("tenant.alpha", "tenant.gamma"),
+            None
+        );
+    }
 }
 
 impl RecognizerRegistry {
@@ -203,7 +354,10 @@ impl RecognizerRegistry {
         }
 
         let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
-        (resolve_candidates(candidates), vetoed)
+        (
+            resolve_candidates_with_policy(candidates, self.family_policy()),
+            vetoed,
+        )
     }
 
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
@@ -217,6 +371,10 @@ impl RecognizerRegistry {
     pub fn canonicalizers(&self) -> &HashMap<String, Arc<dyn Canonicalizer>> {
         &self.canonicalizers
     }
+
+    pub fn family_policy(&self) -> &FamilyPolicyTable {
+        &self.family_policy
+    }
 }
 
 fn min_score(_class: &PiiClass) -> f32 {
@@ -228,6 +386,7 @@ pub struct RecognizerRegistryBuilder {
     entries: Vec<Arc<dyn Recognizer>>,
     validators: HashMap<String, Arc<dyn Validator>>,
     canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
+    collision_memberships: HashMap<String, CollisionMembership>,
 }
 
 impl RecognizerRegistryBuilder {
@@ -238,6 +397,16 @@ impl RecognizerRegistryBuilder {
 
     pub fn register_arc(mut self, r: Arc<dyn Recognizer>) -> Self {
         self.entries.push(r);
+        self
+    }
+
+    pub fn register_collision(
+        mut self,
+        recognizer_id: impl Into<String>,
+        membership: CollisionMembership,
+    ) -> Self {
+        self.collision_memberships
+            .insert(recognizer_id.into(), membership);
         self
     }
 
@@ -252,6 +421,7 @@ impl RecognizerRegistryBuilder {
             recognizers_by_id,
             validators: self.validators,
             canonicalizers: self.canonicalizers,
+            family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
         }
     }
 }
