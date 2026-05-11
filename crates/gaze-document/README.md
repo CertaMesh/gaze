@@ -169,12 +169,56 @@ If you observe a new artifact class slipping through, file an issue
 with the OCR output and the expected normalization shape; the fix
 belongs in `ocr::normalize` alongside the existing rules.
 
+## MCP feature
+
+Enable `mcp` to register two agent-tier tools with `gaze-mcp-core`:
+`gaze_read_text` for already-extracted text and `gaze_read_file` for PNG,
+JPG, or PDF paths. Hosts still call them through `PiiEnvelope::dispatch`,
+so args, responses, manifest rows, and auth stay on the MCP chokepoint.
+
+```rust,no_run
+use std::sync::Arc;
+
+use gaze_document::mcp::{self, GazeReadOpts};
+use gaze_mcp_core::ToolRegistry;
+use gaze_mcp_rmcp::{FixedPrincipalResolver, RmcpFrontend};
+
+let mut registry = ToolRegistry::new();
+mcp::register_tools(&mut registry, GazeReadOpts::default())?;
+
+let frontend = RmcpFrontend::stdio(Arc::new(
+    FixedPrincipalResolver::agent("local-stdio"),
+));
+# Ok::<(), gaze_mcp_core::ToolRegistryError>(())
+```
+
+Both tools return a JSON object:
+
+```json
+{
+  "clean_markdown": "# gaze-document safe text\n\n...",
+  "manifest_id": "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "file_metadata": {
+    "source_kind": "text",
+    "ocr_mean_confidence": null,
+    "bundle_version": 1,
+    "page_count": null
+  }
+}
+```
+
+`gaze_read_file` defaults to a 25 MiB input cap. Override it with
+`GazeReadFile::with_max_file_size(bytes)` or `GazeReadOpts`.
+`gaze mcp install` is planned as a separate `gaze-cli` flow; this crate only
+provides the opt-in tool implementations.
+
 ## Feature flags
 
 | Feature           | Default | What it enables                                      |
 |-------------------|---------|------------------------------------------------------|
 | `ocr-tesseract`   | yes     | Tesseract subprocess OCR backend + `clean()` entry.  |
 | `pdf-input`       | yes     | `pdfium-render` PDF rasterization (single page).     |
+| `mcp`             | no      | `gaze_read_file` + `gaze_read_text` Tool impls.      |
 | `extract-docling` | no      | Reserved — future Docling layout adapter.            |
 | `render-image`    | no      | Reserved — future redacted-preview renderer.         |
 

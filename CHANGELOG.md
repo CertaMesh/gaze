@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ambiguity_record`, `collision_family`, and `collision_variant`; CLI audit
   queries can filter ambiguity and collision metadata. See
   `docs/architecture/ambiguity-side-channel.md`.
+- `gaze-document` opt-in `mcp` feature exposes `gaze_read_file` and
+  `gaze_read_text` Tool impls that route document ingestion through
+  `PiiEnvelope::dispatch`. Returns `{ clean_markdown, manifest_id,
+  file_metadata }`.
 
 ### Changed
 
