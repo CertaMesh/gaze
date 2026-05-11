@@ -971,6 +971,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaze-document"
+version = "0.0.1"
+dependencies = [
+ "gaze-pii",
+]
+
+[[package]]
 name = "gaze-mcp-core"
 version = "0.7.0"
 dependencies = [
