@@ -15,3 +15,19 @@ names = ["antwortest", "antworte", "schreibst", "reply to", "respond to", "draft
 
 [locale.footer_cues]
 names = ["Gesendet von", "Gesendet durch", "Sent by", "Sent via", "On behalf of", "via"]
+
+[locale.cues.iban]
+names = ["IBAN", "IBAN:", "Konto", "Kontonummer", "Bankverbindung"]
+window_chars = 64
+
+[locale.cues.passport]
+names = ["Reisepass", "Reisepass-Nr", "Pass-Nr", "Passnummer"]
+window_chars = 64
+
+[locale.cues.codice-fiscale]
+names = ["Codice fiscale", "Codice Fiscale", "C.F.", "CF"]
+window_chars = 64
+
+[locale.cues.vat-id]
+names = ["USt-IdNr", "USt-ID", "Umsatzsteuer-ID", "MwSt-Nr"]
+window_chars = 64

@@ -145,11 +145,19 @@ pub struct SourceSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct LocaleData {
     pub buckets: HashMap<String, LocaleBucket>,
+    pub cues: HashMap<String, LocaleCueBundle>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocaleBucket {
     pub names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LocaleCueBundle {
+    pub names: Vec<String>,
+    pub window_chars: Option<u16>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -317,6 +325,8 @@ struct RawRulepackWithLint {
 
 #[derive(Debug, Deserialize)]
 struct RawLocaleData {
+    #[serde(default)]
+    cues: HashMap<String, RawLocaleCueBundle>,
     #[serde(flatten)]
     buckets: HashMap<String, RawLocaleBucket>,
 }
@@ -325,6 +335,14 @@ struct RawLocaleData {
 #[serde(deny_unknown_fields)]
 struct RawLocaleBucket {
     names: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawLocaleCueBundle {
+    names: Vec<String>,
+    #[serde(default)]
+    window_chars: Option<u16>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -507,6 +525,19 @@ impl From<RawLocaleData> for LocaleData {
                         name,
                         LocaleBucket {
                             names: bucket.names,
+                        },
+                    )
+                })
+                .collect(),
+            cues: raw
+                .cues
+                .into_iter()
+                .map(|(name, bundle)| {
+                    (
+                        name,
+                        LocaleCueBundle {
+                            names: bundle.names,
+                            window_chars: bundle.window_chars,
                         },
                     )
                 })
@@ -1160,6 +1191,34 @@ license = "Apache-2.0"
         assert_eq!(recognizer.class, PiiClass::Email);
         assert_eq!(recognizer.scoring.priority, 90);
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
+    }
+
+    #[test]
+    fn parses_nested_locale_cue_bundles() {
+        let rulepack = Rulepack::parse(
+            r#"
+schema_version = "0.1.0"
+rulepack_id = "locale-cues"
+rulepack_version = "0.7.0"
+default_locales = ["en-US"]
+
+[locale.forward_markers]
+names = ["Forwarded message"]
+
+[locale.cues.iban]
+names = ["IBAN:", "Account"]
+window_chars = 48
+"#,
+        )
+        .expect("locale cues rulepack");
+
+        let locale = rulepack.locale.expect("locale data");
+        assert_eq!(
+            locale.buckets["forward_markers"].names,
+            vec!["Forwarded message"]
+        );
+        assert_eq!(locale.cues["iban"].names, vec!["IBAN:", "Account"]);
+        assert_eq!(locale.cues["iban"].window_chars, Some(48));
     }
 
     #[cfg(feature = "bundled-recognizers")]

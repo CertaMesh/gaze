@@ -15,3 +15,15 @@ names = ["reply to", "respond to", "draft for", "draft to"]
 
 [locale.footer_cues]
 names = ["Sent by", "Sent via", "On behalf of"]
+
+[locale.cues.iban]
+names = ["IBAN", "IBAN:", "Account", "Account No.", "Bank account"]
+window_chars = 64
+
+[locale.cues.passport]
+names = ["Passport", "Passport:", "Passport No.", "Passport number"]
+window_chars = 64
+
+[locale.cues.vat-id]
+names = ["VAT", "VAT:", "VAT no", "VAT ID", "VAT number"]
+window_chars = 64
