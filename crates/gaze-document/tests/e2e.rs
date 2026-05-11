@@ -29,6 +29,7 @@ use gaze_types::PiiClass;
 const ORIGINAL_EMAIL: &str = "jane.doe@example.com";
 const ORIGINAL_EMAIL_DOMAIN: &str = "@example.com";
 const ORIGINAL_EMAIL_LOCAL: &str = "jane.doe";
+const ORIGINAL_NAME: &str = "Jane Doe";
 const ORIGINAL_PHONE_TAIL: &str = "555-0142";
 
 fn testdata_dir() -> PathBuf {
@@ -85,12 +86,20 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
         "clean.md leaked the original phone tail substring:\n{clean_text}"
     );
     assert!(
+        !clean_text.contains(ORIGINAL_NAME),
+        "clean.md leaked the original recipient name substring:\n{clean_text}"
+    );
+    assert!(
         clean_text.contains(":Email_"),
         "expected a tokenized Email reference in clean.md, got:\n{clean_text}"
     );
     assert!(
         clean_text.contains(":Custom:phone_"),
         "expected a tokenized phone reference in clean.md, got:\n{clean_text}"
+    );
+    assert!(
+        clean_text.contains(":Name_"),
+        "expected a tokenized Name reference in clean.md, got:\n{clean_text}"
     );
 
     let manifest_bytes = std::fs::read(&manifest_path).expect("manifest bytes");
@@ -109,6 +118,13 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
             .iter()
             .any(|s| matches!(&s.class, PiiClass::Custom(name) if name == "phone")),
         "manifest missing Custom(phone) span"
+    );
+    assert!(
+        manifest
+            .spans
+            .iter()
+            .any(|s| matches!(s.class, PiiClass::Name)),
+        "manifest missing Name span"
     );
 
     let report_bytes = std::fs::read(&report_path).expect("report bytes");

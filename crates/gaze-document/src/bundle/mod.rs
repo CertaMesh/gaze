@@ -35,7 +35,9 @@ use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, LocaleTag, Pipeline, RawDocument, Scope, Session,
 };
 #[cfg(feature = "ocr-tesseract")]
-use gaze_recognizers::RegexDetector;
+use gaze_recognizers::{
+    AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape, RegexDetector,
+};
 #[cfg(feature = "ocr-tesseract")]
 use gaze_types::{EmittedTokenSpan, PiiClass};
 
@@ -311,11 +313,38 @@ fn build_document_pipeline() -> Result<Pipeline, DocumentError> {
         PiiClass::custom("phone"),
     )
     .map_err(|err| pipeline_err("phone-regex", err))?;
+    // Invoice / shipping recipient block names. Scope is intentionally
+    // local to gaze-document (rather than extending the locale-en
+    // `forward_markers` bucket): forwarded-email cues and document
+    // recipient blocks are semantically distinct anchors and should not
+    // share a bucket. `LineEnd` boundary stops the name span at the
+    // newline that ends the recipient line so a follow-up `Email:` row
+    // cannot be absorbed into the Name match.
+    let recipient_name = AnchoredMatchRecognizer::new(
+        "gaze_document.name.recipient".to_string(),
+        vec![
+            "Bill to".to_string(),
+            "Invoice to".to_string(),
+            "Ship to".to_string(),
+            "Attention".to_string(),
+            "Attn".to_string(),
+        ],
+        AnchoredBoundary::LineEnd,
+        48,
+        NameShape::PersonName,
+        CuePosition::Before,
+        "invoice_recipient".to_string(),
+        2,
+        0.88,
+        110,
+    );
     Pipeline::builder()
         .detector(email)
         .detector(phone)
+        .recognizer(recipient_name)
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
         .rule(ClassRule::new(PiiClass::custom("phone"), Action::Tokenize))
+        .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .map_err(|err| pipeline_err("build", err))
