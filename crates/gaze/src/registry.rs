@@ -2,10 +2,10 @@ use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use crate::anchor_resolver::{AnchorOutcome, AnchorResolver};
-use crate::resolver::resolve_candidates_with_policy;
+use crate::anchor_resolver::AnchorResolver;
+use crate::resolver::resolve_candidates_with_policy_and_anchors;
 pub use gaze_types::{Candidate, DetectContext, Recognizer};
-use gaze_types::{CollisionMembership, ConflictTier, LocaleChain, LocaleTag, PiiClass};
+use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -356,9 +356,14 @@ impl RecognizerRegistry {
         }
 
         let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
-        let candidates = self.apply_anchor_resolution(candidates, input, ctx.locale_chain);
         (
-            resolve_candidates_with_policy(candidates, self.family_policy()),
+            resolve_candidates_with_policy_and_anchors(
+                candidates,
+                self.family_policy(),
+                &self.anchor_resolver,
+                input,
+                ctx.locale_chain,
+            ),
             vetoed,
         )
     }
@@ -378,50 +383,6 @@ impl RecognizerRegistry {
     pub fn family_policy(&self) -> &FamilyPolicyTable {
         &self.family_policy
     }
-
-    fn apply_anchor_resolution(
-        &self,
-        candidates: Vec<Candidate>,
-        input: &str,
-        locale_chain: &[LocaleTag],
-    ) -> Vec<Candidate> {
-        candidates
-            .into_iter()
-            .map(|candidate| {
-                match self.anchor_resolver.resolve(
-                    &candidate,
-                    input,
-                    self.family_policy(),
-                    locale_chain,
-                ) {
-                    AnchorOutcome::Found | AnchorOutcome::NotRequired => candidate,
-                    AnchorOutcome::Missing { family, .. } => {
-                        family_fallback_candidate(candidate, family, ConflictTier::AnchoredContext)
-                    }
-                }
-            })
-            .collect()
-    }
-}
-
-fn family_fallback_candidate(
-    candidate: Candidate,
-    family: String,
-    decided_by: ConflictTier,
-) -> Candidate {
-    let original_recognizer_id = candidate.recognizer_id.clone();
-    Candidate::new(
-        candidate.span,
-        PiiClass::Custom(format!("family:{family}")),
-        format!("collision-family:{family}"),
-        candidate.score,
-        candidate.priority,
-        None,
-        format!("collision-family:{family}"),
-        candidate.source,
-        decided_by,
-        vec![original_recognizer_id],
-    )
 }
 
 fn min_score(_class: &PiiClass) -> f32 {
