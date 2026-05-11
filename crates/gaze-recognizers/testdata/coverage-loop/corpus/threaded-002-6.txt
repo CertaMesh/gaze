@@ -1,0 +1,9 @@
+Aktuelle Antwort:
+Bitte nutzt fuer diese Pruefung ransom@example.net und den Namen Mara Meyer. Die neue Rueckrufnummer lautet 01710000000.
+
+Am 10.05.2026 schrieb Support:
+> In der vorherigen Nachricht standen DE30864894817213149652 fuer die Zahlung und 38012 fuer die Zustellung.
+> Der technische Header enthielt 2001:db8::2cca:192.0.2.196.
+> Weitere Werte wie 000-00-0000, CASE-123 und test@example.invalid waren nur Beispiele.
+
+Abschluss: Die Markierungen in der aktuellen Nachricht und im Zitat bleiben synthetisch und muessen gemeinsam erkannt werden.

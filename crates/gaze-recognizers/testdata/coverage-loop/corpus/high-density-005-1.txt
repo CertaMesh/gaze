@@ -1,0 +1,1 @@
+Kurznotiz fuer die Pruefung: Kontakt Felix Wagner, Mail ova@example.org, Telefon 015550112233, PLZ 93889, Konto DE14466648307259845178, Quelladresse 2001:db8::82f:192.0.2.102. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.

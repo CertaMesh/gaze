@@ -1,0 +1,1 @@
+Kurznotiz fuer die Pruefung: Kontakt Max Weber, Mail lowell@example.net, Telefon +49 30 00000000, PLZ 46791, Konto DE49223295931770550418, Quelladresse 2001:db8:cb0e:e12f::b654. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.

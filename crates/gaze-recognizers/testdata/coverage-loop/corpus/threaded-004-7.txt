@@ -1,0 +1,9 @@
+Newest message:
+I spoke with Blair Reed today. They confirmed nils@example.org, 555-0183, and postal code 84705-7770.
+
+On previous escalation wrote:
+> The refund account remains DE12590954308533212495.
+> The staging request was seen at 2001:db8::f8f8:192.0.2.97.
+> The old note included Root, Admin, and Main as product roles, not personal names.
+
+Follow-up paragraph: long email threads repeat and reorder facts. This template keeps the quote prefix on old PII so the corpus covers both new and inherited context.

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-002-6",
+  "context": "threaded",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 50,
+      "byte_end": 68,
+      "class_id": "Email",
+      "raw_label": "ransom@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 2381349912560139137,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 83,
+      "byte_end": 93,
+      "class_id": "Name",
+      "raw_label": "Mara Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 4443618026852401935,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 126,
+      "byte_end": 137,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 1305206218446083945,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 209,
+      "byte_end": 231,
+      "class_id": "custom:iban",
+      "raw_label": "DE30864894817213149652",
+      "generator_id": "iban_de",
+      "generator_seed": 9586518035509145571,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 253,
+      "byte_end": 258,
+      "class_id": "custom:postal_code",
+      "raw_label": "38012",
+      "generator_id": "postal_de",
+      "generator_seed": 8662008361543633379,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 313,
+      "byte_end": 339,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::2cca:192.0.2.196",
+      "generator_id": "ip_v6",
+      "generator_seed": 1149939174700138777,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-002",
+    "template_seed": 5859252211064378727
+  }
+}

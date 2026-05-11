@@ -1,0 +1,9 @@
+Newest message:
+I spoke with Alice Reed today. They confirmed karlie@example.com, 555-0130, and postal code 24901-1823.
+
+On previous escalation wrote:
+> The refund account remains DE30384169761143870023.
+> The staging request was seen at 2001:db8::48b6:192.0.2.239.
+> The old note included Root, Admin, and Main as product roles, not personal names.
+
+Follow-up paragraph: long email threads repeat and reorder facts. This template keeps the quote prefix on old PII so the corpus covers both new and inherited context.

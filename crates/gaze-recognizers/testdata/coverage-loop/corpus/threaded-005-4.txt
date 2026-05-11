@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Jonas Meyer bittet um Antwort an blair@example.com und Rueckruf unter 01710000000.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE13809009727064074950
+> Quelladresse: 2001:db8::e097:192.0.2.144
+> Versandbereich: 70884
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

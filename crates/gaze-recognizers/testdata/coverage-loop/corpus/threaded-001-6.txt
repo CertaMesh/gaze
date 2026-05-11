@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Blair Parker and the preferred address is felton@example.org. Please use 555-0173 for callback and keep refund routing on DE77304013598787493826.
+
+On Tue, Support wrote:
+> Previous note listed postal route 26185-7438 and source address 2001:db8::b2d4:192.0.2.159.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

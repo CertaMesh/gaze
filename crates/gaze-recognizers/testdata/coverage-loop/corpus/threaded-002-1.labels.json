@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-002-1",
+  "context": "threaded",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 50,
+      "byte_end": 69,
+      "class_id": "Email",
+      "raw_label": "lavinia@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 10535888478986636108,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 84,
+      "byte_end": 96,
+      "class_id": "Name",
+      "raw_label": "Nina Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 14180687170725234039,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 129,
+      "byte_end": 145,
+      "class_id": "custom:phone",
+      "raw_label": "+49 1555 0112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 6804156604356518771,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 217,
+      "byte_end": 239,
+      "class_id": "custom:iban",
+      "raw_label": "DE15811983561080109809",
+      "generator_id": "iban_de",
+      "generator_seed": 469281687914804172,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 261,
+      "byte_end": 266,
+      "class_id": "custom:postal_code",
+      "raw_label": "92697",
+      "generator_id": "postal_de",
+      "generator_seed": 7038171680536099971,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 321,
+      "byte_end": 345,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:2ac6:c5d7::6680",
+      "generator_id": "ip_v6",
+      "generator_seed": 8131640516923187064,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-002",
+    "template_seed": 10502500530141748154
+  }
+}

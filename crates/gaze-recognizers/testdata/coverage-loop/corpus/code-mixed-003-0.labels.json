@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-003-0",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 22,
+      "byte_end": 39,
+      "class_id": "Email",
+      "raw_label": "regan@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 12679119033550175614,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 53,
+      "byte_end": 78,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::3a6a:192.0.2.96",
+      "generator_id": "ip_v6",
+      "generator_seed": 14759653107367977069,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 94,
+      "byte_end": 136,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xA503bF946952d00cA31D7982F260c83a8C699116",
+      "generator_id": "eth_eip55",
+      "generator_seed": 1352662451496556758,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-003",
+    "template_seed": 10061375225223246731
+  }
+}

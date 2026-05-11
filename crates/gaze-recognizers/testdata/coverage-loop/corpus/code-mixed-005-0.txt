@@ -1,0 +1,12 @@
+Incident note for staging run:
+
+```text
+Exception: PaymentRouteRejected
+  account.email = viviane@example.org
+  account.name = Casey Morgan
+  account.phone = 555-0111
+  network.remote_addr = 2001:db8::7d65:192.0.2.113
+  payout.iban = DE38849055049043227976
+```
+
+The surrounding text matters because real agent inputs often paste the trace and then explain it in prose. The engineer says the code path is harmless in dry run, but the same blob still contains generated labels. Extra values like 000-00-0000, port 443, and error 0xDEADBEEF are present as distractors. The final note asks whether postal routing 96647-9729 should be compared before or after the retry job.

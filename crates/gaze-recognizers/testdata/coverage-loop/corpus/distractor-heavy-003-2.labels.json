@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-003-2",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 151,
+      "byte_end": 175,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:432b:fa0c::4d08",
+      "generator_id": "ip_v6",
+      "generator_seed": 10556108282389088814,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 205,
+      "byte_end": 220,
+      "class_id": "Email",
+      "raw_label": "ola@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 14463784204582548040,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 242,
+      "byte_end": 284,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x959040455CD6891cC7eA50bDBA1085dA592ace6C",
+      "generator_id": "eth_eip55",
+      "generator_seed": 7571385726554144056,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 370,
+      "byte_end": 389,
+      "class_id": "custom:credit_card",
+      "raw_label": "4670 7131 9929 7267",
+      "generator_id": "card_luhn",
+      "generator_seed": 9952945677463593163,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 413,
+      "byte_end": 435,
+      "class_id": "custom:iban",
+      "raw_label": "DE45209005223915296620",
+      "generator_id": "iban_de",
+      "generator_seed": 14841606858376248790,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-003",
+    "template_seed": 13296696446374570267
+  }
+}

@@ -1,0 +1,8 @@
+Guten Tag,
+
+zur Vorbereitung der Antwort habe ich die letzten Nachrichten bereinigt. In der ersten Nachricht stand Felix Fischer mit der Adresse daphne@example.net. Danach folgte eine Rueckfrage zur Zahlung, in der DE39574363563021706922 genannt wurde. Zwischen diesen Angaben standen viele normale Saetze: Dank fuer die Hilfe, Bitte um Geduld, Hinweis auf Feiertage und ein interner Code CASE-2026-0001.
+
+Die zweite Nachricht brachte mehr Kontext. Fuer den Rueckruf wurde +49 1555 0112233 eingetragen, und fuer die regionale Zuordnung steht 92809 im Formular. Der technische Anhang meldet 2001:db8:2cc3:ca09::82db als synthetische Quelladresse. Bitte achtet darauf, dass Text wie "Main", "Root" oder "Admin" in diesem Verlauf nur Rollen oder Menuepunkte meint. Die echte Namensstelle ist der generierte Platzhalter oben.
+
+Mit freundlichen Gruessen
+Pruefpostfach

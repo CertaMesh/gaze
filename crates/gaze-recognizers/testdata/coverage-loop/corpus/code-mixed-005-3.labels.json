@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-005-3",
+  "context": "code-mixed",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 90,
+      "byte_end": 105,
+      "class_id": "Email",
+      "raw_label": "iva@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 9650466721484113281,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 123,
+      "byte_end": 135,
+      "class_id": "Name",
+      "raw_label": "Casey Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 3563714664827138956,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 154,
+      "byte_end": 162,
+      "class_id": "custom:phone",
+      "raw_label": "555-0104",
+      "generator_id": "phone_national_us",
+      "generator_seed": 12527217147969748309,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 187,
+      "byte_end": 213,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::3911:192.0.2.144",
+      "generator_id": "ip_v6",
+      "generator_seed": 8151168340320411759,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 230,
+      "byte_end": 252,
+      "class_id": "custom:iban",
+      "raw_label": "DE46991643713441392878",
+      "generator_id": "iban_de",
+      "generator_seed": 9457980099385501222,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 605,
+      "byte_end": 615,
+      "class_id": "custom:postal_code",
+      "raw_label": "28244-7511",
+      "generator_id": "postal_us",
+      "generator_seed": 15395164170517575336,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-005",
+    "template_seed": 14652585077639473751
+  }
+}

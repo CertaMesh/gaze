@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-005-3",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 129,
+      "byte_end": 140,
+      "class_id": "Name",
+      "raw_label": "Max Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 11298765983767855290,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 166,
+      "byte_end": 186,
+      "class_id": "Email",
+      "raw_label": "cordelia@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 8623376257117557054,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 225,
+      "byte_end": 241,
+      "class_id": "custom:phone",
+      "raw_label": "+49 1555 0112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 5316473920723547851,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 366,
+      "byte_end": 388,
+      "class_id": "custom:iban",
+      "raw_label": "DE10794613161611134926",
+      "generator_id": "iban_de",
+      "generator_seed": 12468799683228233153,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 393,
+      "byte_end": 418,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::280c:192.0.2.28",
+      "generator_id": "ip_v6",
+      "generator_seed": 1803437892328844131,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-005",
+    "template_seed": 1147100635328943022
+  }
+}

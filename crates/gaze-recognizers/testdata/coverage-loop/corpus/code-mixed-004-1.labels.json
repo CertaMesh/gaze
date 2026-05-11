@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-004-1",
+  "context": "code-mixed",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 35,
+      "byte_end": 48,
+      "class_id": "Name",
+      "raw_label": "Felix Schmidt",
+      "generator_id": "name_de",
+      "generator_seed": 9293663192091871709,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 54,
+      "byte_end": 76,
+      "class_id": "custom:iban",
+      "raw_label": "DE17497329483536667251",
+      "generator_id": "iban_de",
+      "generator_seed": 18100461044003093280,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 81,
+      "byte_end": 86,
+      "class_id": "custom:postal_code",
+      "raw_label": "43015",
+      "generator_id": "postal_de",
+      "generator_seed": 3388924650734456884,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 90,
+      "byte_end": 114,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:77e0:e7ab::7a64",
+      "generator_id": "ip_v6",
+      "generator_seed": 13080376240504484696,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-004",
+    "template_seed": 5940898355477657775
+  }
+}

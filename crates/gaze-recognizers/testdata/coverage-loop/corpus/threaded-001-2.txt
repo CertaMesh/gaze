@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Evan Hayes and the preferred address is kianna@example.org. Please use 555-0191 for callback and keep refund routing on DE80509949058980625302.
+
+On Tue, Support wrote:
+> Previous note listed postal route 25611-6270 and source address 2001:db8:5238:45ec::5d9b.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

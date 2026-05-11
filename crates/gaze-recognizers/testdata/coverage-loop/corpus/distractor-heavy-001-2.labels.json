@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-001-2",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 206,
+      "byte_end": 217,
+      "class_id": "Name",
+      "raw_label": "Dana Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 6368180902881704928,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 251,
+      "byte_end": 266,
+      "class_id": "Email",
+      "raw_label": "ova@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 1460080779636625766,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 298,
+      "byte_end": 306,
+      "class_id": "custom:phone",
+      "raw_label": "555-0164",
+      "generator_id": "phone_national_us",
+      "generator_seed": 13944337296718652873,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 337,
+      "byte_end": 347,
+      "class_id": "custom:postal_code",
+      "raw_label": "75379-7419",
+      "generator_id": "postal_us",
+      "generator_seed": 3907719733005825458,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 366,
+      "byte_end": 388,
+      "class_id": "custom:iban",
+      "raw_label": "DE75777158939076325199",
+      "generator_id": "iban_de",
+      "generator_seed": 9602927823775677237,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-001",
+    "template_seed": 11209149716083371811
+  }
+}

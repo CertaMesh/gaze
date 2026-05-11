@@ -1,0 +1,8 @@
+Hi again,
+
+This is the cleaned version of a long chat. The user first wrote from melyssa@example.org and signed the note as Evan Morgan. A later reply changed tone, added thanks, and asked whether the phone desk could use 555-0164 instead of the number stored in the old sandbox. The text also mentions amounts like 42.00 and 100.25, plus a fake form value 111-11-1111 that should remain plain text.
+
+The payment paragraph says that the synthetic account can receive a reversal through DE51464343044208832923. The shipping paragraph says the region should be checked against 59927-8498. The diagnostics paragraph says the form submission came through 2001:db8:ad78:8b1a::27bf. None of this is written in a neat order because real conversations drift from topic to topic, repeat details, and bury the important facts between ordinary sentences.
+
+Thanks,
+Case desk

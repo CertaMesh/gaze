@@ -1,0 +1,9 @@
+Newest message:
+I spoke with Evan Jordan today. They confirmed zander@example.net, 555-0116, and postal code 84799-4651.
+
+On previous escalation wrote:
+> The refund account remains DE53849129092000401797.
+> The staging request was seen at 2001:db8::270f:192.0.2.177.
+> The old note included Root, Admin, and Main as product roles, not personal names.
+
+Follow-up paragraph: long email threads repeat and reorder facts. This template keeps the quote prefix on old PII so the corpus covers both new and inherited context.

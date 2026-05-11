@@ -1,0 +1,8 @@
+Hello,
+
+Quick follow-up after the customer called and then replied by email. The caller introduced themselves as Dana Taylor and confirmed that the email on file is willow@example.org. They repeated the callback number 555-0181 slowly because the previous transcript dropped two digits. The conversation also included ordinary reference values like build 2026.05 and queue 000-00-0000; those are not labeled spans.
+
+For finance, they asked whether the staged refund can still settle to DE79286221885583647178. For network tracing, the synthetic request record includes 2001:db8::cb44:192.0.2.68. I am including extra wording here because real tickets rarely contain a clean one-line fact. They include apologies, small corrections, duplicate statements, and sentences that have no detection value. The final useful location cue is postal code 24714-1282 in the shipping section.
+
+Regards,
+Operations desk

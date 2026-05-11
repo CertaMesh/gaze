@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-003-2",
+  "context": "conversational",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 113,
+      "byte_end": 123,
+      "class_id": "Name",
+      "raw_label": "Casey Reed",
+      "generator_id": "name_en",
+      "generator_seed": 1457788861697242353,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 164,
+      "byte_end": 183,
+      "class_id": "Email",
+      "raw_label": "candice@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 272332137350193686,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 219,
+      "byte_end": 227,
+      "class_id": "custom:phone",
+      "raw_label": "555-0183",
+      "generator_id": "phone_national_us",
+      "generator_seed": 16321803647733973926,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 486,
+      "byte_end": 508,
+      "class_id": "custom:iban",
+      "raw_label": "DE89784497627525093543",
+      "generator_id": "iban_de",
+      "generator_seed": 18238112168318756200,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 569,
+      "byte_end": 593,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:25b6:37a7::17a2",
+      "generator_id": "ip_v6",
+      "generator_seed": 17754541580523604526,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 842,
+      "byte_end": 852,
+      "class_id": "custom:postal_code",
+      "raw_label": "12700-2416",
+      "generator_id": "postal_us",
+      "generator_seed": 12373475892658033326,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-003",
+    "template_seed": 8838572884809717886
+  }
+}

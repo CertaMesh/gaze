@@ -7,7 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::generators::GeneratorRegistry;
-use super::templates::{self, Template};
+use super::templates::{self, Template, TemplateLengthTier};
 
 #[derive(Debug, Parser)]
 pub struct Args {
@@ -223,10 +223,11 @@ fn mixed_seed(global_seed: u64, template_id: &str, fixture_idx: usize, slot: &st
 }
 
 fn fixture_variants(template: &Template) -> usize {
-    if template.id == "prose-en-001" {
-        5
-    } else {
-        2
+    match template.length_tier {
+        TemplateLengthTier::Snippet if template.id == "prose-en-001" => 5,
+        TemplateLengthTier::Snippet => 2,
+        TemplateLengthTier::Page => 6,
+        TemplateLengthTier::MultiPage => 10,
     }
 }
 

@@ -1,0 +1,9 @@
+Aktuelle Antwort:
+Bitte nutzt fuer diese Pruefung orville@example.com und den Namen Max Meyer. Die neue Rueckrufnummer lautet 01710000000.
+
+Am 10.05.2026 schrieb Support:
+> In der vorherigen Nachricht standen DE36840998655983615724 fuer die Zahlung und 70981 fuer die Zustellung.
+> Der technische Header enthielt 2001:db8::24fc:192.0.2.171.
+> Weitere Werte wie 000-00-0000, CASE-123 und test@example.invalid waren nur Beispiele.
+
+Abschluss: Die Markierungen in der aktuellen Nachricht und im Zitat bleiben synthetisch und muessen gemeinsam erkannt werden.

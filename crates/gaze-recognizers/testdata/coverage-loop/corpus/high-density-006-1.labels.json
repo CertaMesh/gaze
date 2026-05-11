@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-006-1",
+  "context": "high-density",
+  "locale_chain": [
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 27,
+      "byte_end": 45,
+      "class_id": "Email",
+      "raw_label": "dortha@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 777040189211556219,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 54,
+      "byte_end": 71,
+      "class_id": "Email",
+      "raw_label": "ethan@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 5102445769291231877,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 79,
+      "byte_end": 101,
+      "class_id": "custom:iban",
+      "raw_label": "DE71836031662492582747",
+      "generator_id": "iban_de",
+      "generator_seed": 12267093762310516161,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 107,
+      "byte_end": 133,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::4ace:192.0.2.252",
+      "generator_id": "ip_v6",
+      "generator_seed": 1722943898733536351,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 139,
+      "byte_end": 163,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:b652:b928::f298",
+      "generator_id": "ip_v6",
+      "generator_seed": 16153373118894624512,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 170,
+      "byte_end": 189,
+      "class_id": "custom:credit_card",
+      "raw_label": "4059 0796 9529 4955",
+      "generator_id": "card_luhn",
+      "generator_seed": 4687939669749069231,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 198,
+      "byte_end": 240,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xB5778C11f434F84C7AbCc001E710D3aa66301a08",
+      "generator_id": "eth_eip55",
+      "generator_seed": 1608443189034914005,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-006",
+    "template_seed": 5367559825156288436
+  }
+}

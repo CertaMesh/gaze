@@ -1,0 +1,9 @@
+Aktuelle Antwort:
+Bitte nutzt fuer diese Pruefung tyrell@example.org und den Namen Nina Fischer. Die neue Rueckrufnummer lautet +49 1555 0112233.
+
+Am 10.05.2026 schrieb Support:
+> In der vorherigen Nachricht standen DE18320491854945578742 fuer die Zahlung und 19864 fuer die Zustellung.
+> Der technische Header enthielt 2001:db8:3180:8729::eee9.
+> Weitere Werte wie 000-00-0000, CASE-123 und test@example.invalid waren nur Beispiele.
+
+Abschluss: Die Markierungen in der aktuellen Nachricht und im Zitat bleiben synthetisch und muessen gemeinsam erkannt werden.

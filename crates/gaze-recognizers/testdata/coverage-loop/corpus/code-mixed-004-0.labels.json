@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-004-0",
+  "context": "code-mixed",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 35,
+      "byte_end": 45,
+      "class_id": "Name",
+      "raw_label": "Nina Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 16169455103536014974,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 51,
+      "byte_end": 73,
+      "class_id": "custom:iban",
+      "raw_label": "DE85358007147499711766",
+      "generator_id": "iban_de",
+      "generator_seed": 12081486558262550367,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 78,
+      "byte_end": 83,
+      "class_id": "custom:postal_code",
+      "raw_label": "18379",
+      "generator_id": "postal_de",
+      "generator_seed": 7174391694235109964,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 87,
+      "byte_end": 113,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::fae5:192.0.2.164",
+      "generator_id": "ip_v6",
+      "generator_seed": 12487880945018860249,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-004",
+    "template_seed": 5593592878591170967
+  }
+}

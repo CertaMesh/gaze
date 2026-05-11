@@ -1,0 +1,8 @@
+Hallo Team,
+
+ich fasse den Verlauf noch einmal zusammen, damit nichts aus der Unterhaltung verloren geht. Die anfragende Person ist Nina Schmidt und nutzt fuer Rueckfragen karine@example.net. Im Chat wurde mehrmals nach der Zahlung gefragt, einmal mit dem Hinweis auf DE20801132888796794964 und einmal mit einer alten Referenz aus dem Testhandbuch. Diese alte Referenz sieht wie eine Nummer aus, bleibt aber ohne Label.
+
+Im zweiten Teil der Nachricht ging es um die Zustellung. Bitte prueft den synthetischen Postleitzahlwert 79307 zusammen mit der Kontakttelefonnummer 01710000000. Der Kunde schrieb ausserdem, dass der Test um 09:30 begann und spaeter um 13:45 endete; diese Uhrzeiten duerfen nicht als PII behandelt werden. In der internen Kopfzeile steht noch die Pruefadresse 2001:db8::25ad:192.0.2.196, weil das Formular aus der Staging-Umgebung kam.
+
+Viele Gruesse
+Support-Probe

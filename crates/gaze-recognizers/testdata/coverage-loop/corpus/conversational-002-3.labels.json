@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-002-3",
+  "context": "conversational",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 132,
+      "byte_end": 145,
+      "class_id": "Name",
+      "raw_label": "Mara Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 16643040687978951816,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 173,
+      "byte_end": 192,
+      "class_id": "Email",
+      "raw_label": "daphney@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 4834085178602011776,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 270,
+      "byte_end": 292,
+      "class_id": "custom:iban",
+      "raw_label": "DE39636215586595325391",
+      "generator_id": "iban_de",
+      "generator_seed": 7804197545328736755,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 528,
+      "byte_end": 533,
+      "class_id": "custom:postal_code",
+      "raw_label": "52768",
+      "generator_id": "postal_de",
+      "generator_seed": 1861211538797362469,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 572,
+      "byte_end": 583,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 10602796517061902985,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 783,
+      "byte_end": 807,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:8b47:9c1b::f46d",
+      "generator_id": "ip_v6",
+      "generator_seed": 326857104994518246,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-002",
+    "template_seed": 5792793457700441905
+  }
+}

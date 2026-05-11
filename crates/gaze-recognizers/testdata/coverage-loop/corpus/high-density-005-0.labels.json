@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-005-0",
+  "context": "high-density",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 37,
+      "byte_end": 49,
+      "class_id": "Name",
+      "raw_label": "Felix Wagner",
+      "generator_id": "name_de",
+      "generator_seed": 1431513965385450556,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 56,
+      "byte_end": 76,
+      "class_id": "Email",
+      "raw_label": "cheyanne@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 12940562238481451171,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 86,
+      "byte_end": 98,
+      "class_id": "custom:phone",
+      "raw_label": "015550112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 12280874060013449997,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 104,
+      "byte_end": 109,
+      "class_id": "custom:postal_code",
+      "raw_label": "46524",
+      "generator_id": "postal_de",
+      "generator_seed": 1408357065556473517,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 117,
+      "byte_end": 139,
+      "class_id": "custom:iban",
+      "raw_label": "DE43452875168622963691",
+      "generator_id": "iban_de",
+      "generator_seed": 965294204023851894,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 154,
+      "byte_end": 180,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::351e:192.0.2.151",
+      "generator_id": "ip_v6",
+      "generator_seed": 12578535100969503281,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-005",
+    "template_seed": 13858037055390503309
+  }
+}

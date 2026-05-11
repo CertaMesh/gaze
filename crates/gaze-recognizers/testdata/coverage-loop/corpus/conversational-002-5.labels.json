@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-002-5",
+  "context": "conversational",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 132,
+      "byte_end": 141,
+      "class_id": "Name",
+      "raw_label": "Max Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 12028846661847758051,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 169,
+      "byte_end": 187,
+      "class_id": "Email",
+      "raw_label": "meggie@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 13970521812597803066,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 265,
+      "byte_end": 287,
+      "class_id": "custom:iban",
+      "raw_label": "DE16239677307786273489",
+      "generator_id": "iban_de",
+      "generator_seed": 7855714723521842264,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 523,
+      "byte_end": 528,
+      "class_id": "custom:postal_code",
+      "raw_label": "31239",
+      "generator_id": "postal_de",
+      "generator_seed": 12495439974185376999,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 567,
+      "byte_end": 579,
+      "class_id": "custom:phone",
+      "raw_label": "015550112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 2507849316931788641,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 779,
+      "byte_end": 804,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::d9c3:192.0.2.24",
+      "generator_id": "ip_v6",
+      "generator_seed": 5335276821748896227,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-002",
+    "template_seed": 12287759778738950062
+  }
+}

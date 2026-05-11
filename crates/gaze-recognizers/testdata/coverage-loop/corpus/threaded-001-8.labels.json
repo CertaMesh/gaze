@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-001-8",
+  "context": "threaded",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 63,
+      "byte_end": 74,
+      "class_id": "Name",
+      "raw_label": "Morgan Reed",
+      "generator_id": "name_en",
+      "generator_seed": 3806963233718092272,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 104,
+      "byte_end": 123,
+      "class_id": "Email",
+      "raw_label": "vernice@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 14642566489411183347,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 136,
+      "byte_end": 144,
+      "class_id": "custom:phone",
+      "raw_label": "555-0133",
+      "generator_id": "phone_national_us",
+      "generator_seed": 12798435010524237491,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 185,
+      "byte_end": 207,
+      "class_id": "custom:iban",
+      "raw_label": "DE06670708534562029312",
+      "generator_id": "iban_de",
+      "generator_seed": 7283534433754760474,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 269,
+      "byte_end": 279,
+      "class_id": "custom:postal_code",
+      "raw_label": "33144-9016",
+      "generator_id": "postal_us",
+      "generator_seed": 17918009978668053347,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 299,
+      "byte_end": 323,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:2dc9:d618::8dc9",
+      "generator_id": "ip_v6",
+      "generator_seed": 15014568565616659336,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-001",
+    "template_seed": 11420107349102258912
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-002-1",
+  "context": "conversational",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 132,
+      "byte_end": 146,
+      "class_id": "Name",
+      "raw_label": "Jonas Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 2184910394439865173,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 174,
+      "byte_end": 192,
+      "class_id": "Email",
+      "raw_label": "marlin@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 2978935928504456040,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 270,
+      "byte_end": 292,
+      "class_id": "custom:iban",
+      "raw_label": "DE88667706535653625719",
+      "generator_id": "iban_de",
+      "generator_seed": 8214452642286582300,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 528,
+      "byte_end": 533,
+      "class_id": "custom:postal_code",
+      "raw_label": "26954",
+      "generator_id": "postal_de",
+      "generator_seed": 2529412713229053588,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 572,
+      "byte_end": 587,
+      "class_id": "custom:phone",
+      "raw_label": "+49 30 00000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 1708610750748407591,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 787,
+      "byte_end": 813,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::e6be:192.0.2.232",
+      "generator_id": "ip_v6",
+      "generator_seed": 6119896365291342723,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-002",
+    "template_seed": 8373231474261964552
+  }
+}

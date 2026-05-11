@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Jonas Hoffmann bittet um Antwort an jarod@example.com und Rueckruf unter +49 1555 0112233.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE59955638589760202907
+> Quelladresse: 2001:db8:58a3:ccac::30db
+> Versandbereich: 87212
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

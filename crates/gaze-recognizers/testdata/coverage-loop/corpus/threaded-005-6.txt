@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Mara Schmidt bittet um Antwort an jorge@example.net und Rueckruf unter +49 1555 0112233.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE37470393875777810456
+> Quelladresse: 2001:db8::ebf7:192.0.2.28
+> Versandbereich: 69987
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

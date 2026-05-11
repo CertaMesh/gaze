@@ -1,0 +1,9 @@
+Agent summary after three turns:
+Turn 3 says actor august@example.org retried from 2001:db8::8a0:192.0.2.154 and attached wallet 0x34698d75254b921D95a07971EccA7E746CF0c45B.
+
+> Turn 2 quoted payment data:
+> iban=DE03134155473933737837
+> card=4615 2038 4545 3983
+> docs also showed 198.51.100.9 as an example address and should not use it as an oracle span.
+
+> Turn 1 asked whether user@example.invalid should be masked in documentation. It remains bait. Generated labels above and in the quoted block are the only oracle spans for this fixture.

@@ -1,0 +1,8 @@
+Stack trace with user explanation:
+
+```python
+raise ContactError(name="Blair Parker", email="major@example.com", phone="555-0139")
+metadata = {"ip": "2001:db8:2994:2d9d::7fc0", "postal": "86652-1262"}
+```
+
+The support engineer pasted this block into a ticket and wrote three sentences around it. The first sentence says the problem reproduced twice. The second sentence says the example number 555-0000 is documentation noise. The third sentence says payout details were later added as DE48228863022981747907. This is intentionally mixed because real agent prompts often contain code, prose, and repeated partial facts.

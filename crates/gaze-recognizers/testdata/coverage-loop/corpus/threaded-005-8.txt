@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Laura Wagner bittet um Antwort an godfrey@example.org und Rueckruf unter +49 1555 0112233.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE07593180992590063589
+> Quelladresse: 2001:db8:cf5c:55e4::655c
+> Versandbereich: 26761
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

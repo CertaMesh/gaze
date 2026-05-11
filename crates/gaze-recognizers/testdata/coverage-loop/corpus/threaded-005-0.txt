@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Mara Meyer bittet um Antwort an lukas@example.com und Rueckruf unter +49 1555 0112233.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE58479975906634369675
+> Quelladresse: 2001:db8::2e56:192.0.2.81
+> Versandbereich: 56143
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

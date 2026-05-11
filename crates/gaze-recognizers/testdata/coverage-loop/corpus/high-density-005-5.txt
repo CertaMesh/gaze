@@ -1,0 +1,1 @@
+Kurznotiz fuer die Pruefung: Kontakt Mara Fischer, Mail lurline@example.org, Telefon 015550112233, PLZ 36806, Konto DE86115475797751624401, Quelladresse 2001:db8:925:6b82::f930. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.

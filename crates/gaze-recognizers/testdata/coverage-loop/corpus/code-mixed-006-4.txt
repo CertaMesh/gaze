@@ -1,0 +1,11 @@
+Analyse aus dem Testlauf:
+
+```rust
+let kontakt = "burdette@example.org";
+let name = "Laura Weber";
+let rueckruf = "01710000000";
+let iban = "DE87539006539180448272";
+let quelle = "2001:db8::c939:192.0.2.10";
+```
+
+Der Kommentar danach beschreibt normale Ablaufdaten, etwa Batch 2026-05, Queue 42 und Status OK. Diese Angaben sind absichtlich nicht markiert. Die echte synthetische Postleitzahl steht spaeter im Freitext: 26822. So ein Ausschnitt prueft, ob laengere Entwicklernotizen mit halb strukturiertem Code und normaler Sprache zusammen funktionieren.

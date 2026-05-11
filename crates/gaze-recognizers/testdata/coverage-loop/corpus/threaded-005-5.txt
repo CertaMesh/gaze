@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Felix Wagner bittet um Antwort an parker@example.net und Rueckruf unter 015550112233.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE41767588309553540476
+> Quelladresse: 2001:db8:8b5f:728e::616e
+> Versandbereich: 39356
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

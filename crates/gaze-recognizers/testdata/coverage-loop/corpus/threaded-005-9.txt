@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Mara Hoffmann bittet um Antwort an dallas@example.org und Rueckruf unter +49 30 00000000.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE89282257228572478766
+> Quelladresse: 2001:db8::8d66:192.0.2.23
+> Versandbereich: 74100
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

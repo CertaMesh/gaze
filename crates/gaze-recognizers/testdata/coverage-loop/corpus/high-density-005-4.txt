@@ -1,0 +1,1 @@
+Kurznotiz fuer die Pruefung: Kontakt Jonas Fischer, Mail vada@example.net, Telefon +49 1555 0112233, PLZ 49845, Konto DE50465998422291162701, Quelladresse 2001:db8:4a5c:ae18::2cb8. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.

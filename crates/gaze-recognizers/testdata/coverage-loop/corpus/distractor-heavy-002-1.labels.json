@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-002-1",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 168,
+      "byte_end": 182,
+      "class_id": "Name",
+      "raw_label": "Laura Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 15878453835893927257,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 233,
+      "byte_end": 251,
+      "class_id": "Email",
+      "raw_label": "newell@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 10985007445023706026,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 280,
+      "byte_end": 296,
+      "class_id": "custom:phone",
+      "raw_label": "+49 1555 0112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 7690588229632821934,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 330,
+      "byte_end": 352,
+      "class_id": "custom:iban",
+      "raw_label": "DE07774832236536139828",
+      "generator_id": "iban_de",
+      "generator_seed": 15047839864569717546,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 359,
+      "byte_end": 364,
+      "class_id": "custom:postal_code",
+      "raw_label": "11061",
+      "generator_id": "postal_de",
+      "generator_seed": 5408544967020334248,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-002",
+    "template_seed": 16265754210460682663
+  }
+}

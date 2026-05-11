@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-006-5",
+  "context": "code-mixed",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 50,
+      "byte_end": 68,
+      "class_id": "Email",
+      "raw_label": "autumn@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 13275079501950686100,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 83,
+      "byte_end": 96,
+      "class_id": "Name",
+      "raw_label": "Nina Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 9387133023356882321,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 115,
+      "byte_end": 126,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 11195224841939316370,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 141,
+      "byte_end": 163,
+      "class_id": "custom:iban",
+      "raw_label": "DE84149941726099662596",
+      "generator_id": "iban_de",
+      "generator_seed": 10298652737660161730,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 180,
+      "byte_end": 206,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::c061:192.0.2.159",
+      "generator_id": "ip_v6",
+      "generator_seed": 7937887580165949023,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 421,
+      "byte_end": 426,
+      "class_id": "custom:postal_code",
+      "raw_label": "44801",
+      "generator_id": "postal_de",
+      "generator_seed": 10392636556477514016,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-006",
+    "template_seed": 4876731553806075209
+  }
+}

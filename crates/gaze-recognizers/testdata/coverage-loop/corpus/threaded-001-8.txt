@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Morgan Reed and the preferred address is vernice@example.org. Please use 555-0133 for callback and keep refund routing on DE06670708534562029312.
+
+On Tue, Support wrote:
+> Previous note listed postal route 33144-9016 and source address 2001:db8:2dc9:d618::8dc9.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

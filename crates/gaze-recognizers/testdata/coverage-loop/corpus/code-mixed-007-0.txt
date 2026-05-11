@@ -1,0 +1,7 @@
+Tool transcript:
+
+```json
+{"tool":"refund.preview","args":{"email":"kaitlin@example.net","iban":"DE58464213227152431261","ip":"2001:db8:55bf:2754::6cd7","card":"4526 4543 6315 8920"}}
+```
+
+The agent then summarized the result in natural language and mentioned that the ticket number TICKET-1234 is not a sensitive value. A second paragraph adds that the generated wallet 0x6876501e697352a4a8E04893E9FD263C5fdb080b belongs to the synthetic test case only. This template forces recognizers to cross fenced JSON, prose, payment-like tokens, and ordinary identifiers without using real traffic.

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-004-4",
+  "context": "high-density",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 13,
+      "byte_end": 24,
+      "class_id": "Name",
+      "raw_label": "Evan Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 1560579270914786800,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 27,
+      "byte_end": 45,
+      "class_id": "Email",
+      "raw_label": "anjali@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 16862839837375426472,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 48,
+      "byte_end": 56,
+      "class_id": "custom:phone",
+      "raw_label": "555-0189",
+      "generator_id": "phone_national_us",
+      "generator_seed": 41210677488109749,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 119,
+      "byte_end": 129,
+      "class_id": "custom:postal_code",
+      "raw_label": "94155-9337",
+      "generator_id": "postal_us",
+      "generator_seed": 17272319149521788909,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 144,
+      "byte_end": 168,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:9f86:882e::73e1",
+      "generator_id": "ip_v6",
+      "generator_seed": 6531429874153038744,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 186,
+      "byte_end": 208,
+      "class_id": "custom:iban",
+      "raw_label": "DE37139747047270165933",
+      "generator_id": "iban_de",
+      "generator_seed": 3292589520680185650,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-004",
+    "template_seed": 6694882503374956661
+  }
+}

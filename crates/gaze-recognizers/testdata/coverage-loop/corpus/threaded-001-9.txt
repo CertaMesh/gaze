@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Dana Parker and the preferred address is lia@example.net. Please use 555-0183 for callback and keep refund routing on DE91909179988001589783.
+
+On Tue, Support wrote:
+> Previous note listed postal route 36457-5263 and source address 2001:db8::f7e4:192.0.2.253.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

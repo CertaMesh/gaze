@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-002-1",
+  "context": "code-mixed",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 28,
+      "byte_end": 38,
+      "class_id": "Name",
+      "raw_label": "Evan Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 15261651235816509274,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 53,
+      "byte_end": 72,
+      "class_id": "Email",
+      "raw_label": "vincent@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 2865395417596931233,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 87,
+      "byte_end": 95,
+      "class_id": "custom:phone",
+      "raw_label": "555-0120",
+      "generator_id": "phone_national_us",
+      "generator_seed": 17680574288329012514,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-002",
+    "template_seed": 3672244447845765164
+  }
+}

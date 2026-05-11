@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-005-3",
+  "context": "high-density",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 37,
+      "byte_end": 46,
+      "class_id": "Name",
+      "raw_label": "Max Weber",
+      "generator_id": "name_de",
+      "generator_seed": 13839950562616011546,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 53,
+      "byte_end": 71,
+      "class_id": "Email",
+      "raw_label": "lowell@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 953138403634406898,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 81,
+      "byte_end": 96,
+      "class_id": "custom:phone",
+      "raw_label": "+49 30 00000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 2315130211535243857,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 102,
+      "byte_end": 107,
+      "class_id": "custom:postal_code",
+      "raw_label": "46791",
+      "generator_id": "postal_de",
+      "generator_seed": 14720929624920889785,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 115,
+      "byte_end": 137,
+      "class_id": "custom:iban",
+      "raw_label": "DE49223295931770550418",
+      "generator_id": "iban_de",
+      "generator_seed": 5408769115782456612,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 152,
+      "byte_end": 176,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:cb0e:e12f::b654",
+      "generator_id": "ip_v6",
+      "generator_seed": 17596976244603371112,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-005",
+    "template_seed": 15442698969459011120
+  }
+}

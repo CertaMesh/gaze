@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-003-5",
+  "context": "conversational",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 113,
+      "byte_end": 125,
+      "class_id": "Name",
+      "raw_label": "Blair Parker",
+      "generator_id": "name_en",
+      "generator_seed": 9328142536796831746,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 166,
+      "byte_end": 181,
+      "class_id": "Email",
+      "raw_label": "noe@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 7952109906235877885,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 217,
+      "byte_end": 225,
+      "class_id": "custom:phone",
+      "raw_label": "555-0193",
+      "generator_id": "phone_national_us",
+      "generator_seed": 14618779147991272878,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 484,
+      "byte_end": 506,
+      "class_id": "custom:iban",
+      "raw_label": "DE94160204466450946260",
+      "generator_id": "iban_de",
+      "generator_seed": 15449549322672817128,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 567,
+      "byte_end": 593,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::85bd:192.0.2.161",
+      "generator_id": "ip_v6",
+      "generator_seed": 11291451505488963277,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 842,
+      "byte_end": 852,
+      "class_id": "custom:postal_code",
+      "raw_label": "87449-8753",
+      "generator_id": "postal_us",
+      "generator_seed": 9183726641673083908,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-003",
+    "template_seed": 6362163339417215100
+  }
+}

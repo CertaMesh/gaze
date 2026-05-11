@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Jonas Fischer bittet um Antwort an delfina@example.com und Rueckruf unter 01710000000.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE86726813282953237139
+> Quelladresse: 2001:db8:de80:f940::ab72
+> Versandbereich: 70408
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

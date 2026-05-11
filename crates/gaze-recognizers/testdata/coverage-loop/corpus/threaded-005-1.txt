@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Nina Meyer bittet um Antwort an perry@example.com und Rueckruf unter +49 30 00000000.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE02139732407462548462
+> Quelladresse: 2001:db8:7d99:d4bf::543e
+> Versandbereich: 79185
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

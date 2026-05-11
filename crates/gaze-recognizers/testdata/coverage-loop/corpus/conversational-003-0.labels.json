@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-003-0",
+  "context": "conversational",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 113,
+      "byte_end": 124,
+      "class_id": "Name",
+      "raw_label": "Evan Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 2375371055897240170,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 165,
+      "byte_end": 183,
+      "class_id": "Email",
+      "raw_label": "beulah@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 14952842065152379189,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 219,
+      "byte_end": 227,
+      "class_id": "custom:phone",
+      "raw_label": "555-0176",
+      "generator_id": "phone_national_us",
+      "generator_seed": 154138884053665241,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 486,
+      "byte_end": 508,
+      "class_id": "custom:iban",
+      "raw_label": "DE06757735267271515409",
+      "generator_id": "iban_de",
+      "generator_seed": 5385184945097149251,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 569,
+      "byte_end": 594,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::d78e:192.0.2.86",
+      "generator_id": "ip_v6",
+      "generator_seed": 14134211620582613357,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 843,
+      "byte_end": 853,
+      "class_id": "custom:postal_code",
+      "raw_label": "31456-9240",
+      "generator_id": "postal_us",
+      "generator_seed": 12077382616672898419,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-003",
+    "template_seed": 2138398598159193620
+  }
+}

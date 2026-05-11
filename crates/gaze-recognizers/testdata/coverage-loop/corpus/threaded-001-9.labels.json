@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-001-9",
+  "context": "threaded",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 63,
+      "byte_end": 74,
+      "class_id": "Name",
+      "raw_label": "Dana Parker",
+      "generator_id": "name_en",
+      "generator_seed": 2501357167984879541,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 104,
+      "byte_end": 119,
+      "class_id": "Email",
+      "raw_label": "lia@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 17075108227709600190,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 132,
+      "byte_end": 140,
+      "class_id": "custom:phone",
+      "raw_label": "555-0183",
+      "generator_id": "phone_national_us",
+      "generator_seed": 12053181429329103142,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 181,
+      "byte_end": 203,
+      "class_id": "custom:iban",
+      "raw_label": "DE91909179988001589783",
+      "generator_id": "iban_de",
+      "generator_seed": 13054789090827590323,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 265,
+      "byte_end": 275,
+      "class_id": "custom:postal_code",
+      "raw_label": "36457-5263",
+      "generator_id": "postal_us",
+      "generator_seed": 3723685079535982074,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 295,
+      "byte_end": 321,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::f7e4:192.0.2.253",
+      "generator_id": "ip_v6",
+      "generator_seed": 11645077481129815701,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-001",
+    "template_seed": 16360624711157210878
+  }
+}

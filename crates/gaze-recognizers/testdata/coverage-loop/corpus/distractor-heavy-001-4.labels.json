@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-001-4",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 206,
+      "byte_end": 219,
+      "class_id": "Name",
+      "raw_label": "Morgan Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 3356436770916460053,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 253,
+      "byte_end": 272,
+      "class_id": "Email",
+      "raw_label": "raymond@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 3655908038253813156,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 304,
+      "byte_end": 312,
+      "class_id": "custom:phone",
+      "raw_label": "555-0119",
+      "generator_id": "phone_national_us",
+      "generator_seed": 11762536209274365814,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 343,
+      "byte_end": 353,
+      "class_id": "custom:postal_code",
+      "raw_label": "21994-7764",
+      "generator_id": "postal_us",
+      "generator_seed": 4833081841313204576,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 372,
+      "byte_end": 394,
+      "class_id": "custom:iban",
+      "raw_label": "DE49512813654339126720",
+      "generator_id": "iban_de",
+      "generator_seed": 14391338853507032610,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-001",
+    "template_seed": 9468835720306002908
+  }
+}

@@ -1,0 +1,1 @@
+Kurznotiz fuer die Pruefung: Kontakt Laura Schmidt, Mail francis@example.org, Telefon +49 1555 0112233, PLZ 46523, Konto DE32772416309017698121, Quelladresse 2001:db8:b434:f348::cad1. Danach folgen nur allgemeine Worte ueber Freigabe, Rueckfrage und Warteschlange. Der Zweck ist ein dichter synthetischer Block mit vielen Trefferklassen pro Absatz.

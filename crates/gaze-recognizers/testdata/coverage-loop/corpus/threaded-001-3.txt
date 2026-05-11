@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Evan Jordan and the preferred address is izabella@example.net. Please use 555-0198 for callback and keep refund routing on DE36569881752709619439.
+
+On Tue, Support wrote:
+> Previous note listed postal route 58041-3256 and source address 2001:db8::d628:192.0.2.243.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-004-5",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 134,
+      "byte_end": 145,
+      "class_id": "Name",
+      "raw_label": "Dana Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 8119571847735165081,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 260,
+      "byte_end": 278,
+      "class_id": "Email",
+      "raw_label": "london@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 13867804208291019908,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 283,
+      "byte_end": 291,
+      "class_id": "custom:phone",
+      "raw_label": "555-0155",
+      "generator_id": "phone_national_us",
+      "generator_seed": 4629010842263934379,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 322,
+      "byte_end": 332,
+      "class_id": "custom:postal_code",
+      "raw_label": "69294-3001",
+      "generator_id": "postal_us",
+      "generator_seed": 17918735632030695062,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 370,
+      "byte_end": 394,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:d7a8:34ea::adf4",
+      "generator_id": "ip_v6",
+      "generator_seed": 3162349559169939050,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-004",
+    "template_seed": 7306775191540540303
+  }
+}

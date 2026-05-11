@@ -1,0 +1,10 @@
+Neue Nachricht:
+Der Kontakt Jonas Fischer bittet um Antwort an tiara@example.org und Rueckruf unter 01710000000.
+
+Am vorherigen Tag schrieb das System:
+> Zahlungsziel: DE75689426161719070516
+> Quelladresse: 2001:db8:f89d:4ac::af5e
+> Versandbereich: 56425
+> Beispiele wie Herr Muster und example@example.invalid sind nur Ablenkung.
+
+Notiz: Diese Struktur prueft Zitatzeichen, deutsche Threadmarker und gemischte aktuelle sowie alte synthetische Werte.

@@ -1,0 +1,1 @@
+panic: invalid callback for Alice Morgan\n  at notify("diamond@example.net")\n  at dial("555-0133")\n  note: build id 123-45-6789 is fixture noise

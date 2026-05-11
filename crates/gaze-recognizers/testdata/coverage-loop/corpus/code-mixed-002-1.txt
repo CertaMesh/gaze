@@ -1,0 +1,1 @@
+panic: invalid callback for Evan Hayes\n  at notify("vincent@example.net")\n  at dial("555-0120")\n  note: build id 123-45-6789 is fixture noise

@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-004-5",
+  "context": "threaded",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 29,
+      "byte_end": 41,
+      "class_id": "Name",
+      "raw_label": "Alice Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 9250835566633590742,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 64,
+      "byte_end": 82,
+      "class_id": "Email",
+      "raw_label": "buford@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 12879626162118774332,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 84,
+      "byte_end": 92,
+      "class_id": "custom:phone",
+      "raw_label": "555-0151",
+      "generator_id": "phone_national_us",
+      "generator_seed": 6578053403999857193,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 110,
+      "byte_end": 120,
+      "class_id": "custom:postal_code",
+      "raw_label": "21280-5259",
+      "generator_id": "postal_us",
+      "generator_seed": 9728353059602918035,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 182,
+      "byte_end": 204,
+      "class_id": "custom:iban",
+      "raw_label": "DE82275713515834614660",
+      "generator_id": "iban_de",
+      "generator_seed": 4061383102100611065,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 240,
+      "byte_end": 264,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:aee9:43a2::b470",
+      "generator_id": "ip_v6",
+      "generator_seed": 10976073471835246548,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-004",
+    "template_seed": 4196423636023736815
+  }
+}

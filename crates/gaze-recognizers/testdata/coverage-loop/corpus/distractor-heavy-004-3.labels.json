@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-004-3",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 134,
+      "byte_end": 145,
+      "class_id": "Name",
+      "raw_label": "Blair Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 17406439261616929197,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 260,
+      "byte_end": 279,
+      "class_id": "Email",
+      "raw_label": "arielle@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 296711248509719961,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 284,
+      "byte_end": 292,
+      "class_id": "custom:phone",
+      "raw_label": "555-0193",
+      "generator_id": "phone_national_us",
+      "generator_seed": 3771761497428037185,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 323,
+      "byte_end": 333,
+      "class_id": "custom:postal_code",
+      "raw_label": "61883-8856",
+      "generator_id": "postal_us",
+      "generator_seed": 5188887575551805219,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 371,
+      "byte_end": 396,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::bfa:192.0.2.222",
+      "generator_id": "ip_v6",
+      "generator_seed": 8310816910006253281,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-004",
+    "template_seed": 1906972553953842569
+  }
+}

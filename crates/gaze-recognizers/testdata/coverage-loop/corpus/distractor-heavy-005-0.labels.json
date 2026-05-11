@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-heavy-005-0",
+  "context": "distractor-heavy",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 129,
+      "byte_end": 140,
+      "class_id": "Name",
+      "raw_label": "Felix Weber",
+      "generator_id": "name_de",
+      "generator_seed": 1916611176308588068,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 166,
+      "byte_end": 185,
+      "class_id": "Email",
+      "raw_label": "hilbert@example.com",
+      "generator_id": "email_global",
+      "generator_seed": 14782611983445033296,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 224,
+      "byte_end": 236,
+      "class_id": "custom:phone",
+      "raw_label": "015550112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 1257930856940516394,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 361,
+      "byte_end": 383,
+      "class_id": "custom:iban",
+      "raw_label": "DE36980572434447287311",
+      "generator_id": "iban_de",
+      "generator_seed": 17468032469290196666,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 388,
+      "byte_end": 413,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::b8f:192.0.2.103",
+      "generator_id": "ip_v6",
+      "generator_seed": 12588508694912325529,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-heavy-005",
+    "template_seed": 17540704407302742334
+  }
+}

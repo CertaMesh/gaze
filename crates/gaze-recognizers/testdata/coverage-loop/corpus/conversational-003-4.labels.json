@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-003-4",
+  "context": "conversational",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 113,
+      "byte_end": 126,
+      "class_id": "Name",
+      "raw_label": "Morgan Parker",
+      "generator_id": "name_en",
+      "generator_seed": 1012903648614963382,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 167,
+      "byte_end": 185,
+      "class_id": "Email",
+      "raw_label": "turner@example.org",
+      "generator_id": "email_global",
+      "generator_seed": 7257182773918040018,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 221,
+      "byte_end": 229,
+      "class_id": "custom:phone",
+      "raw_label": "555-0131",
+      "generator_id": "phone_national_us",
+      "generator_seed": 17146520231587741719,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 488,
+      "byte_end": 510,
+      "class_id": "custom:iban",
+      "raw_label": "DE37662185541032209501",
+      "generator_id": "iban_de",
+      "generator_seed": 5149750679526233821,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 571,
+      "byte_end": 597,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::2c8e:192.0.2.222",
+      "generator_id": "ip_v6",
+      "generator_seed": 15393014473373971243,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 846,
+      "byte_end": 856,
+      "class_id": "custom:postal_code",
+      "raw_label": "92794-7572",
+      "generator_id": "postal_us",
+      "generator_seed": 9091133543174960754,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-003",
+    "template_seed": 13988531299706215462
+  }
+}

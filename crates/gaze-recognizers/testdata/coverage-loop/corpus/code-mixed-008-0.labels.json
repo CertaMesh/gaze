@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-008-0",
+  "context": "code-mixed",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 71,
+      "byte_end": 80,
+      "class_id": "Name",
+      "raw_label": "Dana Reed",
+      "generator_id": "name_en",
+      "generator_seed": 15442025399391422649,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 90,
+      "byte_end": 107,
+      "class_id": "Email",
+      "raw_label": "elvie@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 11040302000895189594,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 117,
+      "byte_end": 125,
+      "class_id": "custom:phone",
+      "raw_label": "555-0104",
+      "generator_id": "phone_national_us",
+      "generator_seed": 16948965086642542960,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 147,
+      "byte_end": 171,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:645d:9213::ba29",
+      "generator_id": "ip_v6",
+      "generator_seed": 6842046183113751254,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 185,
+      "byte_end": 195,
+      "class_id": "custom:postal_code",
+      "raw_label": "59187-2546",
+      "generator_id": "postal_us",
+      "generator_seed": 11125479141541779085,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 483,
+      "byte_end": 505,
+      "class_id": "custom:iban",
+      "raw_label": "DE39755200762285159242",
+      "generator_id": "iban_de",
+      "generator_seed": 10351195518528927039,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-008",
+    "template_seed": 11693826714895704704
+  }
+}

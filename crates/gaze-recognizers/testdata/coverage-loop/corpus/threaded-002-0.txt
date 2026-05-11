@@ -1,0 +1,9 @@
+Aktuelle Antwort:
+Bitte nutzt fuer diese Pruefung eloy@example.net und den Namen Nina Fischer. Die neue Rueckrufnummer lautet +49 1555 0112233.
+
+Am 10.05.2026 schrieb Support:
+> In der vorherigen Nachricht standen DE21747304556243466571 fuer die Zahlung und 39919 fuer die Zustellung.
+> Der technische Header enthielt 2001:db8::59bc:192.0.2.42.
+> Weitere Werte wie 000-00-0000, CASE-123 und test@example.invalid waren nur Beispiele.
+
+Abschluss: Die Markierungen in der aktuellen Nachricht und im Zitat bleiben synthetisch und muessen gemeinsam erkannt werden.

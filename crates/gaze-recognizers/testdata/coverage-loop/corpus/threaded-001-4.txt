@@ -1,0 +1,9 @@
+Current reply:
+Thanks for the update. The current requester is Alice Hayes and the preferred address is edyth@example.org. Please use 555-0158 for callback and keep refund routing on DE07891806964900322152.
+
+On Tue, Support wrote:
+> Previous note listed postal route 89700-4976 and source address 2001:db8:20d1:9a19::1ba1.
+> The pasted ticket also had example values 123-45-6789 and nobody@example.invalid, which are not generated labels.
+> We are preserving the quote markers because real inbox threads carry old facts forward.
+
+Current closing: confirm that both the quoted labels and the fresh labels are still synthetic fixture spans.

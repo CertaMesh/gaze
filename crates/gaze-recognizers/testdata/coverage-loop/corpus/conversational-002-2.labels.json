@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-002-2",
+  "context": "conversational",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "spans": [
+    {
+      "byte_start": 132,
+      "byte_end": 144,
+      "class_id": "Name",
+      "raw_label": "Mara Schmidt",
+      "generator_id": "name_de",
+      "generator_seed": 14695655946634631090,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 172,
+      "byte_end": 191,
+      "class_id": "Email",
+      "raw_label": "roberto@example.net",
+      "generator_id": "email_global",
+      "generator_seed": 17408552785486486258,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 269,
+      "byte_end": 291,
+      "class_id": "custom:iban",
+      "raw_label": "DE65710807087422262899",
+      "generator_id": "iban_de",
+      "generator_seed": 719800675485457927,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 527,
+      "byte_end": 532,
+      "class_id": "custom:postal_code",
+      "raw_label": "93011",
+      "generator_id": "postal_de",
+      "generator_seed": 9862832972389399320,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 571,
+      "byte_end": 586,
+      "class_id": "custom:phone",
+      "raw_label": "+49 30 00000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 6064480937769122297,
+      "license_origin": "synthetic-rust-generator"
+    },
+    {
+      "byte_start": 786,
+      "byte_end": 810,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:859c:2641::3324",
+      "generator_id": "ip_v6",
+      "generator_seed": 631721456148779390,
+      "license_origin": "synthetic-rust-generator"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-002",
+    "template_seed": 2370016014055751584
+  }
+}

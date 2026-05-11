@@ -1,0 +1,9 @@
+Merged tool thread:
+Current tool call used lambert@example.org and 2001:db8:1af0:60cb::7246.
+
+> Earlier tool call:
+> {"iban":"DE11299873336547810716","card":"4138 1778 1697 9408","wallet":"0x80BDE1E8dc87BB5a1ec561ab33655e01a9a10f91"}
+>
+> Earlier prose also mentioned localhost and user@example.invalid as examples.
+
+Final agent note: preserve labels from both current and quoted sections. The fixture is synthetic, deterministic, and intentionally shaped like copied tool output inside a conversation.
