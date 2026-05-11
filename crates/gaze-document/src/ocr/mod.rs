@@ -11,6 +11,10 @@
 
 use crate::DocumentError;
 
+mod normalize;
+
+pub(crate) use normalize::normalize_ocr_artifacts;
+
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub mod tesseract;

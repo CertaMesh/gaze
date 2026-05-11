@@ -219,15 +219,18 @@ pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> 
         .map_err(|err| DocumentError::OutputDir(absolute_out.clone(), err))?;
 
     let (ocr_result, pdf_page_count, pdf_page_index) = run_ocr(input, kind)?;
+    // Repair known narrow OCR artifacts (e.g. spurious whitespace around
+    // `@` in emails) before the redact pipeline sees the text. See
+    // `crate::ocr::normalize` for the documented rule set. Axis 1
+    // (never leak) requires this — the OCR pass occasionally inserts a
+    // single space inside an email that would otherwise slip past strict
+    // recognizers and survive into clean.md.
+    let normalized_text = crate::ocr::normalize_ocr_artifacts(&ocr_result.text);
     let pipeline = build_document_pipeline()?;
     let session = Session::new(Scope::Ephemeral).map_err(|err| pipeline_err("session", err))?;
     let locale_chain = [LocaleTag::Global];
     let (clean_doc, spans, _leak_report) = pipeline
-        .clean_with_safety_net(
-            &session,
-            RawDocument::Text(ocr_result.text.clone()),
-            &locale_chain,
-        )
+        .clean_with_safety_net(&session, RawDocument::Text(normalized_text), &locale_chain)
         .map_err(|err| pipeline_err("redact", err))?;
 
     let clean_text = match clean_doc {

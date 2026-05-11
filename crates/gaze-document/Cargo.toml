@@ -24,6 +24,7 @@ path = "src/lib.rs"
 gaze = { path = "../gaze", version = "0.7.0", package = "gaze-pii" }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.7.0" }
 gaze-types = { workspace = true }
+regex = "1"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

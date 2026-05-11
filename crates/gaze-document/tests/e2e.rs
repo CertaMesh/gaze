@@ -27,6 +27,8 @@ use gaze_document::{BundleReport, DocumentError, BUNDLE_VERSION};
 use gaze_types::PiiClass;
 
 const ORIGINAL_EMAIL: &str = "jane.doe@example.com";
+const ORIGINAL_EMAIL_DOMAIN: &str = "@example.com";
+const ORIGINAL_EMAIL_LOCAL: &str = "jane.doe";
 const ORIGINAL_PHONE_TAIL: &str = "555-0142";
 
 fn testdata_dir() -> PathBuf {
@@ -62,13 +64,25 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     assert!(report_path.exists(), "report.json missing");
 
     let clean_text = std::fs::read_to_string(&clean_md_path).expect("clean.md readable");
+    // Belt-and-braces negative substring checks. Each one independently
+    // detects a different leak shape that could survive a brittle
+    // detector (e.g. OCR-corrupted email with spurious whitespace, or
+    // partial-domain leftover after a narrow regex match).
     assert!(
         !clean_text.contains(ORIGINAL_EMAIL),
-        "clean.md leaked the original email substring"
+        "clean.md leaked the original email substring:\n{clean_text}"
+    );
+    assert!(
+        !clean_text.contains(ORIGINAL_EMAIL_DOMAIN),
+        "clean.md leaked the email domain substring (OCR-artifact survival):\n{clean_text}"
+    );
+    assert!(
+        !clean_text.contains(ORIGINAL_EMAIL_LOCAL),
+        "clean.md leaked the email local-part substring:\n{clean_text}"
     );
     assert!(
         !clean_text.contains(ORIGINAL_PHONE_TAIL),
-        "clean.md leaked the original phone tail substring"
+        "clean.md leaked the original phone tail substring:\n{clean_text}"
     );
     assert!(
         clean_text.contains(":Email_"),
