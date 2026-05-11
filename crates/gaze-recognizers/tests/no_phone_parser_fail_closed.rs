@@ -1,7 +1,8 @@
 #![cfg(not(feature = "phone-parser"))]
 
 use gaze::RulepackSource;
-use gaze_recognizers::{RecognizerError, ValidatorKind};
+use gaze_recognizers::ValidatorKind;
+use gaze_types::ValidatorKindParseError;
 
 #[test]
 fn phone_validators_fail_closed_at_rulepack_load_without_phone_parser() {
@@ -24,7 +25,7 @@ fn phone_validators_fail_closed_at_rulepack_load_without_phone_parser() {
             .expect_err("phone validator must fail closed without phone-parser feature");
 
         assert!(
-            matches!(err, RecognizerError::UnsupportedValidator { ref kind } if kind == validator),
+            matches!(err, ValidatorKindParseError::UnsupportedValidator { ref kind } if kind == validator),
             "expected UnsupportedValidator for {validator}, got {err:?}"
         );
     }

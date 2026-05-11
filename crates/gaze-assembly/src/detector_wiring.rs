@@ -109,7 +109,10 @@ pub(crate) fn register_rulepack_recognizers(
                 let validator_kind = recognizer
                     .validator
                     .as_ref()
-                    .map(|validator| ValidatorKind::parse(&validator.kind))
+                    .map(|validator| {
+                        ValidatorKind::parse(&validator.kind)
+                            .map_err(gaze_recognizers::RecognizerError::from)
+                    })
                     .transpose()?;
                 let normalizer_kind = recognizer
                     .normalizer

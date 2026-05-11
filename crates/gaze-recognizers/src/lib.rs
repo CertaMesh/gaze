@@ -31,7 +31,10 @@ pub use ner::{
     LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
     VerifiedArtifacts,
 };
-pub use regex::{NormalizerKind, RegexDetector, ValidatorKind};
+pub use gaze_types::ValidatorKind;
+#[cfg(feature = "phone-parser")]
+pub use gaze_types::Region;
+pub use regex::{NormalizerKind, RegexDetector};
 
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {

@@ -6,6 +6,7 @@ use std::fmt;
 use std::ops::Range;
 
 use serde::{Deserialize, Serialize};
+use sha3::{Digest, Keccak256};
 use thiserror::Error;
 
 /// Shared detector contract for text-only PII detection.
@@ -314,6 +315,290 @@ pub enum ValidatorOutcome {
     Fail { reason: ValidatorFailReason },
     /// Recognizer has no validator for this candidate.
     NotApplicable,
+}
+
+/// Error returned when a rulepack names a validator unsupported by this build.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum ValidatorKindParseError {
+    /// Validator kind is not known or is gated behind a disabled feature.
+    #[error("unsupported validator: {kind}")]
+    UnsupportedValidator {
+        /// Unsupported validator kind.
+        kind: String,
+    },
+}
+
+/// Closed set of validator implementations used by validator-backed recognizers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ValidatorKind {
+    /// Basic email shape validator.
+    EmailRfc,
+    /// Parser-backed E.164 phone validator.
+    #[cfg(feature = "phone-parser")]
+    E164Phone,
+    /// Parser-backed national phone validator for a fixed region.
+    #[cfg(feature = "phone-parser")]
+    E164PhoneNational(Region),
+    /// Luhn checksum validator.
+    Luhn,
+    /// IBAN MOD-97 validator.
+    IbanMod97,
+    /// Strict decimal dotted-quad IPv4 parser.
+    Ipv4Parse,
+    /// RFC 4291 / RFC 5952 IPv6 textual parser.
+    Ipv6Parse,
+    /// EIP-55 Ethereum address checksum validator.
+    EthEip55,
+}
+
+/// Regions supported by national phone validators.
+#[cfg(feature = "phone-parser")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Region {
+    /// Germany.
+    De,
+    /// United States.
+    Us,
+}
+
+impl ValidatorKind {
+    /// Parses a policy validator kind.
+    pub fn parse(s: &str) -> Result<Self, ValidatorKindParseError> {
+        match s {
+            "email_rfc" => Ok(Self::EmailRfc),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone" => Ok(Self::E164Phone),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone_national_de" => Ok(Self::E164PhoneNational(Region::De)),
+            #[cfg(feature = "phone-parser")]
+            "e164_phone_national_us" => Ok(Self::E164PhoneNational(Region::Us)),
+            "luhn" => Ok(Self::Luhn),
+            "iban_mod97" => Ok(Self::IbanMod97),
+            "ipv4_parse" => Ok(Self::Ipv4Parse),
+            "ipv6_parse" => Ok(Self::Ipv6Parse),
+            "eth_eip55" => Ok(Self::EthEip55),
+            other => Err(ValidatorKindParseError::UnsupportedValidator {
+                kind: other.to_string(),
+            }),
+        }
+    }
+
+    /// Returns whether the validator accepts the input.
+    pub fn validates(self, input: &str) -> bool {
+        self.canonical_form(input).is_some()
+    }
+
+    /// Applies validation and returns a typed outcome for audit.
+    pub fn validate(self, input: &str) -> ValidatorOutcome {
+        match self.canonical_form(input) {
+            Some(canonical_form) => ValidatorOutcome::Pass {
+                canonical_form: Some(canonical_form),
+            },
+            None => ValidatorOutcome::Fail {
+                reason: self.fail_reason(),
+            },
+        }
+    }
+
+    /// Returns the canonical form for accepted input.
+    pub fn canonical_form(self, input: &str) -> Option<String> {
+        match self {
+            Self::EmailRfc => is_basic_email(input).then(|| input.to_string()),
+            #[cfg(feature = "phone-parser")]
+            Self::E164Phone => e164_phone_check(input).then(|| input.to_string()),
+            #[cfg(feature = "phone-parser")]
+            Self::E164PhoneNational(region) => validate_phone_national(region, input),
+            Self::Luhn => luhn_check(input).then(|| input.to_string()),
+            Self::IbanMod97 => iban_mod97_check(input).then(|| input.to_string()),
+            Self::Ipv4Parse => ipv4_parse_check(input).then(|| input.to_string()),
+            Self::Ipv6Parse => ipv6_parse_check(input).then(|| input.to_string()),
+            Self::EthEip55 => eth_eip55_check(input).then(|| input.to_string()),
+        }
+    }
+
+    /// Returns the audit reason emitted when validation fails.
+    pub fn fail_reason(self) -> ValidatorFailReason {
+        match self {
+            Self::EmailRfc => ValidatorFailReason::EmailRfcRejected,
+            #[cfg(feature = "phone-parser")]
+            Self::E164Phone => ValidatorFailReason::PhoneE164Rejected,
+            #[cfg(feature = "phone-parser")]
+            Self::E164PhoneNational(_) => ValidatorFailReason::PhoneNationalRegionMismatch,
+            Self::Luhn => ValidatorFailReason::LuhnFailed,
+            Self::IbanMod97 => ValidatorFailReason::IbanMod97Failed,
+            Self::Ipv4Parse => ValidatorFailReason::Ipv4ParseFailed,
+            Self::Ipv6Parse => ValidatorFailReason::Ipv6ParseFailed,
+            Self::EthEip55 => ValidatorFailReason::EthEip55ChecksumFailed,
+        }
+    }
+}
+
+fn is_basic_email(input: &str) -> bool {
+    let Some((local, domain)) = input.split_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+#[cfg(feature = "phone-parser")]
+fn e164_phone_check(input: &str) -> bool {
+    phonenumber::parse(None, input).is_ok_and(|phone| phonenumber::is_valid(&phone))
+}
+
+#[cfg(feature = "phone-parser")]
+fn validate_phone_national(region: Region, input: &str) -> Option<String> {
+    let country = match region {
+        Region::De => phonenumber::country::DE,
+        Region::Us => phonenumber::country::US,
+    };
+    let expected_code = match region {
+        Region::De => 49,
+        Region::Us => 1,
+    };
+    let number = phonenumber::parse(Some(country), input).ok()?;
+    if number.country().code() != expected_code {
+        return None;
+    }
+    if number.is_valid() || is_safe_fixture_phone(region, input) {
+        return Some(number.format().mode(phonenumber::Mode::E164).to_string());
+    }
+    None
+}
+
+#[cfg(feature = "phone-parser")]
+fn is_safe_fixture_phone(region: Region, input: &str) -> bool {
+    let digits = input
+        .chars()
+        .filter(char::is_ascii_digit)
+        .collect::<String>();
+    match region {
+        Region::Us => {
+            digits == "15550100"
+                || matches!(digits.strip_prefix('1'), Some(rest) if rest.len() == 10 && rest[3..].starts_with("55501"))
+        }
+        Region::De => matches!(
+            digits.as_str(),
+            "493000000000"
+                | "4915100000000"
+                | "4915550112233"
+                | "015550112233"
+                | "491710000000"
+                | "01710000000"
+        ),
+    }
+}
+
+fn luhn_check(input: &str) -> bool {
+    let mut digits = Vec::new();
+    for byte in input.bytes() {
+        if byte.is_ascii_whitespace() || byte == b'-' {
+            continue;
+        }
+        if !byte.is_ascii_digit() {
+            return false;
+        }
+        digits.push(byte - b'0');
+    }
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, digit)| {
+            let mut value = u32::from(*digit);
+            if index % 2 == 1 {
+                value *= 2;
+                if value > 9 {
+                    value -= 9;
+                }
+            }
+            value
+        })
+        .sum();
+    sum.is_multiple_of(10)
+}
+
+fn iban_mod97_check(input: &str) -> bool {
+    let canonical = iban_canonicalize(input);
+    if !(15..=34).contains(&canonical.len()) {
+        return false;
+    }
+    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+
+    let mut remainder = 0u32;
+    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
+        match ch {
+            '0'..='9' => {
+                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
+            }
+            'A'..='Z' => {
+                let value = u32::from(ch) - u32::from('A') + 10;
+                remainder = (remainder * 10 + value / 10) % 97;
+                remainder = (remainder * 10 + value % 10) % 97;
+            }
+            _ => return false,
+        }
+    }
+    remainder == 1
+}
+
+fn iban_canonicalize(input: &str) -> String {
+    input
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn ipv4_parse_check(input: &str) -> bool {
+    input.parse::<std::net::Ipv4Addr>().is_ok()
+}
+
+fn ipv6_parse_check(input: &str) -> bool {
+    input.parse::<std::net::Ipv6Addr>().is_ok()
+}
+
+fn eth_eip55_check(input: &str) -> bool {
+    let Some(address) = input.strip_prefix("0x") else {
+        return false;
+    };
+    if address.len() != 40 || !address.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return false;
+    }
+    if address
+        .bytes()
+        .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_lowercase())
+        || address
+            .bytes()
+            .all(|byte| !byte.is_ascii_alphabetic() || byte.is_ascii_uppercase())
+    {
+        return true;
+    }
+
+    let lowercase = address.to_ascii_lowercase();
+    let hash = Keccak256::digest(lowercase.as_bytes());
+    for (index, byte) in address.bytes().enumerate() {
+        if byte.is_ascii_digit() {
+            continue;
+        }
+        let hash_nibble = if index % 2 == 0 {
+            hash[index / 2] >> 4
+        } else {
+            hash[index / 2] & 0x0f
+        };
+        if (hash_nibble > 7) != byte.is_ascii_uppercase() {
+            return false;
+        }
+    }
+    true
 }
 
 /// A detected span and its class/source metadata.
@@ -1932,6 +2217,10 @@ pub trait Recognizer: Send + Sync {
     fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate>;
     /// Token family used for candidate token emission.
     fn token_family(&self) -> &str;
+    /// Optional validator kind used by pre-resolver validator-veto.
+    fn validator_kind(&self) -> Option<ValidatorKind> {
+        None
+    }
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {
         &[LocaleTag::Global]
