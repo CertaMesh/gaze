@@ -1,5 +1,9 @@
 # gaze-document
 
+[![Crates.io](https://img.shields.io/crates/v/gaze-document.svg)](https://crates.io/crates/gaze-document)
+[![docs.rs](https://docs.rs/gaze-document/badge.svg)](https://docs.rs/gaze-document)
+[![License](https://img.shields.io/crates/l/gaze-document.svg)](https://github.com/EmpireTwo/gaze#license)
+
 Reversible PII pseudonymization for **documents** — image + single-page PDF →
 clean Markdown + a restorable `gaze::Manifest` + an OCR/PII report. Powers
 the `gaze document clean` CLI verb on top of the same `gaze-pii` runtime
@@ -16,7 +20,7 @@ contract that always restores. OCR is a subprocess call to the standard
 
 ```toml
 [dependencies]
-gaze-document = "0.0.1"
+gaze-document = "0.7.1"
 ```
 
 ### CLI

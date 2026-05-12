@@ -28,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PDF rasterization via pdfium). Output is a `SafeBundle` containing redacted
   Markdown + a restorable `gaze::Manifest` + an OCR/PII report. New `gaze document
   clean <input> --out <dir>` subcommand on `gaze-cli` (opt-in via `--features
-  document`). See todo 728.
+  document`).
 - Validator-veto pre-resolver phase for validator-backed recognizer failures.
   Invalid candidates are rejected before conflict resolution, then logged as
   loser-only audit rows with `decided_by: ValidatorVeto` and typed
