@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## [0.7.1] - 2026-05-12
+
+### Added
+
 - New OSS crate `gaze-document` for document → safe-bundle generation.
   Ships with PNG/JPG/PDF input support via Tesseract subprocess OCR (single-page
   PDF rasterization via pdfium). Output is a `SafeBundle` containing redacted
