@@ -51,7 +51,7 @@ response escapes — are checked in `tests/chokepoint_ordering.rs`.
 Snapshot refs use `sha256(audit_session_id || 0x00 || call_id || 0x00 ||
 payload_bytes)`. This is an integrity marker for audit lookup, not a secret
 commitment scheme. Threat model: anyone who can read audit rows and guess the
-exact response payload can verify that guess offline. Current v0.7 beta accepts
+exact response payload can verify that guess offline. Current v0.7.x stable accepts
 that risk because audit readers are already trusted with manifest metadata and
 operator-tier deployments must protect snapshot storage. If that trust boundary
 changes, replace the hash input with keyed HMAC material owned by the
@@ -92,7 +92,7 @@ inventory. `ManifestStore` implementations that persist snapshots must protect
 those bytes with encryption at rest and operator-only read access. Audit rows
 record snapshot locators plus the salted SHA-256 integrity marker described
 above; audit readers are trusted to see manifest metadata and to verify guessed
-payloads offline under the v0.7 beta threat model.
+payloads offline under the v0.7.x threat model.
 
 ## Adopter quickstart
 
