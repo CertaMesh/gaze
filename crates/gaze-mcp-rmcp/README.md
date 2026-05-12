@@ -1,5 +1,9 @@
 # gaze-mcp-rmcp
 
+[![Crates.io](https://img.shields.io/crates/v/gaze-mcp-rmcp.svg)](https://crates.io/crates/gaze-mcp-rmcp)
+[![docs.rs](https://docs.rs/gaze-mcp-rmcp/badge.svg)](https://docs.rs/gaze-mcp-rmcp)
+[![License](https://img.shields.io/crates/l/gaze-mcp-rmcp.svg)](https://github.com/EmpireTwo/gaze#license)
+
 ### Scope
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
