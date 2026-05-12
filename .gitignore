@@ -1,6 +1,7 @@
 /target
 /.gaze/
 /.superpowers/
+/.lean-ctx/
 *.db
 *.db-journal
 .DS_Store
