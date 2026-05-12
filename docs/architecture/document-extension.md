@@ -1,6 +1,6 @@
 # Document Extension Architecture
 
-`DocumentExtension` is the v0.7.0 upstream hook for `gaze-document`. It lets a
+`DocumentExtension` is the v0.7.x upstream hook for `gaze-document`. It lets a
 document bundle bind document metadata into the same signed owner-only
 `SensitiveSnapshot` that already restores tokens.
 
@@ -22,10 +22,6 @@ files must be safe to upload to an LLM workspace as a unit.
 
 `<base>-agent/` is the agent-shippable directory. `<base>-owner/manifest.bin` is
 owner-only restore material produced by `Session::export_with_extension`.
-
-> v0.7.0 Phase 1 followup: runtime enforcement of `<base>-agent/` vs
-> `<base>-owner/` separation lands in `Bundle::write` (v0.7.0 Phase 1 PR).
-> No raw byte may land in `<base>-agent/` except via tokenization.
 
 ## File Shapes
 
@@ -85,9 +81,8 @@ let manifest_bin = session.export_with_extension(extension)?.into_bytes();
 `Session::export()` remains unchanged for text-only adopters. `Session::import`
 continues to restore both plain v3 and document-extended v4 snapshots.
 
-## v0.7.1 Adapter Path
+## Shipped in v0.7.1
 
-The `gaze-document` crate, real codec registry, Tesseract adapter, PDFium
-adapter, and owner-side `manifest.index.json` are v0.7.1+ work. v0.7.0 only
-locks the upstream value contracts and session export hook needed by those
-adapters.
+`gaze-document` now ships the OSS document-ingestion path on top of this hook:
+PNG/JPG/PDF input, Tesseract OCR, optional PDF rasterization, `write_bundle`
+runtime separation, and a versioned `BundleReport` with `bundle_version = 1`.
