@@ -149,7 +149,7 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 ## Status
 
-- **Version:** v0.7.0 (2026-05).
+- **Version:** v0.7.1 (2026-05).
 - **MSRV:** Rust 1.89.
 - **License:** dual `Apache-2.0 OR MIT`.
 - **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.
