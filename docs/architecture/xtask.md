@@ -11,6 +11,8 @@ $ cargo run -p xtask -- class-map-override-safety
 $ cargo run -p xtask -- recognizer-composition-validator
 $ cargo run -p xtask -- no-tenant-knowledge
 $ cargo run -p xtask -- bundle-tokenization-drift
+$ cargo run -p xtask -- family-policy-table-coherence
+$ cargo run -p xtask -- locale-cue-bundle-coherence
 $ cargo run -p xtask -- fixture-citation-lint
 $ cargo run -p xtask -- ci-feature-matrix
 $ cargo run -p xtask -- cargo-metadata-audit-isolation
@@ -19,6 +21,8 @@ $ cargo run -p xtask -- safety-net-sanity
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
+The canonical active-gate roster is the "Active xtask gates" line in
+[`CLAUDE.md`](../../CLAUDE.md).
 
 ## Current gates
 
@@ -29,6 +33,8 @@ The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.
 | `RecognizerCompositionValidator` | `cargo run -p xtask -- recognizer-composition-validator` | Lists and runs the behavioral tests in `RECOGNIZER_COMPOSITION_VALIDATOR_TESTS`. The gate fails if the rulepack composition validator tests are missing or failing. |
 | `NoTenantKnowledge` | `cargo run -p xtask -- no-tenant-knowledge` | Added in v0.4.3. Production-code lint scanner that rejects tenant-pattern strings (`order_id`, `Order_42`, `Song_42`, `User_7`) in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Allow markers (`// allow(tenant-fixture)`) hard-fail in production scope and remain valid only in tests, benches, docs, and `CONTRIBUTING.md`. |
 | `BundleTokenizationDrift` | `cargo run -p xtask -- bundle-tokenization-drift` | Added in v0.4.6. Discovers recognizer-bearing bundled rulepacks from `crates/gaze-recognizers/embedded/*.toml`, runs the real `gaze clean --rulepack-bundled <bundle> --audit-db <tmp>` path against `crates/xtask/fixtures/drift-corpus.txt`, restores emitted tokens to infer byte spans, and compares canonical no-policy tokenization metadata to `crates/xtask/snapshots/<bundle>-no-policy.json`. Snapshots exclude raw values, `session_blob`, and audit `created_at`. `--verify-ack` fails closed when snapshot changes lack both a `// drift-ack:` source/test comment and a `[bundle-tokenization-drift]` line in the `[Unreleased]` `### Changed` section of `CHANGELOG.md`. |
+| `FamilyPolicyTableCoherence` | `cargo run -p xtask -- family-policy-table-coherence` | Added in v0.7 Spike 2. Parses embedded rulepacks and checks collision-family declarations compile into the expected family precedence table, including IBAN-over-PAN and same-variant phone non-arbitration. |
+| `LocaleCueBundleCoherence` | `cargo run -p xtask -- locale-cue-bundle-coherence` | Added in v0.7 Spike 3. Checks every mandatory-anchor declaration in core bundles has a matching cue key in embedded locale bundles. |
 | `FixtureCitationLint` | `cargo run -p xtask -- fixture-citation-lint` | Added in v0.4.6 S2. Production-code lint scanner for fixture-shaped PII literals in `crates/{gaze,gaze-types,gaze-recognizers,gaze-assembly,gaze-cli}/src/`. Each production fixture literal must carry `// fixture-cited(<test-path>:<fully-qualified-test-name>)`, and the fully qualified test name must appear exactly in `cargo test --workspace -- --list`. |
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C and updated in v0.6 after the `gaze` audit feature shim was removed. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default, `--no-default-features`, or safety-net graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
