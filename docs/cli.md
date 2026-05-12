@@ -1,5 +1,32 @@
 # Gaze CLI
 
+## MCP
+
+`gaze mcp` installs, diagnoses, or runs the stdio MCP server. It requires the
+CLI to be built with `--features mcp`, which also enables the document tool
+surface.
+
+```sh
+cargo install --path crates/gaze-cli --features mcp
+gaze mcp install --client claude-code
+gaze mcp doctor
+gaze mcp serve --manifest-dir ~/.local/share/gaze/mcp-manifests --max-file-size 26214400
+```
+
+`install` updates a supported client config for `gaze mcp serve`. Supported
+clients include Claude Code, Claude Desktop, and Cursor. Use `--dry-run` to
+print planned changes and `--skip-agents-md` to skip the marker-fenced
+AGENTS.md guidance block.
+
+`doctor` checks the current executable, optional AGENTS.md guidance, client
+configuration, and runtime dependencies. Use `--strict` to fail on warnings and
+`--json` for machine-readable output.
+
+`serve` starts the stdio MCP server and exposes agent-tier document tools such
+as `gaze_read_file` and `gaze_read_text`. `--manifest-dir` selects where call
+records are written; `--max-file-size` bounds file input accepted by
+`gaze_read_file`.
+
 ## Audit Metadata
 
 `gaze audit` reads SQLite redaction-log metadata produced by `gaze clean --audit-db`.
