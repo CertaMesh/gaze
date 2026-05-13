@@ -74,6 +74,11 @@ enum Cmd {
         /// Optional observer-only privacy safety net.
         #[arg(long, value_enum)]
         safety_net: Option<SafetyNetKind>,
+        /// v0.8 backend selector. Defaults to `openai-filter`. When set with
+        /// `--safety-net=<kind>`, this flag wins. Lets adopters swap the
+        /// Pass-3 backend without re-typing the legacy `--safety-net` value.
+        #[arg(long, value_enum, default_value_t = SafetyNetBackend::OpenaiFilter)]
+        safety_net_backend: SafetyNetBackend,
         /// Path to the local OpenAI Privacy Filter `opf` command.
         #[arg(long)]
         openai_filter_command: Option<PathBuf>,
@@ -86,6 +91,13 @@ enum Cmd {
         /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
         #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
         openai_filter_device: OpenAiFilterDevice,
+        /// Path to the local Kiji DistilBERT subprocess command.
+        #[arg(long)]
+        kiji_distilbert_command: Option<PathBuf>,
+        /// Path to the pinned Kiji DistilBERT model directory (must contain
+        /// SHA256SUMS, labels.json, model.onnx, tokenizer.json).
+        #[arg(long)]
+        kiji_distilbert_model_dir: Option<PathBuf>,
         /// Safety-net subprocess timeout in milliseconds.
         #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
         safety_net_timeout_ms: u64,
@@ -322,6 +334,27 @@ enum SafetyNetAuditCmd {
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetKind {
     OpenaiFilter,
+    KijiDistilbert,
+}
+
+/// v0.8 forward-compatible backend selector.
+///
+/// `--safety-net-backend` lets adopters pick which observer-only backend runs
+/// at Pass-3 when more than one is wired in. Defaults to `openai-filter`,
+/// which preserves the v0.6/v0.7 single-backend behavior.
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SafetyNetBackend {
+    OpenaiFilter,
+    KijiDistilbert,
+}
+
+impl From<SafetyNetKind> for SafetyNetBackend {
+    fn from(kind: SafetyNetKind) -> Self {
+        match kind {
+            SafetyNetKind::OpenaiFilter => Self::OpenaiFilter,
+            SafetyNetKind::KijiDistilbert => Self::KijiDistilbert,
+        }
+    }
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
@@ -385,10 +418,13 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             context_json,
             audit_db,
             safety_net,
+            safety_net_backend,
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            kiji_distilbert_command,
+            kiji_distilbert_model_dir,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
@@ -407,10 +443,13 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             context_json,
             audit_db,
             safety_net,
+            safety_net_backend,
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            kiji_distilbert_command,
+            kiji_distilbert_model_dir,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,

@@ -3821,3 +3821,65 @@ action = "preserve"
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+// ------------------------------------------------------------------
+// Kiji DistilBERT safety-net backend activation predicate (v0.8 T2.5)
+// ------------------------------------------------------------------
+
+/// Activating `--safety-net-backend=kiji-distilbert` with a missing model
+/// artifact must fail closed with the typed `SafetyNetArtifactMissing` envelope
+/// and CLI exit code 2 (config-level, Axis-1 reliability — never silent-
+/// disable).
+#[cfg(feature = "safety-net-kiji")]
+#[test]
+fn t_kiji_distilbert_backend_without_artifact_emits_typed_envelope() {
+    let dir = tempdir().unwrap();
+    let kiji = dir.path().join("kiji");
+    fs::write(&kiji, b"#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&kiji, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let model_dir = dir.path().join("kiji-distilbert");
+    fs::create_dir(&model_dir).unwrap();
+    // No SHA256SUMS, no model.onnx, no tokenizer.json, no labels.json.
+
+    let out = clean_raw_with_args(
+        &[
+            "--safety-net=kiji-distilbert",
+            "--safety-net-backend=kiji-distilbert",
+            &format!("--kiji-distilbert-command={}", kiji.display()),
+            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
+        ],
+        "hello",
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr_line = String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let value: Value =
+        serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
+    assert_eq!(value["error"], "SafetyNetArtifactMissing");
+    assert_eq!(value["exit"], 2);
+    assert_eq!(value["backend"], "kiji-distilbert");
+    let path = value["path"].as_str().expect("path field");
+    // First missing artifact surfaced is SHA256SUMS — the pinned-artifact
+    // contract enforces this order: SHA256SUMS, labels.json, model.onnx,
+    // tokenizer.json.
+    assert!(
+        path.contains("SHA256SUMS"),
+        "expected SHA256SUMS in artifact path, got {path}"
+    );
+    assert!(
+        path.contains("fetch-kiji-safetynet-model.sh"),
+        "expected install hint, got {path}"
+    );
+}

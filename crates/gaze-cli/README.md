@@ -141,10 +141,13 @@ Flags:
 | `--max-bytes <bytes>` | Stdin byte cap. Defaults to `10485760`. |
 | `--context-json <path>` | Typed context envelope with dictionaries, class map, and fields. |
 | `--audit-db <path>` | Optional SQLite redaction-log database path for metadata-only audit entries. |
-| `--safety-net <kind>` | Optional observer-only safety net. Currently `openai-filter`. Activates the post-clean leak audit. |
-| `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with `--safety-net=openai-filter`. |
-| `--openai-filter-checkpoint <path>` | Path to the OPF checkpoint or model directory. Required with `--safety-net=openai-filter`. |
+| `--safety-net <kind>` | Optional observer-only safety net. Accepts `openai-filter` (v0.6+) or `kiji-distilbert` (v0.8+). Activates the post-clean leak audit. |
+| `--safety-net-backend <backend>` | v0.8 backend selector: `openai-filter` (default) or `kiji-distilbert`. When set alongside `--safety-net=<kind>`, this flag wins and lets adopters swap the Pass-3 implementation without re-typing the legacy `--safety-net` value. |
+| `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with the `openai-filter` backend. |
+| `--openai-filter-checkpoint <path>` | Path to the OPF checkpoint or model directory. Required with the `openai-filter` backend. |
 | `--openai-filter-operating-point <point>` | Operating point: `high-recall`, `balanced`, `high-precision`. |
+| `--kiji-distilbert-command <path>` | Path to the local Kiji DistilBERT subprocess command. Required with the `kiji-distilbert` backend. |
+| `--kiji-distilbert-model-dir <path>` | Path to the pinned Kiji DistilBERT model directory (must contain `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`). Required with the `kiji-distilbert` backend. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
 | `--safety-net-mode <strict\|tolerant>` | `strict` exits `3` on `Uncovered`/`PartialBleed` suspects; `tolerant` emits warnings on stderr and continues. Defaults to `strict`. |
@@ -154,19 +157,44 @@ surface can be exercised. Production use should pass `--policy`.
 
 ### Safety net
 
-The optional `--safety-net=openai-filter` flag activates the observer-only
-safety net documented in
+The optional `--safety-net=<kind>` flag activates the observer-only safety
+net documented in
 [docs/architecture/safety-nets.md](../../docs/architecture/safety-nets.md).
 The safety net runs after the deterministic clean and reports suspected
 leaks against the manifest of emitted tokens. It cannot mutate the clean
 text and cannot affect restore.
 
+#### Safety-net backends
+
+Two observer-only backends are available; pick one via
+`--safety-net-backend <backend>` (v0.8) or the legacy `--safety-net=<kind>`.
+Both share the strict/tolerant exit-code contract, the `LeakReport` shape,
+and the `safety_net_log` audit table.
+
+**`openai-filter`** (v0.6+) wraps the official `openai/privacy-filter`
+subprocess. Strengths: eight typed labels covering Person, Email, Phone,
+URL, Address, Date, Account number, Secret; documented operating points;
+mature upstream. Trade-offs: heavier model and slower per-clean latency;
+no first-party fetch path; runtime depends on a third-party Python install
+the operator pins.
+
+**`kiji-distilbert`** (v0.8+) wraps a pinned DistilBERT NER model as a
+subprocess. Strengths: lightweight ONNX-served weights, faster startup,
+straightforward fetch script, second NER opinion at the chokepoint that
+complements OPF's class set. Trade-offs: narrower closed label set
+(`person`, `location`, `organization`, `miscellaneous`) so financial-secret
+or account-number suspects are not surfaced; pinned-artifact contract
+requires `SHA256SUMS` present on disk (Axis-1 fail-closed — no silent
+disable).
+
 #### Setup
 
-The safety-net feature is gated off by default. Build with:
+The safety-net features are gated off by default. Build with one or both:
 
 ```console
 $ cargo build -p gaze-cli --features safety-net-openai
+$ cargo build -p gaze-cli --features safety-net-kiji
+$ cargo build -p gaze-cli --features safety-net-openai,safety-net-kiji
 ```
 
 The `opf` command must be installed from a pinned upstream Git revision or
@@ -187,6 +215,14 @@ If the checkpoint is missing, the CLI fails closed with exit `3` and
 variant `WeightsMissing` before any subprocess spawn. Initialization
 failures are cached for the lifetime of the process so missing-checkpoint
 errors do not retry on every clean.
+
+The Kiji DistilBERT backend follows the same bring-your-own pattern. The
+model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`,
+and `tokenizer.json`; populate it via `scripts/fetch-kiji-safetynet-model.sh`.
+A missing artifact (including a missing `SHA256SUMS`) fails closed with the
+typed `SafetyNetArtifactMissing` envelope and exit code `2` *before* the
+subprocess is spawned — Axis-1 reliability never silent-disables a
+requested backend.
 
 #### Synthetic example — strict mode
 
@@ -245,6 +281,24 @@ Strict mode (the default) would exit `3` with the JSON error
 `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout would
 be empty. `ClassMismatch` suspects always warn but never fail strict mode,
 because the manifest still tokenized the bytes — only the class disagrees.
+
+#### Synthetic example — Kiji DistilBERT backend
+
+```console
+$ printf '%s' 'Alice Example mailed the package to Berlin' \
+  | gaze clean \
+      --policy=policy.toml \
+      --safety-net=kiji-distilbert \
+      --safety-net-backend=kiji-distilbert \
+      --kiji-distilbert-command=/opt/kiji/bin/kiji \
+      --kiji-distilbert-model-dir=~/.local/share/gaze/models/kiji-distilbert
+```
+
+The `--safety-net-backend` flag overrides any legacy `--safety-net=<kind>`
+value, so a deployment can keep its existing `--safety-net=openai-filter`
+invocation and flip to Kiji by adding one flag. Suspects emit the same
+`LeakReport` shape; the `safety_net_id` field switches to
+`kiji-distilbert`.
 
 #### Approved synthetic PII
 
@@ -379,7 +433,7 @@ Exit codes are defined by `CliError` in [`src/error.rs`](src/error.rs).
 |------|----------|
 | `0` | Success, help, version output, or tolerant-mode safety-net runs that produced only stderr warnings. |
 | `1` | `StdinParse`, `EmptyInput`, `InputTooLarge`, `InvalidEncoding`. |
-| `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, or `SafetyNetConfig` (missing `--openai-filter-command` / `--openai-filter-checkpoint`, or safety-net flags supplied without the `safety-net-openai` feature). |
+| `2` | `PolicyConfig`, including unsupported format, invalid policy, invalid locale, invalid NER threshold, unknown rulepack, unsupported CLI column rules, `SafetyNetConfig` (missing backend command/checkpoint or safety-net flags supplied without the matching feature), or `SafetyNetArtifactMissing` (Axis-1 fail-closed when a backend's pinned artifact is absent, including a missing `SHA256SUMS` for the Kiji DistilBERT backend). |
 | `3` | `UnknownToken`, `InvalidSignature`, `InvalidBlobVersion`, `BlobExpired`, `Pipeline`, sanitized panic path, and `SafetyNetFailure` variants: `Unavailable`, `WeightsMissing`, `ModelUnavailable`, `InputTooLarge`, `Timeout`, `Runtime`, `InvalidOutput`, `SuspectedLeak` (strict mode only). |
 | `4` | `Io`, `PolicyOpen`. |
 

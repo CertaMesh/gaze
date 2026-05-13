@@ -22,6 +22,7 @@ default = ["phone-parser"]
 phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
 safety-net = []
 safety-net-openai = ["safety-net"]
+safety-net-kiji = ["safety-net"]
 test-support = ["safety-net"]
 
 [dependencies]
@@ -62,6 +63,10 @@ required-features = ["test-support"]
 [[test]]
 name = "openai_filter_subprocess"
 required-features = ["safety-net-openai"]
+
+[[test]]
+name = "kiji_distilbert_subprocess"
+required-features = ["safety-net-kiji"]
 
 [[bench]]
 name = "dictionary"

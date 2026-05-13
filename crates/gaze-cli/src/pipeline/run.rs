@@ -19,7 +19,7 @@ use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode,
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetKind, SafetyNetMode,
     DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES, DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
@@ -45,13 +45,29 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) context_json: Option<&'a Path>,
     pub(crate) audit_db: Option<&'a Path>,
     pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) safety_net_backend: SafetyNetBackend,
     pub(crate) openai_filter_command: Option<&'a Path>,
     pub(crate) openai_filter_checkpoint: Option<&'a Path>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    pub(crate) kiji_distilbert_command: Option<&'a Path>,
+    pub(crate) kiji_distilbert_model_dir: Option<&'a Path>,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
+}
+
+/// Resolves the active Pass-3 SafetyNet backend.
+///
+/// `--safety-net-backend` takes precedence when explicitly different from the
+/// default (`openai-filter`). Otherwise we fall back to the value of
+/// `--safety-net=<kind>`. Returns `None` when no safety net is active.
+pub(crate) fn effective_safety_net_backend(options: &CleanOptions<'_>) -> Option<SafetyNetBackend> {
+    let activator = options.safety_net?;
+    if options.safety_net_backend != SafetyNetBackend::OpenaiFilter {
+        return Some(options.safety_net_backend);
+    }
+    Some(SafetyNetBackend::from(activator))
 }
 
 pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), CliError> {
@@ -205,8 +221,22 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     Ok(())
 }
 
-#[cfg(feature = "safety-net-openai")]
 fn maybe_register_safety_net(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    let Some(backend) = effective_safety_net_backend(options) else {
+        validate_no_backend_options(options)?;
+        return Ok(pipeline);
+    };
+    match backend {
+        SafetyNetBackend::OpenaiFilter => register_openai_filter(pipeline, options),
+        SafetyNetBackend::KijiDistilbert => register_kiji_distilbert(pipeline, options),
+    }
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn register_openai_filter(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
@@ -214,71 +244,116 @@ fn maybe_register_safety_net(
         OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
     };
 
-    let Some(kind) = options.safety_net else {
-        validate_no_openai_filter_options(options)?;
-        return Ok(pipeline);
-    };
-    match kind {
-        SafetyNetKind::OpenaiFilter => {
-            let command = options.openai_filter_command.ok_or_else(|| {
-                CliError::SafetyNetConfigDetail(
-                    "--openai-filter-command is required for --safety-net=openai-filter"
-                        .to_string(),
-                )
-            })?;
-            let checkpoint = options.openai_filter_checkpoint.ok_or_else(|| {
-                CliError::SafetyNetConfigDetail(
-                    "--openai-filter-checkpoint is required for --safety-net=openai-filter"
-                        .to_string(),
-                )
-            })?;
-            let mut config = SubprocessOpenAiFilterConfig::new(command)
-                .with_checkpoint_path(checkpoint)
-                .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
-                .with_max_input_bytes(options.safety_net_input_limit_bytes);
-            let mut opf_args = vec!["--format", "json", "--output-mode", "typed"];
-            if let Some(operating_point) = options.openai_filter_operating_point {
-                let value = operating_point.as_opf_value();
-                opf_args.extend(["--operating-point", value]);
-                config = config.with_decoding_param("operating_point", value);
-            }
-            if let Some(device) = options.openai_filter_device.as_opf_value() {
-                opf_args.extend(["--device", device]);
-                config = config.with_decoding_param("device", device);
-            }
-            config = config.with_args(opf_args);
-            Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
-        }
+    let command = options.openai_filter_command.ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(
+            "--openai-filter-command is required for --safety-net-backend=openai-filter"
+                .to_string(),
+        )
+    })?;
+    let checkpoint = options.openai_filter_checkpoint.ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(
+            "--openai-filter-checkpoint is required for --safety-net-backend=openai-filter"
+                .to_string(),
+        )
+    })?;
+    let mut config = SubprocessOpenAiFilterConfig::new(command)
+        .with_checkpoint_path(checkpoint)
+        .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
+        .with_max_input_bytes(options.safety_net_input_limit_bytes);
+    let mut opf_args = vec!["--format", "json", "--output-mode", "typed"];
+    if let Some(operating_point) = options.openai_filter_operating_point {
+        let value = operating_point.as_opf_value();
+        opf_args.extend(["--operating-point", value]);
+        config = config.with_decoding_param("operating_point", value);
     }
+    if let Some(device) = options.openai_filter_device.as_opf_value() {
+        opf_args.extend(["--device", device]);
+        config = config.with_decoding_param("device", device);
+    }
+    config = config.with_args(opf_args);
+    Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
 }
 
 #[cfg(not(feature = "safety-net-openai"))]
-fn maybe_register_safety_net(
+fn register_openai_filter(
+    _pipeline: gaze::Pipeline,
+    _options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "safety net requested but gaze-cli was not compiled with feature safety-net-openai"
+            .to_string(),
+    ))
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn register_kiji_distilbert(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
-    if options.safety_net.is_some() {
-        return Err(CliError::SafetyNetConfigDetail(
-            "safety net requested but gaze-cli was not compiled with feature safety-net-openai"
+    use gaze_recognizers::safety_net::kiji_distilbert::{
+        KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+    };
+
+    let command = options.kiji_distilbert_command.ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(
+            "--kiji-distilbert-command is required for --safety-net-backend=kiji-distilbert"
                 .to_string(),
-        ));
+        )
+    })?;
+    let model_dir = options.kiji_distilbert_model_dir.ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(
+            "--kiji-distilbert-model-dir is required for --safety-net-backend=kiji-distilbert"
+                .to_string(),
+        )
+    })?;
+
+    // Pinned-artifact contract (Axis 1): the runtime never silently disables
+    // the backend. Surface the artifact-missing predicate as a config-level
+    // error (exit 2) with the install hint, so the activation predicate
+    // documented in docs/architecture/safety-nets.md is preserved.
+    for required in REQUIRED_KIJI_ARTIFACTS {
+        let artifact = model_dir.join(required);
+        if !artifact.exists() {
+            return Err(CliError::SafetyNetArtifactMissing {
+                backend: "kiji-distilbert",
+                path: format!(
+                    "{} (install via scripts/fetch-kiji-safetynet-model.sh)",
+                    artifact.display()
+                ),
+            });
+        }
     }
-    validate_no_openai_filter_options(options)?;
-    Ok(pipeline)
+
+    let config = SubprocessKijiConfig::new(command)
+        .with_model_dir(model_dir)
+        .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
+        .with_max_input_bytes(options.safety_net_input_limit_bytes);
+    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::new(config)))
 }
 
-fn validate_no_openai_filter_options(
-    options: &CleanOptions<'_>,
-) -> std::result::Result<(), CliError> {
+#[cfg(not(feature = "safety-net-kiji"))]
+fn register_kiji_distilbert(
+    _pipeline: gaze::Pipeline,
+    _options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "kiji-distilbert backend requested but gaze-cli was not compiled with feature safety-net-kiji"
+            .to_string(),
+    ))
+}
+
+fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Result<(), CliError> {
     if options.openai_filter_command.is_some()
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
         || options.openai_filter_device != OpenAiFilterDevice::Auto
+        || options.kiji_distilbert_command.is_some()
+        || options.kiji_distilbert_model_dir.is_some()
         || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
         || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
     {
         return Err(CliError::SafetyNetConfigDetail(
-            "openai-filter options require --safety-net=openai-filter".to_string(),
+            "safety-net backend options require --safety-net=<kind> activation".to_string(),
         ));
     }
     Ok(())

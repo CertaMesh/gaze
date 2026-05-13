@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use super::{OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetKind, SafetyNetMode};
+use super::{
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetKind, SafetyNetMode,
+};
 use crate::error::CliError;
 use crate::pipeline::{run_clean, CleanOptions};
 
@@ -19,10 +21,13 @@ pub(crate) struct Args {
     pub(crate) context_json: Option<PathBuf>,
     pub(crate) audit_db: Option<PathBuf>,
     pub(crate) safety_net: Option<SafetyNetKind>,
+    pub(crate) safety_net_backend: SafetyNetBackend,
     pub(crate) openai_filter_command: Option<PathBuf>,
     pub(crate) openai_filter_checkpoint: Option<PathBuf>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    pub(crate) kiji_distilbert_command: Option<PathBuf>,
+    pub(crate) kiji_distilbert_model_dir: Option<PathBuf>,
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -44,10 +49,13 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         context_json: args.context_json.as_deref(),
         audit_db: args.audit_db.as_deref(),
         safety_net: args.safety_net,
+        safety_net_backend: args.safety_net_backend,
         openai_filter_command: args.openai_filter_command.as_deref(),
         openai_filter_checkpoint: args.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
+        kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
+        kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
         safety_net_timeout_ms: args.safety_net_timeout_ms,
         safety_net_input_limit_bytes: args.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_mode,
