@@ -61,7 +61,8 @@ The UI suite covers 18 bypass classes, including macro call-site hygiene,
 controls. This is the source of truth for audit-sink protected-path isolation;
 the legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 The architecture, toolchain pins, timings, and Phase E migration plan are documented in
-[`docs/research/v0.5-dylint-audit-gate.md`](../research/v0.5-dylint-audit-gate.md).
+[`v0.5-dylint-audit-gate.md`](https://github.com/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md)
+(hosted in `PIInuts/business:research/`).
 
 ## cargo_metadata_audit_isolation self-test
 

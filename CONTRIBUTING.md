@@ -128,7 +128,8 @@ The `dylint-gate` (v0.5 Phase D) is the canonical audit-sink protected-path
 enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was
 decommissioned in v0.5 Phase E (PR #77, commit `f4fde12`). Toolchain pins,
 fixture matrix, and timings live in
-[`docs/research/v0.5-dylint-audit-gate.md`](docs/research/v0.5-dylint-audit-gate.md).
+[`v0.5-dylint-audit-gate.md`](https://github.com/PIInuts/business/blob/main/research/v0.5-dylint-audit-gate.md)
+(hosted in `PIInuts/business:research/`).
 `cargo-dylint` is a scheduled-workflow requirement; the local gate ritual does
 not include it.
 

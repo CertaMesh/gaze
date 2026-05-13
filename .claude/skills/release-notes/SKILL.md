@@ -157,7 +157,7 @@ Subject = "the recognizers", verbs = past-tense + present descriptive, PR anchor
 
 The Known-limitations paragraph in v0.4.5 demonstrates the trust-signal frame:
 
-> The v0.4.5 `audit_metadata_only` gate is intentionally syntax-based. It covers natural-code escape routes that have caused drift risk in this codebase, but fully-qualified path references, `include!`, let-else diverge cases, and macro-emitted imports remain documented accepted-risk limitations for this release. See `docs/architecture/xtask.md` for the current coverage table and `docs/research/v0.5-dylint-audit-gate.md` for the planned v0.5 pivot to a dylint-based name-resolution lint (todo #181).
+> The v0.4.5 `audit_metadata_only` gate is intentionally syntax-based. It covers natural-code escape routes that have caused drift risk in this codebase, but fully-qualified path references, `include!`, let-else diverge cases, and macro-emitted imports remain documented accepted-risk limitations for this release. See `docs/architecture/xtask.md` for the current coverage table and `PIInuts/business:research/v0.5-dylint-audit-gate.md` for the planned v0.5 pivot to a dylint-based name-resolution lint (todo #181).
 
 Pattern: `"intentionally"` framing + named exception classes + two `docs/` links + one todo number for the planned-fix release.
 
