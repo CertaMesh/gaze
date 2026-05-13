@@ -329,6 +329,7 @@ fn run_with_stdin(root: &Path, command: &mut Command, stdin: &str) -> Result<Vec
         .context("failed to open child stdin")?
         .write_all(stdin.as_bytes())
         .context("failed to write child stdin")?;
+    drop(child.stdin.take());
     let output = child
         .wait_with_output()
         .context("failed to wait for command")?;
