@@ -4,3 +4,8 @@
 *.db
 *.db-journal
 .DS_Store
+
+# Agent-local infrastructure (per-machine, recreated by skills/tooling)
+/.agents/
+/.claude/
+/.scribe.yaml
