@@ -12,6 +12,10 @@ pub(crate) enum CliError {
     InvalidEncoding,
     PolicyConfig,
     PolicyConfigDetail(String),
+    PolicySchemaUnsupported {
+        found: String,
+        supported: &'static str,
+    },
     SafetyNetConfigDetail(String),
     SafetyNetFailure {
         variant: &'static str,
@@ -41,7 +45,10 @@ impl CliError {
     pub(crate) fn exit_code(&self) -> u8 {
         match self {
             Self::StdinParse | Self::EmptyInput | Self::InputTooLarge | Self::InvalidEncoding => 1,
-            Self::PolicyConfig | Self::PolicyConfigDetail(_) | Self::AuditPurgeIso8601 { .. } => 2,
+            Self::PolicyConfig
+            | Self::PolicyConfigDetail(_)
+            | Self::PolicySchemaUnsupported { .. }
+            | Self::AuditPurgeIso8601 { .. } => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
             | Self::UnsupportedSessionScope { .. }
@@ -64,6 +71,7 @@ impl CliError {
             Self::InputTooLarge => "InputTooLarge",
             Self::InvalidEncoding => "InvalidEncoding",
             Self::PolicyConfig | Self::PolicyConfigDetail(_) => "PolicyConfig",
+            Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
             Self::SafetyNetFailure { .. } => "SafetyNet",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
@@ -84,6 +92,19 @@ impl CliError {
 
     pub(crate) fn emit_stderr(&self) {
         match self {
+            Self::PolicySchemaUnsupported { found, supported } => {
+                let found = serde_json::to_string(found)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                let supported = serde_json::to_string(supported)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"found":{},"supported":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    found,
+                    supported
+                )
+            }
             Self::PolicyConfigDetail(detail) | Self::SafetyNetConfigDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
