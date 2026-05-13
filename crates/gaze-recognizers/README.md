@@ -146,6 +146,74 @@ Loading failures are policy configuration failures in the CLI path.
 The loader returns `None` for unknown names. Policy/CLI callers should treat
 unknown bundled names as configuration errors.
 
+## Recognizer-level metadata (v0.7.2)
+
+Rulepacks loaded into this crate can carry two cross-cutting metadata blocks
+that change conflict-resolution behavior without changing the underlying
+backend implementation. Both are designed to fail closed: when adopters
+under-specify them, Gaze emits a coarser family-level token rather than a
+guess.
+
+### Collision-family policy
+
+Cross-class recognizer rivalries (PAN vs IBAN, postal vs phone, …) declare
+collision metadata beside the recognizer definition:
+
+```toml
+[[recognizers]]
+id = "iban.structural"
+class = "custom:iban"
+
+[recognizers.collision]
+family = "payment-card-or-iban"
+variant = "iban"
+precedence = 10
+```
+
+Adopter policy uses the same shape under `[[policy.custom_recognizers]]` with
+a `[policy.custom_recognizers.collision]` table. The runtime compiles these
+into a `FamilyPolicyTable` queried by stable recognizer id. Validator-veto
+runs first; family policy then arbitrates same-family different-variant
+overlaps with `ConflictTier::CollisionPolicy`. Equal precedence between
+variants emits a family-level `PiiClass::Custom("family:<name>")` token plus
+`AmbiguityRecord::PrecedenceTie`. Reserved bundled family names cannot be
+claimed by adopter policy. Full contract:
+[`docs/architecture/collision-family.md`](../../docs/architecture/collision-family.md).
+
+### Mandatory-anchor resolution
+
+A collision-family recognizer can require a deterministic cue before emitting
+its narrower variant:
+
+```toml
+[recognizers.collision]
+family = "payment-card-or-iban"
+variant = "iban"
+precedence = 10
+mandatory_anchor = "iban"
+```
+
+Locale rulepacks (e.g. `locale-en`, `locale-de`) supply the matching cue
+bundle:
+
+```toml
+[locale.cues.iban]
+names = ["IBAN", "IBAN:", "Account No."]
+window_chars = 64
+```
+
+When the anchor cue is found in a bounded window around the candidate span,
+the variant class flows normally. When the anchor is missing — or the locale
+bundle does not provide that cue key — Gaze emits one family-level
+`PiiClass::Custom("family:<name>")` token, sets the decision to
+`ConflictTier::AnchoredContext`, and attaches an `AmbiguityRecord` with
+`AmbiguityReason::NoAnchor`. The cleaned text receives one token and the
+manifest stores one restore mapping. The bundled
+`cargo run -p xtask -- locale-cue-bundle-coherence` gate fails if a bundled
+recognizer declares `mandatory_anchor` without a matching bundled cue block.
+Full contract:
+[`docs/architecture/anchor-resolution.md`](../../docs/architecture/anchor-resolution.md).
+
 ## Adding recognizers here
 
 Add a recognizer to this crate when it is a built-in backend Gaze should ship

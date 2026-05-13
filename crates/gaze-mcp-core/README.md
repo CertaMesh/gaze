@@ -4,6 +4,15 @@
 [![docs.rs](https://docs.rs/gaze-mcp-core/badge.svg)](https://docs.rs/gaze-mcp-core)
 [![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/EmpireTwo/gaze#license)
 
+> **Adding `gaze-mcp-core` (v0.7.2) to your crate enables:** the transport-free
+> MCP chokepoint runtime — `Tool` trait, `PiiEnvelope::dispatch`,
+> `ToolRegistry`, `ManifestStore` / `AuthHook` / `SessionIdPolicy` plug-in
+> points, and the optional `core-tools` agent-tier tool set.
+> **Does NOT bring in:** an MCP transport. No stdio, no streamable HTTP, no
+> JSON-RPC framing — this crate is transport-free by design.
+> **For the rmcp transport sink, also add `gaze-mcp-rmcp`** (or implement
+> `Frontend` yourself; see below).
+
 ### Scope
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
