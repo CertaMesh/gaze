@@ -62,7 +62,7 @@ cd gaze
 cargo install --path crates/gaze-cli
 ```
 
-Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: build from source with `cargo build --release -p gaze-cli`.
+Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: build from source with `cargo build --release -p gaze-cli`. See [Quickstart](#quickstart) below for first-run guidance.
 
 For library use — linking the Rust runtime directly instead of shelling out — see [Use from Rust](#use-from-rust) below.
 
@@ -79,6 +79,157 @@ The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning
 tokenized content plus a `manifest_id` for authorized restore flows. See
 [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation) for
 Claude Code, Claude Desktop, and Cursor config paths.
+
+## Quickstart
+
+A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the v0.7.2 CLI.
+
+### 1. First redact
+
+Write the smallest policy that drives the bundled `core` rulepack and tokenizes emails:
+
+```toml
+# quickstart-policy.toml
+schema_version = "0.1.0"
+
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core"]
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+Run `gaze clean` against it:
+
+```sh
+printf '%s' 'Contact alice@example.invalid for details.' \
+  | gaze clean --policy quickstart-policy.toml
+```
+
+The output is JSON. `clean_text` is the only field that may reach the LLM; `session_blob` is the signed restore manifest and must never leave the server:
+
+```json
+{
+  "clean_text": "Contact <{session_hex}:Email_1> for details.",
+  "session_blob": "<base64>",
+  "stats": {"detections": 1, "locale_chain": ["global"], "dictionaries_loaded": []}
+}
+```
+
+Round-trip through restore to recover the original on the same manifest:
+
+```sh
+printf '{"session_blob":"<base64>","text":"Re: <{session_hex}:Email_1>"}' \
+  | gaze restore
+```
+
+```json
+{"text": "Re: alice@example.invalid"}
+```
+
+Schema and every rule kind / action live in [`docs/policy.md`](docs/policy.md).
+
+### 2. Add NER
+
+NER is opt-in and stacks on top of the deterministic regex and dictionary passes. Turn it on when the input has free-prose names that the cue-anchored Name recognizer in `core` does not cover.
+
+Fetch the pinned mBERT bundle once:
+
+```sh
+bash scripts/fetch-ner-model.sh
+```
+
+The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override the destination). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
+
+Add the `[ner]` block to `quickstart-policy.toml` and a rule for the `name` class:
+
+```toml
+[ner]
+model_dir = "~/.local/share/gaze/models/davlan-mbert-ner-hrl"
+locale = "de"
+threshold = 0.3
+
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+```
+
+Re-run on free-prose German with a Name span the rule-based passes leave alone:
+
+```sh
+printf '%s' 'Bitte richten Sie es Dr. Erika Müller aus.' \
+  | gaze clean --policy quickstart-policy.toml
+```
+
+NER contributes a `Name_*` span via the model's `PER` label:
+
+```json
+{
+  "clean_text": "Bitte richten Sie es <{session_hex}:Name_1> aus.",
+  "session_blob": "<base64>",
+  "stats": {"detections": 1, "locale_chain": ["de-DE", "global"], "dictionaries_loaded": []}
+}
+```
+
+Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](docs/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
+
+### 3. Add the Privacy filter (Pass-3 SafetyNet)
+
+The Privacy filter is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+
+The safety-net code path is off the default build graph. Reinstall the CLI with the feature compiled in:
+
+```sh
+cargo install --path crates/gaze-cli --features safety-net-openai
+```
+
+Install the upstream [`openai/privacy-filter`](https://github.com/openai/privacy-filter) `opf` binary and a checkpoint per its instructions. Gaze does not download or update either — bring-your-own-binary plus bring-your-own-weights is the contract. The checkpoint directory must be owned by the running user with mode `0700`.
+
+Activate the filter on the same `gaze clean` invocation:
+
+```sh
+printf '%s' 'Contact alice@example.invalid for details.' \
+  | gaze clean \
+      --policy quickstart-policy.toml \
+      --safety-net openai-filter \
+      --openai-filter-command /opt/opf/bin/opf \
+      --openai-filter-checkpoint /opt/opf/checkpoint \
+      --openai-filter-device auto
+```
+
+`--openai-filter-device` accepts `auto` (default; the upstream `opf` picks), `cpu`, `cuda`, or `mps`.
+
+A clean run produces a `leak_report` block alongside the usual JSON; `suspect_count = 0` is the contract for "no leaks":
+
+```json
+{
+  "clean_text": "Contact <{session_hex}:Email_1> for details.",
+  "session_blob": "<base64>",
+  "stats": {"detections": 1},
+  "leak_report": {
+    "stats": {
+      "suspect_count": 0,
+      "uncovered_count": 0,
+      "partial_bleed_count": 0,
+      "class_mismatch_count": 0,
+      "locale_skipped_count": 0
+    }
+  }
+}
+```
+
+The default safety-net mode is `strict`: if the filter raises an `Uncovered` or `PartialBleed` suspect, the CLI exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty. Pass `--safety-net-mode tolerant` to keep running and route the warning to stderr. Full flag table, operating points, and exit-code map: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 
 ## Pipeline shape
 
