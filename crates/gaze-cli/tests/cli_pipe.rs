@@ -3733,3 +3733,91 @@ action = "preserve"
     assert_eq!(out.status.code(), Some(2));
     assert_policy_config_detail_contains(&out.stderr, "parse policy.toml");
 }
+
+// Dogfooding F#6: policy.toml schema_version mismatch must fail closed with a
+// typed envelope so adopters upgrading the gaze binary across a contract break
+// see the version mismatch directly rather than a generic PolicyConfig that
+// shadows the real cause.
+#[test]
+fn t19_policy_schema_version_unsupported_emits_typed_envelope() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+schema_version = "9.9.0"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = ".+"
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args(["clean", &format!("--policy={}", path.display())])
+        .write_stdin(b"anything".to_vec())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "PolicySchemaUnsupported");
+    assert_eq!(value["exit"], 2);
+    assert_eq!(value["found"], "9.9.0");
+    assert_eq!(value["supported"], "0.1");
+}
+
+#[test]
+fn t19a_policy_without_schema_version_loads_via_soft_default() {
+    // Existing 0.6.x / 0.7.x policies omit `schema_version`. The loader must
+    // keep accepting them by stamping DEFAULT_POLICY_SCHEMA_VERSION so the
+    // 0.1.x deployments do not hard-break on the binary upgrade that
+    // introduces the field.
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = 'a@b'
+class = "email"
+
+[[rule]]
+kind = "class"
+class = "email"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "ping a@b please",
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "soft default must accept missing schema_version: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}

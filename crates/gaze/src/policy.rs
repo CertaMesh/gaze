@@ -12,6 +12,26 @@ use crate::{
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 
+/// `major.minor` prefix of the policy schema versions this build accepts.
+///
+/// A policy.toml `schema_version` (or the [`DEFAULT_POLICY_SCHEMA_VERSION`]
+/// soft default applied when the field is omitted) must start with this string.
+/// Anything else fails closed at load with
+/// [`PolicyError::PolicySchemaUnsupported`], so operators upgrading the binary
+/// learn about a contract break instead of silently mis-loading the policy.
+///
+/// Mirrors the rulepack-side `SUPPORTED_SCHEMA_MAJOR_MINOR` in
+/// [`crate::rulepack`].
+pub const SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR: &str = "0.1";
+
+/// Schema version stamped on policy.toml documents that omit the field.
+///
+/// Existing 0.6.x / 0.7.x policies were written before `schema_version` was
+/// introduced; soft-defaulting them to `"0.1.0"` keeps the loader backward
+/// compatible. New policies should declare `schema_version = "0.1.0"`
+/// explicitly so future migrations can be detected.
+pub const DEFAULT_POLICY_SCHEMA_VERSION: &str = "0.1.0";
+
 /// Loaded redaction policy from a TOML configuration file.
 ///
 /// Defines which rulepacks activate, which recognizers are enabled, and the locale chain.
@@ -22,7 +42,7 @@ pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 /// development smoke-testing only and has an unauditable detection posture.
 ///
 /// See `docs/policy.md` in the repository for the full TOML schema reference.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Policy {
     pub session: SessionPolicy,
@@ -32,6 +52,29 @@ pub struct Policy {
     pub ner: Option<NerPolicy>,
     pub rulepacks: RulepackPolicy,
     pub locale: Option<Vec<LocaleTag>>,
+    /// Declared policy schema version (e.g. `"0.1.0"`).
+    ///
+    /// Populated from policy.toml's top-level `schema_version` field. Loader
+    /// requires the `major.minor` prefix to match
+    /// [`SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`]; documents that omit the field
+    /// soft-default to [`DEFAULT_POLICY_SCHEMA_VERSION`] for backward
+    /// compatibility with policies written before v0.7.2.
+    pub schema_version: String,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self {
+            session: SessionPolicy::default(),
+            detectors: Vec::new(),
+            dictionaries: Vec::new(),
+            rules: Vec::new(),
+            ner: None,
+            rulepacks: RulepackPolicy::default(),
+            locale: None,
+            schema_version: DEFAULT_POLICY_SCHEMA_VERSION.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,6 +246,11 @@ pub enum PolicyError {
     InvalidCollisionMetadata { name: String, reason: String },
     #[error("{0}")]
     UnsupportedRuleKind(String),
+    #[error("unsupported policy schema_version {found}; supported {supported}")]
+    PolicySchemaUnsupported {
+        found: String,
+        supported: &'static str,
+    },
 }
 
 impl Policy {
@@ -230,6 +278,8 @@ impl Policy {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPolicy {
+    #[serde(default = "default_raw_schema_version")]
+    schema_version: String,
     session: RawSessionPolicy,
     #[serde(rename = "detector", default)]
     detectors: Vec<RawDetectorSpec>,
@@ -241,6 +291,10 @@ struct RawPolicy {
     locale: Option<RawLocalePolicy>,
     #[serde(default)]
     policy: Option<RawPolicyTables>,
+}
+
+fn default_raw_schema_version() -> String {
+    DEFAULT_POLICY_SCHEMA_VERSION.to_string()
 }
 
 #[derive(Debug, Deserialize)]
@@ -316,6 +370,16 @@ impl TryFrom<RawPolicy> for Policy {
     type Error = PolicyError;
 
     fn try_from(raw: RawPolicy) -> Result<Self, Self::Error> {
+        if !raw
+            .schema_version
+            .starts_with(SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR)
+        {
+            return Err(PolicyError::PolicySchemaUnsupported {
+                found: raw.schema_version,
+                supported: SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR,
+            });
+        }
+        let schema_version = raw.schema_version;
         let session = parse_session(raw.session)?;
 
         if !raw.detectors.is_empty() {
@@ -370,6 +434,7 @@ impl TryFrom<RawPolicy> for Policy {
             ner,
             rulepacks,
             locale,
+            schema_version,
         })
     }
 }
@@ -963,5 +1028,83 @@ action = "preserve"
             Some("songs")
         );
         assert_eq!(policy.dictionaries[0].terms, vec!["Song A"]);
+    }
+
+    fn minimal_policy_body(schema_line: &str) -> String {
+        format!(
+            r#"{schema_line}
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "regex"
+name = "emails"
+pattern = 'a@b'
+class = "email"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#
+        )
+    }
+
+    fn write_policy(dir: &tempfile::TempDir, body: &str) -> PathBuf {
+        let path = dir.path().join("policy.toml");
+        fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn schema_version_omitted_soft_defaults_to_supported() {
+        let dir = tempdir().unwrap();
+        let path = write_policy(&dir, &minimal_policy_body(""));
+        let policy = Policy::load(&path).expect("missing schema_version should soft-default");
+        assert_eq!(policy.schema_version, DEFAULT_POLICY_SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn schema_version_explicit_matching_major_minor_is_accepted() {
+        let dir = tempdir().unwrap();
+        let path = write_policy(&dir, &minimal_policy_body(r#"schema_version = "0.1.7""#));
+        let policy = Policy::load(&path).expect("0.1.x must be accepted");
+        assert_eq!(policy.schema_version, "0.1.7");
+    }
+
+    #[test]
+    fn schema_version_unsupported_major_fails_closed() {
+        let dir = tempdir().unwrap();
+        let path = write_policy(&dir, &minimal_policy_body(r#"schema_version = "0.2.0""#));
+        let err = Policy::load(&path).expect_err("0.2.x must be rejected");
+        match err {
+            PolicyError::PolicySchemaUnsupported { found, supported } => {
+                assert_eq!(found, "0.2.0");
+                assert_eq!(supported, SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR);
+            }
+            other => panic!("expected PolicySchemaUnsupported, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn schema_version_unsupported_fails_before_other_validation() {
+        // Body has zero rules — would normally trip NoRules — but the schema
+        // gate must fire first so adopters see the version mismatch, not a
+        // downstream validation surprise.
+        let dir = tempdir().unwrap();
+        let path = write_policy(
+            &dir,
+            r#"
+schema_version = "9.9.9"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+"#,
+        );
+        let err = Policy::load(&path).expect_err("must reject schema first");
+        assert!(
+            matches!(err, PolicyError::PolicySchemaUnsupported { .. }),
+            "expected PolicySchemaUnsupported, got {err:?}"
+        );
     }
 }

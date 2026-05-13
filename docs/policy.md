@@ -74,6 +74,65 @@ recognizer definitions (`[[policy.custom_recognizers]]`), rule definitions
 define the auditable contract; changing them requires changing the policy or
 rulepack document itself.
 
+## Policy schema versioning
+
+Every `policy.toml` declares the schema it was authored against:
+
+```toml
+schema_version = "0.1.0"
+```
+
+The loader checks the `major.minor` prefix against
+[`SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`](../crates/gaze/src/policy.rs) (currently
+`"0.1"`). A mismatch fails closed at load time with a typed envelope:
+
+```json
+{"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1"}
+```
+
+The envelope is intentionally distinct from `PolicyConfig` so adopters
+upgrading the gaze binary across a contract break see the version mismatch
+directly, rather than chasing a generic policy-load error that shadows the
+real cause. Mirrors the rulepack-side version gate in
+[`crates/gaze/src/rulepack.rs`](../crates/gaze/src/rulepack.rs).
+
+### Soft default for pre-versioned policies
+
+Policies written before the field was introduced (any 0.6.x / 0.7.x policy
+shipped before the `schema_version` field landed) omit `schema_version`. The
+loader soft-defaults the missing field to
+[`DEFAULT_POLICY_SCHEMA_VERSION`](../crates/gaze/src/policy.rs) (currently
+`"0.1.0"`) so existing deployments continue to load on the binary upgrade
+that introduces the field. New policies should declare `schema_version =
+"0.1.0"` explicitly so a future `0.2.0` migration can detect them.
+
+### Migration log
+
+Each entry below names a contract break that requires bumping
+`schema_version`. Adopters should consult the migration log when upgrading
+across the named gaze release boundary.
+
+#### `[ner]` block changes (0.6.x → 0.7.x)
+
+The 0.7.0 release tightened the `[ner]` block: `threshold` is now parsed as a
+required-typed field (0.6.x accepted any numeric coercion) and `model_dir`
+relative paths resolve against the policy file rather than the process CWD.
+A policy authored against 0.6.x that uses an unusual `threshold` literal or a
+relative `model_dir` may load against 0.7.x in unexpected ways.
+
+The recommended migration is:
+
+- Quote the threshold as a TOML float (`threshold = 0.3`, not `0.3 `).
+- Express `[ner].model_dir` as an absolute path, or move the policy file to
+  the directory the model is co-located with.
+- Stamp `schema_version = "0.1.0"` on the policy so a future contract break
+  surfaces the typed `PolicySchemaUnsupported` error instead of a generic
+  load failure.
+
+This entry exists because the Pulseflow Laravel demo
+(`EmpireTwo/business/dogfooding/pulseflow-demo-2026-05-13`) lost ~30 minutes
+of debugging time to silent `[ner]` schema drift between 0.6.6 and 0.7.1.
+
 ## Bundled rulepack version drift
 
 Bundled rulepacks in
