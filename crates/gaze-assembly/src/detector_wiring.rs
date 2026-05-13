@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
     Context, DetectorKind, LocaleChain, LocaleTag, PiiClass, PipelineBuilder, PolicyError,
-    RawMatch, Rulepack, RulepackError,
+    RawMatch, Rulepack, RulepackError, SafetyTier,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -100,6 +100,14 @@ pub(crate) fn register_rulepack_recognizers(
         .into_values()
         .filter(|(_, recognizer)| recognizer.enabled)
     {
+        if !recognizer_activates(&recognizer, policy, active_locales) {
+            tracing::debug!(
+                recognizer_id = %recognizer.id,
+                safety_tier = %recognizer.safety_tier.as_str(),
+                "skipping rulepack recognizer outside active safety tier"
+            );
+            continue;
+        }
         if let Some(collision) = recognizer.collision.clone() {
             builder = builder.register_collision(recognizer.id.clone(), collision);
         }
@@ -238,6 +246,32 @@ pub(crate) fn register_rulepack_recognizers(
     }
 
     Ok(builder)
+}
+
+fn recognizer_activates(
+    recognizer: &gaze::RecognizerSpec,
+    policy: &gaze::Policy,
+    active_locales: &LocaleChain,
+) -> bool {
+    if !recognizer_matches_active_locale(&recognizer.locales, active_locales) {
+        return false;
+    }
+
+    match recognizer.safety_tier {
+        SafetyTier::SafeDefault => true,
+        SafetyTier::LocaleGated => {
+            policy.rulepacks.auto_activate_locale_gated
+                || recognizer.locales.iter().any(|locale| {
+                    *locale != LocaleTag::Global
+                        && active_locales
+                            .as_slice()
+                            .iter()
+                            .any(|active| active == locale)
+                })
+        }
+        SafetyTier::OptIn => false,
+        _ => false,
+    }
 }
 
 fn recognizer_matches_active_locale(locales: &[LocaleTag], active_locales: &LocaleChain) -> bool {

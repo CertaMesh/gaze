@@ -44,13 +44,30 @@ impl CorePipelineConfig {
 
     pub fn build(self) -> Result<CorePipeline, BuildError> {
         let rulepacks = self.load_rulepacks()?;
-        let rulepack_defaults = merged_rulepack_default_locales(&rulepacks);
+        let auto_activate_locale_gated = self
+            .extra_bundled
+            .iter()
+            .any(|bundle| bundle == "core-extended");
+        let mut rulepack_defaults = merged_rulepack_default_locales(&rulepacks);
+        if auto_activate_locale_gated {
+            for locale in [
+                LocaleTag::EnUs,
+                LocaleTag::DeDe,
+                LocaleTag::DeAt,
+                LocaleTag::DeCh,
+            ] {
+                if !rulepack_defaults.iter().any(|existing| existing == &locale) {
+                    rulepack_defaults.push(locale);
+                }
+            }
+        }
         let locale_chain = LocaleChain::merge_cli_policy_rulepack_default(
             None,
             self.locale.as_deref(),
             Some(&rulepack_defaults),
         );
-        let policy = default_policy(self.locale, class_rules_from_rulepacks(&rulepacks));
+        let mut policy = default_policy(self.locale, class_rules_from_rulepacks(&rulepacks));
+        policy.rulepacks.auto_activate_locale_gated = auto_activate_locale_gated;
         let context = Context {
             dictionaries: std::collections::HashMap::new(),
             class_map: std::collections::HashMap::new(),
@@ -70,6 +87,9 @@ impl CorePipelineConfig {
         rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
 
         for bundled in &self.extra_bundled {
+            if matches!(bundled.as_str(), "core" | "core-extended") {
+                continue;
+            }
             let contents = load_embedded_rulepack_contents(bundled)?;
             rulepacks.push(Rulepack::load(RulepackSource::Embedded(contents))?);
         }

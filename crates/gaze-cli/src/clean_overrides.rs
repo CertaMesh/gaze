@@ -9,6 +9,7 @@ pub struct CleanOverrides {
     pub ner_locale: Option<String>,
     pub rulepack_bundled: Option<Vec<String>>,
     pub rulepack_paths: Vec<PathBuf>,
+    pub auto_activate_locale_gated: bool,
 }
 
 impl CleanOverrides {
@@ -55,6 +56,8 @@ impl CleanOverrides {
         } else {
             self.rulepack_paths.clone()
         };
+        resolved.rulepacks.auto_activate_locale_gated =
+            policy.rulepacks.auto_activate_locale_gated || self.auto_activate_locale_gated;
         resolved
     }
 }

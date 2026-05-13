@@ -34,7 +34,7 @@ pub use gaze_types::{
     DocumentExtensionBuilder, DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy,
     LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, Manifest,
     OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
-    SafetyNetError, SafetyNetPiiClass, TextOrigin, RESERVED_BUNDLED_FAMILIES,
+    SafetyNetError, SafetyNetPiiClass, SafetyTier, TextOrigin, RESERVED_BUNDLED_FAMILIES,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};

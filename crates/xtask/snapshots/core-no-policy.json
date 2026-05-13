@@ -5,6 +5,17 @@
   "fixtures_sha256": "7720e1730e5e23f4af5fc78615e702f050e85dca7a786aa2134ce64596ea754a",
   "entries": [
     {
+      "recognizer_id": "card.structural",
+      "class": "custom:credit_card",
+      "byte_span": {
+        "start": 392,
+        "len": 19
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:credit_card_{N}>",
+      "count": 1
+    },
+    {
       "recognizer_id": "email.global",
       "class": "Email",
       "byte_span": {
@@ -47,13 +58,83 @@
       "family": "session_builtin_counter",
       "token_shape": "<session:Name_{N}>",
       "count": 1
+    },
+    {
+      "recognizer_id": "eth.address",
+      "class": "custom:eth_address",
+      "byte_span": {
+        "start": 701,
+        "len": 42
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:eth_address_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "iban.structural",
+      "class": "custom:family:payment-card-or-iban",
+      "byte_span": {
+        "start": 345,
+        "len": 22
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:family:payment-card-or-iban_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "ip.v4",
+      "class": "custom:ip_address",
+      "byte_span": {
+        "start": 448,
+        "len": 10
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:ip_address_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "ip.v4",
+      "class": "custom:ip_address",
+      "byte_span": {
+        "start": 571,
+        "len": 12
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:ip_address_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "ip.v6",
+      "class": "custom:ip_address",
+      "byte_span": {
+        "start": 509,
+        "len": 28
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:ip_address_{N}>",
+      "count": 1
+    },
+    {
+      "recognizer_id": "ip.v6",
+      "class": "custom:ip_address",
+      "byte_span": {
+        "start": 632,
+        "len": 18
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:ip_address_{N}>",
+      "count": 1
     }
   ],
   "stats": {
-    "detections": 4,
+    "detections": 11,
     "classes": {
       "Email": 3,
-      "Name": 1
+      "Name": 1,
+      "custom:credit_card": 1,
+      "custom:eth_address": 1,
+      "custom:family:payment-card-or-iban": 1,
+      "custom:ip_address": 4
     }
   }
 }

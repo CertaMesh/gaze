@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{CollisionMembership, LocaleTag, PiiClass};
+use crate::{CollisionMembership, LocaleTag, PiiClass, SafetyTier};
 
 const SUPPORTED_SCHEMA_MAJOR_MINOR: &str = "0.1.";
 
@@ -27,6 +27,7 @@ pub struct RecognizerSpec {
     pub cooperates_with: Vec<String>,
     pub collision: Option<CollisionMembership>,
     pub enabled: bool,
+    pub safety_tier: SafetyTier,
     pub locales: Vec<LocaleTag>,
     pub matcher: RawMatch,
     pub context: Option<ContextSpec>,
@@ -203,6 +204,8 @@ pub enum RulepackError {
     UnsupportedValidator { kind: String },
     #[error("unsupported normalizer kind: {kind}")]
     UnsupportedNormalizer { kind: String },
+    #[error("unsupported safety_tier: {value}")]
+    UnsupportedSafetyTier { value: String },
     #[error("unsupported rule spec variant: {variant}")]
     UnsupportedRuleSpec { variant: String },
     #[error("duplicate recognizer id '{id}' in rulepacks '{first_pack}' and '{second_pack}'")]
@@ -383,6 +386,8 @@ struct RawRecognizerSpec {
     collision: Option<RawCollisionSpec>,
     #[serde(default = "default_true")]
     enabled: bool,
+    #[serde(default)]
+    safety_tier: Option<String>,
     #[serde(default)]
     locales: Vec<String>,
     #[serde(rename = "match")]
@@ -585,6 +590,15 @@ fn parse_recognizer(
         .collision
         .map(|collision| parse_collision_membership(&raw.id, collision))
         .transpose()?;
+    let safety_tier = raw
+        .safety_tier
+        .as_deref()
+        .map(SafetyTier::parse)
+        .transpose()
+        .map_err(|err| RulepackError::UnsupportedSafetyTier {
+            value: err.value().to_string(),
+        })?
+        .unwrap_or_default();
 
     Ok(RecognizerSpec {
         id: raw.id,
@@ -592,6 +606,7 @@ fn parse_recognizer(
         cooperates_with: raw.cooperates_with,
         collision,
         enabled: raw.enabled,
+        safety_tier,
         locales,
         matcher: raw.matcher,
         context: raw.context.map(|context| ContextSpec {
@@ -1267,7 +1282,17 @@ window_chars = 48
 
         assert_eq!(
             rulepack.activated_classes(),
-            BTreeSet::from([PiiClass::Email, PiiClass::Name])
+            BTreeSet::from([
+                PiiClass::Email,
+                PiiClass::Name,
+                PiiClass::custom("phone"),
+                PiiClass::custom("iban"),
+                PiiClass::Custom("family:payment-card-or-iban".to_string()),
+                PiiClass::custom("credit_card"),
+                PiiClass::custom("ip_address"),
+                PiiClass::custom("eth_address"),
+                PiiClass::custom("postal_code"),
+            ])
         );
     }
 
@@ -1302,24 +1327,17 @@ window_chars = 48
 
     #[cfg(feature = "bundled-recognizers")]
     #[test]
-    fn embedded_core_extended_activated_classes_match_rulepack_classes() {
+    fn embedded_core_extended_alias_activated_classes_match_core() {
         let rulepack = Rulepack::load(RulepackSource::Embedded(
             gaze_recognizers::embedded("core-extended").expect("core-extended rulepack"),
         ))
         .expect("embedded core-extended rulepack");
+        let core = Rulepack::load(RulepackSource::Embedded(
+            gaze_recognizers::embedded("core").expect("core rulepack"),
+        ))
+        .expect("embedded core rulepack");
 
-        assert_eq!(
-            rulepack.activated_classes(),
-            BTreeSet::from([
-                PiiClass::custom("phone"),
-                PiiClass::custom("iban"),
-                PiiClass::Custom("family:payment-card-or-iban".to_string()),
-                PiiClass::custom("credit_card"),
-                PiiClass::custom("ip_address"),
-                PiiClass::custom("eth_address"),
-                PiiClass::custom("postal_code"),
-            ])
-        );
+        assert_eq!(rulepack.activated_classes(), core.activated_classes());
     }
 
     #[cfg(feature = "bundled-recognizers")]

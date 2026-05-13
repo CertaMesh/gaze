@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Unified `core` + `core-extended` bundled rulepacks into single `core` bundle. Each recognizer now declares a `safety_tier` (`safe_default` / `locale_gated` / `opt_in`) which gates no-policy activation. `--rulepack-bundled core-extended` is deprecated (will be removed in v0.10.0); aliases to `--rulepack-bundled core` and auto-activates locale-gated tier. Adopters who relied on the v0.4.5 PR #58 no-policy surprise activation should pass `--locale=de-DE` or `--locale=en-US` explicitly.
+- [bundle-tokenization-drift] v0.8 bundle unification refreshed the `core` no-policy snapshot and removed the deprecated `core-extended` no-policy snapshot.
 - Research docs (gaze-threat-model, ner-library-evaluation, v0.4.x audits, v0.5 dylint gate, v0.7.x corpus-rework/coverage-baseline) migrated to `PIInuts/business:research/`.
 
 ### Deprecated

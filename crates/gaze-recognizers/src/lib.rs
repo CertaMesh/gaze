@@ -29,7 +29,7 @@ pub use dictionary::DictionaryRecognizer;
 pub use error::{RecognizerError, Result};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;
-pub use gaze_types::ValidatorKind;
+pub use gaze_types::{SafetyTier, ValidatorKind};
 pub use ner::{
     LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
     VerifiedArtifacts,
@@ -38,8 +38,7 @@ pub use regex::{NormalizerKind, RegexDetector};
 
 pub fn embedded(name: &str) -> Option<&'static str> {
     match name {
-        "core" => Some(include_str!("../embedded/core.toml")),
-        "core-extended" => Some(include_str!("../embedded/core-extended.toml")),
+        "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
         "locale-de" => Some(include_str!("../embedded/locale-de.toml")),
         "locale-en" => Some(include_str!("../embedded/locale-en.toml")),
         _ => None,
@@ -52,11 +51,11 @@ mod tests {
     use gaze::{RawMatch, Rulepack, RulepackSource};
 
     #[test]
-    fn embedded_core_rulepack_parses_and_contains_email_regex() {
+    fn embedded_core_rulepack_parses_and_contains_unified_recognizers() {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 6);
+        assert_eq!(rulepack.recognizers.len(), 16);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -77,29 +76,24 @@ mod tests {
         ));
         assert!(rulepack.recognizers[3..]
             .iter()
+            .take(3)
             .all(|recognizer| matches!(recognizer.matcher, RawMatch::AnchoredMatch { .. })));
+        assert!(rulepack.recognizers[6..]
+            .iter()
+            .all(|recognizer| matches!(recognizer.matcher, RawMatch::Regex { .. })));
     }
 
     #[test]
-    fn embedded_core_extended_rulepack_parses_and_contains_phase2_recognizers() {
+    fn embedded_core_extended_aliases_core() {
+        assert_eq!(embedded("core-extended"), embedded("core"));
         let core_extended = embedded("core-extended").expect("core-extended rulepack");
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 10);
-        assert_eq!(rulepack.recognizers[0].id, "phone.structural");
-        assert_eq!(rulepack.recognizers[1].id, "phone.national.de");
-        assert_eq!(rulepack.recognizers[2].id, "phone.national.us");
-        assert_eq!(rulepack.recognizers[3].id, "iban.structural");
-        assert_eq!(rulepack.recognizers[4].id, "card.structural");
-        assert_eq!(rulepack.recognizers[5].id, "ip.v4");
-        assert_eq!(rulepack.recognizers[6].id, "ip.v6");
-        assert_eq!(rulepack.recognizers[7].id, "eth.address");
-        assert_eq!(rulepack.recognizers[8].id, "postal.de");
-        assert_eq!(rulepack.recognizers[9].id, "postal.us");
+        assert_eq!(rulepack.recognizers.len(), 16);
         assert!(rulepack
             .recognizers
             .iter()
-            .all(|recognizer| matches!(recognizer.matcher, RawMatch::Regex { .. })));
+            .any(|recognizer| recognizer.id == "phone.structural"));
     }
 }

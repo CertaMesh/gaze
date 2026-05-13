@@ -96,10 +96,25 @@ pub fn build_pipeline(
 
     let has_policy_detector = !policy.detectors.is_empty();
     let has_enabled_rulepack_recognizer = rulepacks.iter().any(|rulepack| {
-        rulepack
-            .recognizers
-            .iter()
-            .any(|recognizer| recognizer.enabled && active_locales.intersects(&recognizer.locales))
+        rulepack.recognizers.iter().any(|recognizer| {
+            recognizer.enabled
+                && active_locales.intersects(&recognizer.locales)
+                && match recognizer.safety_tier {
+                    gaze::SafetyTier::SafeDefault => true,
+                    gaze::SafetyTier::LocaleGated => {
+                        policy.rulepacks.auto_activate_locale_gated
+                            || recognizer.locales.iter().any(|locale| {
+                                *locale != gaze::LocaleTag::Global
+                                    && active_locales
+                                        .as_slice()
+                                        .iter()
+                                        .any(|active| active == locale)
+                            })
+                    }
+                    gaze::SafetyTier::OptIn => false,
+                    _ => false,
+                }
+        })
     });
     let has_usable_ner = policy
         .ner

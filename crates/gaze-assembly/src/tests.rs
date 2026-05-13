@@ -253,7 +253,7 @@ fn core_pipeline_config_tokenizes_synthetic_email() {
 }
 
 #[test]
-fn core_pipeline_config_core_only_does_not_tokenize_phone() {
+fn core_pipeline_config_core_tokenizes_safe_default_phone() {
     let core = CorePipelineConfig::new()
         .with_locale(&[LocaleTag::EnUs])
         .build()
@@ -262,11 +262,11 @@ fn core_pipeline_config_core_only_does_not_tokenize_phone() {
     let input = "Phone +12025550100";
     let text = clean_text(core.redact_text(&session, input).expect("redact"));
 
-    assert_eq!(text, input);
+    assert!(text.contains(":Custom:phone_"), "{text}");
 }
 
 #[test]
-fn core_pipeline_config_extended_tokenizes_synthetic_phone() {
+fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_phone() {
     let core = CorePipelineConfig::new()
         .with_locale(&[LocaleTag::EnUs])
         .with_bundled_rulepack("core-extended")
@@ -282,7 +282,7 @@ fn core_pipeline_config_extended_tokenizes_synthetic_phone() {
 }
 
 #[test]
-fn core_pipeline_config_extended_tokenizes_synthetic_iban() {
+fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_iban() {
     let core = CorePipelineConfig::new()
         .with_locale(&[LocaleTag::DeDe])
         .with_bundled_rulepack("core-extended")
