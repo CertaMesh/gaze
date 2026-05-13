@@ -1,0 +1,107 @@
+//! Kiji DistilBERT subprocess adapter integration tests.
+//!
+//! Mirrors the `openai_filter_subprocess` suite at the boundary level: drive
+//! the adapter against a fake `kiji` CLI written in shell, assert the
+//! `SafetyNet::check` contract returns shape-valid `LeakSuspect`s and the
+//! manifest-diff classification is wired through.
+
+#![cfg(all(unix, feature = "safety-net-kiji"))]
+
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+
+use gaze_recognizers::safety_net::kiji_distilbert::{
+    KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+};
+use gaze_types::{DocumentKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
+use tempfile::{tempdir, TempDir};
+
+fn write_mock_kiji(body: &str) -> (TempDir, PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("mock-kiji");
+    fs::write(
+        &path,
+        format!(
+            r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '{}'
+"#,
+            body
+        ),
+    )
+    .unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    (dir, path)
+}
+
+fn populate_model_dir() -> TempDir {
+    let dir = tempdir().unwrap();
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    for required in REQUIRED_KIJI_ARTIFACTS {
+        let path = dir.path().join(required);
+        fs::write(&path, b"fixture").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    dir
+}
+
+#[test]
+fn missing_sha256sums_is_weights_missing() {
+    let dir = tempdir().unwrap();
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
+    for required in REQUIRED_KIJI_ARTIFACTS {
+        if *required == "SHA256SUMS" {
+            continue;
+        }
+        let path = dir.path().join(required);
+        fs::write(&path, b"fixture").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    let config = SubprocessKijiConfig::new("kiji").with_model_dir(dir.path());
+    let net = KijiDistilbertSafetyNet::new(config);
+    let manifest = Manifest::default();
+    let ctx = SafetyNetContext::new(
+        &manifest,
+        &[LocaleTag::Global],
+        DocumentKind::Text,
+        None,
+        None,
+    );
+    let error = net.check("hello", ctx).unwrap_err();
+    match error {
+        SafetyNetError::WeightsMissing { path } => {
+            assert!(path.contains("SHA256SUMS"), "got {path}");
+        }
+        other => panic!("expected WeightsMissing, got {other:?}"),
+    }
+}
+
+#[test]
+fn subprocess_span_round_trips_through_manifest_diff() {
+    // Mock-kiji emits one person span at [0,11] over "Alice Smith". The default
+    // empty manifest classifies that as Uncovered.
+    let (_kiji_dir, kiji) =
+        write_mock_kiji(r#"[{"label":"person","start":0,"end":11,"score":0.97}]"#);
+    let model = populate_model_dir();
+
+    let config = SubprocessKijiConfig::new(&kiji).with_model_dir(model.path());
+    let net = KijiDistilbertSafetyNet::new(config);
+    let manifest = Manifest::default();
+    let ctx = SafetyNetContext::new(
+        &manifest,
+        &[LocaleTag::Global],
+        DocumentKind::Text,
+        None,
+        None,
+    );
+
+    let suspects = net.check("Alice Smith greets you", ctx).unwrap();
+    assert_eq!(suspects.len(), 1);
+    let suspect = &suspects[0];
+    assert_eq!(suspect.safety_net_id, "kiji-distilbert-subprocess");
+    assert_eq!(suspect.raw_label, "person");
+    assert_eq!(suspect.span, 0..11);
+    assert_eq!(suspect.score, Some(0.97));
+}

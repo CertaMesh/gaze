@@ -20,6 +20,13 @@ pub(crate) enum CliError {
     SafetyNetFailure {
         variant: &'static str,
     },
+    /// Pinned-artifact contract violation: a safety-net backend was requested
+    /// but its required artifact (e.g. `SHA256SUMS`) is missing on disk. Exit
+    /// code 2 (config-level error). Axis-1 fail-closed: never silent-disable.
+    SafetyNetArtifactMissing {
+        backend: &'static str,
+        path: String,
+    },
     AuditPurgeIso8601 {
         input: String,
     },
@@ -48,7 +55,8 @@ impl CliError {
             Self::PolicyConfig
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
-            | Self::AuditPurgeIso8601 { .. } => 2,
+            | Self::AuditPurgeIso8601 { .. }
+            | Self::SafetyNetArtifactMissing { .. } => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
             | Self::UnsupportedSessionScope { .. }
@@ -74,6 +82,7 @@ impl CliError {
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
             Self::SafetyNetFailure { .. } => "SafetyNet",
+            Self::SafetyNetArtifactMissing { .. } => "SafetyNetArtifactMissing",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
             Self::UnsupportedSessionScope { .. } => "UnsupportedSessionScope",
@@ -141,6 +150,17 @@ impl CliError {
                 self.exit_code(),
                 variant
             ),
+            Self::SafetyNetArtifactMissing { backend, path } => {
+                let path = serde_json::to_string(path)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"backend":"{}","path":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    backend,
+                    path
+                )
+            }
             #[cfg(feature = "document")]
             Self::DocumentDetail(detail) => {
                 let detail = serde_json::to_string(detail)

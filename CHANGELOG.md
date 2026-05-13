@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5,
+  `--safety-net-backend kiji-distilbert`): observer-only DistilBERT NER pass
+  that runs at the Pass-3 chokepoint alongside the existing OpenAI Privacy
+  Filter. Subprocess model identical to `OpenAiFilterSafetyNet`: read clean
+  text on stdin, emit a JSON span array on stdout, never mutate the manifest.
+  Pinned-artifact contract identical to the existing OpenAI filter — model
+  dir must carry `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`
+  with `0o700` directory + `0o600` file permissions on Unix; missing
+  artifacts (including a missing `SHA256SUMS`) fail closed with typed
+  `CliError::SafetyNetArtifactMissing` exit `2` *before* the subprocess
+  spawns. New CLI flags: `--safety-net-backend`, `--kiji-distilbert-command`,
+  `--kiji-distilbert-model-dir`. New fetcher: `scripts/fetch-kiji-safetynet-model.sh`
+  (HF commit SHA placeholder pending first sign-off). (Axis 1 reliability —
+  defense in depth, second NER opinion at the chokepoint.)
+
 ### Changed
 
 - Research docs (gaze-threat-model, ner-library-evaluation, v0.4.x audits, v0.5 dylint gate, v0.7.x corpus-rework/coverage-baseline) migrated to `PIInuts/business:research/`.

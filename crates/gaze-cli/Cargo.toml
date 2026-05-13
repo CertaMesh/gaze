@@ -18,6 +18,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = []
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
+safety-net-kiji = ["gaze-recognizers/safety-net-kiji"]
 document = ["dep:gaze-document"]
 mcp = [
     "dep:async-trait",
