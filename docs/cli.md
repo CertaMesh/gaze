@@ -1,71 +1,38 @@
 # Gaze CLI
 
-## MCP
+The canonical CLI reference is [`crates/gaze-cli/README.md`](../crates/gaze-cli/README.md). It documents
+every subcommand, flag, exit code, and feature gate exposed by the `gaze`
+binary. This page is a short index plus a few adopter-facing walk-throughs that
+are not covered there.
 
-`gaze mcp` installs, diagnoses, or runs the stdio MCP server. It requires the
-CLI to be built with `--features mcp`, which also enables the document tool
-surface.
+## Subcommands
 
-```sh
-cargo install --path crates/gaze-cli --features mcp
-gaze mcp install --client claude-code
-gaze mcp doctor
-gaze mcp serve --manifest-dir ~/.local/share/gaze/mcp-manifests --max-file-size 26214400
-```
+Every verb below is defined by the clap `Subcommand` enum in
+[`crates/gaze-cli/src/commands/mod.rs`](../crates/gaze-cli/src/commands/mod.rs).
 
-`install` updates a supported client config for `gaze mcp serve`. Supported
-clients include Claude Code, Claude Desktop, and Cursor. Use `--dry-run` to
-print planned changes and `--skip-agents-md` to skip the marker-fenced
-AGENTS.md guidance block.
+| Subcommand | One-line summary | Feature gate |
+|------------|------------------|--------------|
+| [`gaze clean`](../crates/gaze-cli/README.md#clean) | Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON. | always |
+| [`gaze restore`](../crates/gaze-cli/README.md#restore) | Read `{session_blob, text}` JSON from stdin; emit restored `{text}` JSON. | always |
+| [`gaze audit query`](../crates/gaze-cli/README.md#audit-query) | Print filtered redaction-log metadata rows as TSV from a read-only SQLite DB. | always |
+| [`gaze audit export`](../crates/gaze-cli/README.md#audit-export) | Export filtered redaction-log metadata rows as JSONL for downstream processing. | always |
+| `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [Guides](#guides). | always |
+| [`gaze audit safety-net query`](../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. | always |
+| `gaze document clean` | OCR a PNG/JPG/PDF into a `SafeBundle` (`clean.md` + `manifest.json` + `report.json`). | `document` |
+| [`gaze mcp install`](../crates/gaze-cli/README.md#mcp-installation) | Install `gaze mcp serve` into a supported MCP client config. | `mcp` |
+| [`gaze mcp doctor`](../crates/gaze-cli/README.md#mcp-installation) | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. | `mcp` |
+| [`gaze mcp serve`](../crates/gaze-cli/README.md#mcp-installation) | Run the stdio MCP server exposing agent-tier document tools. | `mcp` |
 
-`doctor` checks the current executable, optional AGENTS.md guidance, client
-configuration, and runtime dependencies. Use `--strict` to fail on warnings and
-`--json` for machine-readable output.
+For exit codes and stderr error JSON, see
+[Exit codes](../crates/gaze-cli/README.md#exit-codes) in the crate README.
+For policy schema details, see [`docs/policy.md`](policy.md).
 
-`serve` starts the stdio MCP server and exposes agent-tier document tools such
-as `gaze_read_file` and `gaze_read_text`. `--manifest-dir` selects where call
-records are written; `--max-file-size` bounds file input accepted by
-`gaze_read_file`.
+## Guides
 
-## Audit Metadata
+### `gaze audit purge`
 
-`gaze audit` reads SQLite redaction-log metadata produced by `gaze clean --audit-db`.
-It is intentionally restricted to metadata columns and must not read raw spans,
-restore mappings, token payloads, or future sensitive columns.
-
-### Query
-
-```sh
-gaze audit query --audit-db audit.sqlite
-gaze audit query --audit-db audit.sqlite --class email --source email.global
-gaze audit query --audit-db audit.sqlite --action tokenize --document-kind text
-gaze audit query --audit-db audit.sqlite --from 2026-04-26T00:00:00Z --to 2026-04-27T00:00:00Z
-```
-
-`query` writes tab-separated rows to stdout with a header row. `created_at` is
-epoch milliseconds. Legacy audit databases without `created_at` remain
-queryable; missing values are empty in TSV output. Unfiltered queries include
-legacy rows. Filtered queries omit NULL rows by SQL semantics; to access legacy
-rows, omit the matching time filter.
-
-### Export
-
-```sh
-gaze audit export --audit-db audit.sqlite --format jsonl
-gaze audit export --audit-db audit.sqlite --format jsonl --output audit.jsonl
-gaze audit export --audit-db audit.sqlite --format jsonl --from 2026-04-26T00:00:00Z
-```
-
-`export --format jsonl` writes one JSON object per row:
-
-```json
-{"source":"email.global","class":"email","action":"tokenize","field_name":null,"document_kind":"text","conflict_loser":false,"decided_by":"recognizer_id","created_at":1777161600000}
-```
-
-### Purge
-
-`gaze audit purge` manually removes redaction audit metadata rows older than an
-ISO 8601 UTC timestamp. It never purges session manifests and does not run in
+`gaze audit purge` manually removes redaction-log metadata rows older than an
+ISO 8601 UTC timestamp. It never touches session manifests and does not run in
 the background.
 
 ```sh
@@ -77,7 +44,7 @@ gaze audit purge --audit-db .gaze/audit.sqlite --before 2026-04-01T00:00:00Z
 `--count` is an alias for `--dry-run`; both flags count matching rows without
 deleting them.
 
-Successful output is JSON:
+Successful output is JSON on stdout:
 
 ```json
 {"dry_run":true,"matched":12,"deleted":0}
@@ -90,27 +57,27 @@ input:
 {"error":"AuditPurgeIso8601","exit":2,"input":"not-iso8601"}
 ```
 
-### Filters
+### `gaze document clean`
 
-The audit CLI supports only fields that already exist in `RedactionEntry`
-metadata:
+`gaze document clean` is the OSS document ingestion verb. It OCRs the input
+through Tesseract, redacts the recognized text through the standard Gaze
+pipeline, and writes a `SafeBundle` to `--out`: `clean.md` (tokenized text),
+`manifest.json` (restore mapping), and `report.json` (per-detection metadata).
+Requires the binary to be built with `--features document`, and the host must
+have `tesseract` on PATH plus the pdfium runtime for PDF input.
 
-| Filter | Status | Rationale |
-|---|---:|---|
-| `--class` | in | `RedactionEntry.class` exists |
-| `--source` | in | `RedactionEntry.source` exists |
-| `--action` | in | `RedactionEntry.action` exists |
-| `--document-kind` | in | `RedactionEntry.document_kind` exists |
-| `--from` / `--to` | in | `RedactionEntry.created_at` exists |
+```sh
+cargo install gaze-cli --features document
+gaze document clean ./invoice.pdf --out ./safe-bundle/
+```
 
-`--from` and `--to` must be ISO 8601/RFC3339 timestamps with an explicit offset,
-for example `2026-04-26T00:00:00Z` or `2026-04-26T01:00:00+01:00`.
-Invalid timestamps exit with `PolicyConfig` and code 2.
+The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
+`BundleReport` schema is versioned via `bundle_version = 1`. See the
+`gaze-document` crate for the full bundle contract.
 
-Audit filters are reporting parameters, not runtime policy knobs. They do not
-alter recognizer composition, token emission, restore behavior, or the
-three-surfaces runtime contract.
+### Legacy audit databases
 
-Round-trip and recognizer-composition tests are not applicable to `gaze audit`
-because it is read-only metadata reporting: it emits no tokens, rewrites no text,
-and composes no recognizers. Fixtures must remain synthetic and AGENTS-safe.
+Audit databases written before v0.4.4 lack a `created_at` column. Unfiltered
+`gaze audit query` calls still surface those rows. Filtered queries that use
+`--from` or `--to` omit NULL `created_at` rows by SQL semantics; drop the time
+filter to access legacy rows.
