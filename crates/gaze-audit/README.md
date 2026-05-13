@@ -62,6 +62,49 @@ for row in &rows {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+## Audit-query API surface
+
+Adopters building dashboards, exports, or compliance views interact with four
+public items beyond `SqliteLogger`:
+
+| Item | Role |
+|------|------|
+| `AuditFilter` | Plain-struct filter builder. All fields are `Option<_>` and default to `None`, so `AuditFilter::default()` returns every row. Narrow by `class`, `source`, `action`, `document_kind`, `field_path`, `session_id`, `from_epoch_ms` / `to_epoch_ms`, snapshot scheme / alg / key version, plus the v0.7.x ambiguity columns described below. |
+| `AuditLogRow` | Shape returned by `SqliteLogger::query`. Metadata only — `class`, `action`, `field_name`, `document_kind`, `conflict_loser`, `decided_by`, `created_at`, `session_id`, snapshot metadata, and the four v0.7.x ambiguity columns. No raw PII, no token values, no restore material. |
+| `build_audit_query_sql` | Lower-level helper that constructs the `(SQL, params)` pair used by `SqliteLogger::query`. Takes column-presence booleans so callers querying older databases project `NULL AS <missing_column>` rather than failing. Exposed so external readers can run the same projection logic against a read replica without re-implementing the filter compiler. |
+| `AUDIT_RESTRICTED_COLUMNS` | Canonical allowlist of columns the audit-query path may project. `audit export` and `SqliteLogger::query` select only from this set. `redaction_log` may grow columns over time (e.g. snapshot locators, replay hashes); restricting projection here is defense in depth so future schema additions never accidentally leak raw PII, token bytes, or document content. The clean path is forbidden from touching audit storage by the `gaze_module_isolation` Dylint lint; this constant is the matching read-side guard. |
+
+## Ambiguity side-channel columns (v0.7.2)
+
+`SqliteLogger`'s `redaction_log` migration adds four nullable columns and
+`AuditLogRow` mirrors them as `Option<String>`:
+
+- `validator_fail_reason` — JSON-encoded closed enum (`LuhnFailed`,
+  `IbanMod97Failed`, `EmailRfcFailed`, `E164PhoneFailed`) for validator-veto
+  losers. Populated only on rows where `decided_by = ValidatorVeto`.
+- `ambiguity_record` — JSON-encoded `AmbiguityRecord` (family-level class,
+  losing candidate list, closed `AmbiguityReason`). Populated when the
+  resolver fell back to a family-level token instead of a precise variant.
+- `collision_family` — plain string identifier for the
+  `[recognizers.collision]` family this row belongs to. `NULL` for rows
+  outside collision-family policy.
+- `collision_variant` — plain string variant identifier within the family.
+  `NULL` when the family-level fallback fired (no specific variant was
+  emitted).
+
+Migration is lazy and idempotent: `SqliteLogger::new(path)` runs
+`CREATE TABLE IF NOT EXISTS` followed by `PRAGMA table_info` and
+`ALTER TABLE ADD COLUMN` for any missing column. There is no schema-version
+table; reopening an up-to-date database is a no-op.
+
+`AuditFilter` exposes four matching filter fields (`has_ambiguity`,
+`ambiguity_reason`, `collision_family`, `collision_variant`) and the CLI
+surfaces them as `--has-ambiguity`, `--ambiguity-reason <variant>` (kebab
+case, e.g. `no-anchor`), `--collision-family <id>`, and
+`--collision-variant <id>` on `gaze audit query` and `gaze audit export`.
+Full contract:
+[`docs/architecture/ambiguity-side-channel.md`](../../docs/architecture/ambiguity-side-channel.md).
+
 ## Isolation gate
 
 `gaze` core has **no compile-time dependency** on `gaze-audit`. The `gaze_module_isolation`
