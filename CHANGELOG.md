@@ -19,6 +19,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.7.2] - 2026-05-13
+
+Dogfooding-driven point release. Both findings surfaced during a Pulseflow
+adopter demo (`EmpireTwo/business:dogfooding/pulseflow-demo-2026-05-13`) and
+strengthen the trust + adopter-ergonomics axes of the north star.
+
+### Added
+
+- **Policy schema versioning** (F#6, PR #192 `e698e35`): new top-level
+  `schema_version` field in `policy.toml`. The loader gates the `major.minor`
+  prefix against the supported version and fails closed with a dedicated
+  `{"error":"PolicySchemaUnsupported","exit":2,"found":"...","supported":"0.1"}`
+  CLI envelope. Existing 0.6.x/0.7.x policies continue to load via a soft
+  default. Public-surface additions: `gaze::SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`,
+  `gaze::DEFAULT_POLICY_SCHEMA_VERSION`, `gaze::PolicyError::PolicySchemaUnsupported`,
+  `gaze_cli::CliError::PolicySchemaUnsupported`. (Axis 4 trust, Axis 5 ergonomics.)
+
+### Changed
+
+- **PolicyConfig error envelope now carries detail** (F#5, PR #191 `6ec7afd`):
+  every `gaze-cli` `map_err(|_| PolicyConfig)` site now threads the underlying
+  loader cause through `CliError::PolicyConfigDetail`. JSON shape stays additive
+  — `{"error":"PolicyConfig","exit":2}` unchanged, optional `detail` field now
+  populated at every site EXCEPT the bare clap parse fallback (intentional —
+  argv noise must not leak through `detail`). (Axis 4 trust, Axis 5 ergonomics.)
+
 ## [0.7.1] - 2026-05-12
 
 ### Added

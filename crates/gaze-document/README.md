@@ -20,7 +20,7 @@ contract that always restores. OCR is a subprocess call to the standard
 
 ```toml
 [dependencies]
-gaze-document = "0.7.1"
+gaze-document = "0.7.2"
 ```
 
 ### CLI
