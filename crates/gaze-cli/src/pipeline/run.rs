@@ -88,7 +88,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         .context_json
         .map(TypedContext::load)
         .transpose()
-        .map_err(|_| CliError::PolicyConfig)?;
+        .map_err(|err| CliError::PolicyConfigDetail(format!("context json: {err}")))?;
     let context_bundle = context
         .as_ref()
         .map(dictionary_bundle_from_context)
@@ -126,11 +126,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
             context.as_ref().expect("checked context"),
             Arc::clone(&counter) as Arc<dyn RedactionLogger>,
         )
-        .map_err(|_| CliError::PolicyConfig)?,
+        .map_err(|err| CliError::PolicyConfigDetail(format!("context pipeline build: {err}")))?,
         None => {
             tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
-            build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>)
-                .map_err(|_| CliError::PolicyConfig)?
+            build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>).map_err(
+                |err| CliError::PolicyConfigDetail(format!("stub pipeline build: {err}")),
+            )?
         }
     };
     let pipeline = maybe_register_safety_net(pipeline, &options)?;
@@ -375,9 +376,12 @@ fn class_rules_for_bundled_overrides(
     };
     let mut classes = std::collections::BTreeSet::new();
     for bundle in bundled {
-        let contents = gaze_recognizers::embedded(bundle).ok_or(CliError::PolicyConfig)?;
-        let rulepack = Rulepack::load(RulepackSource::Embedded(contents))
-            .map_err(|_| CliError::PolicyConfig)?;
+        let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
+            CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
+        })?;
+        let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
+            CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
+        })?;
         classes.extend(rulepack.activated_classes());
         classes.extend(
             rulepack
@@ -428,7 +432,11 @@ fn parse_cli_locales(raw: &[String]) -> std::result::Result<Option<Vec<LocaleTag
         return Ok(None);
     }
     raw.iter()
-        .map(|locale| LocaleTag::parse(locale).map_err(|_| CliError::PolicyConfig))
+        .map(|locale| {
+            LocaleTag::parse(locale).map_err(|err| {
+                CliError::PolicyConfigDetail(format!("invalid --locale '{locale}': {err}"))
+            })
+        })
         .collect::<std::result::Result<Vec<_>, _>>()
         .map(Some)
 }

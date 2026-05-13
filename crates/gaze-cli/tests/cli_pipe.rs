@@ -110,6 +110,39 @@ fn parse_stderr_variant(stderr: &[u8]) -> Value {
     serde_json::from_slice(stderr).expect("stderr is one-line JSON")
 }
 
+/// Assert a `PolicyConfig`/exit=2 stderr envelope and require `detail` to be a
+/// non-empty string. The exact detail wording is intentionally not pinned here
+/// so the helper can be reused across the many sites that route through the
+/// same envelope; tests that care about specific wording should call
+/// `assert_policy_config_detail_contains` instead.
+fn assert_policy_config_envelope(stderr: &[u8]) {
+    let value = parse_stderr_variant(stderr);
+    assert_eq!(value["error"], "PolicyConfig", "stderr={value}");
+    assert_eq!(value["exit"], 2, "stderr={value}");
+    let detail = value
+        .get("detail")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        !detail.is_empty(),
+        "expected non-empty detail on PolicyConfig envelope: {value}"
+    );
+}
+
+fn assert_policy_config_detail_contains(stderr: &[u8], needle: &str) {
+    let value = parse_stderr_variant(stderr);
+    assert_eq!(value["error"], "PolicyConfig", "stderr={value}");
+    assert_eq!(value["exit"], 2, "stderr={value}");
+    let detail = value
+        .get("detail")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    assert!(
+        detail.contains(needle),
+        "detail '{detail}' must contain '{needle}'"
+    );
+}
+
 fn assert_session_scoped_custom_token(token: &str) {
     let re = Regex::new(r"^<[0-9a-f]{8}:Custom:[a-z0-9_]+_\d+>$").unwrap();
     assert!(re.is_match(token), "unexpected custom token shape: {token}");
@@ -354,10 +387,7 @@ fn assert_symmetric_policy_config(cli_out: std::process::Output, toml_out: std::
         cli_out.stderr, toml_out.stderr,
         "CLI and TOML policy errors must be byte-identical"
     );
-    assert_eq!(
-        parse_stderr_variant(&cli_out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&cli_out.stderr);
 }
 
 fn normalize_session_hex(text: &str) -> String {
@@ -928,10 +958,7 @@ fn rulepack_recognizer_is_gated_by_policy_locale() {
     );
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty(), "policy config must not emit stdout");
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 
     let (_dir, path) =
         write_policy_with_rulepack(&de_email_rulepack("\"de-DE\""), Some("\"de-DE\""));
@@ -957,10 +984,7 @@ fn rulepack_recognizer_fr_fr_not_gated_by_en_us() {
 
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty(), "policy config must not emit stdout");
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 }
 
 #[test]
@@ -990,10 +1014,7 @@ terms = ["Sonnenlied"]
     );
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty(), "policy config must not emit stdout");
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 
     let (_dir, path) = write_policy_with_rulepack(rulepack, Some("\"de-DE\""));
     let v = clean_json_with_args(
@@ -2074,10 +2095,7 @@ fn t_cli_ner_threshold_out_of_range_fails_closed() {
 
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_detail_contains(&out.stderr, "ner.threshold");
 }
 
 #[test]
@@ -2706,10 +2724,7 @@ fn s1_ner_model_dir_and_locale_override_toml_and_detect_with_test_backend() {
 
     let out = clean_raw_with_args(&[&format!("--policy={}", policy.display())], input);
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 
     let value = clean_json_with_args(
         &[
@@ -3064,10 +3079,7 @@ action = "preserve"
     );
 
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 }
 
 #[test]
@@ -3100,10 +3112,7 @@ action = "preserve"
     );
 
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 }
 
 // -----------------------------------------------------------------------
@@ -3205,10 +3214,7 @@ fn t08_format_xml_rejected() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_detail_contains(&out.stderr, "--format");
 }
 
 // -----------------------------------------------------------------------
@@ -3223,9 +3229,12 @@ fn t09_bad_flag_emits_sanitized_json_not_clap_usage() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
+    let value = parse_stderr_variant(&out.stderr);
+    assert_eq!(value["error"], "PolicyConfig");
+    assert_eq!(value["exit"], 2);
+    assert!(
+        value.get("detail").is_none(),
+        "clap parse fallback must stay bare (no detail leak): {value}"
     );
     // No clap usage banner, no "Usage:" string.
     let stderr_str = String::from_utf8_lossy(&out.stderr);
@@ -3237,6 +3246,29 @@ fn t09_bad_flag_emits_sanitized_json_not_clap_usage() {
         !stderr_str.contains("--help"),
         "clap help leaked: {stderr_str}"
     );
+}
+
+// Adopter-pain coverage (dogfooding F#5): the operator must see *why* a
+// `PolicyConfig` was returned. These tests pin the specific detail wording
+// for the highest-traffic misconfiguration paths so a downstream agent or
+// support engineer can act without spelunking the loader.
+
+#[test]
+fn t09a_bundled_rulepack_unknown_name_surfaces_detail() {
+    let out = clean_raw_with_args(&["--rulepack-bundled=does-not-exist"], "anything");
+    assert_eq!(out.status.code(), Some(2));
+    assert_policy_config_detail_contains(&out.stderr, "unknown bundled rulepack");
+    assert_policy_config_detail_contains(&out.stderr, "does-not-exist");
+}
+
+#[test]
+fn t09b_cli_locale_invalid_surfaces_detail() {
+    // BCP47-parseable tags (e.g. "ZZ-bogus") fall through to LocaleTag::Other;
+    // use a value that fails the BCP47 grammar so LocaleTag::parse errors.
+    let out = clean_raw_with_args(&["--locale=not a locale"], "anything");
+    assert_eq!(out.status.code(), Some(2));
+    assert_policy_config_detail_contains(&out.stderr, "invalid --locale");
+    assert_policy_config_detail_contains(&out.stderr, "not a locale");
 }
 
 // -----------------------------------------------------------------------
@@ -3550,10 +3582,7 @@ action = "preserve"
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_envelope(&out.stderr);
 }
 
 #[test]
@@ -3702,8 +3731,5 @@ action = "preserve"
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    assert_eq!(
-        parse_stderr_variant(&out.stderr),
-        json!({ "error": "PolicyConfig", "exit": 2 })
-    );
+    assert_policy_config_detail_contains(&out.stderr, "parse policy.toml");
 }

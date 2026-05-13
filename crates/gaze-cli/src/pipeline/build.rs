@@ -16,14 +16,16 @@ pub(crate) fn map_policy_error(err: PolicyError) -> CliError {
         PolicyError::UnsupportedRuleKind(_) => {
             CliError::PolicyConfigDetail("column rules not supported in CLI mode".to_string())
         }
-        _ => CliError::PolicyConfig,
+        other => CliError::PolicyConfigDetail(other.to_string()),
     }
 }
 
 pub(crate) fn map_pipeline_error(err: gaze::Error) -> CliError {
     match err {
         gaze::Error::Policy(policy_err) => map_policy_error(policy_err),
-        gaze::Error::Rulepack(_) => CliError::PolicyConfig,
+        gaze::Error::Rulepack(rulepack_err) => {
+            CliError::PolicyConfigDetail(format!("rulepack error: {rulepack_err}"))
+        }
         _ => CliError::Pipeline,
     }
 }
