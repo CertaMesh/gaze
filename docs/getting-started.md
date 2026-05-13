@@ -175,7 +175,7 @@ let pipeline = gaze_assembly::build_pipeline(
 ## Next steps
 
 - [Policy reference](policy.md) -- full TOML schema, all recognizers, locale chain
-- [CLI adapter contract](cli-adapter-contract.md) -- shell-out protocol for framework adapters
+- [CLI adapter contract](../crates/gaze-cli/README.md) -- canonical shell-out protocol (stdin/stdout/stderr) for framework adapters; see [Subcommands](../crates/gaze-cli/README.md#subcommands) for the `clean` / `restore` / `audit` surface as of v0.7.2
 - [Security review](security-review.md) -- invariants, threat boundaries, audit isolation
 - [Exit codes](../crates/gaze-cli/README.md#exit-codes) -- canonical exit code reference
 - `cargo doc --open -p gaze` -- full API reference
