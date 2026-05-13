@@ -85,7 +85,8 @@ Current validator and normalizer enums:
 `E164Phone` is implemented via the `phonenumber` crate. It preserves valid E.164
 matches such as synthetic non-reachable `+49-30-0000-0000` (not a real number)
 while rejecting regex-passing but unassigned shapes such as `+99999999`. Audit notes live in
-[`docs/research/v0.4.4-phonenumber-audit.md`](../../docs/research/v0.4.4-phonenumber-audit.md).
+[`v0.4.4-phonenumber-audit.md`](https://github.com/PIInuts/business/blob/main/research/v0.4.4-phonenumber-audit.md)
+(hosted in `PIInuts/business:research/`).
 
 ## Anchored match backend
 
