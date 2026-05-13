@@ -10,10 +10,14 @@ use gaze_types::{
 };
 
 fn core_extended() -> Rulepack {
-    Rulepack::load(RulepackSource::Embedded(
+    let mut rulepack = Rulepack::load(RulepackSource::Embedded(
         embedded("core-extended").expect("core-extended embedded rulepack"),
     ))
-    .expect("core-extended loads")
+    .expect("core-extended loads");
+    rulepack.recognizers.retain(|recognizer| {
+        !recognizer.id.starts_with("email.") && !recognizer.id.starts_with("name.")
+    });
+    rulepack
 }
 
 fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {

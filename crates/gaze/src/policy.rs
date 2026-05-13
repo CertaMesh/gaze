@@ -7,7 +7,8 @@ use serde::Deserialize;
 use thiserror::Error;
 
 use crate::{
-    Action, CollisionMembership, LocaleTag, PiiClass, RulepackDict, RESERVED_BUNDLED_FAMILIES,
+    Action, CollisionMembership, LocaleTag, PiiClass, RulepackDict, SafetyTier,
+    RESERVED_BUNDLED_FAMILIES,
 };
 
 pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
@@ -133,6 +134,7 @@ pub struct DetectorSpec {
     pub case_sensitive: bool,
     pub token_family: String,
     pub collision: Option<CollisionMembership>,
+    pub safety_tier: SafetyTier,
 }
 
 impl Default for DetectorSpec {
@@ -146,6 +148,7 @@ impl Default for DetectorSpec {
             case_sensitive: false,
             token_family: "counter".to_string(),
             collision: None,
+            safety_tier: SafetyTier::OptIn,
         }
     }
 }
@@ -181,6 +184,7 @@ impl Default for NerPolicy {
 pub struct RulepackPolicy {
     pub bundled: Vec<String>,
     pub paths: Vec<PathBuf>,
+    pub auto_activate_locale_gated: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -321,6 +325,8 @@ struct RawDetectorSpec {
     token_family: Option<String>,
     #[serde(default)]
     collision: Option<crate::rulepack::RawCollisionSpec>,
+    #[serde(default)]
+    safety_tier: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -410,6 +416,7 @@ impl TryFrom<RawPolicy> for Policy {
             .unwrap_or_else(|| RulepackPolicy {
                 bundled: vec!["core".to_string()],
                 paths: Vec::new(),
+                auto_activate_locale_gated: false,
             });
 
         if detectors.is_empty() && rulepacks.bundled.is_empty() && rulepacks.paths.is_empty() {
@@ -472,9 +479,10 @@ fn parse_detector(
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     let class = parse_class(&raw.class)?;
     let collision = parse_detector_collision(&raw)?;
+    let safety_tier = parse_custom_safety_tier(raw.safety_tier.as_deref())?;
     match raw.kind.as_str() {
-        "regex" => parse_regex_detector(raw, class, collision),
-        "dictionary" => parse_dictionary_detector(raw, class, collision),
+        "regex" => parse_regex_detector(raw, class, collision, safety_tier),
+        "dictionary" => parse_dictionary_detector(raw, class, collision, safety_tier),
         other => Ok((
             DetectorSpec {
                 kind: DetectorKind::Unknown(other.to_string()),
@@ -485,6 +493,7 @@ fn parse_detector(
                 case_sensitive: raw.case_sensitive,
                 token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
                 collision,
+                safety_tier,
             },
             None,
         )),
@@ -517,6 +526,7 @@ fn parse_regex_detector(
     raw: RawDetectorSpec,
     class: PiiClass,
     collision: Option<CollisionMembership>,
+    safety_tier: SafetyTier,
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     let pattern = raw.pattern.ok_or_else(|| PolicyError::BadDictionary {
         name: raw.name.clone(),
@@ -544,6 +554,7 @@ fn parse_regex_detector(
             case_sensitive: false,
             token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
             collision,
+            safety_tier,
         },
         None,
     ))
@@ -553,6 +564,7 @@ fn parse_dictionary_detector(
     raw: RawDetectorSpec,
     class: PiiClass,
     collision: Option<CollisionMembership>,
+    safety_tier: SafetyTier,
 ) -> Result<(DetectorSpec, Option<RulepackDict>), PolicyError> {
     if raw.pattern.is_some() {
         return Err(PolicyError::BadDictionary {
@@ -620,9 +632,17 @@ fn parse_dictionary_detector(
             case_sensitive: raw.case_sensitive,
             token_family: raw.token_family.unwrap_or_else(|| "counter".to_string()),
             collision,
+            safety_tier,
         },
         dictionary,
     ))
+}
+
+fn parse_custom_safety_tier(raw: Option<&str>) -> Result<SafetyTier, PolicyError> {
+    raw.map(SafetyTier::parse)
+        .transpose()
+        .map_err(|err| PolicyError::BadTtl(err.to_string()))
+        .map(|tier| tier.unwrap_or(SafetyTier::OptIn))
 }
 
 fn parse_rule(raw: RawRuleSpec) -> Result<RuleSpec, PolicyError> {
@@ -686,14 +706,35 @@ fn parse_locale_policy(raw: RawLocalePolicy) -> Result<Option<Vec<LocaleTag>>, P
 }
 
 fn parse_rulepack_policy(raw: RawRulepackPolicy) -> Result<RulepackPolicy, PolicyError> {
+    let (bundled, auto_activate_locale_gated) = normalize_bundled_rulepacks(raw.bundled);
     Ok(RulepackPolicy {
-        bundled: raw.bundled,
+        bundled,
         paths: raw
             .paths
             .into_iter()
             .map(expand_home)
             .collect::<Result<_, _>>()?,
+        auto_activate_locale_gated,
     })
+}
+
+fn normalize_bundled_rulepacks(raw: Vec<String>) -> (Vec<String>, bool) {
+    let mut bundled = Vec::with_capacity(raw.len());
+    let mut auto_activate_locale_gated = false;
+    for bundle in raw {
+        if bundle == "core-extended" {
+            auto_activate_locale_gated = true;
+            tracing::warn!(
+                "`core-extended` bundled rulepack is deprecated since v0.8.0; use `core` with an explicit locale"
+            );
+            if !bundled.iter().any(|existing| existing == "core") {
+                bundled.push("core".to_string());
+            }
+        } else if !bundled.iter().any(|existing| existing == &bundle) {
+            bundled.push(bundle);
+        }
+    }
+    (bundled, auto_activate_locale_gated)
 }
 
 fn expand_home(path: String) -> Result<PathBuf, PolicyError> {

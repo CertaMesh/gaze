@@ -478,30 +478,34 @@ loaded rulepack rather than a separate hand-maintained list.
 
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
-| `core` | `email.global`, `email.header.name` | `email`, `name` | Default bundle when `[policy.rulepacks]` is omitted. |
-| `core-extended` | `phone.structural`, `phone.national.de`, `phone.national.us`, `iban.structural`, `card.structural`, `ip.v4`, `ip.v6`, `postal.de`, `postal.us` | `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:postal_code` | Opt-in bundle. Validator-backed E.164, DE national, US national phone, IBAN, and credit-card recognizers plus structural IP/postal recognizers. |
+| `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` so low-FPR recognizers can run by default while national phone and postal recognizers require an explicit locale. |
+| `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
 
-Opt into `core-extended` alongside `core`:
+Use `core` with an explicit locale when you want locale-shaped recognizers:
 
 ```toml
 [policy.rulepacks]
-bundled = ["core", "core-extended"]
+bundled = ["core"]
+
+[locale]
+active = ["en-US"]
 ```
 
 Or override the bundle list for one CLI run:
 
 ```bash
-gaze clean --rulepack-bundled core,core-extended --policy ./policy.toml
+gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 ```
 
-`core-extended` recognizers are intentionally conservative:
+`core` recognizers are intentionally tiered:
 
 - `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
   `custom:phone` only when the match passes `e164_phone`. Regex-passing but
   unassigned values such as `+99999999` do not emit detections.
-- `phone.national.de` and `phone.national.us` match parser-backed national
-  phone shapes and emit `custom:phone` under the bundled default locale chain
-  (`en-US`, `de-DE`, `de-AT`, `de-CH`, then `global`). The DE recognizer
+- `phone.national.de`, `phone.national.us`, `postal.de`, and `postal.us` are
+  `locale_gated`; pass `--locale=de-DE` or `--locale=en-US`, or set
+  `[locale].active`, to activate them. `global` alone does not activate
+  locale-gated recognizers. The DE phone recognizer
   includes Berlin (`30`), Hamburg (`40`), Frankfurt (`69`), Munich (`89`),
   Cologne (`221`), Stuttgart (`711`), and the synthetic mobile fixture shape
   (`151`) while still requiring `e164_phone_national_de` validation. These
@@ -568,7 +572,7 @@ kind = "luhn"
 | Kind | Applies to | Behavior |
 |------|------------|----------|
 | `email_rfc` | Email-like regex candidates | Basic email shape validation used by the bundled core email recognizer. |
-| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core-extended` uses it with `phone.structural` so parser-valid international fixtures such as `+4915100000000` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
+| `e164_phone` | E.164-like phone candidates | Parser-backed phone validation. `core` uses it with `phone.structural` so parser-valid international fixtures such as `+4915100000000` emit `custom:phone`, while unassigned regex-only values such as `+99999999` are dropped. |
 | `e164_phone_national_de` | German national or international phone candidates | Parser-backed DE validation with synthetic-non-reachable fixture allowance because Germany has no NANPA 555-01XX equivalent. |
 | `e164_phone_national_us` | US national or international phone candidates | Parser-backed US validation with NANPA 555-0100 through 555-0199 fixture allowance. |
 | `luhn` | Credit-card-like numeric candidates | Mod 10 checksum. ASCII whitespace is ignored; any other non-digit fails validation. |
@@ -658,6 +662,7 @@ class = "email"
 | `terms_from_context` | string    | dictionary | Reads the named dictionary from `--context-json`; cannot be combined with `terms` or `terms_file`. |
 | `case_sensitive`     | boolean   | no       | Dictionary only. Defaults to `false`; non-ASCII insensitive dictionaries fail closed in v0.4.0. |
 | `token_family`       | string    | no       | Defaults to `"counter"`. |
+| `safety_tier`        | string    | no       | Defaults to `"opt_in"` for custom recognizers. Accepted values are `"safe_default"`, `"locale_gated"`, and `"opt_in"`. Naming a custom recognizer in policy is the opt-in. |
 | `[collision]`        | table     | no       | Cross-class collision-family metadata. See below. |
 
 Dictionary recognizers are registered through the same recognizer registry as

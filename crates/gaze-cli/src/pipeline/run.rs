@@ -30,6 +30,8 @@ use crate::pipeline::build::{
     merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold, ArcLogger,
 };
 
+const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
+
 pub(crate) struct CleanOptions<'a> {
     pub(crate) policy: Option<&'a Path>,
     pub(crate) format: &'a str,
@@ -104,7 +106,22 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         .unwrap_or_default();
     let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
     let dictionary_stats = dictionaries.stats();
-    let rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
+    let mut rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
+    if effective_policy.is_some_and(|policy| policy.rulepacks.auto_activate_locale_gated) {
+        for locale in [
+            LocaleTag::EnUs,
+            LocaleTag::DeDe,
+            LocaleTag::DeAt,
+            LocaleTag::DeCh,
+        ] {
+            if !rulepack_default_locales
+                .iter()
+                .any(|existing| existing == &locale)
+            {
+                rulepack_default_locales.push(locale);
+            }
+        }
+    }
     let cli_locales = parse_cli_locales(options.locale)?;
     let locale_chain = gaze::LocaleChain::merge_cli_policy_rulepack_default(
         cli_locales.as_deref(),
@@ -332,10 +349,12 @@ fn clean_overrides_from_options(
                 .map_err(map_policy_error)
         })
         .transpose()?;
-    let rulepack_bundled = if options.rulepack_bundled.is_empty() {
+    let (rulepack_bundled, auto_activate_locale_gated) =
+        normalize_rulepack_bundles(options.rulepack_bundled);
+    let rulepack_bundled = if rulepack_bundled.is_empty() {
         None
     } else {
-        Some(options.rulepack_bundled.to_vec())
+        Some(rulepack_bundled)
     };
 
     Ok(CleanOverrides {
@@ -344,7 +363,26 @@ fn clean_overrides_from_options(
         ner_locale,
         rulepack_bundled,
         rulepack_paths: options.rulepack_paths.clone(),
+        auto_activate_locale_gated,
     })
+}
+
+fn normalize_rulepack_bundles(raw: &[String]) -> (Vec<String>, bool) {
+    let mut auto_activate_locale_gated = false;
+    let mut bundled = Vec::with_capacity(raw.len());
+    for bundle in raw {
+        if bundle == "core-extended" {
+            auto_activate_locale_gated = true;
+            tracing::warn!("{CORE_EXTENDED_DEPRECATION}");
+            eprintln!("warning: {CORE_EXTENDED_DEPRECATION}");
+            if !bundled.iter().any(|existing| existing == "core") {
+                bundled.push("core".to_string());
+            }
+        } else if !bundled.iter().any(|existing| existing == bundle) {
+            bundled.push(bundle.clone());
+        }
+    }
+    (bundled, auto_activate_locale_gated)
 }
 
 fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {

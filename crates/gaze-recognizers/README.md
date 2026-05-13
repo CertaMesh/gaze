@@ -138,8 +138,8 @@ Loading failures are policy configuration failures in the CLI path.
 
 | Name | File | Purpose |
 |------|------|---------|
-| `core` | [`embedded/core.toml`](embedded/core.toml) | Global core recognizers, including email address, email-header display-name detection, and v0.6 anchored structural Name detection. |
-| `core-extended` | [`embedded/core-extended.toml`](embedded/core-extended.toml) | Opt-in extension. Phase 1 (v0.4.2): shape-only E.164 phone numbers, IPv4/IPv6 addresses, `de-DE`/`en-US` postal codes. Phase 2 (v0.4.3): validator-backed IBAN (`iban.structural`, `iban_mod97` + `iban_canonical`) and credit card (`card.structural`, `luhn`). Phase 3 (v0.4.4): `e164_phone` parser-backed validator extends the existing `phone.structural` recognizer. Default `[[rule]]` entries ship in the rulepack so `--rulepack-bundled core,core-extended` tokenizes the new classes out of the box. |
+| `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` to control no-policy activation. |
+| `core-extended` | alias of `core` | Deprecated since v0.8.0 and scheduled for removal in v0.10.0. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
 

@@ -1592,6 +1592,64 @@ pub trait RedactionLogger: Send + Sync {
     fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError>;
 }
 
+/// Rulepack recognizer activation tier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum SafetyTier {
+    /// Activates whenever the recognizer's locale projection intersects the active locale chain.
+    #[default]
+    SafeDefault,
+    /// Activates only when an explicit locale or compatibility alias enables locale-shaped rules.
+    LocaleGated,
+    /// Activates only through adopter opt-in surfaces such as policy-defined custom recognizers.
+    OptIn,
+}
+
+/// Safety-tier parsing error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SafetyTierParseError {
+    value: String,
+}
+
+impl SafetyTier {
+    /// Parses the TOML `safety_tier` string.
+    pub fn parse(value: &str) -> Result<Self, SafetyTierParseError> {
+        match value {
+            "safe_default" => Ok(Self::SafeDefault),
+            "locale_gated" => Ok(Self::LocaleGated),
+            "opt_in" => Ok(Self::OptIn),
+            other => Err(SafetyTierParseError {
+                value: other.to_string(),
+            }),
+        }
+    }
+
+    /// Returns the TOML string for this tier.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SafeDefault => "safe_default",
+            Self::LocaleGated => "locale_gated",
+            Self::OptIn => "opt_in",
+        }
+    }
+}
+
+impl SafetyTierParseError {
+    /// Returns the rejected safety-tier string.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Display for SafetyTierParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unsupported safety_tier '{}'", self.value)
+    }
+}
+
+impl std::error::Error for SafetyTierParseError {}
+
 /// Locale tag recognized by policy and recognizers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]

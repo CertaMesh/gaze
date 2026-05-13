@@ -2281,26 +2281,13 @@ fn s1_rulepack_bundled_override_changes_bundled_recognizer_availability() {
 }
 
 #[test]
-fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
+fn unified_core_toml_tokenizes_safe_and_locale_gated_recognizers() {
     // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;
     // literals chosen for parser-valid + non-routable.
     let input = "Email alice@example.invalid phone +4915100000000 host 192.168.1.1 zip 94103-1234 IBAN GB82WEST12345698765432 card 4111111111111111";
     let (_core_dir, core_policy) = write_policy_with_core_extended_rulepacks(&["core"], "en-US");
-    let core_only = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
-    let core_clean = core_only["clean_text"].as_str().unwrap();
-    assert!(core_clean.contains(":Email_1>"), "{core_clean}");
-    assert!(!core_clean.contains("Custom:phone"), "{core_clean}");
-    assert!(!core_clean.contains("Custom:ip_address"), "{core_clean}");
-    assert!(!core_clean.contains("Custom:postal_code"), "{core_clean}");
-    assert!(!core_clean.contains("Custom:iban"), "{core_clean}");
-    assert!(!core_clean.contains("Custom:credit_card"), "{core_clean}");
-    assert_eq!(core_only["stats"]["detections"], 1);
-
-    let (_extended_dir, extended_policy) =
-        write_policy_with_core_extended_rulepacks(&["core", "core-extended"], "en-US");
-    let extended =
-        clean_json_with_args(&[&format!("--policy={}", extended_policy.display())], input);
-    let extended_clean = extended["clean_text"].as_str().unwrap();
+    let unified = clean_json_with_args(&[&format!("--policy={}", core_policy.display())], input);
+    let extended_clean = unified["clean_text"].as_str().unwrap();
     assert!(extended_clean.contains(":Email_1>"), "{extended_clean}");
     assert!(
         extended_clean.contains(":Custom:phone_1>"),
@@ -2322,9 +2309,9 @@ fn s2_core_extended_toml_opt_in_tokenizes_and_core_only_does_not() {
         extended_clean.contains(":Custom:credit_card_1>"),
         "{extended_clean}"
     );
-    assert_eq!(extended["stats"]["detections"], 6);
+    assert_eq!(unified["stats"]["detections"], 6);
     assert_eq!(
-        restore_success_text(extended["session_blob"].as_str().unwrap(), extended_clean),
+        restore_success_text(unified["session_blob"].as_str().unwrap(), extended_clean),
         input
     );
 }
@@ -2438,6 +2425,36 @@ fn s3a_cli_bundled_core_extended_tokenizes_valid_e164_phone() {
 
 #[test]
 fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() {
+    let core = clean_json_with_args(
+        &["--rulepack-bundled", "core"],
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        "Phone +1 555 0100 ZIP 94103",
+    );
+    assert_eq!(core["clean_text"], "Phone +1 555 0100 ZIP 94103");
+    assert_eq!(core["stats"]["detections"], 0);
+
+    let alias_out = clean_raw_with_args(
+        &["--rulepack-bundled", "core-extended"],
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        "Phone +1 555 0100",
+    );
+    assert!(alias_out.status.success());
+    assert!(
+        String::from_utf8_lossy(&alias_out.stderr).contains("deprecated since v0.8.0"),
+        "stderr={}",
+        String::from_utf8_lossy(&alias_out.stderr)
+    );
+    let alias_json: Value = serde_json::from_slice(&alias_out.stdout).expect("stdout is JSON");
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1>$")
+            .unwrap()
+            .is_match(alias_json["clean_text"].as_str().unwrap()),
+        "unexpected alias clean text: {}",
+        alias_json["clean_text"]
+    );
+
     let de = clean_json_with_args(
         &["--rulepack-bundled", "core-extended"],
         // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists;

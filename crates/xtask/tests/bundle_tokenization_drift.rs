@@ -1,3 +1,4 @@
+// drift-ack: v0.8 unifies core/core-extended snapshots under the single core bundle.
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -52,8 +53,8 @@ fn bundle_tokenization_drift_gate_fails_when_enabled_recognizer_id_drifts() {
         .expect("create adversarial worktree");
     assert!(add_status.success(), "git worktree add must succeed");
 
-    let rulepack = fixture_root.join("crates/gaze-recognizers/embedded/core-extended.toml");
-    let source = fs::read_to_string(&rulepack).expect("read core-extended rulepack");
+    let rulepack = fixture_root.join("crates/gaze-recognizers/embedded/core.toml");
+    let source = fs::read_to_string(&rulepack).expect("read core rulepack");
     assert!(
         source.contains("id = \"ip.v4\""),
         "fixture must contain expected recognizer id before mutation"
@@ -83,7 +84,7 @@ fn bundle_tokenization_drift_gate_fails_when_enabled_recognizer_id_drifts() {
         "gate failure must identify snapshot drift; {text}"
     );
     assert!(
-        text.contains("bundle `core-extended`"),
+        text.contains("bundle `core`"),
         "gate failure must name the changed bundle; {text}"
     );
     assert!(
