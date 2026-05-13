@@ -38,9 +38,11 @@ Out of scope:
 
 ## Supported versions
 
-We currently support security fixes only on the latest minor of the `0.6.x`
-series and (when released) the latest minor of `0.7.x`. Earlier versions
-do not receive backports.
+We currently support security fixes on the latest minor of the `0.7.x`
+series (`v0.7.2` at the time of writing). The last released minor of
+`0.6.x` receives one-cycle backports for high-severity findings while
+adopters complete the `0.7.x` upgrade. Earlier versions do not receive
+backports.
 
 ## Coordinated disclosure
 
