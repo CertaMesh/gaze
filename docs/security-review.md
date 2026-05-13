@@ -93,5 +93,6 @@ These claims are security-relevant but are not yet proven by a named test.
 
 ## Threat Model
 
-See [docs/research/gaze-threat-model.md](research/gaze-threat-model.md) for trust
-boundaries, adversary model, and broader attack-surface notes.
+See [`gaze-threat-model.md`](https://github.com/PIInuts/business/blob/main/research/gaze-threat-model.md)
+(hosted in `PIInuts/business:research/`) for trust boundaries, adversary model,
+and broader attack-surface notes.
