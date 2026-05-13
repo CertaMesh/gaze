@@ -25,6 +25,9 @@ sha3 = "0.10"
 thiserror = { workspace = true }
 phonenumber = { version = "0.3.9", default-features = false, optional = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [features]
 default = []
 phone-parser = ["dep:phonenumber"]

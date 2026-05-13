@@ -27,6 +27,8 @@ pub struct AuditFilter {
     pub ambiguity_reason: Option<String>,
     pub collision_family: Option<String>,
     pub collision_variant: Option<String>,
+    pub recognizer_id: Option<String>,
+    pub recognizer_version_id: Option<String>,
 }
 
 /// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
@@ -37,6 +39,8 @@ pub struct AuditFilter {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuditLogRow {
     pub source: String,
+    pub recognizer_id: Option<String>,
+    pub recognizer_version_id: Option<String>,
     pub class: String,
     pub action: String,
     pub field_name: Option<String>,
@@ -84,6 +88,8 @@ pub struct LeakSuspectRow {
 /// values into the audit path.
 pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "source",
+    "recognizer_id",
+    "recognizer_version_id",
     "class",
     "action",
     "field_name",
@@ -137,6 +143,8 @@ pub fn build_audit_query_sql(
     has_ambiguity_record: bool,
     has_collision_family: bool,
     has_collision_variant: bool,
+    has_recognizer_id: bool,
+    has_recognizer_version_id: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -188,8 +196,18 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS collision_variant"
     };
+    let recognizer_id_column = if has_recognizer_id {
+        "recognizer_id"
+    } else {
+        "NULL AS recognizer_id"
+    };
+    let recognizer_version_id_column = if has_recognizer_version_id {
+        "recognizer_version_id"
+    } else {
+        "NULL AS recognizer_version_id"
+    };
     let mut sql = format!(
-        "SELECT source, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column} FROM redaction_log"
+        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -200,6 +218,22 @@ pub fn build_audit_query_sql(
     if let Some(source) = &filter.source {
         predicates.push("source = ?");
         values.push(Value::Text(source.clone()));
+    }
+    if let Some(recognizer_id) = &filter.recognizer_id {
+        if has_recognizer_id {
+            predicates.push("recognizer_id = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(recognizer_id.clone()));
+    }
+    if let Some(recognizer_version_id) = &filter.recognizer_version_id {
+        if has_recognizer_version_id {
+            predicates.push("recognizer_version_id = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(recognizer_version_id.clone()));
     }
     if let Some(action) = &filter.action {
         predicates.push("action = ?");

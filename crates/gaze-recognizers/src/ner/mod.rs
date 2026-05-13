@@ -81,8 +81,21 @@ mod tests {
         let dir = setup_good_dir();
         let verified = NerDetector::verify_artifacts(dir.path()).expect("verify");
         assert_eq!(verified.backend_kind, NerBackendKind::Ort);
+        assert_eq!(verified.recognizer_model_id, "unknown");
+        assert_eq!(verified.recognizer_model_version, "v0");
         assert!(verified.labels.get("PER").is_some());
         assert_eq!(verified.id2label[1], "B-PER");
+    }
+
+    #[test]
+    fn verify_artifacts_reads_versioned_ner_identity_from_config() {
+        let dir = setup_dir_with_config(
+            br#"{"model_id":"Davlan/mBERT NER HRL","model_version":"1","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
+        );
+        let verified = NerDetector::verify_artifacts(dir.path()).expect("verify");
+
+        assert_eq!(verified.recognizer_model_id, "davlan-mbert-ner-hrl");
+        assert_eq!(verified.recognizer_model_version, "v1");
     }
 
     #[test]
@@ -333,6 +346,7 @@ mod tests {
             detector: NerDetector {
                 model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
                 threshold: 0.5,
                 backend: Arc::new(FixedBackend {
@@ -359,6 +373,10 @@ mod tests {
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, 6..11);
         assert_eq!(candidates[0].score, 0.50);
+        assert_eq!(
+            candidates[0].recognizer_version_id.as_deref(),
+            Some("ner.fixed.v1")
+        );
     }
 
     #[test]
@@ -389,6 +407,7 @@ mod tests {
             detector: NerDetector {
                 model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: Some("de".to_string()),
                 threshold: 0.3,
                 backend: backend.clone(),
@@ -398,6 +417,7 @@ mod tests {
             detector: NerDetector {
                 model_dir: PathBuf::from("/test/fake"),
                 backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: Some("de".to_string()),
                 threshold: 0.5,
                 backend,

@@ -137,6 +137,8 @@ impl SqliteLogger {
             r#"
             CREATE TABLE IF NOT EXISTS redaction_log (
                 source TEXT NOT NULL,
+                recognizer_id TEXT NULL,
+                recognizer_version_id TEXT NULL,
                 class TEXT NOT NULL,
                 action TEXT NOT NULL,
                 field_name TEXT NULL,
@@ -271,6 +273,28 @@ impl SqliteLogger {
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         }
+        if !columns.iter().any(|column| column == "recognizer_id") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN recognizer_id TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+            conn.execute(
+                "UPDATE redaction_log SET recognizer_id = 'legacy_unversioned' WHERE recognizer_id IS NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
+        if !columns
+            .iter()
+            .any(|column| column == "recognizer_version_id")
+        {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN recognizer_version_id TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -284,9 +308,11 @@ impl SqliteLogger {
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 entry.source,
+                entry.recognizer_id,
+                entry.recognizer_version_id,
                 entry.class.to_canonical_str(),
                 action_to_db(entry.action),
                 entry.field_name,
@@ -312,31 +338,33 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
             .query_map([], |row| {
                 let mut entry = RedactionEntry::new(
                     row.get::<_, String>(0)?,
-                    pii_class_from_db(&row.get::<_, String>(1)?)?,
-                    action_from_db(&row.get::<_, String>(2)?)?,
-                    row.get(3)?,
-                    document_kind_from_db(&row.get::<_, String>(4)?)?,
-                    row.get::<_, i64>(5)? != 0,
-                    conflict_tier_from_db(&row.get::<_, String>(6)?)?,
-                    row.get::<_, Option<i64>>(7)?.unwrap_or(0),
-                    row.get(8)?,
-                );
+                    pii_class_from_db(&row.get::<_, String>(3)?)?,
+                    action_from_db(&row.get::<_, String>(4)?)?,
+                    row.get(5)?,
+                    document_kind_from_db(&row.get::<_, String>(6)?)?,
+                    row.get::<_, i64>(7)? != 0,
+                    conflict_tier_from_db(&row.get::<_, String>(8)?)?,
+                    row.get::<_, Option<i64>>(9)?.unwrap_or(0),
+                    row.get(10)?,
+                )
+                .with_recognizer_metadata(row.get(1)?, row.get(2)?);
                 if let Some(reason) =
-                    deserialize_json_column::<ValidatorFailReason>(row.get(9)?, 9)?
+                    deserialize_json_column::<ValidatorFailReason>(row.get(11)?, 11)?
                 {
                     entry = entry.with_validator_fail_reason(reason);
                 }
-                if let Some(record) = deserialize_json_column::<AmbiguityRecord>(row.get(10)?, 10)?
+                if let Some(record) = deserialize_json_column::<AmbiguityRecord>(row.get(12)?, 12)?
                 {
                     entry = entry.with_ambiguity_record(record);
                 }
+                entry = entry.with_collision_metadata(row.get(13)?, row.get(14)?);
                 Ok(entry)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -365,6 +393,8 @@ impl SqliteLogger {
         let has_ambiguity_record = table_has_column(&conn, "ambiguity_record")?;
         let has_collision_family = table_has_column(&conn, "collision_family")?;
         let has_collision_variant = table_has_column(&conn, "collision_variant")?;
+        let has_recognizer_id = table_has_column(&conn, "recognizer_id")?;
+        let has_recognizer_version_id = table_has_column(&conn, "recognizer_version_id")?;
         let (sql, values) = build_audit_query_sql(
             filter,
             has_decided_by,
@@ -377,6 +407,8 @@ impl SqliteLogger {
             has_ambiguity_record,
             has_collision_family,
             has_collision_variant,
+            has_recognizer_id,
+            has_recognizer_version_id,
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -385,21 +417,23 @@ impl SqliteLogger {
             .query_map(params_from_iter(values.iter()), |row| {
                 Ok(AuditLogRow {
                     source: row.get(0)?,
-                    class: row.get(1)?,
-                    action: row.get(2)?,
-                    field_name: row.get(3)?,
-                    document_kind: row.get(4)?,
-                    conflict_loser: row.get::<_, i64>(5)? != 0,
-                    decided_by: row.get(6)?,
-                    created_at: row.get(7)?,
-                    session_id: row.get(8)?,
-                    snapshot_scheme: row.get(9)?,
-                    snapshot_alg: row.get(10)?,
-                    snapshot_key_version: row.get(11)?,
-                    validator_fail_reason: row.get(12)?,
-                    ambiguity_record: row.get(13)?,
-                    collision_family: row.get(14)?,
-                    collision_variant: row.get(15)?,
+                    recognizer_id: row.get(1)?,
+                    recognizer_version_id: row.get(2)?,
+                    class: row.get(3)?,
+                    action: row.get(4)?,
+                    field_name: row.get(5)?,
+                    document_kind: row.get(6)?,
+                    conflict_loser: row.get::<_, i64>(7)? != 0,
+                    decided_by: row.get(8)?,
+                    created_at: row.get(9)?,
+                    session_id: row.get(10)?,
+                    snapshot_scheme: row.get(11)?,
+                    snapshot_alg: row.get(12)?,
+                    snapshot_key_version: row.get(13)?,
+                    validator_fail_reason: row.get(14)?,
+                    ambiguity_record: row.get(15)?,
+                    collision_family: row.get(16)?,
+                    collision_variant: row.get(17)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;

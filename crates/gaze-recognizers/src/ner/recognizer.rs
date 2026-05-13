@@ -52,6 +52,7 @@ impl Recognizer for NerRecognizer {
                         ConflictTier::None,
                         Vec::new(),
                     )
+                    .with_recognizer_version_id(self.detector.recognizer_version_id())
                 })
                 .collect(),
             Err(err) => {

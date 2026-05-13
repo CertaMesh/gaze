@@ -30,7 +30,13 @@ fn opens_v05_db_creates_safety_net_log_and_preserves_redaction_rows() {
     assert_eq!(safety_net_count, 1);
 
     let after = SqliteLogger::query(temp.path(), &AuditFilter::default()).expect("migrated query");
-    assert_eq!(after, before);
+    assert!(before
+        .iter()
+        .all(|row| row.recognizer_id.is_none() && row.recognizer_version_id.is_none()));
+    assert!(after.iter().all(|row| {
+        row.recognizer_id.as_deref() == Some("legacy_unversioned")
+            && row.recognizer_version_id.is_none()
+    }));
     assert_eq!(after, legacy_rows());
 }
 
@@ -157,6 +163,8 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             ambiguity_reason: None,
             collision_family: None,
             collision_variant: None,
+            recognizer_id: None,
+            recognizer_version_id: None,
         },
     )
     .expect("filtered query");
@@ -262,6 +270,8 @@ fn legacy_rows() -> Vec<AuditLogRow> {
     vec![
         AuditLogRow {
             source: "regex".to_string(),
+            recognizer_id: Some("legacy_unversioned".to_string()),
+            recognizer_version_id: None,
             class: "email".to_string(),
             action: "tokenize".to_string(),
             field_name: Some("contact.email".to_string()),
@@ -280,6 +290,8 @@ fn legacy_rows() -> Vec<AuditLogRow> {
         },
         AuditLogRow {
             source: "dictionary".to_string(),
+            recognizer_id: Some("legacy_unversioned".to_string()),
+            recognizer_version_id: None,
             class: "name".to_string(),
             action: "preserve".to_string(),
             field_name: None,

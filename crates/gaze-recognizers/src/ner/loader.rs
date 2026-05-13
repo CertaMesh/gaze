@@ -57,11 +57,23 @@ impl NerDetector {
         let labels = parse_labels(&model_dir.join(LABELS_FILE))?;
         let config = parse_config(&model_dir.join(CONFIG_FILE))?;
         let backend_kind = NerBackendKind::parse(config.backend.as_deref())?;
+        let recognizer_model_id = config
+            .recognizer_model_id()
+            .map(sanitize_recognizer_segment)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "unknown".to_string());
+        let recognizer_model_version = config
+            .recognizer_model_version()
+            .map(sanitize_version_segment)
+            .filter(|value| !value.is_empty())
+            .unwrap_or_else(|| "v0".to_string());
         let id2label = config_to_id2label(config.id2label)?;
 
         Ok(VerifiedArtifacts {
             model_dir: model_dir.to_path_buf(),
             backend_kind,
+            recognizer_model_id,
+            recognizer_model_version,
             labels,
             id2label,
         })
@@ -188,7 +200,29 @@ fn parse_labels(path: &Path) -> Result<LabelMap, NerLoadError> {
 #[derive(Deserialize)]
 struct ConfigFile {
     backend: Option<String>,
+    model_id: Option<String>,
+    model_name: Option<String>,
+    model: Option<String>,
+    version: Option<String>,
+    model_version: Option<String>,
+    recognizer_version: Option<String>,
     id2label: Option<BTreeMap<String, String>>,
+}
+
+impl ConfigFile {
+    fn recognizer_model_id(&self) -> Option<&str> {
+        self.model_id
+            .as_deref()
+            .or(self.model_name.as_deref())
+            .or(self.model.as_deref())
+    }
+
+    fn recognizer_model_version(&self) -> Option<&str> {
+        self.recognizer_version
+            .as_deref()
+            .or(self.model_version.as_deref())
+            .or(self.version.as_deref())
+    }
 }
 
 fn parse_config(path: &Path) -> Result<ConfigFile, NerLoadError> {
@@ -219,4 +253,28 @@ fn config_to_id2label(
         out[index] = label;
     }
     Ok(out)
+}
+
+fn sanitize_recognizer_segment(raw: &str) -> String {
+    raw.trim()
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| match ch {
+            'a'..='z' | '0'..='9' => ch,
+            _ => '-',
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn sanitize_version_segment(raw: &str) -> String {
+    let sanitized = sanitize_recognizer_segment(raw);
+    if sanitized.is_empty() || sanitized.starts_with('v') {
+        sanitized
+    } else {
+        format!("v{sanitized}")
+    }
 }

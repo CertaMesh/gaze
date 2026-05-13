@@ -8,7 +8,7 @@ use gaze_types::{
 use rusqlite::Connection;
 
 #[test]
-fn spike4_migration_adds_four_columns_and_is_idempotent() {
+fn spike4_migration_adds_audit_metadata_columns_and_is_idempotent() {
     let temp = tempfile::NamedTempFile::new().expect("temp db");
     create_pre_spike4_redaction_log(temp.path());
 
@@ -17,6 +17,8 @@ fn spike4_migration_adds_four_columns_and_is_idempotent() {
 
     let rows = logger.entries().expect("legacy entries");
     assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].recognizer_id.as_deref(), Some("legacy_unversioned"));
+    assert_eq!(rows[0].recognizer_version_id, None);
     assert_eq!(rows[0].validator_fail_reason, None);
     assert_eq!(rows[0].ambiguity_record, None);
 
@@ -54,6 +56,43 @@ fn spike4_migration_adds_four_columns_and_is_idempotent() {
         Some(ValidatorFailReason::EmailRfcRejected)
     );
     assert_eq!(entries[1].ambiguity_record, Some(record));
+}
+
+#[test]
+fn recognizer_lineage_round_trips_through_redaction_log_rows() {
+    let temp = tempfile::NamedTempFile::new().expect("temp db");
+    let logger = SqliteLogger::new(temp.path()).expect("fresh schema");
+    let entry = RedactionEntry::new(
+        "ner/ort",
+        PiiClass::Name,
+        Action::Tokenize,
+        None,
+        DocumentKind::Text,
+        false,
+        ConflictTier::None,
+        300,
+        Some("session-c".to_string()),
+    )
+    .with_recognizer_metadata(
+        Some("ner".to_string()),
+        Some("ner.davlan-mbert.v1".to_string()),
+    );
+
+    logger.log(&entry).expect("log entry");
+
+    let entries = logger.entries().expect("entries");
+    assert_eq!(entries[0].recognizer_id.as_deref(), Some("ner"));
+    assert_eq!(
+        entries[0].recognizer_version_id.as_deref(),
+        Some("ner.davlan-mbert.v1")
+    );
+
+    let rows = SqliteLogger::query(temp.path(), &AuditFilter::default()).expect("query rows");
+    assert_eq!(rows[0].recognizer_id.as_deref(), Some("ner"));
+    assert_eq!(
+        rows[0].recognizer_version_id.as_deref(),
+        Some("ner.davlan-mbert.v1")
+    );
 }
 
 #[test]
@@ -139,6 +178,8 @@ fn assert_spike4_columns(path: &Path) {
         "ambiguity_record",
         "collision_family",
         "collision_variant",
+        "recognizer_id",
+        "recognizer_version_id",
     ] {
         assert!(columns.iter().any(|actual| actual == column), "{column}");
     }

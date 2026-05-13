@@ -42,6 +42,7 @@ pub(crate) fn load_test_support_recognizer(
         detector: NerDetector {
             model_dir: model_dir.to_path_buf(),
             backend_kind: NerBackendKind::Ort,
+            recognizer_version_id: "ner.test-support.v1".to_string(),
             locale: options.locale.clone(),
             threshold: options.threshold,
             backend: Arc::new(TestSupportBackend),

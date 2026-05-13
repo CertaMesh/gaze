@@ -1465,6 +1465,10 @@ pub enum DocumentKind {
 pub struct RedactionEntry {
     /// Detector or recognizer source identifier.
     pub source: String,
+    /// Stable semantic recognizer identifier, when available.
+    pub recognizer_id: Option<String>,
+    /// Versioned recognizer artifact/rule identifier, when available.
+    pub recognizer_version_id: Option<String>,
     /// PII class affected by the decision.
     pub class: PiiClass,
     /// Policy action applied to the span.
@@ -1491,6 +1495,83 @@ pub struct RedactionEntry {
     pub collision_variant: Option<String>,
 }
 
+impl Serialize for RedactionEntry {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut len = 13;
+        if self.recognizer_id.is_some() {
+            len += 1;
+        }
+        if self.recognizer_version_id.is_some() {
+            len += 1;
+        }
+        let mut state = serializer.serialize_struct("RedactionEntry", len)?;
+        state.serialize_field("source", &self.source)?;
+        if let Some(recognizer_id) = &self.recognizer_id {
+            state.serialize_field("recognizer_id", recognizer_id)?;
+        }
+        if let Some(recognizer_version_id) = &self.recognizer_version_id {
+            state.serialize_field("recognizer_version_id", recognizer_version_id)?;
+        }
+        state.serialize_field("class", &self.class.to_canonical_str())?;
+        state.serialize_field("action", redaction_action_as_str(self.action))?;
+        state.serialize_field("field_name", &self.field_name)?;
+        state.serialize_field(
+            "document_kind",
+            redaction_document_kind_as_str(self.document_kind),
+        )?;
+        state.serialize_field("conflict_loser", &self.conflict_loser)?;
+        state.serialize_field(
+            "decided_by",
+            redaction_conflict_tier_as_str(self.decided_by),
+        )?;
+        state.serialize_field("created_at", &self.created_at)?;
+        state.serialize_field("session_id", &self.session_id)?;
+        state.serialize_field("validator_fail_reason", &self.validator_fail_reason)?;
+        state.serialize_field("ambiguity_record", &self.ambiguity_record)?;
+        state.serialize_field("collision_family", &self.collision_family)?;
+        state.serialize_field("collision_variant", &self.collision_variant)?;
+        state.end()
+    }
+}
+
+fn redaction_action_as_str(action: Action) -> &'static str {
+    match action {
+        Action::Tokenize => "tokenize",
+        Action::Redact => "redact",
+        Action::FormatPreserve => "format_preserve",
+        Action::Generalize => "generalize",
+        Action::Preserve => "preserve",
+    }
+}
+
+fn redaction_document_kind_as_str(kind: DocumentKind) -> &'static str {
+    match kind {
+        DocumentKind::Structured => "structured",
+        DocumentKind::Text => "text",
+    }
+}
+
+fn redaction_conflict_tier_as_str(tier: ConflictTier) -> &'static str {
+    match tier {
+        ConflictTier::None => "none",
+        ConflictTier::ClassPriority => "class_priority",
+        ConflictTier::RulePriority => "rule_priority",
+        ConflictTier::Score => "score",
+        ConflictTier::SpanLength => "span_length",
+        ConflictTier::Validator => "validator",
+        ConflictTier::ValidatorVeto => "validator_veto",
+        ConflictTier::CollisionPolicy => "collision_policy",
+        ConflictTier::AnchoredContext => "anchored_context",
+        ConflictTier::RecognizerId => "recognizer_id",
+        ConflictTier::Merged => "merged",
+    }
+}
+
 impl RedactionEntry {
     /// Builds a metadata-only redaction log entry.
     #[allow(clippy::too_many_arguments)]
@@ -1515,6 +1596,8 @@ impl RedactionEntry {
             decided_by,
             created_at,
             session_id,
+            recognizer_id: None,
+            recognizer_version_id: None,
             validator_fail_reason: None,
             ambiguity_record: None,
             collision_family: None,
@@ -1542,6 +1625,17 @@ impl RedactionEntry {
     ) -> Self {
         self.collision_family = family;
         self.collision_variant = variant;
+        self
+    }
+
+    /// Attaches recognizer lineage metadata to this row.
+    pub fn with_recognizer_metadata(
+        mut self,
+        recognizer_id: Option<String>,
+        recognizer_version_id: Option<String>,
+    ) -> Self {
+        self.recognizer_id = recognizer_id;
+        self.recognizer_version_id = recognizer_version_id;
         self
     }
 }
@@ -2152,6 +2246,8 @@ mod redaction_logger_tests {
         let logger = CapturingLogger;
         let entry = RedactionEntry {
             source: "unit-test".to_string(),
+            recognizer_id: None,
+            recognizer_version_id: None,
             class: PiiClass::Email,
             action: Action::Tokenize,
             field_name: None,
@@ -2168,6 +2264,80 @@ mod redaction_logger_tests {
 
         let trait_object: &dyn RedactionLogger = &logger;
         trait_object.log(&entry).expect("log entry");
+    }
+
+    #[test]
+    fn redaction_entry_json_shape_omits_absent_recognizer_lineage() {
+        let entry = RedactionEntry::new(
+            "email.global",
+            PiiClass::Email,
+            Action::Tokenize,
+            None,
+            DocumentKind::Text,
+            false,
+            ConflictTier::None,
+            0,
+            None,
+        );
+
+        let rendered = serde_json::to_string(&entry).expect("serialize redaction entry");
+
+        assert_eq!(
+            rendered,
+            r#"{"source":"email.global","class":"email","action":"tokenize","field_name":null,"document_kind":"text","conflict_loser":false,"decided_by":"none","created_at":0,"session_id":null,"validator_fail_reason":null,"ambiguity_record":null,"collision_family":null,"collision_variant":null}"#
+        );
+    }
+
+    #[test]
+    fn redaction_entry_json_shape_includes_recognizer_lineage_when_present() {
+        let entry = RedactionEntry::new(
+            "ner/ort",
+            PiiClass::Name,
+            Action::Tokenize,
+            None,
+            DocumentKind::Text,
+            false,
+            ConflictTier::None,
+            0,
+            None,
+        )
+        .with_recognizer_metadata(
+            Some("ner".to_string()),
+            Some("ner.davlan-mbert.v1".to_string()),
+        );
+
+        let value: serde_json::Value =
+            serde_json::to_value(&entry).expect("serialize redaction entry");
+
+        assert_eq!(value["recognizer_id"], "ner");
+        assert_eq!(value["recognizer_version_id"], "ner.davlan-mbert.v1");
+    }
+
+    #[test]
+    fn candidate_keeps_versioned_and_unversioned_recognizer_ids() {
+        let unversioned = Candidate::new(
+            0..5,
+            PiiClass::Email,
+            "email.global",
+            0.9,
+            10,
+            None,
+            "email",
+            "email.global",
+            ConflictTier::None,
+            Vec::new(),
+        );
+        assert_eq!(unversioned.recognizer_id, "email.global");
+        assert_eq!(unversioned.recognizer_version_id, None);
+
+        let versioned = unversioned
+            .clone()
+            .with_recognizer_version_id("email.global.v1");
+        assert_eq!(versioned.recognizer_id, "email.global");
+        assert_eq!(
+            versioned.recognizer_version_id.as_deref(),
+            Some("email.global.v1")
+        );
     }
 }
 
@@ -2368,6 +2538,8 @@ pub struct Candidate {
     pub class: PiiClass,
     /// Recognizer identifier.
     pub recognizer_id: String,
+    /// Optional versioned recognizer identifier for audit lineage.
+    pub recognizer_version_id: Option<String>,
     /// Recognizer confidence score.
     pub score: f32,
     /// Rule or recognizer priority.
@@ -2403,6 +2575,7 @@ impl Candidate {
             span,
             class,
             recognizer_id: recognizer_id.into(),
+            recognizer_version_id: None,
             score,
             priority,
             canonical_form,
@@ -2416,6 +2589,12 @@ impl Candidate {
     /// Returns this candidate with a translated span.
     pub fn with_span(mut self, span: Range<usize>) -> Self {
         self.span = span;
+        self
+    }
+
+    /// Returns this candidate with versioned recognizer lineage attached.
+    pub fn with_recognizer_version_id(mut self, recognizer_version_id: impl Into<String>) -> Self {
+        self.recognizer_version_id = Some(recognizer_version_id.into());
         self
     }
 }

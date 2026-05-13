@@ -17,6 +17,7 @@ pub struct NerDetector {
     #[allow(dead_code)]
     pub(crate) model_dir: PathBuf,
     pub(crate) backend_kind: NerBackendKind,
+    pub(crate) recognizer_version_id: String,
     pub(crate) locale: Option<String>,
     pub(crate) threshold: f32,
     pub(crate) backend: Arc<dyn NerBackend>,
@@ -27,6 +28,7 @@ impl fmt::Debug for NerDetector {
         f.debug_struct("NerDetector")
             .field("model_dir", &self.model_dir)
             .field("backend_kind", &self.backend_kind)
+            .field("recognizer_version_id", &self.recognizer_version_id)
             .field("locale", &self.locale)
             .field("threshold", &self.threshold)
             .finish_non_exhaustive()
@@ -43,6 +45,10 @@ impl NerDetector {
     pub fn load_with_options(model_dir: &Path, options: NerOptions) -> Result<Self, NerLoadError> {
         let verified = Self::verify_artifacts(model_dir)?;
         let backend_kind = verified.backend_kind;
+        let recognizer_version_id = format!(
+            "ner.{}.{}",
+            verified.recognizer_model_id, verified.recognizer_model_version
+        );
         let model_dir_path = verified.model_dir.clone();
         let label_count = verified.labels.len();
         let id2label_len = verified.id2label.len();
@@ -51,6 +57,7 @@ impl NerDetector {
 
         tracing::info!(
             backend = backend_kind.as_str(),
+            recognizer_version_id = %recognizer_version_id,
             labels = label_count,
             id2label_size = id2label_len,
             locale = options.locale.as_deref().unwrap_or(""),
@@ -62,6 +69,7 @@ impl NerDetector {
         Ok(Self {
             model_dir: model_dir_path,
             backend_kind,
+            recognizer_version_id,
             locale: options.locale,
             threshold: options.threshold,
             backend,
@@ -74,6 +82,10 @@ impl NerDetector {
 
     pub fn backend_kind(&self) -> NerBackendKind {
         self.backend_kind
+    }
+
+    pub fn recognizer_version_id(&self) -> &str {
+        &self.recognizer_version_id
     }
 
     /// Label/offset reconstruction helper. Public for testing the BIO merge.

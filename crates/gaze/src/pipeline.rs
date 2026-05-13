@@ -480,6 +480,10 @@ impl Pipeline {
             detection.decided_by,
             crate::redaction_log::current_epoch_ms(),
             Some(session.audit_session_id().to_string()),
+        )
+        .with_recognizer_metadata(
+            detection.recognizer_id.clone(),
+            detection.recognizer_version_id.clone(),
         );
         if let Some(record) = detection.ambiguity_record.clone() {
             entry = entry.with_ambiguity_record(record);
@@ -523,6 +527,10 @@ impl Pipeline {
             crate::redaction_log::current_epoch_ms(),
             Some(session.audit_session_id().to_string()),
         )
+        .with_recognizer_metadata(
+            Some(vetoed.candidate.recognizer_id.clone()),
+            vetoed.candidate.recognizer_version_id.clone(),
+        )
         .with_validator_fail_reason(vetoed.reason);
 
         for logger in &self.redaction_loggers {
@@ -536,6 +544,8 @@ impl Pipeline {
 #[derive(Clone)]
 struct IndexedDetection {
     detection: Detection,
+    recognizer_id: Option<String>,
+    recognizer_version_id: Option<String>,
     decided_by: ConflictTier,
     family: String,
     ambiguity_record: Option<AmbiguityRecord>,
@@ -966,6 +976,8 @@ fn merged_losers(resolved: &[Candidate], registry: &RecognizerRegistry) -> Vec<I
                 let membership = registry.family_policy().membership(source);
                 IndexedDetection {
                     detection: Detection::new(winner.span.clone(), class, source.clone()),
+                    recognizer_id: Some(source.clone()),
+                    recognizer_version_id: None,
                     decided_by: if winner.decided_by == ConflictTier::Merged {
                         ConflictTier::Merged
                     } else {
@@ -1006,6 +1018,8 @@ fn indexed_detection_from_candidate(
 
     IndexedDetection {
         detection: Detection::new(candidate.span, candidate.class, candidate.source),
+        recognizer_id: Some(candidate.recognizer_id),
+        recognizer_version_id: candidate.recognizer_version_id,
         decided_by: candidate.decided_by,
         family: candidate.token_family,
         ambiguity_record,
@@ -1219,6 +1233,73 @@ mod tests {
         let entries = entries.lock().unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries.iter().all(|e| !e.conflict_loser));
+    }
+
+    #[test]
+    fn audit_entry_threads_recognizer_lineage_from_candidate() {
+        struct VersionedRecognizer;
+
+        impl Recognizer for VersionedRecognizer {
+            fn id(&self) -> &str {
+                "name.semantic"
+            }
+
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Name
+            }
+
+            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+                let Some(start) = input.find("Dr. Schmidt") else {
+                    return Vec::new();
+                };
+                let end = start + "Dr. Schmidt".len();
+                vec![Candidate::new(
+                    start..end,
+                    PiiClass::Name,
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    self.token_family(),
+                    "ner/ort",
+                    ConflictTier::None,
+                    Vec::new(),
+                )
+                .with_recognizer_version_id("name.semantic.v2")]
+            }
+
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+        }
+
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .recognizer(VersionedRecognizer)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Contact Dr. Schmidt today.".to_string()),
+            )
+            .expect("redact");
+
+        let entries = entries.lock().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "ner/ort");
+        assert_eq!(entries[0].recognizer_id.as_deref(), Some("name.semantic"));
+        assert_eq!(
+            entries[0].recognizer_version_id.as_deref(),
+            Some("name.semantic.v2")
+        );
     }
 
     #[test]
