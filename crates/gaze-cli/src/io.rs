@@ -43,6 +43,8 @@ pub(crate) fn require_json_format(format: &str) -> std::result::Result<(), CliEr
     if format == "json" {
         Ok(())
     } else {
-        Err(CliError::PolicyConfig)
+        Err(CliError::PolicyConfigDetail(format!(
+            "--format must be 'json', got '{format}'"
+        )))
     }
 }
