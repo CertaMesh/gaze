@@ -144,6 +144,18 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
             PiiClass::Custom("credit_card".to_string()),
             Action::Tokenize,
         ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("ssn".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("nino".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("pan".to_string()),
+            Action::Tokenize,
+        ))
         .rule(DefaultRule::new(Action::Preserve));
 
     for spec in &rulepack.recognizers {
@@ -478,6 +490,67 @@ fn corpus_accepts_universal_shapes_and_rejects_tenant_like_phone_inputs() {
         detect_recognizer(&rulepack, "postal.us", "ZIP 94103-1234", LocaleTag::EnUs),
         vec!["94103-1234".to_string()]
     );
+
+    for (recognizer_id, locale, input, expected) in [
+        ("ssn.us", LocaleTag::EnUs, "SSN 123-45-6789", "123-45-6789"),
+        (
+            "ssn.us",
+            LocaleTag::EnUs,
+            "Social Security Number:\n123456789",
+            "123456789",
+        ),
+        (
+            "nino.uk",
+            LocaleTag::EnGb,
+            "National Insurance Number AB123456C",
+            "AB123456C",
+        ),
+        (
+            "nino.uk",
+            LocaleTag::EnGb,
+            "NI Number: AB 12 34 56 C",
+            "AB 12 34 56 C",
+        ),
+        (
+            "pan.in",
+            LocaleTag::Other("en-IN".to_string()),
+            "PAN card ABCPA1234F",
+            "ABCPA1234F",
+        ),
+        (
+            "pan.in",
+            LocaleTag::Other("hi-IN".to_string()),
+            "पैन ABCPA1234F",
+            "ABCPA1234F",
+        ),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, recognizer_id, input, locale),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+
+    for (recognizer_id, locale, input) in [
+        ("ssn.us", LocaleTag::EnUs, "Reference 123-45-6789"),
+        ("nino.uk", LocaleTag::EnGb, "Reference AB123456C"),
+        ("nino.uk", LocaleTag::EnGb, "NINO GB123456C"),
+        (
+            "pan.in",
+            LocaleTag::Other("en-IN".to_string()),
+            "Reference ABCPA1234F",
+        ),
+        (
+            "pan.in",
+            LocaleTag::Other("en-IN".to_string()),
+            "PAN ABCDA1234F",
+        ),
+    ] {
+        assert!(
+            detect_recognizer(&rulepack, recognizer_id, input, locale).is_empty(),
+            "{recognizer_id} must not fire for {input}"
+        );
+    }
 
     // Source: synthetic-non-reachable; no DE equivalent of NANPA 555-01XX exists.
     // +49 1555 0112233-style literals follow the documented DE fixture shape;

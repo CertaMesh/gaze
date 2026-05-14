@@ -169,12 +169,19 @@ spawns.
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
 none) is unchanged.
 
-### Tier 3 — Regex-only locale recognizers (queued)
+### Tier 3 — Regex-only locale recognizers (additive)
 
-Queued as a follow-up PR after Tier 2 merges. Adds US SSN, UK NINO, and
-Indian PAN as `safety_tier = "locale_gated"` recognizers — they fire
-only when the resolved locale matches. No validator math; cue-anchored
-in the style of the v0.6 cue-anchored Name detection.
+PR [#208](https://github.com/EmpireTwo/gaze/pull/208).
+
+Adds US SSN, UK NINO, and Indian PAN as `safety_tier = "locale_gated"`
+recognizers — they fire only when the resolved locale matches. No
+validator math; regex shape plus cue context only.
+
+| Entity     | Locale | Cue examples                              | ValidatorKind |
+| ---------- | ------ | ----------------------------------------- | ------------- |
+| US SSN     | US     | `SSN`, `Social Security Number`, `SS#`    | None          |
+| UK NINO    | UK     | `NINO`, `NI Number`, `National Insurance` | None          |
+| Indian PAN | IN     | `PAN`, `Permanent Account Number`, `पैन`  | None          |
 
 **Action required:** none — pure additive coverage when the relevant
 locale is set.

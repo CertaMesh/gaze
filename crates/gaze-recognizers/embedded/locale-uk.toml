@@ -6,3 +6,7 @@ default_locales = ["en-GB"]
 [locale.cues.nhs]
 names = ["NHS number", "NHS no", "NHS id"]
 window_chars = 64
+
+[locale.cues.nino]
+names = ["NINO", "NI Number", "National Insurance", "National Insurance Number"]
+window_chars = 64

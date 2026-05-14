@@ -2716,6 +2716,9 @@ fn s2_cli_core_validator_locale_entities_tokenize_and_round_trip() {
         ("en-IN", "en-US", "Aadhaar 6741 8529 6303", "aadhaar"),
         ("en-GB", "fr-FR", "NHS number 943 476 5919", "nhs_number"),
         ("de-DE", "en-US", "Steuer-ID 48 954 371 207", "steuer_id"),
+        ("en-US", "en-GB", "SSN 123-45-6789", "ssn"),
+        ("en-GB", "en-US", "NINO AB123456C", "nino"),
+        ("en-IN", "en-US", "PAN ABCPA1234F", "pan"),
     ] {
         let value = clean_json_with_args(
             &["--rulepack-bundled=core", &format!("--locale={locale}")],
