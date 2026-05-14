@@ -75,6 +75,17 @@ fn clean(args: &[String], input: &str) -> std::process::Output {
         .unwrap()
 }
 
+fn clean_with_tolerant_env(args: &[String], input: &str) -> std::process::Output {
+    Command::cargo_bin("gaze")
+        .unwrap()
+        .arg("clean")
+        .args(args)
+        .env("GAZE_ALLOW_TOLERANT", "1")
+        .write_stdin(input.as_bytes().to_vec())
+        .output()
+        .unwrap()
+}
+
 fn safety_args(command: &Path, checkpoint: &Path) -> Vec<String> {
     vec![
         "--safety-net".to_string(),
@@ -149,13 +160,62 @@ fn missing_checkpoint_fails_closed_with_sanitized_error() {
 fn uncovered_suspect_exits_three_in_strict_mode_without_stdout() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_person","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
-    let out = clean(&safety_args(&opf, checkpoint.path()), "Plain text");
+    let mut args = safety_args(&opf, checkpoint.path());
+    args.extend(["--safety-net-mode".to_string(), "strict".to_string()]);
+    let out = clean(&args, "Plain text");
 
     assert_eq!(out.status.code(), Some(3));
     assert!(out.stdout.is_empty());
     let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
     assert_eq!(stderr["variant"], "SuspectedLeak");
     assert!(!String::from_utf8_lossy(&out.stderr).contains("Plain text"));
+}
+
+#[test]
+fn default_safety_net_mode_resolves_with_redact_fallback() {
+    let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
+    let checkpoint = checkpoint_dir();
+    let out = clean(&safety_args(&opf, checkpoint.path()), "Plain text");
+
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let body: Value = serde_json::from_slice(&out.stdout).unwrap();
+    let clean_text = body["clean_text"].as_str().expect("clean_text");
+    assert!(!clean_text.starts_with("Plain"));
+    assert!(clean_text.ends_with(" text"));
+    assert_eq!(body["leak_report"]["stats"]["uncovered_count"], 1);
+}
+
+#[test]
+fn tolerant_mode_requires_env_opt_in() {
+    let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
+    let checkpoint = checkpoint_dir();
+    let mut args = safety_args(&opf, checkpoint.path());
+    args.extend(["--safety-net-mode".to_string(), "tolerant".to_string()]);
+    let out = clean(&args, "Plain text");
+
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty());
+    let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(stderr["variant"], "TolerantModeDisabled");
+}
+
+#[test]
+fn tolerant_fallback_requires_env_opt_in() {
+    let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
+    let checkpoint = checkpoint_dir();
+    let mut args = safety_args(&opf, checkpoint.path());
+    args.extend(["--safety-net-fallback".to_string(), "tolerant".to_string()]);
+    let out = clean(&args, "Plain text");
+
+    assert_eq!(out.status.code(), Some(3));
+    assert!(out.stdout.is_empty());
+    let stderr: Value = serde_json::from_slice(&out.stderr).unwrap();
+    assert_eq!(stderr["variant"], "TolerantModeDisabled");
 }
 
 #[test]
@@ -204,10 +264,10 @@ fn tolerant_uncovered_outputs_report_and_logs_audit_row() {
         "--audit-db".to_string(),
         audit.display().to_string(),
     ]);
-    let out = clean(&args, "Plain text");
+    let out = clean_with_tolerant_env(&args, "Plain text");
 
     assert_eq!(out.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&out.stderr).contains(r#""variant":"SuspectedLeak""#));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("warning: tolerant mode downgrades"));
     let body: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(body["leak_report"]["stats"]["uncovered_count"], 1);
 

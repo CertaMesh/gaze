@@ -287,6 +287,7 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
+            fallback_triggered: None,
         },
         AuditLogRow {
             source: "dictionary".to_string(),
@@ -307,6 +308,7 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
+            fallback_triggered: None,
         },
     ]
 }

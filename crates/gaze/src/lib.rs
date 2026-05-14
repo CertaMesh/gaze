@@ -32,12 +32,14 @@ pub use dictionaries::{
 pub use gaze_types::{
     CodecAuditRow, CodecCapabilitySet, CollisionMembership, DocumentExtension,
     DocumentExtensionBuilder, DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy,
-    LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect, Manifest,
-    OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
+    FallbackReason, LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect,
+    Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
     SafetyNetError, SafetyNetPiiClass, SafetyTier, TextOrigin, RESERVED_BUNDLED_FAMILIES,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
-pub use pipeline::{Error, Pipeline, PipelineBuilder, Result};
+pub use pipeline::{
+    Error, Pipeline, PipelineBuilder, Result, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+};
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,
     RulepackPolicy, SessionPolicy, SessionScope, DEFAULT_NER_THRESHOLD,

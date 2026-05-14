@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 use gaze_types::{
-    AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, LeakReport,
-    LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError, RedactionLogger, SafetyNet,
-    SafetyNetContext, SafetyNetError,
+    AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
+    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
+    RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
 };
 use thiserror::Error;
 
@@ -52,12 +53,53 @@ pub enum Error {
     SafetyNet(#[from] SafetyNetError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
+    #[error("safety net fallback failed closed: {0:?}")]
+    SafetyNetFallback(FallbackReason),
     #[error("unsupported raw document variant")]
     UnsupportedRawDocumentVariant,
     #[error("unsupported structured value variant")]
     UnsupportedValueVariant,
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SafetyNetMode {
+    Strict,
+    Tolerant,
+    Redact,
+    Resolve,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SafetyNetFallback {
+    Strict,
+    Tolerant,
+    Redact,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct SafetyNetPolicy {
+    pub mode: SafetyNetMode,
+    pub fallback: SafetyNetFallback,
+}
+
+impl Default for SafetyNetPolicy {
+    fn default() -> Self {
+        Self {
+            mode: SafetyNetMode::Resolve,
+            fallback: SafetyNetFallback::Redact,
+        }
+    }
+}
+
+impl SafetyNetPolicy {
+    pub fn new(mode: SafetyNetMode, fallback: SafetyNetFallback) -> Self {
+        Self { mode, fallback }
+    }
 }
 
 /// The stateless PII pseudonymization engine.
@@ -200,6 +242,23 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        self.clean_with_safety_net_policy_detect_context(
+            session,
+            raw,
+            locale_chain,
+            dictionaries,
+            SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+        )
+    }
+
+    pub fn clean_with_safety_net_policy_detect_context(
+        &self,
+        session: &Session,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         match raw {
             RawDocument::Structured(structured_fields) => {
                 let mut report = LeakReport::default();
@@ -214,7 +273,7 @@ impl Pipeline {
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
             }
             RawDocument::Text(text) => {
-                let clean = self.redact_text_with_manifest(
+                let mut clean = self.redact_text_with_manifest(
                     session,
                     &text,
                     None,
@@ -229,6 +288,15 @@ impl Pipeline {
                     DocumentKind::Text,
                     locale_chain,
                     None,
+                )?;
+                self.apply_safety_net_policy(
+                    session,
+                    &mut clean,
+                    &report,
+                    DocumentKind::Text,
+                    locale_chain,
+                    None,
+                    policy,
                 )?;
                 Ok((CleanDocument::Text(clean.text), clean.manifest, report))
             }
@@ -454,6 +522,223 @@ impl Pipeline {
         Ok(LeakReport::from_parts(suspects, telemetry))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    fn apply_safety_net_policy(
+        &self,
+        session: &Session,
+        clean: &mut CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        field_path: Option<&str>,
+        policy: SafetyNetPolicy,
+    ) -> Result<()> {
+        match policy.mode {
+            SafetyNetMode::Strict | SafetyNetMode::Tolerant => Ok(()),
+            SafetyNetMode::Redact => self.redact_safety_net_suspects(
+                session,
+                clean,
+                report,
+                document_kind,
+                field_path,
+                None,
+                true,
+            ),
+            SafetyNetMode::Resolve => {
+                let reason = match self.resolve_safety_net_suspects(
+                    session,
+                    clean,
+                    report,
+                    document_kind,
+                    field_path,
+                )? {
+                    Some(reason) => Some(reason),
+                    None => {
+                        let follow_up = self.run_safety_nets(
+                            session,
+                            &clean.text,
+                            &Manifest::from_spans(clean.manifest.clone()),
+                            document_kind,
+                            locale_chain,
+                            field_path,
+                        )?;
+                        (follow_up.stats.uncovered_count + follow_up.stats.partial_bleed_count > 0)
+                            .then_some(FallbackReason::ResidualSuspect)
+                    }
+                };
+                if let Some(reason) = reason {
+                    self.apply_safety_net_fallback(
+                        session,
+                        clean,
+                        report,
+                        document_kind,
+                        field_path,
+                        policy.fallback,
+                        reason,
+                    )?;
+                }
+                Ok(())
+            }
+        }
+    }
+
+    fn resolve_safety_net_suspects(
+        &self,
+        session: &Session,
+        clean: &mut CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+    ) -> Result<Option<FallbackReason>> {
+        if report
+            .suspects
+            .iter()
+            .any(|suspect| matches!(suspect.kind, LeakKind::ClassMismatch { .. }))
+        {
+            return Ok(Some(FallbackReason::OverlapConflict));
+        }
+        for suspect in actionable_suspects(report).into_iter().rev() {
+            let span = suspect_action_span(suspect);
+            if !is_char_boundary_range(&clean.text, &span) {
+                return Ok(Some(FallbackReason::ResidualSuspect));
+            }
+            let raw = clean.text[span.clone()].to_string();
+            let replacement = session.tokenize_with_family("safety_net", &suspect.class, &raw)?;
+            self.log_safety_net_entry(
+                session,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Tokenize,
+                false,
+                ConflictTier::Resolve,
+                None,
+            )?;
+            replace_clean_span(
+                clean,
+                span.clone(),
+                &replacement,
+                Some(EmittedTokenSpan::new(
+                    span.start..span.start + replacement.len(),
+                    span,
+                    suspect.class.clone(),
+                )),
+            );
+        }
+        Ok(None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn apply_safety_net_fallback(
+        &self,
+        session: &Session,
+        clean: &mut CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        fallback: SafetyNetFallback,
+        reason: FallbackReason,
+    ) -> Result<()> {
+        for suspect in redaction_suspects(report) {
+            self.log_safety_net_entry(
+                session,
+                suspect,
+                document_kind,
+                field_path,
+                fallback_action(fallback),
+                true,
+                ConflictTier::Fallback,
+                Some(reason),
+            )?;
+        }
+        match fallback {
+            SafetyNetFallback::Strict => Err(Error::SafetyNetFallback(reason)),
+            SafetyNetFallback::Tolerant => Ok(()),
+            SafetyNetFallback::Redact => self.redact_safety_net_suspects(
+                session,
+                clean,
+                report,
+                document_kind,
+                field_path,
+                Some(reason),
+                false,
+            ),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn redact_safety_net_suspects(
+        &self,
+        session: &Session,
+        clean: &mut CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        fallback_reason: Option<FallbackReason>,
+        log_entries: bool,
+    ) -> Result<()> {
+        for suspect in redaction_suspects(report).into_iter().rev() {
+            let span = suspect_action_span(suspect);
+            if !is_char_boundary_range(&clean.text, &span) {
+                continue;
+            }
+            if log_entries {
+                self.log_safety_net_entry(
+                    session,
+                    suspect,
+                    document_kind,
+                    field_path,
+                    Action::Redact,
+                    fallback_reason.is_some(),
+                    if fallback_reason.is_some() {
+                        ConflictTier::Fallback
+                    } else {
+                        ConflictTier::Redact
+                    },
+                    fallback_reason,
+                )?;
+            }
+            replace_clean_span(clean, span, "", None);
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn log_safety_net_entry(
+        &self,
+        session: &Session,
+        suspect: &LeakSuspect,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        action: Action,
+        conflict_loser: bool,
+        decided_by: ConflictTier,
+        fallback_reason: Option<FallbackReason>,
+    ) -> Result<()> {
+        let source = format!("safety_net.{}", suspect.safety_net_id);
+        let mut entry = RedactionEntry::new(
+            source.clone(),
+            suspect.class.clone(),
+            action,
+            field_path
+                .map(str::to_string)
+                .or_else(|| suspect.field_path.clone()),
+            document_kind,
+            conflict_loser,
+            decided_by,
+            crate::redaction_log::current_epoch_ms(),
+            Some(session.audit_session_id().to_string()),
+        )
+        .with_recognizer_metadata(Some(source), None);
+        if let Some(reason) = fallback_reason {
+            entry = entry.with_fallback_triggered(reason);
+        }
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+        Ok(())
+    }
+
     fn action_for(&self, detection: &Detection, context: &RuleContext) -> Action {
         self.rules
             .iter()
@@ -556,6 +841,90 @@ struct IndexedDetection {
 struct CleanText {
     text: String,
     manifest: Vec<EmittedTokenSpan>,
+}
+
+fn actionable_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
+    let mut suspects = report
+        .suspects
+        .iter()
+        .filter(|suspect| {
+            matches!(
+                suspect.kind,
+                LeakKind::Uncovered | LeakKind::PartialBleed { .. }
+            )
+        })
+        .collect::<Vec<_>>();
+    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
+    suspects
+}
+
+fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
+    let mut suspects = report.suspects.iter().collect::<Vec<_>>();
+    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
+    suspects
+}
+
+fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
+    match &suspect.kind {
+        LeakKind::PartialBleed { uncovered } => uncovered.clone(),
+        _ => suspect.span.clone(),
+    }
+}
+
+fn fallback_action(fallback: SafetyNetFallback) -> Action {
+    match fallback {
+        SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
+        SafetyNetFallback::Redact => Action::Redact,
+    }
+}
+
+fn is_char_boundary_range(text: &str, span: &Range<usize>) -> bool {
+    span.start <= span.end
+        && span.end <= text.len()
+        && text.is_char_boundary(span.start)
+        && text.is_char_boundary(span.end)
+}
+
+fn replace_clean_span(
+    clean: &mut CleanText,
+    span: Range<usize>,
+    replacement: &str,
+    emitted: Option<EmittedTokenSpan>,
+) {
+    let removed_len = span.end - span.start;
+    let replacement_len = replacement.len();
+    clean.text.replace_range(span.clone(), replacement);
+    clean.manifest = clean
+        .manifest
+        .iter()
+        .filter_map(|existing| adjust_emitted_span(existing, &span, replacement_len, removed_len))
+        .chain(emitted)
+        .collect();
+    clean.manifest.sort_by_key(|span| span.clean_span.start);
+}
+
+fn adjust_emitted_span(
+    existing: &EmittedTokenSpan,
+    edited: &Range<usize>,
+    replacement_len: usize,
+    removed_len: usize,
+) -> Option<EmittedTokenSpan> {
+    if existing.clean_span.start < edited.end && edited.start < existing.clean_span.end {
+        return None;
+    }
+    let mut span = existing.clone();
+    if span.clean_span.start >= edited.end {
+        if replacement_len >= removed_len {
+            let delta = replacement_len - removed_len;
+            span.clean_span.start += delta;
+            span.clean_span.end += delta;
+        } else {
+            let delta = removed_len - replacement_len;
+            span.clean_span.start -= delta;
+            span.clean_span.end -= delta;
+        }
+    }
+    Some(span)
 }
 
 /// Builder for [`Pipeline`].

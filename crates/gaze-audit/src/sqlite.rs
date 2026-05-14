@@ -2,8 +2,8 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use gaze_types::{
-    Action, AmbiguityRecord, ConflictTier, DocumentKind, LeakKind, LeakSuspect, PiiClass,
-    RedactionEntry, ValidatorFailReason,
+    Action, AmbiguityRecord, ConflictTier, DocumentKind, FallbackReason, LeakKind, LeakSuspect,
+    PiiClass, RedactionEntry, ValidatorFailReason,
 };
 use rusqlite::{params, params_from_iter, Connection, OpenFlags};
 use serde::de::DeserializeOwned;
@@ -153,7 +153,8 @@ impl SqliteLogger {
                 validator_fail_reason TEXT NULL,
                 ambiguity_record TEXT NULL,
                 collision_family TEXT NULL,
-                collision_variant TEXT NULL
+                collision_variant TEXT NULL,
+                fallback_triggered TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS safety_net_log (
@@ -273,6 +274,13 @@ impl SqliteLogger {
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         }
+        if !columns.iter().any(|column| column == "fallback_triggered") {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN fallback_triggered TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
         if !columns.iter().any(|column| column == "recognizer_id") {
             conn.execute(
                 "ALTER TABLE redaction_log ADD COLUMN recognizer_id TEXT NULL",
@@ -303,12 +311,13 @@ impl SqliteLogger {
     pub fn log(&self, entry: &RedactionEntry) -> Result<()> {
         let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
         let ambiguity_record = serialize_json_column(entry.ambiguity_record.as_ref())?;
+        let fallback_triggered = entry.fallback_triggered.map(fallback_reason_to_db);
         let conn = self
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -325,6 +334,7 @@ impl SqliteLogger {
                 ambiguity_record,
                 entry.collision_family,
                 entry.collision_variant,
+                fallback_triggered,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -338,7 +348,7 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -365,6 +375,13 @@ impl SqliteLogger {
                     entry = entry.with_ambiguity_record(record);
                 }
                 entry = entry.with_collision_metadata(row.get(13)?, row.get(14)?);
+                if let Some(reason) = row
+                    .get::<_, Option<String>>(15)?
+                    .map(|value| fallback_reason_from_db(&value))
+                    .transpose()?
+                {
+                    entry = entry.with_fallback_triggered(reason);
+                }
                 Ok(entry)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -393,6 +410,7 @@ impl SqliteLogger {
         let has_ambiguity_record = table_has_column(&conn, "ambiguity_record")?;
         let has_collision_family = table_has_column(&conn, "collision_family")?;
         let has_collision_variant = table_has_column(&conn, "collision_variant")?;
+        let has_fallback_triggered = table_has_column(&conn, "fallback_triggered")?;
         let has_recognizer_id = table_has_column(&conn, "recognizer_id")?;
         let has_recognizer_version_id = table_has_column(&conn, "recognizer_version_id")?;
         let (sql, values) = build_audit_query_sql(
@@ -407,6 +425,7 @@ impl SqliteLogger {
             has_ambiguity_record,
             has_collision_family,
             has_collision_variant,
+            has_fallback_triggered,
             has_recognizer_id,
             has_recognizer_version_id,
         );
@@ -434,6 +453,7 @@ impl SqliteLogger {
                     ambiguity_record: row.get(15)?,
                     collision_family: row.get(16)?,
                     collision_variant: row.get(17)?,
+                    fallback_triggered: row.get(18)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -575,8 +595,40 @@ fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
         ConflictTier::AnchoredContext => "anchored_context",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
+        ConflictTier::Redact => "redact",
+        ConflictTier::Resolve => "resolve",
+        ConflictTier::Fallback => "fallback",
         _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {tier:?}"),
     }
+}
+
+fn fallback_reason_to_db(reason: FallbackReason) -> &'static str {
+    match reason {
+        FallbackReason::OverlapConflict => "overlap_conflict",
+        FallbackReason::ValidatorVeto => "validator_veto",
+        FallbackReason::AnchorMissing => "anchor_missing",
+        FallbackReason::ResidualSuspect => "residual_suspect",
+        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {reason:?}"),
+    }
+}
+
+fn fallback_reason_from_db(value: &str) -> std::result::Result<FallbackReason, rusqlite::Error> {
+    Ok(match value {
+        "overlap_conflict" => FallbackReason::OverlapConflict,
+        "validator_veto" => FallbackReason::ValidatorVeto,
+        "anchor_missing" => FallbackReason::AnchorMissing,
+        "residual_suspect" => FallbackReason::ResidualSuspect,
+        other => {
+            return Err(rusqlite::Error::FromSqlConversionFailure(
+                18,
+                rusqlite::types::Type::Text,
+                Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("unknown fallback reason {other}"),
+                )),
+            ))
+        }
+    })
 }
 
 fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
@@ -632,6 +684,9 @@ fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusql
         "anchored_context" => ConflictTier::AnchoredContext,
         "recognizer_id" => ConflictTier::RecognizerId,
         "merged" => ConflictTier::Merged,
+        "redact" => ConflictTier::Redact,
+        "resolve" => ConflictTier::Resolve,
+        "fallback" => ConflictTier::Fallback,
         other => {
             return Err(rusqlite::Error::FromSqlConversionFailure(
                 6,

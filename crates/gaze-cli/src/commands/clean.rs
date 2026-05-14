@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
 use super::{
-    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetKind, SafetyNetMode,
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
+    SafetyNetKind, SafetyNetMode,
 };
 use crate::error::CliError;
 use crate::pipeline::{run_clean, CleanOptions};
@@ -31,6 +32,7 @@ pub(crate) struct Args {
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
+    pub(crate) safety_net_fallback: SafetyNetFallback,
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
@@ -59,5 +61,6 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         safety_net_timeout_ms: args.safety_net_timeout_ms,
         safety_net_input_limit_bytes: args.safety_net_input_limit_bytes,
         safety_net_mode: args.safety_net_mode,
+        safety_net_fallback: args.safety_net_fallback,
     })
 }

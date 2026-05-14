@@ -19,8 +19,9 @@ use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetKind, SafetyNetMode,
-    DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES, DEFAULT_SAFETY_NET_TIMEOUT_MS,
+    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
+    SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
+    DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
@@ -57,6 +58,7 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
+    pub(crate) safety_net_fallback: SafetyNetFallback,
 }
 
 /// Resolves the active Pass-3 SafetyNet backend.
@@ -168,6 +170,14 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         }
     };
     let pipeline = maybe_register_safety_net(pipeline, &options)?;
+    validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
+    if matches!(
+        options.safety_net_mode,
+        SafetyNetMode::Strict | SafetyNetMode::Tolerant
+    ) && options.safety_net_fallback != SafetyNetFallback::Redact
+    {
+        eprintln!("warning: --safety-net-fallback is ignored when --safety-net-mode is terminal");
+    }
 
     let session = match effective_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
@@ -180,11 +190,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
 
     let (clean_doc, leak_report) = if options.safety_net.is_some() {
         let (doc, _manifest, _report) = pipeline
-            .clean_with_safety_net_detect_context(
+            .clean_with_safety_net_policy_detect_context(
                 &session,
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
+                safety_net_policy(options.safety_net_mode, options.safety_net_fallback),
             )
             .map_err(map_safety_net_pipeline_error)?;
         (doc, _report)
@@ -202,7 +213,11 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     counter
         .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
         .map_err(|_| CliError::Pipeline)?;
-    enforce_safety_net_mode(&leak_report, options.safety_net_mode)?;
+    enforce_safety_net_mode(
+        &leak_report,
+        options.safety_net_mode,
+        options.safety_net_fallback,
+    )?;
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
@@ -774,6 +789,7 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
 fn enforce_safety_net_mode(
     report: &LeakReport,
     mode: SafetyNetMode,
+    fallback: SafetyNetFallback,
 ) -> std::result::Result<(), CliError> {
     let suspected_leaks = report.stats.uncovered_count + report.stats.partial_bleed_count;
     if suspected_leaks > 0 {
@@ -783,13 +799,54 @@ fn enforce_safety_net_mode(
                     variant: "SuspectedLeak",
                 });
             }
-            SafetyNetMode::Tolerant => emit_safety_net_warning("SuspectedLeak", suspected_leaks),
+            SafetyNetMode::Tolerant => emit_tolerant_deprecation_warning(),
+            SafetyNetMode::Redact | SafetyNetMode::Resolve => {
+                if fallback == SafetyNetFallback::Tolerant {
+                    emit_tolerant_deprecation_warning();
+                }
+            }
         }
     }
     if report.stats.class_mismatch_count > 0 {
         emit_safety_net_warning("ClassMismatch", report.stats.class_mismatch_count);
     }
     Ok(())
+}
+
+fn validate_safety_net_tolerant_gate(
+    mode: SafetyNetMode,
+    fallback: SafetyNetFallback,
+) -> std::result::Result<(), CliError> {
+    if (mode == SafetyNetMode::Tolerant || fallback == SafetyNetFallback::Tolerant)
+        && std::env::var_os("GAZE_ALLOW_TOLERANT").is_none()
+    {
+        return Err(CliError::SafetyNetFailure {
+            variant: "TolerantModeDisabled",
+        });
+    }
+    Ok(())
+}
+
+fn safety_net_policy(mode: SafetyNetMode, fallback: SafetyNetFallback) -> gaze::SafetyNetPolicy {
+    gaze::SafetyNetPolicy::new(
+        match mode {
+            SafetyNetMode::Strict => gaze::SafetyNetMode::Strict,
+            SafetyNetMode::Tolerant => gaze::SafetyNetMode::Tolerant,
+            SafetyNetMode::Redact => gaze::SafetyNetMode::Redact,
+            SafetyNetMode::Resolve => gaze::SafetyNetMode::Resolve,
+        },
+        match fallback {
+            SafetyNetFallback::Strict => gaze::SafetyNetFallback::Strict,
+            SafetyNetFallback::Tolerant => gaze::SafetyNetFallback::Tolerant,
+            SafetyNetFallback::Redact => gaze::SafetyNetFallback::Redact,
+        },
+    )
+}
+
+fn emit_tolerant_deprecation_warning() {
+    eprintln!(
+        "warning: tolerant mode downgrades suspect leaks; deprecated v0.9, removal candidate v0.10."
+    );
 }
 
 fn emit_safety_net_warning(variant: &'static str, count: usize) {

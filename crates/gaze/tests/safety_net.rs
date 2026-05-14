@@ -3,9 +3,10 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, Detection, Detector, DocumentKind,
-    EmittedTokenSpan, LeakKind, LeakReportTelemetry, LeakSuspect, PiiClass, Pipeline, RawDocument,
-    SafetyNet, SafetyNetContext, SafetyNetError, Scope, Session, Value,
+    Action, ClassRule, CleanDocument, ConflictTier, DefaultRule, Detection, Detector, DocumentKind,
+    EmittedTokenSpan, FallbackReason, LeakKind, LeakReportTelemetry, LeakSuspect, PiiClass,
+    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, SafetyNet,
+    SafetyNetContext, SafetyNetError, Scope, Session, Value,
 };
 
 #[derive(Clone)]
@@ -42,6 +43,30 @@ struct SeenCheck {
     field_path: Option<String>,
     document_kind: DocumentKind,
     manifest: Vec<EmittedTokenSpan>,
+}
+
+#[derive(Clone)]
+struct MemoryLogger {
+    entries: Arc<Mutex<Vec<RedactionEntry>>>,
+}
+
+impl MemoryLogger {
+    fn new() -> Self {
+        Self {
+            entries: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn entries(&self) -> Vec<RedactionEntry> {
+        self.entries.lock().expect("entries").clone()
+    }
+}
+
+impl RedactionLogger for MemoryLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        self.entries.lock().expect("entries").push(entry.clone());
+        Ok(())
+    }
 }
 
 impl MockNet {
@@ -176,6 +201,114 @@ fn tokenizing_pipeline_with_net(net: MockNet) -> Pipeline {
         .register_safety_net(net)
         .build()
         .expect("pipeline")
+}
+
+#[test]
+fn safety_net_resolve_mode_promotes_suspect_to_manifest_token() {
+    let suspect = "alice@example.invalid";
+    let raw = format!("Reach {suspect}");
+    let start = raw.find(suspect).expect("suspect");
+    let net = MockNet::new(Some(start..start + suspect.len()), PiiClass::Email);
+    let logger = MemoryLogger::new();
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(net)
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+    let session = session();
+
+    let (clean, manifest, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::default(),
+        )
+        .expect("resolve");
+    let clean_text = text(clean);
+
+    assert!(!clean_text.contains(suspect));
+    assert_eq!(manifest.len(), 1);
+    assert_eq!(report.stats.uncovered_count, 1);
+    assert_eq!(
+        session.restore(&clean_text[start..]),
+        Some(suspect.to_string())
+    );
+    assert!(logger
+        .entries()
+        .iter()
+        .any(|entry| entry.decided_by == ConflictTier::Resolve && !entry.conflict_loser));
+}
+
+#[test]
+fn safety_net_redact_mode_strips_suspect_without_manifest_entry() {
+    let suspect = "alice@example.invalid";
+    let raw = format!("Reach {suspect}");
+    let start = raw.find(suspect).expect("suspect");
+    let net = MockNet::new(Some(start..start + suspect.len()), PiiClass::Email);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Redact,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .expect("redact");
+
+    assert_eq!(text(clean), "Reach ");
+    assert!(manifest.is_empty());
+    assert_eq!(report.stats.uncovered_count, 1);
+}
+
+#[test]
+fn safety_net_resolve_overlap_conflict_triggers_redact_fallback_audit() {
+    let session = session();
+    let raw = RawDocument::Text("alice@example.invalid ok".to_string());
+    let baseline = text(
+        tokenizing_pipeline()
+            .redact(&session, raw.clone())
+            .expect("baseline"),
+    );
+    let token_len = baseline.find(" ok").expect("token suffix");
+    let logger = MemoryLogger::new();
+    let net = MockNet::new(Some(0..token_len), PiiClass::Name);
+    let pipeline = Pipeline::builder()
+        .detector(FixedDetector {
+            span: 0.."alice@example.invalid".len(),
+            class: PiiClass::Email,
+        })
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(net)
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let (clean, _, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            raw,
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::default(),
+        )
+        .expect("fallback redact");
+
+    assert_eq!(report.stats.class_mismatch_count, 1);
+    assert_eq!(text(clean), " ok");
+    assert!(logger.entries().iter().any(|entry| {
+        entry.decided_by == ConflictTier::Fallback
+            && entry.fallback_triggered == Some(FallbackReason::OverlapConflict)
+    }));
 }
 
 #[test]
