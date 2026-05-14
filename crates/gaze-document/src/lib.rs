@@ -50,10 +50,16 @@ pub mod render;
 
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
-pub use bundle::clean;
+pub use bundle::{clean, clean_with_ocr_backend};
 pub use bundle::{BundleReport, ClassCount, LayoutSummary, SafeBundle, BUNDLE_VERSION};
 pub use layout::ReadingOrder;
-pub use ocr::OcrAdapter;
+#[cfg(feature = "ocr-tesseract")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
+pub use ocr::TesseractBackend;
+pub use ocr::{
+    BBox, ImageFormat, ImageInput, LanguageTag, OcrAdapter, OcrBackend, OcrError, OcrHints,
+    OcrSpan, PendingOcrAdapter,
+};
 pub use render::Renderer;
 
 /// Crate-level error type for `gaze-document`.

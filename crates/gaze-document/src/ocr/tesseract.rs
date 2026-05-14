@@ -21,7 +21,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use super::OcrResult;
+use super::{BBox, ImageInput, OcrBackend, OcrError, OcrHints, OcrResult, OcrSpan};
 use crate::DocumentError;
 
 const STDERR_TRUNCATE_BYTES: usize = 4096;
@@ -29,14 +29,14 @@ const STDERR_TRUNCATE_BYTES: usize = 4096;
 /// Tesseract subprocess OCR backend.
 #[non_exhaustive]
 #[derive(Debug, Clone)]
-pub struct TesseractOcr {
+pub struct TesseractBackend {
     /// Tesseract language code (default `eng`).
     pub lang: String,
     /// Optional explicit binary path. `None` → look up `tesseract` on `PATH`.
     pub binary: Option<std::path::PathBuf>,
 }
 
-impl TesseractOcr {
+impl TesseractBackend {
     /// Builds the adapter with `eng` language and `tesseract` on `PATH`.
     pub fn new() -> Self {
         Self {
@@ -58,6 +58,19 @@ impl TesseractOcr {
     /// Calls `tesseract <path> stdout -l <lang> tsv`, parses the TSV stream
     /// for text + per-word confidence in a single subprocess invocation.
     pub fn extract_from_file(&self, path: &Path) -> Result<OcrResult, DocumentError> {
+        self.extract_from_file_with_lang(path, &self.lang)
+    }
+
+    fn extract_from_file_with_lang(
+        &self,
+        path: &Path,
+        lang: &str,
+    ) -> Result<OcrResult, DocumentError> {
+        let tsv = self.run_tesseract_tsv(path, lang)?;
+        Ok(parse_tsv_result(&tsv, lang))
+    }
+
+    fn run_tesseract_tsv(&self, path: &Path, lang: &str) -> Result<String, DocumentError> {
         let binary: &std::ffi::OsStr = self
             .binary
             .as_deref()
@@ -68,7 +81,7 @@ impl TesseractOcr {
             .arg(path)
             .arg("stdout")
             .arg("-l")
-            .arg(&self.lang)
+            .arg(lang)
             .arg("tsv")
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -87,8 +100,7 @@ impl TesseractOcr {
             });
         }
 
-        let tsv = String::from_utf8_lossy(&output.stdout);
-        Ok(parse_tsv(&tsv, &self.lang))
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     }
 
     /// Runs OCR on an in-memory image payload.
@@ -113,18 +125,93 @@ impl TesseractOcr {
     }
 }
 
-impl Default for TesseractOcr {
+impl Default for TesseractBackend {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl super::OcrAdapter for TesseractOcr {
+impl OcrBackend for TesseractBackend {
+    fn name(&self) -> &str {
+        "tesseract"
+    }
+
+    fn recognize(&self, image: ImageInput, hints: OcrHints) -> Result<Vec<OcrSpan>, OcrError> {
+        let suffix = format!(".{}", image.format.extension());
+        let mut file = tempfile::Builder::new()
+            .prefix("gaze-document-ocr-")
+            .suffix(suffix.as_str())
+            .tempfile()
+            .map_err(|err| OcrError::Internal(err.to_string()))?;
+        file.write_all(&image.bytes)
+            .map_err(|err| OcrError::Internal(err.to_string()))?;
+        file.flush()
+            .map_err(|err| OcrError::Internal(err.to_string()))?;
+        let tsv = self
+            .run_tesseract_tsv(file.path(), hints.primary_language())
+            .map_err(document_error_to_ocr_error)?;
+        Ok(parse_tsv_spans(&tsv))
+    }
+}
+
+impl super::OcrAdapter for TesseractBackend {
     fn extract_text(&self, bytes: &[u8]) -> Result<String, DocumentError> {
-        // PNG is the default carrier we hand to Tesseract for in-memory bytes;
-        // callers with JPG should prefer `extract_from_bytes` with the right
-        // extension or `extract_from_file`.
-        self.extract_from_bytes(bytes, "png").map(|res| res.text)
+        self.extract_from_bytes(bytes, "png")
+            .map(|result| result.text)
+    }
+}
+
+fn parse_tsv_result(tsv: &str, lang: &str) -> OcrResult {
+    parse_tsv(tsv, lang)
+}
+
+fn parse_tsv_spans(tsv: &str) -> Vec<OcrSpan> {
+    let mut spans = Vec::new();
+
+    for (idx, line) in tsv.lines().enumerate() {
+        if idx == 0 || line.is_empty() {
+            continue;
+        }
+        let cols: Vec<&str> = line.split('\t').collect();
+        if cols.len() < 12 {
+            continue;
+        }
+        let level: u32 = cols[0].parse().unwrap_or(0);
+        if level != 5 {
+            continue;
+        }
+        let word = cols[11];
+        if word.is_empty() {
+            continue;
+        }
+        let confidence = cols[10]
+            .parse::<f32>()
+            .ok()
+            .filter(|conf| *conf >= 0.0)
+            .map(|conf| (conf / 100.0).clamp(0.0, 1.0));
+        spans.push(OcrSpan {
+            text: word.to_string(),
+            bbox: BBox {
+                x: cols[6].parse().unwrap_or(0),
+                y: cols[7].parse().unwrap_or(0),
+                w: cols[8].parse().unwrap_or(0),
+                h: cols[9].parse().unwrap_or(0),
+            },
+            confidence,
+        });
+    }
+
+    spans
+}
+
+fn document_error_to_ocr_error(err: DocumentError) -> OcrError {
+    match err {
+        DocumentError::TesseractNotFound(hint) => OcrError::InitFailed(hint),
+        DocumentError::TesseractFailed { status, stderr } => {
+            OcrError::RecognizeFailed(format!("status {status}: {stderr}"))
+        }
+        DocumentError::Io(err) => OcrError::Internal(err.to_string()),
+        other => OcrError::Internal(other.to_string()),
     }
 }
 
