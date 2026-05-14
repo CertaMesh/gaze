@@ -19,7 +19,9 @@ pub mod backend;
 pub mod class_map;
 
 pub use backend::subprocess::{
-    SubprocessKijiBackend, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+    SubprocessKijiBackend, SubprocessKijiConfig, KIJI_DISTILBERT_BUNDLE_SHA256,
+    KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO, KIJI_DISTILBERT_SHA256SUMS,
+    REQUIRED_KIJI_ARTIFACTS,
 };
 pub use backend::{KijiDistilbertBackend, RawSpan};
 pub use class_map::{

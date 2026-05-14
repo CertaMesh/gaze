@@ -15,6 +15,7 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
     KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
 };
 use gaze_types::{DocumentKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
+use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
 
 fn write_mock_kiji(body: &str) -> (TempDir, PathBuf) {
@@ -35,15 +36,30 @@ printf '%s\n' '{}'
     (dir, path)
 }
 
-fn populate_model_dir() -> TempDir {
+fn populate_model_dir() -> (TempDir, String) {
     let dir = tempdir().unwrap();
     fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o700)).unwrap();
     for required in REQUIRED_KIJI_ARTIFACTS {
+        if *required == "SHA256SUMS" {
+            continue;
+        }
         let path = dir.path().join(required);
         fs::write(&path, b"fixture").unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
     }
-    dir
+    let artifact_sha = hex_sha256(b"fixture");
+    let sha256sums = format!(
+        "{artifact_sha}  labels.json\n{artifact_sha}  model.onnx\n{artifact_sha}  tokenizer.json\n"
+    );
+    let path = dir.path().join("SHA256SUMS");
+    fs::write(&path, sha256sums.as_bytes()).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    let expected_sha = hex_sha256(sha256sums.as_bytes());
+    (dir, expected_sha)
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 #[test]
@@ -84,9 +100,11 @@ fn subprocess_span_round_trips_through_manifest_diff() {
     // empty manifest classifies that as Uncovered.
     let (_kiji_dir, kiji) =
         write_mock_kiji(r#"[{"label":"person","start":0,"end":11,"score":0.97}]"#);
-    let model = populate_model_dir();
+    let (model, expected_sha) = populate_model_dir();
 
-    let config = SubprocessKijiConfig::new(&kiji).with_model_dir(model.path());
+    let config = SubprocessKijiConfig::new(&kiji)
+        .with_model_dir(model.path())
+        .with_expected_bundle_sha256_for_tests(expected_sha);
     let net = KijiDistilbertSafetyNet::new(config);
     let manifest = Manifest::default();
     let ctx = SafetyNetContext::new(

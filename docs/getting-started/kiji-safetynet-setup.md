@@ -23,9 +23,13 @@ The backend wraps a local subprocess that serves pinned ONNX DistilBERT
 weights. The adapter sends already-tokenized clean text to stdin and accepts
 typed JSON spans from stdout. The runtime requires an Apache-2.0 model bundle
 with `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json` on disk
-before it will run. The upstream Kiji taxonomy has 26 PII classes; the local
-adapter validates emitted labels and maps them into Gaze's closed SafetyNet
-classes before manifest diffing.
+before it will run. The canonical upstream source is
+`onnx-community/distilbert-NER-ONNX` at commit
+`3a19fe9404a4469d91aa3d551558a97f68872f67`; the runtime pins the canonical
+bundle checksum file to SHA256
+`c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f`.
+The local adapter validates emitted labels and maps them into Gaze's closed
+SafetyNet classes before manifest diffing.
 
 For the full pipeline view, including the canonical ASCII diagram that places
 Kiji inside Pass 3, see
@@ -211,8 +215,9 @@ for every required artifact before the subprocess is spawned:
 - `tokenizer.json`
 
 The required file list is defined in [`REQUIRED_KIJI_ARTIFACTS`][kiji-subprocess].
-If any artifact is absent, the CLI returns `SafetyNetArtifactMissing` with exit
-`2` before the backend process starts:
+The checksum pin is defined beside that list as
+`KIJI_DISTILBERT_BUNDLE_SHA256`. If any artifact is absent, the CLI returns
+`SafetyNetArtifactMissing` with exit `2` before the backend process starts:
 
 ```json
 {
@@ -228,9 +233,11 @@ SafetyNet could not be trusted to run against the pinned artifact set, so Gaze
 refuses to silently continue with the backend disabled.
 
 Once the initial artifact check passes, the subprocess backend also verifies
-model directory presence during backend initialization. Missing weights at that
-layer map to `SafetyNetError::WeightsMissing`, which the CLI treats as a
-SafetyNet failure. Both checks preserve the same Axis-1 rule: requested privacy
+model directory presence and bundle integrity during backend initialization.
+Missing weights at that layer map to `SafetyNetError::WeightsMissing`; a
+checksum-file or artifact hash mismatch maps to
+`SafetyNetError::ModelIntegrityMismatch`. The CLI treats both as SafetyNet
+failures. Both checks preserve the same Axis-1 rule: requested privacy
 infrastructure must either run with the pinned inputs or fail closed.
 
 This contract is intentionally stricter than "try the backend if available."

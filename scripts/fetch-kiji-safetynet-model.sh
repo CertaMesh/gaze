@@ -20,11 +20,9 @@ set -euo pipefail
 
 # ---- Pinned artifact contract -----------------------------------------------
 
-# TODO(v0.8-signoff): replace with the real pinned commit SHA from the upstream
-# DistilBERT NER repository after the first reproducible fetch run. Until then,
-# this script will refuse to run with the placeholder.
 HF_REPO="onnx-community/distilbert-NER-ONNX"
-HF_COMMIT_SHA="0000000000000000000000000000000000000000"
+HF_COMMIT_SHA="3a19fe9404a4469d91aa3d551558a97f68872f67"
+KIJI_BUNDLE_SHA256="c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f"
 GITHUB_REPO="${GAZE_GITHUB_REPO:-EmpireTwo/gaze}"
 
 # Files that must end up in the destination directory.
@@ -111,13 +109,6 @@ fi
 
 DEST="${DEST:-$DEFAULT_DEST}"
 
-# Fail closed on placeholder SHA — Axis-1 reliability: no silent-disable.
-if [ "$HF_COMMIT_SHA" = "0000000000000000000000000000000000000000" ]; then
-  log "HF_COMMIT_SHA is still a placeholder. Edit scripts/fetch-kiji-safetynet-model.sh"
-  log "and replace HF_COMMIT_SHA with the pinned upstream commit before fetching."
-  exit 2
-fi
-
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     log "missing required command: $1"
@@ -169,6 +160,20 @@ fetch_sha256sums() {
 }
 
 verify_sha256sums() {
+  local actual
+  if command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 SHA256SUMS | awk '{print $1}')"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    actual="$(sha256sum SHA256SUMS | awk '{print $1}')"
+  else
+    log "missing required command: shasum or sha256sum"
+    exit 2
+  fi
+  if [ "$actual" != "$KIJI_BUNDLE_SHA256" ]; then
+    log "SHA256SUMS integrity mismatch: expected $KIJI_BUNDLE_SHA256 got $actual"
+    exit 4
+  fi
+
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 -c SHA256SUMS
   elif command -v sha256sum >/dev/null 2>&1; then
@@ -197,8 +202,20 @@ fetch_raw() {
 
 fetch_raw "onnx/model.onnx" "model.onnx"
 fetch_raw "tokenizer.json" "tokenizer.json"
-# Kiji ships its label set in labels.json at the repo root.
-fetch_raw "labels.json" "labels.json"
+cat > labels.json <<EOF
+{
+  "schema_version": 1,
+  "source": "${HF_REPO}",
+  "source_commit": "${HF_COMMIT_SHA}",
+  "labels": [
+    {"id": "person", "upstream": ["B-PER", "I-PER"]},
+    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
+    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
+    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
+  ]
+}
+EOF
+chmod 0600 labels.json 2>/dev/null || true
 
 # ---- Fetch release checksum contract ----------------------------------------
 

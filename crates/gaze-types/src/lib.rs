@@ -1639,6 +1639,14 @@ pub enum SafetyNetError {
         /// Sanitized reason.
         reason: String,
     },
+    /// Backend model artifacts failed integrity verification.
+    #[error("safety net model integrity mismatch: expected={expected}, actual={actual}")]
+    ModelIntegrityMismatch {
+        /// Expected SHA256 digest.
+        expected: String,
+        /// Actual SHA256 digest.
+        actual: String,
+    },
     /// Input exceeded configured backend limit.
     #[error("safety net input too large: limit={limit}, actual={actual}")]
     InputTooLarge {
@@ -2761,6 +2769,11 @@ mod safety_net_manifest_tests {
             .to_string(),
             SafetyNetError::ModelUnavailable {
                 reason: "load failed".to_string(),
+            }
+            .to_string(),
+            SafetyNetError::ModelIntegrityMismatch {
+                expected: "e3b0c44298fc1c149afbf4c8996fb924".to_string(),
+                actual: "4e07408562bedb8b60ce05c1decfe3ad".to_string(),
             }
             .to_string(),
             SafetyNetError::InputTooLarge {
