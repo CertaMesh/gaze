@@ -21,13 +21,15 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact: gaze-x86_64-linux-gnu
     runs-on: ${{ matrix.os }}
+    env:
+      GAZE_RELEASE_FEATURES: document,proxy
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --bin gaze --target ${{ matrix.target }}
+        run: cargo build --release --bin gaze --target ${{ matrix.target }} --features "$GAZE_RELEASE_FEATURES"
       - name: Package
         run: |
           mkdir -p dist
@@ -55,6 +57,12 @@ jobs:
           "$bin" clean --help | grep -q -- '--ner-locale'
           "$bin" clean --help | grep -q -- '--rulepack-bundled'
           "$bin" clean --help | grep -q -- '--rulepack-path'
+          "$bin" document --help | grep -q 'clean'
+          "$bin" proxy --help | grep -q 'serve'
+          "$bin" proxy --help | grep -q 'start'
+          "$bin" proxy --help | grep -q 'stop'
+          "$bin" proxy --help | grep -q 'status'
+          "$bin" proxy --help | grep -q 'restart'
 
           clean_json="$(printf 'alice@example.invalid' | "$bin" clean)"
           clean_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$clean_json")"
@@ -84,6 +92,27 @@ jobs:
           extended_json="$(printf 'host 192.0.2.1' | "$bin" clean --policy="$policy")"
           extended_text="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["clean_text"])' <<< "$extended_json")"
           grep -q 'Custom:ip_address' <<< "$extended_text" || (echo "smoke failed: core-extended did not tokenize IP fixture"; exit 1)
+
+          smoke_home="$(mktemp -d)"
+          proxy_port="$(python3 - <<'PY'
+          import socket
+          s = socket.socket()
+          s.bind(("127.0.0.1", 0))
+          print(s.getsockname()[1])
+          s.close()
+          PY
+          )"
+          export HOME="$smoke_home"
+          trap '"$bin" proxy stop --force >/dev/null 2>&1 || true; rm -rf "$smoke_home"' EXIT
+          "$bin" proxy status | grep -q 'not running'
+          "$bin" proxy start --bind "127.0.0.1:$proxy_port"
+          sleep 1
+          "$bin" proxy status | grep -q 'running'
+          "$bin" proxy restart --force
+          sleep 1
+          "$bin" proxy status | grep -q 'running'
+          "$bin" proxy stop --force
+          "$bin" proxy status | grep -q 'not running'
 
   release:
     needs: build

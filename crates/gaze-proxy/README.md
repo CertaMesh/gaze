@@ -7,7 +7,7 @@ PII-bearing fields before calling the supplied `gaze::Pipeline`.
 ## Quickstart
 
 ```bash
-cargo install gaze-cli --features proxy
+cargo install gaze-cli
 gaze proxy start
 ```
 
