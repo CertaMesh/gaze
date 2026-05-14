@@ -394,6 +394,9 @@ fn map_safety_net_error(err: gaze::SafetyNetError) -> CliError {
         gaze::SafetyNetError::ModelUnavailable { .. } => CliError::SafetyNetFailure {
             variant: "ModelUnavailable",
         },
+        gaze::SafetyNetError::ModelIntegrityMismatch { .. } => CliError::SafetyNetFailure {
+            variant: "ModelIntegrityMismatch",
+        },
         gaze::SafetyNetError::InputTooLarge { .. } => CliError::SafetyNetFailure {
             variant: "InputTooLarge",
         },

@@ -66,7 +66,7 @@ required-features = ["safety-net-openai"]
 
 [[test]]
 name = "kiji_distilbert_subprocess"
-required-features = ["safety-net-kiji"]
+required-features = ["safety-net-kiji", "test-support"]
 
 [[bench]]
 name = "dictionary"
@@ -75,3 +75,8 @@ harness = false
 [[bench]]
 name = "restore_pass2"
 harness = false
+
+[[bench]]
+name = "kiji_direct_vs_observer"
+harness = false
+required-features = ["safety-net-kiji"]

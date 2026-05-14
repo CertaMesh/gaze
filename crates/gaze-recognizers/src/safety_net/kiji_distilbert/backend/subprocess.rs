@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use gaze_types::SafetyNetError;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use super::{normalize_raw_spans, KijiDistilbertBackend, RawSpan};
 use crate::safety_net::kiji_distilbert::class_map::map_kiji_label;
@@ -25,6 +26,28 @@ const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 pub const REQUIRED_KIJI_ARTIFACTS: &[&str] =
     &["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"];
 
+/// Hugging Face repository for the canonical Kiji DistilBERT ONNX bundle.
+pub const KIJI_DISTILBERT_HF_REPO: &str = "onnx-community/distilbert-NER-ONNX";
+
+/// Immutable upstream revision used by `scripts/fetch-kiji-safetynet-model.sh`.
+pub const KIJI_DISTILBERT_HF_COMMIT: &str = "3a19fe9404a4469d91aa3d551558a97f68872f67";
+
+/// SHA256 of the canonical `SHA256SUMS` file for the bundle.
+///
+/// The runtime first verifies this digest, then verifies every artifact listed
+/// in the checksum file. That keeps the release-published checksum contract and
+/// local bytes tied together at load time.
+pub const KIJI_DISTILBERT_BUNDLE_SHA256: &str =
+    "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f";
+
+/// Canonical checksum file content. The model hash is the Hugging Face LFS
+/// SHA256 for `onnx/model.onnx` at `KIJI_DISTILBERT_HF_COMMIT`.
+pub const KIJI_DISTILBERT_SHA256SUMS: &str = concat!(
+    "d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97  labels.json\n",
+    "b5f77096d0d9f425d34a2e263f8a2dfb845cdc757dc00c7a1e69e9cbb93115d5  model.onnx\n",
+    "cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34  tokenizer.json\n",
+);
+
 /// Configuration for the local Kiji DistilBERT subprocess backend.
 #[derive(Debug, Clone)]
 pub struct SubprocessKijiConfig {
@@ -37,6 +60,8 @@ pub struct SubprocessKijiConfig {
     capture_stderr: bool,
     version: String,
     decoding_params: Vec<(&'static str, String)>,
+    #[cfg(any(test, feature = "test-support"))]
+    expected_bundle_sha256: String,
 }
 
 impl SubprocessKijiConfig {
@@ -60,6 +85,8 @@ impl SubprocessKijiConfig {
                 ("format", "json".to_string()),
                 ("output_mode", "typed".to_string()),
             ],
+            #[cfg(any(test, feature = "test-support"))]
+            expected_bundle_sha256: KIJI_DISTILBERT_BUNDLE_SHA256.to_string(),
         }
     }
 
@@ -113,12 +140,30 @@ impl SubprocessKijiConfig {
         self
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    pub fn with_expected_bundle_sha256_for_tests(mut self, sha256: impl Into<String>) -> Self {
+        self.expected_bundle_sha256 = sha256.into();
+        self
+    }
+
     pub fn command(&self) -> &Path {
         &self.command
     }
 
     pub fn model_dir(&self) -> Option<&Path> {
         self.model_dir.as_deref()
+    }
+
+    fn expected_bundle_sha256(&self) -> &str {
+        #[cfg(any(test, feature = "test-support"))]
+        {
+            &self.expected_bundle_sha256
+        }
+        #[cfg(not(any(test, feature = "test-support")))]
+        {
+            KIJI_DISTILBERT_BUNDLE_SHA256
+        }
     }
 }
 
@@ -136,7 +181,7 @@ impl SubprocessKijiBackend {
             });
         }
         verify_command_path(&config.command)?;
-        verify_model_dir(config.model_dir.as_deref())?;
+        verify_model_dir(config.model_dir.as_deref(), config.expected_bundle_sha256())?;
         Ok(Self { config })
     }
 
@@ -515,7 +560,7 @@ fn verify_command_path(command: &Path) -> Result<(), SafetyNetError> {
 
 /// Pinned-artifact contract: every entry in `REQUIRED_KIJI_ARTIFACTS` must exist
 /// under `model_dir`. Missing `SHA256SUMS` is a fail-closed condition (Axis 1).
-fn verify_model_dir(model_dir: Option<&Path>) -> Result<(), SafetyNetError> {
+fn verify_model_dir(model_dir: Option<&Path>, expected_sha256: &str) -> Result<(), SafetyNetError> {
     let Some(dir) = model_dir else {
         return Ok(());
     };
@@ -535,7 +580,85 @@ fn verify_model_dir(model_dir: Option<&Path>) -> Result<(), SafetyNetError> {
             });
         }
     }
+    verify_bundle_integrity(dir, expected_sha256)?;
     Ok(())
+}
+
+fn verify_bundle_integrity(dir: &Path, expected_sha256: &str) -> Result<(), SafetyNetError> {
+    let sha256sums_path = dir.join("SHA256SUMS");
+    let sha256sums =
+        std::fs::read(&sha256sums_path).map_err(|_| SafetyNetError::WeightsMissing {
+            path: sanitize_path(&sha256sums_path),
+        })?;
+    let actual_sha256 = hex_sha256(&sha256sums);
+    if actual_sha256 != expected_sha256 {
+        return Err(SafetyNetError::ModelIntegrityMismatch {
+            expected: expected_sha256.to_string(),
+            actual: actual_sha256,
+        });
+    }
+
+    let checksums = parse_sha256sums(&sha256sums)?;
+    for required in REQUIRED_KIJI_ARTIFACTS {
+        if *required == "SHA256SUMS" {
+            continue;
+        }
+        let Some(expected_artifact_sha256) = checksums
+            .iter()
+            .find_map(|(sha256, name)| (name == required).then_some(sha256.as_str()))
+        else {
+            return Err(SafetyNetError::ModelIntegrityMismatch {
+                expected: format!("<checksum-entry:{required}>"),
+                actual: "<missing>".to_string(),
+            });
+        };
+        let artifact = dir.join(required);
+        let bytes = std::fs::read(&artifact).map_err(|_| SafetyNetError::WeightsMissing {
+            path: sanitize_path(&artifact),
+        })?;
+        let actual_artifact_sha256 = hex_sha256(&bytes);
+        if actual_artifact_sha256 != expected_artifact_sha256 {
+            return Err(SafetyNetError::ModelIntegrityMismatch {
+                expected: expected_artifact_sha256.to_string(),
+                actual: actual_artifact_sha256,
+            });
+        }
+    }
+
+    Ok(())
+}
+
+fn parse_sha256sums(bytes: &[u8]) -> Result<Vec<(String, String)>, SafetyNetError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| SafetyNetError::ModelIntegrityMismatch {
+        expected: "valid UTF-8 SHA256SUMS".to_string(),
+        actual: "<invalid-utf8>".to_string(),
+    })?;
+    let mut entries = Vec::new();
+    for line in text.lines().filter(|line| !line.trim().is_empty()) {
+        let mut fields = line.split_whitespace();
+        let sha256 = fields.next().unwrap_or_default();
+        let name = fields.next().unwrap_or_default();
+        if fields.next().is_some()
+            || sha256.len() != 64
+            || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || !REQUIRED_KIJI_ARTIFACTS.contains(&name)
+            || name == "SHA256SUMS"
+            || name.contains('/')
+            || name.contains('\\')
+        {
+            return Err(SafetyNetError::ModelIntegrityMismatch {
+                expected: "canonical SHA256SUMS entries".to_string(),
+                actual: "<invalid>".to_string(),
+            });
+        }
+        entries.push((sha256.to_ascii_lowercase(), name.to_string()));
+    }
+    Ok(entries)
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    hex::encode(digest)
 }
 
 fn verify_sensitive_tree(path: &Path) -> Result<(), SafetyNetError> {
@@ -651,12 +774,25 @@ mod tests {
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
     }
 
-    fn populate_secure_model_dir(dir: &Path) {
+    fn populate_secure_model_dir(dir: &Path) -> String {
         #[cfg(unix)]
         std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)).unwrap();
         for required in REQUIRED_KIJI_ARTIFACTS {
+            if *required == "SHA256SUMS" {
+                continue;
+            }
             write_secure_artifact(dir, required, b"fixture");
         }
+        let sums = fixture_sha256sums();
+        write_secure_artifact(dir, "SHA256SUMS", sums.as_bytes());
+        hex_sha256(sums.as_bytes())
+    }
+
+    fn fixture_sha256sums() -> String {
+        let artifact_sha = hex_sha256(b"fixture");
+        format!(
+            "{artifact_sha}  labels.json\n{artifact_sha}  model.onnx\n{artifact_sha}  tokenizer.json\n"
+        )
     }
 
     #[test]
@@ -725,9 +861,49 @@ mod tests {
     #[test]
     fn complete_artifact_set_constructs_backend() {
         let dir = tempfile::tempdir().unwrap();
-        populate_secure_model_dir(dir.path());
-        let config = SubprocessKijiConfig::new("kiji").with_model_dir(dir.path());
+        let expected_sha = populate_secure_model_dir(dir.path());
+        let config = SubprocessKijiConfig::new("kiji")
+            .with_model_dir(dir.path())
+            .with_expected_bundle_sha256_for_tests(expected_sha);
         SubprocessKijiBackend::new(config).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checksum_mismatch_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        let expected_sha = populate_secure_model_dir(dir.path());
+        write_secure_artifact(dir.path(), "model.onnx", b"tampered");
+        let config = SubprocessKijiConfig::new("kiji")
+            .with_model_dir(dir.path())
+            .with_expected_bundle_sha256_for_tests(expected_sha);
+        let error = SubprocessKijiBackend::new(config).unwrap_err();
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn documented_bundle_sha_matches_canonical_checksum_file() {
+        assert_eq!(
+            hex_sha256(KIJI_DISTILBERT_SHA256SUMS.as_bytes()),
+            KIJI_DISTILBERT_BUNDLE_SHA256
+        );
+
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let workspace = manifest_dir.parent().unwrap().parent().unwrap();
+        let setup_doc =
+            std::fs::read_to_string(workspace.join("docs/getting-started/kiji-safetynet-setup.md"))
+                .unwrap();
+        let fetcher =
+            std::fs::read_to_string(workspace.join("scripts/fetch-kiji-safetynet-model.sh"))
+                .unwrap();
+
+        for content in [setup_doc, fetcher] {
+            assert!(content.contains(KIJI_DISTILBERT_HF_COMMIT));
+            assert!(content.contains(KIJI_DISTILBERT_BUNDLE_SHA256));
+        }
     }
 
     #[cfg(unix)]
