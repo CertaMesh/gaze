@@ -4,7 +4,7 @@
 
 **Reversible PII pseudonymization for agentic LLM workflows.**
 
-Gaze sits between your data and the LLM. It swaps PII for stable, session-scoped tokens on the way out, and restores the originals on the way back. The agent never sees raw personal data; the data owner never loses the ability to read the agent's reply.
+Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
 
 ```sh
 git clone https://github.com/EmpireTwo/gaze.git
@@ -39,20 +39,50 @@ Full CLI surface — flags, structured-document mode, audit logging, policy TOML
 
 ## Why this exists
 
-PII handling in LLM apps usually falls into one of three buckets:
+PII in agent workflows usually falls into one of three failure modes:
 
 1. **No redaction.** Real emails, phone numbers, and order IDs end up in the model provider's logs.
-2. **One-way redaction.** You strip PII, the agent replies "I've sent the confirmation to `<REDACTED>`", and you have no way to thread the reply back to the actual user.
-3. **LLM-based redaction.** A second model call decides what's PII. Non-deterministic, non-auditable, costs another round trip per turn.
+2. **One-way redaction.** PII is stripped, the agent replies "I've sent the confirmation to `<REDACTED>`", and you have no way to thread the reply back to the actual customer.
+3. **LLM-judged redaction.** A second model call decides what's PII. Non-deterministic, non-auditable, costs another round trip every turn.
 
-Gaze takes a fourth path: deterministic, rule-based detection with a signed restore manifest. Reversible without giving up an audit trail.
+Gaze is the fourth path: deterministic detection, signed restore manifest, every token traced to a versioned recognizer.
 
-## Guarantees
+## What ships
 
-- **Fail closed.** Ambiguous matches are tokenized, never silently passed. Unknown rulepack validators or normalizers fail at policy load — no degraded mode.
-- **Reversible by design.** Tokens like `<{session_hex}:Email_1>` are session-scoped and counted by class. Restore goes through a signed `SensitiveSnapshot`, not string substitution.
-- **Auditable.** Every emitted token traces to a recognizer + rule. Optional metadata-only SQLite log via `gaze clean --audit-db`; raw PII is never written to the log.
-- **Deterministic.** Detection is regex/dictionary-first. NER and the OpenAI-filter safety net are opt-in observers. They cannot mutate the manifest or the restore path.
+Each feature, what you get, where the proof lives.
+
+- **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` without translating between them. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
+- **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
+- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+- **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
+- **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
+- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
+- **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
+
+## How it fits your stack
+
+Three execution layers, one core invariant: PII crosses the agent boundary only as manifest-backed tokens.
+
+```text
+  Direct library          MCP source chokepoint        HTTP proxy in front of LLM
+
+  Application code        Agent tool call              SDK / agent request
+        │                       │                            │
+        ▼                       ▼                            ▼
+  gaze::Pipeline          gaze-mcp-rmcp transport       gaze-proxy provider driver
+        │                       │                            │
+        ▼                       ▼                            ▼
+  owner-controlled        gaze-mcp-core dispatch        OpenAI / Anthropic / Gemini
+  manifest + restore            │
+                                ▼
+                          source system call
+```
+
+- **Library** — link `gaze-pii` and own the data path. Use when your app already controls the LLM call.
+- **MCP chokepoint** — every agent tool call passes through `PiiEnvelope::dispatch` before reaching its source. Use when your agent host already speaks MCP and you want one redaction boundary across many tools.
+- **Proxy** — SDK base-URL swap. Use when the agent is a hosted product or vendor SDK, and you cannot link a library or rewrite its tool layer.
+
+Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Install
 
@@ -62,12 +92,18 @@ cd gaze
 cargo install --path crates/gaze-cli
 ```
 
-Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: build from source with `cargo build --release -p gaze-cli`. See [Quickstart](#quickstart) below for first-run guidance.
+Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: `cargo build --release -p gaze-cli`.
 
-For library use — linking the Rust runtime directly instead of shelling out — see [Use from Rust](#use-from-rust) below.
+For the LLM API proxy:
 
-For agent hosts that support MCP, build the CLI with the MCP feature and install
-the stdio server into a client config:
+```sh
+cargo install --path crates/gaze-cli --features proxy
+gaze proxy start
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+```
+
+For MCP hosts (Claude Code, Claude Desktop, Cursor):
 
 ```sh
 cargo install --path crates/gaze-cli --features mcp
@@ -75,14 +111,13 @@ gaze mcp install --client=claude-code
 gaze mcp doctor
 ```
 
-The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning
-tokenized content plus a `manifest_id` for authorized restore flows. See
-[`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation) for
-Claude Code, Claude Desktop, and Cursor config paths.
+The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning tokenized content plus a `manifest_id` for authorized restore flows. Client config paths: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#mcp-installation).
+
+For library use, see [Use from Rust](#use-from-rust) below.
 
 ## Quickstart
 
-A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the current `gaze` CLI.
+A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only SafetyNet layered on top. Each step is copy-paste-able against the current `gaze` CLI.
 
 ### 1. First redact
 
@@ -149,7 +184,7 @@ Fetch the pinned mBERT bundle once:
 bash scripts/fetch-ner-model.sh
 ```
 
-The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override the destination). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
+The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
 
 Add the `[ner]` block to `quickstart-policy.toml` and a rule for the `name` class:
 
@@ -184,11 +219,11 @@ NER contributes a `Name_*` span via the model's `PER` label:
 
 Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](docs/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
 
-### 3. Add the Privacy filter (Pass-3 SafetyNet)
+### 3. Add a SafetyNet (Pass-3 observer)
 
-The Privacy filter is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
-Gaze ships two SafetyNet backends. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT model bundle, about 8.8 MB, with a 26-class upstream PII taxonomy and faster cold-start profile. Pick one based on your deployment constraints; both are observer-only and both share the same strict/tolerant exit contract.
+Two backends ship. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT bundle, ~8.8 MB, 26-class upstream PII taxonomy, faster cold start. Pick on deployment constraints; both are observer-only and share the same strict/tolerant exit contract.
 
 #### OpenAI Privacy Filter
 
@@ -283,37 +318,39 @@ Full Kiji setup, backend switching, and failure-mode notes: [`docs/getting-start
 
 Three deterministic detection passes plus an optional observer pass. The safety net cannot modify the clean text or the restore path; it only emits suspect reports against the manifest of emitted tokens.
 
-## Workspace
-
-Published crates. Pick the smallest surface that does the job.
-
-| Crate | Use when |
-|-------|----------|
-| [`gaze-pii`](crates/gaze/) (lib name `gaze`) | You want the runtime: `Pipeline`, `Session`, `Policy`, `Recognizer`, restore. |
-| [`gaze-assembly`](crates/gaze-assembly/) | You want bundled defaults without hand-wiring recognizers. |
-| [`gaze-recognizers`](crates/gaze-recognizers/) | You're writing a custom recognizer or rulepack. |
-| [`gaze-audit`](crates/gaze-audit/) | You want SQLite-backed metadata audit logging. Adopt directly; `gaze` core has no `rusqlite` dep in any feature graph. |
-| [`gaze-types`](crates/gaze-types/) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
-| [`gaze-document`](crates/gaze-document/) | You want PNG/JPG/PDF document ingestion into SafeBundles or MCP document-read tools. |
-| [`gaze-mcp-core`](crates/gaze-mcp-core/) | You're building an MCP-protocol tool host and want every call to pass through Gaze's redaction chokepoint. |
-| [`gaze-mcp-rmcp`](crates/gaze-mcp-rmcp/) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, optional streamable HTTP). |
-| [`gaze-proxy`](crates/gaze-proxy/) | You want an HTTP proxy that sits in front of OpenAI / Anthropic / Gemini API calls and inserts a PII redact/restore boundary in the middle. Multi-provider adapter pattern, SSE + tool-call aware, daemon-mode subcommands (`gaze proxy start/stop/status/logs/restart`). |
-| [`gaze-cli`](crates/gaze-cli/) | You want a process boundary for non-Rust adapters (Laravel, Python, etc.). |
-
-Crate boundaries and the audit-isolation gate: [`docs/architecture/crates.md`](docs/architecture/crates.md).
-
-Document extension for codec adapters that use `SafeBundle`: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
-
 ## Detection coverage
 
-Bundled rulepacks (composable through `CorePipelineConfig::with_bundled_rulepack` or `[policy.rulepacks]`):
+All bundled detectors ship in the unified `core` rulepack. Activation is encoded in a closed `safety_tier` enum:
 
-- **`core` — always-on.** Email (RFC-validated), and locale-aware `Name` coverage cued off forwarded headers, agent reply preambles, and auto-footer sender lines.
-- **`core-extended` — opt-in.** Phone (E.164 + national), IPv4/IPv6, postal codes, IBAN (MOD-97), credit card (Luhn).
+- **safe_default** — active whenever the bundle loads.
+- **locale_gated** — active only when the resolved locale matches `recognizer.locales`.
+- **opt_in** — active only when explicitly named under `[[policy.custom_recognizers]]`.
 
-Validators are a closed enum (`EmailRfc`, `E164Phone`, `Luhn`, `IbanMod97`); unknown validator names in a rulepack fail at load with a typed error. Locale chain is strict and ordered: CLI > policy > rulepack default > system default.
+| Class | Locale | Validator | Tier |
+|---|---|---|---|
+| Email | global | RFC | safe_default |
+| Phone (E.164) | global | parser (`phone-parser` feature) | safe_default |
+| IPv4 / IPv6 | global | parser | safe_default |
+| IBAN | global | MOD-97 | safe_default |
+| Credit card | global | Luhn | safe_default |
+| Ethereum address | global | EIP-55 | safe_default |
+| Aadhaar | IN | Verhoeff | safe_default |
+| NIR | FR | MOD-97 variant | safe_default |
+| Steuer-ID | DE | MOD 11,10 | safe_default |
+| BSN | NL | MOD-11 | safe_default |
+| CPF | BR | MOD-11 | safe_default |
+| CNPJ | BR | MOD-11 | safe_default |
+| NHS number | UK | MOD-11 | safe_default |
+| Name (cue-anchored) | DE, EN | locale cue buckets | safe_default |
+| Phone (national) | DE, US | parser + locale | locale_gated |
+| Postal code | DE, US | regex + locale | locale_gated |
+| US SSN | US | cue + regex | locale_gated |
+| UK NINO | UK | cue + regex | locale_gated |
+| Indian PAN | IN | cue + regex | locale_gated |
 
-Tenant-specific PII (order IDs, song titles, artist names) needs a dictionary or custom regex recognizer. See [`docs/policy.md`](docs/policy.md).
+Validator names are a closed enum; unknown names fail at rulepack load with a typed `RulepackError`. The locale chain is strict and ordered: CLI > policy > rulepack default > system default.
+
+Tenant-specific PII — order IDs, song titles, artist names — needs a dictionary or custom regex recognizer. See [`docs/policy.md`](docs/policy.md).
 
 ## Audit and restore
 
@@ -328,14 +365,15 @@ gaze audit export --audit-db audit.sqlite --format jsonl --output redactions.jso
 gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z
 ```
 
-The audit DB is opened read-only by `query` and `export`. The exported column set excludes raw PII payloads. There is no policy-level retention default and no background auto-purge — adopters drive retention explicitly.
+The audit DB is opened read-only by `query` and `export`. The exported column set excludes raw PII payloads. Every row carries `recognizer_id` plus `recognizer_version_id` for lineage; pre-v0.8 rows carry a `legacy_unversioned` marker. There is no policy-level retention default and no background auto-purge — adopters drive retention explicitly.
 
 ## Limits
 
-- Bundled detection is strongest for emails, names, locations, organizations, IBANs, credit cards, IPv4/IPv6, and DACH/EN postal + phone shapes. Tenant-specific PII needs a custom recognizer.
-- `--rulepack-bundled core-extended` without a policy activates `phone.national.de`, `phone.national.us`, `postal.us`, `postal.de`. Adopters wanting narrower scope must supply a policy or pass `--locale=global`.
+- Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
-- No Intel macOS, no musl, no Windows binaries shipped today; build from source.
+- No Intel macOS, no musl, no Windows binaries today. Build from source.
+- The Kiji benchmark in research ships rule-floor numbers only; the Kiji-as-detector and observer-residual cells are `not_run` pending a pinned-model SHA snapshot.
+- `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, and transparent MITM are out of scope here — those belong in [`gaze-lens`](https://github.com/EmpireTwo/gaze-lens), not the core proxy.
 
 ## Use from Rust
 
@@ -347,10 +385,33 @@ gaze-pii = "0.8.0"
 gaze-assembly = "0.8.0"
 ```
 
-The crate is published as `gaze-pii` because the bare `gaze` name is in transfer; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
+The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
-- Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [`crates.io/crates/gaze-pii`](https://crates.io/crates/gaze-pii)).
+- Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [crates.io/crates/gaze-pii](https://crates.io/crates/gaze-pii)).
 - Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
+
+## Workspace and crates.io
+
+Ten published crates. Pick the smallest surface that does the job.
+
+| Crate | Use when |
+|---|---|
+| [`gaze-pii`](https://crates.io/crates/gaze-pii) (lib name `gaze`) | You link the runtime: `Pipeline`, `Session`, `Policy`, `Recognizer`, restore. |
+| [`gaze-types`](https://crates.io/crates/gaze-types) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
+| [`gaze-recognizers`](https://crates.io/crates/gaze-recognizers) | You're writing a custom recognizer or rulepack, or you want the bundled detectors and SafetyNet backends. |
+| [`gaze-audit`](https://crates.io/crates/gaze-audit) | You want SQLite-backed metadata audit logging. `gaze` core has no `rusqlite` dep in any feature graph. |
+| [`gaze-assembly`](https://crates.io/crates/gaze-assembly) | You want bundled defaults without hand-wiring recognizers. |
+| [`gaze-cli`](https://crates.io/crates/gaze-cli) | You want a process boundary for non-Rust adapters (Laravel, Python). |
+| [`gaze-document`](https://crates.io/crates/gaze-document) | You want PNG / JPG / PDF ingestion into `SafeBundle`s or MCP document tools. |
+| [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | You're building an MCP tool host and want every call to pass through Gaze's chokepoint. |
+| [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
+| [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of OpenAI / Anthropic / Gemini, daemon-managed via `gaze proxy`. |
+
+```sh
+cargo add gaze-pii
+```
+
+Crate boundaries and the audit-isolation Dylint gate: [`docs/architecture/crates.md`](docs/architecture/crates.md). Document codec extension: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
 
 ## Publishing
 
@@ -368,26 +429,6 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-features --all-targets -- -D warnings
 cargo test --workspace --all-features
 cargo run -p xtask -- ci-feature-matrix
-```
-
-## Available on crates.io
-
-The Gaze workspace publishes crates that point at this repository as their canonical source.
-
-| Crate | Purpose |
-|---|---|
-| [`gaze-pii`](https://crates.io/crates/gaze-pii) | Umbrella runtime — pipeline, sessions, policy, manifest. The crate adopters typically depend on. |
-| [`gaze-types`](https://crates.io/crates/gaze-types) | Shared value contracts; serde-only, no ML/SQL deps. |
-| [`gaze-recognizers`](https://crates.io/crates/gaze-recognizers) | Detection backends (regex / dictionary / NER) and bundled rulepacks. |
-| [`gaze-audit`](https://crates.io/crates/gaze-audit) | Passive SQLite audit sink, isolated from core. |
-| [`gaze-assembly`](https://crates.io/crates/gaze-assembly) | Policy-to-pipeline builder shared by CLI-style adopters. |
-| [`gaze-cli`](https://crates.io/crates/gaze-cli) | Command-line `gaze clean` / `gaze restore` binary. |
-| [`gaze-document`](https://crates.io/crates/gaze-document) | Document SafeBundle pipeline and opt-in MCP document tools. |
-| [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | MCP chokepoint runtime — Tool / ToolCtx / PiiEnvelope dispatch. |
-| [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | rmcp transport adapter for `gaze-mcp-core`. |
-
-```sh
-cargo add gaze-pii
 ```
 
 ## License
