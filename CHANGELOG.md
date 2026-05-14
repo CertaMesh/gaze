@@ -19,6 +19,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+## [0.8.1] - 2026-05-15
+
+Reversibility-first SafetyNet defaults, layout-report v2 with vector-PDF + multi-column + table-cell + deskew handling, an `OcrBackend` trait for plug-in OCR drivers, model-SHA integrity for the Kiji backend, and the default release binary now baking `--features proxy`. Schema-level: `BundleReport.bundle_version` bumps `1 → 2` (additive); `gaze-audit` rows gain a typed `fallback_triggered: Option<FallbackReason>` column and `decided_by` gains `Redact`/`Resolve`/`Fallback` variants.
+
+### Added
+
+- **SafetyNet `resolve` + `redact` + `fallback` modes** (PR #223 `167acca`): suspect spans flagged by Pass-3 SafetyNet are now promoted to custom-recognizer matches and rejoin conflict resolution before any irreversible side-effect. On promotion failure the typed fallback path emits a `:Redact_` token and records a `FallbackReason` in the audit log. Closed-enum variants: `FallbackReason::{OverlapConflict, ValidatorVeto, AnchorMissing, ResidualSuspect}`. New `decided_by` variants: `Redact`, `Resolve`, `Fallback`. CLI gains `--safety-net-mode {resolve|strict|tolerant}` and `--safety-net-fallback {redact|none}`. Tolerant remains dev-only behind `GAZE_ALLOW_TOLERANT=1`. (Axis 1 reliability, Axis 2 reversibility, Axis 4 trust.)
+- **gaze-document layout report v2** (PR #219 `6acf77e`, PR #222 `9714b41`): `BundleReport.bundle_version` bumps `1 → 2`. New per-page fields: `ocr_source`, `ocr_backend`, `confidence`, `low_confidence`, `column_count`, `page_index`. New top-level field: `low_confidence_threshold`. Vector-PDF text-extraction fallback when PDFs have selectable text; multi-column segmentation in the post-processor; per-page confidence + low-confidence flagging against the threshold; table-cell preservation in markdown output; rotation/deskew preprocessing before OCR. v1 bundles continue to parse on read; emission is always v2. (Axis 1 reliability, Axis 4 trust.)
+- **`OcrBackend` trait** (PR #218 `b9f3407`): single trait, single impl (`TesseractBackend`). `gaze-document` now exposes one OCR contract that second-party backends (ocrs, Apple Vision, PaddleOCR) can slot into cleanly. Trait is object-safe; covered by `tests/ocr_backend.rs`. (Axis 4 trust, Axis 5 ergonomics.)
+- **Kiji model-SHA integrity** (PR #221 `07cf93d`): `KijiDistilbertSafetyNet` backend now verifies the DistilBERT bundle SHA256 at init and fails closed via `SafetyNetError::ModelIntegrityMismatch { expected, actual }` on mismatch. Direct-vs-observer benchmark harness shipped under `gaze-recognizers/benches/`; published metric fields stay `null` until populated on a machine with the pinned local Kiji runtime (Axis 4 — no uncited benchmark numbers). (Axis 1 reliability, Axis 4 trust.)
+- **Safety-net architecture contract** (PR #216 `1cf6732`): `docs/architecture/safety-nets.md` now documents the resolve/redact/fallback semantics, the typed `FallbackReason` set, and how SafetyNet promotion interacts with `ConflictTier`. Companion adopter-facing doc updated in PR #217 `d55af13`.
+
+### Changed
+
+- **`--safety-net-mode resolve` is the new default** (PR #217 `d55af13`, PR #223 `167acca`), replacing `strict`. Reversibility-first; falls back to `redact` on resolve failure. Strict mode remains available for hard-fail deployments via `--safety-net-mode strict`. (Axis 1, Axis 2.)
+- **Default release binary now bakes `--features proxy`** (PR #220 `fc00c26`): the published `gaze-v0.8.1-*.tar.gz` artifacts include `gaze proxy {serve,start,stop,status,logs,restart}` out of the box. Adopters who build from source unchanged.
+- **Marketing-pass README** (PR #215 `ad22121`): adopter-focused copy refresh; no behavior change.
+- **Workspace version pin** `0.8.0 → 0.8.1` across all ten crates.
+
+### Removed
+
+- **Legacy `OcrAdapter` shims** (PR #224 `89aaa4e`): the deprecated v0.7.1 adapter surface is gone. Adopters who plug in custom OCR now implement `OcrBackend` directly. Magic-byte validation (`detect_image_format`) is now mandatory at the `clean_with_ocr_backend` boundary — bare-byte payloads fail closed with `DocumentError::UnsupportedInput`.
+
+### Fixed
+
+- **Table-cell mock-backend test missing PNG magic bytes**: `bundle::tests::clean_with_mock_backend_preserves_table_cell_context` failed on `89aaa4e` after the magic-byte gate landed in PR #224. Test fixture now prepends `\x89PNG\r\n\x1A\n` to the synthetic payload. CI was red on main HEAD; this commit makes it green.
+
+### Migration notes
+
+- If your downstream tooling reads SafeBundle JSON: handle the `bundle_version=2` field. v1 reads work; v2 emission is non-optional.
+- If you query the audit log: the new `fallback_triggered` column is nullable on existing rows; the new `decided_by` variants are closed-enum and discriminated.
+- If your pipeline expected `--safety-net-mode strict` as default: pass the flag explicitly.
+- If you embedded custom OCR via `OcrAdapter`: port to `OcrBackend` (object-safe, same shape).
+- v0.7.x → v0.8.x → v0.8.1 multi-hop adopters: read [UPGRADE.md](./UPGRADE.md) before bumping; v0.8.0 already flipped several defaults.
+
 ## [0.8.0] - 2026-05-14
 
 Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth + ten checksum-backed and locale-gated national-ID recognizers across five new locale packs, plus the new `gaze-proxy` crate that puts a PII chokepoint in front of OpenAI / Anthropic / Gemini API traffic. The workspace publish count rises from nine to ten.

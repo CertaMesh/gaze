@@ -898,7 +898,7 @@ mod tests {
         };
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
-        fs::write(&input, b"not-real-image").expect("write input");
+        fs::write(&input, b"\x89PNG\r\n\x1A\nnot-real-image").expect("write input");
 
         let bundle = Pipeline::new()
             .clean_with_ocr_backend(&input, tmp.path(), &backend)
