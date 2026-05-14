@@ -439,6 +439,7 @@ struct DocumentExtraction {
 }
 
 #[cfg(feature = "ocr-tesseract")]
+#[cfg_attr(not(feature = "mcp"), allow(dead_code))]
 pub(crate) fn run_ocr(
     input: &Path,
     kind: InputKind,
@@ -567,6 +568,7 @@ fn recognize_image(
 ) -> Result<(OcrResult, u32), DocumentError> {
     let hints = OcrHints::default();
     let lang = hints.primary_language().to_string();
+    let image = crate::preprocess::preprocess_image(image);
     let spans = ocr_backend
         .recognize(image, hints)
         .map_err(map_ocr_error_to_document_error)?;
@@ -876,6 +878,207 @@ mod tests {
         assert_eq!(page.column_count, 2);
         assert_eq!(page.confidence, Some(0.5));
         assert!(page.low_confidence);
+        assert!(
+            bundle.clean_markdown.contains(":Email_"),
+            "{}",
+            bundle.clean_markdown
+        );
+        assert!(
+            !bundle.clean_markdown.contains("alice@example.invalid"),
+            "{}",
+            bundle.clean_markdown
+        );
+    }
+
+    #[test]
+    fn clean_with_mock_backend_preserves_table_cell_context() {
+        let backend = MockBackend {
+            spans: vec![
+                span("Field", 20, 10, 0.92),
+                span("Value", 160, 10, 0.92),
+                span("Bill", 20, 40, 0.92),
+                span("Jane", 160, 40, 0.92),
+                span("Email", 20, 70, 0.92),
+                span("alice@example.invalid", 160, 70, 0.92),
+            ],
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let input = tmp.path().join("input.png");
+        fs::write(&input, b"not-real-image").expect("write input");
+
+        let bundle = Pipeline::new()
+            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .expect("clean succeeds");
+
+        assert_eq!(bundle.report.pages[0].column_count, 1);
+        assert!(
+            bundle.clean_markdown.contains("Field\nValue\n\nBill\nJane"),
+            "{}",
+            bundle.clean_markdown
+        );
+        assert!(
+            bundle.clean_markdown.contains(":Email_"),
+            "{}",
+            bundle.clean_markdown
+        );
+        assert!(
+            !bundle.clean_markdown.contains("alice@example.invalid"),
+            "{}",
+            bundle.clean_markdown
+        );
+    }
+
+    #[cfg(feature = "pdf-input")]
+    #[test]
+    fn clean_preprocesses_rotated_image_before_backend_ocr() {
+        use image::{GrayImage, ImageFormat as EncodedImageFormat, Luma};
+
+        #[derive(Debug)]
+        struct OrientationSensitiveBackend;
+
+        impl OcrBackend for OrientationSensitiveBackend {
+            fn name(&self) -> &str {
+                "orientation-sensitive"
+            }
+
+            fn recognize(
+                &self,
+                image: ImageInput,
+                _hints: OcrHints,
+            ) -> Result<Vec<OcrSpan>, OcrError> {
+                let decoded = image::load_from_memory(&image.bytes)
+                    .map_err(|err| OcrError::Internal(err.to_string()))?;
+                if decoded.width() <= decoded.height() {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![span("alice@example.invalid", 20, 20, 0.91)])
+            }
+        }
+
+        let mut image = GrayImage::from_pixel(120, 80, Luma([255]));
+        for y in 38..42 {
+            for x in 16..104 {
+                image.put_pixel(x, y, Luma([0]));
+            }
+        }
+        let sideways = image::imageops::rotate90(&image);
+        let mut bytes = Vec::new();
+        sideways
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                EncodedImageFormat::Png,
+            )
+            .expect("encode png");
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let input = tmp.path().join("input.png");
+        fs::write(&input, bytes).expect("write input");
+
+        let bundle = Pipeline::new()
+            .clean_with_ocr_backend(&input, tmp.path(), &OrientationSensitiveBackend)
+            .expect("clean succeeds");
+
+        assert!(
+            bundle.clean_markdown.contains(":Email_"),
+            "{}",
+            bundle.clean_markdown
+        );
+        assert!(
+            !bundle.clean_markdown.contains("alice@example.invalid"),
+            "{}",
+            bundle.clean_markdown
+        );
+    }
+
+    #[cfg(feature = "pdf-input")]
+    #[test]
+    fn clean_deskews_image_before_backend_ocr() {
+        use image::{GrayImage, ImageFormat as EncodedImageFormat, Luma};
+        use imageproc::geometric_transformations::{rotate_about_center, Interpolation};
+
+        fn horizontal_score(bytes: &[u8]) -> Result<u64, OcrError> {
+            let decoded = image::load_from_memory(bytes)
+                .map_err(|err| OcrError::Internal(err.to_string()))?
+                .to_luma8();
+            let mut score = 0u64;
+            for y in 0..decoded.height() {
+                let mut dark = 0u64;
+                for x in 0..decoded.width() {
+                    if decoded.get_pixel(x, y).0[0] < 200 {
+                        dark += 1;
+                    }
+                }
+                score = score.saturating_add(dark.saturating_mul(dark));
+            }
+            Ok(score)
+        }
+
+        #[derive(Debug)]
+        struct DeskewSensitiveBackend {
+            minimum_score: u64,
+        }
+
+        impl OcrBackend for DeskewSensitiveBackend {
+            fn name(&self) -> &str {
+                "deskew-sensitive"
+            }
+
+            fn recognize(
+                &self,
+                image: ImageInput,
+                _hints: OcrHints,
+            ) -> Result<Vec<OcrSpan>, OcrError> {
+                if horizontal_score(&image.bytes)? < self.minimum_score {
+                    return Ok(Vec::new());
+                }
+                Ok(vec![span("alice@example.invalid", 20, 20, 0.91)])
+            }
+        }
+
+        let mut image = GrayImage::from_pixel(120, 80, Luma([255]));
+        for y in 38..42 {
+            for x in 16..104 {
+                image.put_pixel(x, y, Luma([0]));
+            }
+        }
+        let skewed = rotate_about_center(
+            &image,
+            4.0_f32.to_radians(),
+            Interpolation::Nearest,
+            Luma([255]),
+        );
+        let mut bytes = Vec::new();
+        skewed
+            .write_to(
+                &mut std::io::Cursor::new(&mut bytes),
+                EncodedImageFormat::Png,
+            )
+            .expect("encode png");
+        let raw_score = horizontal_score(&bytes).expect("raw score");
+        let backend = DeskewSensitiveBackend {
+            minimum_score: raw_score + 1_000,
+        };
+        assert!(
+            backend
+                .recognize(
+                    ImageInput {
+                        bytes: bytes.clone(),
+                        format: ImageFormat::Png,
+                        dpi: None
+                    },
+                    OcrHints::default()
+                )
+                .expect("raw recognize")
+                .is_empty(),
+            "raw skewed payload should miss before preprocessing"
+        );
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let input = tmp.path().join("input.png");
+        fs::write(&input, bytes).expect("write input");
+
+        let bundle = Pipeline::new()
+            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .expect("clean succeeds");
+
         assert!(
             bundle.clean_markdown.contains(":Email_"),
             "{}",
