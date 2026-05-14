@@ -6,6 +6,8 @@ mutate the [`Manifest`](../../crates/gaze-types/src/lib.rs), and never reach
 the restore path. They exist to surface leak suspects so the deterministic
 detectors and rulepacks can be improved.
 
+For step-by-step setup with Kiji DistilBERT, see [`docs/getting-started/kiji-safetynet-setup.md`](../getting-started/kiji-safetynet-setup.md).
+
 Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.
@@ -14,6 +16,62 @@ This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
 (`opf`) subprocess adapter; the contract is generic so additional backends
 can land without changing the trait shape or audit schema.
+
+```text
+                    GAZE CLEAN INVOCATION
+                            │
+                            ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PASS 1 — REGEX + DICTIONARY (deterministic)                     │
+   │   "Contact alice@example.invalid"                               │
+   │     → recognizers (email.global, name.de, iban, …)              │
+   │     → Candidate { class=Email, score=1.0, span=(8,28), … }      │
+   └────────────────────────────┬────────────────────────────────────┘
+                                ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PASS 2 — NER (optional, opt-in feature)                         │
+   │   mBERT (Davlan) emits B-PER / I-PER / B-LOC … per token        │
+   │   → Candidate { class=Name, score=0.91, span=(0,7) }            │
+   └────────────────────────────┬────────────────────────────────────┘
+                                ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ CONFLICT RESOLUTION + TOKENIZATION                              │
+   │   class-priority > rule-priority > score > span-len > id        │
+   │   emit tokens → "Contact <{sess}:Email_1>" + Manifest           │
+   └────────────────────────────┬────────────────────────────────────┘
+                                │ clean_text + manifest committed
+                                │ (this is what restore will reverse)
+                                ▼
+   ┌─────────────────────────────────────────────────────────────────┐
+   │ PASS 3 — SAFETYNET (observer-only, opt-in)                      │
+   │   Mode selector: --safety-net-backend                           │
+   │                  ↓                  ↓                           │
+   │   ┌──────────────────────┐  ┌────────────────────────────┐     │
+   │   │  openai-filter       │  │  kiji-distilbert (v0.8+)   │     │
+   │   │  (OPF binary)        │  │  (Kiji ONNX model)         │     │
+   │   │                      │  │                            │     │
+   │   │  ─ heavier weights   │  │  ─ 8.8 MB DistilBERT       │     │
+   │   │  ─ OpenAI's PII set  │  │  ─ 26 PII classes (Kiji)   │     │
+   │   │  ─ requires `opf`    │  │  ─ ONNX subprocess         │     │
+   │   │    binary install    │  │  ─ tokenizers crate        │     │
+   │   └──────────┬───────────┘  └────────────┬───────────────┘     │
+   │              │                            │                     │
+   │              └──────────────┬─────────────┘                     │
+   │                             ▼                                   │
+   │   Subprocess contract identical for both:                       │
+   │       stdin  ← clean_text (post-tokenization!)                  │
+   │       stdout → JSON span array [{start, end, label, score}, …]  │
+   │                                                                 │
+   │   Gaze compares the SafetyNet spans against the manifest:       │
+   │     ─ Span overlaps an emitted token → covered (no leak)        │
+   │     ─ Span outside every token       → "Uncovered" suspect      │
+   │     ─ Span overlaps partial token    → "PartialBleed" suspect   │
+   │     ─ Span overlaps wrong class      → "ClassMismatch" suspect  │
+   │                                                                 │
+   │   Result: leak_report attached to JSON output. Manifest         │
+   │   UNCHANGED. Restore UNAFFECTED. (Axis 2 reversibility intact.) │
+   └─────────────────────────────────────────────────────────────────┘
+```
 
 ## North-star fit
 
