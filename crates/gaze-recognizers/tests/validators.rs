@@ -368,3 +368,338 @@ fn s1_iban_mod97_failing_iban_emits_no_detection() {
 
     assert_eq!(clean, input);
 }
+
+#[test]
+fn aadhaar_verhoeff_accepts_generated_values_and_rejects_mutants() {
+    assert!(ValidatorKind::AadhaarVerhoeff.validates("2345 6789 0124"));
+
+    let values = (20..30).map(gen_aadhaar).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::AadhaarVerhoeff.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::verhoeff::validate_aadhaar(
+            value
+        ));
+        assert!(!ValidatorKind::AadhaarVerhoeff.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{4} \d{4} \d{4}\b",
+        ValidatorKind::AadhaarVerhoeff,
+        "Aadhaar 6741 8529 6303",
+        "aadhaar",
+    );
+}
+
+#[test]
+fn fr_nir_mod97_accepts_generated_values_and_rejects_mutants() {
+    for value in ["151024610204325", "1 84 12 76 451 089 46"] {
+        assert!(ValidatorKind::FrNirMod97.validates(value), "{value}");
+    }
+
+    let values = (0..10).map(gen_fr_nir).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::FrNirMod97.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod97_nir::validate_fr_nir(
+            value
+        ));
+        assert!(!ValidatorKind::FrNirMod97.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b[12]\d(?: ?\d){13}\b",
+        ValidatorKind::FrNirMod97,
+        "NIR 190010100100058",
+        "nir",
+    );
+}
+
+#[test]
+fn de_steuer_id_mod1110_accepts_generated_values_and_rejects_mutants() {
+    for value in ["48954371207", "55492670836", "65929970489"] {
+        assert!(ValidatorKind::DeSteuerIdMod1110.validates(value), "{value}");
+    }
+    assert!(!ValidatorKind::DeSteuerIdMod1110.validates("12345678903"));
+
+    let values = (0..10).map(gen_steuer_id).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::DeSteuerIdMod1110.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod11::validate_de_steuer_id(
+            value
+        ));
+        assert!(!ValidatorKind::DeSteuerIdMod1110.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{2} \d{3} \d{3} \d{3}\b",
+        ValidatorKind::DeSteuerIdMod1110,
+        "Steuer-ID 48 954 371 207",
+        "steuer_id",
+    );
+}
+
+#[test]
+fn bsn_mod11_accepts_generated_values_and_rejects_mutants() {
+    assert!(ValidatorKind::BsnMod11.validates("123456782"));
+
+    let values = (0..10).map(gen_bsn).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::BsnMod11.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod11::validate_bsn(value));
+        assert!(!ValidatorKind::BsnMod11.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{9}\b",
+        ValidatorKind::BsnMod11,
+        "BSN 111222333",
+        "bsn",
+    );
+}
+
+#[test]
+fn cpf_mod11_accepts_generated_values_and_rejects_mutants() {
+    let values = (0..10).map(gen_cpf).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::CpfMod11.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod11::validate_cpf(value));
+        assert!(!ValidatorKind::CpfMod11.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{3}\.\d{3}\.\d{3}-\d{2}\b",
+        ValidatorKind::CpfMod11,
+        "CPF 529.982.247-25",
+        "cpf",
+    );
+}
+
+#[test]
+fn cnpj_mod11_accepts_generated_values_and_rejects_mutants() {
+    let values = (0..10).map(gen_cnpj).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::CnpjMod11.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod11::validate_cnpj(value));
+        assert!(!ValidatorKind::CnpjMod11.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{2}\.\d{3}\.\d{3}/\d{4}-\d{2}\b",
+        ValidatorKind::CnpjMod11,
+        "CNPJ 04.252.011/0001-10",
+        "cnpj",
+    );
+}
+
+#[test]
+fn uk_nhs_mod11_accepts_generated_values_and_rejects_mutants() {
+    let values = (0..10).map(gen_nhs).collect::<Vec<_>>();
+    for value in &values {
+        assert!(ValidatorKind::UkNhsMod11.validates(value), "{value}");
+        assert!(gaze_recognizers::validators::mod11::validate_uk_nhs(value));
+        assert!(!ValidatorKind::UkNhsMod11.validates(&flip_last_digit(value)));
+    }
+
+    assert_validator_pipeline_round_trip(
+        r"\b\d{3} \d{3} \d{4}\b",
+        ValidatorKind::UkNhsMod11,
+        "NHS number 943 476 5919",
+        "nhs_number",
+    );
+}
+
+fn assert_validator_pipeline_round_trip(
+    pattern: &str,
+    validator: ValidatorKind,
+    input: &str,
+    class: &str,
+) {
+    let pipeline = custom_validator_pipeline(pattern, PiiClass::custom(class), validator, None);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input);
+
+    assert!(clean.contains(&format!(":Custom:{class}_1>")), "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+fn flip_last_digit(value: &str) -> String {
+    let mut bytes = value.as_bytes().to_vec();
+    let index = bytes
+        .iter()
+        .rposition(u8::is_ascii_digit)
+        .expect("digit fixture");
+    bytes[index] = if bytes[index] == b'9' {
+        b'0'
+    } else {
+        bytes[index] + 1
+    };
+    String::from_utf8(bytes).expect("ascii fixture")
+}
+
+fn gen_aadhaar(seed: u64) -> String {
+    let mut digits = [0u8; 12];
+    digits[0] = 2 + (seed as u8 % 8);
+    for (index, digit) in digits[..11].iter_mut().enumerate().skip(1) {
+        *digit = ((seed + index as u64 * 7) % 10) as u8;
+    }
+    digits[11] = verhoeff_check_digit(&digits[..11]);
+    digits_to_string(&digits)
+}
+
+fn verhoeff_check_digit(digits: &[u8]) -> u8 {
+    const D: [[u8; 10]; 10] = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+        [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+        [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+        [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+        [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+        [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+        [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+        [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+        [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+    ];
+    const P: [[u8; 10]; 8] = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+        [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+        [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+        [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+        [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+        [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+        [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+    ];
+    const INV: [u8; 10] = [0, 4, 3, 2, 1, 5, 6, 7, 8, 9];
+    let mut checksum = 0u8;
+    for (index, digit) in digits.iter().rev().enumerate() {
+        checksum = D[checksum as usize][P[(index + 1) % 8][*digit as usize] as usize];
+    }
+    INV[checksum as usize]
+}
+
+fn gen_fr_nir(seed: u64) -> String {
+    let base = format!("1{:02}0101001{:03}", 90 + seed % 10, seed % 999);
+    let number = base.parse::<u64>().expect("nir base");
+    format!("{base}{:02}", 97 - (number % 97))
+}
+
+fn gen_steuer_id(seed: u64) -> String {
+    let mut digits = [0u8; 11];
+    for (index, digit) in digits[..10].iter_mut().enumerate() {
+        *digit = ((seed + index as u64) % 10) as u8;
+    }
+    digits[0] = 1 + (digits[0] % 9);
+    digits[10] = steuer_id_check_digit(&digits[..10]);
+    digits_to_string(&digits)
+}
+
+fn steuer_id_check_digit(digits: &[u8]) -> u8 {
+    let mut product = 10u8;
+    for digit in digits {
+        let mut sum = (*digit + product) % 10;
+        if sum == 0 {
+            sum = 10;
+        }
+        product = (2 * sum) % 11;
+    }
+    (11 - product) % 10
+}
+
+fn gen_bsn(seed: u64) -> String {
+    for candidate in seed * 100.. {
+        let mut digits = first_digits::<8>(candidate);
+        digits[0] = 1 + (digits[0] % 9);
+        let sum: u32 = digits
+            .iter()
+            .enumerate()
+            .map(|(index, digit)| u32::from(*digit) * (9 - index as u32))
+            .sum();
+        let check = sum % 11;
+        if check < 10 {
+            let mut full = [0u8; 9];
+            full[..8].copy_from_slice(&digits);
+            full[8] = check as u8;
+            return digits_to_string(&full);
+        }
+    }
+    unreachable!("unbounded BSN generator finds a check digit")
+}
+
+fn gen_cpf(seed: u64) -> String {
+    let mut digits = [0u8; 11];
+    digits[..9].copy_from_slice(&first_digits::<9>(seed + 529_982_247));
+    digits[9] = cpf_check_digit(&digits[..9], 10);
+    digits[10] = cpf_check_digit(&digits[..10], 11);
+    digits_to_string(&digits)
+}
+
+fn gen_cnpj(seed: u64) -> String {
+    let mut digits = [0u8; 14];
+    digits[..12].copy_from_slice(&first_digits::<12>(seed + 42_520_110_001));
+    digits[12] = weighted_check_digit(&digits[..12], &[5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+    digits[13] = weighted_check_digit(&digits[..13], &[6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]);
+    digits_to_string(&digits)
+}
+
+fn gen_nhs(seed: u64) -> String {
+    for candidate in seed * 100.. {
+        let digits = first_digits::<9>(candidate + 943_476_591);
+        let sum: u32 = digits
+            .iter()
+            .enumerate()
+            .map(|(index, digit)| u32::from(*digit) * (10 - index as u32))
+            .sum();
+        let check = 11 - (sum % 11);
+        let check = if check == 11 { 0 } else { check };
+        if check != 10 {
+            let mut full = [0u8; 10];
+            full[..9].copy_from_slice(&digits);
+            full[9] = check as u8;
+            return digits_to_string(&full);
+        }
+    }
+    unreachable!("unbounded NHS generator finds a check digit")
+}
+
+fn first_digits<const N: usize>(mut value: u64) -> [u8; N] {
+    let mut digits = [0u8; N];
+    for digit in digits.iter_mut().rev() {
+        *digit = (value % 10) as u8;
+        value /= 10;
+    }
+    digits
+}
+
+fn cpf_check_digit(digits: &[u8], start_weight: u8) -> u8 {
+    let sum: u32 = digits
+        .iter()
+        .zip((2..=start_weight).rev())
+        .map(|(digit, weight)| u32::from(*digit) * u32::from(weight))
+        .sum();
+    let remainder = sum % 11;
+    if remainder < 2 {
+        0
+    } else {
+        (11 - remainder) as u8
+    }
+}
+
+fn weighted_check_digit(digits: &[u8], weights: &[u8]) -> u8 {
+    let sum: u32 = digits
+        .iter()
+        .zip(weights)
+        .map(|(digit, weight)| u32::from(*digit) * u32::from(*weight))
+        .sum();
+    let remainder = sum % 11;
+    if remainder < 2 {
+        0
+    } else {
+        (11 - remainder) as u8
+    }
+}
+
+fn digits_to_string(digits: &[u8]) -> String {
+    digits
+        .iter()
+        .map(|digit| char::from(b'0' + *digit))
+        .collect()
+}

@@ -47,6 +47,13 @@ every locale chain because `global` intersects all locale projections.
 | `core-extended` | `ip.v4` | `custom:ip_address` | `global` | `Ipv4Parse` |
 | `core-extended` | `ip.v6` | `custom:ip_address` | `global` | `Ipv6Parse` |
 | `core-extended` | `eth.address` | `custom:eth_address` | `global` | `EthEip55` |
+| `core` | `aadhaar.in` | `custom:aadhaar` | `en-IN`, `hi-IN` | `AadhaarVerhoeff` |
+| `core` | `nir.fr` | `custom:nir` | `fr-FR` | `FrNirMod97` |
+| `core` | `steuer_id.de` | `custom:steuer_id` | `de-DE`, `de-AT`, `de-CH` | `DeSteuerIdMod1110` |
+| `core` | `bsn.nl` | `custom:bsn` | `nl-NL` | `BsnMod11` |
+| `core` | `cpf.br` | `custom:cpf` | `pt-BR` | `CpfMod11` |
+| `core` | `cnpj.br` | `custom:cnpj` | `pt-BR` | `CnpjMod11` |
+| `core` | `nhs.uk` | `custom:nhs_number` | `en-GB` | `UkNhsMod11` |
 | `core-extended` | `postal.de` | `custom:postal_code` | `de-DE` | None |
 | `core-extended` | `postal.us` | `custom:postal_code` | `en-US` | None |
 | NER artifact | `ner` | `Name` | Policy-selected NER locale, or any locale when unset | None |

@@ -580,6 +580,13 @@ kind = "luhn"
 | `ipv4_parse` | IPv4-like candidates | `std::net::Ipv4Addr` parser validation. Rejects leading-zero octets, hex forms, short forms, and out-of-range octets. |
 | `ipv6_parse` | IPv6-like candidates | `std::net::Ipv6Addr` parser validation for RFC 4291 textual forms, including IPv4-embedded addresses. Rejects bracketed URI literals and zone-id suffixes. |
 | `eth_eip55` | Ethereum address candidates | EIP-55 checksum validation using Keccak-256. Mixed-case addresses must satisfy the checksum; all-lower and all-upper legacy forms are accepted. |
+| `aadhaar_verhoeff` | Aadhaar candidates | Verhoeff checksum validation for cue-anchored Indian Aadhaar recognizers. |
+| `fr_nir_mod97` | French NIR candidates | French NIR two-digit MOD-97 key validation. |
+| `de_steuer_id_mod1110` | German Steuer-ID candidates | ISO 7064 MOD 11,10 checksum validation. |
+| `bsn_mod11` | Dutch BSN candidates | Dutch 11-test checksum validation. |
+| `cpf_mod11` | Brazilian CPF candidates | Two-stage MOD-11 checksum validation with repeated-digit rejection. |
+| `cnpj_mod11` | Brazilian CNPJ candidates | Two-stage weighted MOD-11 checksum validation with repeated-digit rejection. |
+| `uk_nhs_mod11` | UK NHS number candidates | NHS MOD-11 checksum validation; check digit 10 is rejected. |
 
 Validator-backed regex candidates fail closed: a regex match whose validator
 returns false emits no detection. This is intentionally stricter than emitting

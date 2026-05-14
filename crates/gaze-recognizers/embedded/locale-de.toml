@@ -31,3 +31,7 @@ window_chars = 64
 [locale.cues.vat-id]
 names = ["USt-IdNr", "USt-ID", "Umsatzsteuer-ID", "MwSt-Nr"]
 window_chars = 64
+
+[locale.cues.steuer-id]
+names = ["Steuer-ID", "Steuerid", "IdNr.", "Steuerliche Identifikationsnummer", "Identifikationsnummer"]
+window_chars = 64

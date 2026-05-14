@@ -1,0 +1,8 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-locale-fr"
+rulepack_version = "0.5.1"
+default_locales = ["fr-FR"]
+
+[locale.cues.nir]
+names = ["Sécurité sociale", "Securite sociale", "n° SS", "NIR", "Numéro de sécurité sociale", "Numero de securite sociale"]
+window_chars = 64

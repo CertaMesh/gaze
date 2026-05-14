@@ -1,0 +1,8 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-locale-uk"
+rulepack_version = "0.5.1"
+default_locales = ["en-GB"]
+
+[locale.cues.nhs]
+names = ["NHS number", "NHS no", "NHS id"]
+window_chars = 64

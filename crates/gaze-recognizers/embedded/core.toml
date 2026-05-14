@@ -391,6 +391,153 @@ priority = 80
 
 [recognizers.token]
 
+[[recognizers]]
+id = "aadhaar.in"
+safety_tier = "safe_default"
+class = "custom:aadhaar"
+enabled = true
+locales = ["en-IN", "hi-IN"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:aadhaar|uid|unique identification|आधार)(?:\s*(?:number|no\.?|id))?\s*[:#-]?\s*(\d{4}[ -]?\d{4}[ -]?\d{4})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "aadhaar_verhoeff"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "nir.fr"
+safety_tier = "safe_default"
+class = "custom:nir"
+enabled = true
+locales = ["fr-FR"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:n[°º]?\s*ss|nir|s[ée]curit[ée]\s+sociale|num[ée]ro\s+de\s+s[ée]curit[ée]\s+sociale)\s*[:#-]?\s*([123478]\d(?:[ -]?\d){13})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "fr_nir_mod97"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "steuer_id.de"
+safety_tier = "safe_default"
+class = "custom:steuer_id"
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:steuer-id|steuerid|idnr\.?|steuerliche\s+identifikationsnummer|identifikationsnummer)\s*[:#-]?\s*(\d{2}[ -]?\d{3}[ -]?\d{3}[ -]?\d{3})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "de_steuer_id_mod1110"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "bsn.nl"
+safety_tier = "safe_default"
+class = "custom:bsn"
+enabled = true
+locales = ["nl-NL"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:bsn|burgerservicenummer)\s*[:#-]?\s*(\d{9})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "bsn_mod11"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "cpf.br"
+safety_tier = "safe_default"
+class = "custom:cpf"
+enabled = true
+locales = ["pt-BR"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:cpf|cadastro\s+de\s+pessoas\s+f[íi]sicas)\s*[:#-]?\s*(\d{3}\.?\d{3}\.?\d{3}-?\d{2})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "cpf_mod11"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "cnpj.br"
+safety_tier = "safe_default"
+class = "custom:cnpj"
+enabled = true
+locales = ["pt-BR"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:cnpj|cadastro\s+nacional\s+da\s+pessoa\s+jur[íi]dica)\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "cnpj_mod11"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "nhs.uk"
+safety_tier = "safe_default"
+class = "custom:nhs_number"
+enabled = true
+locales = ["en-GB"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\bnhs\s*(?:number|no\.?|id)?\s*[:#-]?\s*(\d{3}[ -]?\d{3}[ -]?\d{4})\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "uk_nhs_mod11"
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
 # Postal collision warning (research-855 §Collision matrix conclusion):
 # `postal.de` and `postal.us` both accept naked five-digit numeric strings.
 # This is safe only when active locale chains keep DE and US projections apart.
