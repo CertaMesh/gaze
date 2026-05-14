@@ -9,7 +9,7 @@
 //! * `manifest.json` deserializes back into a `gaze::Manifest` and contains
 //!   at least one `Email` + one `Custom("phone")` span.
 //! * `report.json` deserializes into a `BundleReport` shape with
-//!   `bundle_version = 1` and non-zero PII counts.
+//!   `bundle_version = 2`, per-page provenance, and non-zero PII counts.
 //!
 //! ## Skip conditions
 //!
@@ -23,7 +23,7 @@
 use std::path::{Path, PathBuf};
 
 use gaze::Manifest;
-use gaze_document::{BundleReport, DocumentError, BUNDLE_VERSION};
+use gaze_document::{BundleReport, DocumentError, OcrSource, BUNDLE_VERSION};
 use gaze_types::PiiClass;
 
 const ORIGINAL_EMAIL: &str = "jane.doe@example.com";
@@ -132,15 +132,28 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     assert_eq!(report.bundle_version, BUNDLE_VERSION);
     assert!(report.pii_token_count >= 2);
     assert!(report.clean_char_count > 0);
-    assert!(report.ocr_word_count > 0, "OCR returned zero words");
+    assert_eq!(report.low_confidence_threshold, 0.65);
+    assert_eq!(report.pages.len(), 1);
+    assert_eq!(report.pages[0].page_index, 0);
+    assert!(report.pages[0].column_count >= 1);
+    if report.pages[0].ocr_source == OcrSource::Ocr {
+        assert!(report.ocr_word_count > 0, "OCR returned zero words");
+        assert_eq!(report.pages[0].ocr_backend.as_deref(), Some("tesseract"));
+    } else {
+        assert_eq!(report.pages[0].ocr_source, OcrSource::VectorPdf);
+        assert!(report.pages[0].confidence.is_none());
+        assert!(!report.pages[0].low_confidence);
+    }
 
     if expect_pdf_fields {
         assert_eq!(report.input_kind, "pdf");
         assert_eq!(report.pdf_page_count, Some(1));
         assert_eq!(report.pdf_page_index, Some(0));
+        assert_eq!(report.pages[0].ocr_source, OcrSource::VectorPdf);
     } else {
         assert!(matches!(report.input_kind.as_str(), "png" | "jpeg"));
         assert!(report.pdf_page_count.is_none());
+        assert_eq!(report.pages[0].ocr_source, OcrSource::Ocr);
     }
 
     // Sanity: the in-memory bundle matches the written report.

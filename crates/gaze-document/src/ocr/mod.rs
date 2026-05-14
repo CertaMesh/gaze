@@ -241,7 +241,17 @@ impl OcrResult {
     /// Build an OCR result from flat spans using pixel y-position to recover
     /// a conservative reading order.
     pub fn from_spans(spans: &[OcrSpan], lang: String) -> Self {
-        let text = spans_to_text(spans);
+        Self::from_spans_with_column_detection(spans, lang, false).0
+    }
+
+    /// Build an OCR result from flat spans using the crate layout
+    /// post-processor. Returns the result plus the detected column count.
+    pub(crate) fn from_spans_with_column_detection(
+        spans: &[OcrSpan],
+        lang: String,
+        column_detection: bool,
+    ) -> (Self, u32) {
+        let ordered = crate::layout::order_spans(spans, column_detection);
         let mut conf_sum = 0.0f64;
         let mut conf_count = 0usize;
         for span in spans {
@@ -255,48 +265,89 @@ impl OcrResult {
         } else {
             Some((conf_sum / conf_count as f64) as f32)
         };
-        Self {
-            text,
-            mean_confidence,
-            word_count: conf_count,
-            lang,
-        }
+        (
+            Self {
+                text: ordered.text,
+                mean_confidence,
+                word_count: conf_count,
+                lang,
+            },
+            ordered.column_count,
+        )
+    }
+
+    /// Mean confidence normalized to `0.0..=1.0`.
+    pub(crate) fn mean_confidence_unit(&self) -> Option<f32> {
+        self.mean_confidence.map(|confidence| {
+            if confidence > 1.0 {
+                (confidence / 100.0).clamp(0.0, 1.0)
+            } else {
+                confidence.clamp(0.0, 1.0)
+            }
+        })
     }
 }
 
-fn spans_to_text(spans: &[OcrSpan]) -> String {
-    let mut ordered = spans.to_vec();
-    ordered.sort_by_key(|span| (span.bbox.y, span.bbox.x));
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut lines: Vec<Vec<OcrSpan>> = Vec::new();
-
-    for span in ordered {
-        if span.text.is_empty() {
-            continue;
-        }
-        let belongs_to_current_line = lines
-            .last()
-            .and_then(|line| line.first())
-            .map(|first| span.bbox.y.abs_diff(first.bbox.y) <= span.bbox.h.max(first.bbox.h))
-            .unwrap_or(false);
-        if belongs_to_current_line {
-            if let Some(line) = lines.last_mut() {
-                line.push(span);
-            }
-        } else {
-            lines.push(vec![span]);
-        }
+    #[test]
+    fn mean_confidence_unit_normalizes_legacy_percent_value() {
+        let result = OcrResult::new("body".to_string(), Some(91.0), 1, "eng".to_string());
+        assert_eq!(result.mean_confidence_unit(), Some(0.91));
     }
 
-    lines
-        .into_iter()
-        .map(|mut line| {
-            line.sort_by_key(|span| span.bbox.x);
-            line.into_iter()
-                .map(|span| span.text)
-                .collect::<Vec<_>>()
-                .join(" ")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+    #[test]
+    fn from_spans_reports_detected_columns() {
+        let spans = vec![
+            OcrSpan {
+                text: "A1".to_string(),
+                bbox: BBox {
+                    x: 10,
+                    y: 10,
+                    w: 30,
+                    h: 10,
+                },
+                confidence: Some(0.8),
+            },
+            OcrSpan {
+                text: "B1".to_string(),
+                bbox: BBox {
+                    x: 280,
+                    y: 10,
+                    w: 30,
+                    h: 10,
+                },
+                confidence: Some(0.8),
+            },
+            OcrSpan {
+                text: "A2".to_string(),
+                bbox: BBox {
+                    x: 10,
+                    y: 30,
+                    w: 30,
+                    h: 10,
+                },
+                confidence: Some(0.8),
+            },
+            OcrSpan {
+                text: "B2".to_string(),
+                bbox: BBox {
+                    x: 280,
+                    y: 30,
+                    w: 30,
+                    h: 10,
+                },
+                confidence: Some(0.8),
+            },
+        ];
+
+        let (result, columns) =
+            OcrResult::from_spans_with_column_detection(&spans, "eng".to_string(), true);
+
+        assert_eq!(columns, 2);
+        assert_eq!(result.text, "A1\nA2\n\nB1\nB2");
+        assert_eq!(result.mean_confidence_unit(), Some(0.8));
+    }
 }

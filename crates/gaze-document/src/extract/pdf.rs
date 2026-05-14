@@ -1,4 +1,4 @@
-//! Single-page PDF rasterization via [`pdfium-render`](https://crates.io/crates/pdfium-render).
+//! PDF text extraction and rasterization via [`pdfium-render`](https://crates.io/crates/pdfium-render).
 //!
 //! ## Runtime dependency
 //!
@@ -11,9 +11,8 @@
 //!
 //! ## Scope (v0.0.x)
 //!
-//! * Only page index `0` is rasterized. Multi-page PDFs are accepted but the
-//!   first page wins. Multi-page support is incremental on top.
-//! * Target resolution: 150 DPI, configurable via [`PdfRasterConfig`].
+//! * Selectable text is extracted directly, per page, before OCR is attempted.
+//! * Pages with no selectable text are rasterized at 150 DPI by default.
 
 use std::io::Cursor;
 use std::path::Path;
@@ -87,6 +86,41 @@ impl RasterizedPage {
     }
 }
 
+/// Per-page PDF extraction payload.
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub enum PdfPagePayload {
+    /// Page had selectable text and did not require OCR.
+    VectorText {
+        /// Extracted text in PDF text order.
+        text: String,
+        /// Zero-based page index.
+        page_index: i32,
+        /// Total page count in the source document.
+        page_count: i32,
+    },
+    /// Page had no selectable text and was rasterized for OCR.
+    Raster(RasterizedPage),
+}
+
+impl PdfPagePayload {
+    /// Zero-based page index.
+    pub fn page_index(&self) -> i32 {
+        match self {
+            Self::VectorText { page_index, .. } => *page_index,
+            Self::Raster(page) => page.page_index,
+        }
+    }
+
+    /// Total page count in the source document.
+    pub fn page_count(&self) -> i32 {
+        match self {
+            Self::VectorText { page_count, .. } => *page_count,
+            Self::Raster(page) => page.page_count,
+        }
+    }
+}
+
 /// Rasterize a single page of a PDF on disk to PNG bytes.
 ///
 /// # Errors
@@ -146,6 +180,97 @@ pub fn rasterize_first_page(
     })
 }
 
+/// Extract every PDF page, routing selectable-text pages directly and
+/// rasterizing image-only pages for OCR.
+///
+/// # Errors
+///
+/// Returns [`DocumentError`] when pdfium cannot open the document or a page
+/// cannot be rasterized.
+pub fn extract_pages(
+    path: &Path,
+    config: PdfRasterConfig,
+) -> Result<Vec<PdfPagePayload>, DocumentError> {
+    let bindings = Pdfium::bind_to_system_library().map_err(|err| {
+        DocumentError::PdfiumNotFound(format!("{}. {}", err, pdfium_install_hint()))
+    })?;
+    let pdfium = Pdfium::new(bindings);
+    let document = pdfium
+        .load_pdf_from_file(path, None)
+        .map_err(map_pdfium_error)?;
+    let pages = document.pages();
+    let page_count = pages.len();
+    if page_count == 0 {
+        return Err(DocumentError::PdfRasterFailed(
+            "input PDF contains zero pages".to_string(),
+        ));
+    }
+
+    let mut out = Vec::with_capacity(page_count as usize);
+    for page_index in 0..page_count {
+        let page = pages.get(page_index).map_err(map_pdfium_error)?;
+        let text = page
+            .text()
+            .ok()
+            .map(|page_text| normalize_pdf_text(&page_text.all()))
+            .unwrap_or_default();
+        if !text.trim().is_empty() {
+            out.push(PdfPagePayload::VectorText {
+                text,
+                page_index,
+                page_count,
+            });
+            continue;
+        }
+
+        out.push(PdfPagePayload::Raster(render_page(
+            &page, page_index, page_count, config,
+        )?));
+    }
+
+    Ok(out)
+}
+
+fn render_page(
+    page: &pdfium_render::prelude::PdfPage<'_>,
+    page_index: i32,
+    page_count: i32,
+    config: PdfRasterConfig,
+) -> Result<RasterizedPage, DocumentError> {
+    let mut render_config = PdfRenderConfig::new().set_target_width(config.width_px as i32);
+    if config.height_px > 0 {
+        render_config = render_config.set_maximum_height(config.height_px as i32);
+    }
+    let bitmap = page
+        .render_with_config(&render_config)
+        .map_err(map_pdfium_error)?;
+    let dynamic_image = bitmap.as_image().map_err(map_pdfium_error)?;
+    let (width, height) = (dynamic_image.width(), dynamic_image.height());
+
+    let mut buf = Cursor::new(Vec::with_capacity(64 * 1024));
+    dynamic_image
+        .write_to(&mut buf, ImageFormat::Png)
+        .map_err(|err| DocumentError::PdfRasterFailed(format!("png encode failed: {err}")))?;
+
+    Ok(RasterizedPage {
+        png_bytes: buf.into_inner(),
+        page_index,
+        page_count,
+        width_px: width,
+        height_px: height,
+    })
+}
+
+fn normalize_pdf_text(text: &str) -> String {
+    text.replace('\0', "")
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string()
+}
+
 fn map_pdfium_error(err: PdfiumError) -> DocumentError {
     DocumentError::PdfRasterFailed(err.to_string())
 }
@@ -184,5 +309,10 @@ mod tests {
     #[test]
     fn install_hint_is_non_empty() {
         assert!(!pdfium_install_hint().is_empty());
+    }
+
+    #[test]
+    fn normalize_pdf_text_removes_nuls_and_outer_blank_space() {
+        assert_eq!(normalize_pdf_text(" hello\0 \n\n"), "hello");
     }
 }

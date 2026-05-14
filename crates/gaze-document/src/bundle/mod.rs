@@ -32,7 +32,8 @@ use std::path::Path;
 
 #[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, LocaleTag, Pipeline, RawDocument, Scope, Session,
+    Action, ClassRule, CleanDocument, DefaultRule, LocaleTag, Pipeline as GazePipeline,
+    RawDocument, Scope, Session,
 };
 #[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze_recognizers::{
@@ -47,7 +48,8 @@ use crate::extract::InputKind;
 use crate::DocumentError;
 
 /// Versioned `report.json` schema tag (bump on breaking shape changes).
-pub const BUNDLE_VERSION: u32 = 1;
+pub const BUNDLE_VERSION: u32 = 2;
+const DEFAULT_LOW_CONFIDENCE_THRESHOLD: f32 = 0.65;
 
 /// Bundle filename written into `--out` for tokenized Markdown.
 pub const CLEAN_MARKDOWN_FILE: &str = "clean.md";
@@ -119,6 +121,63 @@ impl ClassCount {
     }
 }
 
+/// Per-page extraction source.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OcrSource {
+    /// Selectable text extracted directly from a PDF page.
+    VectorPdf,
+    /// Raster OCR from an image page.
+    Ocr,
+}
+
+/// Per-page OCR/layout provenance.
+#[non_exhaustive]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct PageReport {
+    /// Zero-based page index.
+    pub page_index: i32,
+    /// Extraction path used for this page.
+    pub ocr_source: OcrSource,
+    /// OCR backend name when [`OcrSource::Ocr`] produced the page.
+    pub ocr_backend: Option<String>,
+    /// Aggregated page confidence in `0.0..=1.0`. `None` for vector PDF text.
+    pub confidence: Option<f32>,
+    /// True when confidence is present and below the configured threshold.
+    pub low_confidence: bool,
+    /// Detected text column count. `1` means single-column.
+    pub column_count: u32,
+    /// Number of OCR words with confidence for this page.
+    pub ocr_word_count: usize,
+    /// Legacy percent-scale mean confidence for this page.
+    pub ocr_mean_confidence: Option<f32>,
+}
+
+impl PageReport {
+    fn new(
+        page_index: i32,
+        ocr_source: OcrSource,
+        ocr_backend: Option<String>,
+        ocr: &OcrResult,
+        column_count: u32,
+        low_confidence_threshold: f32,
+    ) -> Self {
+        let confidence = ocr.mean_confidence_unit();
+        Self {
+            page_index,
+            ocr_source,
+            ocr_backend,
+            confidence,
+            low_confidence: confidence
+                .map(|confidence| confidence < low_confidence_threshold)
+                .unwrap_or(false),
+            column_count,
+            ocr_word_count: ocr.word_count,
+            ocr_mean_confidence: ocr.mean_confidence,
+        }
+    }
+}
+
 /// Bundle audit + provenance report serialized to `report.json`.
 ///
 /// Schema versioned via [`BUNDLE_VERSION`]; older readers can branch on the
@@ -147,6 +206,12 @@ pub struct BundleReport {
     pub pdf_page_count: Option<i32>,
     /// PDF page index that was rasterized. `None` for image inputs.
     pub pdf_page_index: Option<i32>,
+    /// Per-page extraction, confidence, and layout provenance.
+    #[serde(default)]
+    pub pages: Vec<PageReport>,
+    /// Confidence threshold used to set [`PageReport::low_confidence`].
+    #[serde(default = "default_low_confidence_threshold")]
+    pub low_confidence_threshold: f32,
 }
 
 impl BundleReport {
@@ -160,6 +225,8 @@ impl BundleReport {
         pii_tokens_by_class: Vec<ClassCount>,
         pdf_page_count: Option<i32>,
         pdf_page_index: Option<i32>,
+        pages: Vec<PageReport>,
+        low_confidence_threshold: f32,
     ) -> Self {
         Self {
             bundle_version: BUNDLE_VERSION,
@@ -172,7 +239,64 @@ impl BundleReport {
             pii_tokens_by_class,
             pdf_page_count,
             pdf_page_index,
+            pages,
+            low_confidence_threshold,
         }
+    }
+}
+
+fn default_low_confidence_threshold() -> f32 {
+    DEFAULT_LOW_CONFIDENCE_THRESHOLD
+}
+
+/// Configurable document-cleaning pipeline.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy)]
+pub struct Pipeline {
+    low_confidence_threshold: f32,
+    column_detection: bool,
+}
+
+impl Pipeline {
+    /// Build a pipeline with conservative defaults.
+    pub fn new() -> Self {
+        Self {
+            low_confidence_threshold: DEFAULT_LOW_CONFIDENCE_THRESHOLD,
+            column_detection: true,
+        }
+    }
+
+    /// Override the per-page low-confidence threshold.
+    pub fn with_low_confidence_threshold(mut self, threshold: f32) -> Self {
+        self.low_confidence_threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
+
+    /// Enable or disable multi-column OCR span ordering.
+    pub fn with_column_detection(mut self, enabled: bool) -> Self {
+        self.column_detection = enabled;
+        self
+    }
+
+    /// Clean one document with an adopter-supplied OCR backend.
+    ///
+    /// # Errors
+    /// Returns [`DocumentError`] for any extraction, OCR, redaction, or write failure.
+    #[cfg(feature = "ocr-tesseract")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
+    pub fn clean_with_ocr_backend(
+        &self,
+        input: &Path,
+        out_dir: &Path,
+        ocr_backend: &dyn OcrBackend,
+    ) -> Result<SafeBundle, DocumentError> {
+        clean_with_options(input, out_dir, ocr_backend, *self)
+    }
+}
+
+impl Default for Pipeline {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -214,7 +338,7 @@ impl LayoutSummary {
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> {
     let backend = crate::ocr::TesseractBackend::new();
-    clean_with_ocr_backend(input, out_dir, &backend)
+    Pipeline::new().clean_with_ocr_backend(input, out_dir, &backend)
 }
 
 /// Top-level entry point with an adopter-supplied OCR backend.
@@ -234,6 +358,16 @@ pub fn clean_with_ocr_backend(
     out_dir: &Path,
     ocr_backend: &dyn OcrBackend,
 ) -> Result<SafeBundle, DocumentError> {
+    Pipeline::new().clean_with_ocr_backend(input, out_dir, ocr_backend)
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn clean_with_options(
+    input: &Path,
+    out_dir: &Path,
+    ocr_backend: &dyn OcrBackend,
+    options: Pipeline,
+) -> Result<SafeBundle, DocumentError> {
     let kind = InputKind::detect(input)?;
     let absolute_input = absolutize(input);
     let absolute_out = absolutize(out_dir);
@@ -241,14 +375,14 @@ pub fn clean_with_ocr_backend(
     fs::create_dir_all(out_dir)
         .map_err(|err| DocumentError::OutputDir(absolute_out.clone(), err))?;
 
-    let (ocr_result, pdf_page_count, pdf_page_index) = run_ocr(input, kind, ocr_backend)?;
+    let extraction = run_document_extraction(input, kind, ocr_backend, options)?;
     // Repair known narrow OCR artifacts (e.g. spurious whitespace around
     // `@` in emails) before the redact pipeline sees the text. See
     // `crate::ocr::normalize` for the documented rule set. Axis 1
     // (never leak) requires this — the OCR pass occasionally inserts a
     // single space inside an email that would otherwise slip past strict
     // recognizers and survive into clean.md.
-    let normalized_text = crate::ocr::normalize_ocr_artifacts(&ocr_result.text);
+    let normalized_text = crate::ocr::normalize_ocr_artifacts(&extraction.ocr_result.text);
     let pipeline = build_document_pipeline()?;
     let session = Session::new(Scope::Ephemeral).map_err(|err| pipeline_err("session", err))?;
     let locale_chain = [LocaleTag::Global];
@@ -271,12 +405,14 @@ pub fn clean_with_ocr_backend(
 
     let report = BundleReport::new(
         kind_label(kind),
-        &ocr_result,
+        &extraction.ocr_result,
         clean_text.chars().count(),
         pii_token_count,
         counts,
-        pdf_page_count,
-        pdf_page_index,
+        extraction.pdf_page_count,
+        extraction.pdf_page_index,
+        extraction.pages,
+        options.low_confidence_threshold,
     );
 
     let clean_markdown = format_clean_markdown(&clean_text, kind);
@@ -285,7 +421,7 @@ pub fn clean_with_ocr_backend(
     Ok(SafeBundle::new(
         clean_markdown,
         manifest,
-        LayoutSummary::single_page(),
+        LayoutSummary::new(extraction.page_count),
         None,
         report,
         absolute_input,
@@ -294,38 +430,123 @@ pub fn clean_with_ocr_backend(
 }
 
 #[cfg(feature = "ocr-tesseract")]
+struct DocumentExtraction {
+    ocr_result: OcrResult,
+    pdf_page_count: Option<i32>,
+    pdf_page_index: Option<i32>,
+    pages: Vec<PageReport>,
+    page_count: u32,
+}
+
+#[cfg(feature = "ocr-tesseract")]
 pub(crate) fn run_ocr(
     input: &Path,
     kind: InputKind,
     ocr_backend: &dyn OcrBackend,
 ) -> Result<(OcrResult, Option<i32>, Option<i32>), DocumentError> {
+    let extraction = run_document_extraction(input, kind, ocr_backend, Pipeline::new())?;
+    Ok((
+        extraction.ocr_result,
+        extraction.pdf_page_count,
+        extraction.pdf_page_index,
+    ))
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn run_document_extraction(
+    input: &Path,
+    kind: InputKind,
+    ocr_backend: &dyn OcrBackend,
+    options: Pipeline,
+) -> Result<DocumentExtraction, DocumentError> {
     match kind {
         InputKind::Png | InputKind::Jpeg => {
             let bytes = fs::read(input)?;
-            let result = recognize_image(
+            let (result, column_count) = recognize_image(
                 ocr_backend,
                 ImageInput {
                     bytes,
                     format: image_format_for_kind(kind),
                     dpi: None,
                 },
+                options.column_detection,
             )?;
-            Ok((result, None, None))
+            let page_report = PageReport::new(
+                0,
+                OcrSource::Ocr,
+                Some(ocr_backend.name().to_string()),
+                &result,
+                column_count,
+                options.low_confidence_threshold,
+            );
+            Ok(DocumentExtraction {
+                ocr_result: result,
+                pdf_page_count: None,
+                pdf_page_index: None,
+                pages: vec![page_report],
+                page_count: 1,
+            })
         }
         InputKind::Pdf => {
             #[cfg(feature = "pdf-input")]
             {
-                use crate::extract::pdf::{rasterize_first_page, PdfRasterConfig};
-                let raster = rasterize_first_page(input, PdfRasterConfig::new())?;
-                let result = recognize_image(
-                    ocr_backend,
-                    ImageInput {
-                        bytes: raster.png_bytes,
-                        format: ImageFormat::Png,
-                        dpi: None,
-                    },
-                )?;
-                Ok((result, Some(raster.page_count), Some(raster.page_index)))
+                use crate::extract::pdf::{extract_pages, PdfPagePayload, PdfRasterConfig};
+                let payloads = extract_pages(input, PdfRasterConfig::new())?;
+                let mut page_results = Vec::with_capacity(payloads.len());
+                let mut pages = Vec::with_capacity(payloads.len());
+                let mut pdf_page_count = None;
+                let mut first_page_index = None;
+
+                for payload in payloads {
+                    pdf_page_count = Some(payload.page_count());
+                    if first_page_index.is_none() {
+                        first_page_index = Some(payload.page_index());
+                    }
+                    match payload {
+                        PdfPagePayload::VectorText {
+                            text, page_index, ..
+                        } => {
+                            let result = OcrResult::new(text, None, 0, "vector-pdf".to_string());
+                            pages.push(PageReport::new(
+                                page_index,
+                                OcrSource::VectorPdf,
+                                None,
+                                &result,
+                                1,
+                                options.low_confidence_threshold,
+                            ));
+                            page_results.push(result);
+                        }
+                        PdfPagePayload::Raster(raster) => {
+                            let (result, column_count) = recognize_image(
+                                ocr_backend,
+                                ImageInput {
+                                    bytes: raster.png_bytes,
+                                    format: ImageFormat::Png,
+                                    dpi: None,
+                                },
+                                options.column_detection,
+                            )?;
+                            pages.push(PageReport::new(
+                                raster.page_index,
+                                OcrSource::Ocr,
+                                Some(ocr_backend.name().to_string()),
+                                &result,
+                                column_count,
+                                options.low_confidence_threshold,
+                            ));
+                            page_results.push(result);
+                        }
+                    }
+                }
+
+                Ok(DocumentExtraction {
+                    ocr_result: merge_page_results(&page_results),
+                    pdf_page_count,
+                    pdf_page_index: first_page_index,
+                    page_count: pages.len() as u32,
+                    pages,
+                })
             }
             #[cfg(not(feature = "pdf-input"))]
             {
@@ -342,13 +563,41 @@ pub(crate) fn run_ocr(
 fn recognize_image(
     ocr_backend: &dyn OcrBackend,
     image: ImageInput,
-) -> Result<OcrResult, DocumentError> {
+    column_detection: bool,
+) -> Result<(OcrResult, u32), DocumentError> {
     let hints = OcrHints::default();
     let lang = hints.primary_language().to_string();
     let spans = ocr_backend
         .recognize(image, hints)
         .map_err(map_ocr_error_to_document_error)?;
-    Ok(OcrResult::from_spans(&spans, lang))
+    Ok(OcrResult::from_spans_with_column_detection(
+        &spans,
+        lang,
+        column_detection,
+    ))
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn merge_page_results(results: &[OcrResult]) -> OcrResult {
+    let text = results
+        .iter()
+        .map(|result| result.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let mut conf_sum = 0.0f64;
+    let mut conf_count = 0usize;
+    for result in results {
+        if let Some(confidence) = result.mean_confidence {
+            conf_sum += confidence as f64 * result.word_count as f64;
+            conf_count += result.word_count;
+        }
+    }
+    let mean_confidence = if conf_count == 0 {
+        None
+    } else {
+        Some((conf_sum / conf_count as f64) as f32)
+    };
+    OcrResult::new(text, mean_confidence, conf_count, "mixed".to_string())
 }
 
 #[cfg(feature = "ocr-tesseract")]
@@ -382,7 +631,7 @@ fn map_ocr_error_to_document_error(err: OcrError) -> DocumentError {
 
 #[cfg(feature = "ocr-tesseract")]
 #[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
-pub(crate) fn build_document_pipeline() -> Result<Pipeline, DocumentError> {
+pub(crate) fn build_document_pipeline() -> Result<GazePipeline, DocumentError> {
     let email = RegexDetector::emails().map_err(|err| pipeline_err("email-regex", err))?;
     // Conservative phone pattern: optional `+CC`, area, exchange, line, with
     // common separators. Synthetic fixture uses `+1-555-0142`-style numbers.
@@ -416,7 +665,7 @@ pub(crate) fn build_document_pipeline() -> Result<Pipeline, DocumentError> {
         0.88,
         110,
     );
-    Pipeline::builder()
+    GazePipeline::builder()
         .detector(email)
         .detector(phone)
         .recognizer(recipient_name)
@@ -496,6 +745,34 @@ fn pipeline_err(stage: &'static str, err: impl std::fmt::Display) -> DocumentErr
 #[cfg(all(test, feature = "ocr-tesseract"))]
 mod tests {
     use super::*;
+    use crate::ocr::{BBox, OcrSpan};
+
+    #[derive(Debug)]
+    struct MockBackend {
+        spans: Vec<OcrSpan>,
+    }
+
+    impl OcrBackend for MockBackend {
+        fn name(&self) -> &str {
+            "mock-ocr"
+        }
+
+        fn recognize(
+            &self,
+            _image: ImageInput,
+            _hints: OcrHints,
+        ) -> Result<Vec<OcrSpan>, OcrError> {
+            Ok(self.spans.clone())
+        }
+    }
+
+    fn span(text: &str, x: u32, y: u32, confidence: f32) -> OcrSpan {
+        OcrSpan {
+            text: text.to_string(),
+            bbox: BBox { x, y, w: 90, h: 16 },
+            confidence: Some(confidence),
+        }
+    }
 
     #[test]
     fn count_pii_by_class_groups_email_and_phone() {
@@ -525,11 +802,90 @@ mod tests {
             ],
             None,
             None,
+            vec![PageReport::new(
+                0,
+                OcrSource::Ocr,
+                Some("tesseract".to_string()),
+                &ocr,
+                1,
+                DEFAULT_LOW_CONFIDENCE_THRESHOLD,
+            )],
+            DEFAULT_LOW_CONFIDENCE_THRESHOLD,
         );
         let json = serde_json::to_value(&report).expect("serialize");
         assert_eq!(json["bundle_version"], BUNDLE_VERSION);
         assert_eq!(json["input_kind"], "png");
         assert_eq!(json["pii_token_count"], 3);
+        assert_eq!(json["pages"][0]["ocr_source"], "ocr");
+        assert_eq!(
+            json["low_confidence_threshold"],
+            DEFAULT_LOW_CONFIDENCE_THRESHOLD
+        );
+    }
+
+    #[test]
+    fn v1_report_without_page_fields_still_deserializes() {
+        let json = serde_json::json!({
+            "bundle_version": 1,
+            "input_kind": "png",
+            "ocr_mean_confidence": 90.0,
+            "ocr_word_count": 2,
+            "ocr_lang": "eng",
+            "clean_char_count": 12,
+            "pii_token_count": 1,
+            "pii_tokens_by_class": [{ "class": "email", "count": 1 }],
+            "pdf_page_count": null,
+            "pdf_page_index": null
+        });
+
+        let report: BundleReport = serde_json::from_value(json).expect("v1 parses");
+
+        assert_eq!(report.bundle_version, 1);
+        assert!(report.pages.is_empty());
+        assert_eq!(
+            report.low_confidence_threshold,
+            DEFAULT_LOW_CONFIDENCE_THRESHOLD
+        );
+    }
+
+    #[test]
+    fn clean_with_mock_backend_flags_low_confidence_and_columns() {
+        let backend = MockBackend {
+            spans: vec![
+                span("Bill", 20, 10, 0.50),
+                span("to:", 116, 10, 0.50),
+                span("Jane", 20, 36, 0.50),
+                span("Doe", 116, 36, 0.50),
+                span("Email:", 360, 10, 0.50),
+                span("alice@example.invalid", 360, 36, 0.50),
+            ],
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let input = tmp.path().join("input.png");
+        fs::write(&input, b"not-real-image").expect("write input");
+
+        let bundle = Pipeline::new()
+            .with_low_confidence_threshold(0.65)
+            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .expect("clean succeeds");
+
+        assert_eq!(bundle.report.bundle_version, 2);
+        assert_eq!(bundle.report.pages.len(), 1);
+        let page = &bundle.report.pages[0];
+        assert_eq!(page.ocr_backend.as_deref(), Some("mock-ocr"));
+        assert_eq!(page.column_count, 2);
+        assert_eq!(page.confidence, Some(0.5));
+        assert!(page.low_confidence);
+        assert!(
+            bundle.clean_markdown.contains(":Email_"),
+            "{}",
+            bundle.clean_markdown
+        );
+        assert!(
+            !bundle.clean_markdown.contains("alice@example.invalid"),
+            "{}",
+            bundle.clean_markdown
+        );
     }
 
     #[test]

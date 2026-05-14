@@ -1,6 +1,6 @@
 //! Document ingestion + safe-bundle generation for the Gaze runtime.
 //!
-//! `gaze-document` turns a single image (PNG / JPG) or single-page PDF into a
+//! `gaze-document` turns a single image (PNG / JPG) or PDF into a
 //! [`SafeBundle`]: tokenized Markdown, a restorable [`gaze::Manifest`], and a
 //! structured OCR + PII [`BundleReport`]. PII detection flows through the
 //! standard [`gaze::Pipeline`] so the manifest stays canonical and reversible
@@ -30,7 +30,7 @@
 //! | Flag             | Default | What it enables                                            |
 //! |------------------|---------|------------------------------------------------------------|
 //! | `ocr-tesseract`  | yes     | Tesseract subprocess OCR backend.                          |
-//! | `pdf-input`      | yes     | Single-page PDF rasterization via `pdfium-render`.         |
+//! | `pdf-input`      | yes     | PDF text extraction + raster OCR fallback via `pdfium-render`. |
 //! | `serde`          | yes     | `Serialize` / `Deserialize` for [`BundleReport`].          |
 //! | `extract-docling`| no      | Reserved — future Docling layout adapter (no impl yet).    |
 //! | `render-image`   | no      | Reserved — future redacted-preview renderer (no impl yet). |
@@ -51,7 +51,10 @@ pub mod render;
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub use bundle::{clean, clean_with_ocr_backend};
-pub use bundle::{BundleReport, ClassCount, LayoutSummary, SafeBundle, BUNDLE_VERSION};
+pub use bundle::{
+    BundleReport, ClassCount, LayoutSummary, OcrSource, PageReport, Pipeline, SafeBundle,
+    BUNDLE_VERSION,
+};
 pub use layout::ReadingOrder;
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
