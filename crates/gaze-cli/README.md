@@ -150,7 +150,9 @@ Flags:
 | `--kiji-distilbert-model-dir <path>` | Path to the pinned Kiji DistilBERT model directory (must contain `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`). Required with the `kiji-distilbert` backend. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
-| `--safety-net-mode <strict\|tolerant>` | `strict` exits `3` on `Uncovered`/`PartialBleed` suspects; `tolerant` emits warnings on stderr and continues. Defaults to `strict`. |
+| `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` overwrites the suspect span with a sentinel and records an audit row; `resolve` promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver. Defaults to `resolve`. Mode catalog and posture guide: [`docs/architecture/safety-net-modes.md`](../../docs/architecture/safety-net-modes.md). |
+| `--safety-net-fallback <strict\|tolerant\|redact>` | Cascade action when `--safety-net-mode` is `redact` or `resolve` and the primary action cannot be honored for a specific suspect (manifest overlap or grapheme-cluster break for `redact`; validator-veto, missing mandatory anchor, or residual suspect after the one-shot resolve pass for `resolve`). Ignored when `--safety-net-mode` is `strict` or `tolerant`. Defaults to `redact`. One-hop cascade only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Composition matrix and audit-row delta: [`docs/architecture/safety-net-modes.md`](../../docs/architecture/safety-net-modes.md#6-fallback-flag). |
+| `--safety-net-resolve-threshold <float>` | Confidence threshold for `--safety-net-mode resolve`. Suspects below threshold are dropped before candidate construction. Defaults to `0.7`. `0.0` disables filtering; `1.0` disables resolve entirely. |
 
 When `--policy` is omitted, the CLI runs a stub email pipeline so the process
 surface can be exercised. Production use should pass `--policy`.
@@ -233,6 +235,7 @@ $ printf '%s' 'Email alice@example.invalid or call 555-0100 now' \
   | gaze clean \
       --policy=policy.toml \
       --safety-net=openai-filter \
+      --safety-net-mode=strict \
       --openai-filter-command=/opt/opf/bin/opf \
       --openai-filter-checkpoint=/opt/opf/checkpoint
 ```
@@ -279,10 +282,14 @@ exits `0`:
 {"warning":"SafetyNet","variant":"SuspectedLeak","count":1}
 ```
 
-Strict mode (the default) would exit `3` with the JSON error
+Strict mode (the v0.7.x default; now opt-in via `--safety-net-mode strict`)
+would exit `3` with the JSON error
 `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout would
 be empty. `ClassMismatch` suspects always warn but never fail strict mode,
 because the manifest still tokenized the bytes — only the class disagrees.
+The default mode in v0.8.x+ is `resolve` with a `redact` fallback (see the
+flag table above and the
+[mode catalog](../../docs/architecture/safety-net-modes.md)).
 
 #### Synthetic example — Kiji DistilBERT backend
 
