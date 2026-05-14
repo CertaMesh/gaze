@@ -12,11 +12,9 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 ```toml
 [dependencies]
-gaze-pii = "0.8.0-rc.1"
-gaze-assembly = "0.8.0-rc.1"
+gaze-pii = "0.8.0"
+gaze-assembly = "0.8.0"
 ```
-
-> v0.8 pre-release window: pin the exact `0.8.0-rc.N` version. Cargo's caret operator excludes pre-releases, so `"0.8"` will not resolve to `0.8.0-rc.1`.
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
 
