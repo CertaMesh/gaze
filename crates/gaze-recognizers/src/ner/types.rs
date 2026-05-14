@@ -130,6 +130,8 @@ impl NerBackendKind {
 pub struct VerifiedArtifacts {
     pub model_dir: PathBuf,
     pub backend_kind: NerBackendKind,
+    pub recognizer_model_id: String,
+    pub recognizer_model_version: String,
     pub labels: LabelMap,
     pub id2label: Vec<String>,
 }

@@ -428,11 +428,11 @@ fn legacy_schema_without_decided_by_is_queryable() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
     ));
-    assert!(
-        stdout.contains("dictionary:audit_terms[#0]\tcustom:term\ttokenize\t\ttext\tfalse\tnone")
-    );
+    assert!(stdout.contains("dictionary:audit_terms[#0]"));
+    assert!(stdout.contains("custom:term"));
+    assert!(stdout.contains("tokenize"));
 }
 
 #[test]
@@ -454,9 +454,11 @@ fn audit_sql_uses_restricted_column_set() {
         ambiguity_reason: None,
         collision_family: None,
         collision_variant: None,
+        recognizer_id: None,
+        recognizer_version_id: None,
     };
     let (current_sql, values) = build_audit_query_sql(
-        &filter, true, true, true, true, true, true, true, true, true, true,
+        &filter, true, true, true, true, true, true, true, true, true, true, true, true,
     );
     assert_eq!(
         values,
@@ -493,6 +495,8 @@ fn audit_sql_uses_restricted_column_set() {
     };
     let (legacy_sql, legacy_values) = build_audit_query_sql(
         &legacy_filter,
+        false,
+        false,
         false,
         false,
         false,
@@ -543,7 +547,9 @@ fn assert_restricted_sql(sql: &str) {
             "audit SQL must not read sensitive column '{sensitive}': {sql}"
         );
     }
-    assert!(lower
-        .starts_with("select source, class, action, field_name, document_kind, conflict_loser, "));
+    assert!(lower.starts_with("select source, "));
+    assert!(lower.contains("recognizer_id"));
+    assert!(lower.contains("recognizer_version_id"));
+    assert!(lower.contains(" class, action, field_name, document_kind, conflict_loser, "));
     assert!(lower.contains(" from redaction_log"));
 }

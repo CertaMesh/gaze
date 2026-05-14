@@ -69,8 +69,10 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
+            row.recognizer_id.as_deref().unwrap_or(""),
+            row.recognizer_version_id.as_deref().unwrap_or(""),
             row.class,
             row.action,
             row.field_name.as_deref().unwrap_or(""),
@@ -195,6 +197,8 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
             .map(normalize_kebab_variant),
         collision_family: args.collision_family.clone(),
         collision_variant: args.collision_variant.clone(),
+        recognizer_id: None,
+        recognizer_version_id: None,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -221,6 +225,8 @@ fn read_safety_net_rows(
         ambiguity_reason: None,
         collision_family: None,
         collision_variant: None,
+        recognizer_id: None,
+        recognizer_version_id: None,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -307,6 +313,8 @@ fn ambiguity_display(value: &Option<String>) -> Result<String, CliError> {
 #[derive(Serialize)]
 struct JsonlRow {
     source: String,
+    recognizer_id: Option<String>,
+    recognizer_version_id: Option<String>,
     class: String,
     action: String,
     field_name: Option<String>,
@@ -330,6 +338,8 @@ impl TryFrom<AuditLogRow> for JsonlRow {
     fn try_from(row: AuditLogRow) -> Result<Self, Self::Error> {
         Ok(Self {
             source: row.source,
+            recognizer_id: row.recognizer_id,
+            recognizer_version_id: row.recognizer_version_id,
             class: row.class,
             action: row.action,
             field_name: row.field_name,

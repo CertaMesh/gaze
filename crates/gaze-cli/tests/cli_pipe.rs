@@ -1204,12 +1204,12 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
     ));
     assert!(
         stdout
             .lines()
-            .any(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t")),
+            .any(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t")),
         "unexpected query stdout: {stdout}"
     );
 
@@ -1240,6 +1240,8 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     let row: Value = serde_json::from_str(rows.lines().next().unwrap()).unwrap();
     assert_eq!(row["class"], "email");
     assert_eq!(row["source"], "regex");
+    assert_eq!(row["recognizer_id"], "regex");
+    assert_eq!(row["recognizer_version_id"], Value::Null);
     assert_eq!(row["action"], "tokenize");
     assert_eq!(row["field_name"], Value::Null);
     assert_eq!(row["document_kind"], "text");
@@ -1317,8 +1319,8 @@ fn s4_audit_query_filters_ambiguity_and_collision_metadata() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.lines().next().unwrap().ends_with("\tambiguity"));
-    assert!(stdout.contains("hybrid\tcustom:postal_or_phone_de"));
-    assert!(!stdout.contains("regex\temail"));
+    assert!(stdout.contains("hybrid\t\t\tcustom:postal_or_phone_de"));
+    assert!(!stdout.contains("regex\t\t\temail"));
     assert!(stdout.contains(
         "class=custom:postal_or_phone_de reason=no_anchor losing=[custom:postal_de:postal-de]"
     ));
@@ -1389,11 +1391,11 @@ fn s2_audit_cli_smoke_filters_created_at_range() {
     let stdout = String::from_utf8(query.stdout).unwrap();
     let row = stdout
         .lines()
-        .find(|line| line.starts_with("regex\temail\ttokenize\t\ttext\tfalse\t"))
+        .find(|line| line.starts_with("regex\tregex\t\temail\ttokenize\t\ttext\tfalse\t"))
         .expect("expected email audit row in bounded time range");
     let created_at = row
         .split('\t')
-        .nth(7)
+        .nth(9)
         .expect("created_at column")
         .parse::<i64>()
         .expect("created_at is epoch milliseconds");
@@ -1771,6 +1773,8 @@ fn s4_audit_query_columns_are_restricted() {
         true,
         true,
         true,
+        true,
+        true,
     );
     assert!(
         values.is_empty(),
@@ -1837,6 +1841,8 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
         true,
         true,
         true,
+        true,
+        true,
     );
     let conn = Connection::open(&audit_path).unwrap();
     let mut stmt = conn.prepare(&sql).unwrap();
@@ -1844,9 +1850,9 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
         .query_map(params_from_iter(values.iter()), |row| {
             Ok((
                 row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(6)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+                row.get::<_, String>(8)?,
             ))
         })
         .unwrap()
