@@ -1,1 +1,0 @@
-{"tool":"infra_note","args":{"addr":"2001:db8::1448:192.0.2.175","mail":"jadyn@example.org"}}

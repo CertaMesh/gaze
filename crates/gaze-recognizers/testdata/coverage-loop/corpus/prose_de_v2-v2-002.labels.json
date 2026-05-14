@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_de_v2-v2-002",
+  "context": "prose_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_de_v2",
+  "spans": [
+    {
+      "byte_start": 81,
+      "byte_end": 112,
+      "class_id": "Email",
+      "raw_label": "blair.review877@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 3721468137440248417,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 119,
+      "byte_end": 143,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:9ab6:2787::f4f1",
+      "generator_id": "ip_v6",
+      "generator_seed": 12350360220219265860,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_de_v2-v2-002",
+    "template_seed": 13729021410480315524
+  }
+}

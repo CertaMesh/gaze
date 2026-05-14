@@ -1,0 +1,1 @@
+[2026-05-14T08:00:00Z] INFO scenario=Please respond to card_0 4722 4463 6762 0790; email_1 morgan.clean185@example.invalid. ref=CASE-7421 status=pending

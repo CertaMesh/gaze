@@ -1,3 +1,0 @@
-Von: karen@example.net (Felix Weber)
-An: team@example.invalid
-Telefon: +49 1555 0112233

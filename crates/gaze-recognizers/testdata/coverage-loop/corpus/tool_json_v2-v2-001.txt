@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to email_0 dana.audit668@example.invalid; IBAN 1 DE51389061948712616419. ref=CASE-7421 status=pending"}}

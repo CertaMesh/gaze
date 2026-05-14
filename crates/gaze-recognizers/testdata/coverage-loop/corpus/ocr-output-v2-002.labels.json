@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-v2-002",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "ocr-output",
+  "spans": [
+    {
+      "byte_start": 53,
+      "byte_end": 84,
+      "class_id": "Email",
+      "raw_label": "evan.fixture434@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10687271213506475410,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 91,
+      "byte_end": 115,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:2dd1:400b::60e8",
+      "generator_id": "ip_v6",
+      "generator_seed": 17279878063281544860,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-v2-002",
+    "template_seed": 9366532790501887558
+  }
+}

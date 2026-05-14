@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-en-006",
+  "context": "high-density-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 206,
+      "byte_end": 217,
+      "class_id": "Name",
+      "raw_label": "Evan Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 2591694047480076725,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 228,
+      "byte_end": 239,
+      "class_id": "Name",
+      "raw_label": "Dana Morgan",
+      "generator_id": "name_en",
+      "generator_seed": 17644413179503921285,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 249,
+      "byte_end": 283,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic309@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 3612425724502709876,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 292,
+      "byte_end": 311,
+      "class_id": "custom:credit_card",
+      "raw_label": "4792 5068 0921 9017",
+      "generator_id": "card_luhn",
+      "generator_seed": 13753997631060138907,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 318,
+      "byte_end": 344,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::267f:192.0.2.112",
+      "generator_id": "ip_v6",
+      "generator_seed": 14412756097329962359,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-en-006",
+    "template_seed": 11093737397533866473
+  }
+}

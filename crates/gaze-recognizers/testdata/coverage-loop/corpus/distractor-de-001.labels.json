@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-de-001",
+  "context": "distractor-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 80,
+      "byte_end": 102,
+      "class_id": "custom:iban",
+      "raw_label": "DE81457401392752298781",
+      "generator_id": "iban_de",
+      "generator_seed": 9254618674255812897,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 112,
+      "byte_end": 143,
+      "class_id": "Email",
+      "raw_label": "blair.review274@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 823197304218484587,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-de-001",
+    "template_seed": 693860414633287291
+  }
+}

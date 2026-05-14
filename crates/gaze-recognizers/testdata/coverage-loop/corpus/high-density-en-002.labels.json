@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-en-002",
+  "context": "high-density-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 72,
+      "byte_end": 83,
+      "class_id": "Name",
+      "raw_label": "Alice Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 1906275743323109701,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 93,
+      "byte_end": 124,
+      "class_id": "Email",
+      "raw_label": "morgan.clean499@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 1886039708681827211,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 135,
+      "byte_end": 146,
+      "class_id": "Name",
+      "raw_label": "Dana Parker",
+      "generator_id": "name_en",
+      "generator_seed": 3452127049736892675,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 156,
+      "byte_end": 190,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic336@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 3434301998053528710,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-en-002",
+    "template_seed": 5602690250846941214
+  }
+}

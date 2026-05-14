@@ -1,0 +1,1 @@
+SCAN 001 / OCR CONF 0.98 / Please respond to card_0 4492 7796 4065 9849; phone_1 +12025550157. ref=CASE-7421 status=pending

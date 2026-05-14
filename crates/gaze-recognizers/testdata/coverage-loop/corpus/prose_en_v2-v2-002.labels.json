@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_en_v2-v2-002",
+  "context": "prose_en_v2",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_en_v2",
+  "spans": [
+    {
+      "byte_start": 71,
+      "byte_end": 102,
+      "class_id": "Email",
+      "raw_label": "evan.fixture745@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 11247712969728972209,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 109,
+      "byte_end": 133,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:8b4e:774c::eb10",
+      "generator_id": "ip_v6",
+      "generator_seed": 10505607399547110738,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_en_v2-v2-002",
+    "template_seed": 6493576648088579363
+  }
+}

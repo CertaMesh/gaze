@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-009",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 158,
+      "byte_end": 169,
+      "class_id": "Name",
+      "raw_label": "Laura Weber",
+      "generator_id": "name_de",
+      "generator_seed": 13328133042137754823,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 178,
+      "byte_end": 200,
+      "class_id": "custom:iban",
+      "raw_label": "DE11436260102073580572",
+      "generator_id": "iban_de",
+      "generator_seed": 8807150737465111133,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 210,
+      "byte_end": 241,
+      "class_id": "Email",
+      "raw_label": "evan.fixture887@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 12078208962979574528,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 252,
+      "byte_end": 263,
+      "class_id": "Name",
+      "raw_label": "Laura Weber",
+      "generator_id": "name_de",
+      "generator_seed": 1376206126179502854,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 273,
+      "byte_end": 304,
+      "class_id": "Email",
+      "raw_label": "evan.fixture726@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 13539299505166465203,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-009",
+    "template_seed": 15708217504883541212
+  }
+}

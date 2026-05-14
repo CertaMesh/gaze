@@ -1,0 +1,1 @@
+Support note for the synthetic review queue. Please respond to ip_0 2001:db8::2b0f:192.0.2.107; email_1 alice.synthetic624@example.invalid. ref=CASE-7421 status=pending

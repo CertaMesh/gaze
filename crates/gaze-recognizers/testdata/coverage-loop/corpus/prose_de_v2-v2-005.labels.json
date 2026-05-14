@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_de_v2-v2-005",
+  "context": "prose_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_de_v2",
+  "spans": [
+    {
+      "byte_start": 81,
+      "byte_end": 112,
+      "class_id": "Email",
+      "raw_label": "blair.review238@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 14052150582681350524,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 122,
+      "byte_end": 134,
+      "class_id": "custom:phone",
+      "raw_label": "015550112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 6282933715642502794,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_de_v2-v2-005",
+    "template_seed": 8841423487841477773
+  }
+}

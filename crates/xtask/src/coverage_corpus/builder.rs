@@ -8,12 +8,13 @@ use sha2::{Digest, Sha256};
 
 use super::generators::GeneratorRegistry;
 use super::templates::{self, Template};
+use super::COVERAGE_CORPUS_SEED;
 
 #[derive(Debug, Parser)]
 pub struct Args {
     #[arg(long)]
     regenerate: bool,
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = COVERAGE_CORPUS_SEED)]
     seed: u64,
     #[arg(long)]
     only: Option<String>,
@@ -34,16 +35,8 @@ pub fn run(args: Args) -> Result<()> {
     let mut fixture_count = 0_usize;
     let mut manifest_entries = Vec::new();
     for template in templates {
-        for fixture_idx in 0..fixture_variants(&template) {
-            manifest_entries.push(build_fixture(
-                &registry,
-                &template,
-                args.seed,
-                fixture_idx,
-                &corpus_dir,
-            )?);
-            fixture_count += 1;
-        }
+        manifest_entries.push(build_fixture(&registry, &template, args.seed, &corpus_dir)?);
+        fixture_count += 1;
     }
 
     manifest_entries.sort_by(|left, right| left.fixture_id.cmp(&right.fixture_id));
@@ -85,13 +78,12 @@ fn build_fixture(
     registry: &GeneratorRegistry,
     template: &Template,
     global_seed: u64,
-    fixture_idx: usize,
     corpus_dir: &Path,
 ) -> Result<BuildManifestEntry> {
     validate_template(template)?;
 
-    let fixture_id = format!("{}-{fixture_idx}", template.id);
-    let template_seed = mixed_seed(global_seed, &template.id, fixture_idx, "template");
+    let fixture_id = template.id.clone();
+    let template_seed = mixed_seed(global_seed, &template.id, 0, "template");
     let mut body = String::new();
     let mut spans = Vec::new();
     let mut cursor = 0_usize;
@@ -114,11 +106,23 @@ fn build_fixture(
                 locale, template.id
             )
         })?;
-        let generator_seed = mixed_seed(global_seed, &template.id, fixture_idx, slot);
+        let generator_seed = mixed_seed(global_seed, &template.id, 0, slot);
         let raw_label = generator.generate(generator_seed);
         let byte_start = body.len();
         body.push_str(&raw_label);
         let byte_end = body.len();
+
+        let expected = template
+            .expected_emissions
+            .get(slot_idx)
+            .with_context(|| format!("missing expected emission {slot_idx} in {}", template.id))?;
+        if expected.class_id != class_id {
+            bail!(
+                "expected emission {slot_idx} in {} has class {}, placeholder has {class_id}",
+                template.id,
+                expected.class_id
+            );
+        }
 
         spans.push(LabelSpan {
             byte_start,
@@ -128,6 +132,8 @@ fn build_fixture(
             generator_id: generator.id(),
             generator_seed,
             license_origin: "synthetic-rust-generator",
+            expected_recognizer_id: expected.recognizer_id.clone(),
+            expected_recognizer_version_id: expected.recognizer_version_id.clone(),
         });
 
         slot_idx += 1;
@@ -137,6 +143,13 @@ fn build_fixture(
     body.push_str(&template.body[cursor..]);
     if slot_idx == 0 {
         bail!("template {} has no placeholders", template.id);
+    }
+    if slot_idx != template.expected_emissions.len() {
+        bail!(
+            "template {} has {slot_idx} placeholders but {} expected emissions",
+            template.id,
+            template.expected_emissions.len()
+        );
     }
 
     for span in &spans {
@@ -150,6 +163,8 @@ fn build_fixture(
         fixture_id: fixture_id.clone(),
         context: template.context.clone(),
         locale_chain: template.locale_chain.clone(),
+        length_tier: template.length_tier.clone(),
+        structural_family: template.structural_family.clone(),
         spans,
         metadata: LabelMetadata {
             template_id: template.id.clone(),
@@ -177,7 +192,7 @@ fn build_fixture(
     Ok(BuildManifestEntry {
         fixture_id,
         template_id: template.id.clone(),
-        fixture_idx,
+        fixture_idx: 0,
         seed: global_seed,
         template_seed,
         generator_ids,
@@ -207,7 +222,24 @@ fn validate_template(template: &Template) -> Result<()> {
             template.id
         );
     }
+    if !matches!(
+        template.length_tier.as_str(),
+        "Snippet" | "Page" | "MultiPage"
+    ) {
+        bail!(
+            "coverage corpus template {} has invalid length_tier {}",
+            template.id,
+            template.length_tier
+        );
+    }
+    if template.structural_family.trim().is_empty() {
+        bail!(
+            "coverage corpus template {} structural_family must not be empty",
+            template.id
+        );
+    }
     let _ = &template.notes;
+    let _ = &template.source_citation;
     Ok(())
 }
 
@@ -219,14 +251,6 @@ fn mixed_seed(global_seed: u64, template_id: &str, fixture_idx: usize, slot: &st
     hasher.update(slot.as_bytes());
     let digest = hasher.finalize();
     u64::from_le_bytes(digest[..8].try_into().expect("sha256 digest has 32 bytes"))
-}
-
-fn fixture_variants(template: &Template) -> usize {
-    if template.id == "prose-en-001" {
-        5
-    } else {
-        2
-    }
 }
 
 fn remove_generated_corpus_files(corpus_dir: &Path) -> Result<()> {
@@ -285,6 +309,8 @@ struct Labels {
     fixture_id: String,
     context: String,
     locale_chain: Vec<String>,
+    length_tier: String,
+    structural_family: String,
     spans: Vec<LabelSpan>,
     metadata: LabelMetadata,
 }
@@ -298,6 +324,8 @@ struct LabelSpan {
     generator_id: &'static str,
     generator_seed: u64,
     license_origin: &'static str,
+    expected_recognizer_id: String,
+    expected_recognizer_version_id: String,
 }
 
 #[derive(Debug, Serialize)]

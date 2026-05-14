@@ -1,0 +1,1 @@
+[2026-05-14T08:00:00Z] INFO scenario=Please respond to email_0 evan.fixture964@example.invalid; phone_1 +12025550190. ref=CASE-7421 status=pending

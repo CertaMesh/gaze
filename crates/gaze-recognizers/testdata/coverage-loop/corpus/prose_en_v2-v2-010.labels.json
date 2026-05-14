@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_en_v2-v2-010",
+  "context": "prose_en_v2",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_en_v2",
+  "spans": [
+    {
+      "byte_start": 70,
+      "byte_end": 89,
+      "class_id": "custom:credit_card",
+      "raw_label": "4842 4872 3179 6205",
+      "generator_id": "card_luhn",
+      "generator_seed": 1245947723723709509,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 99,
+      "byte_end": 107,
+      "class_id": "custom:phone",
+      "raw_label": "555-0137",
+      "generator_id": "phone_national_us",
+      "generator_seed": 8954900804451228388,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_en_v2-v2-010",
+    "template_seed": 10715947197977508156
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-de-003",
+  "context": "threaded-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 216,
+      "byte_end": 226,
+      "class_id": "Name",
+      "raw_label": "Mara Weber",
+      "generator_id": "name_de",
+      "generator_seed": 3305838617264880738,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 236,
+      "byte_end": 265,
+      "class_id": "Email",
+      "raw_label": "dana.audit512@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 6586078315062618892,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 276,
+      "byte_end": 281,
+      "class_id": "custom:postal_code",
+      "raw_label": "20999",
+      "generator_id": "postal_de",
+      "generator_seed": 10703160911477627233,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    },
+    {
+      "byte_start": 292,
+      "byte_end": 302,
+      "class_id": "Name",
+      "raw_label": "Nina Weber",
+      "generator_id": "name_de",
+      "generator_seed": 6928808299658444014,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-de-003",
+    "template_seed": 15588080455767494736
+  }
+}

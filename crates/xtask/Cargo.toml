@@ -8,7 +8,6 @@ publish = false
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
-fake = "2.10"
 gaze = { path = "../gaze", package = "gaze-pii" }
 gaze-recognizers = { path = "../gaze-recognizers" }
 phonenumber = { version = "0.3.9", default-features = false }
@@ -20,4 +19,5 @@ sha3 = "0.10"
 tempfile = "3"
 
 [dev-dependencies]
+fake = { version = "*", default-features = false }
 tempfile = "3"

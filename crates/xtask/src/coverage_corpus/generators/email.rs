@@ -1,7 +1,5 @@
-use fake::faker::internet::en::SafeEmail;
-use fake::Fake;
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use rand::{Rng, SeedableRng};
 
 use super::Generator;
 
@@ -22,6 +20,23 @@ impl Generator for EmailGlobalGenerator {
 
     fn generate(&self, seed: u64) -> String {
         let mut rng = StdRng::seed_from_u64(seed);
-        SafeEmail().fake_with_rng(&mut rng)
+        format!(
+            "{}{}@example.invalid",
+            pick(&mut rng, LOCAL_PARTS),
+            rng.gen_range(100..=999)
+        )
     }
 }
+
+fn pick<'a>(rng: &mut StdRng, values: &'a [&'a str]) -> &'a str {
+    values[rng.gen_range(0..values.len())]
+}
+
+const LOCAL_PARTS: &[&str] = &[
+    "alice.synthetic",
+    "blair.review",
+    "casey.agent",
+    "dana.audit",
+    "evan.fixture",
+    "morgan.clean",
+];

@@ -1,1 +1,0 @@
-{"tool":"bank_check","args":{"account":"DE82886450041316696474","notify":"bobby@example.com"}}

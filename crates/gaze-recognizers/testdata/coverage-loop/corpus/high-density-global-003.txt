@@ -1,0 +1,1 @@
+Support note for the synthetic review queue. Please respond to wallet_0 0xAFcC5E96Cd41434714F3151189Dd07506c7681Bb; email_1 alice.synthetic437@example.invalid; ip_2 2001:db8:bdf:f8dd::95ed; wallet_3 0x3578d95Ad763f1682E780B15af58eF5115faD7C4. ref=CASE-7421 status=pending

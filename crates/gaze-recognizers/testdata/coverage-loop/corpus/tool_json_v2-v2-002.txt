@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to email_0 casey.agent379@example.invalid; ip_1 2001:db8:6e86:a308::a35a. ref=CASE-7421 status=pending"}}

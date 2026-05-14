@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-en-001",
+  "context": "distractor-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 71,
+      "byte_end": 102,
+      "class_id": "Email",
+      "raw_label": "blair.review785@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9603610519582335899,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 111,
+      "byte_end": 130,
+      "class_id": "custom:credit_card",
+      "raw_label": "4023 5934 9482 3684",
+      "generator_id": "card_luhn",
+      "generator_seed": 12324516594826997356,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-en-001",
+    "template_seed": 201294507242218922
+  }
+}

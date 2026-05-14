@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to ip_0 2001:db8:cd64:d0c2::a52b; wallet_1 0xED77F171261D3c1786C36946C67C16D84DDcC29e. ref=CASE-7421 status=pending"}}

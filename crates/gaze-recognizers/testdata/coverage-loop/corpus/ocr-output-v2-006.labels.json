@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-v2-006",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "ocr-output",
+  "spans": [
+    {
+      "byte_start": 54,
+      "byte_end": 64,
+      "class_id": "custom:postal_code",
+      "raw_label": "41317-7737",
+      "generator_id": "postal_us",
+      "generator_seed": 1873693575467239414,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    },
+    {
+      "byte_start": 74,
+      "byte_end": 105,
+      "class_id": "Email",
+      "raw_label": "morgan.clean158@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 7897999287769253262,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-v2-006",
+    "template_seed": 6243940520748567241
+  }
+}

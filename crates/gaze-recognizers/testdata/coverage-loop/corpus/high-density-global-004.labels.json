@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-global-004",
+  "context": "high-density-global",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 202,
+      "byte_end": 228,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::2559:192.0.2.131",
+      "generator_id": "ip_v6",
+      "generator_seed": 7271613693350263965,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 235,
+      "byte_end": 259,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::941:192.0.2.81",
+      "generator_id": "ip_v6",
+      "generator_seed": 6728509669058984733,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 266,
+      "byte_end": 292,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::f0a7:192.0.2.113",
+      "generator_id": "ip_v6",
+      "generator_seed": 8175475670346587647,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 303,
+      "byte_end": 345,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xa85D1267Bc13cC3fE275E45c75e5ba4B81056Dbc",
+      "generator_id": "eth_eip55",
+      "generator_seed": 16068288555926905591,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    },
+    {
+      "byte_start": 356,
+      "byte_end": 398,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x9006baC508A3681FBC223425BCD7F219992acee8",
+      "generator_id": "eth_eip55",
+      "generator_seed": 1774044537380104413,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    },
+    {
+      "byte_start": 408,
+      "byte_end": 438,
+      "class_id": "Email",
+      "raw_label": "casey.agent244@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 616847592639558333,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 448,
+      "byte_end": 479,
+      "class_id": "Email",
+      "raw_label": "blair.review970@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10801035758981010290,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-global-004",
+    "template_seed": 5687810673800196130
+  }
+}

@@ -1,0 +1,1 @@
+Support note for the synthetic review queue. Please respond to email_0 blair.review785@example.invalid; card_1 4023 5934 9482 3684. ref=CASE-7421 status=pending

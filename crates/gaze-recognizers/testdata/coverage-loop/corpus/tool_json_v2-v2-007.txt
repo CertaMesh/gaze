@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to wallet_0 0x1483f6b6602F5D60bce9f34b4B8Ceac74862a822; email_1 alice.synthetic435@example.invalid. ref=CASE-7421 status=pending"}}

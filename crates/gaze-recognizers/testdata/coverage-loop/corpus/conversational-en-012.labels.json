@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-012",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 147,
+      "byte_end": 177,
+      "class_id": "Email",
+      "raw_label": "casey.agent504@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 15741824005385979269,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 188,
+      "byte_end": 198,
+      "class_id": "custom:postal_code",
+      "raw_label": "93578-9232",
+      "generator_id": "postal_us",
+      "generator_seed": 1731389133472199051,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    },
+    {
+      "byte_start": 209,
+      "byte_end": 221,
+      "class_id": "Name",
+      "raw_label": "Casey Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 5213885362677803837,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 230,
+      "byte_end": 252,
+      "class_id": "custom:iban",
+      "raw_label": "DE27200243458909703548",
+      "generator_id": "iban_de",
+      "generator_seed": 15743382920024569540,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-012",
+    "template_seed": 7289486561643418796
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-003",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 70,
+      "byte_end": 89,
+      "class_id": "custom:credit_card",
+      "raw_label": "4677 0777 7056 1407",
+      "generator_id": "card_luhn",
+      "generator_seed": 8905679393547850379,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 99,
+      "byte_end": 130,
+      "class_id": "Email",
+      "raw_label": "morgan.clean863@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9806952263845508509,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-003",
+    "template_seed": 13281766458195776350
+  }
+}

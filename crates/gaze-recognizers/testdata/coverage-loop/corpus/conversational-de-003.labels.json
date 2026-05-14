@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-003",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 82,
+      "byte_end": 91,
+      "class_id": "Name",
+      "raw_label": "Max Weber",
+      "generator_id": "name_de",
+      "generator_seed": 15934472702534954598,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 102,
+      "byte_end": 107,
+      "class_id": "custom:postal_code",
+      "raw_label": "22493",
+      "generator_id": "postal_de",
+      "generator_seed": 17696257927896846010,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-003",
+    "template_seed": 11348228403111018661
+  }
+}

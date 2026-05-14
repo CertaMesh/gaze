@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to postal_0 59043-3778; email_1 morgan.clean102@example.invalid. ref=CASE-7421 status=pending"}}

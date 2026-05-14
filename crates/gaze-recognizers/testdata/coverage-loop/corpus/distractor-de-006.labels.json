@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-de-006",
+  "context": "distractor-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 215,
+      "byte_end": 245,
+      "class_id": "Email",
+      "raw_label": "casey.agent128@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 7800085632601570649,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 256,
+      "byte_end": 269,
+      "class_id": "Name",
+      "raw_label": "Felix Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 16785706974327325597,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 280,
+      "byte_end": 285,
+      "class_id": "custom:postal_code",
+      "raw_label": "23111",
+      "generator_id": "postal_de",
+      "generator_seed": 5970826745339666116,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-de-006",
+    "template_seed": 9893926274022170374
+  }
+}

@@ -1,3 +1,0 @@
-Von: "Nina Weber" <keegan@example.net>
-An: support@example.invalid
-Betreff: Pruefung DE44336131876520910376

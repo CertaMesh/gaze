@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_en_v2-v2-009",
+  "context": "prose_en_v2",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_en_v2",
+  "spans": [
+    {
+      "byte_start": 68,
+      "byte_end": 92,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:9f1a:10f5::4a5a",
+      "generator_id": "ip_v6",
+      "generator_seed": 6814928454559978250,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 103,
+      "byte_end": 145,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x1c1F6AC0B90c4340D78076341Da4E265809Ef37a",
+      "generator_id": "eth_eip55",
+      "generator_seed": 12976803857727038704,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_en_v2-v2-009",
+    "template_seed": 6646715231310938936
+  }
+}

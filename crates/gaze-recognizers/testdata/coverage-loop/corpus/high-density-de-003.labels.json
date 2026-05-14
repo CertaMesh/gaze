@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-de-003",
+  "context": "high-density-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 82,
+      "byte_end": 93,
+      "class_id": "Name",
+      "raw_label": "Laura Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 13836351707795679747,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 103,
+      "byte_end": 134,
+      "class_id": "Email",
+      "raw_label": "evan.fixture273@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 1667109029741985737,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 143,
+      "byte_end": 165,
+      "class_id": "custom:iban",
+      "raw_label": "DE54406756565200865134",
+      "generator_id": "iban_de",
+      "generator_seed": 13524192444563585990,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 176,
+      "byte_end": 188,
+      "class_id": "Name",
+      "raw_label": "Mara Schmidt",
+      "generator_id": "name_de",
+      "generator_seed": 5248404311738293186,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-de-003",
+    "template_seed": 17338209182634615665
+  }
+}

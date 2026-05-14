@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "support_email_de_v2-v2-003",
+  "context": "support_email_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "support_email_de_v2",
+  "spans": [
+    {
+      "byte_start": 81,
+      "byte_end": 92,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 1005813989477025295,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    },
+    {
+      "byte_start": 102,
+      "byte_end": 133,
+      "class_id": "Email",
+      "raw_label": "morgan.clean523@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 15038285552495370132,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "support_email_de_v2-v2-003",
+    "template_seed": 7439815021202548704
+  }
+}

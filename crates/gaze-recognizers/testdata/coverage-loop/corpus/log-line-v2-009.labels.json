@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "log-line-v2-009",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "log-line",
+  "spans": [
+    {
+      "byte_start": 60,
+      "byte_end": 86,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::f46b:192.0.2.179",
+      "generator_id": "ip_v6",
+      "generator_seed": 11959626264884044809,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 97,
+      "byte_end": 139,
+      "class_id": "custom:eth_address",
+      "raw_label": "0x5F46C37A336691695c4a675f1769B6720482D574",
+      "generator_id": "eth_eip55",
+      "generator_seed": 1262470225758200054,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "log-line-v2-009",
+    "template_seed": 6132997113791870803
+  }
+}

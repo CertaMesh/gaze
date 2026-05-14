@@ -1,0 +1,1 @@
+Support note for the synthetic review queue. The following values are intentionally synthetic and citable. Distractors: ORD-2026-00017, 9999-0000-1111-2222, v10.20.30, 0100-ABCD. Please respond to reply to Casey Jordan; email_1 blair.review585@example.invalid; phone_2 555-0166. The agent must pseudonymize only the labeled spans and preserve the rest of the workflow context.

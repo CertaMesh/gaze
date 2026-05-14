@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-en-004",
+  "context": "high-density-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 239,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic285@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 2700720803517917835,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 249,
+      "byte_end": 280,
+      "class_id": "Email",
+      "raw_label": "blair.review195@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 7747108813382834338,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 290,
+      "byte_end": 321,
+      "class_id": "Email",
+      "raw_label": "morgan.clean266@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 5734739586719530962,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 330,
+      "byte_end": 352,
+      "class_id": "custom:iban",
+      "raw_label": "DE63291408146068605336",
+      "generator_id": "iban_de",
+      "generator_seed": 3414354633030979386,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 361,
+      "byte_end": 383,
+      "class_id": "custom:iban",
+      "raw_label": "DE29913686986752087514",
+      "generator_id": "iban_de",
+      "generator_seed": 3893709237851694899,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 392,
+      "byte_end": 411,
+      "class_id": "custom:credit_card",
+      "raw_label": "4983 4025 5359 0846",
+      "generator_id": "card_luhn",
+      "generator_seed": 5719396991427910997,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 422,
+      "byte_end": 433,
+      "class_id": "Name",
+      "raw_label": "Evan Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 1492580145849058067,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 444,
+      "byte_end": 455,
+      "class_id": "Name",
+      "raw_label": "Dana Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 5107411030399527500,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-en-004",
+    "template_seed": 4518174325287801252
+  }
+}

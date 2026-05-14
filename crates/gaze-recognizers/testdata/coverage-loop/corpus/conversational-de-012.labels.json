@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-012",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 158,
+      "byte_end": 171,
+      "class_id": "Name",
+      "raw_label": "Felix Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 17791777062655825568,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 181,
+      "byte_end": 215,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic439@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9497690332355586102,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 222,
+      "byte_end": 247,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::b5e3:192.0.2.62",
+      "generator_id": "ip_v6",
+      "generator_seed": 6427156246359383593,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 257,
+      "byte_end": 268,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 10551026850728170310,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-012",
+    "template_seed": 2302025637737191146
+  }
+}

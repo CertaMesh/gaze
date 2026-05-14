@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-en-005",
+  "context": "distractor-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 234,
+      "class_id": "Email",
+      "raw_label": "dana.audit459@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 12798951300685234981,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 245,
+      "byte_end": 255,
+      "class_id": "Name",
+      "raw_label": "Dana Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 13537612703051897400,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 264,
+      "byte_end": 283,
+      "class_id": "custom:credit_card",
+      "raw_label": "4169 9295 1518 5238",
+      "generator_id": "card_luhn",
+      "generator_seed": 2746819164387746441,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-en-005",
+    "template_seed": 1191372330862098775
+  }
+}

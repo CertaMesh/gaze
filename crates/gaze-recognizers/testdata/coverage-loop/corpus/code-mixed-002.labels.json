@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-002",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 70,
+      "byte_end": 92,
+      "class_id": "custom:iban",
+      "raw_label": "DE19993644656208957166",
+      "generator_id": "iban_de",
+      "generator_seed": 12857199682870192159,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 102,
+      "byte_end": 133,
+      "class_id": "Email",
+      "raw_label": "blair.review618@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 17021314411362367054,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-002",
+    "template_seed": 15525760519687253019
+  }
+}
