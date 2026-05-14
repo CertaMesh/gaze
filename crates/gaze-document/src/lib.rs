@@ -46,6 +46,8 @@ pub mod layout;
 #[cfg_attr(docsrs, doc(cfg(feature = "mcp")))]
 pub mod mcp;
 pub mod ocr;
+mod postprocess;
+mod preprocess;
 pub mod render;
 
 #[cfg(feature = "ocr-tesseract")]

@@ -251,7 +251,7 @@ impl OcrResult {
         lang: String,
         column_detection: bool,
     ) -> (Self, u32) {
-        let ordered = crate::layout::order_spans(spans, column_detection);
+        let ordered = crate::postprocess::order_spans(spans, column_detection);
         let mut conf_sum = 0.0f64;
         let mut conf_count = 0usize;
         for span in spans {
