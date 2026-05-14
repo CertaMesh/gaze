@@ -223,7 +223,7 @@ Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](do
 
 The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
-Two backends ship. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT bundle, ~8.8 MB, 26-class upstream PII taxonomy, faster cold start. Pick on deployment constraints; both are observer-only and share the same strict/tolerant exit contract.
+Two backends ship. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT bundle, ~8.8 MB, 26-class upstream PII taxonomy, faster cold start. Pick on deployment constraints; both are observer-only and both run in **strict mode by default** — production traffic should keep that default.
 
 #### OpenAI Privacy Filter
 
@@ -268,7 +268,9 @@ A clean run produces a `leak_report` block alongside the usual JSON; `suspect_co
 }
 ```
 
-The default safety-net mode is `strict`: if the filter raises an `Uncovered` or `PartialBleed` suspect, the CLI exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty. Pass `--safety-net-mode tolerant` to keep running and route the warning to stderr. Full flag table, operating points, and exit-code map: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
+SafetyNet runs in **`strict` mode by default**. If the filter raises an `Uncovered` or `PartialBleed` suspect, the CLI exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty. **Strict is the production contract**: any suspect leak fails the call, the agent never sees the would-be-leaky `clean_text`, and the operator gets a typed error to alert on.
+
+A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Full flag table, mode semantics, and exit-code map: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 
 #### Kiji DistilBERT
 
