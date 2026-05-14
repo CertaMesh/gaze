@@ -19,12 +19,6 @@ pub mod tesseract;
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub use tesseract::TesseractBackend;
 
-/// Backward-compatible alias for the Tesseract subprocess OCR backend.
-#[cfg(feature = "ocr-tesseract")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
-#[deprecated(note = "use TesseractBackend")]
-pub type TesseractOcr = TesseractBackend;
-
 /// Raster image format handed to an OCR backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImageFormat {
@@ -45,6 +39,28 @@ impl ImageFormat {
             Self::Tiff => "tiff",
         }
     }
+}
+
+/// Detect the encoded image format from magic bytes.
+///
+/// # Errors
+///
+/// Returns [`DocumentError::UnsupportedInput`] when the byte payload is not a
+/// supported PNG, JPEG, or TIFF image.
+pub fn detect_image_format(bytes: &[u8]) -> Result<ImageFormat, DocumentError> {
+    if bytes.starts_with(b"\x89PNG") {
+        return Ok(ImageFormat::Png);
+    }
+    if bytes.starts_with(b"\xFF\xD8\xFF") {
+        return Ok(ImageFormat::Jpeg);
+    }
+    if bytes.starts_with(b"II\x2A\x00") || bytes.starts_with(b"MM\x00\x2A") {
+        return Ok(ImageFormat::Tiff);
+    }
+    Err(DocumentError::UnsupportedInput {
+        path: std::path::PathBuf::new(),
+        reason: "image bytes are not PNG, JPEG, or TIFF",
+    })
 }
 
 /// Finalized image payload for one OCR pass.
@@ -160,49 +176,6 @@ pub trait OcrBackend: Send + Sync {
     fn recognize(&self, image: ImageInput, hints: OcrHints) -> Result<Vec<OcrSpan>, OcrError>;
 }
 
-/// Legacy text-only adapter contract kept for source compatibility.
-///
-/// New code should use [`OcrBackend`] so backend output remains traceable to
-/// bounding boxes and confidence values.
-pub trait OcrAdapter {
-    /// Extract textual content from image bytes.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`DocumentError`] when backend recognition fails.
-    fn extract_text(&self, bytes: &[u8]) -> Result<String, DocumentError>;
-}
-
-/// Reserved fail-loud legacy adapter.
-///
-/// New code should wire a concrete [`OcrBackend`]. This placeholder remains so
-/// older callers fail closed instead of receiving silent empty OCR output.
-#[non_exhaustive]
-pub struct PendingOcrAdapter {
-    _private: (),
-}
-
-impl PendingOcrAdapter {
-    /// Build the fail-loud adapter.
-    ///
-    /// # Errors
-    ///
-    /// Always returns [`DocumentError::NotImplemented`].
-    pub fn new() -> Result<Self, DocumentError> {
-        Err(DocumentError::NotImplemented(
-            "PendingOcrAdapter::new (wire a concrete OCR backend)",
-        ))
-    }
-}
-
-impl OcrAdapter for PendingOcrAdapter {
-    fn extract_text(&self, _bytes: &[u8]) -> Result<String, DocumentError> {
-        Err(DocumentError::NotImplemented(
-            "PendingOcrAdapter::extract_text (wire a concrete OCR backend)",
-        ))
-    }
-}
-
 /// Result of an OCR pass: full text + a structured confidence summary.
 ///
 /// Backend-agnostic — concrete adapters (e.g., [`tesseract::TesseractBackend`])
@@ -224,7 +197,7 @@ pub struct OcrResult {
 
 impl OcrResult {
     /// Build an OCR result from raw fields.
-    pub fn new(
+    pub(crate) fn new(
         text: String,
         mean_confidence: Option<f32>,
         word_count: usize,
@@ -349,5 +322,31 @@ mod tests {
         assert_eq!(columns, 2);
         assert_eq!(result.text, "A1\nA2\n\nB1\nB2");
         assert_eq!(result.mean_confidence_unit(), Some(0.8));
+    }
+
+    #[test]
+    fn detect_image_format_accepts_supported_magic_bytes() {
+        assert_eq!(
+            detect_image_format(b"\x89PNG\r\n\x1A\nrest").expect("png magic"),
+            ImageFormat::Png
+        );
+        assert_eq!(
+            detect_image_format(b"\xFF\xD8\xFF\xE0rest").expect("jpeg magic"),
+            ImageFormat::Jpeg
+        );
+        assert_eq!(
+            detect_image_format(b"II\x2A\x00rest").expect("little-endian tiff magic"),
+            ImageFormat::Tiff
+        );
+        assert_eq!(
+            detect_image_format(b"MM\x00\x2Arest").expect("big-endian tiff magic"),
+            ImageFormat::Tiff
+        );
+    }
+
+    #[test]
+    fn detect_image_format_rejects_unknown_bytes() {
+        let err = detect_image_format(b"not an image").expect_err("unknown format fails");
+        assert!(matches!(err, DocumentError::UnsupportedInput { .. }));
     }
 }

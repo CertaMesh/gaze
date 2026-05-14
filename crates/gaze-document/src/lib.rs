@@ -62,8 +62,8 @@ pub use layout::ReadingOrder;
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub use ocr::TesseractBackend;
 pub use ocr::{
-    BBox, ImageFormat, ImageInput, LanguageTag, OcrAdapter, OcrBackend, OcrError, OcrHints,
-    OcrSpan, PendingOcrAdapter,
+    detect_image_format, BBox, ImageFormat, ImageInput, LanguageTag, OcrBackend, OcrError,
+    OcrHints, OcrSpan,
 };
 pub use render::Renderer;
 

@@ -21,7 +21,9 @@ use std::path::PathBuf;
 use gaze::Manifest;
 use serde::{Deserialize, Serialize};
 
-use crate::ocr::{ImageFormat, ImageInput, OcrBackend, OcrError, OcrHints, OcrResult};
+use crate::ocr::{
+    detect_image_format, ImageFormat, ImageInput, OcrBackend, OcrError, OcrHints, OcrResult,
+};
 
 #[cfg(feature = "ocr-tesseract")]
 use std::collections::BTreeMap;
@@ -463,11 +465,12 @@ fn run_document_extraction(
     match kind {
         InputKind::Png | InputKind::Jpeg => {
             let bytes = fs::read(input)?;
+            let format = detect_image_format(&bytes)?;
             let (result, column_count) = recognize_image(
                 ocr_backend,
                 ImageInput {
                     bytes,
-                    format: image_format_for_kind(kind),
+                    format,
                     dpi: None,
                 },
                 options.column_detection,
@@ -600,15 +603,6 @@ fn merge_page_results(results: &[OcrResult]) -> OcrResult {
         Some((conf_sum / conf_count as f64) as f32)
     };
     OcrResult::new(text, mean_confidence, conf_count, "mixed".to_string())
-}
-
-#[cfg(feature = "ocr-tesseract")]
-fn image_format_for_kind(kind: InputKind) -> ImageFormat {
-    match kind {
-        InputKind::Png => ImageFormat::Png,
-        InputKind::Jpeg => ImageFormat::Jpeg,
-        InputKind::Pdf => ImageFormat::Png,
-    }
 }
 
 #[cfg(feature = "ocr-tesseract")]
@@ -864,7 +858,7 @@ mod tests {
         };
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
-        fs::write(&input, b"not-real-image").expect("write input");
+        fs::write(&input, b"\x89PNG\r\n\x1A\nnot-real-image").expect("write input");
 
         let bundle = Pipeline::new()
             .with_low_confidence_threshold(0.65)

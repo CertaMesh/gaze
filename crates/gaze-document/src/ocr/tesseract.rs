@@ -154,13 +154,6 @@ impl OcrBackend for TesseractBackend {
     }
 }
 
-impl super::OcrAdapter for TesseractBackend {
-    fn extract_text(&self, bytes: &[u8]) -> Result<String, DocumentError> {
-        self.extract_from_bytes(bytes, "png")
-            .map(|result| result.text)
-    }
-}
-
 fn parse_tsv_result(tsv: &str, lang: &str) -> OcrResult {
     parse_tsv(tsv, lang)
 }
