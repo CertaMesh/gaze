@@ -68,6 +68,13 @@ required-features = ["safety-net-openai"]
 name = "kiji_distilbert_subprocess"
 required-features = ["safety-net-kiji", "test-support"]
 
+[[test]]
+name = "locale_aware_registry"
+
+[[test]]
+name = "locale_aware_trait"
+required-features = ["safety-net-kiji", "test-support"]
+
 [[bench]]
 name = "dictionary"
 harness = false
