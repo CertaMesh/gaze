@@ -107,8 +107,11 @@ enum Cmd {
         #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
         safety_net_input_limit_bytes: usize,
         /// Safety-net handling mode for suspected leaks.
-        #[arg(long, value_enum, default_value_t = SafetyNetMode::Strict)]
+        #[arg(long, value_enum, default_value_t = SafetyNetMode::Resolve)]
         safety_net_mode: SafetyNetMode,
+        /// Fallback when safety-net resolve or redact cannot complete.
+        #[arg(long, value_enum, default_value_t = SafetyNetFallback::Redact)]
+        safety_net_fallback: SafetyNetFallback,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -479,6 +482,15 @@ impl OpenAiFilterDevice {
 pub(crate) enum SafetyNetMode {
     Strict,
     Tolerant,
+    Redact,
+    Resolve,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum SafetyNetFallback {
+    Strict,
+    Tolerant,
+    Redact,
 }
 
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
@@ -508,6 +520,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
+            safety_net_fallback,
         } => clean::run(clean::Args {
             policy,
             format,
@@ -533,6 +546,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
+            safety_net_fallback,
         }),
         Cmd::Restore {
             format,

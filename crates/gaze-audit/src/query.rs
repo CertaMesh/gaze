@@ -56,6 +56,7 @@ pub struct AuditLogRow {
     pub ambiguity_record: Option<String>,
     pub collision_family: Option<String>,
     pub collision_variant: Option<String>,
+    pub fallback_triggered: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,6 +106,7 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "ambiguity_record",
     "collision_family",
     "collision_variant",
+    "fallback_triggered",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -143,6 +145,7 @@ pub fn build_audit_query_sql(
     has_ambiguity_record: bool,
     has_collision_family: bool,
     has_collision_variant: bool,
+    has_fallback_triggered: bool,
     has_recognizer_id: bool,
     has_recognizer_version_id: bool,
 ) -> (String, Vec<Value>) {
@@ -196,6 +199,11 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS collision_variant"
     };
+    let fallback_triggered_column = if has_fallback_triggered {
+        "fallback_triggered"
+    } else {
+        "NULL AS fallback_triggered"
+    };
     let recognizer_id_column = if has_recognizer_id {
         "recognizer_id"
     } else {
@@ -207,7 +215,7 @@ pub fn build_audit_query_sql(
         "NULL AS recognizer_version_id"
     };
     let mut sql = format!(
-        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column} FROM redaction_log"
+        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();

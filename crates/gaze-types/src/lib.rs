@@ -1723,6 +1723,26 @@ pub enum ConflictTier {
     RecognizerId,
     /// Candidate was merged with another candidate.
     Merged,
+    /// Safety-net redact mode stripped a suspect span.
+    Redact,
+    /// Safety-net resolve mode promoted a suspect span into a reversible token.
+    Resolve,
+    /// Safety-net fallback policy decided the outcome.
+    Fallback,
+}
+
+/// Safety-net fallback reason recorded in metadata-only audit rows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum FallbackReason {
+    /// The suspect overlapped an existing emitted token in a way that could not be promoted.
+    OverlapConflict,
+    /// A validator rejected the promoted candidate.
+    ValidatorVeto,
+    /// A mandatory anchor was missing for the promoted candidate.
+    AnchorMissing,
+    /// A follow-up safety-net pass still observed a suspect.
+    ResidualSuspect,
 }
 
 /// Source document kind for metadata-only audit logging.
@@ -1777,6 +1797,8 @@ pub struct RedactionEntry {
     pub collision_family: Option<String>,
     /// Collision variant that influenced this decision.
     pub collision_variant: Option<String>,
+    /// Safety-net fallback reason, when fallback policy handled the row.
+    pub fallback_triggered: Option<FallbackReason>,
 }
 
 impl Serialize for RedactionEntry {
@@ -1786,7 +1808,7 @@ impl Serialize for RedactionEntry {
     {
         use serde::ser::SerializeStruct;
 
-        let mut len = 13;
+        let mut len = 14;
         if self.recognizer_id.is_some() {
             len += 1;
         }
@@ -1819,6 +1841,7 @@ impl Serialize for RedactionEntry {
         state.serialize_field("ambiguity_record", &self.ambiguity_record)?;
         state.serialize_field("collision_family", &self.collision_family)?;
         state.serialize_field("collision_variant", &self.collision_variant)?;
+        state.serialize_field("fallback_triggered", &self.fallback_triggered)?;
         state.end()
     }
 }
@@ -1853,6 +1876,9 @@ fn redaction_conflict_tier_as_str(tier: ConflictTier) -> &'static str {
         ConflictTier::AnchoredContext => "anchored_context",
         ConflictTier::RecognizerId => "recognizer_id",
         ConflictTier::Merged => "merged",
+        ConflictTier::Redact => "redact",
+        ConflictTier::Resolve => "resolve",
+        ConflictTier::Fallback => "fallback",
     }
 }
 
@@ -1886,6 +1912,7 @@ impl RedactionEntry {
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
+            fallback_triggered: None,
         }
     }
 
@@ -1909,6 +1936,12 @@ impl RedactionEntry {
     ) -> Self {
         self.collision_family = family;
         self.collision_variant = variant;
+        self
+    }
+
+    /// Attaches safety-net fallback metadata to this row.
+    pub fn with_fallback_triggered(mut self, reason: FallbackReason) -> Self {
+        self.fallback_triggered = Some(reason);
         self
     }
 
@@ -2544,6 +2577,7 @@ mod redaction_logger_tests {
             ambiguity_record: None,
             collision_family: None,
             collision_variant: None,
+            fallback_triggered: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;
@@ -2568,7 +2602,7 @@ mod redaction_logger_tests {
 
         assert_eq!(
             rendered,
-            r#"{"source":"email.global","class":"email","action":"tokenize","field_name":null,"document_kind":"text","conflict_loser":false,"decided_by":"none","created_at":0,"session_id":null,"validator_fail_reason":null,"ambiguity_record":null,"collision_family":null,"collision_variant":null}"#
+            r#"{"source":"email.global","class":"email","action":"tokenize","field_name":null,"document_kind":"text","conflict_loser":false,"decided_by":"none","created_at":0,"session_id":null,"validator_fail_reason":null,"ambiguity_record":null,"collision_family":null,"collision_variant":null,"fallback_triggered":null}"#
         );
     }
 

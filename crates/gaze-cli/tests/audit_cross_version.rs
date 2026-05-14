@@ -428,7 +428,7 @@ fn legacy_schema_without_decided_by_is_queryable() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\n"
     ));
     assert!(stdout.contains("dictionary:audit_terms[#0]"));
     assert!(stdout.contains("custom:term"));
@@ -458,7 +458,7 @@ fn audit_sql_uses_restricted_column_set() {
         recognizer_version_id: None,
     };
     let (current_sql, values) = build_audit_query_sql(
-        &filter, true, true, true, true, true, true, true, true, true, true, true, true,
+        &filter, true, true, true, true, true, true, true, true, true, true, true, true, true,
     );
     assert_eq!(
         values,
@@ -495,6 +495,7 @@ fn audit_sql_uses_restricted_column_set() {
     };
     let (legacy_sql, legacy_values) = build_audit_query_sql(
         &legacy_filter,
+        false,
         false,
         false,
         false,

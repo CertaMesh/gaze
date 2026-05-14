@@ -69,7 +69,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -91,7 +91,8 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.validator_fail_reason.as_deref().unwrap_or(""),
             row.ambiguity_record.as_deref().unwrap_or(""),
             row.collision_family.as_deref().unwrap_or(""),
-            row.collision_variant.as_deref().unwrap_or("")
+            row.collision_variant.as_deref().unwrap_or(""),
+            row.fallback_triggered.as_deref().unwrap_or("")
         );
         if include_ambiguity {
             writeln!(
@@ -330,6 +331,7 @@ struct JsonlRow {
     ambiguity_record: Option<AmbiguityRecord>,
     collision_family: Option<String>,
     collision_variant: Option<String>,
+    fallback_triggered: Option<String>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -355,6 +357,7 @@ impl TryFrom<AuditLogRow> for JsonlRow {
             ambiguity_record: parse_json_opt(row.ambiguity_record)?,
             collision_family: row.collision_family,
             collision_variant: row.collision_variant,
+            fallback_triggered: row.fallback_triggered,
         })
     }
 }
