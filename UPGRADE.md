@@ -166,6 +166,8 @@ permissions on Unix. Missing artifacts fail closed with typed
 `CliError::SafetyNetArtifactMissing` (exit `2`) before the subprocess
 spawns.
 
+Setup walkthrough: [`docs/getting-started/kiji-safetynet-setup.md`](docs/getting-started/kiji-safetynet-setup.md).
+
 **Action required:** none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
 none) is unchanged.

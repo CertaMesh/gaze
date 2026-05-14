@@ -224,6 +224,8 @@ typed `SafetyNetArtifactMissing` envelope and exit code `2` *before* the
 subprocess is spawned — Axis-1 reliability never silent-disables a
 requested backend.
 
+See also: [Kiji DistilBERT SafetyNet setup](../../docs/getting-started/kiji-safetynet-setup.md).
+
 #### Synthetic example — strict mode
 
 ```console

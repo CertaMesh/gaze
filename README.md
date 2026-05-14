@@ -82,7 +82,7 @@ Claude Code, Claude Desktop, and Cursor config paths.
 
 ## Quickstart
 
-A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the v0.8.0 CLI.
+A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the current `gaze` CLI.
 
 ### 1. First redact
 
@@ -188,7 +188,11 @@ Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](do
 
 The Privacy filter is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
-The safety-net code path is off the default build graph. Reinstall the CLI with the feature compiled in:
+Gaze ships two SafetyNet backends. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT model bundle, about 8.8 MB, with a 26-class upstream PII taxonomy and faster cold-start profile. Pick one based on your deployment constraints; both are observer-only and both share the same strict/tolerant exit contract.
+
+#### OpenAI Privacy Filter
+
+The safety-net code path is off the default build graph. Reinstall the CLI with the OpenAI backend compiled in:
 
 ```sh
 cargo install --path crates/gaze-cli --features safety-net-openai
@@ -231,6 +235,33 @@ A clean run produces a `leak_report` block alongside the usual JSON; `suspect_co
 
 The default safety-net mode is `strict`: if the filter raises an `Uncovered` or `PartialBleed` suspect, the CLI exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty. Pass `--safety-net-mode tolerant` to keep running and route the warning to stderr. Full flag table, operating points, and exit-code map: [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 
+#### Kiji DistilBERT
+
+The Kiji backend is also feature-gated. Fetch the pinned model bundle once, then reinstall the CLI with the Kiji feature compiled in:
+
+```sh
+bash scripts/fetch-kiji-safetynet-model.sh
+cargo install --path crates/gaze-cli --features safety-net-kiji
+```
+
+The fetcher verifies the release-pinned `SHA256SUMS.kiji` file and installs the runtime bundle into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert` by default. Gaze does not fetch or update the model during `gaze clean`.
+
+Activate Kiji on the same `gaze clean` invocation:
+
+```sh
+printf '%s' 'Contact alice@example.invalid for details.' \
+  | gaze clean \
+      --policy quickstart-policy.toml \
+      --safety-net kiji-distilbert \
+      --safety-net-backend kiji-distilbert \
+      --kiji-distilbert-command /opt/kiji/bin/kiji \
+      --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert
+```
+
+The output shape is the same `leak_report` block shown above; `suspect_count = 0` remains the contract for "no leaks". The Kiji model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json`. Missing artifacts fail closed before subprocess spawn with `{"error":"SafetyNetArtifactMissing","exit":2,...}`.
+
+Full Kiji setup, backend switching, and failure-mode notes: [`docs/getting-started/kiji-safetynet-setup.md`](docs/getting-started/kiji-safetynet-setup.md).
+
 ## Pipeline shape
 
 ```text
@@ -262,15 +293,16 @@ Published crates. Pick the smallest surface that does the job.
 | [`gaze-assembly`](crates/gaze-assembly/) | You want bundled defaults without hand-wiring recognizers. |
 | [`gaze-recognizers`](crates/gaze-recognizers/) | You're writing a custom recognizer or rulepack. |
 | [`gaze-audit`](crates/gaze-audit/) | You want SQLite-backed metadata audit logging. Adopt directly; `gaze` core has no `rusqlite` dep in any feature graph. |
-| [`gaze-cli`](crates/gaze-cli/) | You want a process boundary for non-Rust adapters (Laravel, Python, etc.). |
 | [`gaze-types`](crates/gaze-types/) | You want the value contracts (`RedactionLogger`, `Manifest`, `LeakReport`) without ML deps. |
 | [`gaze-document`](crates/gaze-document/) | You want PNG/JPG/PDF document ingestion into SafeBundles or MCP document-read tools. |
 | [`gaze-mcp-core`](crates/gaze-mcp-core/) | You're building an MCP-protocol tool host and want every call to pass through Gaze's redaction chokepoint. |
 | [`gaze-mcp-rmcp`](crates/gaze-mcp-rmcp/) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, optional streamable HTTP). |
+| [`gaze-proxy`](crates/gaze-proxy/) | You want an HTTP proxy that sits in front of OpenAI / Anthropic / Gemini API calls and inserts a PII redact/restore boundary in the middle. Multi-provider adapter pattern, SSE + tool-call aware, daemon-mode subcommands (`gaze proxy start/stop/status/logs/restart`). |
+| [`gaze-cli`](crates/gaze-cli/) | You want a process boundary for non-Rust adapters (Laravel, Python, etc.). |
 
 Crate boundaries and the audit-isolation gate: [`docs/architecture/crates.md`](docs/architecture/crates.md).
 
-Document extension for v0.7.1+ codec adapters: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
+Document extension for codec adapters that use `SafeBundle`: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
 
 ## Detection coverage
 
@@ -297,14 +329,6 @@ gaze audit purge --audit-db audit.sqlite --before 2026-01-01T00:00:00Z
 ```
 
 The audit DB is opened read-only by `query` and `export`. The exported column set excludes raw PII payloads. There is no policy-level retention default and no background auto-purge — adopters drive retention explicitly.
-
-## Status
-
-- **Version:** v0.8.0 (2026-05).
-- **MSRV:** Rust 1.89.
-- **License:** dual `Apache-2.0 OR MIT`.
-- **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.
-- **Contract surface:** `Pipeline`, `Session`, `Policy`, rulepack schema, and token shape are stable across the v0.7 line. SafetyNet contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 
 ## Limits
 
