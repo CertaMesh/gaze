@@ -104,15 +104,20 @@ jobs:
           )"
           export HOME="$smoke_home"
           trap '"$bin" proxy stop --force >/dev/null 2>&1 || true; rm -rf "$smoke_home"' EXIT
-          "$bin" proxy status | grep -q 'not running'
+          # Capture `proxy status` stdout via $() instead of piping into `grep -q`.
+          # grep -q closes stdin on first match → upstream gaze hits EPIPE on
+          # the next println and the CLI panic hook emits {"error":"Pipeline","exit":3}.
+          # The $() form lets gaze finish writing before grep inspects the result.
+          # Underlying SIGPIPE tolerance is tracked as a v0.8.2 follow-up.
+          status_out="$("$bin" proxy status)"; grep -q 'not running' <<< "$status_out"
           "$bin" proxy start --bind "127.0.0.1:$proxy_port"
           sleep 1
-          "$bin" proxy status | grep -q 'running'
+          status_out="$("$bin" proxy status)"; grep -q 'running' <<< "$status_out"
           "$bin" proxy restart --force
           sleep 1
-          "$bin" proxy status | grep -q 'running'
+          status_out="$("$bin" proxy status)"; grep -q 'running' <<< "$status_out"
           "$bin" proxy stop --force
-          "$bin" proxy status | grep -q 'not running'
+          status_out="$("$bin" proxy status)"; grep -q 'not running' <<< "$status_out"
 
   release:
     needs: build
