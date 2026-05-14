@@ -1,0 +1,8 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-locale-in"
+rulepack_version = "0.5.1"
+default_locales = ["en-IN", "hi-IN"]
+
+[locale.cues.aadhaar]
+names = ["आधार", "Aadhaar", "UID", "Unique Identification"]
+window_chars = 64

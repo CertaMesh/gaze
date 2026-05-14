@@ -352,6 +352,20 @@ pub enum ValidatorFailReason {
     Ipv6ParseFailed,
     /// EIP-55 Ethereum checksum validation failed.
     EthEip55ChecksumFailed,
+    /// Aadhaar Verhoeff checksum validation failed.
+    AadhaarVerhoeffFailed,
+    /// French NIR MOD-97 key validation failed.
+    FrNirMod97Failed,
+    /// German Steuer-ID MOD 11,10 checksum validation failed.
+    DeSteuerIdMod1110Failed,
+    /// Dutch BSN MOD-11 checksum validation failed.
+    BsnMod11Failed,
+    /// Brazilian CPF MOD-11 checksum validation failed.
+    CpfMod11Failed,
+    /// Brazilian CNPJ MOD-11 checksum validation failed.
+    CnpjMod11Failed,
+    /// UK NHS number MOD-11 checksum validation failed.
+    UkNhsMod11Failed,
 }
 
 /// Typed validator outcome used by the pre-resolver validator-veto phase.
@@ -401,6 +415,20 @@ pub enum ValidatorKind {
     Ipv6Parse,
     /// EIP-55 Ethereum address checksum validator.
     EthEip55,
+    /// Indian Aadhaar Verhoeff checksum validator.
+    AadhaarVerhoeff,
+    /// French NIR MOD-97 key validator.
+    FrNirMod97,
+    /// German Steuer-ID MOD 11,10 checksum validator.
+    DeSteuerIdMod1110,
+    /// Dutch BSN MOD-11 checksum validator.
+    BsnMod11,
+    /// Brazilian CPF MOD-11 checksum validator.
+    CpfMod11,
+    /// Brazilian CNPJ MOD-11 checksum validator.
+    CnpjMod11,
+    /// UK NHS number MOD-11 checksum validator.
+    UkNhsMod11,
 }
 
 /// Regions supported by national phone validators.
@@ -430,6 +458,13 @@ impl ValidatorKind {
             "ipv4_parse" => Ok(Self::Ipv4Parse),
             "ipv6_parse" => Ok(Self::Ipv6Parse),
             "eth_eip55" => Ok(Self::EthEip55),
+            "aadhaar_verhoeff" => Ok(Self::AadhaarVerhoeff),
+            "fr_nir_mod97" => Ok(Self::FrNirMod97),
+            "de_steuer_id_mod1110" => Ok(Self::DeSteuerIdMod1110),
+            "bsn_mod11" => Ok(Self::BsnMod11),
+            "cpf_mod11" => Ok(Self::CpfMod11),
+            "cnpj_mod11" => Ok(Self::CnpjMod11),
+            "uk_nhs_mod11" => Ok(Self::UkNhsMod11),
             other => Err(ValidatorKindParseError::UnsupportedValidator {
                 kind: other.to_string(),
             }),
@@ -438,7 +473,16 @@ impl ValidatorKind {
 
     /// Returns whether the validator accepts the input.
     pub fn validates(self, input: &str) -> bool {
-        self.canonical_form(input).is_some()
+        match self {
+            Self::AadhaarVerhoeff => aadhaar_verhoeff_check(input),
+            Self::FrNirMod97 => fr_nir_mod97_check(input),
+            Self::DeSteuerIdMod1110 => de_steuer_id_mod1110_check(input),
+            Self::BsnMod11 => bsn_mod11_check(input),
+            Self::CpfMod11 => cpf_mod11_check(input),
+            Self::CnpjMod11 => cnpj_mod11_check(input),
+            Self::UkNhsMod11 => uk_nhs_mod11_check(input),
+            _ => self.canonical_form(input).is_some(),
+        }
     }
 
     /// Applies validation and returns a typed outcome for audit.
@@ -466,6 +510,25 @@ impl ValidatorKind {
             Self::Ipv4Parse => ipv4_parse_check(input).then(|| input.to_string()),
             Self::Ipv6Parse => ipv6_parse_check(input).then(|| input.to_string()),
             Self::EthEip55 => eth_eip55_check(input).then(|| input.to_string()),
+            Self::AadhaarVerhoeff => {
+                canonical_ascii_digits::<12>(input).filter(|_| aadhaar_verhoeff_check(input))
+            }
+            Self::FrNirMod97 => {
+                canonical_ascii_digits::<15>(input).filter(|_| fr_nir_mod97_check(input))
+            }
+            Self::DeSteuerIdMod1110 => {
+                canonical_ascii_digits::<11>(input).filter(|_| de_steuer_id_mod1110_check(input))
+            }
+            Self::BsnMod11 => canonical_ascii_digits::<9>(input).filter(|_| bsn_mod11_check(input)),
+            Self::CpfMod11 => {
+                canonical_ascii_digits::<11>(input).filter(|_| cpf_mod11_check(input))
+            }
+            Self::CnpjMod11 => {
+                canonical_ascii_digits::<14>(input).filter(|_| cnpj_mod11_check(input))
+            }
+            Self::UkNhsMod11 => {
+                canonical_ascii_digits::<10>(input).filter(|_| uk_nhs_mod11_check(input))
+            }
         }
     }
 
@@ -482,6 +545,13 @@ impl ValidatorKind {
             Self::Ipv4Parse => ValidatorFailReason::Ipv4ParseFailed,
             Self::Ipv6Parse => ValidatorFailReason::Ipv6ParseFailed,
             Self::EthEip55 => ValidatorFailReason::EthEip55ChecksumFailed,
+            Self::AadhaarVerhoeff => ValidatorFailReason::AadhaarVerhoeffFailed,
+            Self::FrNirMod97 => ValidatorFailReason::FrNirMod97Failed,
+            Self::DeSteuerIdMod1110 => ValidatorFailReason::DeSteuerIdMod1110Failed,
+            Self::BsnMod11 => ValidatorFailReason::BsnMod11Failed,
+            Self::CpfMod11 => ValidatorFailReason::CpfMod11Failed,
+            Self::CnpjMod11 => ValidatorFailReason::CnpjMod11Failed,
+            Self::UkNhsMod11 => ValidatorFailReason::UkNhsMod11Failed,
         }
     }
 }
@@ -649,6 +719,212 @@ fn eth_eip55_check(input: &str) -> bool {
         }
     }
     true
+}
+
+fn collect_ascii_digits<const N: usize>(input: &str) -> Option<[u8; N]> {
+    let mut digits = [0u8; N];
+    let mut count = 0usize;
+    for byte in input.bytes() {
+        if byte.is_ascii_digit() {
+            if count == N {
+                return None;
+            }
+            digits[count] = byte - b'0';
+            count += 1;
+        } else if matches!(byte, b' ' | b'\t' | b'\n' | b'\r' | b'-' | b'.' | b'/') {
+            continue;
+        } else {
+            return None;
+        }
+    }
+    (count == N).then_some(digits)
+}
+
+fn canonical_ascii_digits<const N: usize>(input: &str) -> Option<String> {
+    let digits = collect_ascii_digits::<N>(input)?;
+    let mut canonical = String::with_capacity(N);
+    for digit in digits {
+        canonical.push(char::from(b'0' + digit));
+    }
+    Some(canonical)
+}
+
+fn not_all_same<const N: usize>(digits: &[u8; N]) -> bool {
+    digits[1..].iter().any(|digit| *digit != digits[0])
+}
+
+fn aadhaar_verhoeff_check(input: &str) -> bool {
+    const D: [[u8; 10]; 10] = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+        [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+        [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+        [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+        [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+        [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+        [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+        [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+        [9, 8, 7, 6, 5, 4, 3, 2, 1, 0],
+    ];
+    const P: [[u8; 10]; 8] = [
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+        [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+        [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+        [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+        [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+        [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+        [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+        [7, 0, 4, 6, 9, 1, 3, 2, 5, 8],
+    ];
+    let Some(digits) = collect_ascii_digits::<12>(input) else {
+        return false;
+    };
+    if digits[0] < 2 || !not_all_same(&digits) {
+        return false;
+    }
+    let mut checksum = 0u8;
+    for (index, digit) in digits.iter().rev().enumerate() {
+        checksum = D[checksum as usize][P[index % 8][*digit as usize] as usize];
+    }
+    checksum == 0
+}
+
+fn fr_nir_mod97_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<15>(input) else {
+        return false;
+    };
+    if !matches!(digits[0], 1 | 2 | 3 | 4 | 7 | 8) {
+        return false;
+    }
+    let month = digits[3] * 10 + digits[4];
+    if !(1..=12).contains(&month) && !(20..=42).contains(&month) && !(50..=99).contains(&month) {
+        return false;
+    }
+    let mut number = 0u32;
+    for digit in &digits[..13] {
+        number = (number * 10 + u32::from(*digit)) % 97;
+    }
+    let key = u32::from(digits[13]) * 10 + u32::from(digits[14]);
+    97 - number == key
+}
+
+fn de_steuer_id_mod1110_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<11>(input) else {
+        return false;
+    };
+    if !steuer_id_first_ten_digits_valid(&digits) {
+        return false;
+    }
+    let mut product = 10u8;
+    for digit in &digits[..10] {
+        let mut sum = (*digit + product) % 10;
+        if sum == 0 {
+            sum = 10;
+        }
+        product = (2 * sum) % 11;
+    }
+    let check = (11 - product) % 10;
+    check == digits[10]
+}
+
+fn steuer_id_first_ten_digits_valid(digits: &[u8; 11]) -> bool {
+    if digits[0] == 0 {
+        return false;
+    }
+    let mut counts = [0u8; 10];
+    for digit in &digits[..10] {
+        counts[*digit as usize] += 1;
+    }
+    let repeated_digits = counts.iter().filter(|count| **count > 1).count();
+    let missing_digits = counts.iter().filter(|count| **count == 0).count();
+    let repeated_count_valid = counts.iter().any(|count| matches!(*count, 2 | 3));
+    repeated_digits == 1 && repeated_count_valid && matches!(missing_digits, 1 | 2)
+}
+
+fn bsn_mod11_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<9>(input) else {
+        return false;
+    };
+    if !not_all_same(&digits) {
+        return false;
+    }
+    let sum: i32 = digits[..8]
+        .iter()
+        .enumerate()
+        .map(|(index, digit)| i32::from(*digit) * (9 - index as i32))
+        .sum::<i32>()
+        - i32::from(digits[8]);
+    sum.rem_euclid(11) == 0
+}
+
+fn cpf_mod11_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<11>(input) else {
+        return false;
+    };
+    if !not_all_same(&digits) {
+        return false;
+    }
+    mod11_check_digit(&digits[..9], 10) == digits[9]
+        && mod11_check_digit(&digits[..10], 11) == digits[10]
+}
+
+fn cnpj_mod11_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<14>(input) else {
+        return false;
+    };
+    if !not_all_same(&digits) {
+        return false;
+    }
+    const FIRST: [u8; 12] = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    const SECOND: [u8; 13] = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    weighted_mod11_check_digit(&digits[..12], &FIRST) == digits[12]
+        && weighted_mod11_check_digit(&digits[..13], &SECOND) == digits[13]
+}
+
+fn uk_nhs_mod11_check(input: &str) -> bool {
+    let Some(digits) = collect_ascii_digits::<10>(input) else {
+        return false;
+    };
+    if !not_all_same(&digits) {
+        return false;
+    }
+    let sum: u32 = digits[..9]
+        .iter()
+        .enumerate()
+        .map(|(index, digit)| u32::from(*digit) * (10 - index as u32))
+        .sum();
+    let check = 11 - (sum % 11);
+    let check = if check == 11 { 0 } else { check };
+    check != 10 && check == u32::from(digits[9])
+}
+
+fn mod11_check_digit(digits: &[u8], start_weight: u8) -> u8 {
+    let weights = (2..=start_weight).rev();
+    let sum: u32 = digits
+        .iter()
+        .zip(weights)
+        .map(|(digit, weight)| u32::from(*digit) * u32::from(weight))
+        .sum();
+    let remainder = sum % 11;
+    if remainder < 2 {
+        0
+    } else {
+        (11 - remainder) as u8
+    }
+}
+
+fn weighted_mod11_check_digit(digits: &[u8], weights: &[u8]) -> u8 {
+    let sum: u32 = digits
+        .iter()
+        .zip(weights)
+        .map(|(digit, weight)| u32::from(*digit) * u32::from(*weight))
+        .sum();
+    let remainder = sum % 11;
+    if remainder < 2 {
+        0
+    } else {
+        (11 - remainder) as u8
+    }
 }
 
 /// A detected span and its class/source metadata.

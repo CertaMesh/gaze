@@ -1,0 +1,8 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-locale-nl"
+rulepack_version = "0.5.1"
+default_locales = ["nl-NL"]
+
+[locale.cues.bsn]
+names = ["BSN", "Burgerservicenummer"]
+window_chars = 64

@@ -2707,6 +2707,44 @@ fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
 }
 
 #[test]
+fn s2_cli_core_validator_locale_entities_tokenize_and_round_trip() {
+    for (locale, wrong_locale, input, class) in [
+        ("fr-FR", "en-US", "NIR 190010100100058", "nir"),
+        ("nl-NL", "en-US", "BSN 111222333", "bsn"),
+        ("pt-BR", "en-US", "CPF 529.982.247-25", "cpf"),
+        ("pt-BR", "en-US", "CNPJ 04.252.011/0001-10", "cnpj"),
+        ("en-IN", "en-US", "Aadhaar 6741 8529 6303", "aadhaar"),
+        ("en-GB", "fr-FR", "NHS number 943 476 5919", "nhs_number"),
+        ("de-DE", "en-US", "Steuer-ID 48 954 371 207", "steuer_id"),
+    ] {
+        let value = clean_json_with_args(
+            &["--rulepack-bundled=core", &format!("--locale={locale}")],
+            input,
+        );
+        let clean = value["clean_text"].as_str().unwrap();
+        assert!(
+            clean.ends_with(&format!(":Custom:{class}_1>")),
+            "{locale} {input}: {clean}"
+        );
+        assert_eq!(value["stats"]["detections"], 1, "{input}");
+        assert_eq!(
+            restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+            input
+        );
+
+        let wrong_locale = clean_json_with_args(
+            &[
+                "--rulepack-bundled=core",
+                &format!("--locale={wrong_locale}"),
+            ],
+            input,
+        );
+        assert_eq!(wrong_locale["clean_text"], input, "{input}");
+        assert_eq!(wrong_locale["stats"]["detections"], 0, "{input}");
+    }
+}
+
+#[test]
 fn s1_rulepack_path_override_loads_fixture_rulepack_and_round_trips() {
     let dir = tempdir().unwrap();
     let rulepack_path = dir.path().join("class-alpha.toml");
@@ -2796,6 +2834,11 @@ fn s1_three_surfaces_flags_are_exposed_and_bundled_ids_unchanged() {
     assert!(gaze_recognizers::embedded("core").is_some());
     assert!(gaze_recognizers::embedded("locale-de").is_some());
     assert!(gaze_recognizers::embedded("locale-en").is_some());
+    assert!(gaze_recognizers::embedded("locale-br").is_some());
+    assert!(gaze_recognizers::embedded("locale-fr").is_some());
+    assert!(gaze_recognizers::embedded("locale-in").is_some());
+    assert!(gaze_recognizers::embedded("locale-nl").is_some());
+    assert!(gaze_recognizers::embedded("locale-uk").is_some());
     assert!(gaze_recognizers::embedded("class_alpha").is_none());
 }
 

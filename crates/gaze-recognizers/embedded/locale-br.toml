@@ -1,0 +1,12 @@
+schema_version = "0.1.0"
+rulepack_id = "gaze-locale-br"
+rulepack_version = "0.5.1"
+default_locales = ["pt-BR"]
+
+[locale.cues.cpf]
+names = ["CPF", "Cadastro de Pessoas Físicas", "Cadastro de Pessoas Fisicas"]
+window_chars = 64
+
+[locale.cues.cnpj]
+names = ["CNPJ", "Cadastro Nacional da Pessoa Jurídica", "Cadastro Nacional da Pessoa Juridica"]
+window_chars = 64

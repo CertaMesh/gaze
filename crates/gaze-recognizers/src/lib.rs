@@ -21,6 +21,7 @@ mod ner;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;
+pub mod validators;
 
 pub use anchored_match::{
     is_person_name_candidate, AnchoredBoundary, AnchoredMatchRecognizer, CuePosition, NameShape,
@@ -41,6 +42,11 @@ pub fn embedded(name: &str) -> Option<&'static str> {
         "core" | "core-extended" => Some(include_str!("../embedded/core.toml")),
         "locale-de" => Some(include_str!("../embedded/locale-de.toml")),
         "locale-en" => Some(include_str!("../embedded/locale-en.toml")),
+        "locale-br" => Some(include_str!("../embedded/locale-br.toml")),
+        "locale-fr" => Some(include_str!("../embedded/locale-fr.toml")),
+        "locale-in" => Some(include_str!("../embedded/locale-in.toml")),
+        "locale-nl" => Some(include_str!("../embedded/locale-nl.toml")),
+        "locale-uk" => Some(include_str!("../embedded/locale-uk.toml")),
         _ => None,
     }
 }
@@ -55,7 +61,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 16);
+        assert_eq!(rulepack.recognizers.len(), 23);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -90,7 +96,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 16);
+        assert_eq!(rulepack.recognizers.len(), 23);
         assert!(rulepack
             .recognizers
             .iter()
