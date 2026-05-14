@@ -9,6 +9,7 @@ members = [
     "crates/gaze-document",
     "crates/gaze-mcp-core",
     "crates/gaze-mcp-rmcp",
+    "crates/gaze-proxy",
     "crates/xtask",
 ]
 resolver = "2"
@@ -21,6 +22,7 @@ license = "Apache-2.0 OR MIT"
 [workspace.dependencies]
 gaze-audit = { path = "crates/gaze-audit", version = "0.8.0-rc.1" }
 gaze-types = { path = "crates/gaze-types", version = "0.8.0-rc.1" }
+gaze-proxy = { path = "crates/gaze-proxy", version = "0.8.0-rc.1" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1" }
 serde_json = "1"

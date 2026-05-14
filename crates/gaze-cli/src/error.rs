@@ -46,6 +46,8 @@ pub(crate) enum CliError {
     DocumentDetail(String),
     #[cfg(feature = "mcp")]
     McpDetail(String),
+    #[cfg(feature = "proxy")]
+    ProxyDetail(String),
 }
 
 impl CliError {
@@ -69,6 +71,8 @@ impl CliError {
             Self::DocumentDetail(_) => 5,
             #[cfg(feature = "mcp")]
             Self::McpDetail(_) => 6,
+            #[cfg(feature = "proxy")]
+            Self::ProxyDetail(_) => 7,
         }
     }
 
@@ -96,6 +100,8 @@ impl CliError {
             Self::DocumentDetail(_) => "Document",
             #[cfg(feature = "mcp")]
             Self::McpDetail(_) => "Mcp",
+            #[cfg(feature = "proxy")]
+            Self::ProxyDetail(_) => "Proxy",
         }
     }
 
@@ -174,6 +180,17 @@ impl CliError {
             }
             #[cfg(feature = "mcp")]
             Self::McpDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
+            #[cfg(feature = "proxy")]
+            Self::ProxyDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 eprintln!(

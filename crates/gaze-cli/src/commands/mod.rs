@@ -4,6 +4,8 @@ mod clean;
 mod document;
 #[cfg(feature = "mcp")]
 mod mcp;
+#[cfg(feature = "proxy")]
+mod proxy;
 mod restore;
 
 use std::path::PathBuf;
@@ -141,6 +143,14 @@ enum Cmd {
         #[command(subcommand)]
         command: McpCmd,
     },
+    /// Run or manage the Gaze LLM proxy.
+    ///
+    /// Requires the binary to be built with `--features proxy`.
+    #[cfg(feature = "proxy")]
+    Proxy {
+        #[command(subcommand)]
+        command: ProxyCmd,
+    },
 }
 
 #[cfg(feature = "document")]
@@ -196,6 +206,76 @@ enum McpCmd {
         #[arg(long)]
         max_file_size: Option<u64>,
     },
+}
+
+#[cfg(feature = "proxy")]
+#[derive(Subcommand, Debug)]
+enum ProxyCmd {
+    /// Run proxy in the foreground.
+    Serve {
+        #[arg(long, default_value = "127.0.0.1:8787")]
+        bind: std::net::SocketAddr,
+        #[arg(long, default_value = "https://api.openai.com")]
+        upstream_openai: url::Url,
+        #[arg(long, default_value = "https://api.anthropic.com")]
+        upstream_anthropic: url::Url,
+        #[arg(long, default_value = "https://generativelanguage.googleapis.com")]
+        upstream_gemini: url::Url,
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        #[arg(long, default_value = "core")]
+        rulepack: String,
+        #[arg(long, default_value = "30m")]
+        session_ttl: String,
+        #[arg(long = "_foreground-daemon", hide = true)]
+        foreground_daemon: bool,
+    },
+    /// Start proxy as a detached daemon.
+    Start {
+        #[arg(long)]
+        bind: Option<std::net::SocketAddr>,
+        #[arg(long)]
+        upstream_openai: Option<url::Url>,
+        #[arg(long)]
+        upstream_anthropic: Option<url::Url>,
+        #[arg(long)]
+        upstream_gemini: Option<url::Url>,
+        #[arg(long)]
+        policy: Option<PathBuf>,
+        #[arg(long)]
+        rulepack: Option<String>,
+        #[arg(long)]
+        session_ttl: Option<String>,
+    },
+    /// Stop the detached proxy daemon.
+    Stop {
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "10s")]
+        timeout: String,
+    },
+    /// Show proxy daemon status.
+    Status,
+    /// Print proxy daemon logs.
+    Logs {
+        #[arg(long)]
+        follow: bool,
+    },
+    /// Restart proxy daemon using persisted config.
+    Restart {
+        #[arg(long)]
+        force: bool,
+        #[arg(long, default_value = "10s")]
+        timeout: String,
+    },
+    /// Install macOS launchd auto-start integration.
+    InstallLaunchd,
+    /// Uninstall macOS launchd auto-start integration.
+    UninstallLaunchd,
+    /// Install Linux systemd user auto-start integration.
+    InstallSystemdUser,
+    /// Uninstall Linux systemd user auto-start integration.
+    UninstallSystemdUser,
 }
 
 #[derive(Subcommand, Debug)]
@@ -588,6 +668,55 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 manifest_dir,
                 max_file_size,
             }),
+        },
+        #[cfg(feature = "proxy")]
+        Cmd::Proxy { command } => match command {
+            ProxyCmd::Serve {
+                bind,
+                upstream_openai,
+                upstream_anthropic,
+                upstream_gemini,
+                policy,
+                rulepack,
+                session_ttl,
+                foreground_daemon,
+            } => proxy::serve(proxy::ServeArgs {
+                bind,
+                upstream_openai,
+                upstream_anthropic,
+                upstream_gemini,
+                policy,
+                rulepack,
+                session_ttl,
+                foreground_daemon,
+            }),
+            ProxyCmd::Start {
+                bind,
+                upstream_openai,
+                upstream_anthropic,
+                upstream_gemini,
+                policy,
+                rulepack,
+                session_ttl,
+            } => proxy::start(proxy::StartArgs {
+                bind,
+                upstream_openai,
+                upstream_anthropic,
+                upstream_gemini,
+                policy,
+                rulepack,
+                session_ttl,
+            }),
+            ProxyCmd::Stop { force, timeout } => proxy::stop(proxy::StopArgs { force, timeout }),
+            ProxyCmd::Status => proxy::status(),
+            ProxyCmd::Logs { follow } => proxy::logs(follow),
+            ProxyCmd::Restart { force, timeout } => {
+                proxy::restart(proxy::RestartArgs { force, timeout })
+            }
+            ProxyCmd::InstallLaunchd => proxy::install_launchd(),
+            ProxyCmd::UninstallLaunchd => proxy::uninstall_launchd(),
+            ProxyCmd::InstallSystemdUser => proxy::install_systemd_user(),
+            ProxyCmd::UninstallSystemdUser => proxy::uninstall_systemd_user(),
         },
     }
 }

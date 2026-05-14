@@ -1,0 +1,52 @@
+[package]
+name = "gaze-proxy"
+version = "0.8.0-rc.1"
+edition = "2021"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Feature-gated multi-provider HTTP proxy for Gaze PII pseudonymization"
+readme = "README.md"
+keywords = ["pii", "gaze", "proxy", "llm"]
+categories = ["web-programming::http-server", "text-processing"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+default = ["proxy-daemon"]
+proxy-daemon = ["dep:chrono", "dep:dirs", "dep:fs2", "dep:daemonize", "dep:tracing-appender"]
+
+[dependencies]
+async-trait = "0.1"
+axum = "0.8"
+bytes = "1"
+chrono = { version = "0.4", optional = true, default-features = false, features = ["clock", "std"] }
+daemonize = { version = "0.5", optional = true }
+dirs = { version = "6", optional = true }
+fs2 = { version = "0.4", optional = true }
+futures-util = "0.3"
+gaze = { path = "../gaze", version = "0.8.0-rc.1", package = "gaze-pii" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.8.0-rc.1" }
+gaze-types = { workspace = true }
+http = "1"
+libc = "0.2"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+tokio = { version = "1", features = ["macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio-stream = "0.1"
+toml = "0.8"
+tower = "0.5"
+tracing = "0.1"
+tracing-appender = { version = "0.2", optional = true }
+url = { version = "2", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+
+[dev-dependencies]
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.8.0-rc.1" }
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
