@@ -9,26 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5,
-  `--safety-net-backend kiji-distilbert`): observer-only DistilBERT NER pass
-  that runs at the Pass-3 chokepoint alongside the existing OpenAI Privacy
-  Filter. Subprocess model identical to `OpenAiFilterSafetyNet`: read clean
-  text on stdin, emit a JSON span array on stdout, never mutate the manifest.
-  Pinned-artifact contract identical to the existing OpenAI filter — model
-  dir must carry `SHA256SUMS`, `labels.json`, `model.onnx`, `tokenizer.json`
-  with `0o700` directory + `0o600` file permissions on Unix; missing
-  artifacts (including a missing `SHA256SUMS`) fail closed with typed
-  `CliError::SafetyNetArtifactMissing` exit `2` *before* the subprocess
-  spawns. New CLI flags: `--safety-net-backend`, `--kiji-distilbert-command`,
-  `--kiji-distilbert-model-dir`. New fetcher: `scripts/fetch-kiji-safetynet-model.sh`
-  (HF commit SHA placeholder pending first sign-off). (Axis 1 reliability —
-  defense in depth, second NER opinion at the chokepoint.)
-
 ### Changed
-
-- Unified `core` + `core-extended` bundled rulepacks into single `core` bundle. Each recognizer now declares a `safety_tier` (`safe_default` / `locale_gated` / `opt_in`) which gates no-policy activation. `--rulepack-bundled core-extended` is deprecated (will be removed in v0.10.0); aliases to `--rulepack-bundled core` and auto-activates locale-gated tier. Adopters who relied on the v0.4.5 PR #58 no-policy surprise activation should pass `--locale=de-DE` or `--locale=en-US` explicitly.
-- [bundle-tokenization-drift] v0.8 bundle unification refreshed the `core` no-policy snapshot and removed the deprecated `core-extended` no-policy snapshot.
-- Research docs (gaze-threat-model, ner-library-evaluation, v0.4.x audits, v0.5 dylint gate, v0.7.x corpus-rework/coverage-baseline) migrated to `PIInuts/business:research/`.
 
 ### Deprecated
 
@@ -37,6 +18,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [0.8.0-rc.1] - 2026-05-14
+
+First v0.8 pre-release. Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth. Tier 2 checksum-backed locale parity (Aadhaar / NIR / Steuer-ID / BSN / CPF / CNPJ / NHS) and Tier 3 regex locales (SSN / NINO / PAN) follow in rc.2 / rc.3.
+
+### Added
+
+- **Versioned recognizer lineage** (v0.8 Tier 1, PR #203 `3c95304`): `Candidate.recognizer_version_id` + `RedactionEntry.recognizer_id` + `recognizer_version_id` (all `Option<String>`, additive). Audit boundary in `pipeline.rs` now propagates lineage instead of dropping at `source`. SQLite schema gains nullable `recognizer_id` / `recognizer_version_id` columns; pre-migration rows tagged `legacy_unversioned`. NER recognizer emissions versioned as `ner.<model>.<vN>` from artifact config metadata (`ner.unknown.v0` fallback). `docs/architecture/locale-chain.md` gains a coverage matrix listing every bundled recognizer × supported locales × ValidatorKind. (Axis 4 trust/auditable, Axis 5 ergonomics.)
+- **`SafetyTier` enum on rulepack recognizers** (v0.8 Tier 1.5, PR #201 `8ab9daf`): `SafeDefault`, `LocaleGated`, `OptIn` with `#[non_exhaustive]`. Closed-enum activation gate replaces the dual-bundle activation model. (Axis 1 reliability, Axis 4 trust.)
+- **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5, PR #202 `0cd9ccc`): new `--safety-net-backend kiji-distilbert` flag (default remains `openai-filter` for compat). Pass-3 SafetyNet device with pinned-artifact contract identical to existing OpenAI filter (SHA256SUMS hard-fail on missing). New `CliError::SafetyNetArtifactMissing { backend, path }` typed variant. `scripts/fetch-kiji-safetynet-model.sh` mirror of existing NER fetcher. (Axis 1 defense-in-depth.)
+
+### Changed
+
+- **Unified `core` + `core-extended` bundled rulepacks** into single `core` bundle (v0.8 Tier 1.5, PR #201). Each recognizer now declares a `safety_tier` field; no-policy activation gates on `SafeDefault` only. Adopter behavior preserved through alias path described under Deprecated.
+
+### Deprecated
+
+- **`--rulepack-bundled core-extended`** is deprecated (v0.8 Tier 1.5, PR #201). Aliases to `--rulepack-bundled core` with auto-activation of `LocaleGated` recognizers + a `tracing::warn!` deprecation notice. Scheduled removal in v0.10.0. Adopters who relied on the v0.4.5 PR #58 no-policy surprise activation for `phone.national.*` / `postal.*` should pass `--locale=de-DE` or `--locale=en-US` explicitly.
+
+### Migration notes
+
+- Existing `RedactionEntry` JSON consumers see no shape change — new fields use `#[serde(skip_serializing_if = "Option::is_none")]` and emit nothing when None.
+- Existing SQLite audit DBs are migrated forward: pre-migration redaction rows get `recognizer_id = "legacy_unversioned"`, `recognizer_version_id = NULL`. Migration is idempotent.
+- Existing `policy.toml` files unchanged. No new required fields.
 
 ## [0.7.2] - 2026-05-13
 

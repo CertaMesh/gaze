@@ -82,7 +82,7 @@ Claude Code, Claude Desktop, and Cursor config paths.
 
 ## Quickstart
 
-A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the v0.7.2 CLI.
+A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only Privacy filter layered on top. Each step is copy-paste-able against the v0.8.0-rc.1 CLI.
 
 ### 1. First redact
 
@@ -300,7 +300,7 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 ## Status
 
-- **Version:** v0.7.2 (2026-05).
+- **Version:** v0.8.0-rc.1 (2026-05, pre-release).
 - **MSRV:** Rust 1.89.
 - **License:** dual `Apache-2.0 OR MIT`.
 - **crates.io:** published as `gaze-pii`. The bare `gaze` name is in transfer; until that completes, depend on `gaze-pii`. Source-compat is preserved via `[lib].name = "gaze"`.
@@ -319,11 +319,11 @@ The CLI is a process boundary around the Rust runtime; you can link the runtime 
 
 ```toml
 [dependencies]
-gaze-pii = "0.7"
-gaze-assembly = "0.7"
+gaze-pii = "0.8.0-rc.1"
+gaze-assembly = "0.8.0-rc.1"
 ```
 
-The crate is published as `gaze-pii` because the bare `gaze` name is in transfer; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
+The crate is published as `gaze-pii` because the bare `gaze` name is in transfer; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved. During the v0.8 pre-release window, pin the exact `0.8.0-rc.N` version — Cargo's caret operator excludes pre-releases.
 
 - Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [`crates.io/crates/gaze-pii`](https://crates.io/crates/gaze-pii)).
 - Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
