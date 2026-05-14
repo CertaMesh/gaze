@@ -171,7 +171,7 @@ none) is unchanged.
 
 ### Tier 3 — Regex-only locale recognizers (additive)
 
-PR: to be filled with the Tier 3 pull request number before merge.
+PR [#208](https://github.com/EmpireTwo/gaze/pull/208).
 
 Adds US SSN, UK NINO, and Indian PAN as `safety_tier = "locale_gated"`
 recognizers — they fire only when the resolved locale matches. No
