@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-011",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 148,
+      "byte_end": 159,
+      "class_id": "Name",
+      "raw_label": "Alice Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 2004289590034887205,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 169,
+      "byte_end": 198,
+      "class_id": "Email",
+      "raw_label": "dana.audit194@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 17621762898074556511,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 207,
+      "byte_end": 226,
+      "class_id": "custom:credit_card",
+      "raw_label": "4954 8544 4927 7589",
+      "generator_id": "card_luhn",
+      "generator_seed": 13970939825875638993,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 233,
+      "byte_end": 257,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:8c7d:f28f::a128",
+      "generator_id": "ip_v6",
+      "generator_seed": 9243345912642009938,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 267,
+      "byte_end": 275,
+      "class_id": "custom:phone",
+      "raw_label": "555-0138",
+      "generator_id": "phone_national_us",
+      "generator_seed": 16836934888435552396,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-011",
+    "template_seed": 16198717230088558829
+  }
+}

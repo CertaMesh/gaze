@@ -1,0 +1,1 @@
+SCAN 001 / OCR CONF 0.98 / Please respond to ip_0 2001:db8::d7c1:192.0.2.31; wallet_1 0x097fE86403Db318C9C891AC419A3ffEc48B3Fd79. ref=CASE-7421 status=pending

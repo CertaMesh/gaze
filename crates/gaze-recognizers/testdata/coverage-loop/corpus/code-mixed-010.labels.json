@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-010",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 202,
+      "byte_end": 227,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::cae:192.0.2.235",
+      "generator_id": "ip_v6",
+      "generator_seed": 10885754345349753735,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 234,
+      "byte_end": 259,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::ae77:192.0.2.90",
+      "generator_id": "ip_v6",
+      "generator_seed": 16460131638397345559,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 269,
+      "byte_end": 299,
+      "class_id": "Email",
+      "raw_label": "casey.agent281@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 1921441178036139257,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-010",
+    "template_seed": 11395479841571324922
+  }
+}

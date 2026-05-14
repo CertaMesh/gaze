@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-global-002",
+  "context": "high-density-global",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 70,
+      "byte_end": 89,
+      "class_id": "custom:credit_card",
+      "raw_label": "4252 8425 9533 3271",
+      "generator_id": "card_luhn",
+      "generator_seed": 14213850320707060052,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 98,
+      "byte_end": 120,
+      "class_id": "custom:iban",
+      "raw_label": "DE02584177104614659094",
+      "generator_id": "iban_de",
+      "generator_seed": 17345563610503844339,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 129,
+      "byte_end": 148,
+      "class_id": "custom:credit_card",
+      "raw_label": "4315 6142 4925 8120",
+      "generator_id": "card_luhn",
+      "generator_seed": 6851313502302660282,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 157,
+      "byte_end": 179,
+      "class_id": "custom:iban",
+      "raw_label": "DE85986815041833170734",
+      "generator_id": "iban_de",
+      "generator_seed": 17325970325873198199,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-global-002",
+    "template_seed": 7257029384301440882
+  }
+}

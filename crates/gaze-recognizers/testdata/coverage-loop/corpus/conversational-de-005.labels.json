@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-005",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 216,
+      "byte_end": 226,
+      "class_id": "Name",
+      "raw_label": "Nina Meyer",
+      "generator_id": "name_de",
+      "generator_seed": 6935738367706769831,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 235,
+      "byte_end": 257,
+      "class_id": "custom:iban",
+      "raw_label": "DE40299047931727451208",
+      "generator_id": "iban_de",
+      "generator_seed": 5938724452988931601,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 268,
+      "byte_end": 273,
+      "class_id": "custom:postal_code",
+      "raw_label": "62872",
+      "generator_id": "postal_de",
+      "generator_seed": 16027369009572883095,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-005",
+    "template_seed": 16907157840716929221
+  }
+}

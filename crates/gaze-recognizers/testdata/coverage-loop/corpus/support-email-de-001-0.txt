@@ -1,3 +1,0 @@
-Von: "Mara Meyer" <aleen@example.org>
-An: support@example.invalid
-Betreff: Pruefung DE92332995298984181327

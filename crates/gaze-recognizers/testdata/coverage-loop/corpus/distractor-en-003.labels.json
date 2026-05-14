@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-en-003",
+  "context": "distractor-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 72,
+      "byte_end": 84,
+      "class_id": "Name",
+      "raw_label": "Blair Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 3844036156676295116,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 94,
+      "byte_end": 128,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic906@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 11048724809313757088,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-en-003",
+    "template_seed": 11937778487061601377
+  }
+}

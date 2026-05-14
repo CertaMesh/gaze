@@ -1,0 +1,1 @@
+{"tool":"handoff","args":{"payload":"Please respond to card_0 4218 7411 6450 0125; phone_1 +12025550126. ref=CASE-7421 status=pending"}}

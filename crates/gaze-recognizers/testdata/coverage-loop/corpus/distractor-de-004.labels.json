@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-de-004",
+  "context": "distractor-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 216,
+      "byte_end": 230,
+      "class_id": "Name",
+      "raw_label": "Laura Hoffmann",
+      "generator_id": "name_de",
+      "generator_seed": 4866199520627727162,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 241,
+      "byte_end": 246,
+      "class_id": "custom:postal_code",
+      "raw_label": "79931",
+      "generator_id": "postal_de",
+      "generator_seed": 17876889632209865518,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-de-004",
+    "template_seed": 3314091866016351288
+  }
+}

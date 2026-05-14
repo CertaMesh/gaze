@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "log-line-v2-005",
+  "context": "log-line",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "log-line",
+  "spans": [
+    {
+      "byte_start": 63,
+      "byte_end": 94,
+      "class_id": "Email",
+      "raw_label": "evan.fixture964@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 2622110262985175585,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 104,
+      "byte_end": 116,
+      "class_id": "custom:phone",
+      "raw_label": "+12025550190",
+      "generator_id": "phone_structural",
+      "generator_seed": 18294459577133006961,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.structural",
+      "expected_recognizer_version_id": "phone.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "log-line-v2-005",
+    "template_seed": 1958682547532998443
+  }
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-en-002",
+  "context": "threaded-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 236,
+      "class_id": "Email",
+      "raw_label": "blair.review516@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 8160211805936427039,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 246,
+      "byte_end": 277,
+      "class_id": "Email",
+      "raw_label": "blair.review338@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 3840126756714724498,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 288,
+      "byte_end": 299,
+      "class_id": "Name",
+      "raw_label": "Blair Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 9434898350872921349,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 308,
+      "byte_end": 327,
+      "class_id": "custom:credit_card",
+      "raw_label": "4643 2439 6063 1852",
+      "generator_id": "card_luhn",
+      "generator_seed": 16462104765393556201,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-en-002",
+    "template_seed": 6329476787231155590
+  }
+}

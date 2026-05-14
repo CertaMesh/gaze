@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-008",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 213,
+      "class_id": "custom:phone",
+      "raw_label": "555-0124",
+      "generator_id": "phone_national_us",
+      "generator_seed": 10463843312882624971,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    },
+    {
+      "byte_start": 224,
+      "byte_end": 234,
+      "class_id": "custom:postal_code",
+      "raw_label": "98454-3976",
+      "generator_id": "postal_us",
+      "generator_seed": 1999019953325568834,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    },
+    {
+      "byte_start": 244,
+      "byte_end": 274,
+      "class_id": "Email",
+      "raw_label": "casey.agent239@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 730875986610589660,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-008",
+    "template_seed": 1306725815649046308
+  }
+}

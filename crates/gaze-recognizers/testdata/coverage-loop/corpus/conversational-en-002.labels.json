@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-002",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 71,
+      "byte_end": 102,
+      "class_id": "Email",
+      "raw_label": "blair.review904@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10741408535054971749,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 112,
+      "byte_end": 120,
+      "class_id": "custom:phone",
+      "raw_label": "555-0190",
+      "generator_id": "phone_national_us",
+      "generator_seed": 11504078302363159681,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-002",
+    "template_seed": 904897533404111285
+  }
+}

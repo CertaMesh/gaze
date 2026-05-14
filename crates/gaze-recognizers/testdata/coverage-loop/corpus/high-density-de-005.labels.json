@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-de-005",
+  "context": "high-density-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 214,
+      "byte_end": 236,
+      "class_id": "custom:iban",
+      "raw_label": "DE70968886364382916262",
+      "generator_id": "iban_de",
+      "generator_seed": 601891905950421945,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 245,
+      "byte_end": 267,
+      "class_id": "custom:iban",
+      "raw_label": "DE16103741319112173046",
+      "generator_id": "iban_de",
+      "generator_seed": 238332363001525931,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 276,
+      "byte_end": 298,
+      "class_id": "custom:iban",
+      "raw_label": "DE07624494108046988003",
+      "generator_id": "iban_de",
+      "generator_seed": 9042198488794483891,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 309,
+      "byte_end": 321,
+      "class_id": "Name",
+      "raw_label": "Nina Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 11031242761636614428,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 332,
+      "byte_end": 345,
+      "class_id": "Name",
+      "raw_label": "Laura Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 8359070648711726410,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 355,
+      "byte_end": 386,
+      "class_id": "Email",
+      "raw_label": "morgan.clean703@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9851558112162193215,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-de-005",
+    "template_seed": 13374442876036695095
+  }
+}

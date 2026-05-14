@@ -10,20 +10,20 @@
   "leak_set": {
     "Email": {
       "de-DE": {
-        "covered": 20,
-        "uncovered": 6,
+        "covered": 55,
+        "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "en-US": {
-        "covered": 10,
-        "uncovered": 1,
+        "covered": 48,
+        "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "global": {
-        "covered": 19,
-        "uncovered": 11,
+        "covered": 59,
+        "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       }
@@ -31,46 +31,32 @@
     "Name": {
       "de-DE": {
         "covered": 0,
-        "uncovered": 32,
+        "uncovered": 29,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "en-US": {
         "covered": 0,
-        "uncovered": 8,
+        "uncovered": 29,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 0,
+        "uncovered": 5,
         "partial_bleed": 0,
         "class_mismatch": 0
       }
     },
     "custom:credit_card": {
       "de-DE": {
-        "covered": 6,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 2
-      },
-      "en-US": {
-        "covered": 6,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 0
-      },
-      "global": {
-        "covered": 22,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 0
-      }
-    },
-    "custom:eth_address": {
-      "de-DE": {
-        "covered": 8,
+        "covered": 7,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "en-US": {
-        "covered": 4,
+        "covered": 10,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
@@ -82,9 +68,49 @@
         "class_mismatch": 0
       }
     },
+    "custom:eth_address": {
+      "de-DE": {
+        "covered": 4,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "en-US": {
+        "covered": 5,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 21,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      }
+    },
     "custom:iban": {
       "de-DE": {
-        "covered": 8,
+        "covered": 0,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 22
+      },
+      "en-US": {
+        "covered": 0,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 8
+      },
+      "global": {
+        "covered": 0,
+        "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 18
+      }
+    },
+    "custom:ip_address": {
+      "de-DE": {
+        "covered": 6,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
@@ -96,27 +122,7 @@
         "class_mismatch": 0
       },
       "global": {
-        "covered": 20,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 0
-      }
-    },
-    "custom:ip_address": {
-      "de-DE": {
-        "covered": 8,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 0
-      },
-      "en-US": {
-        "covered": 4,
-        "uncovered": 0,
-        "partial_bleed": 0,
-        "class_mismatch": 0
-      },
-      "global": {
-        "covered": 30,
+        "covered": 25,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
@@ -124,39 +130,51 @@
     },
     "custom:phone": {
       "de-DE": {
-        "covered": 10,
+        "covered": 17,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "en-US": {
         "covered": 0,
-        "uncovered": 6,
+        "uncovered": 15,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 11,
+        "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       }
     },
     "custom:postal_code": {
       "de-DE": {
-        "covered": 8,
+        "covered": 13,
         "uncovered": 0,
         "partial_bleed": 0,
         "class_mismatch": 0
       },
       "en-US": {
-        "covered": 4,
+        "covered": 10,
         "uncovered": 0,
+        "partial_bleed": 0,
+        "class_mismatch": 0
+      },
+      "global": {
+        "covered": 0,
+        "uncovered": 6,
         "partial_bleed": 0,
         "class_mismatch": 0
       }
     }
   },
   "totals": {
-    "fixture_count": 123,
-    "labeled_span_total": 278,
-    "uncovered_total": 64,
+    "fixture_count": 150,
+    "labeled_span_total": 448,
+    "uncovered_total": 84,
     "partial_bleed_total": 0,
-    "class_mismatch_total": 2,
-    "covered_total": 212
+    "class_mismatch_total": 48,
+    "covered_total": 316
   }
 }

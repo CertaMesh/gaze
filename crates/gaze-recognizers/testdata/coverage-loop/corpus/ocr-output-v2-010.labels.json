@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "ocr-output-v2-010",
+  "context": "ocr-output",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "ocr-output",
+  "spans": [
+    {
+      "byte_start": 52,
+      "byte_end": 71,
+      "class_id": "custom:credit_card",
+      "raw_label": "4492 7796 4065 9849",
+      "generator_id": "card_luhn",
+      "generator_seed": 16125373658318175506,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 81,
+      "byte_end": 93,
+      "class_id": "custom:phone",
+      "raw_label": "+12025550157",
+      "generator_id": "phone_structural",
+      "generator_seed": 13828319662477355815,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.structural",
+      "expected_recognizer_version_id": "phone.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "ocr-output-v2-010",
+    "template_seed": 10089993925997999052
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_en_v2-v2-005",
+  "context": "prose_en_v2",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_en_v2",
+  "spans": [
+    {
+      "byte_start": 71,
+      "byte_end": 100,
+      "class_id": "Email",
+      "raw_label": "dana.audit604@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 4596531150465598831,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 110,
+      "byte_end": 118,
+      "class_id": "custom:phone",
+      "raw_label": "555-0157",
+      "generator_id": "phone_national_us",
+      "generator_seed": 12058595819148570647,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_en_v2-v2-005",
+    "template_seed": 16058155686959355637
+  }
+}

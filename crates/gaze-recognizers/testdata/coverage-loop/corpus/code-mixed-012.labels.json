@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-012",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 206,
+      "byte_end": 216,
+      "class_id": "Name",
+      "raw_label": "Dana Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 17422803762591476186,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 227,
+      "byte_end": 237,
+      "class_id": "custom:postal_code",
+      "raw_label": "56997-3386",
+      "generator_id": "postal_us",
+      "generator_seed": 14935644120217411802,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    },
+    {
+      "byte_start": 247,
+      "byte_end": 281,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic443@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 18201144059078046025,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-012",
+    "template_seed": 8449950510197921549
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool_json_v2-v2-002",
+  "context": "tool_json_v2",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "tool_json_v2",
+  "spans": [
+    {
+      "byte_start": 63,
+      "byte_end": 93,
+      "class_id": "Email",
+      "raw_label": "casey.agent379@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10605603225016853009,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 100,
+      "byte_end": 124,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:6e86:a308::a35a",
+      "generator_id": "ip_v6",
+      "generator_seed": 5775698691205027620,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool_json_v2-v2-002",
+    "template_seed": 8037807051088670937
+  }
+}

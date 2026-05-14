@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-de-001",
+  "context": "high-density-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 81,
+      "byte_end": 112,
+      "class_id": "Email",
+      "raw_label": "evan.fixture417@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 2429136126932259022,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 122,
+      "byte_end": 152,
+      "class_id": "Email",
+      "raw_label": "casey.agent231@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 17229992670819930778,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 161,
+      "byte_end": 183,
+      "class_id": "custom:iban",
+      "raw_label": "DE95138125931108684452",
+      "generator_id": "iban_de",
+      "generator_seed": 17998564417934704068,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 193,
+      "byte_end": 204,
+      "class_id": "custom:phone",
+      "raw_label": "01710000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 13034233744097117767,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-de-001",
+    "template_seed": 3594878812903446536
+  }
+}

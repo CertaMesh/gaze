@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-010",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 158,
+      "byte_end": 170,
+      "class_id": "Name",
+      "raw_label": "Mara Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 3187879699984005839,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 180,
+      "byte_end": 211,
+      "class_id": "Email",
+      "raw_label": "evan.fixture835@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 2488315553570525946,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 220,
+      "byte_end": 239,
+      "class_id": "custom:credit_card",
+      "raw_label": "4852 2246 4145 1072",
+      "generator_id": "card_luhn",
+      "generator_seed": 13602440889767540630,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 249,
+      "byte_end": 264,
+      "class_id": "custom:phone",
+      "raw_label": "+49 30 00000000",
+      "generator_id": "phone_national_de",
+      "generator_seed": 5830803133961002502,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-010",
+    "template_seed": 2278302462188900925
+  }
+}

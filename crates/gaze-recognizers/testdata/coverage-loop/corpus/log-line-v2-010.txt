@@ -1,0 +1,1 @@
+[2026-05-14T08:00:00Z] INFO scenario=Please respond to card_0 4752 2375 2925 0979; phone_1 +12025550132. ref=CASE-7421 status=pending

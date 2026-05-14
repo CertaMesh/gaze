@@ -67,6 +67,15 @@ impl GeneratorRegistry {
                 *registered_class == class_id && *registered_locale == locale
             })
             .or_else(|| {
+                fallback_locale(class_id, locale).and_then(|fallback| {
+                    self.by_class_locale.iter().find(
+                        |((registered_class, registered_locale), _)| {
+                            *registered_class == class_id && *registered_locale == Some(fallback)
+                        },
+                    )
+                })
+            })
+            .or_else(|| {
                 self.by_class_locale
                     .iter()
                     .find(|((registered_class, registered_locale), _)| {
@@ -79,5 +88,14 @@ impl GeneratorRegistry {
     fn register(&mut self, generator: Box<dyn Generator>) {
         let key = (generator.class_id(), generator.locale());
         self.by_class_locale.insert(key, generator);
+    }
+}
+
+fn fallback_locale(class_id: &str, locale: Option<&str>) -> Option<&'static str> {
+    match (class_id, locale) {
+        ("Name" | "custom:postal_code", Some("global")) | ("Name" | "custom:postal_code", None) => {
+            Some("en-US")
+        }
+        _ => None,
     }
 }

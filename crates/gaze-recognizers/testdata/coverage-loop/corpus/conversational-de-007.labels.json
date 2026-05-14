@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-de-007",
+  "context": "conversational-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 215,
+      "byte_end": 246,
+      "class_id": "Email",
+      "raw_label": "morgan.clean964@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 11498170238758576988,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 256,
+      "byte_end": 272,
+      "class_id": "custom:phone",
+      "raw_label": "+49 1555 0112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 14500839032348616924,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    },
+    {
+      "byte_start": 283,
+      "byte_end": 295,
+      "class_id": "Name",
+      "raw_label": "Mara Fischer",
+      "generator_id": "name_de",
+      "generator_seed": 7147813351254212152,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-de-007",
+    "template_seed": 17973150051311781062
+  }
+}

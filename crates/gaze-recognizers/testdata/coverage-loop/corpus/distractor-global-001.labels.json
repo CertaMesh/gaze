@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "distractor-global-001",
+  "context": "distractor-global",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "distractor-heavy",
+  "spans": [
+    {
+      "byte_start": 68,
+      "byte_end": 94,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::2b0f:192.0.2.107",
+      "generator_id": "ip_v6",
+      "generator_seed": 15978333715900407945,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 104,
+      "byte_end": 138,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic624@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 17061308953404173000,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "distractor-global-001",
+    "template_seed": 15551070624085496145
+  }
+}

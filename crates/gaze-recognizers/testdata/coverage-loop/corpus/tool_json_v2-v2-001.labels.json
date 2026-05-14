@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "fixture_id": "tool_json_v2-v2-001",
+  "context": "tool_json_v2",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "tool_json_v2",
+  "spans": [
+    {
+      "byte_start": 63,
+      "byte_end": 92,
+      "class_id": "Email",
+      "raw_label": "dana.audit668@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9456792064736991824,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 101,
+      "byte_end": 123,
+      "class_id": "custom:iban",
+      "raw_label": "DE51389061948712616419",
+      "generator_id": "iban_de",
+      "generator_seed": 14311961803606505099,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "tool_json_v2-v2-001",
+    "template_seed": 2251870986719244804
+  }
+}

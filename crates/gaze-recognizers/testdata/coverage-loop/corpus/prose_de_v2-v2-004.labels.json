@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "prose_de_v2-v2-004",
+  "context": "prose_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "prose_de_v2",
+  "spans": [
+    {
+      "byte_start": 80,
+      "byte_end": 99,
+      "class_id": "custom:credit_card",
+      "raw_label": "4630 2450 1660 1230",
+      "generator_id": "card_luhn",
+      "generator_seed": 14472607279383600476,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 109,
+      "byte_end": 140,
+      "class_id": "Email",
+      "raw_label": "morgan.clean420@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 16095672806641956937,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "prose_de_v2-v2-004",
+    "template_seed": 12375693342321558183
+  }
+}

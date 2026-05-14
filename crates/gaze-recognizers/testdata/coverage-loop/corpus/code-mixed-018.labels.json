@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-018",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 148,
+      "byte_end": 159,
+      "class_id": "Name",
+      "raw_label": "Alice Hayes",
+      "generator_id": "name_en",
+      "generator_seed": 10462681414956192580,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 169,
+      "byte_end": 198,
+      "class_id": "Email",
+      "raw_label": "dana.audit259@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 16109370463225007080,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 205,
+      "byte_end": 231,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::3b92:192.0.2.154",
+      "generator_id": "ip_v6",
+      "generator_seed": 17882313802927283985,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 242,
+      "byte_end": 252,
+      "class_id": "custom:postal_code",
+      "raw_label": "40015-8667",
+      "generator_id": "postal_us",
+      "generator_seed": 17595248624628794495,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-018",
+    "template_seed": 3624021858909820087
+  }
+}

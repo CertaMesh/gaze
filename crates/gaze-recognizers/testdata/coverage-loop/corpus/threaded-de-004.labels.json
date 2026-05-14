@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-de-004",
+  "context": "threaded-de",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 157,
+      "byte_end": 188,
+      "class_id": "Email",
+      "raw_label": "morgan.clean440@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10350664756524060656,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 198,
+      "byte_end": 229,
+      "class_id": "Email",
+      "raw_label": "blair.review399@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 9204101254536227100,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 239,
+      "byte_end": 268,
+      "class_id": "Email",
+      "raw_label": "dana.audit541@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 7748739531476905637,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 279,
+      "byte_end": 291,
+      "class_id": "Name",
+      "raw_label": "Jonas Wagner",
+      "generator_id": "name_de",
+      "generator_seed": 11944543458365047744,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 302,
+      "byte_end": 313,
+      "class_id": "Name",
+      "raw_label": "Laura Weber",
+      "generator_id": "name_de",
+      "generator_seed": 4976051193727321392,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 322,
+      "byte_end": 344,
+      "class_id": "custom:iban",
+      "raw_label": "DE90977251533580998429",
+      "generator_id": "iban_de",
+      "generator_seed": 9894142257285651141,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 355,
+      "byte_end": 360,
+      "class_id": "custom:postal_code",
+      "raw_label": "44402",
+      "generator_id": "postal_de",
+      "generator_seed": 17732945117395632498,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.de",
+      "expected_recognizer_version_id": "postal.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-de-004",
+    "template_seed": 8954893856297701218
+  }
+}

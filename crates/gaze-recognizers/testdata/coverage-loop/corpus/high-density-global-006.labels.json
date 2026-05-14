@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "fixture_id": "high-density-global-006",
+  "context": "high-density-global",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "high-density",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 235,
+      "class_id": "Email",
+      "raw_label": "casey.agent336@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 13780958583476579989,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 244,
+      "byte_end": 266,
+      "class_id": "custom:iban",
+      "raw_label": "DE23622403454106251471",
+      "generator_id": "iban_de",
+      "generator_seed": 9795721178243101433,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 273,
+      "byte_end": 297,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:7988:ca99::adf5",
+      "generator_id": "ip_v6",
+      "generator_seed": 16909387828004497480,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 306,
+      "byte_end": 325,
+      "class_id": "custom:credit_card",
+      "raw_label": "4829 3940 8824 9931",
+      "generator_id": "card_luhn",
+      "generator_seed": 3767804967566321306,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 336,
+      "byte_end": 378,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xE40fFe733511976De31ef2A79e305Eb79E4c6F2f",
+      "generator_id": "eth_eip55",
+      "generator_seed": 14441604826415227472,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "high-density-global-006",
+    "template_seed": 11036327239144129359
+  }
+}

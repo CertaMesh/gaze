@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "support_email_de_v2-v2-009",
+  "context": "support_email_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "support_email_de_v2",
+  "spans": [
+    {
+      "byte_start": 78,
+      "byte_end": 103,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8::365a:192.0.2.69",
+      "generator_id": "ip_v6",
+      "generator_seed": 7434672538364359217,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    },
+    {
+      "byte_start": 114,
+      "byte_end": 156,
+      "class_id": "custom:eth_address",
+      "raw_label": "0xEce99F6E331191E8ADe867ea5fB7473eC985D6CA",
+      "generator_id": "eth_eip55",
+      "generator_seed": 4451844377344762349,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "eth.address",
+      "expected_recognizer_version_id": "eth.address.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "support_email_de_v2-v2-009",
+    "template_seed": 2446711559776549191
+  }
+}

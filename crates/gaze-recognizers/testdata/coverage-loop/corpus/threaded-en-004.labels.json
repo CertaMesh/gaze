@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-en-004",
+  "context": "threaded-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 147,
+      "byte_end": 181,
+      "class_id": "Email",
+      "raw_label": "alice.synthetic836@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 7008782844770720306,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 191,
+      "byte_end": 220,
+      "class_id": "Email",
+      "raw_label": "dana.audit187@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 11583052933125367915,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 230,
+      "byte_end": 260,
+      "class_id": "Email",
+      "raw_label": "casey.agent317@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 14882992924614115629,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 271,
+      "byte_end": 280,
+      "class_id": "Name",
+      "raw_label": "Dana Reed",
+      "generator_id": "name_en",
+      "generator_seed": 5217682973980658038,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 291,
+      "byte_end": 303,
+      "class_id": "Name",
+      "raw_label": "Casey Jordan",
+      "generator_id": "name_en",
+      "generator_seed": 9367323186856265548,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 313,
+      "byte_end": 321,
+      "class_id": "custom:phone",
+      "raw_label": "555-0186",
+      "generator_id": "phone_national_us",
+      "generator_seed": 8168241551288593977,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-en-004",
+    "template_seed": 17503976849670953905
+  }
+}

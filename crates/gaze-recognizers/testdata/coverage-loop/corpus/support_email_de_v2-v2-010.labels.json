@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "support_email_de_v2-v2-010",
+  "context": "support_email_de_v2",
+  "locale_chain": [
+    "de-DE",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "support_email_de_v2",
+  "spans": [
+    {
+      "byte_start": 80,
+      "byte_end": 99,
+      "class_id": "custom:credit_card",
+      "raw_label": "4898 6287 9199 4473",
+      "generator_id": "card_luhn",
+      "generator_seed": 3973322310362385944,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "card.structural",
+      "expected_recognizer_version_id": "card.structural.v1"
+    },
+    {
+      "byte_start": 109,
+      "byte_end": 121,
+      "class_id": "custom:phone",
+      "raw_label": "015550112233",
+      "generator_id": "phone_national_de",
+      "generator_seed": 12238728931938902912,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.de",
+      "expected_recognizer_version_id": "phone.national.de.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "support_email_de_v2-v2-010",
+    "template_seed": 5171903679629560022
+  }
+}

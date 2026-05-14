@@ -1,2 +1,0 @@
-Von: "Mara Wagner" <monte@example.net>
-Netzwerkadresse: 2001:db8::df0a:192.0.2.158

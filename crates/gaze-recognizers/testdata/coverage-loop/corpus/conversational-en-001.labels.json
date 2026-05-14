@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-001",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Snippet",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 72,
+      "byte_end": 83,
+      "class_id": "Name",
+      "raw_label": "Morgan Reed",
+      "generator_id": "name_en",
+      "generator_seed": 13428144329321549432,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 93,
+      "byte_end": 124,
+      "class_id": "Email",
+      "raw_label": "evan.fixture878@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 109142642445974780,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-001",
+    "template_seed": 12694569175205423595
+  }
+}

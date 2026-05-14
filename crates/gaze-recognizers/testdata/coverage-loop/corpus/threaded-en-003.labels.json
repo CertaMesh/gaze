@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-en-003",
+  "context": "threaded-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 206,
+      "byte_end": 217,
+      "class_id": "Name",
+      "raw_label": "Evan Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 12548826639247472867,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 227,
+      "byte_end": 258,
+      "class_id": "Email",
+      "raw_label": "morgan.clean722@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 14471531690210019293,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 268,
+      "byte_end": 276,
+      "class_id": "custom:phone",
+      "raw_label": "555-0189",
+      "generator_id": "phone_national_us",
+      "generator_seed": 14818335446063700031,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    },
+    {
+      "byte_start": 287,
+      "byte_end": 296,
+      "class_id": "Name",
+      "raw_label": "Dana Reed",
+      "generator_id": "name_en",
+      "generator_seed": 5189681324060000638,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-en-003",
+    "template_seed": 18102632813856148037
+  }
+}

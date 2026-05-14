@@ -1,1 +1,0 @@
-Der technische Hinweis nennt 2001:db8::5055:192.0.2.249 und die Adresse lexi@example.org.

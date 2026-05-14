@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "fixture_id": "code-mixed-013",
+  "context": "code-mixed",
+  "locale_chain": [
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "code-mixed",
+  "spans": [
+    {
+      "byte_start": 147,
+      "byte_end": 178,
+      "class_id": "Email",
+      "raw_label": "morgan.clean195@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 14695132793339092752,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 188,
+      "byte_end": 217,
+      "class_id": "Email",
+      "raw_label": "dana.audit313@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 2792357196713581172,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 226,
+      "byte_end": 248,
+      "class_id": "custom:iban",
+      "raw_label": "DE62319810391482744906",
+      "generator_id": "iban_de",
+      "generator_seed": 9937360574628856108,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 257,
+      "byte_end": 279,
+      "class_id": "custom:iban",
+      "raw_label": "DE63421385686008668189",
+      "generator_id": "iban_de",
+      "generator_seed": 14925039852962463700,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "iban.structural",
+      "expected_recognizer_version_id": "iban.structural.v1"
+    },
+    {
+      "byte_start": 286,
+      "byte_end": 310,
+      "class_id": "custom:ip_address",
+      "raw_label": "2001:db8:c442:b141::918d",
+      "generator_id": "ip_v6",
+      "generator_seed": 13129338226438473290,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "ip.v6",
+      "expected_recognizer_version_id": "ip.v6.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "code-mixed-013",
+    "template_seed": 12567169575644587568
+  }
+}

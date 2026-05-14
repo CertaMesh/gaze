@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "fixture_id": "threaded-en-001",
+  "context": "threaded-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "Page",
+  "structural_family": "threaded",
+  "spans": [
+    {
+      "byte_start": 205,
+      "byte_end": 236,
+      "class_id": "Email",
+      "raw_label": "blair.review376@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 3476796401944367826,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 246,
+      "byte_end": 275,
+      "class_id": "Email",
+      "raw_label": "dana.audit819@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 10983204147664357838,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 286,
+      "byte_end": 297,
+      "class_id": "Name",
+      "raw_label": "Evan Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 16397622779469292244,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 308,
+      "byte_end": 320,
+      "class_id": "Name",
+      "raw_label": "Alice Parker",
+      "generator_id": "name_en",
+      "generator_seed": 7182165930362324835,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "threaded-en-001",
+    "template_seed": 7335547863309183632
+  }
+}

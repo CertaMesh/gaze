@@ -1,0 +1,83 @@
+{
+  "schema_version": 1,
+  "fixture_id": "conversational-en-009",
+  "context": "conversational-en",
+  "locale_chain": [
+    "en-US",
+    "global"
+  ],
+  "length_tier": "MultiPage",
+  "structural_family": "conversational",
+  "spans": [
+    {
+      "byte_start": 148,
+      "byte_end": 160,
+      "class_id": "Name",
+      "raw_label": "Alice Taylor",
+      "generator_id": "name_en",
+      "generator_seed": 13387320313941044779,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 170,
+      "byte_end": 201,
+      "class_id": "Email",
+      "raw_label": "evan.fixture449@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 839002287324874588,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    },
+    {
+      "byte_start": 211,
+      "byte_end": 219,
+      "class_id": "custom:phone",
+      "raw_label": "555-0183",
+      "generator_id": "phone_national_us",
+      "generator_seed": 6546732592935740711,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "phone.national.us",
+      "expected_recognizer_version_id": "phone.national.us.v1"
+    },
+    {
+      "byte_start": 230,
+      "byte_end": 240,
+      "class_id": "custom:postal_code",
+      "raw_label": "85114-2321",
+      "generator_id": "postal_us",
+      "generator_seed": 7801208989781449157,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "postal.us",
+      "expected_recognizer_version_id": "postal.us.v1"
+    },
+    {
+      "byte_start": 251,
+      "byte_end": 262,
+      "class_id": "Name",
+      "raw_label": "Morgan Reed",
+      "generator_id": "name_en",
+      "generator_seed": 17299416611211129142,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "name.agent_recipient",
+      "expected_recognizer_version_id": "name.agent_recipient.v1"
+    },
+    {
+      "byte_start": 272,
+      "byte_end": 302,
+      "class_id": "Email",
+      "raw_label": "casey.agent166@example.invalid",
+      "generator_id": "email_global",
+      "generator_seed": 12677634762083718060,
+      "license_origin": "synthetic-rust-generator",
+      "expected_recognizer_id": "email.global",
+      "expected_recognizer_version_id": "email.global.v1"
+    }
+  ],
+  "metadata": {
+    "template_id": "conversational-en-009",
+    "template_seed": 411321136310168941
+  }
+}
