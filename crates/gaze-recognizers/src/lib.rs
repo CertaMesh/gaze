@@ -17,6 +17,7 @@
 mod anchored_match;
 mod dictionary;
 mod error;
+mod locale_aware;
 mod ner;
 mod regex;
 #[cfg(feature = "safety-net")]
@@ -31,6 +32,10 @@ pub use error::{RecognizerError, Result};
 #[cfg(feature = "phone-parser")]
 pub use gaze_types::Region;
 pub use gaze_types::{SafetyTier, ValidatorKind};
+pub use locale_aware::{
+    LocaleAwareModel, LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan,
+    ModelStage,
+};
 pub use ner::{
     LabelMap, NerBackendKind, NerDetector, NerLoadError, NerOptions, NerRecognizer,
     VerifiedArtifacts,

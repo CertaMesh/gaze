@@ -15,6 +15,8 @@ use std::sync::{Arc, OnceLock};
 
 use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
 
+use crate::{LocaleAwareModel, ModelError, ModelHints, ModelInput, ModelSpan};
+
 pub mod backend;
 pub mod class_map;
 
@@ -96,6 +98,64 @@ impl SafetyNet for KijiDistilbertSafetyNet {
             })
             .collect()
     }
+}
+
+impl LocaleAwareModel for KijiDistilbertSafetyNet {
+    fn name(&self) -> &str {
+        "kiji-distilbert"
+    }
+
+    fn native_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+
+    fn infer(&self, input: ModelInput, hints: ModelHints) -> Result<Vec<ModelSpan>, ModelError> {
+        let backend = self
+            .backend()
+            .map_err(|error| ModelError::InitFailed(error.to_string()))?;
+        let mut spans = backend
+            .infer(&input.text)
+            .map_err(|error| ModelError::InferenceFailed(error.to_string()))?
+            .into_iter()
+            .map(|raw| raw_span_to_model_span(raw, self.name(), &input.text))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if let Some(max_spans) = hints.max_spans {
+            spans.truncate(max_spans as usize);
+        }
+
+        Ok(spans)
+    }
+}
+
+fn raw_span_to_model_span(
+    raw: RawSpan,
+    model_name: &str,
+    input: &str,
+) -> Result<ModelSpan, ModelError> {
+    if raw.start >= raw.end
+        || raw.end > input.len()
+        || !input.is_char_boundary(raw.start)
+        || !input.is_char_boundary(raw.end)
+    {
+        return Err(ModelError::InferenceFailed(
+            "kiji returned out-of-bounds span".to_string(),
+        ));
+    }
+
+    let label = map_kiji_label(&raw.label)
+        .map_err(|error| ModelError::InferenceFailed(error.to_string()))?;
+    let class = kiji_label_to_pii_class(label);
+    let byte_range = raw.start..raw.end;
+    let text = input[byte_range.clone()].to_string();
+
+    Ok(ModelSpan {
+        text,
+        byte_range,
+        class,
+        confidence: raw.score,
+        model_name: model_name.to_string(),
+    })
 }
 
 fn raw_span_to_suspect(
