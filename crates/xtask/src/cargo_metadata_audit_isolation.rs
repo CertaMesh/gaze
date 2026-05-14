@@ -35,10 +35,16 @@ const SAFETY_NET_LEGACY_NER_EXEMPTIONS: &[LegacyNerExemption] = &[LegacyNerExemp
 // safety-net subgraph (e.g. tokio, hyper) but are not themselves part of the
 // safety-net code path. Each entry must carry an explicit reason so future
 // additions cannot silently widen the chokepoint surface.
-const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[WorkspaceMemberExemption {
-    workspace_member: "gaze-mcp-rmcp",
-    reason: "rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline",
-}];
+const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[
+    WorkspaceMemberExemption {
+        workspace_member: "gaze-mcp-rmcp",
+        reason: "rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline",
+    },
+    WorkspaceMemberExemption {
+        workspace_member: "gaze-proxy",
+        reason: "HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps",
+    },
+];
 
 // No current workspace feature is allowed to disappear silently. Keep this
 // table explicit so future cfg-gated feature plans must carry a reason beside

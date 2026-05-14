@@ -298,3 +298,25 @@ restore on a newer minor, that is a bug. Open an issue tagged
 `reversibility-regression` and we will treat it as a critical defect
 against north-star axis 2. There is no migration step that asks you to
 re-tokenize stored manifests.
+# v0.8.0
+
+## gaze-proxy
+
+The new off-by-default `proxy` feature adds `gaze-proxy` and `gaze proxy`
+subcommands for multi-provider LLM SDK base-URL swaps. OpenAI, Anthropic, and
+Gemini ship as separate provider adapters from day one. The proxy uses native
+provider wire shapes and does not transcode between providers.
+
+Daemon UX is available through:
+
+```bash
+gaze proxy serve
+gaze proxy start
+gaze proxy status
+gaze proxy logs --follow
+gaze proxy stop
+gaze proxy restart
+```
+
+Pidfiles are stored in platform local-data directories and stale pidfiles are
+cleaned after process liveness checks.

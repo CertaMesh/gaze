@@ -1,0 +1,66 @@
+# gaze-proxy
+
+`gaze-proxy` is the feature-gated HTTP proxy runtime for LLM SDK base-URL swaps.
+It preserves each provider's native wire shape and uses adapters only to locate
+PII-bearing fields before calling the supplied `gaze::Pipeline`.
+
+## Quickstart
+
+```bash
+cargo install gaze-cli --features proxy
+gaze proxy start
+```
+
+Then point SDKs at the daemon:
+
+```bash
+export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
+export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+```
+
+The default config is written to `~/.config/gaze/proxy.toml` and includes:
+
+```toml
+bind = "127.0.0.1:8787"
+session_ttl = "30m"
+rulepack = "core"
+
+[adapters.openai]
+upstream = "https://api.openai.com/"
+
+[adapters.anthropic]
+upstream = "https://api.anthropic.com/"
+
+[adapters.gemini]
+upstream = "https://generativelanguage.googleapis.com/"
+```
+
+## Providers
+
+- OpenAI: `POST /v1/chat/completions`, `/v1/completions`, `/v1/responses`
+- Anthropic: `POST /v1/messages`
+- Gemini: `POST /v1beta/models/*:{generateContent,streamGenerateContent,countTokens}`
+
+Each adapter walks text, tool-call, tool-result, and function argument surfaces
+in that provider's native JSON. The proxy does not transcode requests.
+
+## Daemon Commands
+
+```bash
+gaze proxy serve
+gaze proxy start
+gaze proxy status
+gaze proxy logs --follow
+gaze proxy stop
+gaze proxy restart
+```
+
+Pidfiles live under the platform local-data directory, never `/tmp`. Stale
+pidfiles are revalidated with process liveness checks and cleaned before start.
+
+## Security Notes
+
+Authentication headers are forwarded unchanged. The proxy does not own provider
+API keys and does not add an auth boundary around the local listener. Bind to
+loopback unless you are deliberately placing it behind a separate local access
+control layer.
