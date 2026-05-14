@@ -27,3 +27,7 @@ window_chars = 64
 [locale.cues.vat-id]
 names = ["VAT", "VAT:", "VAT no", "VAT ID", "VAT number"]
 window_chars = 64
+
+[locale.cues.ssn]
+names = ["SSN", "Social Security", "Social Security Number", "SS#"]
+window_chars = 64

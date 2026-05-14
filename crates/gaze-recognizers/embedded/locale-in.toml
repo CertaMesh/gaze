@@ -6,3 +6,7 @@ default_locales = ["en-IN", "hi-IN"]
 [locale.cues.aadhaar]
 names = ["आधार", "Aadhaar", "UID", "Unique Identification"]
 window_chars = 64
+
+[locale.cues.pan]
+names = ["PAN", "Permanent Account Number", "PAN card", "PAN no", "पैन"]
+window_chars = 64

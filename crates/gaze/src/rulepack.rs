@@ -1298,6 +1298,9 @@ window_chars = 48
                 PiiClass::custom("cpf"),
                 PiiClass::custom("cnpj"),
                 PiiClass::custom("nhs_number"),
+                PiiClass::custom("ssn"),
+                PiiClass::custom("nino"),
+                PiiClass::custom("pan"),
                 PiiClass::custom("postal_code"),
             ])
         );

@@ -54,6 +54,9 @@ every locale chain because `global` intersects all locale projections.
 | `core` | `cpf.br` | `custom:cpf` | `pt-BR` | `CpfMod11` |
 | `core` | `cnpj.br` | `custom:cnpj` | `pt-BR` | `CnpjMod11` |
 | `core` | `nhs.uk` | `custom:nhs_number` | `en-GB` | `UkNhsMod11` |
+| `core` | `ssn.us` | `custom:ssn` | `en-US` | None |
+| `core` | `nino.uk` | `custom:nino` | `en-GB` | None |
+| `core` | `pan.in` | `custom:pan` | `en-IN`, `hi-IN` | None |
 | `core-extended` | `postal.de` | `custom:postal_code` | `de-DE` | None |
 | `core-extended` | `postal.us` | `custom:postal_code` | `en-US` | None |
 | NER artifact | `ner` | `Name` | Policy-selected NER locale, or any locale when unset | None |
