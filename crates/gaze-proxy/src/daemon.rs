@@ -221,7 +221,7 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
     write_config(&options.paths, &options.config)?;
     create_parent(&options.paths.pidfile)?;
     create_parent(&options.paths.log_file)?;
-    let _lock = lock_pidfile(&options.paths)?;
+    let lock = lock_pidfile(&options.paths)?;
 
     let stdout = OpenOptions::new()
         .create(true)
@@ -256,6 +256,7 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
+    drop(lock);
     let child = command.spawn().map_err(|source| ProxyError::DaemonIo {
         path: PathBuf::from("gaze proxy serve"),
         source,

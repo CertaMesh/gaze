@@ -97,7 +97,7 @@ Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are at
 For the LLM API proxy:
 
 ```sh
-cargo install --path crates/gaze-cli --features proxy
+cargo install --path crates/gaze-cli
 gaze proxy start
 export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8787

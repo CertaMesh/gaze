@@ -16,7 +16,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
+default = ["proxy"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
 safety-net-kiji = ["gaze-recognizers/safety-net-kiji"]
 document = ["dep:gaze-document"]

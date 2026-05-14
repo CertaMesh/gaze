@@ -30,6 +30,8 @@ Build from the workspace root:
 $ cargo build -p gaze-cli
 ```
 
+The default build includes `gaze proxy` for local LLM API proxy use.
+
 Build with the MCP installer/server surface:
 
 ```console
@@ -58,6 +60,7 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | `mcp install` | Installs `gaze mcp serve` into supported MCP client configs. Requires `--features mcp`. |
 | `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`. |
 | `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`. |
+| `proxy serve/start/stop/status/restart` | Runs or manages the local LLM API proxy. Included in the default build. |
 
 Audit logging is captured on `clean` via `--audit-db <path>`; the
 `audit query` and `audit export` subcommands read the same database back.
