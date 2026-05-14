@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use gaze::Manifest;
 use serde::{Deserialize, Serialize};
 
-use crate::ocr::OcrResult;
+use crate::ocr::{ImageFormat, ImageInput, OcrBackend, OcrError, OcrHints, OcrResult};
 
 #[cfg(feature = "ocr-tesseract")]
 use std::collections::BTreeMap;
@@ -213,6 +213,27 @@ impl LayoutSummary {
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> {
+    let backend = crate::ocr::TesseractBackend::new();
+    clean_with_ocr_backend(input, out_dir, &backend)
+}
+
+/// Top-level entry point with an adopter-supplied OCR backend.
+///
+/// The backend receives finalized single-image bytes. PDF rasterization and
+/// downstream layout/report generation remain owned by `gaze-document`.
+///
+/// # Errors
+///
+/// Returns [`DocumentError`] for any failure in the OCR → redact → write
+/// chain. OCR backend errors are mapped into the existing document error
+/// surface so current callers keep the same high-level behavior.
+#[cfg(feature = "ocr-tesseract")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
+pub fn clean_with_ocr_backend(
+    input: &Path,
+    out_dir: &Path,
+    ocr_backend: &dyn OcrBackend,
+) -> Result<SafeBundle, DocumentError> {
     let kind = InputKind::detect(input)?;
     let absolute_input = absolutize(input);
     let absolute_out = absolutize(out_dir);
@@ -220,7 +241,7 @@ pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> 
     fs::create_dir_all(out_dir)
         .map_err(|err| DocumentError::OutputDir(absolute_out.clone(), err))?;
 
-    let (ocr_result, pdf_page_count, pdf_page_index) = run_ocr(input, kind)?;
+    let (ocr_result, pdf_page_count, pdf_page_index) = run_ocr(input, kind, ocr_backend)?;
     // Repair known narrow OCR artifacts (e.g. spurious whitespace around
     // `@` in emails) before the redact pipeline sees the text. See
     // `crate::ocr::normalize` for the documented rule set. Axis 1
@@ -276,12 +297,19 @@ pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> 
 pub(crate) fn run_ocr(
     input: &Path,
     kind: InputKind,
+    ocr_backend: &dyn OcrBackend,
 ) -> Result<(OcrResult, Option<i32>, Option<i32>), DocumentError> {
-    use crate::ocr::TesseractOcr;
-    let ocr = TesseractOcr::new();
     match kind {
         InputKind::Png | InputKind::Jpeg => {
-            let result = ocr.extract_from_file(input)?;
+            let bytes = fs::read(input)?;
+            let result = recognize_image(
+                ocr_backend,
+                ImageInput {
+                    bytes,
+                    format: image_format_for_kind(kind),
+                    dpi: None,
+                },
+            )?;
             Ok((result, None, None))
         }
         InputKind::Pdf => {
@@ -289,7 +317,14 @@ pub(crate) fn run_ocr(
             {
                 use crate::extract::pdf::{rasterize_first_page, PdfRasterConfig};
                 let raster = rasterize_first_page(input, PdfRasterConfig::new())?;
-                let result = ocr.extract_from_bytes(&raster.png_bytes, "png")?;
+                let result = recognize_image(
+                    ocr_backend,
+                    ImageInput {
+                        bytes: raster.png_bytes,
+                        format: ImageFormat::Png,
+                        dpi: None,
+                    },
+                )?;
                 Ok((result, Some(raster.page_count), Some(raster.page_index)))
             }
             #[cfg(not(feature = "pdf-input"))]
@@ -300,6 +335,48 @@ pub(crate) fn run_ocr(
                 })
             }
         }
+    }
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn recognize_image(
+    ocr_backend: &dyn OcrBackend,
+    image: ImageInput,
+) -> Result<OcrResult, DocumentError> {
+    let hints = OcrHints::default();
+    let lang = hints.primary_language().to_string();
+    let spans = ocr_backend
+        .recognize(image, hints)
+        .map_err(map_ocr_error_to_document_error)?;
+    Ok(OcrResult::from_spans(&spans, lang))
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn image_format_for_kind(kind: InputKind) -> ImageFormat {
+    match kind {
+        InputKind::Png => ImageFormat::Png,
+        InputKind::Jpeg => ImageFormat::Jpeg,
+        InputKind::Pdf => ImageFormat::Png,
+    }
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn map_ocr_error_to_document_error(err: OcrError) -> DocumentError {
+    match err {
+        OcrError::InitFailed(hint) => DocumentError::TesseractNotFound(hint),
+        OcrError::RecognizeFailed(detail) => DocumentError::TesseractFailed {
+            status: -1,
+            stderr: detail,
+        },
+        OcrError::UnsupportedFormat(format) => DocumentError::UnsupportedInput {
+            path: PathBuf::new(),
+            reason: match format {
+                ImageFormat::Png => "png image format is not supported by the OCR backend",
+                ImageFormat::Jpeg => "jpeg image format is not supported by the OCR backend",
+                ImageFormat::Tiff => "tiff image format is not supported by the OCR backend",
+            },
+        },
+        OcrError::Internal(detail) => DocumentError::Pipeline(format!("ocr: {detail}")),
     }
 }
 

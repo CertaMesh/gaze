@@ -233,8 +233,9 @@ fn map_file_metadata_error(path: &Path, err: std::io::Error) -> ToolError {
 #[cfg(feature = "ocr-tesseract")]
 fn read_file_response(path: &Path, ctx: &ToolCtx<'_>) -> Result<DocumentToolResponse, ToolError> {
     let kind = InputKind::detect(path).map_err(map_document_error)?;
+    let backend = crate::ocr::TesseractBackend::new();
     let (ocr_result, pdf_page_count, _) =
-        crate::bundle::run_ocr(path, kind).map_err(map_document_error)?;
+        crate::bundle::run_ocr(path, kind, &backend).map_err(map_document_error)?;
     let normalized = crate::ocr::normalize_ocr_artifacts(&ocr_result.text);
     let clean_text = redact_document_text(&normalized, ctx)?;
     Ok(DocumentToolResponse {
