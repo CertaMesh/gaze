@@ -161,7 +161,7 @@ fn assert_clean_response(payload: &Value, expect_source_kind: &str) {
     assert!(!clean.contains("555-0142"), "{clean}");
     assert!(!payload["manifest_id"].as_str().unwrap().is_empty());
     assert_eq!(payload["file_metadata"]["source_kind"], expect_source_kind);
-    assert_eq!(payload["file_metadata"]["bundle_version"], json!(1));
+    assert_eq!(payload["file_metadata"]["bundle_version"], json!(2));
 }
 
 #[tokio::test]

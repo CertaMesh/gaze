@@ -82,11 +82,11 @@ let _ = &bundle.clean_markdown;
 // Restorable manifest — pair with a `gaze::Session` to round-trip.
 let _ = &bundle.manifest;
 
-// Provenance: OCR confidence + PII counts.
+// Provenance: per-page extraction confidence + PII counts.
 println!(
-    "tokens={} confidence={:?}",
+    "tokens={} first_page_confidence={:?}",
     bundle.report.pii_token_count,
-    bundle.report.ocr_mean_confidence,
+    bundle.report.pages.first().and_then(|page| page.confidence),
 );
 # Ok::<(), gaze_document::DocumentError>(())
 ```
@@ -116,9 +116,12 @@ Stdout carries a one-line JSON summary so callers can pipe it.
   `gaze-types`). Compatible with `gaze restore` and the rest of the
   `gaze` runtime.
 * **`report.json`** — `BundleReport`. Schema versioned via
-  `bundle_version: u32 = 1`; field set is `#[non_exhaustive]` so additive
-  fields are SemVer-safe. Includes OCR confidence, per-class PII counts,
-  PDF metadata, and the source kind.
+  `bundle_version: u32 = 2`; field set is `#[non_exhaustive]` so additive
+  fields are SemVer-safe. Includes per-page extraction source
+  (`vector_pdf` or `ocr`), OCR backend, normalized confidence,
+  low-confidence flag, column count, per-class PII counts, PDF metadata,
+  and the source kind. Existing v1 reports still deserialize; new emission
+  is always v2.
 
 ## OCR brittleness + normalization
 
@@ -165,9 +168,10 @@ Two mitigations land at the test boundary so future drift fails loudly:
   substring checks (`!contains("@example.com")`, `!contains("Jane Doe")`,
   `!contains("555-0142")`) **in addition** to the positive `:Email_`,
   `:Name_`, `:Custom:phone_` token assertions.
-* `BundleReport.ocr_mean_confidence` is always surfaced to adopters
-  unmodified — no silent floor — so downstream gates can route
-  low-confidence bundles for human review.
+* `BundleReport.pages[].confidence` and `pages[].low_confidence` are always
+  surfaced to adopters. The default threshold is `0.65`, configurable with
+  `gaze_document::Pipeline::with_low_confidence_threshold()`, so downstream
+  gates can route low-confidence pages for human review.
 
 If you observe a new artifact class slipping through, file an issue
 with the OCR output and the expected normalization shape; the fix
@@ -205,7 +209,7 @@ Both tools return a JSON object:
   "file_metadata": {
     "source_kind": "text",
     "ocr_mean_confidence": null,
-    "bundle_version": 1,
+    "bundle_version": 2,
     "page_count": null
   }
 }
@@ -221,7 +225,7 @@ provides the opt-in tool implementations.
 | Feature           | Default | What it enables                                      |
 |-------------------|---------|------------------------------------------------------|
 | `ocr-tesseract`   | yes     | Tesseract subprocess OCR backend + `clean()` entry.  |
-| `pdf-input`       | yes     | `pdfium-render` PDF rasterization (single page).     |
+| `pdf-input`       | yes     | `pdfium-render` PDF text extraction + raster OCR fallback. |
 | `mcp`             | no      | `gaze_read_file` + `gaze_read_text` Tool impls.      |
 | `extract-docling` | no      | Reserved — future Docling layout adapter.            |
 | `render-image`    | no      | Reserved — future redacted-preview renderer.         |
