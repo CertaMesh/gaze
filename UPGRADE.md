@@ -35,10 +35,11 @@ exists today.)
 
 ## v0.7.x → v0.8.0
 
-Status: **in flight.** v0.8.0-rc.1 has been tagged at commit `448c292`.
-Crates.io publish of the nine workspace crates is pending; until then,
-adopters can build from the tag (see "Building from a tag during the rc
-cycle" below).
+Status: **shipped.** v0.8.0 is published to crates.io; the workspace
+now includes ten published crates (the new `gaze-proxy` joins
+`gaze-types`, `gaze-recognizers`, `gaze-audit`, `gaze-pii`,
+`gaze-assembly`, `gaze-mcp-core`, `gaze-mcp-rmcp`, `gaze-document`,
+and `gaze-cli`).
 
 ### TL;DR
 
@@ -186,21 +187,17 @@ validator math; regex shape plus cue context only.
 **Action required:** none — pure additive coverage when the relevant
 locale is set.
 
-### Building from a tag during the rc cycle
+### Depending on v0.8.0
 
-While `v0.8.0-rc.1` is on Git but not yet on crates.io, depend on the
-tag directly:
+The workspace is published to crates.io. Pin by version:
 
 ```toml
 [dependencies]
-gaze-pii = { git = "https://github.com/EmpireTwo/gaze", tag = "v0.8.0-rc.1" }
+gaze-pii = "0.8.0"
 ```
 
 The exact crate name is `gaze-pii` (cargo package); the library imports
-as `gaze` (e.g. `use gaze::Pipeline;`). Replace the dependency with a
-plain version pin (`gaze-pii = "0.8.0-rc.1"`) once the workspace is
-published to crates.io. CHANGELOG.md notes the publish date when it
-happens.
+as `gaze` (e.g. `use gaze::Pipeline;`).
 
 ### Schema-version field on `policy.toml`
 

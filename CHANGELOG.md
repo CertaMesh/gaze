@@ -19,19 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-## [0.8.0-rc.1] - 2026-05-14
+## [0.8.0] - 2026-05-14
 
-First v0.8 pre-release. Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth. Tier 2 checksum-backed locale parity (Aadhaar / NIR / Steuer-ID / BSN / CPF / CNPJ / NHS) and Tier 3 regex locales (SSN / NINO / PAN) follow in rc.2 / rc.3.
+Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth + ten checksum-backed and locale-gated national-ID recognizers across five new locale packs, plus the new `gaze-proxy` crate that puts a PII chokepoint in front of OpenAI / Anthropic / Gemini API traffic. The workspace publish count rises from nine to ten.
 
 ### Added
 
 - **Versioned recognizer lineage** (v0.8 Tier 1, PR #203 `3c95304`): `Candidate.recognizer_version_id` + `RedactionEntry.recognizer_id` + `recognizer_version_id` (all `Option<String>`, additive). Audit boundary in `pipeline.rs` now propagates lineage instead of dropping at `source`. SQLite schema gains nullable `recognizer_id` / `recognizer_version_id` columns; pre-migration rows tagged `legacy_unversioned`. NER recognizer emissions versioned as `ner.<model>.<vN>` from artifact config metadata (`ner.unknown.v0` fallback). `docs/architecture/locale-chain.md` gains a coverage matrix listing every bundled recognizer × supported locales × ValidatorKind. (Axis 4 trust/auditable, Axis 5 ergonomics.)
 - **`SafetyTier` enum on rulepack recognizers** (v0.8 Tier 1.5, PR #201 `8ab9daf`): `SafeDefault`, `LocaleGated`, `OptIn` with `#[non_exhaustive]`. Closed-enum activation gate replaces the dual-bundle activation model. (Axis 1 reliability, Axis 4 trust.)
 - **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5, PR #202 `0cd9ccc`): new `--safety-net-backend kiji-distilbert` flag (default remains `openai-filter` for compat). Pass-3 SafetyNet device with pinned-artifact contract identical to existing OpenAI filter (SHA256SUMS hard-fail on missing). New `CliError::SafetyNetArtifactMissing { backend, path }` typed variant. `scripts/fetch-kiji-safetynet-model.sh` mirror of existing NER fetcher. (Axis 1 defense-in-depth.)
+- **Seven checksum-backed locale validators** (v0.8 Tier 2, PR #207 `16c1fd5`): Aadhaar Verhoeff (IN), French NIR MOD-97 variant (FR), German Steuer-ID MOD 11,10 (DE), Dutch BSN MOD-11 (NL), Brazilian CPF + CNPJ MOD-11 (BR), and UK NHS number MOD-11 (UK). New `ValidatorKind` variants are closed-enum and fail-closed on parse. Five new locale packs ship alongside: `locale-fr`, `locale-nl`, `locale-br`, `locale-in`, `locale-uk`. Every entity ships at `safety_tier = "safe_default"`, so adopters in BR/FR/NL/IN/UK get coverage out of the box once their locale is set. (Axis 1 reliability, Axis 3 agentic-first.)
+- **Three locale-gated regex recognizers** (v0.8 Tier 3, PR #208 `7348690`): US SSN, UK NINO, and Indian PAN. All ship at `safety_tier = "locale_gated"` — no bare 9-digit / 10-character shapes activate without explicit locale + cue context. PAN extends the existing `locale-in` pack from Tier 2 in place. (Axis 1 reliability, Axis 4 trust.)
+- **Corpus rework v2 implementation** (PR #205 `aa9c5fc`): the 61 stochastic status-quo templates + the `fixture_variants` mechanism are replaced with 150 deliberate scenarios. Each scenario declares its expected emissions including `recognizer_version_id` from day one. `fake` crate added as an xtask-only dev dependency; seed pinned in a documented `COVERAGE_CORPUS_SEED` constant. `baseline.json` fully re-snapped. (Axis 4 trust.)
+- **`UPGRADE.md`** (PR #206 `492573d`): per-minor migration guide complementing `CHANGELOG.md`, with v0.7.x → v0.8.0 TL;DR + backfill summaries for v0.4 → v0.7.
+- **`docs/research/v0.8-kiji-class-gap.md`** (PR #210 `eba350a`): coverage map of all 26 Kiji PII classes against gaze's recognizers — 6 beat-via-Tier-2, 1 beat-via-Tier-3, 16 observer-only-via-Tier-2.5, 3 parity, 0 deferred.
+- **`docs/research/v0.8-kiji-benchmark.md`** (PR #209 `b875381`): two-mode (direct-detector + observer-residual) benchmark methodology headlining strict span leak rate, with a rule-floor snapshot pinned to corpus + Gaze tag. Kiji direct-detector + observer-residual cells deferred (no pinned model SHA yet — tracked as v0.8.x follow-up).
+- **`ARCHITECTURE.md`** (PR #211 `fd130ac`): 14.8 KiB repo-root architecture overview of how the ten workspace crates fit together, with eight numbered Key Design Decisions and a one-diagram view of the redact/restore path.
+- **`gaze-proxy` crate at v0.8.0** (PR #212 `503d0f9`): new published workspace crate. Multi-provider HTTP proxy with an adapter/driver pattern that serves OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` without translation. SSE streaming and tool-call argument reconstruction wired through `gaze::Pipeline` (chunk-split PII spans inside `tool_calls.function.arguments` are accumulated and redacted before leaving the proxy). Daemon-mode subcommands `gaze proxy {serve,start,stop,status,logs,restart}` plus opt-in `install-launchd` / `install-systemd-user` installers. Feature-gated on `gaze-cli` as `--features proxy`, off by default. (Axis 3 agentic-first, Axis 5 ergonomics.)
 
 ### Changed
 
 - **Unified `core` + `core-extended` bundled rulepacks** into single `core` bundle (v0.8 Tier 1.5, PR #201). Each recognizer now declares a `safety_tier` field; no-policy activation gates on `SafeDefault` only. Adopter behavior preserved through alias path described under Deprecated.
+- **Workspace version pin** `0.8.0-rc.1` → `0.8.0` across ten crates (was nine; `gaze-proxy` joins this release).
+- **[bundle-tokenization-drift] `baseline.json`** fully re-snapped against the corpus rework v2 scenarios.
 
 ### Deprecated
 
@@ -42,6 +52,8 @@ First v0.8 pre-release. Bundle unification + versioned recognizer lineage + Kiji
 - Existing `RedactionEntry` JSON consumers see no shape change — new fields use `#[serde(skip_serializing_if = "Option::is_none")]` and emit nothing when None.
 - Existing SQLite audit DBs are migrated forward: pre-migration redaction rows get `recognizer_id = "legacy_unversioned"`, `recognizer_version_id = NULL`. Migration is idempotent.
 - Existing `policy.toml` files unchanged. No new required fields.
+- **`gaze-proxy` is opt-in** behind `--features proxy` on `gaze-cli`; existing adopters are unaffected unless they invoke `gaze proxy serve` or `gaze proxy start`.
+- All Tier 2 + Tier 3 entity adds are additive. Adopters in BR / FR / NL / IN / UK / US-only / UK-only see no behavior change unless they enable their locale via `--locale=<bcp47>`.
 
 ## [0.7.2] - 2026-05-13
 
