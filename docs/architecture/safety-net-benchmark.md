@@ -6,7 +6,7 @@ The tracked benchmark snapshot lives at
 validates that the snapshot pins match runtime constants and prints the JSON
 for CI logs.
 
-Current status: `not_run_requires_local_backends`.
+Current status: `kiji_direct_run_v1_observer_residual_deferred`.
 
 ## Backend Pins
 
@@ -64,9 +64,11 @@ The top-level `strict_span_leak_rate` block is mode-independent and records
 one nullable headline field for each backend-locale pair. It measures
 end-to-end fail-closed behavior rather than detector precision/recall.
 
-The result fields remain `null` until pinned local backend commands and model
-directories are available. Publishing numeric Kiji or OPF claims without those
-pins would violate the Axis 4 trust contract.
+Kiji direct-detector fields are populated from the pinned local model artifact.
+Kiji observer-residual and all OPF result fields remain `null` until their
+separate pinned local backend runs are captured. Publishing numeric OPF claims
+or observer-residual Kiji claims without those pins would violate the Axis 4
+trust contract.
 
 The methodology and rule-floor baseline are documented in
 [`docs/research/v0.8-kiji-benchmark.md`](../research/v0.8-kiji-benchmark.md);
