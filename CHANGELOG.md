@@ -9,68 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **CLI plaintext JSON `entries` field**: `gaze clean --format=json` now emits
-  top-level `entries` mirroring the session snapshot entries (`class`, `raw`,
-  `token`, `family`) while preserving the existing signed `session_blob`.
-  Empty detections emit `entries: []`. (Axis 5 ergonomics; unblocks
-  gaze-laravel `GazeSession::$entries`.)
-
-- **OPF checkpoint trust pin**: the OpenAI Privacy Filter safety-net backend now
-  pins the locally captured checkpoint bundle SHA256 and required artifact
-  inventory for `openai/privacy-filter` commit
-  `f7f00ca7fb869683eb732c010299d901457f19c3`. OPF benchmark cells remain
-  `null` until the separate scorer run publishes measured results. The matrix
-  bench now compiles under `--features safety-net-openai` so the OPF pin block
-  can be validated without also enabling Kiji. (Axis 4 trust.)
-- **OPF direct-detector benchmark cells**: `scripts/opf-bench-scorer.py`
-  populated the OpenAI Privacy Filter direct-detector cells in the safety-net
-  matrix snapshot from the same 150-fixture coverage-loop corpus used for Kiji.
-  The consolidated v0.9 benchmark doc now compares Kiji and OPF with pins,
-  per-locale metrics, per-class strict recall, and observer-residual caveats.
-  (Axis 4 trust.)
-- **Observer-residual safety-net cells and latency snapshot**:
-  `scripts/kiji-bench-scorer.py` and `scripts/opf-bench-scorer.py` now share a
-  direct/observer scorer, the benchmark snapshot has measured observer-residual
-  cells for Kiji and OPF across all three locale buckets, and
-  `safety_net_perf_snapshot.json` records 150-fixture direct-mode latency for
-  both backends. The observer path uses a Rust `clean_for_bench` helper so
-  residual scoring is grounded in Gaze's emitted manifest spans. (Axis 4 trust.)
-- **Multi-NER leaderboard**: published at
-  `docs/research/v0.9-ner-model-leaderboard.md`; Kiji selected as the v0.9
-  default per shipped class-map measurement. (Axis 4 trust, Axis 5 ergonomics.)
-
-- **Audit NER-provenance schema migration**: `gaze-audit` adds eleven
-  nullable, additive provenance columns to `redaction_log` for future NER
-  attribution (`provenance_stage`, model/artifact/tokenizer identifiers,
-  resolved locale, class mapping, confidence, and merged-source attribution).
-  Existing rows read back with `NULL` provenance fields; producer population is
-  deferred to a follow-up. (Axis 4 trust, Axis 5 ergonomics.)
-
-- **Locale-aware Pass-3 SafetyNet dispatcher**: `Pipeline::with_safety_net_registry` wires `LocaleAwareModelRegistry` into clean-time safety-net dispatch. The CLI gains `--safety-net-registry`, repeatable `--safety-net-add`, and backend locale override flags so adopters can route to the best configured backend per input locale. v1 uses first-match-wins semantics; aggregation is follow-up. Audit rows now carry the resolved backend id. (Axis 1 reliability, Axis 5 ergonomics.)
-
 ### Changed
-
-- **Synthetic email fixtures** now use the IANA-reserved
-  `@example.invalid` domain instead of reachable `@example.com` examples across
-  crates and document fixtures. (Axis 4 trust.)
-
-- **`SqliteLogger` leak-suspect writes now have one canonical verb**:
-  the previous public inherent safety-net write method was removed. Call
-  `LeakSuspectLogger::log_leak_suspect` instead. This is a pre-1.0 breaking API
-  cleanup for adopter ergonomics; the SQLite schema and write behavior are
-  unchanged. (Axis 5 ergonomics.)
-
-- **Pre-1.0 breaking API cleanup:** `CorePipeline::redact_text` is now
-  `pseudonymize_text`, and `Pipeline::redact_with_context` is now
-  `pseudonymize_with_context`; the detector-aware sibling is now
-  `pseudonymize_with_detect_context`. Operation is reversible pseudonymization,
-  not one-way redaction. (Axis 4 trust naming.)
-
-- **Safety-net benchmark snapshot schema v2**: the internal benchmark artifact
-  moves from the single-backend Kiji schema to a backend × locale × mode matrix
-  with mode-independent `strict_span_leak_rate` entries. Adopter impact is
-  zero: these snapshots are internal CI artifacts, not part of the public API
-  surface. (Axis 4 trust.)
 
 ### Deprecated
 
@@ -79,6 +18,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 ### Security
+
+## [0.9.0-rc.1] - 2026-05-16
+
+v0.9.0-rc.1 is the performance-wave release candidate: Kiji warm p50 moves from 323ms (subprocess) to 2.981ms (in-process ORT fp32), int8 warm p50 lands at 1.849ms, int8 cold start is 297ms, the Kiji bundle shrinks from 249MB to 63MB, and int8 preserves F1 recall with a 0.000 delta across all locales/modes. Pipeline skip + capitals gates can reduce best-case SafetyNet calls from 100% to 0% on numeric input, prefix-cache hit latency drops -50.8%, `gaze daemon` removes full binary fork + model-load overhead for repeated calls, and `tract` provides the new opt-in static-binary path. Manifest restore semantics and the signed snapshot wire format are unchanged from v0.8.1.
+
+### Added
+
+- **In-process Kiji ORT backend** (PR #250 `4b8db66`): Kiji DistilBERT now runs
+  inside the process instead of through the Python subprocess path, headlining a
+  measured 2.981ms warm p50 on fp32 ORT. (Axis 1 reliability, Axis 5 ergonomics.)
+- **Kiji int8 dynamic quantization** (PR #256 `0a35f8e`): shipped the quantized
+  Kiji bundle with 1.849ms warm p50, 297ms cold start, 63MB bundle size, and
+  0.000 F1 recall delta across all locales/modes. (Axis 1 reliability, Axis 4 trust.)
+- **`gaze daemon` JSONL stdio mode** (PR #255 `cddbea4`): a persistent,
+  multi-session CLI daemon removes per-call binary fork and model-load overhead
+  while preserving the same reversible session contract. (Axis 3 agentic-first,
+  Axis 5 ergonomics.)
+- **Tier 4 pipeline gating and prefix cache** (PR #252 `67374cb`): opt-in skip
+  gates, capitals heuristic, prefix cache, and length bucketing reduce avoidable
+  SafetyNet work; best-case numeric input drops SafetyNet calls from 100% to 0%,
+  and prefix-cache hit latency drops -50.8%. (Axis 1 reliability, Axis 5 ergonomics.)
+- **Runtime comparison benchmark** (PR #257 `0fd7c8e`): published ORT vs tract
+  vs candle results; recommendation is ORT by default and tract for opt-in
+  static binaries. (Axis 4 trust.)
+- **Tiny-model leaderboard** (PR #258 `3fd3859`): validates Kiji int8 as the
+  v0.9 default against the smaller model candidates. (Axis 4 trust, Axis 5 ergonomics.)
+- **End-to-end pipeline benchmark** (PR #244 `1bf78f3`): added detection +
+  performance measurement for the full Gaze pipeline. (Axis 4 trust.)
+- **Python Kiji runner reference wrapper** (PR #236 `c5e623f`): added a reference
+  subprocess runner to bridge the older benchmark path and the new in-process
+  runtime work. (Axis 4 trust.)
+- **CLI plaintext JSON `entries` field** (PR #232 `ac579cd`): `gaze clean
+  --format=json` now emits top-level `entries` mirroring session snapshot entries
+  while preserving the signed `session_blob`; empty detections emit `entries: []`.
+  (Axis 5 ergonomics.)
+- **OPF checkpoint trust pin and benchmark cells** (PR #240 `e681361`, PR #241
+  `430ba7f`): the OpenAI Privacy Filter backend pins the local checkpoint bundle
+  SHA256 and required artifact inventory, and the benchmark snapshot now includes
+  measured OPF direct-detector cells. (Axis 4 trust.)
+- **Observer-residual safety-net cells and latency snapshot** (PR #248 `7cab754`):
+  Kiji and OPF share a direct/observer scorer, observer-residual cells are
+  populated across locale buckets, and latency snapshots cover the 150-fixture
+  direct-mode corpus. (Axis 4 trust.)
+- **Multi-NER leaderboard** (PR #245 `4a4338d`): published
+  `docs/research/v0.9-ner-model-leaderboard.md`; Kiji selected as the v0.9
+  default per shipped class-map measurement. (Axis 4 trust, Axis 5 ergonomics.)
+- **Audit NER-provenance schema migration** (PR #238 `b030038`): `gaze-audit`
+  adds eleven nullable provenance columns to `redaction_log` for future NER
+  attribution; existing rows read back with `NULL` provenance fields. (Axis 4 trust,
+  Axis 5 ergonomics.)
+- **Locale-aware Pass-3 SafetyNet dispatcher** (PR #226 `98fa572`, PR #242
+  `4b28ebc`): `Pipeline::with_safety_net_registry` routes SafetyNet work through
+  `LocaleAwareModelRegistry`; the CLI gains registry and backend-locale override
+  flags, and audit rows carry the resolved backend id. (Axis 1 reliability,
+  Axis 5 ergonomics.)
+- **Metrics single source of truth** (PR #235 `71c8e6c`): added `docs/metrics.md`
+  to catalog observable surfaces. (Axis 4 trust.)
+
+### Changed
+
+- **Workspace version pin** `0.8.1` -> `0.9.0-rc.1` across all ten published
+  crates.
+- **Synthetic email fixtures** (PR #233 `e48901b`) now use the IANA-reserved
+  `@example.invalid` domain instead of reachable `@example.com` examples across
+  crates and document fixtures. (Axis 4 trust.)
+- **`SqliteLogger` leak-suspect writes now have one canonical verb** (PR #234
+  `77f91b9`): call `LeakSuspectLogger::log_leak_suspect`; SQLite schema and
+  write behavior are unchanged. (Axis 5 ergonomics.)
+- **Pre-1.0 API naming cleanup** (PR #237 `d6a48af`): `redact_text` /
+  `redact_with_context` names now use `pseudonymize_*` terminology to match
+  reversible pseudonymization. (Axis 4 trust naming.)
+- **Safety-net benchmark snapshot schema v2** (PR #230 `1bc60f5`): internal
+  benchmark artifacts move from single-backend Kiji fields to a backend x locale
+  x mode matrix with mode-independent strict-span leak-rate entries. (Axis 4 trust.)
+- **Kiji and OPF benchmark docs** (PR #231 `eba3c03`, PR #245 `4a4338d`, PR #257
+  `0fd7c8e`): consolidated v0.9 research docs around pinned artifacts,
+  per-locale metrics, observer-residual caveats, runtime tradeoffs, and the Kiji
+  int8 default recommendation. (Axis 4 trust.)
+- **README and docs scope corrections** (PR #228 `051bbc9`, PR #229 `4bdcaa8`,
+  PR #246 `5ff0b1b`, PR #251 `dbc6bdc`, PR #254 `930e38e`): clarified the
+  ghostwriter flow, replaced the Mermaid walkthrough with an ASCII flow, removed
+  private demo references, and qualified proxy scope as API-key path only.
+
+### Removed
+
+- **Private demo-repo README link** (PR #251 `dbc6bdc`): removed the stale link
+  from public docs. (Axis 5 ergonomics.)
+
+### Fixed
+
+- **CI proxy smoke SIGPIPE** (PR #227 `31e00cc`): proxy status capture now uses
+  command substitution so smoke tests do not trip SIGPIPE.
+- **Ubuntu CI disk-full failure** (PR #249 `d412800`): frees preinstalled bloat
+  before the workspace build on `ubuntu-latest`.
+- **v0.9.1 follow-up fixups pulled into rc.1** (PR #253 `23d9ddd`): typed
+  snapshot accessor, OPF artifact-hash gate, silent-drop telemetry, and
+  locale-aware benchmark re-run.
+
+### Migration notes
+
+- `0.9.0-rc.1` is a pre-release. It is intended for adopter validation and may
+  revert or adjust performance internals before final `0.9.0`.
+- Reversibility is unchanged: manifest restore semantics and the signed snapshot
+  wire format remain compatible with v0.8.1.
+- ORT is the recommended runtime default; use the opt-in `tract` path when a
+  static binary is the deployment constraint.
 
 ## [0.8.1] - 2026-05-15
 
