@@ -36,17 +36,17 @@
         "PER": "Name",
         "LOC": "Location",
         "ORG": "Organization",
-        "MISC": "Custom:other"
+        "MISC": "Name"
       },
       "shippable_default": true,
       "default_caveat": null,
       "latency": {
-        "cold_start_ms": 961.065333,
-        "per_fixture_median_ms": 222.059,
-        "per_fixture_p95_ms": 268.206173,
-        "per_fixture_p99_ms": 295.327048,
-        "per_fixture_mean_ms": 231.635754,
-        "throughput_bytes_per_sec": 1232.653691,
+        "cold_start_ms": 2455.891792,
+        "per_fixture_median_ms": 323.346375,
+        "per_fixture_p95_ms": 490.053498,
+        "per_fixture_p99_ms": 680.605004,
+        "per_fixture_mean_ms": 349.494284,
+        "throughput_bytes_per_sec": 816.970919,
         "fixture_count": 150,
         "device": "cpu",
         "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
@@ -189,20 +189,10 @@
       "native_locale": true,
       "mode": "direct_detector",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.084746,
+        "recall": 0.125,
+        "f1": 0.10101,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 5,
-            "true_positive": 0,
-            "false_positive": 5,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Email": {
             "support": 59,
             "predicted": 0,
@@ -215,13 +205,13 @@
           },
           "Name": {
             "support": 5,
-            "predicted": 54,
-            "true_positive": 0,
+            "predicted": 59,
+            "true_positive": 5,
             "false_positive": 54,
-            "false_negative": 5,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "false_negative": 0,
+            "precision": 0.084746,
+            "recall": 1.0,
+            "f1": 0.15625
           },
           "custom:credit_card": {
             "support": 18,
@@ -292,20 +282,10 @@
       "native_locale": false,
       "mode": "direct_detector",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.54717,
+        "recall": 0.125,
+        "f1": 0.203509,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 29,
-            "true_positive": 0,
-            "false_positive": 29,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Email": {
             "support": 48,
             "predicted": 0,
@@ -318,13 +298,13 @@
           },
           "Name": {
             "support": 29,
-            "predicted": 24,
-            "true_positive": 0,
+            "predicted": 53,
+            "true_positive": 29,
             "false_positive": 24,
-            "false_negative": 29,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "false_negative": 0,
+            "precision": 0.54717,
+            "recall": 1.0,
+            "f1": 0.707317
           },
           "custom:credit_card": {
             "support": 10,
@@ -395,20 +375,10 @@
       "native_locale": false,
       "mode": "direct_detector",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.108614,
+        "recall": 0.125,
+        "f1": 0.116232,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 30,
-            "true_positive": 0,
-            "false_positive": 30,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Email": {
             "support": 55,
             "predicted": 0,
@@ -421,13 +391,13 @@
           },
           "Name": {
             "support": 29,
-            "predicted": 237,
-            "true_positive": 0,
-            "false_positive": 237,
-            "false_negative": 29,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "predicted": 267,
+            "true_positive": 29,
+            "false_positive": 238,
+            "false_negative": 0,
+            "precision": 0.108614,
+            "recall": 1.0,
+            "f1": 0.195946
           },
           "custom:credit_card": {
             "support": 7,
@@ -498,20 +468,10 @@
       "native_locale": true,
       "mode": "observer_residual",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.081967,
+        "recall": 0.5,
+        "f1": 0.140845,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 5,
-            "true_positive": 0,
-            "false_positive": 5,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Location": {
             "support": 0,
             "predicted": 2,
@@ -524,13 +484,13 @@
           },
           "Name": {
             "support": 5,
-            "predicted": 54,
-            "true_positive": 0,
+            "predicted": 59,
+            "true_positive": 5,
             "false_positive": 54,
-            "false_negative": 5,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "false_negative": 0,
+            "precision": 0.084746,
+            "recall": 1.0,
+            "f1": 0.15625
           },
           "custom:postal_code": {
             "support": 6,
@@ -543,11 +503,11 @@
             "f1": null
           }
         },
-        "observer_residual_recall": 0.0,
+        "observer_residual_recall": 0.5,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": 0.0
+        "novel_tp_over_rule_floor": 0.5
       }
     },
     {
@@ -556,29 +516,19 @@
       "native_locale": false,
       "mode": "observer_residual",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.54717,
+        "recall": 0.5,
+        "f1": 0.522523,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 29,
-            "true_positive": 0,
-            "false_positive": 29,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Name": {
             "support": 29,
-            "predicted": 24,
-            "true_positive": 0,
+            "predicted": 53,
+            "true_positive": 29,
             "false_positive": 24,
-            "false_negative": 29,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "false_negative": 0,
+            "precision": 0.54717,
+            "recall": 1.0,
+            "f1": 0.707317
           },
           "custom:phone": {
             "support": 15,
@@ -591,11 +541,11 @@
             "f1": null
           }
         },
-        "observer_residual_recall": 0.0,
+        "observer_residual_recall": 0.5,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": 0.0
+        "novel_tp_over_rule_floor": 0.5
       }
     },
     {
@@ -604,36 +554,26 @@
       "native_locale": false,
       "mode": "observer_residual",
       "metrics": {
-        "precision": 0.0,
-        "recall": 0.0,
-        "f1": null,
+        "precision": 0.107407,
+        "recall": 1.0,
+        "f1": 0.19398,
         "per_class": {
-          "Custom:other": {
-            "support": 0,
-            "predicted": 29,
-            "true_positive": 0,
-            "false_positive": 29,
-            "false_negative": 0,
-            "precision": 0.0,
-            "recall": null,
-            "f1": null
-          },
           "Name": {
             "support": 29,
-            "predicted": 245,
-            "true_positive": 0,
-            "false_positive": 245,
-            "false_negative": 29,
-            "precision": 0.0,
-            "recall": 0.0,
-            "f1": null
+            "predicted": 270,
+            "true_positive": 29,
+            "false_positive": 241,
+            "false_negative": 0,
+            "precision": 0.107407,
+            "recall": 1.0,
+            "f1": 0.19398
           }
         },
-        "observer_residual_recall": 0.0,
+        "observer_residual_recall": 1.0,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": 0.0
+        "novel_tp_over_rule_floor": 1.0
       }
     },
     {

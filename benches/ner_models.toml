@@ -11,7 +11,7 @@ fetch_script = "scripts/fetch-kiji-safetynet-model.sh"
 default_checkpoint = "~/.cache/gaze/kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67"
 native_locales = ["Global"]
 label_set = ["PER", "LOC", "ORG", "MISC"]
-label_map = { PER = "Name", LOC = "Location", ORG = "Organization", MISC = "Custom:other" }
+label_map = { PER = "Name", LOC = "Location", ORG = "Organization", MISC = "Name" }
 shippable_default = true
 
 [[model]]
