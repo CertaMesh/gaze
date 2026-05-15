@@ -150,10 +150,10 @@ fn assert_strict_span_leak_rate_shape(snapshot: &Value) {
     for backend in BACKENDS {
         for locale in LOCALES {
             let key = format!("{backend}.{locale}");
-            assert!(
-                leak_rates.get(&key).is_some_and(Value::is_null),
-                "missing null strict_span_leak_rate for {key}"
-            );
+            let value = leak_rates
+                .get(&key)
+                .unwrap_or_else(|| panic!("missing strict_span_leak_rate for {key}"));
+            assert_nullable_unit_float(value, &format!("strict_span_leak_rate {key}"));
         }
     }
 }
@@ -187,15 +187,26 @@ fn assert_cell_schema(cell: &Value, mode: &str) {
     for key in ["precision", "recall", "f1", "per_class"] {
         assert!(metrics.contains_key(key), "cell metrics missing {key}");
     }
-    assert!(metrics["precision"].is_null());
-    assert!(metrics["recall"].is_null());
-    assert!(metrics["f1"].is_null());
-    assert!(
-        metrics["per_class"]
-            .as_object()
-            .is_some_and(serde_json::Map::is_empty),
-        "per_class must be an empty object"
-    );
+    let populated_direct = cell["mode"] == "direct_detector";
+    if populated_direct {
+        for key in ["precision", "recall", "f1"] {
+            assert_nullable_unit_float(&metrics[key], key);
+        }
+        assert!(
+            metrics["per_class"].as_object().is_some(),
+            "per_class must be an object"
+        );
+    } else {
+        assert!(metrics["precision"].is_null());
+        assert!(metrics["recall"].is_null());
+        assert!(metrics["f1"].is_null());
+        assert!(
+            metrics["per_class"]
+                .as_object()
+                .is_some_and(serde_json::Map::is_empty),
+            "per_class must be an empty object"
+        );
+    }
 
     if mode == "observer_residual" {
         for key in [
@@ -211,4 +222,17 @@ fn assert_cell_schema(cell: &Value, mode: &str) {
             );
         }
     }
+}
+
+fn assert_nullable_unit_float(value: &Value, name: &str) {
+    if value.is_null() {
+        return;
+    }
+    let number = value
+        .as_f64()
+        .unwrap_or_else(|| panic!("{name} must be null or numeric"));
+    assert!(
+        (0.0..=1.0).contains(&number),
+        "{name} must be between 0.0 and 1.0"
+    );
 }

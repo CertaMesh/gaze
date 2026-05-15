@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "benchmark": "safety-net-multi-backend-matrix",
-  "status": "not_run_requires_local_backends",
+  "status": "opf_kiji_direct_run_v1_observer_residual_deferred",
   "backends": {
     "kiji_distilbert": {
       "pins": {
@@ -30,15 +30,17 @@
   "corpus": {
     "commit": "7348690",
     "seed": "113668362958386",
-    "sha256": "c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f"
+    "sha256": "c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f",
+    "coverage_report_sha256": "760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c",
+    "fixture_count": 150
   },
   "strict_span_leak_rate": {
-    "kiji_distilbert.Global": null,
-    "kiji_distilbert.EnUs": null,
-    "kiji_distilbert.DeDe": null,
-    "openai_privacy_filter.Global": null,
-    "openai_privacy_filter.EnUs": null,
-    "openai_privacy_filter.DeDe": null
+    "kiji_distilbert.Global": 0.875,
+    "kiji_distilbert.EnUs": 0.875,
+    "kiji_distilbert.DeDe": 0.875,
+    "openai_privacy_filter.Global": 0.635593,
+    "openai_privacy_filter.EnUs": 0.744271,
+    "openai_privacy_filter.DeDe": 0.649332
   },
   "cells": [
     {
@@ -46,10 +48,91 @@
       "locale": "Global",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.084746,
+        "recall": 0.125,
+        "f1": 0.10101,
+        "per_class": {
+          "Email": {
+            "support": 59,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 59,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 59,
+            "true_positive": 5,
+            "false_positive": 54,
+            "false_negative": 0,
+            "precision": 0.084746,
+            "recall": 1.0,
+            "f1": 0.15625
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 11,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -73,10 +156,91 @@
       "locale": "EnUs",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.54717,
+        "recall": 0.125,
+        "f1": 0.203509,
+        "per_class": {
+          "Email": {
+            "support": 48,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 48,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 53,
+            "true_positive": 29,
+            "false_positive": 24,
+            "false_negative": 0,
+            "precision": 0.54717,
+            "recall": 1.0,
+            "f1": 0.707317
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -100,10 +264,91 @@
       "locale": "DeDe",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.108614,
+        "recall": 0.125,
+        "f1": 0.116232,
+        "per_class": {
+          "Email": {
+            "support": 55,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 55,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 267,
+            "true_positive": 29,
+            "false_positive": 238,
+            "false_negative": 0,
+            "precision": 0.108614,
+            "recall": 1.0,
+            "f1": 0.195946
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 17,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -127,10 +372,141 @@
       "locale": "Global",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.321101,
+        "recall": 0.364407,
+        "f1": 0.341386,
+        "per_class": {
+          "Email": {
+            "support": 59,
+            "predicted": 59,
+            "true_positive": 54,
+            "false_positive": 5,
+            "false_negative": 5,
+            "precision": 0.915254,
+            "recall": 0.915254,
+            "f1": 0.915254
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 9,
+            "true_positive": 0,
+            "false_positive": 9,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 7,
+            "true_positive": 5,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.714286,
+            "recall": 1.0,
+            "f1": 0.833333
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 79,
+            "true_positive": 0,
+            "false_positive": 79,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 19,
+            "true_positive": 0,
+            "false_positive": 19,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 14,
+            "true_positive": 11,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.785714,
+            "recall": 1.0,
+            "f1": 0.88
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 5,
+            "true_positive": 0,
+            "false_positive": 5,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:url": {
+            "support": 0,
+            "predicted": 26,
+            "true_positive": 0,
+            "false_positive": 26,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -154,10 +530,141 @@
       "locale": "EnUs",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.418478,
+        "recall": 0.255729,
+        "f1": 0.317461,
+        "per_class": {
+          "Email": {
+            "support": 48,
+            "predicted": 48,
+            "true_positive": 47,
+            "false_positive": 1,
+            "false_negative": 1,
+            "precision": 0.979167,
+            "recall": 0.979167,
+            "f1": 0.979167
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 11,
+            "true_positive": 0,
+            "false_positive": 11,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 52,
+            "true_positive": 0,
+            "false_positive": 52,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 11,
+            "true_positive": 0,
+            "false_positive": 11,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 19,
+            "true_positive": 1,
+            "false_positive": 18,
+            "false_negative": 14,
+            "precision": 0.052632,
+            "recall": 0.066667,
+            "f1": 0.058824
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 6,
+            "true_positive": 0,
+            "false_positive": 6,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:url": {
+            "support": 0,
+            "predicted": 8,
+            "true_positive": 0,
+            "false_positive": 8,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -181,10 +688,141 @@
       "locale": "DeDe",
       "mode": "direct_detector",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "per_class": {}
+        "precision": 0.457547,
+        "recall": 0.350668,
+        "f1": 0.397041,
+        "per_class": {
+          "Email": {
+            "support": 55,
+            "predicted": 55,
+            "true_positive": 54,
+            "false_positive": 1,
+            "false_negative": 1,
+            "precision": 0.981818,
+            "recall": 0.981818,
+            "f1": 0.981818
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 24,
+            "true_positive": 0,
+            "false_positive": 24,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 62,
+            "true_positive": 0,
+            "false_positive": 62,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 11,
+            "true_positive": 0,
+            "false_positive": 11,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 17,
+            "true_positive": 14,
+            "false_positive": 3,
+            "false_negative": 3,
+            "precision": 0.823529,
+            "recall": 0.823529,
+            "f1": 0.823529
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 7,
+            "true_positive": 0,
+            "false_positive": 7,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:url": {
+            "support": 0,
+            "predicted": 7,
+            "true_positive": 0,
+            "false_positive": 7,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        }
       }
     },
     {
@@ -203,5 +841,11 @@
         "per_class": {}
       }
     }
-  ]
+  ],
+  "run_environment": {
+    "os": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.5",
+    "opf_device": "cpu"
+  }
 }

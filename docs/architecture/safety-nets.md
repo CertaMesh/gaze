@@ -12,6 +12,15 @@ Validator-backed self-validation is handled earlier by the deterministic
 [`validator-veto`](validator-veto.md) stage. Safety nets do not veto candidates
 and do not participate in conflict resolution.
 
+## Benchmark
+
+The v0.9 benchmark populated direct-detector cells for both shipped backends
+against the same 150-fixture coverage-loop corpus: Kiji DistilBERT stayed at
+`0.125000` macro strict recall across locales, while OPF measured `0.364407`
+global, `0.255729` en-US, and `0.350668` de-DE. Observer-residual cells remain
+deferred until the cleaned-output harness is run. Full numbers, pins, and
+caveats are in [`docs/research/v0.9-safety-net-benchmark.md`](../research/v0.9-safety-net-benchmark.md).
+
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter
 (`opf`) subprocess adapter; the contract is generic so additional backends
