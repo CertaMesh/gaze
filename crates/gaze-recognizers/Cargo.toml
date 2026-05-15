@@ -86,4 +86,3 @@ harness = false
 [[bench]]
 name = "safety_net_matrix"
 harness = false
-required-features = ["safety-net-kiji"]

@@ -27,8 +27,8 @@ Current status: `not_run_requires_local_backends`.
 |---|---|
 | Source repo | `openai/privacy-filter` |
 | Source commit | `f7f00ca7fb869683eb732c010299d901457f19c3` |
-| Checkpoint bundle SHA256 | `null` |
-| Required checkpoint artifacts | `[]` |
+| Checkpoint bundle SHA256 | `4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae` |
+| Required checkpoint artifacts | `["config.json", "dtypes.json", "model.safetensors", "viterbi_calibration.json"]` |
 
 OPF publishes a source repository and an `opf` Python CLI that downloads its
 checkpoint into `~/.opf/privacy_filter` by default, or into the directory
@@ -36,12 +36,11 @@ selected by `OPF_CHECKPOINT` / `--checkpoint`. It does not publish a GitHub
 release binary, so Gaze does not pin a binary checksum. The source commit and
 checkpoint bundle are the trust anchors.
 
-The source commit is pinned above. The checkpoint bundle hash remains `null`
-and the required-artifact list remains empty until a clean local OPF checkpoint
-download is captured, reviewed, and recorded in
-`OPF_CHECKPOINT_BUNDLE_SHA256` with the matching `REQUIRED_OPF_ARTIFACTS` list.
-Publishing numeric OPF claims or enabling checkpoint-bundle verification without
-those pins would violate the Axis 4 trust contract.
+The source commit is pinned above. The checkpoint bundle hash was captured from
+a clean local `opf download` on 2026-05-15. The bundle hash is SHA256 over the
+Kiji-style line-per-file SHA256SUMS manifest for the required artifact list in
+declaration order. Publishing numeric OPF claims without populated benchmark
+cells would violate the Axis 4 trust contract.
 
 ## Matrix Shape
 
