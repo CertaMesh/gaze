@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LeakSuspectLogger::log_leak_suspect` instead. This is a pre-1.0 breaking API
   cleanup for adopter ergonomics; the SQLite schema and write behavior are
   unchanged. (Axis 5 ergonomics.)
+
+- **Pre-1.0 breaking API cleanup:** `CorePipeline::redact_text` is now
+  `pseudonymize_text`, and `Pipeline::redact_with_context` is now
+  `pseudonymize_with_context`; the detector-aware sibling is now
+  `pseudonymize_with_detect_context`. Operation is reversible pseudonymization,
+  not one-way redaction. (Axis 4 trust naming.)
+
 - **Safety-net benchmark snapshot schema v2**: the internal benchmark artifact
   moves from the single-backend Kiji schema to a backend × locale × mode matrix
   with mode-independent `strict_span_leak_rate` entries. Adopter impact is

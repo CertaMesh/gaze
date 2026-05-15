@@ -178,26 +178,26 @@ impl Pipeline {
         self
     }
 
-    /// Redacts using the default `[Global]` locale chain.
+    /// Pseudonymizes using the default `[Global]` locale chain.
     ///
-    /// Prefer `redact_with_context` when policy, CLI, or rulepack locale
+    /// Prefer `pseudonymize_with_context` when policy, CLI, or rulepack locale
     /// defaults should constrain which recognizers run.
     pub fn redact(&self, session: &Session, raw: RawDocument) -> Result<CleanDocument> {
         let locale_chain = [crate::LocaleTag::Global];
-        self.redact_with_context(session, raw, &locale_chain)
+        self.pseudonymize_with_context(session, raw, &locale_chain)
     }
 
-    pub fn redact_with_context(
+    pub fn pseudonymize_with_context(
         &self,
         session: &Session,
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<CleanDocument> {
         let dictionaries = DictionaryBundle::default();
-        self.redact_with_detect_context(session, raw, locale_chain, &dictionaries)
+        self.pseudonymize_with_detect_context(session, raw, locale_chain, &dictionaries)
     }
 
-    pub fn redact_with_detect_context(
+    pub fn pseudonymize_with_detect_context(
         &self,
         session: &Session,
         raw: RawDocument,
@@ -213,7 +213,7 @@ impl Pipeline {
                 locale_chain,
                 dictionaries,
             ),
-            RawDocument::Text(text) => Ok(CleanDocument::Text(self.redact_text(
+            RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
                 session,
                 &text,
                 None,
@@ -351,7 +351,7 @@ impl Pipeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn redact_text(
+    fn pseudonymize_text(
         &self,
         session: &Session,
         text: &str,
@@ -1068,7 +1068,7 @@ fn redact_structured_value(
     dictionaries: &DictionaryBundle,
 ) -> Result<Value> {
     match value {
-        Value::String(text) => Ok(Value::String(pipeline.redact_text(
+        Value::String(text) => Ok(Value::String(pipeline.pseudonymize_text(
             session,
             &text,
             Some(field_name),

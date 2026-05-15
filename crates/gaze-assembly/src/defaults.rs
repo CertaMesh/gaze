@@ -114,12 +114,12 @@ impl CorePipeline {
         self.pipeline
     }
 
-    pub fn redact_text(
+    pub fn pseudonymize_text(
         &self,
         session: &Session,
         input: impl Into<String>,
     ) -> Result<CleanDocument, gaze::Error> {
-        self.pipeline.redact_with_context(
+        self.pipeline.pseudonymize_with_context(
             session,
             RawDocument::Text(input.into()),
             self.locale_chain.as_slice(),

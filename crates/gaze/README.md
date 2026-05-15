@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let core = CorePipelineConfig::new().build()?;
     let session = Session::new(Scope::Conversation("conv-42".into()))?;
 
-    let CleanDocument::Text(clean) = core.redact_text(
+    let CleanDocument::Text(clean) = core.pseudonymize_text(
         &session,
         "Email alice@example.invalid about ORD-789012.",
     )? else { unreachable!() };
