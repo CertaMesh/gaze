@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `safety_net_perf_snapshot.json` records 150-fixture direct-mode latency for
   both backends. The observer path uses a Rust `clean_for_bench` helper so
   residual scoring is grounded in Gaze's emitted manifest spans. (Axis 4 trust.)
+- **Multi-NER leaderboard**: published at
+  `docs/research/v0.9-ner-model-leaderboard.md`; Kiji selected as the v0.9
+  default per shipped class-map measurement. (Axis 4 trust, Axis 5 ergonomics.)
 
 - **Audit NER-provenance schema migration**: `gaze-audit` adds eleven
   nullable, additive provenance columns to `redaction_log` for future NER
