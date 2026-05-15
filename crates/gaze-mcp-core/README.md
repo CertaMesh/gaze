@@ -219,3 +219,9 @@ exposing restore.
 
 See [`docs/architecture/mcp-runtime.md`](../../docs/architecture/mcp-runtime.md)
 for the full chokepoint contract + audit-row schema + threat model.
+
+The `ToolCtx` audit-correlation surface (`call_id`, `tool_name`,
+`principal_id`, `audit_session_id`), the `ManifestStore` lifecycle methods
+(`begin_call` / `finish_call` / `fail_call`), the closed `FailureReason`
+set, and the `AuthHook` decision audit are cataloged in
+[`docs/metrics.md`](../../docs/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).

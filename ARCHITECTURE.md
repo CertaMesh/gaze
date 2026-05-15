@@ -269,6 +269,10 @@ and [crates/gaze-audit/src/sqlite.rs](./crates/gaze-audit/src/sqlite.rs).
   describes the MCP chokepoint, sealed tool context, tiers, and rmcp sink.
 - [docs/architecture/safety-nets.md](./docs/architecture/safety-nets.md)
   defines observer-only SafetyNet behavior, subprocess hardening, and audit.
+- [docs/metrics.md](./docs/metrics.md) catalogs every observable surface
+  (audit-row columns, conflict tiers, SafetyNet benchmark snapshot fields,
+  recognizer registry, pipeline observability, `BundleReport`, MCP `ToolCtx`,
+  and CLI exit codes) with file-line pointers and stability guarantees.
 - `docs/architecture/proxy-runtime.md` is the v0.8 new/planned deep dive for
   the user-to-model proxy runtime and provider-driver pattern.
 

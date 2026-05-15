@@ -62,6 +62,13 @@ for row in &rows {
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
+Every column emitted by `SqliteLogger`, the full closed-enum value sets for
+`decided_by` / `validator_fail_reason` / `fallback_triggered`, and the
+`AuditFilter` query dimensions are cataloged in
+[`docs/metrics.md`](../../docs/metrics.md#1-audit-row-fields-gaze-audit) — that
+doc is the SSOT for observable surfaces and includes stability guarantees
+and the version each column landed.
+
 ## Audit-query API surface
 
 Adopters building dashboards, exports, or compliance views interact with four

@@ -463,6 +463,10 @@ Stderr is JSON with the error variant and exit code, for example:
 `UnknownToken` includes the unknown token string because the token is already a
 pseudonym emitted by Gaze, not raw PII.
 
+Full exit-code catalog (including `5` document, `6` mcp, `7` proxy feature
+codes) and the stability guarantee for each variant:
+[`docs/metrics.md`](../../docs/metrics.md#8-cli-exit-codes-gaze-cli).
+
 ## Policy path
 
 `clean --policy <path>` loads the TOML policy through `gaze::Policy`, loads
