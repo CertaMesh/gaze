@@ -25,10 +25,10 @@ jobs:
           swap-storage: false
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Tesseract + English language pack (gaze-document)
+      - name: Install Tesseract + English language pack (gaze-document) + protoc (candle-onnx build dep)
         run: |
           sudo apt-get update
-          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-eng protobuf-compiler
       - name: Install pdfium dynamic library (gaze-document PDF input)
         run: |
           set -eu

@@ -3,8 +3,14 @@ use std::cmp::Ordering;
 use gaze_types::SafetyNetError;
 
 pub mod artifacts;
+#[cfg(feature = "runtime-candle")]
+pub mod candle;
+#[cfg(any(feature = "runtime-candle", feature = "runtime-tract"))]
+pub(crate) mod decode;
 pub mod ort;
 pub mod subprocess;
+#[cfg(feature = "runtime-tract")]
+pub mod tract;
 
 /// Precision variant for the pinned Kiji DistilBERT ONNX artifact.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -58,6 +64,10 @@ pub trait KijiDistilbertBackend: Send + Sync {
 pub enum KijiBackendKind {
     Subprocess,
     Ort,
+    #[cfg(feature = "runtime-tract")]
+    Tract,
+    #[cfg(feature = "runtime-candle")]
+    Candle,
 }
 
 impl KijiBackendKind {
@@ -65,6 +75,10 @@ impl KijiBackendKind {
         match self {
             Self::Subprocess => "subprocess",
             Self::Ort => "ort",
+            #[cfg(feature = "runtime-tract")]
+            Self::Tract => "tract",
+            #[cfg(feature = "runtime-candle")]
+            Self::Candle => "candle",
         }
     }
 }
