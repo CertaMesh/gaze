@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "benchmark": "safety-net-multi-backend-matrix",
-  "status": "opf_kiji_direct_run_v1_observer_residual_deferred",
+  "status": "observer_residual_and_direct_run_v1",
   "backends": {
     "kiji_distilbert": {
       "pins": {
@@ -140,15 +140,36 @@
       "locale": "Global",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.084746,
+        "recall": 0.5,
+        "f1": 0.144928,
+        "per_class": {
+          "Name": {
+            "support": 5,
+            "predicted": 59,
+            "true_positive": 5,
+            "false_positive": 54,
+            "false_negative": 0,
+            "precision": 0.084746,
+            "recall": 1.0,
+            "f1": 0.15625
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 0.5
       }
     },
     {
@@ -248,15 +269,36 @@
       "locale": "EnUs",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.54717,
+        "recall": 0.5,
+        "f1": 0.522523,
+        "per_class": {
+          "Name": {
+            "support": 29,
+            "predicted": 53,
+            "true_positive": 29,
+            "false_positive": 24,
+            "false_negative": 0,
+            "precision": 0.54717,
+            "recall": 1.0,
+            "f1": 0.707317
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 0.5
       }
     },
     {
@@ -356,15 +398,26 @@
       "locale": "DeDe",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.106227,
+        "recall": 1.0,
+        "f1": 0.192053,
+        "per_class": {
+          "Name": {
+            "support": 29,
+            "predicted": 273,
+            "true_positive": 29,
+            "false_positive": 244,
+            "false_negative": 0,
+            "precision": 0.106227,
+            "recall": 1.0,
+            "f1": 0.192053
+          }
+        },
+        "observer_residual_recall": 1.0,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 1.0
       }
     },
     {
@@ -514,15 +567,106 @@
       "locale": "Global",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.035971,
+        "recall": 0.5,
+        "f1": 0.067114,
+        "per_class": {
+          "Email": {
+            "support": 0,
+            "predicted": 37,
+            "true_positive": 0,
+            "false_positive": 37,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 3,
+            "true_positive": 0,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 69,
+            "true_positive": 0,
+            "false_positive": 69,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 14,
+            "true_positive": 0,
+            "false_positive": 14,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 0,
+            "predicted": 3,
+            "true_positive": 0,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 6,
+            "true_positive": 0,
+            "false_positive": 6,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:url": {
+            "support": 0,
+            "predicted": 2,
+            "true_positive": 0,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 0.5
       }
     },
     {
@@ -672,15 +816,86 @@
       "locale": "EnUs",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.21519,
+        "recall": 0.666667,
+        "f1": 0.325359,
+        "per_class": {
+          "Email": {
+            "support": 0,
+            "predicted": 31,
+            "true_positive": 0,
+            "false_positive": 31,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 7,
+            "true_positive": 0,
+            "false_positive": 7,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 63,
+            "true_positive": 0,
+            "false_positive": 63,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 7,
+            "true_positive": 0,
+            "false_positive": 7,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 16,
+            "true_positive": 5,
+            "false_positive": 11,
+            "false_negative": 10,
+            "precision": 0.3125,
+            "recall": 0.333333,
+            "f1": 0.322581
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 5,
+            "true_positive": 0,
+            "false_positive": 5,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.666667,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 0.666667
       }
     },
     {
@@ -830,15 +1045,96 @@
       "locale": "DeDe",
       "mode": "observer_residual",
       "metrics": {
-        "precision": null,
-        "recall": null,
-        "f1": null,
-        "observer_residual_recall": null,
+        "precision": 0.2,
+        "recall": 1.0,
+        "f1": 0.333333,
+        "per_class": {
+          "Email": {
+            "support": 0,
+            "predicted": 41,
+            "true_positive": 0,
+            "false_positive": 41,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 2,
+            "true_positive": 0,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:account_number": {
+            "support": 0,
+            "predicted": 55,
+            "true_positive": 0,
+            "false_positive": 55,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:date": {
+            "support": 0,
+            "predicted": 9,
+            "true_positive": 0,
+            "false_positive": 9,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 0,
+            "predicted": 4,
+            "true_positive": 0,
+            "false_positive": 4,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:secret": {
+            "support": 0,
+            "predicted": 4,
+            "true_positive": 0,
+            "false_positive": 4,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:url": {
+            "support": 0,
+            "predicted": 1,
+            "true_positive": 0,
+            "false_positive": 1,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 1.0,
         "agreement_with_rule_floor": null,
         "expansion_fraction": null,
         "contradiction_fraction": null,
-        "novel_tp_over_rule_floor": null,
-        "per_class": {}
+        "novel_tp_over_rule_floor": 1.0
       }
     }
   ],

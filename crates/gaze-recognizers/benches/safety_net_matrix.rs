@@ -10,6 +10,7 @@ use gaze_recognizers::safety_net::openai_filter::backend::subprocess::{
 use serde_json::Value;
 
 const SNAPSHOT: &str = include_str!("safety_net_matrix_snapshot.json");
+const PERF_SNAPSHOT: &str = include_str!("safety_net_perf_snapshot.json");
 
 const BACKENDS: [&str; 2] = ["kiji_distilbert", "openai_privacy_filter"];
 const LOCALES: [&str; 3] = ["Global", "EnUs", "DeDe"];
@@ -28,6 +29,7 @@ fn main() {
     assert_opf_pins(&snapshot);
     assert_strict_span_leak_rate_shape(&snapshot);
     assert_cells(&snapshot);
+    assert_perf_snapshot();
 
     println!("{SNAPSHOT}");
 }
@@ -187,26 +189,13 @@ fn assert_cell_schema(cell: &Value, mode: &str) {
     for key in ["precision", "recall", "f1", "per_class"] {
         assert!(metrics.contains_key(key), "cell metrics missing {key}");
     }
-    let populated_direct = cell["mode"] == "direct_detector";
-    if populated_direct {
-        for key in ["precision", "recall", "f1"] {
-            assert_nullable_unit_float(&metrics[key], key);
-        }
-        assert!(
-            metrics["per_class"].as_object().is_some(),
-            "per_class must be an object"
-        );
-    } else {
-        assert!(metrics["precision"].is_null());
-        assert!(metrics["recall"].is_null());
-        assert!(metrics["f1"].is_null());
-        assert!(
-            metrics["per_class"]
-                .as_object()
-                .is_some_and(serde_json::Map::is_empty),
-            "per_class must be an empty object"
-        );
+    for key in ["precision", "recall", "f1"] {
+        assert_nullable_unit_float(&metrics[key], key);
     }
+    assert!(
+        metrics["per_class"].as_object().is_some(),
+        "per_class must be an object"
+    );
 
     if mode == "observer_residual" {
         for key in [
@@ -216,12 +205,64 @@ fn assert_cell_schema(cell: &Value, mode: &str) {
             "contradiction_fraction",
             "novel_tp_over_rule_floor",
         ] {
-            assert!(
-                metrics.get(key).is_some_and(Value::is_null),
-                "observer_residual metrics missing null {key}"
-            );
+            let value = metrics
+                .get(key)
+                .unwrap_or_else(|| panic!("observer_residual metrics missing {key}"));
+            assert_nullable_unit_float(value, key);
         }
     }
+}
+
+fn assert_perf_snapshot() {
+    let snapshot: Value =
+        serde_json::from_str(PERF_SNAPSHOT).expect("valid safety-net perf benchmark snapshot");
+    assert_eq!(snapshot["schema_version"], Value::from(1));
+    assert_eq!(
+        snapshot["benchmark"],
+        Value::String("safety-net-perf".to_string())
+    );
+    let backends = snapshot["backends"]
+        .as_object()
+        .expect("perf backends object");
+    for backend in BACKENDS {
+        let metrics = backends
+            .get(backend)
+            .unwrap_or_else(|| panic!("missing perf backend {backend}"))
+            .as_object()
+            .expect("perf backend metrics object");
+        for key in [
+            "cold_start_ms",
+            "per_fixture_median_ms",
+            "per_fixture_p95_ms",
+            "per_fixture_p99_ms",
+            "per_fixture_mean_ms",
+            "throughput_bytes_per_sec",
+        ] {
+            assert_positive_number(&metrics[key], key);
+        }
+        assert_eq!(metrics["fixture_count"], Value::from(150));
+        assert_eq!(metrics["device"], Value::String("cpu".to_string()));
+        assert!(
+            metrics["measurement_scope"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty()),
+            "measurement_scope must be a non-empty string"
+        );
+    }
+    let host = snapshot["host"].as_object().expect("perf host object");
+    for key in ["os", "arch", "cpu", "python"] {
+        assert!(
+            host.get(key).is_some_and(Value::is_string),
+            "perf host missing string {key}"
+        );
+    }
+}
+
+fn assert_positive_number(value: &Value, name: &str) {
+    let number = value
+        .as_f64()
+        .unwrap_or_else(|| panic!("{name} must be numeric"));
+    assert!(number > 0.0, "{name} must be positive");
 }
 
 fn assert_nullable_unit_float(value: &Value, name: &str) {
