@@ -49,11 +49,11 @@ fn same_session_reuses_token_for_same_raw_value() {
     let raw = RawDocument::Structured(BTreeMap::from([
         (
             "a".to_string(),
-            Value::String("alice@example.com".to_string()),
+            Value::String("alice@example.invalid".to_string()),
         ),
         (
             "b".to_string(),
-            Value::String("alice@example.com".to_string()),
+            Value::String("alice@example.invalid".to_string()),
         ),
     ]));
 
@@ -81,7 +81,7 @@ fn normalization_runs_before_detection() {
         .build()
         .expect("pipeline");
 
-    let raw = RawDocument::Text("a\u{200D}lice＠example.com".to_string());
+    let raw = RawDocument::Text("a\u{200D}lice＠example.invalid".to_string());
     let clean = pipeline.redact(&session, raw).expect("redact");
 
     let CleanDocument::Text(text) = clean else {
@@ -91,7 +91,7 @@ fn normalization_runs_before_detection() {
     assert!(text.starts_with('<') && text.ends_with(":Email_1>"));
     assert_eq!(
         session.restore_strict(&text).expect("restore"),
-        "a\u{200D}lice＠example.com"
+        "a\u{200D}lice＠example.invalid"
     );
 }
 
@@ -99,7 +99,9 @@ fn normalization_runs_before_detection() {
 fn longest_span_wins_for_overlaps() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let pipeline = Pipeline::builder()
-        .detector(RegexDetector::new("alice@example.com", PiiClass::Name).expect("name detector"))
+        .detector(
+            RegexDetector::new("alice@example.invalid", PiiClass::Name).expect("name detector"),
+        )
         .detector(RegexDetector::emails().expect("email detector"))
         .rule(ClassRule::new(PiiClass::Name, Action::Redact))
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
@@ -109,7 +111,7 @@ fn longest_span_wins_for_overlaps() {
     let clean = pipeline
         .redact(
             &session,
-            RawDocument::Text("reach alice@example.com".to_string()),
+            RawDocument::Text("reach alice@example.invalid".to_string()),
         )
         .expect("redact");
 
@@ -125,8 +127,12 @@ fn longest_span_wins_for_overlaps() {
 fn first_detector_wins_exact_length_tie() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let pipeline = Pipeline::builder()
-        .detector(RegexDetector::new("alice@example.com", PiiClass::Name).expect("name detector"))
-        .detector(RegexDetector::new("alice@example.com", PiiClass::Email).expect("email detector"))
+        .detector(
+            RegexDetector::new("alice@example.invalid", PiiClass::Name).expect("name detector"),
+        )
+        .detector(
+            RegexDetector::new("alice@example.invalid", PiiClass::Email).expect("email detector"),
+        )
         .rule(ClassRule::new(PiiClass::Name, Action::Redact))
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
         .build()
@@ -135,7 +141,7 @@ fn first_detector_wins_exact_length_tie() {
     let clean = pipeline
         .redact(
             &session,
-            RawDocument::Text("reach alice@example.com".to_string()),
+            RawDocument::Text("reach alice@example.invalid".to_string()),
         )
         .expect("redact");
 
@@ -153,11 +159,11 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     let logger = MemoryLogger::default();
     let pipeline = Pipeline::builder()
         .detector(
-            RegexDetector::with_source("alice@example.com", PiiClass::Name, "name-detector")
+            RegexDetector::with_source("alice@example.invalid", PiiClass::Name, "name-detector")
                 .expect("name detector"),
         )
         .detector(
-            RegexDetector::with_source("example.com", PiiClass::Email, "email-detector")
+            RegexDetector::with_source("example.invalid", PiiClass::Email, "email-detector")
                 .expect("email detector"),
         )
         .rule(ClassRule::new(PiiClass::Name, Action::Redact))
@@ -169,7 +175,7 @@ fn overlap_conflict_logs_losing_detection_without_raw_pii() {
     let clean = pipeline
         .redact(
             &session,
-            RawDocument::Text("reach alice@example.com".to_string()),
+            RawDocument::Text("reach alice@example.invalid".to_string()),
         )
         .expect("redact");
     let CleanDocument::Text(text) = clean else {
@@ -669,7 +675,7 @@ fn persistent_session_snapshot_roundtrips() {
     })
     .expect("session");
     let token = session
-        .tokenize(&PiiClass::Email, "alice@example.com")
+        .tokenize(&PiiClass::Email, "alice@example.invalid")
         .expect("tokenize");
 
     let snapshot = session.export().expect("export snapshot");
@@ -677,7 +683,7 @@ fn persistent_session_snapshot_roundtrips() {
 
     assert_eq!(
         imported.restore_strict(&token).expect("restore"),
-        "alice@example.com"
+        "alice@example.invalid"
     );
 }
 
@@ -685,7 +691,7 @@ fn persistent_session_snapshot_roundtrips() {
 fn snapshot_import_rejects_tampering() {
     let session = Session::new(Scope::Conversation("msg-42".to_string())).expect("session");
     session
-        .tokenize(&PiiClass::Email, "alice@example.com")
+        .tokenize(&PiiClass::Email, "alice@example.invalid")
         .expect("tokenize");
 
     let mut bytes = session.export().expect("export snapshot").into_bytes();
@@ -739,7 +745,7 @@ async fn concurrent_redact_reuses_same_token_across_tasks() {
     let left = tokio::spawn(async move {
         left_pipeline.redact(
             &left_session,
-            RawDocument::Text("alice@example.com".to_string()),
+            RawDocument::Text("alice@example.invalid".to_string()),
         )
     });
 
@@ -748,7 +754,7 @@ async fn concurrent_redact_reuses_same_token_across_tasks() {
     let right = tokio::spawn(async move {
         right_pipeline.redact(
             &right_session,
-            RawDocument::Text("alice@example.com".to_string()),
+            RawDocument::Text("alice@example.invalid".to_string()),
         )
     });
 
@@ -765,7 +771,7 @@ async fn concurrent_redact_reuses_same_token_across_tasks() {
     assert_eq!(left, right);
     assert_eq!(
         session.restore_strict(&left).expect("restore"),
-        "alice@example.com"
+        "alice@example.invalid"
     );
 }
 
@@ -779,10 +785,16 @@ fn format_preserve_is_deterministic_and_restorable() {
         .expect("pipeline");
 
     let once = pipeline
-        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .redact(
+            &session,
+            RawDocument::Text("alice@example.invalid".to_string()),
+        )
         .expect("redact once");
     let twice = pipeline
-        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .redact(
+            &session,
+            RawDocument::Text("alice@example.invalid".to_string()),
+        )
         .expect("redact twice");
 
     let CleanDocument::Text(once) = once else {
@@ -796,7 +808,7 @@ fn format_preserve_is_deterministic_and_restorable() {
     assert!(once.contains("@gaze-fake.invalid"));
     assert_eq!(
         session.restore_strict(&once).expect("restore"),
-        "alice@example.com"
+        "alice@example.invalid"
     );
 }
 
@@ -810,7 +822,10 @@ fn generalize_replaces_with_class_token_without_restore_mapping() {
         .expect("pipeline");
 
     let clean = pipeline
-        .redact(&session, RawDocument::Text("alice@example.com".to_string()))
+        .redact(
+            &session,
+            RawDocument::Text("alice@example.invalid".to_string()),
+        )
         .expect("redact");
     let CleanDocument::Text(text) = clean else {
         panic!("expected text document");
@@ -832,7 +847,7 @@ fn tokenize_assigns_indices_left_to_right() {
     let clean = pipeline
         .redact(
             &session,
-            RawDocument::Text("first@example.com then second@example.com".to_string()),
+            RawDocument::Text("first@example.invalid then second@example.invalid".to_string()),
         )
         .expect("redact");
 
@@ -846,11 +861,11 @@ fn tokenize_assigns_indices_left_to_right() {
     assert!(parts[1].starts_with('<') && parts[1].ends_with(":Email_2>"));
     assert_eq!(
         session.restore_strict(parts[0]).expect("restore first"),
-        "first@example.com"
+        "first@example.invalid"
     );
     assert_eq!(
         session.restore_strict(parts[1]).expect("restore second"),
-        "second@example.com"
+        "second@example.invalid"
     );
 }
 
@@ -878,11 +893,11 @@ fn column_rule_uses_field_name_context() {
             RawDocument::Structured(BTreeMap::from([
                 (
                     "primary_email".to_string(),
-                    Value::String("alice@example.com".to_string()),
+                    Value::String("alice@example.invalid".to_string()),
                 ),
                 (
                     "secondary_email".to_string(),
-                    Value::String("alice@example.com".to_string()),
+                    Value::String("alice@example.invalid".to_string()),
                 ),
             ])),
         )

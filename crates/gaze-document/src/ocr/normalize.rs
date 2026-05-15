@@ -6,7 +6,7 @@
 //! around the `@` of an email address, e.g.:
 //!
 //! ```text
-//! jane.doe@example.com   →   "jane.doe @example.com"
+//! jane.doe@example.invalid   →   "jane.doe @example.invalid"
 //! ```
 //!
 //! Such corrupted forms are still unmistakable emails to a human or LLM
@@ -29,10 +29,16 @@
 //! preserved so a stray `@` on a line of its own is left untouched and
 //! cannot accidentally glue two unrelated lines together.
 //!
-//! No other normalization is performed. Phone-number artifacts are already
-//! tolerated by the gaze-document phone recognizer (`[-.\s]` separator
-//! class); any future additions belong here as additional named rules with
-//! their own focused regex.
+//! Rule 2 — **email domain-dot repair.**
+//! Collapse intra-line whitespace after a dot in the domain segment:
+//!
+//! ```text
+//! (\S+@\S+\.)[ \t]+(\S)   →   $1$2
+//! ```
+//!
+//! Phone-number artifacts are already tolerated by the gaze-document phone
+//! recognizer (`[-.\s]` separator class); any future additions belong here as
+//! additional named rules with their own focused regex.
 
 use std::sync::OnceLock;
 
@@ -43,8 +49,11 @@ use regex::Regex;
 /// Returns an owned `String`. The function is allocation-cheap on
 /// already-clean input (only the regex pass walks the string).
 pub(crate) fn normalize_ocr_artifacts(text: &str) -> String {
-    email_separator_regex()
+    let text = email_separator_regex()
         .replace_all(text, "$pre@$post")
+        .into_owned();
+    email_domain_dot_regex()
+        .replace_all(&text, "$pre$post")
         .into_owned()
 }
 
@@ -59,6 +68,14 @@ fn email_separator_regex() -> &'static Regex {
     })
 }
 
+fn email_domain_dot_regex() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| {
+        Regex::new(r"(?P<pre>\S+@\S+\.)[ \t]+(?P<post>\S)")
+            .expect("static email-domain-dot pattern compiles")
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -66,38 +83,46 @@ mod tests {
     #[test]
     fn collapses_space_before_at() {
         assert_eq!(
-            normalize_ocr_artifacts("Email: jane.doe @example.com"),
-            "Email: jane.doe@example.com"
+            normalize_ocr_artifacts("Email: jane.doe @example.invalid"),
+            "Email: jane.doe@example.invalid"
         );
     }
 
     #[test]
     fn collapses_space_after_at() {
         assert_eq!(
-            normalize_ocr_artifacts("Email: jane.doe@ example.com"),
-            "Email: jane.doe@example.com"
+            normalize_ocr_artifacts("Email: jane.doe@ example.invalid"),
+            "Email: jane.doe@example.invalid"
         );
     }
 
     #[test]
     fn collapses_spaces_around_at() {
         assert_eq!(
-            normalize_ocr_artifacts("Email: jane.doe @ example.com"),
-            "Email: jane.doe@example.com"
+            normalize_ocr_artifacts("Email: jane.doe @ example.invalid"),
+            "Email: jane.doe@example.invalid"
         );
     }
 
     #[test]
     fn collapses_tabs_around_at() {
         assert_eq!(
-            normalize_ocr_artifacts("jane.doe\t@\texample.com"),
-            "jane.doe@example.com"
+            normalize_ocr_artifacts("jane.doe\t@\texample.invalid"),
+            "jane.doe@example.invalid"
+        );
+    }
+
+    #[test]
+    fn collapses_space_after_domain_dot() {
+        assert_eq!(
+            normalize_ocr_artifacts("Email: jane.doe@example. invalid"),
+            "Email: jane.doe@example.invalid"
         );
     }
 
     #[test]
     fn already_clean_passthrough() {
-        let s = "Email: jane.doe@example.com\nPhone: +1-555-0142";
+        let s = "Email: jane.doe@example.invalid\nPhone: +1-555-0142";
         assert_eq!(normalize_ocr_artifacts(s), s);
     }
 

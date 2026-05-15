@@ -6,8 +6,8 @@
   ],
   "kind": "png",
   "must_not_contain_substrings": [
-    "jane.doe@example.com",
-    "@example.com",
+    "jane.doe@example.invalid",
+    "@example.invalid",
     "jane.doe",
     "Jane Doe",
     "555-0142"

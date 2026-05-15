@@ -18,7 +18,7 @@ kind = "regex"
 pattern = '''(?i)\b[a-z0-9._%+\-]+@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.(?:com|org|net|edu|gov|de|uk|fr|nl|io|ai|co))\b'''
 
 [recognizers.context]
-exclusions = ["example.com"]
+exclusions = ["test.local"]
 
 # Reserved — not yet applied; see v0.4.1 roadmap.
 # hotwords = ["email", "e-mail", "mail"]

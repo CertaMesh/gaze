@@ -23,7 +23,7 @@ use imageproc::drawing::draw_text_mut;
 
 const LINES: &[&str] = &[
     "Bill to: Jane Doe",
-    "Email: jane.doe@example.com",
+    "Email: jane.doe@example.invalid",
     "Phone: +1-555-0142",
 ];
 
@@ -79,8 +79,14 @@ fn expected_json(kind: &str) -> String {
     serde_json::to_string_pretty(&serde_json::json!({
         "origin": "synthetic-rust-generator",
         "kind": kind,
-        "expected_classes": ["email", "custom:phone"],
-        "must_not_contain_substrings": ["jane.doe@example.com", "555-0142"]
+        "expected_classes": ["email", "custom:phone", "name"],
+        "must_not_contain_substrings": [
+            "jane.doe@example.invalid",
+            "@example.invalid",
+            "jane.doe",
+            "Jane Doe",
+            "555-0142"
+        ]
     }))
     .expect("expected fixture json")
 }
@@ -90,7 +96,7 @@ fn expected_json(kind: &str) -> String {
 /// Uses standard Helvetica (built into every PDF reader) so we don't have to
 /// embed a font. The PDF is small, deterministic, and renderable by pdfium.
 fn build_pdf_bytes() -> Vec<u8> {
-    let content_stream = b"BT\n/F1 16 Tf\n50 720 Td\n(Bill to: Jane Doe) Tj\n0 -28 Td\n(Email: jane.doe@example.com) Tj\n0 -28 Td\n(Phone: +1-555-0142) Tj\nET\n";
+    let content_stream = b"BT\n/F1 16 Tf\n50 720 Td\n(Bill to: Jane Doe) Tj\n0 -28 Td\n(Email: jane.doe@example.invalid) Tj\n0 -28 Td\n(Phone: +1-555-0142) Tj\nET\n";
 
     let mut objects: Vec<Vec<u8>> = vec![
         b"<< /Type /Catalog /Pages 2 0 R >>".to_vec(),

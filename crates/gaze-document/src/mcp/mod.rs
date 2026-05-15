@@ -453,7 +453,10 @@ mod tests {
 
     fn assert_no_raw_fixture_values(clean_markdown: &str) {
         assert!(!clean_markdown.contains("Jane Doe"), "{clean_markdown}");
-        assert!(!clean_markdown.contains("@example.com"), "{clean_markdown}");
+        assert!(
+            !clean_markdown.contains("@example.invalid"),
+            "{clean_markdown}"
+        );
         assert!(!clean_markdown.contains("555-0142"), "{clean_markdown}");
     }
 
@@ -464,7 +467,7 @@ mod tests {
             .dispatch(
                 "gaze_read_text",
                 json!({
-                    "text": "Bill to: Jane Doe\nEmail: jane.doe@example.com\nPhone: +1-555-0142"
+                    "text": "Bill to: Jane Doe\nEmail: jane.doe@example.invalid\nPhone: +1-555-0142"
                 }),
             )
             .await

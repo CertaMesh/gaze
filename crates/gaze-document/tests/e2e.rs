@@ -26,8 +26,8 @@ use gaze::Manifest;
 use gaze_document::{BundleReport, DocumentError, OcrSource, BUNDLE_VERSION};
 use gaze_types::PiiClass;
 
-const ORIGINAL_EMAIL: &str = "jane.doe@example.com";
-const ORIGINAL_EMAIL_DOMAIN: &str = "@example.com";
+const ORIGINAL_EMAIL: &str = "jane.doe@example.invalid";
+const ORIGINAL_EMAIL_DOMAIN: &str = "@example.invalid";
 const ORIGINAL_EMAIL_LOCAL: &str = "jane.doe";
 const ORIGINAL_NAME: &str = "Jane Doe";
 const ORIGINAL_PHONE_TAIL: &str = "555-0142";
