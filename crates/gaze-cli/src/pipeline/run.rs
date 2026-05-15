@@ -544,6 +544,32 @@ fn kiji_distilbert_config(
                 .with_max_input_bytes(options.safety_net_input_limit_bytes);
             Ok(KijiDistilbertConfig::from(config))
         }
+        #[cfg(feature = "runtime-tract")]
+        KijiBackend::Tract => {
+            if options.kiji_distilbert_command.is_some() {
+                return Err(CliError::SafetyNetConfigDetail(
+                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
+                        .to_string(),
+                ));
+            }
+            let config =
+                gaze_recognizers::safety_net::kiji_distilbert::TractKijiConfig::new(model_dir)
+                    .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            Ok(KijiDistilbertConfig::from(config))
+        }
+        #[cfg(feature = "runtime-candle")]
+        KijiBackend::Candle => {
+            if options.kiji_distilbert_command.is_some() {
+                return Err(CliError::SafetyNetConfigDetail(
+                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
+                        .to_string(),
+                ));
+            }
+            let config =
+                gaze_recognizers::safety_net::kiji_distilbert::CandleKijiConfig::new(model_dir)
+                    .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            Ok(KijiDistilbertConfig::from(config))
+        }
     }
 }
 

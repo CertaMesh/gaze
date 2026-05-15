@@ -23,6 +23,8 @@ phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
 safety-net = []
 safety-net-openai = ["safety-net"]
 safety-net-kiji = ["safety-net"]
+runtime-tract = ["safety-net-kiji", "dep:tract-onnx"]
+runtime-candle = ["safety-net-kiji", "dep:candle-core", "dep:candle-onnx"]
 test-support = ["safety-net"]
 
 [dependencies]
@@ -31,6 +33,8 @@ gaze-types = { workspace = true }
 hex = "0.4"
 ndarray = "0.16"
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
+candle-core = { version = "0.10.2", optional = true }
+candle-onnx = { version = "0.10.2", optional = true }
 phonenumber = { version = "0.3.9", default-features = false, optional = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
@@ -40,6 +44,7 @@ sha3 = "0.10"
 thiserror = "1"
 tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
 tracing = "0.1"
+tract-onnx = { version = "=0.23.0-dev.5", optional = true }
 unicode-normalization = "0.1"
 
 [dev-dependencies]
@@ -86,3 +91,8 @@ harness = false
 [[bench]]
 name = "safety_net_matrix"
 harness = false
+
+[[bench]]
+name = "runtime_comparison"
+harness = false
+required-features = ["safety-net-kiji"]

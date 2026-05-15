@@ -25,8 +25,12 @@ pub use backend::artifacts::{
     KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
     KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS, REQUIRED_KIJI_INT8_ARTIFACTS,
 };
+#[cfg(feature = "runtime-candle")]
+pub use backend::candle::{CandleKijiBackend, CandleKijiConfig};
 pub use backend::ort::{OrtKijiBackend, OrtKijiConfig};
 pub use backend::subprocess::{SubprocessKijiBackend, SubprocessKijiConfig};
+#[cfg(feature = "runtime-tract")]
+pub use backend::tract::{TractKijiBackend, TractKijiConfig};
 pub use backend::{KijiBackendKind, KijiDistilbertBackend, KijiDistilbertPrecision, RawSpan};
 pub use class_map::{
     kiji_label_to_pii_class, kiji_label_to_safety_net_class, map_kiji_label, validate_kiji_label,
@@ -95,6 +99,10 @@ impl KijiDistilbertSafetyNet {
 pub enum KijiDistilbertConfig {
     Subprocess(SubprocessKijiConfig),
     Ort(OrtKijiConfig),
+    #[cfg(feature = "runtime-tract")]
+    Tract(TractKijiConfig),
+    #[cfg(feature = "runtime-candle")]
+    Candle(CandleKijiConfig),
 }
 
 impl KijiDistilbertConfig {
@@ -102,6 +110,10 @@ impl KijiDistilbertConfig {
         match self {
             Self::Subprocess(_) => KijiBackendKind::Subprocess,
             Self::Ort(_) => KijiBackendKind::Ort,
+            #[cfg(feature = "runtime-tract")]
+            Self::Tract(_) => KijiBackendKind::Tract,
+            #[cfg(feature = "runtime-candle")]
+            Self::Candle(_) => KijiBackendKind::Candle,
         }
     }
 
@@ -111,6 +123,14 @@ impl KijiDistilbertConfig {
                 .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
                 .map_err(Arc::new),
             Self::Ort(config) => OrtKijiBackend::new(config.clone())
+                .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
+                .map_err(Arc::new),
+            #[cfg(feature = "runtime-tract")]
+            Self::Tract(config) => TractKijiBackend::new(config.clone())
+                .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
+                .map_err(Arc::new),
+            #[cfg(feature = "runtime-candle")]
+            Self::Candle(config) => CandleKijiBackend::new(config.clone())
                 .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
                 .map_err(Arc::new),
         }
@@ -126,6 +146,20 @@ impl From<SubprocessKijiConfig> for KijiDistilbertConfig {
 impl From<OrtKijiConfig> for KijiDistilbertConfig {
     fn from(config: OrtKijiConfig) -> Self {
         Self::Ort(config)
+    }
+}
+
+#[cfg(feature = "runtime-tract")]
+impl From<TractKijiConfig> for KijiDistilbertConfig {
+    fn from(config: TractKijiConfig) -> Self {
+        Self::Tract(config)
+    }
+}
+
+#[cfg(feature = "runtime-candle")]
+impl From<CandleKijiConfig> for KijiDistilbertConfig {
+    fn from(config: CandleKijiConfig) -> Self {
+        Self::Candle(config)
     }
 }
 

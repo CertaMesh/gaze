@@ -19,6 +19,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 default = ["proxy"]
 safety-net-openai = ["gaze-recognizers/safety-net-openai"]
 safety-net-kiji = ["gaze-recognizers/safety-net-kiji"]
+runtime-tract = ["safety-net-kiji", "gaze-recognizers/runtime-tract"]
+runtime-candle = ["safety-net-kiji", "gaze-recognizers/runtime-candle"]
 document = ["dep:gaze-document"]
 mcp = [
     "dep:async-trait",

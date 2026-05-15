@@ -506,6 +506,10 @@ impl OpenAiFilterDevice {
 pub(crate) enum KijiBackend {
     Subprocess,
     Ort,
+    #[cfg(feature = "runtime-tract")]
+    Tract,
+    #[cfg(feature = "runtime-candle")]
+    Candle,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
