@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "benchmark": "openai-privacy-filter-direct-vs-observer-residual",
+  "status": "not_run_requires_local_opf_binary",
+  "pins": {
+    "opf_source_repo": "openai/privacy-filter",
+    "opf_source_commit": "f7f00ca7fb869683eb732c010299d901457f19c3",
+    "opf_checkpoint_bundle_sha256": null
+  },
+  "modes": {
+    "direct_detector": {
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "per_class": {}
+    },
+    "observer_residual": {
+      "precision": null,
+      "recall": null,
+      "f1": null,
+      "observer_residual_recall": null,
+      "per_class": {}
+    }
+  }
+}

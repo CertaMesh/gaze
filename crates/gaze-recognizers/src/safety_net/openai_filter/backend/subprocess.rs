@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use gaze_types::SafetyNetError;
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
 use super::{normalize_raw_spans, OpenAiFilterBackend, RawSpan};
 use crate::safety_net::openai_filter::class_map::map_openai_label;
@@ -16,6 +17,26 @@ const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES: usize = 4 * 1024 * 1024;
 const MAX_VERBOSE_STDERR_BYTES: usize = 256;
 const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+/// Upstream OPF source repository.
+pub const OPF_SOURCE_REPO: &str = "openai/privacy-filter";
+
+/// Pinned upstream commit of the OPF source tree. Verified 2026-05-15.
+pub const OPF_SOURCE_COMMIT: &str = "f7f00ca7fb869683eb732c010299d901457f19c3";
+
+/// SHA256 of the checkpoint bundle downloaded by `opf` at `OPF_SOURCE_COMMIT`.
+///
+/// This remains `None` until a reproducible clean OPF download is captured and
+/// reviewed. When populated, `verify_checkpoint_bundle_sha256` checks the local
+/// checkpoint directory before allowing subprocess execution.
+pub const OPF_CHECKPOINT_BUNDLE_SHA256: Option<&str> = None;
+
+/// Required checkpoint artifact filenames inside the OPF bundle directory.
+///
+/// Empty until a local clean `opf` checkpoint download is captured. A future PR
+/// that fills `OPF_CHECKPOINT_BUNDLE_SHA256` must fill this list in the same
+/// change.
+pub const REQUIRED_OPF_ARTIFACTS: &[&str] = &[];
 
 /// Configuration for the local OPF subprocess backend.
 #[derive(Debug, Clone)]
@@ -28,6 +49,7 @@ pub struct SubprocessOpenAiFilterConfig {
     max_input_bytes: usize,
     max_stdout_bytes: usize,
     capture_stderr: bool,
+    verify_checkpoint_bundle_sha256: bool,
     version: String,
     decoding_params: Vec<(&'static str, String)>,
 }
@@ -49,6 +71,7 @@ impl SubprocessOpenAiFilterConfig {
             max_input_bytes: DEFAULT_MAX_INPUT_BYTES,
             max_stdout_bytes: DEFAULT_MAX_STDOUT_BYTES,
             capture_stderr: false,
+            verify_checkpoint_bundle_sha256: false,
             version: "openai/privacy-filter:external".to_string(),
             decoding_params: vec![
                 ("format", "json".to_string()),
@@ -103,6 +126,11 @@ impl SubprocessOpenAiFilterConfig {
         self
     }
 
+    pub fn with_checkpoint_bundle_sha256_verification(mut self, enabled: bool) -> Self {
+        self.verify_checkpoint_bundle_sha256 = enabled;
+        self
+    }
+
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
@@ -141,6 +169,7 @@ impl SubprocessOpenAiFilterBackend {
         }
         verify_command_path(&config.command)?;
         verify_sensitive_paths(&config)?;
+        verify_checkpoint_bundle_integrity(&config)?;
 
         Ok(Self { config })
     }
@@ -572,6 +601,83 @@ fn verify_sensitive_paths(config: &SubprocessOpenAiFilterConfig) -> Result<(), S
     }
 
     verify_sensitive_tree(checkpoint_path)
+}
+
+fn verify_checkpoint_bundle_integrity(
+    config: &SubprocessOpenAiFilterConfig,
+) -> Result<(), SafetyNetError> {
+    if !config.verify_checkpoint_bundle_sha256 {
+        return Ok(());
+    }
+
+    let Some(expected_sha256) = OPF_CHECKPOINT_BUNDLE_SHA256 else {
+        return Ok(());
+    };
+
+    if REQUIRED_OPF_ARTIFACTS.is_empty() {
+        return Err(SafetyNetError::ModelIntegrityMismatch {
+            expected: "non-empty REQUIRED_OPF_ARTIFACTS".to_string(),
+            actual: "<empty>".to_string(),
+        });
+    }
+
+    let checkpoint_dir = config
+        .checkpoint_path
+        .clone()
+        .or_else(|| std::env::var_os("OPF_CHECKPOINT").map(PathBuf::from))
+        .or_else(default_checkpoint_path)
+        .ok_or_else(|| SafetyNetError::WeightsMissing {
+            path: "<missing:privacy_filter>".to_string(),
+        })?;
+
+    if !checkpoint_dir.exists() {
+        return Err(SafetyNetError::WeightsMissing {
+            path: sanitize_path(&checkpoint_dir),
+        });
+    }
+    verify_sensitive_tree(&checkpoint_dir)?;
+
+    let mut manifest = String::new();
+    for required in REQUIRED_OPF_ARTIFACTS {
+        let artifact = checkpoint_dir.join(required);
+        if !artifact.exists() {
+            return Err(SafetyNetError::WeightsMissing {
+                path: sanitize_path(&artifact),
+            });
+        }
+        if required.contains('/') || required.contains('\\') {
+            return Err(SafetyNetError::ModelIntegrityMismatch {
+                expected: "flat OPF artifact names".to_string(),
+                actual: "<nested>".to_string(),
+            });
+        }
+        let bytes = std::fs::read(&artifact).map_err(|_| SafetyNetError::WeightsMissing {
+            path: sanitize_path(&artifact),
+        })?;
+        manifest.push_str(&hex_sha256(&bytes));
+        manifest.push_str("  ");
+        manifest.push_str(required);
+        manifest.push('\n');
+    }
+
+    let actual_sha256 = hex_sha256(manifest.as_bytes());
+    if actual_sha256 != expected_sha256 {
+        return Err(SafetyNetError::ModelIntegrityMismatch {
+            expected: expected_sha256.to_string(),
+            actual: actual_sha256,
+        });
+    }
+
+    Ok(())
+}
+
+fn default_checkpoint_path() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(PathBuf::from(home).join(".opf").join("privacy_filter"))
+}
+
+fn hex_sha256(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn ensure_secure_dir(path: &Path) -> Result<(), SafetyNetError> {

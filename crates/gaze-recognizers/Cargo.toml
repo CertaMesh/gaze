@@ -87,3 +87,8 @@ harness = false
 name = "safety_net_matrix"
 harness = false
 required-features = ["safety-net-kiji"]
+
+[[bench]]
+name = "openai_privacy_filter_direct_vs_observer"
+harness = false
+required-features = ["safety-net-openai"]
