@@ -269,7 +269,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     Ok(())
 }
 
-fn maybe_register_safety_net(
+pub(crate) fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
@@ -613,7 +613,7 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
     Ok(())
 }
 
-fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
+pub(crate) fn map_safety_net_pipeline_error(err: gaze::Error) -> CliError {
     match err {
         gaze::Error::SafetyNet(err) => map_safety_net_error(err),
         _ => CliError::Pipeline,
@@ -648,7 +648,7 @@ fn map_safety_net_error(err: gaze::SafetyNetError) -> CliError {
     }
 }
 
-fn clean_overrides_from_options(
+pub(crate) fn clean_overrides_from_options(
     options: &CleanOptions<'_>,
 ) -> std::result::Result<CleanOverrides, CliError> {
     let session_scope = options
@@ -700,11 +700,11 @@ fn normalize_rulepack_bundles(raw: &[String]) -> (Vec<String>, bool) {
     (bundled, auto_activate_locale_gated)
 }
 
-fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
+pub(crate) fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
     !options.rulepack_bundled.is_empty() || !options.rulepack_paths.is_empty()
 }
 
-fn policy_for_rulepack_overrides(
+pub(crate) fn policy_for_rulepack_overrides(
     clean_overrides: &CleanOverrides,
 ) -> std::result::Result<Policy, CliError> {
     let mut rules = class_rules_for_bundled_overrides(clean_overrides)?;
@@ -764,7 +764,7 @@ fn class_rules_for_bundled_overrides(
         .collect())
 }
 
-fn scope_for_cli_without_policy(
+pub(crate) fn scope_for_cli_without_policy(
     scope: Option<&SessionScope>,
     ttl_secs: Option<u64>,
 ) -> std::result::Result<Scope, CliError> {
@@ -780,7 +780,9 @@ fn scope_for_cli_without_policy(
     }
 }
 
-fn parse_cli_locales(raw: &[String]) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
+pub(crate) fn parse_cli_locales(
+    raw: &[String],
+) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
     if raw.is_empty() {
         return Ok(None);
     }
@@ -880,7 +882,7 @@ impl From<SessionSnapshotEntry> for EntryJson {
     }
 }
 
-fn entry_class_to_string(class: &PiiClass) -> String {
+pub(crate) fn entry_class_to_string(class: &PiiClass) -> String {
     match class {
         PiiClass::Email => "Email".to_string(),
         PiiClass::Name => "Name".to_string(),
@@ -1042,7 +1044,7 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
     }
 }
 
-fn enforce_safety_net_mode(
+pub(crate) fn enforce_safety_net_mode(
     report: &LeakReport,
     mode: SafetyNetMode,
     fallback: SafetyNetFallback,
@@ -1069,7 +1071,7 @@ fn enforce_safety_net_mode(
     Ok(())
 }
 
-fn validate_safety_net_tolerant_gate(
+pub(crate) fn validate_safety_net_tolerant_gate(
     mode: SafetyNetMode,
     fallback: SafetyNetFallback,
 ) -> std::result::Result<(), CliError> {
@@ -1083,7 +1085,10 @@ fn validate_safety_net_tolerant_gate(
     Ok(())
 }
 
-fn safety_net_policy(mode: SafetyNetMode, fallback: SafetyNetFallback) -> gaze::SafetyNetPolicy {
+pub(crate) fn safety_net_policy(
+    mode: SafetyNetMode,
+    fallback: SafetyNetFallback,
+) -> gaze::SafetyNetPolicy {
     gaze::SafetyNetPolicy::new(
         match mode {
             SafetyNetMode::Strict => gaze::SafetyNetMode::Strict,

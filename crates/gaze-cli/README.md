@@ -53,6 +53,7 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | Subcommand | Purpose |
 |------------|---------|
 | `clean` | Reads raw UTF-8 text from stdin and emits `{"clean_text","session_blob","stats"}` JSON. |
+| `daemon` | Runs a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. |
 | `restore` | Reads `{"session_blob","text"}` JSON from stdin and emits restored `{"text"}` JSON, plus `restore_warning` when tolerant restore allows an unknown token. |
 | `audit query` | Prints filtered audit metadata rows from a `--audit-db` SQLite log, opened read-only. |
 | `audit export` | Exports filtered audit metadata rows in JSONL (default) for downstream processing. |
@@ -64,6 +65,33 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 
 Audit logging is captured on `clean` via `--audit-db <path>`; the
 `audit query` and `audit export` subcommands read the same database back.
+
+## Daemon mode
+
+`gaze daemon --policy policy.toml` keeps one pipeline alive and reads one JSON
+request per stdin line:
+
+```json
+{"session_id":"conversation-1","text":"Contact alice@example.invalid"}
+```
+
+Each stdout line is either a clean response:
+
+```json
+{"session_id":"conversation-1","clean_text":"Contact <...:Email_1>","manifest":[],"tokens":[]}
+```
+
+or a typed protocol/cleaning error:
+
+```json
+{"session_id":null,"error":"JsonMalformed","detail":"malformed JSON line"}
+```
+
+Sessions are isolated by `session_id`, evicted by LRU after `--session-cap`
+(default 1000), and evicted after `--session-idle-timeout` seconds (default
+3600). `--idle-timeout` exits the process after stdin inactivity (default 1800).
+SIGINT and SIGTERM finish the current line, flush stdout/audit writes, and exit.
+Daemon audit rows are stamped with `provenance_stage = "daemon"`.
 
 ## MCP installation
 

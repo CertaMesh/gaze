@@ -1,5 +1,6 @@
 mod audit;
 mod clean;
+mod daemon;
 #[cfg(feature = "document")]
 mod document;
 #[cfg(feature = "mcp")]
@@ -122,6 +123,78 @@ enum Cmd {
         #[arg(long)]
         kiji_distilbert_model_dir: Option<PathBuf>,
         /// Locale list for the Kiji DistilBERT registry entry.
+        #[arg(long, value_delimiter = ',')]
+        kiji_distilbert_locales: Vec<String>,
+        /// Safety-net subprocess timeout in milliseconds.
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
+        safety_net_timeout_ms: u64,
+        /// Maximum clean-text bytes submitted to the safety net.
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
+        safety_net_input_limit_bytes: usize,
+        /// Safety-net handling mode for suspected leaks.
+        #[arg(long, value_enum, default_value_t = SafetyNetMode::Resolve)]
+        safety_net_mode: SafetyNetMode,
+        /// Fallback when safety-net resolve or redact cannot complete.
+        #[arg(long, value_enum, default_value_t = SafetyNetFallback::Redact)]
+        safety_net_fallback: SafetyNetFallback,
+    },
+    /// Run a long-lived JSON-lines stdio cleaning daemon.
+    Daemon {
+        /// Path to policy.toml.
+        #[arg(long)]
+        policy: PathBuf,
+        /// Optional observer-only privacy safety net.
+        #[arg(long, value_enum)]
+        safety_net: Option<SafetyNetKind>,
+        /// v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins.
+        #[arg(long, value_enum)]
+        safety_net_backend: Option<SafetyNetBackend>,
+        /// Exit when stdin is idle for this many seconds.
+        #[arg(long, default_value_t = daemon::default_process_idle_timeout_secs())]
+        idle_timeout: u64,
+        /// Evict sessions idle for this many seconds.
+        #[arg(long, default_value_t = daemon::default_session_idle_timeout_secs())]
+        session_idle_timeout: u64,
+        /// Maximum live sessions before LRU eviction.
+        #[arg(long, default_value_t = daemon::default_session_cap())]
+        session_cap: usize,
+        /// Optional SQLite redaction-log database path.
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
+        /// Active locale fallback chain, comma separated and priority ordered.
+        #[arg(long, value_delimiter = ',')]
+        locale: Vec<String>,
+        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        #[arg(long)]
+        ner_threshold: Option<f32>,
+        /// Override policy [ner].model_dir.
+        #[arg(long)]
+        ner_model_dir: Option<PathBuf>,
+        /// Override policy [ner].locale.
+        #[arg(long)]
+        ner_locale: Option<String>,
+        /// Path to the local OpenAI Privacy Filter `opf` command.
+        #[arg(long)]
+        openai_filter_command: Option<PathBuf>,
+        /// Path to the local OpenAI Privacy Filter checkpoint or model directory.
+        #[arg(long)]
+        openai_filter_checkpoint: Option<PathBuf>,
+        /// OpenAI Privacy Filter operating point, when supported by the command.
+        #[arg(long, value_enum)]
+        openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+        /// Device selection for the OpenAI safety-net subprocess.
+        #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
+        openai_filter_device: OpenAiFilterDevice,
+        /// Kiji DistilBERT runtime backend.
+        #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
+        kiji_backend: KijiBackend,
+        /// Path to the local Kiji DistilBERT subprocess command.
+        #[arg(long)]
+        kiji_distilbert_command: Option<PathBuf>,
+        /// Path to the pinned Kiji DistilBERT model directory.
+        #[arg(long)]
+        kiji_distilbert_model_dir: Option<PathBuf>,
+        /// Locale list for the Kiji DistilBERT backend.
         #[arg(long, value_delimiter = ',')]
         kiji_distilbert_locales: Vec<String>,
         /// Safety-net subprocess timeout in milliseconds.
@@ -608,6 +681,55 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             format,
             restore_mode,
             max_bytes,
+        }),
+        Cmd::Daemon {
+            policy,
+            safety_net,
+            safety_net_backend,
+            idle_timeout,
+            session_idle_timeout,
+            session_cap,
+            audit_db,
+            locale,
+            ner_threshold,
+            ner_model_dir,
+            ner_locale,
+            openai_filter_command,
+            openai_filter_checkpoint,
+            openai_filter_operating_point,
+            openai_filter_device,
+            kiji_backend,
+            kiji_distilbert_command,
+            kiji_distilbert_model_dir,
+            kiji_distilbert_locales,
+            safety_net_timeout_ms,
+            safety_net_input_limit_bytes,
+            safety_net_mode,
+            safety_net_fallback,
+        } => daemon::run(daemon::Args {
+            policy,
+            safety_net,
+            safety_net_backend,
+            idle_timeout_secs: idle_timeout,
+            session_idle_timeout_secs: session_idle_timeout,
+            session_cap,
+            audit_db,
+            locale,
+            ner_threshold,
+            ner_model_dir,
+            ner_locale,
+            openai_filter_command,
+            openai_filter_checkpoint,
+            openai_filter_operating_point,
+            openai_filter_device,
+            kiji_backend,
+            kiji_distilbert_command,
+            kiji_distilbert_model_dir,
+            kiji_distilbert_locales,
+            safety_net_timeout_ms,
+            safety_net_input_limit_bytes,
+            safety_net_mode,
+            safety_net_fallback,
         }),
         Cmd::Audit { command } => match command {
             AuditCmd::Query {
