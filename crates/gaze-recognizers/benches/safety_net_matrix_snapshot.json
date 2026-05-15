@@ -16,8 +16,9 @@
     "openai_privacy_filter": {
       "pins": {
         "source_repo": "openai/privacy-filter",
-        "source_commit": null,
-        "binary_sha256": null
+        "source_commit": "f7f00ca7fb869683eb732c010299d901457f19c3",
+        "checkpoint_bundle_sha256": null,
+        "required_opf_artifacts": []
       }
     }
   },

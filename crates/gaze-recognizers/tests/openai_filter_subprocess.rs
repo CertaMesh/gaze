@@ -11,6 +11,7 @@ use gaze_recognizers::safety_net::openai_filter::{
     map_openai_label, openai_label_to_safety_net_class, OpenAiFilterBackend, OpenAiFilterSafetyNet,
     SubprocessOpenAiFilterBackend, SubprocessOpenAiFilterConfig,
 };
+use gaze_recognizers::{LocaleAwareModel, ModelHints, ModelInput, ModelStage};
 use gaze_types::{
     DocumentKind, LeakKind, LocaleTag, Manifest, PiiClass, SafetyNet, SafetyNetContext,
     SafetyNetError,
@@ -84,6 +85,53 @@ fn all_official_labels_map_exactly_to_gaze_classes() {
     ] {
         assert!(map_openai_label(invented).is_err(), "{invented}");
     }
+}
+
+#[test]
+#[serial]
+fn openai_filter_is_object_safe_locale_aware_model_with_global_native_locale() {
+    let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new("opf"));
+    let model: &dyn LocaleAwareModel = &net;
+
+    assert_eq!(model.name(), "openai-privacy-filter");
+    assert_eq!(model.native_locales(), &[LocaleTag::Global]);
+}
+
+#[test]
+#[serial]
+fn openai_filter_infer_round_trips_spans_through_locale_aware_trait() {
+    let opf = script(
+        "opf-locale-aware",
+        r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"label":"private_email","start":17,"end":38,"score":0.96}]'
+"#,
+    )
+    .unwrap();
+    let net = OpenAiFilterSafetyNet::new(
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(120)),
+    );
+    let model: &dyn LocaleAwareModel = &net;
+
+    let spans = model
+        .infer(
+            ModelInput {
+                text: "Dr. Schmidt uses alice@example.invalid".to_string(),
+                locale: LocaleTag::Global,
+            },
+            ModelHints {
+                stage: ModelStage::Pass3SafetyNet,
+                max_spans: Some(1),
+            },
+        )
+        .unwrap();
+
+    assert_eq!(spans.len(), 1);
+    assert_eq!(spans[0].text, "Dr. Schmidt");
+    assert_eq!(spans[0].byte_range, 0..11);
+    assert_eq!(spans[0].class, PiiClass::Name);
+    assert_eq!(spans[0].confidence, Some(0.97));
+    assert_eq!(spans[0].model_name, "openai-privacy-filter");
 }
 
 #[test]

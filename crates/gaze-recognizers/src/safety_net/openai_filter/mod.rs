@@ -17,10 +17,15 @@ use std::sync::{Arc, OnceLock};
 
 use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
 
+use crate::{LocaleAwareModel, ModelError, ModelHints, ModelInput, ModelSpan};
+
 pub mod backend;
 pub mod class_map;
 
-pub use backend::subprocess::{SubprocessOpenAiFilterBackend, SubprocessOpenAiFilterConfig};
+pub use backend::subprocess::{
+    SubprocessOpenAiFilterBackend, SubprocessOpenAiFilterConfig, OPF_CHECKPOINT_BUNDLE_SHA256,
+    OPF_SOURCE_COMMIT, OPF_SOURCE_REPO, REQUIRED_OPF_ARTIFACTS,
+};
 pub use backend::{OpenAiFilterBackend, RawSpan};
 pub use class_map::{map_openai_label, openai_label_to_safety_net_class, validate_openai_label};
 
@@ -92,6 +97,64 @@ impl SafetyNet for OpenAiFilterSafetyNet {
             })
             .collect()
     }
+}
+
+impl LocaleAwareModel for OpenAiFilterSafetyNet {
+    fn name(&self) -> &str {
+        "openai-privacy-filter"
+    }
+
+    fn native_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+
+    fn infer(&self, input: ModelInput, hints: ModelHints) -> Result<Vec<ModelSpan>, ModelError> {
+        let backend = self
+            .backend()
+            .map_err(|error| ModelError::InitFailed(error.to_string()))?;
+        let mut spans = backend
+            .infer(&input.text)
+            .map_err(|error| ModelError::InferenceFailed(error.to_string()))?
+            .into_iter()
+            .map(|raw| raw_span_to_model_span(raw, self.name(), &input.text))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if let Some(max_spans) = hints.max_spans {
+            spans.truncate(max_spans as usize);
+        }
+
+        Ok(spans)
+    }
+}
+
+fn raw_span_to_model_span(
+    raw: RawSpan,
+    model_name: &str,
+    input: &str,
+) -> Result<ModelSpan, ModelError> {
+    if raw.start >= raw.end
+        || raw.end > input.len()
+        || !input.is_char_boundary(raw.start)
+        || !input.is_char_boundary(raw.end)
+    {
+        return Err(ModelError::InferenceFailed(
+            "opf returned out-of-bounds span".to_string(),
+        ));
+    }
+
+    let private_label = map_openai_label(&raw.label)
+        .map_err(|error| ModelError::InferenceFailed(error.to_string()))?;
+    let class = openai_label_to_safety_net_class(private_label).to_pii_class();
+    let byte_range = raw.start..raw.end;
+    let text = input[byte_range.clone()].to_string();
+
+    Ok(ModelSpan {
+        text,
+        byte_range,
+        class,
+        confidence: raw.score,
+        model_name: model_name.to_string(),
+    })
 }
 
 fn raw_span_to_suspect(
