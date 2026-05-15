@@ -155,6 +155,7 @@ impl SqliteLogger {
                 collision_family TEXT NULL,
                 collision_variant TEXT NULL,
                 fallback_triggered TEXT NULL,
+                backend_silently_dropped TEXT NULL,
                 provenance_stage TEXT NULL,
                 provenance_model_id TEXT NULL,
                 provenance_model_version TEXT NULL,
@@ -292,6 +293,16 @@ impl SqliteLogger {
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         }
+        if !columns
+            .iter()
+            .any(|column| column == "backend_silently_dropped")
+        {
+            conn.execute(
+                "ALTER TABLE redaction_log ADD COLUMN backend_silently_dropped TEXT NULL",
+                [],
+            )
+            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        }
         if !columns.iter().any(|column| column == "recognizer_id") {
             conn.execute(
                 "ALTER TABLE redaction_log ADD COLUMN recognizer_id TEXT NULL",
@@ -348,12 +359,14 @@ impl SqliteLogger {
             .provenance_confidence
             .as_deref()
             .and_then(|value| value.parse::<f64>().ok());
+        let backend_silently_dropped =
+            serialize_json_column(entry.backend_silently_dropped.as_ref())?;
         let conn = self
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -382,6 +395,7 @@ impl SqliteLogger {
                 entry.provenance_native_class,
                 provenance_confidence,
                 entry.provenance_merged_from,
+                backend_silently_dropped,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -395,7 +409,7 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -428,6 +442,9 @@ impl SqliteLogger {
                     .transpose()?
                 {
                     entry = entry.with_fallback_triggered(reason);
+                }
+                if let Some(dropped) = deserialize_json_column::<Vec<String>>(row.get(16)?, 16)? {
+                    entry = entry.with_backend_silently_dropped(dropped);
                 }
                 Ok(entry)
             })
