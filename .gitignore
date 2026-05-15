@@ -2,6 +2,8 @@
 /.gaze/
 /.superpowers/
 /.lean-ctx/
+/.bench-venv/
+/.anvil.local
 *.db
 *.db-journal
 .DS_Store
