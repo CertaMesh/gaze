@@ -84,6 +84,6 @@ name = "restore_pass2"
 harness = false
 
 [[bench]]
-name = "kiji_direct_vs_observer"
+name = "safety_net_matrix"
 harness = false
 required-features = ["safety-net-kiji"]

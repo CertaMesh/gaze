@@ -303,6 +303,8 @@ fixtures whenever possible.
   deterministic and observer-only coverage story.
 - [`docs/research/v0.8-kiji-benchmark.md`](../research/v0.8-kiji-benchmark.md)
   records the benchmark methodology and measured subset status.
+- [`docs/architecture/safety-net-benchmark.md`](../architecture/safety-net-benchmark.md)
+  records the v0.9 backend × locale × mode snapshot shape.
 - [`crates/gaze-cli/README.md`][cli-safety-net] lists the full CLI flag and
   exit-code surface.
 
