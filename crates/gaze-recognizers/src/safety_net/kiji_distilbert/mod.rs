@@ -22,11 +22,12 @@ pub mod class_map;
 
 pub use backend::artifacts::{
     KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS,
+    KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
+    KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS, REQUIRED_KIJI_INT8_ARTIFACTS,
 };
 pub use backend::ort::{OrtKijiBackend, OrtKijiConfig};
 pub use backend::subprocess::{SubprocessKijiBackend, SubprocessKijiConfig};
-pub use backend::{KijiBackendKind, KijiDistilbertBackend, RawSpan};
+pub use backend::{KijiBackendKind, KijiDistilbertBackend, KijiDistilbertPrecision, RawSpan};
 pub use class_map::{
     kiji_label_to_pii_class, kiji_label_to_safety_net_class, map_kiji_label, validate_kiji_label,
     KijiLabel,

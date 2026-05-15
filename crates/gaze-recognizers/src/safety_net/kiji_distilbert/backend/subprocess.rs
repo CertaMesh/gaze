@@ -532,6 +532,7 @@ fn verify_command_path(command: &Path) -> Result<(), SafetyNetError> {
 mod tests {
     use super::super::artifacts::{
         hex_sha256, KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT,
+        KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
         KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS,
     };
     use super::*;
@@ -661,6 +662,10 @@ mod tests {
             hex_sha256(KIJI_DISTILBERT_SHA256SUMS.as_bytes()),
             KIJI_DISTILBERT_BUNDLE_SHA256
         );
+        assert_eq!(
+            hex_sha256(KIJI_DISTILBERT_INT8_SHA256SUMS.as_bytes()),
+            KIJI_DISTILBERT_INT8_BUNDLE_SHA256
+        );
 
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest_dir.parent().unwrap().parent().unwrap();
@@ -674,6 +679,7 @@ mod tests {
         for content in [setup_doc, fetcher] {
             assert!(content.contains(KIJI_DISTILBERT_HF_COMMIT));
             assert!(content.contains(KIJI_DISTILBERT_BUNDLE_SHA256));
+            assert!(content.contains(KIJI_DISTILBERT_INT8_BUNDLE_SHA256));
         }
     }
 

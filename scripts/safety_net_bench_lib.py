@@ -153,6 +153,7 @@ def add_common_args(parser: argparse.ArgumentParser, backend: Literal["kiji", "o
     )
     parser.add_argument("--no-update", action="store_true")
     if backend == "kiji":
+        parser.add_argument("--precision", choices=["fp32", "int8"], default="fp32")
         parser.add_argument(
             "--model-dir",
             type=Path,
@@ -226,6 +227,8 @@ def run_kiji(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]
             "typed",
             "--model-dir",
             str(args.model_dir),
+            "--precision",
+            args.precision,
         ],
         input=text,
         text=True,
@@ -507,6 +510,7 @@ def update_matrix_snapshot(
     corpus_sha256: str | None,
     fixture_count: int,
     run_environment: dict[str, Any],
+    backend_pins: dict[str, Any] | None = None,
 ) -> None:
     snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
     snapshot["status"] = "observer_residual_and_direct_run_v1"
@@ -515,6 +519,8 @@ def update_matrix_snapshot(
     snapshot["corpus"]["coverage_report_sha256"] = coverage_sha256
     snapshot["corpus"]["fixture_count"] = fixture_count
     snapshot["run_environment"] = run_environment
+    if backend_pins is not None:
+        snapshot["backends"][backend_name] = {"pins": backend_pins}
     for locale, metrics in metrics_by_locale.items():
         if mode == "direct_detector":
             snapshot["strict_span_leak_rate"][f"{backend_name}.{locale}"] = rounded(
@@ -523,6 +529,16 @@ def update_matrix_snapshot(
         for cell in snapshot["cells"]:
             if cell["backend"] == backend_name and cell["locale"] == locale and cell["mode"] == mode:
                 cell["metrics"] = metrics
+                break
+        else:
+            snapshot["cells"].append(
+                {
+                    "backend": backend_name,
+                    "locale": locale,
+                    "mode": mode,
+                    "metrics": metrics,
+                }
+            )
     snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=False) + "\n", encoding="utf-8")
 
 
@@ -599,6 +615,8 @@ def validate_inputs(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -
 
 def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> int:
     backend_name = "kiji_distilbert" if backend == "kiji" else "openai_privacy_filter"
+    if backend == "kiji" and args.precision == "int8":
+        backend_name = "kiji_distilbert_int8"
     root, coverage_report, corpus_dir, corpus_sha256 = validate_inputs(args, backend)
     coverage_sha256 = sha256_file(coverage_report)
     fixtures = load_fixtures(corpus_dir)
@@ -647,6 +665,7 @@ def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> in
                 corpus_sha256,
                 len(fixtures),
                 run_environment(args, backend),
+                kiji_int8_pins(args) if backend_name == "kiji_distilbert_int8" else None,
             )
 
     if not args.no_update:
@@ -673,6 +692,17 @@ def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> in
     return 0
 
 
+def kiji_int8_pins(args: argparse.Namespace) -> dict[str, Any]:
+    fp32_pins = json.loads(args.snapshot.read_text(encoding="utf-8"))["backends"][
+        "kiji_distilbert"
+    ]["pins"]
+    return {
+        **fp32_pins,
+        "bundle_sha256": sha256_file(args.model_dir / "SHA256SUMS.int8"),
+        "model_sha256": sha256_file(args.model_dir / "model.int8.onnx"),
+    }
+
+
 def run_environment(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> dict[str, Any]:
     env = {
         "os": platform.platform(),
@@ -681,6 +711,7 @@ def run_environment(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -
     }
     if backend == "kiji":
         env["onnxruntime_threads"] = "default"
+        env["precision"] = args.precision
     else:
         env["opf_device"] = args.device
     return env

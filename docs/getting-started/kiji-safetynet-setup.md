@@ -28,6 +28,9 @@ before it will run. The canonical upstream source is
 `3a19fe9404a4469d91aa3d551558a97f68872f67`; the runtime pins the canonical
 bundle checksum file to SHA256
 `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f`.
+The opt-in ORT int8 path adds `SHA256SUMS.int8` and `model.int8.onnx`; its
+checksum file is pinned to SHA256
+`6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb`.
 The local adapter validates emitted labels and maps them into Gaze's closed
 SafetyNet classes before manifest diffing.
 
@@ -71,6 +74,18 @@ Source anchors:
    returning. The script fails closed if the pinned upstream commit is not set,
    if the release checksum cannot be resolved, or if any required file is
    missing.
+
+   To prepare the opt-in int8 ORT artifact, install `onnxruntime` with its
+   quantization extras available and run:
+
+   ```sh
+   python3 scripts/quantize-kiji-int8.py \
+     "${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert"
+   ```
+
+   The helper writes `model.int8.onnx` and `SHA256SUMS.int8`. Gaze verifies the
+   int8 manifest against the separate int8 SHA pin and will not fall back to
+   fp32 if `--kiji-distilbert-precision=int8` is requested.
 
 2. Install the CLI with Kiji support:
 

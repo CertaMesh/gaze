@@ -6,6 +6,22 @@ pub mod artifacts;
 pub mod ort;
 pub mod subprocess;
 
+/// Precision variant for the pinned Kiji DistilBERT ONNX artifact.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum KijiDistilbertPrecision {
+    Fp32,
+    Int8,
+}
+
+impl KijiDistilbertPrecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Fp32 => "fp32",
+            Self::Int8 => "int8",
+        }
+    }
+}
+
 /// Internal Kiji span after PII-bearing upstream fields have been dropped.
 #[derive(Debug, Clone, PartialEq)]
 pub struct RawSpan {

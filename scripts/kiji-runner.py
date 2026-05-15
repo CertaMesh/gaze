@@ -39,6 +39,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--format", required=True, choices=["json"])
     parser.add_argument("--output-mode", required=True, choices=["typed"])
     parser.add_argument("--model-dir", required=True)
+    parser.add_argument("--precision", choices=["fp32", "int8"], default="fp32")
     return parser.parse_args(argv)
 
 
@@ -169,11 +170,12 @@ def spans_from_predictions(
     return spans
 
 
-def run(model_dir: Path, text: str) -> list[dict[str, Any]]:
+def run(model_dir: Path, text: str, precision: str = "fp32") -> list[dict[str, Any]]:
     if text == "":
         return []
 
-    model_path = model_dir / "model.onnx"
+    model_name = "model.int8.onnx" if precision == "int8" else "model.onnx"
+    model_path = model_dir / model_name
     tokenizer_path = model_dir / "tokenizer.json"
     labels_path = model_dir / "labels.json"
     for path in [model_path, tokenizer_path, labels_path]:
@@ -219,7 +221,7 @@ def main(argv: list[str]) -> int:
     try:
         args = parse_args(argv)
         text = read_stdin()
-        spans = run(Path(args.model_dir), text)
+        spans = run(Path(args.model_dir), text, args.precision)
         json.dump(spans, sys.stdout, separators=(",", ":"))
         sys.stdout.write("\n")
         return 0
