@@ -1,10 +1,9 @@
 //! DistilBERT NER label vocabulary for the Kiji safety-net backend.
 //!
 //! Kiji wraps a DistilBERT NER head whose label set is the standard CoNLL-style
-//! `PER` / `LOC` / `ORG` / `MISC` tags. The Kiji subprocess collapses BIO
-//! prefixes (`B-PER`, `I-PER`) into bare entity labels before emitting the
-//! span shape Gaze consumes; this map only deals with the validated bare
-//! labels.
+//! `PER` / `LOC` / `ORG` / `MISC` tags. The reference subprocess emits bare
+//! upstream entity labels after BIO decoding; older wrappers may emit the
+//! lower-case Gaze label ids from `labels.json`.
 
 use gaze_types::{PiiClass, SafetyNetError, SafetyNetPiiClass};
 
@@ -36,10 +35,9 @@ pub fn validate_kiji_label(label: &str) -> Result<(), SafetyNetError> {
         return Err(invalid_label());
     }
 
-    if label
-        .bytes()
-        .all(|byte| byte.is_ascii_lowercase() || byte == b'_')
-    {
+    if label.bytes().all(|byte| {
+        byte.is_ascii_lowercase() || byte.is_ascii_uppercase() || byte == b'_' || byte == b'-'
+    }) {
         Ok(())
     } else {
         Err(invalid_label())
@@ -50,10 +48,10 @@ pub fn validate_kiji_label(label: &str) -> Result<(), SafetyNetError> {
 pub fn map_kiji_label(label: &str) -> Result<KijiLabel, SafetyNetError> {
     validate_kiji_label(label)?;
     match label {
-        "person" => Ok(KijiLabel::Person),
-        "location" => Ok(KijiLabel::Location),
-        "organization" => Ok(KijiLabel::Organization),
-        "miscellaneous" => Ok(KijiLabel::Miscellaneous),
+        "person" | "PER" | "B-PER" | "I-PER" => Ok(KijiLabel::Person),
+        "location" | "LOC" | "B-LOC" | "I-LOC" => Ok(KijiLabel::Location),
+        "organization" | "ORG" | "B-ORG" | "I-ORG" => Ok(KijiLabel::Organization),
+        "miscellaneous" | "MISC" | "B-MISC" | "I-MISC" => Ok(KijiLabel::Miscellaneous),
         _ => Err(SafetyNetError::InvalidOutput {
             message: "kiji returned unsupported label".to_string(),
         }),
@@ -93,14 +91,18 @@ mod tests {
     fn official_labels_map_to_closed_classes() {
         let cases = [
             ("person", PiiClass::Name),
+            ("PER", PiiClass::Name),
+            ("B-PER", PiiClass::Name),
             ("location", PiiClass::Location),
+            ("LOC", PiiClass::Location),
             ("organization", PiiClass::Name),
+            ("ORG", PiiClass::Name),
             ("miscellaneous", PiiClass::Name),
+            ("MISC", PiiClass::Name),
         ];
 
         for (label, expected) in cases {
             let kiji_label = map_kiji_label(label).expect("official label");
-            assert_eq!(kiji_label.as_str(), label);
             assert_eq!(kiji_label_to_pii_class(kiji_label), expected);
         }
     }
