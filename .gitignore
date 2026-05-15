@@ -3,6 +3,8 @@
 /.superpowers/
 /.lean-ctx/
 /.bench-venv/
+/.opf-bench-src/
+/.opf-bench-venv/
 /.anvil.local
 *.db
 *.db-journal

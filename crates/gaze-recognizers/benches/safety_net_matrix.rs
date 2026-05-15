@@ -153,14 +153,7 @@ fn assert_strict_span_leak_rate_shape(snapshot: &Value) {
             let value = leak_rates
                 .get(&key)
                 .unwrap_or_else(|| panic!("missing strict_span_leak_rate for {key}"));
-            if backend == "kiji_distilbert" {
-                assert_nullable_unit_float(value, &format!("strict_span_leak_rate {key}"));
-            } else {
-                assert!(
-                    value.is_null(),
-                    "strict_span_leak_rate for {key} must remain null until OPF run"
-                );
-            }
+            assert_nullable_unit_float(value, &format!("strict_span_leak_rate {key}"));
         }
     }
 }
@@ -194,9 +187,8 @@ fn assert_cell_schema(cell: &Value, mode: &str) {
     for key in ["precision", "recall", "f1", "per_class"] {
         assert!(metrics.contains_key(key), "cell metrics missing {key}");
     }
-    let populated_kiji_direct =
-        cell["backend"] == "kiji_distilbert" && cell["mode"] == "direct_detector";
-    if populated_kiji_direct {
+    let populated_direct = cell["mode"] == "direct_detector";
+    if populated_direct {
         for key in ["precision", "recall", "f1"] {
             assert_nullable_unit_float(&metrics[key], key);
         }
