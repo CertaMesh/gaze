@@ -720,21 +720,29 @@ fn t01_roundtrip_email_tokenized_then_restored() {
 
 #[test]
 fn clean_json_emits_top_level_entries_for_detections() {
-    let v = clean_json_with_args(&[], "Contact Alice at alice@example.invalid for details.");
+    let v = clean_json_with_args(
+        &[],
+        "Contact alice@example.invalid and bob@example.invalid for details.",
+    );
     let entries = v["entries"].as_array().expect("entries array");
 
-    assert_eq!(entries.len(), 1);
-    assert_eq!(entries[0]["class"], "Email");
-    assert_eq!(entries[0]["raw"], "alice@example.invalid");
-    assert_eq!(entries[0]["family"], "counter");
-    assert!(entries[0]["token"].as_str().unwrap().contains(":Email_1>"));
-    assert!(
-        v["clean_text"]
-            .as_str()
-            .unwrap()
-            .contains(entries[0]["token"].as_str().unwrap()),
-        "clean_text must contain the emitted entry token"
-    );
+    assert_eq!(entries.len(), 2);
+    let mut raws = entries
+        .iter()
+        .map(|entry| entry["raw"].as_str().unwrap())
+        .collect::<Vec<_>>();
+    raws.sort_unstable();
+    assert_eq!(raws, vec!["alice@example.invalid", "bob@example.invalid"]);
+    for entry in entries {
+        assert_eq!(entry["class"], "Email");
+        assert_eq!(entry["family"], "counter");
+        let token = entry["token"].as_str().unwrap();
+        assert!(token.contains(":Email_"), "{token}");
+        assert!(
+            v["clean_text"].as_str().unwrap().contains(token),
+            "clean_text must contain the emitted entry token"
+        );
+    }
 }
 
 #[test]

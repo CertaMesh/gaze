@@ -86,6 +86,14 @@ struct SnapshotEntry {
     family: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSnapshotEntry {
+    pub class: PiiClass,
+    pub raw: String,
+    pub token: String,
+    pub family: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum SnapshotScope {
     Ephemeral,
@@ -380,6 +388,18 @@ impl Session {
         );
     }
 
+    pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
+        self.token_by_value
+            .iter()
+            .map(|entry| SessionSnapshotEntry {
+                family: entry.key().family.clone(),
+                class: entry.key().class.clone(),
+                raw: entry.key().raw.clone(),
+                token: entry.value().clone(),
+            })
+            .collect()
+    }
+
     // Original byte spans are preserved by recognizer normalizers per
     // research-855 §Rulepack > Normalization (axis-2 invariant).
     pub fn restore_strict(&self, token: &str) -> Result<String> {
@@ -473,13 +493,13 @@ impl Session {
             scope: snapshot_scope(&self.scope),
             session_hex: self.session_hex(),
             entries: self
-                .token_by_value
-                .iter()
+                .snapshot_entries()
+                .into_iter()
                 .map(|entry| SnapshotEntry {
-                    family: entry.key().family.clone(),
-                    class: entry.key().class.clone(),
-                    raw: entry.key().raw.clone(),
-                    token: entry.value().clone(),
+                    family: entry.family,
+                    class: entry.class,
+                    raw: entry.raw,
+                    token: entry.token,
                 })
                 .collect(),
             next_by_class: self

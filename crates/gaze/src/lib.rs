@@ -61,5 +61,5 @@ pub use rulepack::{
 pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
 };
-pub use session::{Scope, SensitiveSnapshot, Session};
+pub use session::{Scope, SensitiveSnapshot, Session, SessionSnapshotEntry};
 pub use types::{CleanDocument, RawDocument, Value};
