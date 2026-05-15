@@ -8,34 +8,32 @@ Your agent never sees a real email, phone number, or order ID. Your server keeps
 
 ## In production: AI support drafts that never see the customer
 
-[`empire2/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. Every prompt and response crosses Gaze at one boundary:
+[`EmpireTwo/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. Every prompt and response crosses Gaze at one boundary:
 
-```mermaid
-flowchart LR
-    A[Customer email<br/>via IMAP] --> B[gaze clean<br/>tokenize + sign manifest]
-    B --> C[LLM drafts reply<br/>sees only tokens]
-    C --> D[gaze restore<br/>rehydrate via manifest]
-    D --> E[Support agent<br/>reviews, sends]
-    B -. manifest stays server-side .-> D
+```text
+1. Customer email arrives via IMAP:
+   "Hi Support, I'm Alice Schmidt, order #INV-2026-04-1872,
+    my refund of €128.40 hasn't shown up..."
+       ↓
+2. gaze redact tokenizes:
+   "Hi Support, I'm <Name_1>, order #<OrderId_1>,
+    my refund of <Amount_1> hasn't shown up..."
+   + per-session manifest stored
+       ↓
+3. LLM drafts reply (sees only tokens):
+   "Hi <Name_1>, I've checked <OrderId_1> and confirmed your
+    refund of <Amount_1> was processed on..."
+       ↓
+4. gaze restore rehydrates draft:
+   "Hi Alice Schmidt, I've checked #INV-2026-04-1872 and
+    confirmed your refund of €128.40 was processed on..."
+       ↓
+5. Support agent reviews → approves → reply sent.
+
+LLM never saw "Alice Schmidt", "#INV-2026-04-1872", "€128.40".
+Manifest is the only mapping.
+Audit row records each token's recognizer-id + decided_by.
 ```
-
-A customer email arrives:
-
-> Hi Support — Lukas Schmidt here, northwave-labs.io. You billed €128.40 for invoice #INV-2026-04-1872 after I cancelled.
-
-`gaze clean` tokenizes and signs a restore manifest:
-
-> Hi Support — `<Name_1>` here, `<Email_1>`. You billed `<Amount_1>` for invoice `<OrderId_1>` after I cancelled.
-
-The LLM drafts on tokens:
-
-> Hi `<Name_1>`, I checked `<OrderId_1>` and refunded `<Amount_1>` on…
-
-`gaze restore` rehydrates on the same manifest before review:
-
-> Hi Lukas Schmidt, I checked #INV-2026-04-1872 and refunded €128.40 on…
-
-**What the LLM never saw:** `Lukas Schmidt`, `northwave-labs.io`, `INV-2026-04-1872`, `€128.40`. The provider's logs hold tokens only; the signed manifest stays server-side and is the sole mapping back. A missing or tampered manifest fails restore — no draft is sent. Every token traces to its recognizer, so the audit log answers _who / what / when_ per email.
 
 `OrderId` and refund-amount shapes are tenant-specific custom recognizers in the host policy; email, names, IBAN, phone, postal, and credit-card shapes come from the bundled `core` rulepack.
 
