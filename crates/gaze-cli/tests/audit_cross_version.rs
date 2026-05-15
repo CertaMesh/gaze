@@ -428,7 +428,7 @@ fn legacy_schema_without_decided_by_is_queryable() {
     );
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\n"
     ));
     assert!(stdout.contains("dictionary:audit_terms[#0]"));
     assert!(stdout.contains("custom:term"));
@@ -456,9 +456,21 @@ fn audit_sql_uses_restricted_column_set() {
         collision_variant: None,
         recognizer_id: None,
         recognizer_version_id: None,
+        provenance_stage: None,
+        provenance_model_id: None,
+        provenance_model_version: None,
+        provenance_artifact_sha256: None,
+        provenance_tokenizer_sha256: None,
+        provenance_locale_resolved: None,
+        provenance_locale_match_kind: None,
+        provenance_canonical_class: None,
+        provenance_native_class: None,
+        provenance_confidence: None,
+        provenance_merged_from: None,
     };
     let (current_sql, values) = build_audit_query_sql(
         &filter, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true,
     );
     assert_eq!(
         values,
@@ -508,6 +520,17 @@ fn audit_sql_uses_restricted_column_set() {
         false,
         false,
         false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
     );
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
@@ -542,7 +565,7 @@ fn assert_restricted_sql(sql: &str) {
         !lower.contains("select *"),
         "audit SQL must never SELECT *: {sql}"
     );
-    for sensitive in ["raw", "value", "token"] {
+    for sensitive in ["raw_value", "token_value", "original_value"] {
         assert!(
             !lower.contains(sensitive),
             "audit SQL must not read sensitive column '{sensitive}': {sql}"

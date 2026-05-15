@@ -154,7 +154,18 @@ impl SqliteLogger {
                 ambiguity_record TEXT NULL,
                 collision_family TEXT NULL,
                 collision_variant TEXT NULL,
-                fallback_triggered TEXT NULL
+                fallback_triggered TEXT NULL,
+                provenance_stage TEXT NULL,
+                provenance_model_id TEXT NULL,
+                provenance_model_version TEXT NULL,
+                provenance_artifact_sha256 TEXT NULL,
+                provenance_tokenizer_sha256 TEXT NULL,
+                provenance_locale_resolved TEXT NULL,
+                provenance_locale_match_kind TEXT NULL,
+                provenance_canonical_class TEXT NULL,
+                provenance_native_class TEXT NULL,
+                provenance_confidence REAL NULL,
+                provenance_merged_from TEXT NULL
             );
 
             CREATE TABLE IF NOT EXISTS safety_net_log (
@@ -303,6 +314,27 @@ impl SqliteLogger {
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         }
+        for (column, column_type) in [
+            ("provenance_stage", "TEXT"),
+            ("provenance_model_id", "TEXT"),
+            ("provenance_model_version", "TEXT"),
+            ("provenance_artifact_sha256", "TEXT"),
+            ("provenance_tokenizer_sha256", "TEXT"),
+            ("provenance_locale_resolved", "TEXT"),
+            ("provenance_locale_match_kind", "TEXT"),
+            ("provenance_canonical_class", "TEXT"),
+            ("provenance_native_class", "TEXT"),
+            ("provenance_confidence", "REAL"),
+            ("provenance_merged_from", "TEXT"),
+        ] {
+            if !columns.iter().any(|existing| existing == column) {
+                conn.execute(
+                    &format!("ALTER TABLE redaction_log ADD COLUMN {column} {column_type} NULL"),
+                    [],
+                )
+                .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+            }
+        }
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -413,6 +445,19 @@ impl SqliteLogger {
         let has_fallback_triggered = table_has_column(&conn, "fallback_triggered")?;
         let has_recognizer_id = table_has_column(&conn, "recognizer_id")?;
         let has_recognizer_version_id = table_has_column(&conn, "recognizer_version_id")?;
+        let has_provenance_stage = table_has_column(&conn, "provenance_stage")?;
+        let has_provenance_model_id = table_has_column(&conn, "provenance_model_id")?;
+        let has_provenance_model_version = table_has_column(&conn, "provenance_model_version")?;
+        let has_provenance_artifact_sha256 = table_has_column(&conn, "provenance_artifact_sha256")?;
+        let has_provenance_tokenizer_sha256 =
+            table_has_column(&conn, "provenance_tokenizer_sha256")?;
+        let has_provenance_locale_resolved = table_has_column(&conn, "provenance_locale_resolved")?;
+        let has_provenance_locale_match_kind =
+            table_has_column(&conn, "provenance_locale_match_kind")?;
+        let has_provenance_canonical_class = table_has_column(&conn, "provenance_canonical_class")?;
+        let has_provenance_native_class = table_has_column(&conn, "provenance_native_class")?;
+        let has_provenance_confidence = table_has_column(&conn, "provenance_confidence")?;
+        let has_provenance_merged_from = table_has_column(&conn, "provenance_merged_from")?;
         let (sql, values) = build_audit_query_sql(
             filter,
             has_decided_by,
@@ -428,6 +473,17 @@ impl SqliteLogger {
             has_fallback_triggered,
             has_recognizer_id,
             has_recognizer_version_id,
+            has_provenance_stage,
+            has_provenance_model_id,
+            has_provenance_model_version,
+            has_provenance_artifact_sha256,
+            has_provenance_tokenizer_sha256,
+            has_provenance_locale_resolved,
+            has_provenance_locale_match_kind,
+            has_provenance_canonical_class,
+            has_provenance_native_class,
+            has_provenance_confidence,
+            has_provenance_merged_from,
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -454,6 +510,17 @@ impl SqliteLogger {
                     collision_family: row.get(16)?,
                     collision_variant: row.get(17)?,
                     fallback_triggered: row.get(18)?,
+                    provenance_stage: row.get(19)?,
+                    provenance_model_id: row.get(20)?,
+                    provenance_model_version: row.get(21)?,
+                    provenance_artifact_sha256: row.get(22)?,
+                    provenance_tokenizer_sha256: row.get(23)?,
+                    provenance_locale_resolved: row.get(24)?,
+                    provenance_locale_match_kind: row.get(25)?,
+                    provenance_canonical_class: row.get(26)?,
+                    provenance_native_class: row.get(27)?,
+                    provenance_confidence: row.get(28)?,
+                    provenance_merged_from: row.get(29)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
