@@ -718,6 +718,33 @@ fn t01_roundtrip_email_tokenized_then_restored() {
     );
 }
 
+#[test]
+fn clean_json_emits_top_level_entries_for_detections() {
+    let v = clean_json_with_args(&[], "Contact Alice at alice@example.invalid for details.");
+    let entries = v["entries"].as_array().expect("entries array");
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0]["class"], "Email");
+    assert_eq!(entries[0]["raw"], "alice@example.invalid");
+    assert_eq!(entries[0]["family"], "counter");
+    assert!(entries[0]["token"].as_str().unwrap().contains(":Email_1>"));
+    assert!(
+        v["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains(entries[0]["token"].as_str().unwrap()),
+        "clean_text must contain the emitted entry token"
+    );
+}
+
+#[test]
+fn clean_json_emits_empty_top_level_entries_without_detections() {
+    let v = clean_json_with_args(&[], "Nothing detectable in this text.");
+
+    assert_eq!(v["stats"]["detections"], 0);
+    assert!(v["entries"].as_array().expect("entries array").is_empty());
+}
+
 // -----------------------------------------------------------------------
 // 2. Canary
 // -----------------------------------------------------------------------
