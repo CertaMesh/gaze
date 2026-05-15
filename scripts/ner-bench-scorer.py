@@ -46,6 +46,7 @@ class ModelConfig:
     license: str
     runtime: str
     wrapper: Path
+    model_file: str | None
     label_map: dict[str, str]
     native_locales: list[str]
     label_set: list[str]
@@ -100,6 +101,7 @@ def load_config(path: Path) -> list[ModelConfig]:
                 license=str(item["license"]),
                 runtime=str(item["runtime"]),
                 wrapper=Path(str(item["wrapper"])),
+                model_file=item.get("model_file"),
                 label_map={str(k): str(v) for k, v in item["label_map"].items()},
                 native_locales=[str(v) for v in item["native_locales"]],
                 label_set=[str(v) for v in item["label_set"]],
@@ -126,7 +128,9 @@ def checkpoint_complete(path: Path, model: ModelConfig) -> bool:
     if not path.is_dir():
         return False
     if model.runtime == "onnxruntime":
-        return (path / "model.onnx").is_file() and (path / "tokenizer.json").is_file()
+        model_file = model.model_file or "model.onnx"
+        has_tokenizer = (path / "tokenizer.json").is_file() or (path / "vocab.txt").is_file()
+        return (path / model_file).is_file() and has_tokenizer
     has_config = (path / "config.json").is_file()
     has_tokenizer = (path / "tokenizer.json").is_file() or (path / "vocab.txt").is_file()
     has_weights = any(
@@ -202,6 +206,8 @@ def run_model(
     ]
     if model.runtime == "onnxruntime":
         command.extend(["--model-dir", str(checkpoint)])
+        if model.model_file is not None:
+            command.extend(["--model-file", model.model_file])
     else:
         command.extend(["--checkpoint", str(checkpoint), "--device", device])
 
@@ -323,6 +329,7 @@ def write_snapshot(
             "license": model.license,
             "runtime": model.runtime,
             "wrapper": model.wrapper.as_posix(),
+            "model_file": model.model_file,
             "checkpoint": str(checkpoints[model.id]),
             "native_locales": model.native_locales,
             "label_set": model.label_set,

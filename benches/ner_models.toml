@@ -56,3 +56,51 @@ native_locales = ["EnUs", "DeDe", "FrFr", "ItIt", "EsEs", "PtBr", "Global"]
 label_set = ["PER", "LOC", "ORG", "DATE"]
 label_map = { PER = "Name", LOC = "Location", ORG = "Organization", DATE = "Custom:date" }
 shippable_default = true
+
+[[model]]
+id = "openobscure-tinybert4l-pii-ner-int8"
+display_name = "openobscure TinyBERT4L PII NER int8"
+hf_repo = "openobscure/tinybert4l-pii-ner-int8"
+hf_commit = "f8399a9431b0202e78e20b2d38a3385521472f3f"
+bundle_sha = "f5fa446a02c7d71251749a37c31b5f8ae3c450360b97e3df99539d688ff43d9a"
+license = "apache-2.0"
+runtime = "onnxruntime"
+wrapper = "scripts/onnx-token-classification-runner.py"
+model_file = "model_int8.onnx"
+default_checkpoint = ".huggingface-cache/models/openobscure-tinybert4l-pii-ner-int8"
+native_locales = ["Global"]
+label_set = ["PER", "LOC", "ORG", "HEALTH", "CHILD"]
+label_map = { PER = "Name", LOC = "Location", ORG = "Organization", HEALTH = "Custom:health", CHILD = "Custom:child" }
+shippable_default = true
+default_caveat = "PII-specific TinyBERT head; not a strict CoNLL label-set match."
+
+[[model]]
+id = "mrm8488-mobilebert-ner"
+display_name = "mrm8488 MobileBERT NER"
+hf_repo = "mrm8488/mobilebert-finetuned-ner"
+hf_commit = "3f9a1f308e4272219bd43e9127cb65fa5504d9ec"
+bundle_sha = "2c867d5c7117ef864d82dc2b47089c45550ddabf4c24bd9dfaa6e96026e6f19a"
+license = "mit"
+runtime = "transformers"
+wrapper = "scripts/transformers-runner.py"
+default_checkpoint = ".huggingface-cache/models/mrm8488-mobilebert-ner"
+native_locales = ["EnUs", "EnGb"]
+label_set = ["PER", "LOC", "ORG", "MISC"]
+label_map = { PER = "Name", LOC = "Location", ORG = "Organization", MISC = "Custom:other" }
+shippable_default = true
+
+[[model]]
+id = "osiria-minilm-italian-ner"
+display_name = "osiria MiniLM-L6-H384 Italian NER"
+hf_repo = "osiria/minilm-l6-h384-italian-cased-ner"
+hf_commit = "125c646df9361d4bc764a6b1710bee21b50cd924"
+bundle_sha = "46c82257388b9727b752679cc13d4594fb9eae19dfbf2d2f225f4d5bae841f0a"
+license = "mit"
+runtime = "transformers"
+wrapper = "scripts/transformers-runner.py"
+default_checkpoint = ".huggingface-cache/models/osiria-minilm-italian-ner"
+native_locales = ["ItIt"]
+label_set = ["PER", "LOC", "ORG", "MISC"]
+label_map = { PER = "Name", LOC = "Location", ORG = "Organization", MISC = "Custom:other" }
+shippable_default = true
+default_caveat = "MiniLM-family NER head is Italian-native; no permissive English/Multi MiniLM NER head was found."
