@@ -9,7 +9,7 @@ pub const DEFAULT_SNAPSHOT_ALG: &str = "SHA-256";
 /// Construct with `AuditFilter::default()` for all rows, or set fields to
 /// narrow by class, source, action, document kind, raw safety-net label, field
 /// path, epoch-millisecond time range, or session ID.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AuditFilter {
     pub class: Option<String>,
     pub source: Option<String>,
@@ -29,6 +29,17 @@ pub struct AuditFilter {
     pub collision_variant: Option<String>,
     pub recognizer_id: Option<String>,
     pub recognizer_version_id: Option<String>,
+    pub provenance_stage: Option<String>,
+    pub provenance_model_id: Option<String>,
+    pub provenance_model_version: Option<String>,
+    pub provenance_artifact_sha256: Option<String>,
+    pub provenance_tokenizer_sha256: Option<String>,
+    pub provenance_locale_resolved: Option<String>,
+    pub provenance_locale_match_kind: Option<String>,
+    pub provenance_canonical_class: Option<String>,
+    pub provenance_native_class: Option<String>,
+    pub provenance_confidence: Option<f64>,
+    pub provenance_merged_from: Option<String>,
 }
 
 /// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
@@ -36,7 +47,7 @@ pub struct AuditFilter {
 /// This row mirrors the approved audit export surface. It is safe for audit
 /// display and reporting, but it is not restore material and contains no
 /// original PII or token values.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuditLogRow {
     pub source: String,
     pub recognizer_id: Option<String>,
@@ -57,6 +68,17 @@ pub struct AuditLogRow {
     pub collision_family: Option<String>,
     pub collision_variant: Option<String>,
     pub fallback_triggered: Option<String>,
+    pub provenance_stage: Option<String>,
+    pub provenance_model_id: Option<String>,
+    pub provenance_model_version: Option<String>,
+    pub provenance_artifact_sha256: Option<String>,
+    pub provenance_tokenizer_sha256: Option<String>,
+    pub provenance_locale_resolved: Option<String>,
+    pub provenance_locale_match_kind: Option<String>,
+    pub provenance_canonical_class: Option<String>,
+    pub provenance_native_class: Option<String>,
+    pub provenance_confidence: Option<f64>,
+    pub provenance_merged_from: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -107,6 +129,17 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "collision_family",
     "collision_variant",
     "fallback_triggered",
+    "provenance_stage",
+    "provenance_model_id",
+    "provenance_model_version",
+    "provenance_artifact_sha256",
+    "provenance_tokenizer_sha256",
+    "provenance_locale_resolved",
+    "provenance_locale_match_kind",
+    "provenance_canonical_class",
+    "provenance_native_class",
+    "provenance_confidence",
+    "provenance_merged_from",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -148,6 +181,17 @@ pub fn build_audit_query_sql(
     has_fallback_triggered: bool,
     has_recognizer_id: bool,
     has_recognizer_version_id: bool,
+    has_provenance_stage: bool,
+    has_provenance_model_id: bool,
+    has_provenance_model_version: bool,
+    has_provenance_artifact_sha256: bool,
+    has_provenance_tokenizer_sha256: bool,
+    has_provenance_locale_resolved: bool,
+    has_provenance_locale_match_kind: bool,
+    has_provenance_canonical_class: bool,
+    has_provenance_native_class: bool,
+    has_provenance_confidence: bool,
+    has_provenance_merged_from: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -214,8 +258,33 @@ pub fn build_audit_query_sql(
     } else {
         "NULL AS recognizer_version_id"
     };
+    let provenance_stage_column = nullable_column(has_provenance_stage, "provenance_stage");
+    let provenance_model_id_column =
+        nullable_column(has_provenance_model_id, "provenance_model_id");
+    let provenance_model_version_column =
+        nullable_column(has_provenance_model_version, "provenance_model_version");
+    let provenance_artifact_sha256_column =
+        nullable_column(has_provenance_artifact_sha256, "provenance_artifact_sha256");
+    let provenance_tokenizer_sha256_column = nullable_column(
+        has_provenance_tokenizer_sha256,
+        "provenance_tokenizer_sha256",
+    );
+    let provenance_locale_resolved_column =
+        nullable_column(has_provenance_locale_resolved, "provenance_locale_resolved");
+    let provenance_locale_match_kind_column = nullable_column(
+        has_provenance_locale_match_kind,
+        "provenance_locale_match_kind",
+    );
+    let provenance_canonical_class_column =
+        nullable_column(has_provenance_canonical_class, "provenance_canonical_class");
+    let provenance_native_class_column =
+        nullable_column(has_provenance_native_class, "provenance_native_class");
+    let provenance_confidence_column =
+        nullable_column(has_provenance_confidence, "provenance_confidence");
+    let provenance_merged_from_column =
+        nullable_column(has_provenance_merged_from, "provenance_merged_from");
     let mut sql = format!(
-        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column} FROM redaction_log"
+        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column}, {provenance_stage_column}, {provenance_model_id_column}, {provenance_model_version_column}, {provenance_artifact_sha256_column}, {provenance_tokenizer_sha256_column}, {provenance_locale_resolved_column}, {provenance_locale_match_kind_column}, {provenance_canonical_class_column}, {provenance_native_class_column}, {provenance_confidence_column}, {provenance_merged_from_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -338,12 +407,131 @@ pub fn build_audit_query_sql(
         }
         values.push(Value::Text(variant.clone()));
     }
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_stage,
+        "provenance_stage",
+        &filter.provenance_stage,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_model_id,
+        "provenance_model_id",
+        &filter.provenance_model_id,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_model_version,
+        "provenance_model_version",
+        &filter.provenance_model_version,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_artifact_sha256,
+        "provenance_artifact_sha256",
+        &filter.provenance_artifact_sha256,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_tokenizer_sha256,
+        "provenance_tokenizer_sha256",
+        &filter.provenance_tokenizer_sha256,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_locale_resolved,
+        "provenance_locale_resolved",
+        &filter.provenance_locale_resolved,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_locale_match_kind,
+        "provenance_locale_match_kind",
+        &filter.provenance_locale_match_kind,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_canonical_class,
+        "provenance_canonical_class",
+        &filter.provenance_canonical_class,
+    );
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_native_class,
+        "provenance_native_class",
+        &filter.provenance_native_class,
+    );
+    if let Some(confidence) = filter.provenance_confidence {
+        if has_provenance_confidence {
+            predicates.push("provenance_confidence = ?");
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Real(confidence));
+    }
+    add_optional_text_filter(
+        &mut predicates,
+        &mut values,
+        has_provenance_merged_from,
+        "provenance_merged_from",
+        &filter.provenance_merged_from,
+    );
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");
         sql.push_str(&predicates.join(" AND "));
     }
     sql.push_str(" ORDER BY rowid");
     (sql, values)
+}
+
+fn nullable_column(has_column: bool, column: &'static str) -> String {
+    if has_column {
+        column.to_string()
+    } else {
+        format!("NULL AS {column}")
+    }
+}
+
+fn add_optional_text_filter<'a>(
+    predicates: &mut Vec<&'a str>,
+    values: &mut Vec<Value>,
+    has_column: bool,
+    column: &'a str,
+    value: &Option<String>,
+) {
+    if let Some(value) = value {
+        if has_column {
+            predicates.push(column_eq_predicate(column));
+        } else {
+            predicates.push("NULL = ?");
+        }
+        values.push(Value::Text(value.clone()));
+    }
+}
+
+fn column_eq_predicate(column: &str) -> &str {
+    match column {
+        "provenance_stage" => "provenance_stage = ?",
+        "provenance_model_id" => "provenance_model_id = ?",
+        "provenance_model_version" => "provenance_model_version = ?",
+        "provenance_artifact_sha256" => "provenance_artifact_sha256 = ?",
+        "provenance_tokenizer_sha256" => "provenance_tokenizer_sha256 = ?",
+        "provenance_locale_resolved" => "provenance_locale_resolved = ?",
+        "provenance_locale_match_kind" => "provenance_locale_match_kind = ?",
+        "provenance_canonical_class" => "provenance_canonical_class = ?",
+        "provenance_native_class" => "provenance_native_class = ?",
+        "provenance_merged_from" => "provenance_merged_from = ?",
+        _ => unreachable!("unsupported audit provenance filter column"),
+    }
 }
 
 /// Safety-net reads are restricted to bytes-free metadata columns. The table

@@ -69,7 +69,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -92,7 +92,20 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.ambiguity_record.as_deref().unwrap_or(""),
             row.collision_family.as_deref().unwrap_or(""),
             row.collision_variant.as_deref().unwrap_or(""),
-            row.fallback_triggered.as_deref().unwrap_or("")
+            row.fallback_triggered.as_deref().unwrap_or(""),
+            row.provenance_stage.as_deref().unwrap_or(""),
+            row.provenance_model_id.as_deref().unwrap_or(""),
+            row.provenance_model_version.as_deref().unwrap_or(""),
+            row.provenance_artifact_sha256.as_deref().unwrap_or(""),
+            row.provenance_tokenizer_sha256.as_deref().unwrap_or(""),
+            row.provenance_locale_resolved.as_deref().unwrap_or(""),
+            row.provenance_locale_match_kind.as_deref().unwrap_or(""),
+            row.provenance_canonical_class.as_deref().unwrap_or(""),
+            row.provenance_native_class.as_deref().unwrap_or(""),
+            row.provenance_confidence
+                .map(|confidence| confidence.to_string())
+                .unwrap_or_default(),
+            row.provenance_merged_from.as_deref().unwrap_or("")
         );
         if include_ambiguity {
             writeln!(
@@ -200,6 +213,17 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         collision_variant: args.collision_variant.clone(),
         recognizer_id: None,
         recognizer_version_id: None,
+        provenance_stage: None,
+        provenance_model_id: None,
+        provenance_model_version: None,
+        provenance_artifact_sha256: None,
+        provenance_tokenizer_sha256: None,
+        provenance_locale_resolved: None,
+        provenance_locale_match_kind: None,
+        provenance_canonical_class: None,
+        provenance_native_class: None,
+        provenance_confidence: None,
+        provenance_merged_from: None,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -228,6 +252,17 @@ fn read_safety_net_rows(
         collision_variant: None,
         recognizer_id: None,
         recognizer_version_id: None,
+        provenance_stage: None,
+        provenance_model_id: None,
+        provenance_model_version: None,
+        provenance_artifact_sha256: None,
+        provenance_tokenizer_sha256: None,
+        provenance_locale_resolved: None,
+        provenance_locale_match_kind: None,
+        provenance_canonical_class: None,
+        provenance_native_class: None,
+        provenance_confidence: None,
+        provenance_merged_from: None,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -332,6 +367,17 @@ struct JsonlRow {
     collision_family: Option<String>,
     collision_variant: Option<String>,
     fallback_triggered: Option<String>,
+    provenance_stage: Option<String>,
+    provenance_model_id: Option<String>,
+    provenance_model_version: Option<String>,
+    provenance_artifact_sha256: Option<String>,
+    provenance_tokenizer_sha256: Option<String>,
+    provenance_locale_resolved: Option<String>,
+    provenance_locale_match_kind: Option<String>,
+    provenance_canonical_class: Option<String>,
+    provenance_native_class: Option<String>,
+    provenance_confidence: Option<f64>,
+    provenance_merged_from: Option<String>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -358,6 +404,17 @@ impl TryFrom<AuditLogRow> for JsonlRow {
             collision_family: row.collision_family,
             collision_variant: row.collision_variant,
             fallback_triggered: row.fallback_triggered,
+            provenance_stage: row.provenance_stage,
+            provenance_model_id: row.provenance_model_id,
+            provenance_model_version: row.provenance_model_version,
+            provenance_artifact_sha256: row.provenance_artifact_sha256,
+            provenance_tokenizer_sha256: row.provenance_tokenizer_sha256,
+            provenance_locale_resolved: row.provenance_locale_resolved,
+            provenance_locale_match_kind: row.provenance_locale_match_kind,
+            provenance_canonical_class: row.provenance_canonical_class,
+            provenance_native_class: row.provenance_native_class,
+            provenance_confidence: row.provenance_confidence,
+            provenance_merged_from: row.provenance_merged_from,
         })
     }
 }

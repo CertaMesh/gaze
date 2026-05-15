@@ -23,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bench now compiles under `--features safety-net-openai` so the OPF pin block
   can be validated without also enabling Kiji. (Axis 4 trust.)
 
+- **Audit NER-provenance schema migration**: `gaze-audit` adds eleven
+  nullable, additive provenance columns to `redaction_log` for future NER
+  attribution (`provenance_stage`, model/artifact/tokenizer identifiers,
+  resolved locale, class mapping, confidence, and merged-source attribution).
+  Existing rows read back with `NULL` provenance fields; producer population is
+  deferred to a follow-up. (Axis 4 trust, Axis 5 ergonomics.)
+
 ### Changed
 
 - **Synthetic email fixtures** now use the IANA-reserved
