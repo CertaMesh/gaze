@@ -76,11 +76,17 @@ enum Cmd {
         /// Optional observer-only privacy safety net.
         #[arg(long, value_enum)]
         safety_net: Option<SafetyNetKind>,
-        /// v0.8 backend selector. Defaults to `openai-filter`. When set with
+        /// v0.8 backend selector. When set with
         /// `--safety-net=<kind>`, this flag wins. Lets adopters swap the
         /// Pass-3 backend without re-typing the legacy `--safety-net` value.
-        #[arg(long, value_enum, default_value_t = SafetyNetBackend::OpenaiFilter)]
-        safety_net_backend: SafetyNetBackend,
+        #[arg(long, value_enum)]
+        safety_net_backend: Option<SafetyNetBackend>,
+        /// Enable locale-aware Pass-3 safety-net registry dispatch.
+        #[arg(long)]
+        safety_net_registry: bool,
+        /// Add one backend to the locale-aware safety-net registry. Repeatable.
+        #[arg(long, value_enum)]
+        safety_net_add: Vec<SafetyNetBackend>,
         /// Path to the local OpenAI Privacy Filter `opf` command.
         #[arg(long)]
         openai_filter_command: Option<PathBuf>,
@@ -93,6 +99,15 @@ enum Cmd {
         /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
         #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
         openai_filter_device: OpenAiFilterDevice,
+        /// Locale list for the OpenAI Privacy Filter registry entry.
+        #[arg(long, value_delimiter = ',')]
+        opf_locales: Vec<String>,
+        /// Alias for --openai-filter-command in registry examples.
+        #[arg(long)]
+        opf_command: Option<PathBuf>,
+        /// Alias for --openai-filter-checkpoint in registry examples.
+        #[arg(long)]
+        opf_checkpoint: Option<PathBuf>,
         /// Path to the local Kiji DistilBERT subprocess command.
         #[arg(long)]
         kiji_distilbert_command: Option<PathBuf>,
@@ -100,6 +115,9 @@ enum Cmd {
         /// SHA256SUMS, labels.json, model.onnx, tokenizer.json).
         #[arg(long)]
         kiji_distilbert_model_dir: Option<PathBuf>,
+        /// Locale list for the Kiji DistilBERT registry entry.
+        #[arg(long, value_delimiter = ',')]
+        kiji_distilbert_locales: Vec<String>,
         /// Safety-net subprocess timeout in milliseconds.
         #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
         safety_net_timeout_ms: u64,
@@ -511,12 +529,18 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             audit_db,
             safety_net,
             safety_net_backend,
+            safety_net_registry,
+            safety_net_add,
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            opf_locales,
+            opf_command,
+            opf_checkpoint,
             kiji_distilbert_command,
             kiji_distilbert_model_dir,
+            kiji_distilbert_locales,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,
@@ -537,12 +561,18 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             audit_db,
             safety_net,
             safety_net_backend,
+            safety_net_registry,
+            safety_net_add,
             openai_filter_command,
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            opf_locales,
+            opf_command,
+            opf_checkpoint,
             kiji_distilbert_command,
             kiji_distilbert_model_dir,
+            kiji_distilbert_locales,
             safety_net_timeout_ms,
             safety_net_input_limit_bytes,
             safety_net_mode,

@@ -49,13 +49,19 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) context_json: Option<&'a Path>,
     pub(crate) audit_db: Option<&'a Path>,
     pub(crate) safety_net: Option<SafetyNetKind>,
-    pub(crate) safety_net_backend: SafetyNetBackend,
+    pub(crate) safety_net_backend: Option<SafetyNetBackend>,
+    pub(crate) safety_net_registry: bool,
+    pub(crate) safety_net_add: &'a [SafetyNetBackend],
     pub(crate) openai_filter_command: Option<&'a Path>,
     pub(crate) openai_filter_checkpoint: Option<&'a Path>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    pub(crate) opf_locales: &'a [String],
+    pub(crate) opf_command: Option<&'a Path>,
+    pub(crate) opf_checkpoint: Option<&'a Path>,
     pub(crate) kiji_distilbert_command: Option<&'a Path>,
     pub(crate) kiji_distilbert_model_dir: Option<&'a Path>,
+    pub(crate) kiji_distilbert_locales: &'a [String],
     pub(crate) safety_net_timeout_ms: u64,
     pub(crate) safety_net_input_limit_bytes: usize,
     pub(crate) safety_net_mode: SafetyNetMode,
@@ -69,8 +75,8 @@ pub(crate) struct CleanOptions<'a> {
 /// `--safety-net=<kind>`. Returns `None` when no safety net is active.
 pub(crate) fn effective_safety_net_backend(options: &CleanOptions<'_>) -> Option<SafetyNetBackend> {
     let activator = options.safety_net?;
-    if options.safety_net_backend != SafetyNetBackend::OpenaiFilter {
-        return Some(options.safety_net_backend);
+    if let Some(backend) = options.safety_net_backend {
+        return Some(backend);
     }
     Some(SafetyNetBackend::from(activator))
 }
@@ -189,7 +195,8 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     }
     .map_err(|_| CliError::Pipeline)?;
 
-    let (clean_doc, leak_report) = if options.safety_net.is_some() {
+    let safety_net_active = options.safety_net.is_some() || options.safety_net_registry;
+    let (clean_doc, leak_report) = if safety_net_active {
         let (doc, _manifest, _report) = pipeline
             .clean_with_safety_net_policy_detect_context(
                 &session,
@@ -276,6 +283,19 @@ fn maybe_register_safety_net(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
+    if options.safety_net_registry {
+        if options.safety_net_backend.is_some() {
+            return Err(CliError::SafetyNetConfigDetail(
+                "--safety-net-registry cannot be combined with --safety-net-backend".to_string(),
+            ));
+        }
+        if options.safety_net_add.is_empty() {
+            return Err(CliError::SafetyNetConfigDetail(
+                "--safety-net-registry requires at least one --safety-net-add".to_string(),
+            ));
+        }
+        return register_safety_net_registry(pipeline, options);
+    }
     let Some(backend) = effective_safety_net_backend(options) else {
         validate_no_backend_options(options)?;
         return Ok(pipeline);
@@ -286,26 +306,155 @@ fn maybe_register_safety_net(
     }
 }
 
+#[cfg(any(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+fn parse_backend_locales(
+    raw: &[String],
+    flag: &str,
+) -> std::result::Result<Vec<LocaleTag>, CliError> {
+    raw.iter()
+        .map(|locale| {
+            LocaleTag::parse(locale).map_err(|err| {
+                CliError::SafetyNetConfigDetail(format!("invalid {flag} '{locale}': {err}"))
+            })
+        })
+        .collect()
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn openai_filter_command_option<'a>(options: &'a CleanOptions<'_>) -> Option<&'a Path> {
+    options.opf_command.or(options.openai_filter_command)
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn openai_filter_checkpoint_option<'a>(options: &'a CleanOptions<'_>) -> Option<&'a Path> {
+    options.opf_checkpoint.or(options.openai_filter_checkpoint)
+}
+
+#[cfg(any(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+fn register_safety_net_registry(
+    pipeline: gaze::Pipeline,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    let mut registry = gaze_recognizers::LocaleAwareModelRegistry::new();
+    for backend in options.safety_net_add {
+        match backend {
+            SafetyNetBackend::OpenaiFilter => register_openai_filter_model(&mut registry, options)?,
+            SafetyNetBackend::KijiDistilbert => {
+                register_kiji_distilbert_model(&mut registry, options)?
+            }
+        }
+    }
+    Ok(pipeline.with_safety_net_registry(registry))
+}
+
+#[cfg(not(any(feature = "safety-net-openai", feature = "safety-net-kiji")))]
+fn register_safety_net_registry(
+    _pipeline: gaze::Pipeline,
+    _options: &CleanOptions<'_>,
+) -> std::result::Result<gaze::Pipeline, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "safety-net registry requested but gaze-cli was not compiled with a safety-net backend feature"
+            .to_string(),
+    ))
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn register_openai_filter_model(
+    registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
+    use gaze_recognizers::safety_net::openai_filter::OpenAiFilterSafetyNet;
+    let config = openai_filter_config(options, "--safety-net-add openai-filter")?;
+    let locales = parse_backend_locales(options.opf_locales, "--opf-locales")?;
+    let net = if locales.is_empty() {
+        OpenAiFilterSafetyNet::new(config)
+    } else {
+        OpenAiFilterSafetyNet::new(config).with_locales(locales)
+    };
+    registry.register(net);
+    Ok(())
+}
+
+#[cfg(all(
+    not(feature = "safety-net-openai"),
+    any(feature = "safety-net-openai", feature = "safety-net-kiji")
+))]
+fn register_openai_filter_model(
+    _registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
+    _options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "openai-filter backend requested but gaze-cli was not compiled with feature safety-net-openai"
+            .to_string(),
+    ))
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn register_kiji_distilbert_model(
+    registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
+    options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
+    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
+    let config = kiji_distilbert_config(options, "--safety-net-add kiji-distilbert")?;
+    let locales =
+        parse_backend_locales(options.kiji_distilbert_locales, "--kiji-distilbert-locales")?;
+    let net = if locales.is_empty() {
+        KijiDistilbertSafetyNet::new(config)
+    } else {
+        KijiDistilbertSafetyNet::new(config).with_locales(locales)
+    };
+    registry.register(net);
+    Ok(())
+}
+
+#[cfg(all(
+    not(feature = "safety-net-kiji"),
+    any(feature = "safety-net-openai", feature = "safety-net-kiji")
+))]
+fn register_kiji_distilbert_model(
+    _registry: &mut gaze_recognizers::LocaleAwareModelRegistry,
+    _options: &CleanOptions<'_>,
+) -> std::result::Result<(), CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "kiji-distilbert backend requested but gaze-cli was not compiled with feature safety-net-kiji"
+            .to_string(),
+    ))
+}
+
 #[cfg(feature = "safety-net-openai")]
 fn register_openai_filter(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
-    use gaze_recognizers::safety_net::openai_filter::{
-        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
-    };
+    use gaze_recognizers::safety_net::openai_filter::OpenAiFilterSafetyNet;
 
-    let command = options.openai_filter_command.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(
-            "--openai-filter-command is required for --safety-net-backend=openai-filter"
-                .to_string(),
-        )
+    Ok(
+        pipeline.with_safety_net(OpenAiFilterSafetyNet::new(openai_filter_config(
+            options,
+            "--safety-net-backend=openai-filter",
+        )?)),
+    )
+}
+
+#[cfg(feature = "safety-net-openai")]
+fn openai_filter_config(
+    options: &CleanOptions<'_>,
+    activation: &str,
+) -> std::result::Result<
+    gaze_recognizers::safety_net::openai_filter::SubprocessOpenAiFilterConfig,
+    CliError,
+> {
+    use gaze_recognizers::safety_net::openai_filter::SubprocessOpenAiFilterConfig;
+
+    let command = openai_filter_command_option(options).ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(format!(
+            "--openai-filter-command or --opf-command is required for {activation}"
+        ))
     })?;
-    let checkpoint = options.openai_filter_checkpoint.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(
-            "--openai-filter-checkpoint is required for --safety-net-backend=openai-filter"
-                .to_string(),
-        )
+    let checkpoint = openai_filter_checkpoint_option(options).ok_or_else(|| {
+        CliError::SafetyNetConfigDetail(format!(
+            "--openai-filter-checkpoint or --opf-checkpoint is required for {activation}"
+        ))
     })?;
     let mut config = SubprocessOpenAiFilterConfig::new(command)
         .with_checkpoint_path(checkpoint)
@@ -321,8 +470,7 @@ fn register_openai_filter(
         opf_args.extend(["--device", device]);
         config = config.with_decoding_param("device", device);
     }
-    config = config.with_args(opf_args);
-    Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
+    Ok(config.with_args(opf_args))
 }
 
 #[cfg(not(feature = "safety-net-openai"))]
@@ -341,21 +489,37 @@ fn register_kiji_distilbert(
     pipeline: gaze::Pipeline,
     options: &CleanOptions<'_>,
 ) -> std::result::Result<gaze::Pipeline, CliError> {
+    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
+
+    Ok(
+        pipeline.with_safety_net(KijiDistilbertSafetyNet::new(kiji_distilbert_config(
+            options,
+            "--safety-net-backend=kiji-distilbert",
+        )?)),
+    )
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn kiji_distilbert_config(
+    options: &CleanOptions<'_>,
+    activation: &str,
+) -> std::result::Result<
+    gaze_recognizers::safety_net::kiji_distilbert::SubprocessKijiConfig,
+    CliError,
+> {
     use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+        SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
     };
 
     let command = options.kiji_distilbert_command.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(
-            "--kiji-distilbert-command is required for --safety-net-backend=kiji-distilbert"
-                .to_string(),
-        )
+        CliError::SafetyNetConfigDetail(format!(
+            "--kiji-distilbert-command is required for {activation}"
+        ))
     })?;
     let model_dir = options.kiji_distilbert_model_dir.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(
-            "--kiji-distilbert-model-dir is required for --safety-net-backend=kiji-distilbert"
-                .to_string(),
-        )
+        CliError::SafetyNetConfigDetail(format!(
+            "--kiji-distilbert-model-dir is required for {activation}"
+        ))
     })?;
 
     // Pinned-artifact contract (Axis 1): the runtime never silently disables
@@ -375,11 +539,10 @@ fn register_kiji_distilbert(
         }
     }
 
-    let config = SubprocessKijiConfig::new(command)
+    Ok(SubprocessKijiConfig::new(command)
         .with_model_dir(model_dir)
         .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
-        .with_max_input_bytes(options.safety_net_input_limit_bytes);
-    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::new(config)))
+        .with_max_input_bytes(options.safety_net_input_limit_bytes))
 }
 
 #[cfg(not(feature = "safety-net-kiji"))]
@@ -398,8 +561,13 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
         || options.openai_filter_device != OpenAiFilterDevice::Auto
+        || options.opf_command.is_some()
+        || options.opf_checkpoint.is_some()
+        || !options.opf_locales.is_empty()
         || options.kiji_distilbert_command.is_some()
         || options.kiji_distilbert_model_dir.is_some()
+        || !options.kiji_distilbert_locales.is_empty()
+        || !options.safety_net_add.is_empty()
         || options.safety_net_timeout_ms != DEFAULT_SAFETY_NET_TIMEOUT_MS
         || options.safety_net_input_limit_bytes != DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES
     {

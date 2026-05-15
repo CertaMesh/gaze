@@ -59,12 +59,13 @@ fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 #[test]
-fn kiji_is_object_safe_locale_aware_model_with_global_native_locale() {
-    let net = KijiDistilbertSafetyNet::new(SubprocessKijiConfig::new("kiji"));
+fn kiji_locale_aware_model_reports_configured_native_locales() {
+    let net = KijiDistilbertSafetyNet::new(SubprocessKijiConfig::new("kiji"))
+        .with_locales(vec![LocaleTag::DeDe]);
     let model: &dyn LocaleAwareModel = &net;
 
     assert_eq!(model.name(), "kiji-distilbert");
-    assert_eq!(model.native_locales(), &[LocaleTag::Global]);
+    assert_eq!(model.native_locales(), &[LocaleTag::DeDe]);
 }
 
 #[test]

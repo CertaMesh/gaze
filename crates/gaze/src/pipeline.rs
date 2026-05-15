@@ -2,6 +2,10 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 
+#[cfg(feature = "bundled-recognizers")]
+use gaze_recognizers::{
+    LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan, ModelStage,
+};
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
@@ -138,6 +142,8 @@ pub struct Pipeline {
     registry: Arc<RecognizerRegistry>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
+    #[cfg(feature = "bundled-recognizers")]
+    safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -175,6 +181,12 @@ impl Pipeline {
         N: SafetyNet + 'static,
     {
         self.safety_nets.push(Arc::new(safety_net));
+        self
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    pub fn with_safety_net_registry(mut self, registry: LocaleAwareModelRegistry) -> Pipeline {
+        self.safety_net_registry = Some(Arc::new(registry));
         self
     }
 
@@ -310,7 +322,7 @@ impl Pipeline {
         clean_text: &str,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<SafetyNetResult> {
-        let nets_run = self.safety_nets.len();
+        let nets_run = self.safety_nets_len();
         if nets_run == 0 {
             return Ok(SafetyNetResult {
                 nets_run,
@@ -335,7 +347,7 @@ impl Pipeline {
         document: &BTreeMap<String, Value>,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<SafetyNetResult> {
-        let nets_run = self.safety_nets.len();
+        let nets_run = self.safety_nets_len();
         if nets_run == 0 {
             return Ok(SafetyNetResult {
                 nets_run,
@@ -484,7 +496,7 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         field_path: Option<&str>,
     ) -> Result<LeakReport> {
-        if self.safety_nets.is_empty() {
+        if self.safety_nets_len() == 0 {
             return Ok(LeakReport::default());
         }
 
@@ -518,8 +530,55 @@ impl Pipeline {
             }
             suspects.extend(reported);
         }
+        #[cfg(feature = "bundled-recognizers")]
+        if let Some(registry) = &self.safety_net_registry {
+            let locale = locale_chain
+                .first()
+                .cloned()
+                .unwrap_or(crate::LocaleTag::Global);
+            let selected = registry
+                .resolve(&locale, ModelStage::Pass3SafetyNet)
+                .map_err(model_error_to_safety_net_error)?;
+            if let Some(model) = selected.first() {
+                let spans = model
+                    .infer(
+                        ModelInput {
+                            text: clean_text.to_string(),
+                            locale,
+                        },
+                        ModelHints {
+                            stage: ModelStage::Pass3SafetyNet,
+                            max_spans: None,
+                        },
+                    )
+                    .map_err(model_error_to_safety_net_error)?;
+                for span in spans {
+                    if let Some(suspect) =
+                        model_span_to_suspect(span, model.name(), manifest, field_path)
+                    {
+                        suspects.push(suspect);
+                    }
+                }
+            }
+        }
 
         Ok(LeakReport::from_parts(suspects, telemetry))
+    }
+
+    fn safety_nets_len(&self) -> usize {
+        let single = self.safety_nets.len();
+        #[cfg(feature = "bundled-recognizers")]
+        {
+            single
+                + self
+                    .safety_net_registry
+                    .as_ref()
+                    .map_or(0, |registry| usize::from(!registry.is_empty()))
+        }
+        #[cfg(not(feature = "bundled-recognizers"))]
+        {
+            single
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -941,6 +1000,8 @@ pub struct PipelineBuilder {
     anchor_cue_bundles: Vec<(crate::LocaleTag, String, Vec<String>, Option<u16>)>,
     redaction_loggers: Vec<Arc<dyn RedactionLogger>>,
     safety_nets: Vec<Arc<dyn SafetyNet>>,
+    #[cfg(feature = "bundled-recognizers")]
+    safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -1008,6 +1069,12 @@ impl PipelineBuilder {
         self
     }
 
+    #[cfg(feature = "bundled-recognizers")]
+    pub fn register_safety_net_registry(mut self, registry: LocaleAwareModelRegistry) -> Self {
+        self.safety_net_registry = Some(Arc::new(registry));
+        self
+    }
+
     pub fn build(self) -> Result<Pipeline> {
         let mut registry = RecognizerRegistry::builder();
         for recognizer in self.recognizers {
@@ -1023,8 +1090,48 @@ impl PipelineBuilder {
             registry: Arc::new(registry.build()),
             redaction_loggers: self.redaction_loggers,
             safety_nets: self.safety_nets,
+            #[cfg(feature = "bundled-recognizers")]
+            safety_net_registry: self.safety_net_registry,
             rules: self.rules,
         })
+    }
+}
+
+#[cfg(feature = "bundled-recognizers")]
+fn model_span_to_suspect(
+    span: ModelSpan,
+    backend_name: &str,
+    manifest: &Manifest,
+    field_path: Option<&str>,
+) -> Option<LeakSuspect> {
+    let kind = manifest.diff_against(&span.byte_range, &span.class)?;
+    Some(LeakSuspect::new(
+        span.byte_range,
+        span.class.clone(),
+        backend_name,
+        span.confidence,
+        kind,
+        format!("{:?}", span.class),
+        field_path.map(str::to_string),
+    ))
+}
+
+#[cfg(feature = "bundled-recognizers")]
+fn model_error_to_safety_net_error(error: ModelError) -> SafetyNetError {
+    match error {
+        ModelError::NoLocaleModelCoverage { .. } | ModelError::LocaleNotSupported(_) => {
+            SafetyNetError::Unavailable {
+                reason: error.to_string(),
+            }
+        }
+        ModelError::IntegrityMismatch => SafetyNetError::ModelIntegrityMismatch {
+            expected: "locale-aware registry".to_string(),
+            actual: "backend integrity mismatch".to_string(),
+        },
+        ModelError::InitFailed(reason) => SafetyNetError::ModelUnavailable { reason },
+        ModelError::InferenceFailed(message) | ModelError::Internal(message) => {
+            SafetyNetError::Runtime { message }
+        }
     }
 }
 
