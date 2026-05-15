@@ -23,6 +23,7 @@ set -euo pipefail
 HF_REPO="onnx-community/distilbert-NER-ONNX"
 HF_COMMIT_SHA="3a19fe9404a4469d91aa3d551558a97f68872f67"
 KIJI_BUNDLE_SHA256="c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f"
+KIJI_INT8_BUNDLE_SHA256="6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb"
 GITHUB_REPO="${GAZE_GITHUB_REPO:-EmpireTwo/gaze}"
 
 # Files that must end up in the destination directory.
@@ -234,4 +235,5 @@ log "verifying checksums"
 verify_sha256sums
 
 log "done. model dir: $DEST"
+log "int8 precision is opt-in: run scripts/quantize-kiji-int8.py \"$DEST\" and verify SHA256SUMS.int8=$KIJI_INT8_BUNDLE_SHA256"
 log "next: pass --safety-net-backend=kiji-distilbert --kiji-distilbert-model-dir=\"$DEST\" to gaze clean"

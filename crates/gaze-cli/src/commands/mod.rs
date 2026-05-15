@@ -102,6 +102,9 @@ enum Cmd {
         /// Kiji DistilBERT runtime backend. Default: subprocess for compatibility.
         #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
         kiji_backend: KijiBackend,
+        /// Kiji DistilBERT ONNX precision. Default: fp32.
+        #[arg(long, value_enum, default_value_t = KijiDistilbertPrecision::Fp32)]
+        kiji_distilbert_precision: KijiDistilbertPrecision,
         /// Locale list for the OpenAI Privacy Filter registry entry.
         #[arg(long, value_delimiter = ',')]
         opf_locales: Vec<String>,
@@ -506,6 +509,12 @@ pub(crate) enum KijiBackend {
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum KijiDistilbertPrecision {
+    Fp32,
+    Int8,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetMode {
     Strict,
     Tolerant,
@@ -545,6 +554,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_operating_point,
             openai_filter_device,
             kiji_backend,
+            kiji_distilbert_precision,
             opf_locales,
             opf_command,
             opf_checkpoint,
@@ -578,6 +588,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_operating_point,
             openai_filter_device,
             kiji_backend,
+            kiji_distilbert_precision,
             opf_locales,
             opf_command,
             opf_checkpoint,

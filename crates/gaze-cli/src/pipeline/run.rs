@@ -20,9 +20,9 @@ use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    KijiBackend, OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend,
-    SafetyNetFallback, SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
-    DEFAULT_SAFETY_NET_TIMEOUT_MS,
+    KijiBackend, KijiDistilbertPrecision, OpenAiFilterDevice, OpenAiFilterOperatingPoint,
+    SafetyNetBackend, SafetyNetFallback, SafetyNetKind, SafetyNetMode,
+    DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES, DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
@@ -57,6 +57,7 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
     pub(crate) kiji_backend: KijiBackend,
+    pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
     pub(crate) opf_locales: &'a [String],
     pub(crate) opf_command: Option<&'a Path>,
     pub(crate) opf_checkpoint: Option<&'a Path>,
@@ -497,7 +498,8 @@ fn kiji_distilbert_config(
     CliError,
 > {
     use gaze_recognizers::safety_net::kiji_distilbert::{
-        KijiDistilbertConfig, OrtKijiConfig, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+        KijiDistilbertConfig, KijiDistilbertPrecision as RecognizerKijiPrecision, OrtKijiConfig,
+        SubprocessKijiConfig,
     };
 
     let model_dir = options.kiji_distilbert_model_dir.ok_or_else(|| {
@@ -506,25 +508,15 @@ fn kiji_distilbert_config(
         ))
     })?;
 
-    // Pinned-artifact contract (Axis 1): the runtime never silently disables
-    // the backend. Surface the artifact-missing predicate as a config-level
-    // error (exit 2) with the install hint, so the activation predicate
-    // documented in docs/architecture/safety-nets.md is preserved.
-    for required in REQUIRED_KIJI_ARTIFACTS {
-        let artifact = model_dir.join(required);
-        if !artifact.exists() {
-            return Err(CliError::SafetyNetArtifactMissing {
-                backend: "kiji-distilbert",
-                path: format!(
-                    "{} (install via scripts/fetch-kiji-safetynet-model.sh)",
-                    artifact.display()
-                ),
-            });
-        }
-    }
+    validate_kiji_artifacts(model_dir, options.kiji_distilbert_precision)?;
 
     match options.kiji_backend {
         KijiBackend::Subprocess => {
+            if options.kiji_distilbert_precision != KijiDistilbertPrecision::Fp32 {
+                return Err(CliError::SafetyNetConfigDetail(
+                    "--kiji-distilbert-precision=int8 requires --kiji-backend=ort".to_string(),
+                ));
+            }
             let command = options.kiji_distilbert_command.ok_or_else(|| {
                 CliError::SafetyNetConfigDetail(format!(
                     "--kiji-distilbert-command is required for {activation} with --kiji-backend=subprocess"
@@ -543,11 +535,47 @@ fn kiji_distilbert_config(
                         .to_string(),
                 ));
             }
+            let precision = match options.kiji_distilbert_precision {
+                KijiDistilbertPrecision::Fp32 => RecognizerKijiPrecision::Fp32,
+                KijiDistilbertPrecision::Int8 => RecognizerKijiPrecision::Int8,
+            };
             let config = OrtKijiConfig::new(model_dir)
+                .with_precision(precision)
                 .with_max_input_bytes(options.safety_net_input_limit_bytes);
             Ok(KijiDistilbertConfig::from(config))
         }
     }
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn validate_kiji_artifacts(
+    model_dir: &Path,
+    precision: KijiDistilbertPrecision,
+) -> std::result::Result<(), CliError> {
+    use gaze_recognizers::safety_net::kiji_distilbert::{
+        REQUIRED_KIJI_ARTIFACTS, REQUIRED_KIJI_INT8_ARTIFACTS,
+    };
+
+    // Pinned-artifact contract (Axis 1): the runtime never silently disables
+    // the backend. Surface missing artifacts as a config-level error (exit 2)
+    // before backend construction; SHA mismatches still fail in the backend.
+    let required = match precision {
+        KijiDistilbertPrecision::Fp32 => REQUIRED_KIJI_ARTIFACTS,
+        KijiDistilbertPrecision::Int8 => REQUIRED_KIJI_INT8_ARTIFACTS,
+    };
+    for required in required {
+        let artifact = model_dir.join(required);
+        if !artifact.exists() {
+            return Err(CliError::SafetyNetArtifactMissing {
+                backend: "kiji-distilbert",
+                path: format!(
+                    "{} (install via scripts/fetch-kiji-safetynet-model.sh)",
+                    artifact.display()
+                ),
+            });
+        }
+    }
+    Ok(())
 }
 
 #[cfg(not(feature = "safety-net-kiji"))]
@@ -567,6 +595,7 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
         || options.openai_filter_operating_point.is_some()
         || options.openai_filter_device != OpenAiFilterDevice::Auto
         || options.kiji_backend != KijiBackend::Subprocess
+        || options.kiji_distilbert_precision != KijiDistilbertPrecision::Fp32
         || options.opf_command.is_some()
         || options.opf_checkpoint.is_some()
         || !options.opf_locales.is_empty()

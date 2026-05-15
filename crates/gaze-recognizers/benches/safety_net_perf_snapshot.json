@@ -23,6 +23,17 @@
       "fixture_count": 150,
       "device": "cpu",
       "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+    },
+    "kiji_distilbert_int8": {
+      "cold_start_ms": 155.45675,
+      "per_fixture_median_ms": 151.879855,
+      "per_fixture_p95_ms": 159.788914,
+      "per_fixture_p99_ms": 162.623382,
+      "per_fixture_mean_ms": 152.522085,
+      "throughput_bytes_per_sec": 1872.034901,
+      "fixture_count": 150,
+      "device": "cpu",
+      "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
     }
   },
   "host": {

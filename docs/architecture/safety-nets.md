@@ -14,11 +14,11 @@ and do not participate in conflict resolution.
 
 ## Benchmark
 
-The v0.9 benchmark populated direct-detector cells for both shipped backends
-against the same 150-fixture coverage-loop corpus: Kiji DistilBERT stayed at
-`0.125000` macro strict recall across locales, while OPF measured `0.364407`
-global, `0.255729` en-US, and `0.350668` de-DE. Observer-residual cells remain
-deferred until the cleaned-output harness is run. Full numbers, pins, and
+The v0.9 benchmark populates direct-detector and observer-residual cells for
+both shipped backends against the same 150-fixture coverage-loop corpus. Kiji
+DistilBERT fp32 stays at `0.125000` macro strict recall across locales; the
+opt-in int8 dynamic-quantized Kiji artifact also stays at `0.125000` macro
+strict recall across locales in direct-detector mode. Full numbers, pins, and
 caveats are in [`docs/research/v0.9-safety-net-benchmark.md`](../research/v0.9-safety-net-benchmark.md).
 
 This document describes the safety-net contract introduced in v0.6 through
@@ -84,7 +84,16 @@ can land without changing the trait shape or audit schema.
 
 ## Locale-Aware Registry Dispatch
 
-Kiji DistilBERT has two runtime backends under the same observer-only safety-net contract. `--kiji-backend=subprocess` remains the default for backwards compatibility and for adopters who already pin an external Kiji command; `--kiji-backend=ort` loads the same tokenizer and ONNX model in-process through ONNX Runtime, removing the Python/subprocess install path. Both backends must verify the pinned bundle first: `SHA256SUMS` is hashed against `KIJI_DISTILBERT_BUNDLE_SHA256`, every listed artifact is re-hashed before model load, and any mismatch returns a typed `SafetyNetError` without silent fallback.
+Kiji DistilBERT has two runtime backends under the same observer-only safety-net contract. `--kiji-backend=subprocess` remains the default for backwards compatibility and for adopters who already pin an external Kiji command; `--kiji-backend=ort` loads the same tokenizer and ONNX model in-process through ONNX Runtime, removing the Python/subprocess install path. Both backends must verify the pinned bundle first: fp32 uses `SHA256SUMS` and `KIJI_DISTILBERT_BUNDLE_SHA256`; int8 uses `SHA256SUMS.int8` and `KIJI_DISTILBERT_INT8_BUNDLE_SHA256`. Every listed artifact is re-hashed before model load, and any mismatch returns a typed `SafetyNetError` without silent fallback.
+
+The ORT backend also accepts `--kiji-distilbert-precision {fp32,int8}`. `fp32`
+is the default and remains the compatibility posture. `int8` loads
+`model.int8.onnx`, shares the same tokenizer and class map, and is allowed only
+with `--kiji-backend=ort`; requesting int8 without the quantized artifact fails
+closed at construction. The committed safety-net matrix enforces the precision
+trade-off: int8 macro recall must remain within `0.02` of fp32 for every
+locale and mode, otherwise the bench gate fails and the int8 path must not
+ship.
 
 `Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
 

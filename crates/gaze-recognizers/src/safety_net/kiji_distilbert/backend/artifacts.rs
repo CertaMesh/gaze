@@ -3,6 +3,8 @@ use std::path::Path;
 use gaze_types::SafetyNetError;
 use sha2::{Digest, Sha256};
 
+use super::KijiDistilbertPrecision;
+
 /// Files Kiji must ship under `model_dir` for the pinned-artifact contract.
 ///
 /// Missing `SHA256SUMS` is an Axis-1 reliability defect: the runtime must
@@ -10,6 +12,14 @@ use sha2::{Digest, Sha256};
 /// in `crates/gaze/testdata/ner/`.
 pub const REQUIRED_KIJI_ARTIFACTS: &[&str] =
     &["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"];
+
+/// Files Kiji must ship for the opt-in int8 dynamic-quantized artifact.
+pub const REQUIRED_KIJI_INT8_ARTIFACTS: &[&str] = &[
+    "SHA256SUMS.int8",
+    "labels.json",
+    "model.int8.onnx",
+    "tokenizer.json",
+];
 
 /// Hugging Face repository for the canonical Kiji DistilBERT ONNX bundle.
 pub const KIJI_DISTILBERT_HF_REPO: &str = "onnx-community/distilbert-NER-ONNX";
@@ -25,6 +35,10 @@ pub const KIJI_DISTILBERT_HF_COMMIT: &str = "3a19fe9404a4469d91aa3d551558a97f688
 pub const KIJI_DISTILBERT_BUNDLE_SHA256: &str =
     "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f";
 
+/// SHA256 of the canonical `SHA256SUMS.int8` file for the quantized bundle.
+pub const KIJI_DISTILBERT_INT8_BUNDLE_SHA256: &str =
+    "6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb";
+
 /// Canonical checksum file content. The model hash is the Hugging Face LFS
 /// SHA256 for `onnx/model.onnx` at `KIJI_DISTILBERT_HF_COMMIT`.
 pub const KIJI_DISTILBERT_SHA256SUMS: &str = concat!(
@@ -33,10 +47,25 @@ pub const KIJI_DISTILBERT_SHA256SUMS: &str = concat!(
     "cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34  tokenizer.json\n",
 );
 
+/// Canonical int8 checksum file content generated from the pinned fp32 ONNX.
+pub const KIJI_DISTILBERT_INT8_SHA256SUMS: &str = concat!(
+    "d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97  labels.json\n",
+    "bd909cc924b7e10a8d2cdffb0e3bb6036f12d6ae6740cc45420fe82682f5a867  model.int8.onnx\n",
+    "cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34  tokenizer.json\n",
+);
+
 /// Pinned-artifact contract: every entry in `REQUIRED_KIJI_ARTIFACTS` must exist
 /// under `model_dir`. Missing `SHA256SUMS` is a fail-closed condition (Axis 1).
 pub(crate) fn verify_model_dir(
     model_dir: Option<&Path>,
+    expected_sha256: &str,
+) -> Result<(), SafetyNetError> {
+    verify_model_dir_for_precision(model_dir, KijiDistilbertPrecision::Fp32, expected_sha256)
+}
+
+pub(crate) fn verify_model_dir_for_precision(
+    model_dir: Option<&Path>,
+    precision: KijiDistilbertPrecision,
     expected_sha256: &str,
 ) -> Result<(), SafetyNetError> {
     let Some(dir) = model_dir else {
@@ -50,7 +79,7 @@ pub(crate) fn verify_model_dir(
     }
     verify_sensitive_tree(dir)?;
 
-    for required in REQUIRED_KIJI_ARTIFACTS {
+    for required in required_artifacts(precision) {
         let artifact = dir.join(required);
         if !artifact.exists() {
             return Err(SafetyNetError::WeightsMissing {
@@ -58,15 +87,16 @@ pub(crate) fn verify_model_dir(
             });
         }
     }
-    verify_bundle_integrity(dir, expected_sha256)?;
+    verify_bundle_integrity_for_precision(dir, precision, expected_sha256)?;
     Ok(())
 }
 
-pub(crate) fn verify_bundle_integrity(
+pub(crate) fn verify_bundle_integrity_for_precision(
     dir: &Path,
+    precision: KijiDistilbertPrecision,
     expected_sha256: &str,
 ) -> Result<(), SafetyNetError> {
-    let sha256sums_path = dir.join("SHA256SUMS");
+    let sha256sums_path = dir.join(checksum_filename(precision));
     let sha256sums =
         std::fs::read(&sha256sums_path).map_err(|_| SafetyNetError::WeightsMissing {
             path: sanitize_path(&sha256sums_path),
@@ -79,9 +109,9 @@ pub(crate) fn verify_bundle_integrity(
         });
     }
 
-    let checksums = parse_sha256sums(&sha256sums)?;
-    for required in REQUIRED_KIJI_ARTIFACTS {
-        if *required == "SHA256SUMS" {
+    let checksums = parse_sha256sums(&sha256sums, precision)?;
+    for required in required_artifacts(precision) {
+        if *required == checksum_filename(precision) {
             continue;
         }
         let Some(expected_artifact_sha256) = checksums
@@ -114,7 +144,10 @@ pub(crate) fn hex_sha256(bytes: &[u8]) -> String {
     hex::encode(digest)
 }
 
-fn parse_sha256sums(bytes: &[u8]) -> Result<Vec<(String, String)>, SafetyNetError> {
+fn parse_sha256sums(
+    bytes: &[u8],
+    precision: KijiDistilbertPrecision,
+) -> Result<Vec<(String, String)>, SafetyNetError> {
     let text = std::str::from_utf8(bytes).map_err(|_| SafetyNetError::ModelIntegrityMismatch {
         expected: "valid UTF-8 SHA256SUMS".to_string(),
         actual: "<invalid-utf8>".to_string(),
@@ -127,8 +160,8 @@ fn parse_sha256sums(bytes: &[u8]) -> Result<Vec<(String, String)>, SafetyNetErro
         if fields.next().is_some()
             || sha256.len() != 64
             || !sha256.bytes().all(|byte| byte.is_ascii_hexdigit())
-            || !REQUIRED_KIJI_ARTIFACTS.contains(&name)
-            || name == "SHA256SUMS"
+            || !required_artifacts(precision).contains(&name)
+            || name == checksum_filename(precision)
             || name.contains('/')
             || name.contains('\\')
         {
@@ -140,6 +173,27 @@ fn parse_sha256sums(bytes: &[u8]) -> Result<Vec<(String, String)>, SafetyNetErro
         entries.push((sha256.to_ascii_lowercase(), name.to_string()));
     }
     Ok(entries)
+}
+
+pub(crate) fn required_artifacts(precision: KijiDistilbertPrecision) -> &'static [&'static str] {
+    match precision {
+        KijiDistilbertPrecision::Fp32 => REQUIRED_KIJI_ARTIFACTS,
+        KijiDistilbertPrecision::Int8 => REQUIRED_KIJI_INT8_ARTIFACTS,
+    }
+}
+
+pub(crate) fn checksum_filename(precision: KijiDistilbertPrecision) -> &'static str {
+    match precision {
+        KijiDistilbertPrecision::Fp32 => "SHA256SUMS",
+        KijiDistilbertPrecision::Int8 => "SHA256SUMS.int8",
+    }
+}
+
+pub(crate) fn model_filename(precision: KijiDistilbertPrecision) -> &'static str {
+    match precision {
+        KijiDistilbertPrecision::Fp32 => "model.onnx",
+        KijiDistilbertPrecision::Int8 => "model.int8.onnx",
+    }
 }
 
 fn verify_sensitive_tree(path: &Path) -> Result<(), SafetyNetError> {

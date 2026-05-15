@@ -3,12 +3,14 @@ use std::sync::Mutex;
 
 use gaze_types::SafetyNetError;
 
-use super::artifacts::{verify_model_dir, KIJI_DISTILBERT_BUNDLE_SHA256};
-use super::{normalize_raw_spans, KijiDistilbertBackend, RawSpan};
+use super::artifacts::{
+    model_filename, verify_model_dir_for_precision, KIJI_DISTILBERT_BUNDLE_SHA256,
+    KIJI_DISTILBERT_INT8_BUNDLE_SHA256,
+};
+use super::{normalize_raw_spans, KijiDistilbertBackend, KijiDistilbertPrecision, RawSpan};
 use crate::ner::decode::{softmax_confidence, split_bio};
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
-const MODEL_FILE: &str = "model.onnx";
 const TOKENIZER_FILE: &str = "tokenizer.json";
 const ID2LABEL: [&str; 9] = [
     "O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG", "B-MISC", "I-MISC",
@@ -18,6 +20,7 @@ const ID2LABEL: [&str; 9] = [
 #[derive(Debug, Clone)]
 pub struct OrtKijiConfig {
     model_dir: PathBuf,
+    precision: KijiDistilbertPrecision,
     max_input_bytes: usize,
     version: String,
     decoding_params: Vec<(&'static str, String)>,
@@ -29,9 +32,16 @@ impl OrtKijiConfig {
     pub fn new(model_dir: impl Into<PathBuf>) -> Self {
         Self {
             model_dir: model_dir.into(),
+            precision: KijiDistilbertPrecision::Fp32,
             max_input_bytes: DEFAULT_MAX_INPUT_BYTES,
             version: "kiji/distilbert:ort".to_string(),
-            decoding_params: vec![("runtime", "ort".to_string())],
+            decoding_params: vec![
+                ("runtime", "ort".to_string()),
+                (
+                    "precision",
+                    KijiDistilbertPrecision::Fp32.as_str().to_string(),
+                ),
+            ],
             #[cfg(any(test, feature = "test-support"))]
             expected_bundle_sha256: KIJI_DISTILBERT_BUNDLE_SHA256.to_string(),
         }
@@ -48,6 +58,22 @@ impl OrtKijiConfig {
 
     pub fn with_max_input_bytes(mut self, max_input_bytes: usize) -> Self {
         self.max_input_bytes = max_input_bytes;
+        self
+    }
+
+    pub fn with_precision(mut self, precision: KijiDistilbertPrecision) -> Self {
+        self.precision = precision;
+        self.version = format!("kiji/distilbert:ort-{}", precision.as_str());
+        self.decoding_params.retain(|(key, _)| *key != "precision");
+        self.decoding_params
+            .push(("precision", precision.as_str().to_string()));
+        #[cfg(any(test, feature = "test-support"))]
+        {
+            self.expected_bundle_sha256 = match precision {
+                KijiDistilbertPrecision::Fp32 => KIJI_DISTILBERT_BUNDLE_SHA256.to_string(),
+                KijiDistilbertPrecision::Int8 => KIJI_DISTILBERT_INT8_BUNDLE_SHA256.to_string(),
+            };
+        }
         self
     }
 
@@ -72,6 +98,10 @@ impl OrtKijiConfig {
         &self.model_dir
     }
 
+    pub fn precision(&self) -> KijiDistilbertPrecision {
+        self.precision
+    }
+
     fn expected_bundle_sha256(&self) -> &str {
         #[cfg(any(test, feature = "test-support"))]
         {
@@ -79,7 +109,10 @@ impl OrtKijiConfig {
         }
         #[cfg(not(any(test, feature = "test-support")))]
         {
-            KIJI_DISTILBERT_BUNDLE_SHA256
+            match self.precision {
+                KijiDistilbertPrecision::Fp32 => KIJI_DISTILBERT_BUNDLE_SHA256,
+                KijiDistilbertPrecision::Int8 => KIJI_DISTILBERT_INT8_BUNDLE_SHA256,
+            }
         }
     }
 }
@@ -95,7 +128,11 @@ pub struct OrtKijiBackend {
 
 impl OrtKijiBackend {
     pub fn new(config: OrtKijiConfig) -> Result<Self, SafetyNetError> {
-        verify_model_dir(Some(config.model_dir()), config.expected_bundle_sha256())?;
+        verify_model_dir_for_precision(
+            Some(config.model_dir()),
+            config.precision(),
+            config.expected_bundle_sha256(),
+        )?;
         let tokenizer = tokenizers::Tokenizer::from_file(config.model_dir.join(TOKENIZER_FILE))
             .map_err(|err| SafetyNetError::ModelUnavailable {
                 reason: format!(
@@ -110,7 +147,7 @@ impl OrtKijiBackend {
                     sanitize_error(&err.to_string())
                 ),
             })?
-            .commit_from_file(config.model_dir.join(MODEL_FILE))
+            .commit_from_file(config.model_dir.join(model_filename(config.precision())))
             .map_err(|err| SafetyNetError::ModelUnavailable {
                 reason: format!(
                     "failed to load kiji ort model: {}",
