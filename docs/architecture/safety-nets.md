@@ -61,13 +61,13 @@ can land without changing the trait shape or audit schema.
    │   │                      │  │                            │     │
    │   │  ─ heavier weights   │  │  ─ 8.8 MB DistilBERT       │     │
    │   │  ─ OpenAI's PII set  │  │  ─ 26 PII classes (Kiji)   │     │
-   │   │  ─ requires `opf`    │  │  ─ ONNX subprocess         │     │
+   │   │  ─ requires `opf`    │  │  ─ subprocess or ORT       │     │
    │   │    binary install    │  │  ─ tokenizers crate        │     │
    │   └──────────┬───────────┘  └────────────┬───────────────┘     │
    │              │                            │                     │
    │              └──────────────┬─────────────┘                     │
    │                             ▼                                   │
-   │   Subprocess contract identical for both:                       │
+   │   External subprocess contract:                                 │
    │       stdin  ← clean_text (post-tokenization!)                  │
    │       stdout → JSON span array [{start, end, label, score}, …]  │
    │                                                                 │
@@ -83,6 +83,8 @@ can land without changing the trait shape or audit schema.
 ```
 
 ## Locale-Aware Registry Dispatch
+
+Kiji DistilBERT has two runtime backends under the same observer-only safety-net contract. `--kiji-backend=subprocess` remains the default for backwards compatibility and for adopters who already pin an external Kiji command; `--kiji-backend=ort` loads the same tokenizer and ONNX model in-process through ONNX Runtime, removing the Python/subprocess install path. Both backends must verify the pinned bundle first: `SHA256SUMS` is hashed against `KIJI_DISTILBERT_BUNDLE_SHA256`, every listed artifact is re-hashed before model load, and any mismatch returns a typed `SafetyNetError` without silent fallback.
 
 `Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
 

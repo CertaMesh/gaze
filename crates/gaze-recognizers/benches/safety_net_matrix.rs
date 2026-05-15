@@ -1,7 +1,7 @@
 #[cfg(feature = "safety-net-kiji")]
 use gaze_recognizers::safety_net::kiji_distilbert::{
-    KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_SHA256SUMS,
+    KijiDistilbertBackend, OrtKijiBackend, OrtKijiConfig, KIJI_DISTILBERT_BUNDLE_SHA256,
+    KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO, KIJI_DISTILBERT_SHA256SUMS,
 };
 #[cfg(feature = "safety-net-openai")]
 use gaze_recognizers::safety_net::openai_filter::backend::subprocess::{
@@ -17,6 +17,12 @@ const LOCALES: [&str; 3] = ["Global", "EnUs", "DeDe"];
 const MODES: [&str; 2] = ["direct_detector", "observer_residual"];
 
 fn main() {
+    #[cfg(feature = "safety-net-kiji")]
+    if std::env::var("GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND").as_deref() == Ok("ort") {
+        run_live_ort_bench();
+        return;
+    }
+
     let snapshot: Value =
         serde_json::from_str(SNAPSHOT).expect("valid safety-net matrix benchmark snapshot");
 
@@ -32,6 +38,33 @@ fn main() {
     assert_perf_snapshot();
 
     println!("{SNAPSHOT}");
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn run_live_ort_bench() {
+    use std::time::Instant;
+
+    let model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+        .expect("GAZE_KIJI_DISTILBERT_MODEL_DIR is required for live ORT bench");
+    let cold_start = Instant::now();
+    let backend =
+        OrtKijiBackend::new(OrtKijiConfig::new(model_dir)).expect("load Kiji ORT backend");
+    let cold_start_ms = cold_start.elapsed().as_secs_f64() * 1000.0;
+    let fixture = "Alice Smith visited Berlin before meeting Dr. Schmidt at Example Corp.";
+    backend.infer(fixture).expect("warmup inference");
+
+    let mut samples = Vec::new();
+    for _ in 0..100 {
+        let start = Instant::now();
+        backend.infer(fixture).expect("inference");
+        samples.push(start.elapsed().as_secs_f64() * 1000.0);
+    }
+    samples.sort_by(f64::total_cmp);
+    let p50_ms = samples[samples.len() / 2];
+    println!(
+        "{{\"backend\":\"kiji_distilbert_ort\",\"cold_start_ms\":{cold_start_ms:.3},\"warm_p50_ms\":{p50_ms:.3},\"iterations\":{}}}",
+        samples.len()
+    );
 }
 
 #[cfg(feature = "safety-net-kiji")]

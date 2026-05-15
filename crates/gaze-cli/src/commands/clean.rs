@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use super::{
-    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
-    SafetyNetKind, SafetyNetMode,
+    KijiBackend, OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend,
+    SafetyNetFallback, SafetyNetKind, SafetyNetMode,
 };
 use crate::error::CliError;
 use crate::pipeline::{run_clean, CleanOptions};
@@ -29,6 +29,7 @@ pub(crate) struct Args {
     pub(crate) openai_filter_checkpoint: Option<PathBuf>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    pub(crate) kiji_backend: KijiBackend,
     pub(crate) opf_locales: Vec<String>,
     pub(crate) opf_command: Option<PathBuf>,
     pub(crate) opf_checkpoint: Option<PathBuf>,
@@ -64,6 +65,7 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         openai_filter_checkpoint: args.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
+        kiji_backend: args.kiji_backend,
         opf_locales: &args.opf_locales,
         opf_command: args.opf_command.as_deref(),
         opf_checkpoint: args.opf_checkpoint.as_deref(),

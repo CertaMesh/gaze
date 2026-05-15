@@ -99,6 +99,9 @@ enum Cmd {
         /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
         #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
         openai_filter_device: OpenAiFilterDevice,
+        /// Kiji DistilBERT runtime backend. Default: subprocess for compatibility.
+        #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
+        kiji_backend: KijiBackend,
         /// Locale list for the OpenAI Privacy Filter registry entry.
         #[arg(long, value_delimiter = ',')]
         opf_locales: Vec<String>,
@@ -497,6 +500,12 @@ impl OpenAiFilterDevice {
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum KijiBackend {
+    Subprocess,
+    Ort,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SafetyNetMode {
     Strict,
     Tolerant,
@@ -535,6 +544,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            kiji_backend,
             opf_locales,
             opf_command,
             opf_checkpoint,
@@ -567,6 +577,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             openai_filter_checkpoint,
             openai_filter_operating_point,
             openai_filter_device,
+            kiji_backend,
             opf_locales,
             opf_command,
             opf_checkpoint,

@@ -12,7 +12,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use gaze_recognizers::safety_net::kiji_distilbert::{
-    KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+    KijiDistilbertBackend, KijiDistilbertSafetyNet, OrtKijiBackend, OrtKijiConfig,
+    SubprocessKijiBackend, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
 };
 use gaze_types::{DocumentKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
 use sha2::{Digest, Sha256};
@@ -122,4 +123,31 @@ fn subprocess_span_round_trips_through_manifest_diff() {
     assert_eq!(suspect.raw_label, "person");
     assert_eq!(suspect.span, 0..11);
     assert_eq!(suspect.score, Some(0.97));
+}
+
+#[test]
+fn ort_matches_subprocess_for_fixture_inputs_when_real_kiji_is_configured() {
+    let Some(command) = std::env::var_os("GAZE_KIJI_DISTILBERT_COMMAND") else {
+        eprintln!("skipping parity test: GAZE_KIJI_DISTILBERT_COMMAND is not set");
+        return;
+    };
+    let Some(model_dir) = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR") else {
+        eprintln!("skipping parity test: GAZE_KIJI_DISTILBERT_MODEL_DIR is not set");
+        return;
+    };
+
+    let subprocess = SubprocessKijiBackend::new(
+        SubprocessKijiConfig::new(command).with_model_dir(PathBuf::from(&model_dir)),
+    )
+    .unwrap();
+    let ort = OrtKijiBackend::new(OrtKijiConfig::new(PathBuf::from(model_dir))).unwrap();
+    for fixture in [
+        "Alice Smith visited Berlin.",
+        "Dr. Schmidt works at Example Corp.",
+        "The package moved from Paris to Example Labs.",
+    ] {
+        let left = subprocess.infer(fixture).unwrap();
+        let right = ort.infer(fixture).unwrap();
+        assert_eq!(right, left, "fixture: {fixture}");
+    }
 }

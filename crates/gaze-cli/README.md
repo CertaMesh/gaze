@@ -150,7 +150,7 @@ Flags:
 | `--safety-net-add <backend>` | Adds one backend to the registry. Repeatable. First resolved backend wins for v1. |
 | `--openai-filter-command <path>` | Path to the local OpenAI Privacy Filter `opf` command. Required with the `openai-filter` backend. |
 | `--openai-filter-checkpoint <path>` | Path to the OPF checkpoint or model directory. Required with the `openai-filter` backend. |
-| `--openai-filter-operating-point <point>` | Operating point: `high-recall`, `balanced`, `high-precision`. |
+| `--kiji-backend <backend>` | Kiji runtime backend: `subprocess` (default, compatibility path) or `ort` (in-process ONNX Runtime). |
 | `--opf-command <path>` / `--opf-checkpoint <path>` | Registry-example aliases for the OpenAI Privacy Filter command and checkpoint. |
 | `--opf-locales <tag[,tag...]>` | Native locales for the OpenAI Privacy Filter registry entry. Empty keeps the backend default. |
 | `--kiji-distilbert-command <path>` | Path to the local Kiji DistilBERT subprocess command. Required with the `kiji-distilbert` backend. |
@@ -188,14 +188,16 @@ mature upstream. Trade-offs: heavier model and slower per-clean latency;
 no first-party fetch path; runtime depends on a third-party Python install
 the operator pins.
 
-**`kiji-distilbert`** (v0.8+) wraps a pinned DistilBERT NER model as a
-subprocess. Strengths: lightweight ONNX-served weights, faster startup,
-straightforward fetch script, second NER opinion at the chokepoint that
-complements OPF's class set. Trade-offs: narrower closed label set
+**`kiji-distilbert`** (v0.8+) wraps a pinned DistilBERT NER model. It
+supports `--kiji-backend=subprocess` for the existing external command path
+and `--kiji-backend=ort` for in-process ONNX Runtime inference without a
+Python install. Strengths: lightweight ONNX-served weights, straightforward
+fetch script, second NER opinion at the chokepoint that complements OPF's
+class set. Trade-offs: narrower closed label set
 (`person`, `location`, `organization`, `miscellaneous`) so financial-secret
 or account-number suspects are not surfaced; pinned-artifact contract
 requires `SHA256SUMS` present on disk (Axis-1 fail-closed — no silent
-disable).
+disable). The default remains `subprocess` for backwards compatibility.
 
 #### Setup
 
