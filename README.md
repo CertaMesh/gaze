@@ -6,36 +6,47 @@
 
 Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
 
-```sh
-git clone https://github.com/EmpireTwo/gaze.git
-cd gaze
-cargo install --path crates/gaze-cli
+## In production: AI support drafts that never see the customer
 
-echo 'Email alice@example.invalid about ORD-789012.' | gaze clean
+[`empire2/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. Every prompt and response crosses Gaze at one boundary:
+
+```mermaid
+flowchart LR
+    A[Customer email<br/>via IMAP] --> B[gaze clean<br/>tokenize + sign manifest]
+    B --> C[LLM drafts reply<br/>sees only tokens]
+    C --> D[gaze restore<br/>rehydrate via manifest]
+    D --> E[Support agent<br/>reviews, sends]
+    B -. manifest stays server-side .-> D
 ```
 
-```json
-{
-  "clean_text": "Email <{session_hex}:Email_1> about ORD-789012.",
-  "session_blob": "<base64>",
-  "stats": {"detections": 1}
-}
-```
+A customer email arrives:
 
-Send `clean_text` to the LLM. Keep `session_blob` server-side — it is the signed restore manifest, and it must never reach the model.
+> Hi Support — Lukas Schmidt here, northwave-labs.io. You billed €128.40 for invoice #INV-2026-04-1872 after I cancelled.
 
-Round-trip the model's reply through restore on the same manifest:
+`gaze clean` tokenizes and signs a restore manifest:
 
-```sh
-echo '{"session_blob":"<base64>","text":"Confirmation sent to <{session_hex}:Email_1>."}' \
-  | gaze restore
-```
+> Hi Support — `<Name_1>` here, `<Email_1>`. You billed `<Amount_1>` for invoice `<OrderId_1>` after I cancelled.
 
-```json
-{"text":"Confirmation sent to alice@example.invalid."}
-```
+The LLM drafts on tokens:
 
-Full CLI surface — flags, structured-document mode, audit logging, policy TOML — is in [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md).
+> Hi `<Name_1>`, I checked `<OrderId_1>` and refunded `<Amount_1>` on…
+
+`gaze restore` rehydrates on the same manifest before review:
+
+> Hi Lukas Schmidt, I checked #INV-2026-04-1872 and refunded €128.40 on…
+
+**What the LLM never saw:** `Lukas Schmidt`, `northwave-labs.io`, `INV-2026-04-1872`, `€128.40`. The provider's logs hold tokens only; the signed manifest stays server-side and is the sole mapping back. A missing or tampered manifest fails restore — no draft is sent. Every token traces to its recognizer, so the audit log answers _who / what / when_ per email.
+
+`OrderId` and refund-amount shapes are tenant-specific custom recognizers in the host policy; email, names, IBAN, phone, postal, and credit-card shapes come from the bundled `core` rulepack.
+
+### Try the loop
+
+- Drop-in Laravel package: [`EmpireTwo/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter)
+- Runnable demo with a per-message `See cleanup` modal: [`EmpireTwo/gaze-laravel-demo-gw-ticks`](https://github.com/EmpireTwo/gaze-laravel-demo-gw-ticks)
+
+Agentic workflows (browser automation, tool execution) hook the same restore boundary at tool-call args, on the same manifest contract — the agent stays on tokens end-to-end.
+
+CLI surface (`gaze clean`, `gaze restore`, audit, policy TOML): [Quickstart](#quickstart), [`gaze-cli` README](crates/gaze-cli/README.md).
 
 ## Why this exists
 
