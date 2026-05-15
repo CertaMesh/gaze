@@ -2,9 +2,9 @@
 
 The tracked benchmark snapshot lives at
 `crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`.
-`cargo bench -p gaze-recognizers --features safety-net-kiji --bench safety_net_matrix`
-validates that the snapshot pins match runtime constants where constants exist
-and prints the JSON for CI logs.
+`cargo bench -p gaze-recognizers --features safety-net-kiji,safety-net-openai --bench safety_net_matrix`
+validates that the snapshot pins match runtime constants and prints the JSON
+for CI logs.
 
 Current status: `not_run_requires_local_backends`.
 
@@ -21,13 +21,27 @@ Current status: `not_run_requires_local_backends`.
 | Tokenizer SHA256 | `cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34` |
 | Label-map SHA256 | `d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97` |
 
-### OpenAI Privacy Filter
+## OpenAI Privacy Filter Pins
 
 | Pin | Value |
 |---|---|
 | Source repo | `openai/privacy-filter` |
-| Source commit | `null` until the #33b OPF pin PR lands |
-| Binary SHA256 | `null` until the #33b OPF pin PR lands |
+| Source commit | `f7f00ca7fb869683eb732c010299d901457f19c3` |
+| Checkpoint bundle SHA256 | `null` |
+| Required checkpoint artifacts | `[]` |
+
+OPF publishes a source repository and an `opf` Python CLI that downloads its
+checkpoint into `~/.opf/privacy_filter` by default, or into the directory
+selected by `OPF_CHECKPOINT` / `--checkpoint`. It does not publish a GitHub
+release binary, so Gaze does not pin a binary checksum. The source commit and
+checkpoint bundle are the trust anchors.
+
+The source commit is pinned above. The checkpoint bundle hash remains `null`
+and the required-artifact list remains empty until a clean local OPF checkpoint
+download is captured, reviewed, and recorded in
+`OPF_CHECKPOINT_BUNDLE_SHA256` with the matching `REQUIRED_OPF_ARTIFACTS` list.
+Publishing numeric OPF claims or enabling checkpoint-bundle verification without
+those pins would violate the Axis 4 trust contract.
 
 ## Matrix Shape
 
@@ -51,8 +65,8 @@ one nullable headline field for each backend-locale pair. It measures
 end-to-end fail-closed behavior rather than detector precision/recall.
 
 The result fields remain `null` until pinned local backend commands and model
-directories are available. Publishing numeric Kiji claims without those pins
-would violate the Axis 4 trust contract.
+directories are available. Publishing numeric Kiji or OPF claims without those
+pins would violate the Axis 4 trust contract.
 
 The methodology and rule-floor baseline are documented in
 [`docs/research/v0.8-kiji-benchmark.md`](../research/v0.8-kiji-benchmark.md);

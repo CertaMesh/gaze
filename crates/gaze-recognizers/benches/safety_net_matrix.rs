@@ -2,9 +2,12 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
     KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
     KIJI_DISTILBERT_SHA256SUMS,
 };
+#[cfg(feature = "safety-net-openai")]
+use gaze_recognizers::safety_net::openai_filter::backend::subprocess::{
+    OPF_CHECKPOINT_BUNDLE_SHA256, OPF_SOURCE_COMMIT, OPF_SOURCE_REPO, REQUIRED_OPF_ARTIFACTS,
+};
 use serde_json::Value;
 
-// Coordination with #33b: OPF pins are nullable until the OPF SHA constants land.
 const SNAPSHOT: &str = include_str!("safety_net_matrix_snapshot.json");
 
 const BACKENDS: [&str; 2] = ["kiji_distilbert", "openai_privacy_filter"];
@@ -21,7 +24,7 @@ fn main() {
         Value::String("safety-net-multi-backend-matrix".to_string())
     );
     assert_kiji_pins(&snapshot);
-    assert_opf_placeholder_shape(&snapshot);
+    assert_opf_pins(&snapshot);
     assert_strict_span_leak_rate_shape(&snapshot);
     assert_cells(&snapshot);
 
@@ -66,13 +69,57 @@ fn checksum_for(filename: &str) -> &str {
         .expect("checksum present in Kiji SHA256SUMS")
 }
 
-fn assert_opf_placeholder_shape(snapshot: &Value) {
+#[cfg(feature = "safety-net-openai")]
+fn assert_opf_pins(snapshot: &Value) {
     let pins = snapshot["backends"]["openai_privacy_filter"]["pins"]
         .as_object()
         .expect("OPF pins object");
-    for key in ["source_repo", "source_commit", "binary_sha256"] {
+    assert_eq!(
+        pins["source_repo"],
+        Value::String(OPF_SOURCE_REPO.to_string())
+    );
+    assert_eq!(
+        pins["source_commit"],
+        Value::String(OPF_SOURCE_COMMIT.to_string())
+    );
+    assert_eq!(
+        pins["checkpoint_bundle_sha256"],
+        OPF_CHECKPOINT_BUNDLE_SHA256
+            .map(|sha256| Value::String(sha256.to_string()))
+            .unwrap_or(Value::Null)
+    );
+    assert_eq!(
+        pins["required_opf_artifacts"],
+        Value::Array(
+            REQUIRED_OPF_ARTIFACTS
+                .iter()
+                .map(|artifact| Value::String((*artifact).to_string()))
+                .collect()
+        )
+    );
+    assert!(
+        !pins.contains_key("binary_sha256"),
+        "OPF pins must not include binary_sha256"
+    );
+}
+
+#[cfg(not(feature = "safety-net-openai"))]
+fn assert_opf_pins(snapshot: &Value) {
+    let pins = snapshot["backends"]["openai_privacy_filter"]["pins"]
+        .as_object()
+        .expect("OPF pins object");
+    for key in [
+        "source_repo",
+        "source_commit",
+        "checkpoint_bundle_sha256",
+        "required_opf_artifacts",
+    ] {
         assert!(pins.contains_key(key), "missing OPF pin key: {key}");
     }
+    assert!(
+        !pins.contains_key("binary_sha256"),
+        "OPF pins must not include binary_sha256"
+    );
 }
 
 fn assert_strict_span_leak_rate_shape(snapshot: &Value) {
