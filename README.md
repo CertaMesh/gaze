@@ -55,7 +55,6 @@ Each layer's role is what it is built for.
 ### Try the loop
 
 - Drop-in Laravel package: [`EmpireTwo/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter)
-- Runnable demo with a per-message `See cleanup` modal: [`EmpireTwo/gaze-laravel-demo-gw-ticks`](https://github.com/EmpireTwo/gaze-laravel-demo-gw-ticks)
 
 Agentic workflows (browser automation, tool execution) hook the same restore boundary at tool-call args, on the same manifest contract — the agent stays on tokens end-to-end.
 
