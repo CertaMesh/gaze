@@ -367,6 +367,7 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         openai_filter_operating_point: args.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
         kiji_backend: args.kiji_backend,
+        kiji_distilbert_precision: super::KijiDistilbertPrecision::Fp32,
         opf_locales: &[],
         opf_command: None,
         opf_checkpoint: None,
