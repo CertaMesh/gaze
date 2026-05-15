@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "benchmark": "safety-net-perf",
+  "backends": {
+    "kiji_distilbert": {
+      "cold_start_ms": 317.383083,
+      "per_fixture_median_ms": 231.221062,
+      "per_fixture_p95_ms": 436.079875,
+      "per_fixture_p99_ms": 632.306005,
+      "per_fixture_mean_ms": 269.741862,
+      "throughput_bytes_per_sec": 1058.518185,
+      "fixture_count": 150,
+      "device": "cpu",
+      "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+    },
+    "openai_privacy_filter": {
+      "cold_start_ms": 4204.987958,
+      "per_fixture_median_ms": 2880.083999,
+      "per_fixture_p95_ms": 4105.449383,
+      "per_fixture_p99_ms": 6196.141431,
+      "per_fixture_mean_ms": 3018.441981,
+      "throughput_bytes_per_sec": 94.594055,
+      "fixture_count": 150,
+      "device": "cpu",
+      "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+    }
+  },
+  "host": {
+    "os": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "cpu": "Apple M5 Max",
+    "python": "3.14.5"
+  }
+}

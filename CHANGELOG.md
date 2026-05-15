@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The consolidated v0.9 benchmark doc now compares Kiji and OPF with pins,
   per-locale metrics, per-class strict recall, and observer-residual caveats.
   (Axis 4 trust.)
+- **Observer-residual safety-net cells and latency snapshot**:
+  `scripts/kiji-bench-scorer.py` and `scripts/opf-bench-scorer.py` now share a
+  direct/observer scorer, the benchmark snapshot has measured observer-residual
+  cells for Kiji and OPF across all three locale buckets, and
+  `safety_net_perf_snapshot.json` records 150-fixture direct-mode latency for
+  both backends. The observer path uses a Rust `clean_for_bench` helper so
+  residual scoring is grounded in Gaze's emitted manifest spans. (Axis 4 trust.)
 
 - **Audit NER-provenance schema migration**: `gaze-audit` adds eleven
   nullable, additive provenance columns to `redaction_log` for future NER
