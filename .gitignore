@@ -3,9 +3,12 @@
 /.superpowers/
 /.lean-ctx/
 /.bench-venv/
+/.huggingface-cache/
 /.opf-bench-src/
 /.opf-bench-venv/
 /.anvil.local
+__pycache__/
+*.py[cod]
 *.db
 *.db-journal
 .DS_Store

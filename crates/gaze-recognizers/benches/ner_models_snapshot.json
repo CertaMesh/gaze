@@ -1,0 +1,2069 @@
+{
+  "schema_version": 1,
+  "benchmark": "ner-model-leaderboard",
+  "status": "real_run",
+  "corpus": {
+    "coverage_report_sha256": "760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c",
+    "sha256": "c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f",
+    "fixture_count": 150
+  },
+  "run_environment": {
+    "os": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "python": "3.14.5"
+  },
+  "models": {
+    "kiji-distilbert": {
+      "display_name": "Kiji DistilBERT",
+      "hf_repo": "onnx-community/distilbert-NER-ONNX",
+      "hf_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
+      "bundle_sha256_config": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f",
+      "bundle_sha256_observed": "34c2b83bc54b6fe3b96b74b360425c483f01be7a28feb91a37aaa65476d03aa4",
+      "license": "apache-2.0",
+      "runtime": "onnxruntime",
+      "wrapper": "scripts/kiji-runner.py",
+      "checkpoint": "/Users/krishankoenig/.cache/gaze/kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67",
+      "native_locales": [
+        "Global"
+      ],
+      "label_set": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "label_map": {
+        "PER": "Name",
+        "LOC": "Location",
+        "ORG": "Organization",
+        "MISC": "Custom:other"
+      },
+      "shippable_default": true,
+      "default_caveat": null,
+      "latency": {
+        "cold_start_ms": 961.065333,
+        "per_fixture_median_ms": 222.059,
+        "per_fixture_p95_ms": 268.206173,
+        "per_fixture_p99_ms": 295.327048,
+        "per_fixture_mean_ms": 231.635754,
+        "throughput_bytes_per_sec": 1232.653691,
+        "fixture_count": 150,
+        "device": "cpu",
+        "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+      }
+    },
+    "wikineural-multilingual": {
+      "display_name": "Babelscape WikiNeural Multilingual",
+      "hf_repo": "Babelscape/wikineural-multilingual-ner",
+      "hf_commit": "bed6ee7a45d2827b6c90a4fd7983f0241ae0a5c1",
+      "bundle_sha256_config": "<unpinned>",
+      "bundle_sha256_observed": "7015eaabce63ccc6ed759eeb517c9643f70a098aa49c57131d47aaf36aee075a",
+      "license": "cc-by-nc-sa-4.0",
+      "runtime": "transformers",
+      "wrapper": "scripts/transformers-runner.py",
+      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/wikineural-multilingual",
+      "native_locales": [
+        "EnUs",
+        "DeDe",
+        "FrFr",
+        "ItIt",
+        "EsEs",
+        "Global"
+      ],
+      "label_set": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "label_map": {
+        "PER": "Name",
+        "LOC": "Location",
+        "ORG": "Organization",
+        "MISC": "Custom:other"
+      },
+      "shippable_default": false,
+      "default_caveat": "Non-commercial license; informational benchmark only.",
+      "latency": {
+        "cold_start_ms": 2890.127959,
+        "per_fixture_median_ms": 1786.36075,
+        "per_fixture_p95_ms": 1997.942931,
+        "per_fixture_p99_ms": 2614.783255,
+        "per_fixture_mean_ms": 1832.978229,
+        "throughput_bytes_per_sec": 155.77199,
+        "fixture_count": 150,
+        "device": "cpu",
+        "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+      }
+    },
+    "dslim-bert-base-ner": {
+      "display_name": "dslim/bert-base-NER (English)",
+      "hf_repo": "dslim/bert-base-NER",
+      "hf_commit": "d1a3e8f13f8c3566299d95fcfc9a8d2382a9affc",
+      "bundle_sha256_config": "<unpinned>",
+      "bundle_sha256_observed": "fd7119ab25b127f50b4165bde3cc2466c90d0eabe230b206bf3dae7b6225fe54",
+      "license": "mit",
+      "runtime": "transformers",
+      "wrapper": "scripts/transformers-runner.py",
+      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/dslim-bert-base-ner",
+      "native_locales": [
+        "EnUs",
+        "EnGb"
+      ],
+      "label_set": [
+        "PER",
+        "LOC",
+        "ORG",
+        "MISC"
+      ],
+      "label_map": {
+        "PER": "Name",
+        "LOC": "Location",
+        "ORG": "Organization",
+        "MISC": "Custom:other"
+      },
+      "shippable_default": true,
+      "default_caveat": null,
+      "latency": {
+        "cold_start_ms": 1783.4385,
+        "per_fixture_median_ms": 1737.297417,
+        "per_fixture_p95_ms": 1808.988923,
+        "per_fixture_p99_ms": 1918.146869,
+        "per_fixture_mean_ms": 1743.286581,
+        "throughput_bytes_per_sec": 163.786419,
+        "fixture_count": 150,
+        "device": "cpu",
+        "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+      }
+    },
+    "davlan-bert-multilingual": {
+      "display_name": "Davlan multilingual BERT-NER (HRL)",
+      "hf_repo": "Davlan/bert-base-multilingual-cased-ner-hrl",
+      "hf_commit": "e756de7f7b8f64fea0c3d7c3872f1322fab747b1",
+      "bundle_sha256_config": "<unpinned>",
+      "bundle_sha256_observed": "c3af1f92b9292ba894177812d6f89e5d93502ef819b7fadf7ec7aeb692b4c49d",
+      "license": "afl-3.0",
+      "runtime": "transformers",
+      "wrapper": "scripts/transformers-runner.py",
+      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/davlan-bert-multilingual",
+      "native_locales": [
+        "EnUs",
+        "DeDe",
+        "FrFr",
+        "ItIt",
+        "EsEs",
+        "PtBr",
+        "Global"
+      ],
+      "label_set": [
+        "PER",
+        "LOC",
+        "ORG",
+        "DATE"
+      ],
+      "label_map": {
+        "PER": "Name",
+        "LOC": "Location",
+        "ORG": "Organization",
+        "DATE": "Custom:date"
+      },
+      "shippable_default": true,
+      "default_caveat": null,
+      "latency": {
+        "cold_start_ms": 2637.689166,
+        "per_fixture_median_ms": 1911.348979,
+        "per_fixture_p95_ms": 2143.359539,
+        "per_fixture_p99_ms": 2295.070171,
+        "per_fixture_mean_ms": 1944.522838,
+        "throughput_bytes_per_sec": 146.836366,
+        "fixture_count": 150,
+        "device": "cpu",
+        "measurement_scope": "per-fixture subprocess wall clock; includes fork/import/model load because the published wrappers are one-shot CLIs"
+      }
+    }
+  },
+  "cells": [
+    {
+      "model": "kiji-distilbert",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 5,
+            "true_positive": 0,
+            "false_positive": 5,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 59,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 59,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 54,
+            "true_positive": 0,
+            "false_positive": 54,
+            "false_negative": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 11,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "kiji-distilbert",
+      "locale": "EnUs",
+      "native_locale": false,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 29,
+            "true_positive": 0,
+            "false_positive": 29,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 48,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 48,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 24,
+            "true_positive": 0,
+            "false_positive": 24,
+            "false_negative": 29,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "kiji-distilbert",
+      "locale": "DeDe",
+      "native_locale": false,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 30,
+            "true_positive": 0,
+            "false_positive": 30,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 55,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 55,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 237,
+            "true_positive": 0,
+            "false_positive": 237,
+            "false_negative": 29,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 17,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "kiji-distilbert",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 5,
+            "true_positive": 0,
+            "false_positive": 5,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Location": {
+            "support": 0,
+            "predicted": 2,
+            "true_positive": 0,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 54,
+            "true_positive": 0,
+            "false_positive": 54,
+            "false_negative": 5,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.0
+      }
+    },
+    {
+      "model": "kiji-distilbert",
+      "locale": "EnUs",
+      "native_locale": false,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 29,
+            "true_positive": 0,
+            "false_positive": 29,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 24,
+            "true_positive": 0,
+            "false_positive": 24,
+            "false_negative": 29,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.0
+      }
+    },
+    {
+      "model": "kiji-distilbert",
+      "locale": "DeDe",
+      "native_locale": false,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": null,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 29,
+            "true_positive": 0,
+            "false_positive": 29,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 245,
+            "true_positive": 0,
+            "false_positive": 245,
+            "false_negative": 29,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.0
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.3125,
+        "recall": 0.125,
+        "f1": 0.178571,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 8,
+            "true_positive": 0,
+            "false_positive": 8,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 59,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 59,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 3,
+            "true_positive": 0,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 11,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.707317,
+        "recall": 0.125,
+        "f1": 0.212454,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 9,
+            "true_positive": 0,
+            "false_positive": 9,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 48,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 48,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 3,
+            "true_positive": 0,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "DeDe",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.408451,
+        "recall": 0.125,
+        "f1": 0.191419,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 27,
+            "true_positive": 0,
+            "false_positive": 27,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 55,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 55,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 42,
+            "true_positive": 29,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.690476,
+            "recall": 1.0,
+            "f1": 0.816901
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 2,
+            "true_positive": 0,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 17,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.277778,
+        "recall": 0.5,
+        "f1": 0.357143,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 12,
+            "true_positive": 0,
+            "false_positive": 12,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 1,
+            "true_positive": 0,
+            "false_positive": 1,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.5
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.707317,
+        "recall": 0.5,
+        "f1": 0.585859,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 12,
+            "true_positive": 0,
+            "false_positive": 12,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.5
+      }
+    },
+    {
+      "model": "wikineural-multilingual",
+      "locale": "DeDe",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.537037,
+        "recall": 1.0,
+        "f1": 0.698795,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 23,
+            "true_positive": 0,
+            "false_positive": 23,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 2,
+            "true_positive": 0,
+            "false_positive": 2,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 1.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 1.0
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "Global",
+      "native_locale": false,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.102041,
+        "recall": 0.125,
+        "f1": 0.11236,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 15,
+            "true_positive": 0,
+            "false_positive": 15,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 59,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 59,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 29,
+            "true_positive": 0,
+            "false_positive": 29,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 11,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.636364,
+        "recall": 0.12069,
+        "f1": 0.202899,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 3,
+            "true_positive": 0,
+            "false_positive": 3,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 48,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 48,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 28,
+            "true_positive": 28,
+            "false_positive": 0,
+            "false_negative": 1,
+            "precision": 1.0,
+            "recall": 0.965517,
+            "f1": 0.982456
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 13,
+            "true_positive": 0,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "DeDe",
+      "native_locale": false,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.162921,
+        "recall": 0.125,
+        "f1": 0.141463,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 12,
+            "true_positive": 0,
+            "false_positive": 12,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Email": {
+            "support": 55,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 55,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 30,
+            "true_positive": 29,
+            "false_positive": 1,
+            "false_negative": 0,
+            "precision": 0.966667,
+            "recall": 1.0,
+            "f1": 0.983051
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 136,
+            "true_positive": 0,
+            "false_positive": 136,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 17,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "Global",
+      "native_locale": false,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.104167,
+        "recall": 0.5,
+        "f1": 0.172414,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 8,
+            "true_positive": 0,
+            "false_positive": 8,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 35,
+            "true_positive": 0,
+            "false_positive": 35,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.5
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.613636,
+        "recall": 0.465517,
+        "f1": 0.529412,
+        "per_class": {
+          "Name": {
+            "support": 29,
+            "predicted": 27,
+            "true_positive": 27,
+            "false_positive": 0,
+            "false_negative": 2,
+            "precision": 1.0,
+            "recall": 0.931034,
+            "f1": 0.964286
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 17,
+            "true_positive": 0,
+            "false_positive": 17,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.465517,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.465517
+      }
+    },
+    {
+      "model": "dslim-bert-base-ner",
+      "locale": "DeDe",
+      "native_locale": false,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.153439,
+        "recall": 1.0,
+        "f1": 0.266055,
+        "per_class": {
+          "Custom:other": {
+            "support": 0,
+            "predicted": 5,
+            "true_positive": 0,
+            "false_positive": 5,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 155,
+            "true_positive": 0,
+            "false_positive": 155,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 1.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 1.0
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.294118,
+        "recall": 0.125,
+        "f1": 0.175439,
+        "per_class": {
+          "Email": {
+            "support": 59,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 59,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 12,
+            "true_positive": 0,
+            "false_positive": 12,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 21,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 25,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 11,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 11,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.690476,
+        "recall": 0.125,
+        "f1": 0.211679,
+        "per_class": {
+          "Email": {
+            "support": 48,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 48,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 13,
+            "true_positive": 0,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 10,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 10,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "DeDe",
+      "native_locale": true,
+      "mode": "direct_detector",
+      "metrics": {
+        "precision": 0.690476,
+        "recall": 0.125,
+        "f1": 0.211679,
+        "per_class": {
+          "Email": {
+            "support": 55,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 55,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 13,
+            "true_positive": 0,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:credit_card": {
+            "support": 7,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 7,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 4,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:iban": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 17,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 17,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 13,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 13,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "Global",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.294118,
+        "recall": 0.5,
+        "f1": 0.37037,
+        "per_class": {
+          "Name": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 12,
+            "true_positive": 0,
+            "false_positive": 12,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.5,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.5
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "EnUs",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.666667,
+        "recall": 0.482758,
+        "f1": 0.56,
+        "per_class": {
+          "Name": {
+            "support": 29,
+            "predicted": 28,
+            "true_positive": 28,
+            "false_positive": 0,
+            "false_negative": 1,
+            "precision": 1.0,
+            "recall": 0.965517,
+            "f1": 0.982456
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 14,
+            "true_positive": 0,
+            "false_positive": 14,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 0.482758,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 0.482758
+      }
+    },
+    {
+      "model": "davlan-bert-multilingual",
+      "locale": "DeDe",
+      "native_locale": true,
+      "mode": "observer_residual",
+      "metrics": {
+        "precision": 0.591837,
+        "recall": 1.0,
+        "f1": 0.74359,
+        "per_class": {
+          "Name": {
+            "support": 29,
+            "predicted": 29,
+            "true_positive": 29,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "Organization": {
+            "support": 0,
+            "predicted": 20,
+            "true_positive": 0,
+            "false_positive": 20,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          }
+        },
+        "observer_residual_recall": 1.0,
+        "agreement_with_rule_floor": null,
+        "expansion_fraction": null,
+        "contradiction_fraction": null,
+        "novel_tp_over_rule_floor": 1.0
+      }
+    }
+  ]
+}
