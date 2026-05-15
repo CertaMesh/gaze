@@ -52,3 +52,7 @@ rusqlite = { workspace = true }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 trybuild = "1"
+
+[[bench]]
+name = "pipeline_end_to_end"
+harness = false
