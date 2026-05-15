@@ -506,7 +506,7 @@ impl SqliteLogger {
         Ok(entries)
     }
 
-    pub fn log_safety_net(&self, entry: &LeakSuspectLogEntry) -> Result<()> {
+    fn insert_leak_suspect(&self, entry: &LeakSuspectLogEntry) -> Result<()> {
         let conn = self
             .conn
             .lock()
@@ -568,7 +568,7 @@ impl SqliteLogger {
 
 impl LeakSuspectLogger for SqliteLogger {
     fn log_leak_suspect(&self, entry: &LeakSuspectLogEntry) -> Result<()> {
-        self.log_safety_net(entry)
+        self.insert_leak_suspect(entry)
     }
 }
 

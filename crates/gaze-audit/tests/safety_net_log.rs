@@ -141,8 +141,8 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
         Some("session-b".to_string()),
         None,
     );
-    logger.log_safety_net(&email).expect("log email suspect");
-    logger.log_safety_net(&name).expect("log name suspect");
+    logger.log_leak_suspect(&email).expect("log email suspect");
+    logger.log_leak_suspect(&name).expect("log name suspect");
 
     let rows = SqliteLogger::query_safety_net(
         temp.path(),
@@ -210,7 +210,7 @@ fn safety_net_log_does_not_persist_suspect_or_placeholder_bytes() {
         Some("replay-sha256:no-payload".to_string()),
     );
 
-    logger.log_safety_net(&entry).expect("log suspect");
+    logger.log_leak_suspect(&entry).expect("log suspect");
 
     let conn = Connection::open(temp.path()).expect("open db");
     let mut stmt = conn
