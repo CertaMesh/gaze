@@ -344,12 +344,16 @@ impl SqliteLogger {
         let validator_fail_reason = serialize_json_column(entry.validator_fail_reason.as_ref())?;
         let ambiguity_record = serialize_json_column(entry.ambiguity_record.as_ref())?;
         let fallback_triggered = entry.fallback_triggered.map(fallback_reason_to_db);
+        let provenance_confidence = entry
+            .provenance_confidence
+            .as_deref()
+            .and_then(|value| value.parse::<f64>().ok());
         let conn = self
             .conn
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -367,6 +371,17 @@ impl SqliteLogger {
                 entry.collision_family,
                 entry.collision_variant,
                 fallback_triggered,
+                entry.provenance_stage,
+                entry.provenance_model_id,
+                entry.provenance_model_version,
+                entry.provenance_artifact_sha256,
+                entry.provenance_tokenizer_sha256,
+                entry.provenance_locale_resolved,
+                entry.provenance_locale_match_kind,
+                entry.provenance_canonical_class,
+                entry.provenance_native_class,
+                provenance_confidence,
+                entry.provenance_merged_from,
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;

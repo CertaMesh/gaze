@@ -56,3 +56,7 @@ trybuild = "1"
 [[bench]]
 name = "pipeline_end_to_end"
 harness = false
+
+[[bench]]
+name = "tier4_pipeline_gating"
+harness = false

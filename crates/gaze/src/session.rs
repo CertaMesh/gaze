@@ -1,3 +1,5 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::mapref::entry::Entry;
@@ -105,6 +107,20 @@ struct SnapshotPayload {
     document: Option<DocumentExtension>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PrefixCacheHit {
+    pub raw_len: usize,
+    pub clean_text: String,
+    pub manifest: Vec<gaze_types::EmittedTokenSpan>,
+}
+
+#[derive(Debug, Clone)]
+struct PrefixCacheEntry {
+    raw: String,
+    clean_text: String,
+    manifest: Vec<gaze_types::EmittedTokenSpan>,
+}
+
 /// Owns the token manifest for one conversation or request.
 ///
 /// A `Session` holds the bidirectional map between PII values and their pseudonymous tokens.
@@ -191,6 +207,7 @@ pub struct Session {
     next_by_class: DashMap<PiiClass, usize>,
     token_by_value: DashMap<TokenKey, String>,
     value_by_token: DashMap<String, String>,
+    prefix_cache: DashMap<u64, PrefixCacheEntry>,
     signing_key: SessionKey,
 }
 
@@ -203,6 +220,7 @@ impl Session {
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
+            prefix_cache: DashMap::new(),
             signing_key: SessionKey::generate()?,
         })
     }
@@ -322,6 +340,44 @@ impl Session {
 
     pub fn audit_session_id(&self) -> &str {
         &self.audit_session_id
+    }
+
+    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+        self.prefix_cache
+            .iter()
+            .filter_map(|entry| {
+                let cached = entry.value();
+                (text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())).then(
+                    || PrefixCacheHit {
+                        raw_len: cached.raw.len(),
+                        clean_text: cached.clean_text.clone(),
+                        manifest: cached.manifest.clone(),
+                    },
+                )
+            })
+            .max_by_key(|hit| hit.raw_len)
+    }
+
+    pub(crate) fn store_prefix_cache(
+        &self,
+        raw: &str,
+        clean_text: &str,
+        manifest: &[gaze_types::EmittedTokenSpan],
+    ) {
+        if raw.is_empty() {
+            return;
+        }
+        if self.prefix_cache.len() >= 64 {
+            self.prefix_cache.clear();
+        }
+        self.prefix_cache.insert(
+            prefix_cache_hash(raw),
+            PrefixCacheEntry {
+                raw: raw.to_string(),
+                clean_text: clean_text.to_string(),
+                manifest: manifest.to_vec(),
+            },
+        );
     }
 
     // Original byte spans are preserved by recognizer normalizers per
@@ -523,6 +579,7 @@ impl Session {
             next_by_class: DashMap::new(),
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
+            prefix_cache: DashMap::new(),
             signing_key: SessionKey::generate()?,
         };
         for entry in payload.entries {
@@ -560,6 +617,12 @@ impl Session {
 
 fn default_counter_family() -> String {
     DEFAULT_COUNTER_FAMILY.to_string()
+}
+
+fn prefix_cache_hash(raw: &str) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    raw.hash(&mut hasher);
+    hasher.finish()
 }
 
 fn new_audit_session_id() -> String {
