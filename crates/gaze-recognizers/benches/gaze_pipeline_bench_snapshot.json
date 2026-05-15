@@ -1,0 +1,919 @@
+{
+  "schema_version": 1,
+  "benchmark": "gaze-pipeline-end-to-end",
+  "status": "measured_with_nulls_for_unavailable_configs",
+  "corpus": {
+    "path": "crates/gaze-recognizers/testdata/coverage-loop/corpus",
+    "fixture_count": 150,
+    "sha256": "c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f",
+    "seed": 113668362958386
+  },
+  "configs": {
+    "rule-floor-core": {
+      "rulepacks": [
+        "core"
+      ],
+      "pass2": null,
+      "pass3": null
+    },
+    "rule-floor-extended": {
+      "rulepacks": [
+        "core",
+        "core-extended"
+      ],
+      "pass2": null,
+      "pass3": null
+    },
+    "pass3-kiji": {
+      "rulepacks": [
+        "core",
+        "core-extended"
+      ],
+      "pass2": null,
+      "pass3": "KijiDistilbertSafetyNet observer residual"
+    },
+    "pass3-opf": {
+      "rulepacks": [
+        "core",
+        "core-extended"
+      ],
+      "pass2": null,
+      "pass3": "OpenAiFilterSafetyNet observer residual"
+    },
+    "pass3-locale-aware": {
+      "rulepacks": [
+        "core",
+        "core-extended"
+      ],
+      "pass2": null,
+      "pass3": "LocaleAwareModelRegistry(Kiji+OPF) routed by locale"
+    }
+  },
+  "locales": [
+    "Global",
+    "EnUs",
+    "DeDe"
+  ],
+  "measurable_labels": [
+    "Email",
+    "IBAN",
+    "credit_card",
+    "phone",
+    "postal_code",
+    "Name-first",
+    "Name-surname"
+  ],
+  "label_notes": {
+    "Name-first": "null in schema v1 because the coverage-loop oracle labels full Name spans, not first-name subspans",
+    "Name-surname": "null in schema v1 because the coverage-loop oracle labels full Name spans, not surname subspans"
+  },
+  "host": {
+    "os": "macOS-26.5-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "cpu": "Apple M5 Max",
+    "python": "3.14.5",
+    "platform": "macOS-26.5-arm64-arm-64bit-Mach-O"
+  },
+  "cells": [
+    {
+      "pipeline_config": "rule-floor-core",
+      "locale": "Global",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.625,
+        "strict_leak_rate": 0.375,
+        "precision": 0.881579,
+        "f1": 0.731441,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 1.0,
+          "postal_code": 0.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 59,
+            "predicted": 59,
+            "true_positive": 59,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 18,
+            "predicted": 18,
+            "true_positive": 18,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 21,
+            "true_positive": 21,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 18,
+            "true_positive": 0,
+            "false_positive": 18,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 25,
+            "true_positive": 25,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 11,
+            "predicted": 11,
+            "true_positive": 11,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 3.570125,
+        "mean_ms": 5.188498,
+        "p50_ms": 0.268771,
+        "p95_ms": 0.74932,
+        "p99_ms": 121.202593,
+        "throughput_bytes_per_sec": 49494.093623,
+        "pass_timing": {
+          "pass1_ms": 0.325483,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "rule-floor-core",
+      "locale": "EnUs",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.625,
+        "strict_leak_rate": 0.375,
+        "precision": 0.792079,
+        "f1": 0.69869,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 0.0,
+          "postal_code": 1.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 48,
+            "predicted": 48,
+            "true_positive": 48,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 29,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 10,
+            "predicted": 10,
+            "true_positive": 10,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 8,
+            "true_positive": 0,
+            "false_positive": 8,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 7,
+            "true_positive": 7,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "postal_code": {
+            "support": 10,
+            "predicted": 23,
+            "true_positive": 10,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.434783,
+            "recall": 1.0,
+            "f1": 0.606061
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 1.834875,
+        "mean_ms": 0.449571,
+        "p50_ms": 0.306916,
+        "p95_ms": 1.415014,
+        "p99_ms": 1.978403,
+        "throughput_bytes_per_sec": 703393.102933,
+        "pass_timing": {
+          "pass1_ms": 0.419183,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "rule-floor-core",
+      "locale": "DeDe",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.75,
+        "strict_leak_rate": 0.25,
+        "precision": 0.744526,
+        "f1": 0.747253,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 1.0,
+          "postal_code": 1.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 55,
+            "predicted": 55,
+            "true_positive": 55,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 29,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 7,
+            "predicted": 7,
+            "true_positive": 7,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 4,
+            "true_positive": 4,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 22,
+            "true_positive": 0,
+            "false_positive": 22,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 6,
+            "true_positive": 6,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 17,
+            "predicted": 17,
+            "true_positive": 17,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "postal_code": {
+            "support": 13,
+            "predicted": 26,
+            "true_positive": 13,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.666667
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 1.790708,
+        "mean_ms": 1.230684,
+        "p50_ms": 0.360271,
+        "p95_ms": 3.147984,
+        "p99_ms": 18.579676,
+        "throughput_bytes_per_sec": 240061.596959,
+        "pass_timing": {
+          "pass1_ms": 0.478507,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "rule-floor-extended",
+      "locale": "Global",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.625,
+        "strict_leak_rate": 0.375,
+        "precision": 0.881579,
+        "f1": 0.731441,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 1.0,
+          "postal_code": 0.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 59,
+            "predicted": 59,
+            "true_positive": 59,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 18,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 18,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 5,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 5,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 18,
+            "predicted": 18,
+            "true_positive": 18,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 21,
+            "predicted": 21,
+            "true_positive": 21,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 18,
+            "true_positive": 0,
+            "false_positive": 18,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 25,
+            "predicted": 25,
+            "true_positive": 25,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 11,
+            "predicted": 11,
+            "true_positive": 11,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "postal_code": {
+            "support": 6,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 6,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 3.626167,
+        "mean_ms": 5.16161,
+        "p50_ms": 0.260021,
+        "p95_ms": 0.729184,
+        "p99_ms": 120.716256,
+        "throughput_bytes_per_sec": 49751.914314,
+        "pass_timing": {
+          "pass1_ms": 0.322888,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "rule-floor-extended",
+      "locale": "EnUs",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.625,
+        "strict_leak_rate": 0.375,
+        "precision": 0.792079,
+        "f1": 0.69869,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 0.0,
+          "postal_code": 1.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 48,
+            "predicted": 48,
+            "true_positive": 48,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 8,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 8,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 29,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 10,
+            "predicted": 10,
+            "true_positive": 10,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 5,
+            "predicted": 5,
+            "true_positive": 5,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 8,
+            "true_positive": 0,
+            "false_positive": 8,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 7,
+            "predicted": 7,
+            "true_positive": 7,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 15,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 15,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "postal_code": {
+            "support": 10,
+            "predicted": 23,
+            "true_positive": 10,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.434783,
+            "recall": 1.0,
+            "f1": 0.606061
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 1.790833,
+        "mean_ms": 0.447705,
+        "p50_ms": 0.301249,
+        "p95_ms": 1.368519,
+        "p99_ms": 1.951162,
+        "throughput_bytes_per_sec": 706324.122083,
+        "pass_timing": {
+          "pass1_ms": 0.416047,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "rule-floor-extended",
+      "locale": "DeDe",
+      "status": "measured",
+      "reason": null,
+      "detection": {
+        "strict_recall": 0.75,
+        "strict_leak_rate": 0.25,
+        "precision": 0.744526,
+        "f1": 0.747253,
+        "per_class_recall": {
+          "Email": 1.0,
+          "IBAN": 0.0,
+          "credit_card": 1.0,
+          "phone": 1.0,
+          "postal_code": 1.0,
+          "Name-first": null,
+          "Name-surname": null
+        },
+        "raw_per_class": {
+          "Email": {
+            "support": 55,
+            "predicted": 55,
+            "true_positive": 55,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "support": 22,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 22,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "Name": {
+            "support": 29,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "false_negative": 29,
+            "precision": null,
+            "recall": 0.0,
+            "f1": null
+          },
+          "credit_card": {
+            "support": 7,
+            "predicted": 7,
+            "true_positive": 7,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:eth_address": {
+            "support": 4,
+            "predicted": 4,
+            "true_positive": 4,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "custom:family:payment-card-or-iban": {
+            "support": 0,
+            "predicted": 22,
+            "true_positive": 0,
+            "false_positive": 22,
+            "false_negative": 0,
+            "precision": 0.0,
+            "recall": null,
+            "f1": null
+          },
+          "custom:ip_address": {
+            "support": 6,
+            "predicted": 6,
+            "true_positive": 6,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "phone": {
+            "support": 17,
+            "predicted": 17,
+            "true_positive": 17,
+            "false_positive": 0,
+            "false_negative": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "postal_code": {
+            "support": 13,
+            "predicted": 26,
+            "true_positive": 13,
+            "false_positive": 13,
+            "false_negative": 0,
+            "precision": 0.5,
+            "recall": 1.0,
+            "f1": 0.666667
+          }
+        }
+      },
+      "performance": {
+        "cold_start_ms": 1.844375,
+        "mean_ms": 1.210355,
+        "p50_ms": 0.343354,
+        "p95_ms": 3.026375,
+        "p99_ms": 18.069898,
+        "throughput_bytes_per_sec": 244093.687096,
+        "pass_timing": {
+          "pass1_ms": 0.478881,
+          "pass2_ms": null,
+          "pass2_reason": "no Pass-2 NER is enabled in the five locked configs",
+          "pass3_ms": 0.0,
+          "measurement_scope": "full pipeline wall clock from clean_for_bench; pass1 is matching rule-floor wall clock; pass3 is full minus rule-floor delta"
+        }
+      }
+    },
+    {
+      "pipeline_config": "pass3-kiji",
+      "locale": "Global",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_KIJI_DISTILBERT_COMMAND is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-kiji",
+      "locale": "EnUs",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_KIJI_DISTILBERT_COMMAND is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-kiji",
+      "locale": "DeDe",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_KIJI_DISTILBERT_COMMAND is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-opf",
+      "locale": "Global",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_OPENAI_FILTER_OPF is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-opf",
+      "locale": "EnUs",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_OPENAI_FILTER_OPF is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-opf",
+      "locale": "DeDe",
+      "status": "unavailable",
+      "reason": "Error: Unavailable { reason: \"GAZE_OPENAI_FILTER_OPF is not set\" }",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-locale-aware",
+      "locale": "Global",
+      "status": "unavailable",
+      "reason": "Error: \"LocaleAwareModelRegistry has no Pipeline SafetyNet adapter in this stack\"",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-locale-aware",
+      "locale": "EnUs",
+      "status": "unavailable",
+      "reason": "Error: \"LocaleAwareModelRegistry has no Pipeline SafetyNet adapter in this stack\"",
+      "detection": null,
+      "performance": null
+    },
+    {
+      "pipeline_config": "pass3-locale-aware",
+      "locale": "DeDe",
+      "status": "unavailable",
+      "reason": "Error: \"LocaleAwareModelRegistry has no Pipeline SafetyNet adapter in this stack\"",
+      "detection": null,
+      "performance": null
+    }
+  ]
+}
