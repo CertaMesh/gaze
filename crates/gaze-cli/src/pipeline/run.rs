@@ -202,7 +202,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         (doc, _report)
     } else {
         let doc = pipeline
-            .redact_with_detect_context(
+            .pseudonymize_with_detect_context(
                 &session,
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),

@@ -189,7 +189,7 @@ fn required_string<'a>(args: &'a serde_json::Value, field: &str) -> Result<&'a s
 fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolError> {
     let pipeline = crate::bundle::build_document_pipeline().map_err(map_document_error)?;
     let clean = pipeline
-        .redact_with_context(
+        .pseudonymize_with_context(
             ctx.resources().session(),
             RawDocument::Text(text.to_string()),
             ctx.resources().locale_chain(),

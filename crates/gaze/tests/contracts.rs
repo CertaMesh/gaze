@@ -446,7 +446,7 @@ fn mandatory_anchor_missing_emits_family_token_and_no_anchor_ambiguity() {
     let pipeline = mandatory_anchor_iban_pipeline(logger.clone());
 
     let clean = pipeline
-        .redact_with_context(
+        .pseudonymize_with_context(
             &session,
             RawDocument::Text("DE89 3704 0044 0532 0130 00".to_string()),
             &[gaze::LocaleTag::DeDe],
@@ -499,7 +499,7 @@ fn mandatory_anchor_present_keeps_variant_token_without_ambiguity() {
     let pipeline = mandatory_anchor_iban_pipeline(logger.clone());
 
     let clean = pipeline
-        .redact_with_context(
+        .pseudonymize_with_context(
             &session,
             RawDocument::Text("IBAN: DE89 3704 0044 0532 0130 00".to_string()),
             &[gaze::LocaleTag::DeDe],

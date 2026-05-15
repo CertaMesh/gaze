@@ -169,7 +169,7 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
 
 fn clean_text(pipeline: &Pipeline, session: &Session, input: &str, locale: LocaleTag) -> String {
     let clean = pipeline
-        .redact_with_context(
+        .pseudonymize_with_context(
             session,
             RawDocument::Text(input.to_string()),
             &[locale, LocaleTag::Global],

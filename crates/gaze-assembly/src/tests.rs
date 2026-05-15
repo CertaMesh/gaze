@@ -176,7 +176,7 @@ fn build_pipeline_context_only_still_succeeds() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let dictionaries = gaze::dictionary_bundle_from_context(&context);
     let clean = pipeline
-        .redact_with_detect_context(
+        .pseudonymize_with_detect_context(
             &session,
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
@@ -245,7 +245,7 @@ fn core_pipeline_config_tokenizes_synthetic_email() {
     let core = CorePipelineConfig::new().build().expect("core pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let text = clean_text(
-        core.redact_text(&session, "Email alice@example.invalid")
+        core.pseudonymize_text(&session, "Email alice@example.invalid")
             .expect("redact"),
     );
 
@@ -260,7 +260,7 @@ fn core_pipeline_config_core_tokenizes_safe_default_phone() {
         .expect("core pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let input = "Phone +12025550100";
-    let text = clean_text(core.redact_text(&session, input).expect("redact"));
+    let text = clean_text(core.pseudonymize_text(&session, input).expect("redact"));
 
     assert!(text.contains(":Custom:phone_"), "{text}");
 }
@@ -274,7 +274,7 @@ fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_phone() {
         .expect("extended pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let text = clean_text(
-        core.redact_text(&session, "Phone +12025550100")
+        core.pseudonymize_text(&session, "Phone +12025550100")
             .expect("redact"),
     );
 
@@ -291,7 +291,7 @@ fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_iban() {
         .expect("extended pipeline");
     let session = Session::new(Scope::Ephemeral).expect("session");
     let text = clean_text(
-        core.redact_text(&session, "IBAN DE89 3704 0044 0532 0130 00")
+        core.pseudonymize_text(&session, "IBAN DE89 3704 0044 0532 0130 00")
             .expect("redact"),
     );
 
@@ -304,7 +304,7 @@ fn core_pipeline_restore_round_trip() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let original = "alice@example.invalid";
     let text = clean_text(
-        core.redact_text(&session, format!("Email {original}"))
+        core.pseudonymize_text(&session, format!("Email {original}"))
             .expect("redact"),
     );
     let token = regex::Regex::new(r"<[^>]+:Email_\d+>")
@@ -417,7 +417,7 @@ fn t20_context_class_map_overrides_policy_dict_class() {
     let dictionaries = gaze::dictionary_bundle_from_context(&context);
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = pipeline
-        .redact_with_detect_context(
+        .pseudonymize_with_detect_context(
             &session,
             RawDocument::Text("track context-song-123".to_string()),
             active_locales.as_slice(),
