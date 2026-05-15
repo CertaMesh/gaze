@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **OPF checkpoint trust pin**: the OpenAI Privacy Filter safety-net backend now
+  pins the locally captured checkpoint bundle SHA256 and required artifact
+  inventory for `openai/privacy-filter` commit
+  `f7f00ca7fb869683eb732c010299d901457f19c3`. OPF benchmark cells remain
+  `null` until the separate scorer run publishes measured results. The matrix
+  bench now compiles under `--features safety-net-openai` so the OPF pin block
+  can be validated without also enabling Kiji. (Axis 4 trust.)
+
 ### Changed
 
 - **Safety-net benchmark snapshot schema v2**: the internal benchmark artifact

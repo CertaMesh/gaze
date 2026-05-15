@@ -26,17 +26,22 @@ pub const OPF_SOURCE_COMMIT: &str = "f7f00ca7fb869683eb732c010299d901457f19c3";
 
 /// SHA256 of the checkpoint bundle downloaded by `opf` at `OPF_SOURCE_COMMIT`.
 ///
-/// This remains `None` until a reproducible clean OPF download is captured and
-/// reviewed. When populated, `verify_checkpoint_bundle_sha256` checks the local
-/// checkpoint directory before allowing subprocess execution.
-pub const OPF_CHECKPOINT_BUNDLE_SHA256: Option<&str> = None;
+/// Computed as SHA256 over the Kiji-style line-per-file SHA256SUMS manifest for
+/// `REQUIRED_OPF_ARTIFACTS` in declaration order. Verified 2026-05-15 from a
+/// clean `opf download` into `~/.opf/privacy_filter`.
+pub const OPF_CHECKPOINT_BUNDLE_SHA256: Option<&str> =
+    Some("4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae");
 
 /// Required checkpoint artifact filenames inside the OPF bundle directory.
 ///
-/// Empty until a local clean `opf` checkpoint download is captured. A future PR
-/// that fills `OPF_CHECKPOINT_BUNDLE_SHA256` must fill this list in the same
-/// change.
-pub const REQUIRED_OPF_ARTIFACTS: &[&str] = &[];
+/// The Hugging Face downloader also writes `.cache/huggingface` metadata; those
+/// cache files are excluded from the runtime bundle hash.
+pub const REQUIRED_OPF_ARTIFACTS: &[&str] = &[
+    "config.json",
+    "dtypes.json",
+    "model.safetensors",
+    "viterbi_calibration.json",
+];
 
 /// Configuration for the local OPF subprocess backend.
 #[derive(Debug, Clone)]
