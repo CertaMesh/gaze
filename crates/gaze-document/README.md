@@ -121,7 +121,8 @@ Stdout carries a one-line JSON summary so callers can pipe it.
   (`vector_pdf` or `ocr`), OCR backend, normalized confidence,
   low-confidence flag, column count, per-class PII counts, PDF metadata,
   and the source kind. Existing v1 reports still deserialize; new emission
-  is always v2.
+  is always v2. Full field-by-field catalog with stability per field:
+  [`docs/metrics.md`](../../docs/metrics.md#6-safebundle--bundlereport-gaze-document).
 
 ## OCR brittleness + normalization
 

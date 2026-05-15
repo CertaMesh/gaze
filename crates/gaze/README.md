@@ -81,6 +81,12 @@ The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 
 Full project north star + five-axis contract: [AGENTS.md](https://github.com/EmpireTwo/gaze/blob/main/AGENTS.md#project-north-star).
 
+Every observable surface this crate exposes — `Pipeline` per-pass behavior,
+the `ConflictTier` audit-string set, `RedactionEntry` columns,
+`Recognizer` / `Candidate` metadata, and the `SafetyNetResult` return — is
+cataloged with file-line pointers and stability guarantees in
+[`docs/metrics.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/metrics.md).
+
 ## Features
 
 | Feature | Default | Effect |

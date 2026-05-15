@@ -232,6 +232,15 @@ provide deterministic metadata:
 Add adopter-specific recognizers outside this crate when the behavior is tied
 to one tenant, one private schema, or one proprietary data source.
 
+The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
+`validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
+(strict-span leak rate, observer-residual recall, composability quad), and
+the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
+[`docs/metrics.md`](../../docs/metrics.md#3-safetynet-metrics-gaze-recognizers)
+(SafetyNet) and
+[`docs/metrics.md`](../../docs/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
+(recognizer surface).
+
 ## Test support
 
 The crate has a `test-support` feature for tests that need additional support
