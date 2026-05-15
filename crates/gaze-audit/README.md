@@ -12,6 +12,8 @@ Provides `SqliteLogger` - the concrete `RedactionLogger` implementation that wri
 session-scoped redaction metadata to a local SQLite database. The audit log is
 **metadata-only**: it records class, action, source, field metadata, and timestamp,
 but never the original PII values or the pseudonymous tokens.
+Safety-net leak suspects are written through the canonical
+`LeakSuspectLogger::log_leak_suspect` trait method.
 
 ## When to use this crate
 
@@ -80,6 +82,19 @@ public items beyond `SqliteLogger`:
 | `AuditLogRow` | Shape returned by `SqliteLogger::query`. Metadata only — `class`, `action`, `field_name`, `document_kind`, `conflict_loser`, `decided_by`, `created_at`, `session_id`, snapshot metadata, and the four v0.7.x ambiguity columns. No raw PII, no token values, no restore material. |
 | `build_audit_query_sql` | Lower-level helper that constructs the `(SQL, params)` pair used by `SqliteLogger::query`. Takes column-presence booleans so callers querying older databases project `NULL AS <missing_column>` rather than failing. Exposed so external readers can run the same projection logic against a read replica without re-implementing the filter compiler. |
 | `AUDIT_RESTRICTED_COLUMNS` | Canonical allowlist of columns the audit-query path may project. `audit export` and `SqliteLogger::query` select only from this set. `redaction_log` may grow columns over time (e.g. snapshot locators, replay hashes); restricting projection here is defense in depth so future schema additions never accidentally leak raw PII, token bytes, or document content. The clean path is forbidden from touching audit storage by the `gaze_module_isolation` Dylint lint; this constant is the matching read-side guard. |
+
+Safety-net writes use the `LeakSuspectLogger` trait:
+
+```rust,no_run
+use std::path::Path;
+use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
+
+# fn log(entry: &LeakSuspectLogEntry) -> gaze_audit::Result<()> {
+let logger = SqliteLogger::new(Path::new("audit.db"))?;
+logger.log_leak_suspect(entry)?;
+# Ok(())
+# }
+```
 
 ## Ambiguity side-channel columns (v0.7.2)
 

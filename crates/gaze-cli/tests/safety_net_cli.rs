@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use gaze::{LeakKind, LeakSuspect, PiiClass};
-use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
+use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 use serde_json::Value;
 use tempfile::{tempdir, TempDir};
 
@@ -311,7 +311,7 @@ fn safety_net_audit_query_filters_structured_field_path() {
         Some("session-a".to_string()),
         None,
     );
-    logger.log_safety_net(&entry).unwrap();
+    logger.log_leak_suspect(&entry).unwrap();
 
     let out = Command::cargo_bin("gaze")
         .unwrap()

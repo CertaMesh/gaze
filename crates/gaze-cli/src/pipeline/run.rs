@@ -16,7 +16,7 @@ use gaze::{
     RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack,
     RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope, TypedContext,
 };
-use gaze_audit::{LeakSuspectLogEntry, SqliteLogger};
+use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
@@ -625,7 +625,7 @@ impl CountingLogger {
                 Some(session.audit_session_id().to_string()),
                 report.replay_hash.clone(),
             );
-            audit.log_safety_net(&entry)?;
+            audit.log_leak_suspect(&entry)?;
         }
         Ok(())
     }
