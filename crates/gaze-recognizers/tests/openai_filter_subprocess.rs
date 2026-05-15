@@ -89,12 +89,13 @@ fn all_official_labels_map_exactly_to_gaze_classes() {
 
 #[test]
 #[serial]
-fn openai_filter_is_object_safe_locale_aware_model_with_global_native_locale() {
-    let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new("opf"));
+fn openai_filter_locale_aware_model_reports_configured_native_locales() {
+    let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new("opf"))
+        .with_locales(vec![LocaleTag::EnUs]);
     let model: &dyn LocaleAwareModel = &net;
 
     assert_eq!(model.name(), "openai-privacy-filter");
-    assert_eq!(model.native_locales(), &[LocaleTag::Global]);
+    assert_eq!(model.native_locales(), &[LocaleTag::EnUs]);
 }
 
 #[test]

@@ -118,7 +118,7 @@ impl LeakSuspectLogEntry {
             session_id,
             pipeline_class: leak_kind_pipeline_class(&suspect.kind).map(PiiClass::to_canonical_str),
             safety_net_replay_hash,
-            backend_id: None,
+            backend_id: Some(suspect.safety_net_id.clone()),
             backend_version: None,
             decoding_params_hash: None,
             telemetry_kind: None,

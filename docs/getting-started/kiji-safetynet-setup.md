@@ -228,11 +228,28 @@ single-tenant or offline deployment might prefer Kiji because the artifact
 bundle is smaller and easier to pin. You can keep one policy file and change
 only the CLI backend flags per environment.
 
-Do not configure both backends in one `gaze clean` call. The CLI selector picks
-one active Pass-3 implementation. If you need comparative evaluation, run the
-same synthetic fixture set twice, once per backend, and compare the resulting
-`LeakReport` metadata. Keep those comparisons out of production request paths
-unless you have an explicit latency budget for duplicate subprocess calls.
+For locale-specific routing, use the registry mode instead of the single
+backend selector:
+
+```sh
+gaze clean \
+  --policy quickstart-policy.toml \
+  --locale de-DE \
+  --safety-net-registry \
+  --safety-net-add kiji-distilbert \
+  --kiji-distilbert-command /opt/kiji/bin/kiji \
+  --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert \
+  --kiji-distilbert-locales en-US,en-GB \
+  --safety-net-add openai-filter \
+  --opf-command /opt/opf/bin/opf \
+  --opf-checkpoint ~/.local/share/gaze/models/opf \
+  --opf-locales de-DE,de-AT
+```
+
+Registry dispatch resolves the first backend matching the active locale
+(`de-DE` in the example), then falls back to the parent language and `global`.
+If more than one backend matches the same tier, v1 uses first-match wins.
+Aggregation is a separate follow-up.
 
 ## Pinned-Artifact Contract
 

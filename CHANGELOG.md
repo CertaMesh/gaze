@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Existing rows read back with `NULL` provenance fields; producer population is
   deferred to a follow-up. (Axis 4 trust, Axis 5 ergonomics.)
 
+- **Locale-aware Pass-3 SafetyNet dispatcher**: `Pipeline::with_safety_net_registry` wires `LocaleAwareModelRegistry` into clean-time safety-net dispatch. The CLI gains `--safety-net-registry`, repeatable `--safety-net-add`, and backend locale override flags so adopters can route to the best configured backend per input locale. v1 uses first-match-wins semantics; aggregation is follow-up. Audit rows now carry the resolved backend id. (Axis 1 reliability, Axis 5 ergonomics.)
+
 ### Changed
 
 - **Synthetic email fixtures** now use the IANA-reserved

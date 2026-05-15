@@ -85,6 +85,14 @@ impl LocaleAwareModelRegistry {
         self.backends.push(Box::new(backend));
     }
 
+    pub fn len(&self) -> usize {
+        self.backends.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.backends.is_empty()
+    }
+
     /// Resolve models by four tiers:
     /// exact locale, parent language, multilingual `Global`, then fail-closed.
     pub fn resolve(

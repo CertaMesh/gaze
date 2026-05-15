@@ -53,7 +53,7 @@ can land without changing the trait shape or audit schema.
                                 ▼
    ┌─────────────────────────────────────────────────────────────────┐
    │ PASS 3 — SAFETYNET (observer-only, opt-in)                      │
-   │   Mode selector: --safety-net-backend                           │
+  │   Mode selector: --safety-net-backend or registry dispatch       │
    │                  ↓                  ↓                           │
    │   ┌──────────────────────┐  ┌────────────────────────────┐     │
    │   │  openai-filter       │  │  kiji-distilbert (v0.8+)   │     │
@@ -81,6 +81,31 @@ can land without changing the trait shape or audit schema.
    │   UNCHANGED. Restore UNAFFECTED. (Axis 2 reversibility intact.) │
    └─────────────────────────────────────────────────────────────────┘
 ```
+
+## Locale-Aware Registry Dispatch
+
+`Pipeline::with_safety_net(single_backend)` remains the compatibility path. For deployments with language-specific safety nets, `Pipeline::with_safety_net_registry(LocaleAwareModelRegistry)` activates locale-aware Pass-3 dispatch instead. The registry resolves one backend per clean segment using the existing four-tier order: exact locale, parent language, `Global`, then fail-closed.
+
+The v1 dispatch contract is first-match wins. If a tier resolves multiple backends, Gaze invokes only the first registered backend and records that resolved backend id on the safety-net audit row. Multi-backend aggregation is intentionally left as follow-up work so the audit trail stays simple and deterministic.
+
+CLI registry activation is explicit:
+
+```sh
+gaze clean \
+  --policy quickstart-policy.toml \
+  --locale de-DE \
+  --safety-net-registry \
+  --safety-net-add kiji-distilbert \
+  --kiji-distilbert-command /opt/kiji/bin/kiji \
+  --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert \
+  --kiji-distilbert-locales en-US,en-GB \
+  --safety-net-add openai-filter \
+  --opf-command /opt/opf/bin/opf \
+  --opf-checkpoint ~/.local/share/gaze/models/opf \
+  --opf-locales de-DE,de-AT
+```
+
+`--safety-net-registry` cannot be combined with `--safety-net-backend`; the registry is the backend selector in that mode.
 
 ## North-star fit
 

@@ -105,7 +105,7 @@ impl LocaleAwareModel for OpenAiFilterSafetyNet {
     }
 
     fn native_locales(&self) -> &[LocaleTag] {
-        &[LocaleTag::Global]
+        &self.locales
     }
 
     fn infer(&self, input: ModelInput, hints: ModelHints) -> Result<Vec<ModelSpan>, ModelError> {

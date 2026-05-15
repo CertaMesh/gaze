@@ -4004,3 +4004,112 @@ fn t_kiji_distilbert_backend_without_artifact_emits_typed_envelope() {
         "expected install hint, got {path}"
     );
 }
+
+#[cfg(all(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+#[test]
+fn t_safety_net_registry_selects_locale_backend() {
+    let dir = tempdir().unwrap();
+    let opf = dir.path().join("opf");
+    let kiji = dir.path().join("kiji");
+    fs::write(&opf, b"#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n").unwrap();
+    fs::write(&kiji, b"#!/bin/sh\nexit 91\n").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&opf, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&kiji, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let checkpoint = dir.path().join("opf-checkpoint");
+    fs::create_dir(&checkpoint).unwrap();
+    let model_dir = dir.path().join("kiji-distilbert");
+    fs::create_dir(&model_dir).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&checkpoint, fs::Permissions::from_mode(0o700)).unwrap();
+        fs::set_permissions(&model_dir, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    for artifact in ["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"] {
+        fs::write(model_dir.join(artifact), b"placeholder").unwrap();
+    }
+
+    let out = clean_raw_with_args(
+        &[
+            "--locale=en-US",
+            "--safety-net-registry",
+            "--safety-net-add=openai-filter",
+            "--safety-net-add=kiji-distilbert",
+            &format!("--opf-command={}", opf.display()),
+            &format!("--opf-checkpoint={}", checkpoint.display()),
+            "--opf-locales=en-US,en-GB",
+            &format!("--kiji-distilbert-command={}", kiji.display()),
+            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
+            "--kiji-distilbert-locales=de-DE,de-AT",
+        ],
+        "hello",
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(0),
+        "registry should select OPF for en-US and not invoke Kiji: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let value: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    assert_eq!(value["leak_report"]["stats"]["suspect_count"], 0);
+
+    let out = clean_raw_with_args(
+        &[
+            "--locale=de-DE",
+            "--safety-net-registry",
+            "--safety-net-add=openai-filter",
+            "--safety-net-add=kiji-distilbert",
+            &format!("--opf-command={}", opf.display()),
+            &format!("--opf-checkpoint={}", checkpoint.display()),
+            "--opf-locales=en-US,en-GB",
+            &format!("--kiji-distilbert-command={}", kiji.display()),
+            &format!("--kiji-distilbert-model-dir={}", model_dir.display()),
+            "--kiji-distilbert-locales=de-DE,de-AT",
+        ],
+        "hello",
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "registry should select Kiji for de-DE and fail on the fake model: stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr_line = String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let value: Value =
+        serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
+    assert_eq!(value["variant"], "ModelUnavailable");
+}
+
+#[test]
+fn t_safety_net_registry_rejects_legacy_backend_selector() {
+    let out = clean_raw_with_args(
+        &[
+            "--safety-net-registry",
+            "--safety-net-backend=openai-filter",
+            "--safety-net-add=openai-filter",
+        ],
+        "hello",
+    );
+    assert_eq!(
+        out.status.code(),
+        Some(3),
+        "stderr={}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stderr_line = String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string();
+    let value: Value =
+        serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
+    assert_eq!(value["error"], "SafetyNetConfig");
+}
