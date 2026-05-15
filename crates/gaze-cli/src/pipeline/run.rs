@@ -20,8 +20,8 @@ use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
 use crate::clean_overrides::CleanOverrides;
 use crate::commands::{
-    OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend, SafetyNetFallback,
-    SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
+    KijiBackend, OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend,
+    SafetyNetFallback, SafetyNetKind, SafetyNetMode, DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES,
     DEFAULT_SAFETY_NET_TIMEOUT_MS,
 };
 use crate::error::CliError;
@@ -56,6 +56,7 @@ pub(crate) struct CleanOptions<'a> {
     pub(crate) openai_filter_checkpoint: Option<&'a Path>,
     pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    pub(crate) kiji_backend: KijiBackend,
     pub(crate) opf_locales: &'a [String],
     pub(crate) opf_command: Option<&'a Path>,
     pub(crate) opf_checkpoint: Option<&'a Path>,
@@ -492,18 +493,13 @@ fn kiji_distilbert_config(
     options: &CleanOptions<'_>,
     activation: &str,
 ) -> std::result::Result<
-    gaze_recognizers::safety_net::kiji_distilbert::SubprocessKijiConfig,
+    gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertConfig,
     CliError,
 > {
     use gaze_recognizers::safety_net::kiji_distilbert::{
-        SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
+        KijiDistilbertConfig, OrtKijiConfig, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
     };
 
-    let command = options.kiji_distilbert_command.ok_or_else(|| {
-        CliError::SafetyNetConfigDetail(format!(
-            "--kiji-distilbert-command is required for {activation}"
-        ))
-    })?;
     let model_dir = options.kiji_distilbert_model_dir.ok_or_else(|| {
         CliError::SafetyNetConfigDetail(format!(
             "--kiji-distilbert-model-dir is required for {activation}"
@@ -527,10 +523,31 @@ fn kiji_distilbert_config(
         }
     }
 
-    Ok(SubprocessKijiConfig::new(command)
-        .with_model_dir(model_dir)
-        .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
-        .with_max_input_bytes(options.safety_net_input_limit_bytes))
+    match options.kiji_backend {
+        KijiBackend::Subprocess => {
+            let command = options.kiji_distilbert_command.ok_or_else(|| {
+                CliError::SafetyNetConfigDetail(format!(
+                    "--kiji-distilbert-command is required for {activation} with --kiji-backend=subprocess"
+                ))
+            })?;
+            let config = SubprocessKijiConfig::new(command)
+                .with_model_dir(model_dir)
+                .with_timeout(Duration::from_millis(options.safety_net_timeout_ms))
+                .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            Ok(KijiDistilbertConfig::from(config))
+        }
+        KijiBackend::Ort => {
+            if options.kiji_distilbert_command.is_some() {
+                return Err(CliError::SafetyNetConfigDetail(
+                    "--kiji-distilbert-command is only valid with --kiji-backend=subprocess"
+                        .to_string(),
+                ));
+            }
+            let config = OrtKijiConfig::new(model_dir)
+                .with_max_input_bytes(options.safety_net_input_limit_bytes);
+            Ok(KijiDistilbertConfig::from(config))
+        }
+    }
 }
 
 #[cfg(not(feature = "safety-net-kiji"))]
@@ -549,6 +566,7 @@ fn validate_no_backend_options(options: &CleanOptions<'_>) -> std::result::Resul
         || options.openai_filter_checkpoint.is_some()
         || options.openai_filter_operating_point.is_some()
         || options.openai_filter_device != OpenAiFilterDevice::Auto
+        || options.kiji_backend != KijiBackend::Subprocess
         || options.opf_command.is_some()
         || options.opf_checkpoint.is_some()
         || !options.opf_locales.is_empty()

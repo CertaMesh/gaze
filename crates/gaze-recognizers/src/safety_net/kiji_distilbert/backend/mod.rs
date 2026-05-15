@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 
 use gaze_types::SafetyNetError;
 
+pub mod artifacts;
+pub mod ort;
 pub mod subprocess;
 
 /// Internal Kiji span after PII-bearing upstream fields have been dropped.
@@ -34,6 +36,21 @@ pub trait KijiDistilbertBackend: Send + Sync {
     fn version(&self) -> &str;
     fn decoding_params(&self) -> &[(&str, String)];
     fn infer(&self, clean: &str) -> Result<Vec<RawSpan>, SafetyNetError>;
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum KijiBackendKind {
+    Subprocess,
+    Ort,
+}
+
+impl KijiBackendKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Subprocess => "subprocess",
+            Self::Ort => "ort",
+        }
+    }
 }
 
 pub(crate) fn normalize_raw_spans(

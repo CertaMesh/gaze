@@ -20,34 +20,47 @@ use crate::{LocaleAwareModel, ModelError, ModelHints, ModelInput, ModelSpan};
 pub mod backend;
 pub mod class_map;
 
-pub use backend::subprocess::{
-    SubprocessKijiBackend, SubprocessKijiConfig, KIJI_DISTILBERT_BUNDLE_SHA256,
-    KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO, KIJI_DISTILBERT_SHA256SUMS,
-    REQUIRED_KIJI_ARTIFACTS,
+pub use backend::artifacts::{
+    KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
+    KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS,
 };
-pub use backend::{KijiDistilbertBackend, RawSpan};
+pub use backend::ort::{OrtKijiBackend, OrtKijiConfig};
+pub use backend::subprocess::{SubprocessKijiBackend, SubprocessKijiConfig};
+pub use backend::{KijiBackendKind, KijiDistilbertBackend, RawSpan};
 pub use class_map::{
     kiji_label_to_pii_class, kiji_label_to_safety_net_class, map_kiji_label, validate_kiji_label,
     KijiLabel,
 };
+
+pub type KijiOrtBackend = OrtKijiBackend;
+pub type KijiOrtConfig = OrtKijiConfig;
 
 /// Safety-net implementation backed by a lazily initialized Kiji subprocess.
 ///
 /// Same caching strategy as `OpenAiFilterSafetyNet`: deterministic init
 /// failures (missing SHA256SUMS, missing artifacts, bad perms) cache in a
 /// `OnceLock` so we never retry-storm on every check.
-#[derive(Debug)]
 pub struct KijiDistilbertSafetyNet {
     locales: Vec<LocaleTag>,
-    config: SubprocessKijiConfig,
-    backend: OnceLock<Result<Arc<SubprocessKijiBackend>, Arc<SafetyNetError>>>,
+    config: KijiDistilbertConfig,
+    backend: OnceLock<Result<Arc<dyn KijiDistilbertBackend>, Arc<SafetyNetError>>>,
+}
+
+impl std::fmt::Debug for KijiDistilbertSafetyNet {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("KijiDistilbertSafetyNet")
+            .field("locales", &self.locales)
+            .field("backend_kind", &self.backend_kind())
+            .finish_non_exhaustive()
+    }
 }
 
 impl KijiDistilbertSafetyNet {
-    pub fn new(config: SubprocessKijiConfig) -> Self {
+    pub fn new(config: impl Into<KijiDistilbertConfig>) -> Self {
         Self {
             locales: vec![LocaleTag::Global],
-            config,
+            config: config.into(),
             backend: OnceLock::new(),
         }
     }
@@ -56,20 +69,62 @@ impl KijiDistilbertSafetyNet {
         Ok(Self::new(SubprocessKijiConfig::from_env()?))
     }
 
+    pub fn from_env_ort() -> Result<Self, SafetyNetError> {
+        Ok(Self::new(OrtKijiConfig::from_env()?))
+    }
+
+    pub fn backend_kind(&self) -> KijiBackendKind {
+        self.config.kind()
+    }
+
     pub fn with_locales(mut self, locales: Vec<LocaleTag>) -> Self {
         self.locales = locales;
         self
     }
 
-    fn backend(&self) -> Result<Arc<SubprocessKijiBackend>, SafetyNetError> {
-        match self.backend.get_or_init(|| {
-            SubprocessKijiBackend::new(self.config.clone())
-                .map(Arc::new)
-                .map_err(Arc::new)
-        }) {
+    fn backend(&self) -> Result<Arc<dyn KijiDistilbertBackend>, SafetyNetError> {
+        match self.backend.get_or_init(|| self.config.load_backend()) {
             Ok(backend) => Ok(Arc::clone(backend)),
             Err(error) => Err((**error).clone()),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum KijiDistilbertConfig {
+    Subprocess(SubprocessKijiConfig),
+    Ort(OrtKijiConfig),
+}
+
+impl KijiDistilbertConfig {
+    pub fn kind(&self) -> KijiBackendKind {
+        match self {
+            Self::Subprocess(_) => KijiBackendKind::Subprocess,
+            Self::Ort(_) => KijiBackendKind::Ort,
+        }
+    }
+
+    fn load_backend(&self) -> Result<Arc<dyn KijiDistilbertBackend>, Arc<SafetyNetError>> {
+        match self {
+            Self::Subprocess(config) => SubprocessKijiBackend::new(config.clone())
+                .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
+                .map_err(Arc::new),
+            Self::Ort(config) => OrtKijiBackend::new(config.clone())
+                .map(|backend| Arc::new(backend) as Arc<dyn KijiDistilbertBackend>)
+                .map_err(Arc::new),
+        }
+    }
+}
+
+impl From<SubprocessKijiConfig> for KijiDistilbertConfig {
+    fn from(config: SubprocessKijiConfig) -> Self {
+        Self::Subprocess(config)
+    }
+}
+
+impl From<OrtKijiConfig> for KijiDistilbertConfig {
+    fn from(config: OrtKijiConfig) -> Self {
+        Self::Ort(config)
     }
 }
 
