@@ -59,6 +59,8 @@ pub enum Error {
     RedactionLog(#[from] RedactionLogError),
     #[error("safety net fallback failed closed: {0:?}")]
     SafetyNetFallback(FallbackReason),
+    #[error("capitals heuristic gate is unsupported for locale {locale}")]
+    UnsupportedCapitalHeuristicLocale { locale: String },
     #[error("unsupported raw document variant")]
     UnsupportedRawDocumentVariant,
     #[error("unsupported structured value variant")]
@@ -89,6 +91,37 @@ pub enum SafetyNetFallback {
 pub struct SafetyNetPolicy {
     pub mode: SafetyNetMode,
     pub fallback: SafetyNetFallback,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct PipelineOptimizationConfig {
+    pub skip_class_gating: bool,
+    pub capitals_heuristic_gate: bool,
+    pub prefix_cache: bool,
+    pub length_bucketing: bool,
+}
+
+impl PipelineOptimizationConfig {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    pub fn with_skip_class_gating(mut self, enabled: bool) -> Self {
+        self.skip_class_gating = enabled;
+        self
+    }
+    pub fn with_capitals_heuristic_gate(mut self, enabled: bool) -> Self {
+        self.capitals_heuristic_gate = enabled;
+        self
+    }
+    pub fn with_prefix_cache(mut self, enabled: bool) -> Self {
+        self.prefix_cache = enabled;
+        self
+    }
+    pub fn with_length_bucketing(mut self, enabled: bool) -> Self {
+        self.length_bucketing = enabled;
+        self
+    }
 }
 
 impl Default for SafetyNetPolicy {
@@ -144,6 +177,7 @@ pub struct Pipeline {
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     #[cfg(feature = "bundled-recognizers")]
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
+    optimization_config: PipelineOptimizationConfig,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -181,6 +215,11 @@ impl Pipeline {
         N: SafetyNet + 'static,
     {
         self.safety_nets.push(Arc::new(safety_net));
+        self
+    }
+
+    pub fn with_pipeline_optimizations(mut self, config: PipelineOptimizationConfig) -> Pipeline {
+        self.optimization_config = config;
         self
     }
 
@@ -281,6 +320,7 @@ impl Pipeline {
                     locale_chain,
                     dictionaries,
                     &mut report,
+                    policy,
                 )?;
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
             }
@@ -300,6 +340,7 @@ impl Pipeline {
                     DocumentKind::Text,
                     locale_chain,
                     None,
+                    policy.mode,
                 )?;
                 self.apply_safety_net_policy(
                     session,
@@ -337,6 +378,7 @@ impl Pipeline {
             DocumentKind::Text,
             locale_chain,
             None,
+            SafetyNetMode::Strict,
         )?;
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -386,6 +428,71 @@ impl Pipeline {
 
     #[allow(clippy::too_many_arguments)]
     fn redact_text_with_manifest(
+        &self,
+        session: &Session,
+        text: &str,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<CleanText> {
+        if self.optimization_config.prefix_cache {
+            if let Some(hit) = session
+                .lookup_prefix_cache(text)
+                .filter(|hit| hit.raw_len < text.len())
+            {
+                let suffix = &text[hit.raw_len..];
+                let suffix_clean = self.redact_text_with_manifest_uncached(
+                    session,
+                    suffix,
+                    field_name,
+                    document_kind,
+                    locale_chain,
+                    dictionaries,
+                )?;
+                let clean_offset = hit.clean_text.len();
+                let raw_offset = hit.raw_len;
+                let mut manifest = hit.manifest.clone();
+                manifest.extend(suffix_clean.manifest.into_iter().map(|mut span| {
+                    span.clean_span.start += clean_offset;
+                    span.clean_span.end += clean_offset;
+                    span.raw_span.start += raw_offset;
+                    span.raw_span.end += raw_offset;
+                    span
+                }));
+                let mut clean_text = hit.clean_text;
+                clean_text.push_str(&suffix_clean.text);
+                self.log_prefix_cache_entries(
+                    session,
+                    &hit.manifest,
+                    field_name,
+                    document_kind,
+                    locale_chain,
+                )?;
+                session.store_prefix_cache(text, &clean_text, &manifest);
+                return Ok(CleanText {
+                    text: clean_text,
+                    manifest,
+                });
+            }
+        }
+
+        let clean = self.redact_text_with_manifest_uncached(
+            session,
+            text,
+            field_name,
+            document_kind,
+            locale_chain,
+            dictionaries,
+        )?;
+        if self.optimization_config.prefix_cache {
+            session.store_prefix_cache(text, &clean.text, &clean.manifest);
+        }
+        Ok(clean)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn redact_text_with_manifest_uncached(
         &self,
         session: &Session,
         text: &str,
@@ -487,6 +594,7 @@ impl Pipeline {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn run_safety_nets(
         &self,
         session: &Session,
@@ -495,8 +603,12 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         field_path: Option<&str>,
+        safety_net_mode: SafetyNetMode,
     ) -> Result<LeakReport> {
         if self.safety_nets_len() == 0 {
+            return Ok(LeakReport::default());
+        }
+        if self.should_skip_safety_nets(clean_text, manifest, locale_chain, safety_net_mode)? {
             return Ok(LeakReport::default());
         }
 
@@ -565,6 +677,34 @@ impl Pipeline {
         Ok(LeakReport::from_parts(suspects, telemetry))
     }
 
+    fn should_skip_safety_nets(
+        &self,
+        clean_text: &str,
+        manifest: &Manifest,
+        locale_chain: &[crate::LocaleTag],
+        safety_net_mode: SafetyNetMode,
+    ) -> Result<bool> {
+        if !matches!(
+            safety_net_mode,
+            SafetyNetMode::Strict | SafetyNetMode::Tolerant
+        ) {
+            return Ok(false);
+        }
+        if self.optimization_config.capitals_heuristic_gate {
+            validate_capitals_gate_locales(locale_chain)?;
+            if is_numeric_heavy(clean_text) || !has_non_sentence_start_capital(clean_text) {
+                return Ok(true);
+            }
+        }
+        if self.optimization_config.skip_class_gating
+            && !manifest.spans.is_empty()
+            && !has_residual_gold_shape(clean_text)
+        {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     fn safety_nets_len(&self) -> usize {
         let single = self.safety_nets.len();
         #[cfg(feature = "bundled-recognizers")]
@@ -620,6 +760,7 @@ impl Pipeline {
                             document_kind,
                             locale_chain,
                             field_path,
+                            SafetyNetMode::Resolve,
                         )?;
                         (follow_up.stats.uncovered_count + follow_up.stats.partial_bleed_count > 0)
                             .then_some(FallbackReason::ResidualSuspect)
@@ -846,6 +987,52 @@ impl Pipeline {
         Ok(())
     }
 
+    fn log_prefix_cache_entries(
+        &self,
+        session: &Session,
+        manifest: &[EmittedTokenSpan],
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+    ) -> Result<()> {
+        let locale = locale_chain
+            .first()
+            .map(crate::LocaleTag::as_str)
+            .unwrap_or("global")
+            .to_string();
+        for span in manifest {
+            let entry = RedactionEntry::new(
+                "prefix_cache",
+                span.class.clone(),
+                Action::Tokenize,
+                field_name.map(str::to_string),
+                document_kind,
+                false,
+                ConflictTier::None,
+                crate::redaction_log::current_epoch_ms(),
+                Some(session.audit_session_id().to_string()),
+            )
+            .with_recognizer_metadata(Some("prefix_cache".to_string()), None)
+            .with_provenance_metadata(
+                Some("prefix_cache".to_string()),
+                None,
+                None,
+                None,
+                None,
+                Some(locale.clone()),
+                Some("session_prefix".to_string()),
+                Some(span.class.to_canonical_str()),
+                Some(span.class.to_canonical_str()),
+                None,
+                None,
+            );
+            for logger in &self.redaction_loggers {
+                logger.log(&entry)?;
+            }
+        }
+        Ok(())
+    }
+
     fn log_vetoed_entry(
         &self,
         session: &Session,
@@ -944,6 +1131,59 @@ fn is_char_boundary_range(text: &str, span: &Range<usize>) -> bool {
         && text.is_char_boundary(span.end)
 }
 
+fn validate_capitals_gate_locales(locale_chain: &[crate::LocaleTag]) -> Result<()> {
+    for locale in locale_chain {
+        if !capital_case_locale_supported(locale) {
+            return Err(Error::UnsupportedCapitalHeuristicLocale {
+                locale: locale.as_str().to_string(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn capital_case_locale_supported(locale: &crate::LocaleTag) -> bool {
+    matches!(
+        locale,
+        crate::LocaleTag::Global
+            | crate::LocaleTag::DeDe
+            | crate::LocaleTag::DeAt
+            | crate::LocaleTag::DeCh
+            | crate::LocaleTag::EnUs
+            | crate::LocaleTag::EnGb
+            | crate::LocaleTag::EnIe
+            | crate::LocaleTag::EnAu
+            | crate::LocaleTag::EnCa
+    )
+}
+
+fn is_numeric_heavy(text: &str) -> bool {
+    let digits = text.chars().filter(|ch| ch.is_ascii_digit()).count();
+    let letters = text.chars().filter(|ch| ch.is_alphabetic()).count();
+    digits >= 6 && digits > letters.saturating_mul(2)
+}
+
+// This heuristic is only recall-preserving for locales with capital-case name
+// conventions (currently English and German). Arabic, CJK, and other scripts
+// must fail closed through `validate_capitals_gate_locales`.
+fn has_non_sentence_start_capital(text: &str) -> bool {
+    let mut sentence_start = true;
+    for ch in text.chars() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        if ch.is_uppercase() && !sentence_start {
+            return true;
+        }
+        sentence_start = matches!(ch, '.' | '!' | '?');
+    }
+    false
+}
+
+fn has_residual_gold_shape(text: &str) -> bool {
+    text.contains('@') || is_numeric_heavy(text)
+}
+
 fn replace_clean_span(
     clean: &mut CleanText,
     span: Range<usize>,
@@ -1002,6 +1242,7 @@ pub struct PipelineBuilder {
     safety_nets: Vec<Arc<dyn SafetyNet>>,
     #[cfg(feature = "bundled-recognizers")]
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
+    optimization_config: PipelineOptimizationConfig,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -1069,6 +1310,31 @@ impl PipelineBuilder {
         self
     }
 
+    pub fn pipeline_optimizations(mut self, config: PipelineOptimizationConfig) -> Self {
+        self.optimization_config = config;
+        self
+    }
+
+    pub fn enable_skip_class_gating(mut self) -> Self {
+        self.optimization_config.skip_class_gating = true;
+        self
+    }
+
+    pub fn enable_capitals_heuristic_gate(mut self) -> Self {
+        self.optimization_config.capitals_heuristic_gate = true;
+        self
+    }
+
+    pub fn enable_prefix_cache(mut self) -> Self {
+        self.optimization_config.prefix_cache = true;
+        self
+    }
+
+    pub fn enable_length_bucketing(mut self) -> Self {
+        self.optimization_config.length_bucketing = true;
+        self
+    }
+
     #[cfg(feature = "bundled-recognizers")]
     pub fn register_safety_net_registry(mut self, registry: LocaleAwareModelRegistry) -> Self {
         self.safety_net_registry = Some(Arc::new(registry));
@@ -1092,6 +1358,7 @@ impl PipelineBuilder {
             safety_nets: self.safety_nets,
             #[cfg(feature = "bundled-recognizers")]
             safety_net_registry: self.safety_net_registry,
+            optimization_config: self.optimization_config,
             rules: self.rules,
         })
     }
@@ -1233,6 +1500,7 @@ fn redact_structured_with_safety_net(
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
+    policy: SafetyNetPolicy,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
@@ -1248,6 +1516,7 @@ fn redact_structured_with_safety_net(
                 locale_chain,
                 dictionaries,
                 report,
+                policy,
             )?,
         );
     }
@@ -1264,6 +1533,7 @@ fn redact_structured_value_with_safety_net(
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
+    policy: SafetyNetPolicy,
 ) -> Result<Value> {
     match value {
         Value::String(text) => {
@@ -1287,6 +1557,7 @@ fn redact_structured_value_with_safety_net(
                 DocumentKind::Structured,
                 locale_chain,
                 Some(field_path),
+                policy.mode,
             )?;
             report.extend(field_report);
             Ok(Value::String(clean.text))
@@ -1304,6 +1575,7 @@ fn redact_structured_value_with_safety_net(
                     locale_chain,
                     dictionaries,
                     report,
+                    policy,
                 )
             })
             .collect::<Result<Vec<_>>>()
@@ -1323,6 +1595,7 @@ fn redact_structured_value_with_safety_net(
                         locale_chain,
                         dictionaries,
                         report,
+                        policy,
                     )?,
                 );
             }
@@ -1337,6 +1610,7 @@ fn redact_structured_value_with_safety_net(
                     DocumentKind::Structured,
                     locale_chain,
                     Some(field_path),
+                    policy.mode,
                 )?;
                 report.extend(field_report);
             }
@@ -1364,6 +1638,7 @@ fn walk_value_for_safety_net_scan(
                     DocumentKind::Structured,
                     locale_chain,
                     Some(field_path),
+                    SafetyNetMode::Strict,
                 )?;
                 report.extend(field_report);
             }
@@ -1378,6 +1653,7 @@ fn walk_value_for_safety_net_scan(
                     DocumentKind::Structured,
                     locale_chain,
                     Some(field_path),
+                    SafetyNetMode::Strict,
                 )?;
                 report.extend(field_report);
             }
@@ -1579,6 +1855,7 @@ mod tests {
     use crate::detector::{Detection, PiiClass};
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     /// Shared-handle test double: callers keep an `Arc<Mutex<Vec<_>>>` and
@@ -1617,10 +1894,161 @@ mod tests {
         }
     }
 
+    struct CountingSafetyNet {
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl SafetyNet for CountingSafetyNet {
+        fn id(&self) -> &str {
+            "counting"
+        }
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+        fn check(
+            &self,
+            _clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(Vec::new())
+        }
+    }
+
     #[test]
     fn generalize_token_custom_class_preserves_identity() {
         // Regression guard: custom classes must not collapse to an indistinct [PII].
         assert_eq!(generalize_token(&PiiClass::Custom("foo".into())), "[FOO]");
+    }
+
+    #[test]
+    fn skip_class_gating_skips_only_observer_mode() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .detector(detector_with_detections(
+                "email.global",
+                vec![Detection::new(6..27, PiiClass::Email, "email.global")],
+            ))
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(CountingSafetyNet {
+                calls: Arc::clone(&calls),
+            })
+            .enable_skip_class_gating()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text("Reach alice@example.invalid".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+            )
+            .expect("observer safety net");
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text("Reach alice@example.invalid".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
+            )
+            .expect("resolve safety net");
+        assert!(calls.load(Ordering::SeqCst) > 0);
+    }
+
+    #[test]
+    fn capitals_gate_fails_closed_for_unsupported_locale() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let pipeline = Pipeline::builder()
+            .register_safety_net(CountingSafetyNet {
+                calls: Arc::clone(&calls),
+            })
+            .enable_capitals_heuristic_gate()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let err = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                RawDocument::Text("مرحبا".to_string()),
+                &[crate::LocaleTag::Other("ar-SA".to_string())],
+                &dictionaries,
+                SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+            )
+            .expect_err("unsupported capitals locale must fail closed");
+        assert!(matches!(
+            err,
+            Error::UnsupportedCapitalHeuristicLocale { locale } if locale == "ar-SA"
+        ));
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn prefix_cache_hits_emit_audit_provenance() {
+        struct NameRecognizer;
+        impl Recognizer for NameRecognizer {
+            fn id(&self) -> &str {
+                "name.fixture"
+            }
+            fn supported_class(&self) -> &PiiClass {
+                &PiiClass::Name
+            }
+            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+                input
+                    .find("Dr. Schmidt")
+                    .map(|start| {
+                        Candidate::new(
+                            start..start + "Dr. Schmidt".len(),
+                            PiiClass::Name,
+                            self.id(),
+                            1.0,
+                            0,
+                            None,
+                            self.token_family(),
+                            self.id(),
+                            ConflictTier::None,
+                            Vec::new(),
+                        )
+                    })
+                    .into_iter()
+                    .collect()
+            }
+            fn token_family(&self) -> &str {
+                "counter"
+            }
+        }
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .recognizer(NameRecognizer)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        pipeline
+            .redact(&session, RawDocument::Text("Dr. Schmidt".to_string()))
+            .expect("prime cache");
+        pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Dr. Schmidt reports".to_string()),
+            )
+            .expect("cache hit");
+        let entries = entries.lock().unwrap();
+        assert!(entries.iter().any(|entry| {
+            entry.source == "prefix_cache"
+                && entry.provenance_stage.as_deref() == Some("prefix_cache")
+        }));
     }
 
     #[test]

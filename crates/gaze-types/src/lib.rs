@@ -1799,6 +1799,18 @@ pub struct RedactionEntry {
     pub collision_variant: Option<String>,
     /// Safety-net fallback reason, when fallback policy handled the row.
     pub fallback_triggered: Option<FallbackReason>,
+    /// NER/pipeline provenance stage for audit-only producer attribution.
+    pub provenance_stage: Option<String>,
+    pub provenance_model_id: Option<String>,
+    pub provenance_model_version: Option<String>,
+    pub provenance_artifact_sha256: Option<String>,
+    pub provenance_tokenizer_sha256: Option<String>,
+    pub provenance_locale_resolved: Option<String>,
+    pub provenance_locale_match_kind: Option<String>,
+    pub provenance_canonical_class: Option<String>,
+    pub provenance_native_class: Option<String>,
+    pub provenance_confidence: Option<String>,
+    pub provenance_merged_from: Option<String>,
 }
 
 impl Serialize for RedactionEntry {
@@ -1815,6 +1827,22 @@ impl Serialize for RedactionEntry {
         if self.recognizer_version_id.is_some() {
             len += 1;
         }
+        len += [
+            self.provenance_stage.as_ref(),
+            self.provenance_model_id.as_ref(),
+            self.provenance_model_version.as_ref(),
+            self.provenance_artifact_sha256.as_ref(),
+            self.provenance_tokenizer_sha256.as_ref(),
+            self.provenance_locale_resolved.as_ref(),
+            self.provenance_locale_match_kind.as_ref(),
+            self.provenance_canonical_class.as_ref(),
+            self.provenance_native_class.as_ref(),
+            self.provenance_confidence.as_ref(),
+            self.provenance_merged_from.as_ref(),
+        ]
+        .into_iter()
+        .filter(|value| value.is_some())
+        .count();
         let mut state = serializer.serialize_struct("RedactionEntry", len)?;
         state.serialize_field("source", &self.source)?;
         if let Some(recognizer_id) = &self.recognizer_id {
@@ -1842,6 +1870,39 @@ impl Serialize for RedactionEntry {
         state.serialize_field("collision_family", &self.collision_family)?;
         state.serialize_field("collision_variant", &self.collision_variant)?;
         state.serialize_field("fallback_triggered", &self.fallback_triggered)?;
+        if let Some(value) = &self.provenance_stage {
+            state.serialize_field("provenance_stage", value)?;
+        }
+        if let Some(value) = &self.provenance_model_id {
+            state.serialize_field("provenance_model_id", value)?;
+        }
+        if let Some(value) = &self.provenance_model_version {
+            state.serialize_field("provenance_model_version", value)?;
+        }
+        if let Some(value) = &self.provenance_artifact_sha256 {
+            state.serialize_field("provenance_artifact_sha256", value)?;
+        }
+        if let Some(value) = &self.provenance_tokenizer_sha256 {
+            state.serialize_field("provenance_tokenizer_sha256", value)?;
+        }
+        if let Some(value) = &self.provenance_locale_resolved {
+            state.serialize_field("provenance_locale_resolved", value)?;
+        }
+        if let Some(value) = &self.provenance_locale_match_kind {
+            state.serialize_field("provenance_locale_match_kind", value)?;
+        }
+        if let Some(value) = &self.provenance_canonical_class {
+            state.serialize_field("provenance_canonical_class", value)?;
+        }
+        if let Some(value) = &self.provenance_native_class {
+            state.serialize_field("provenance_native_class", value)?;
+        }
+        if let Some(value) = &self.provenance_confidence {
+            state.serialize_field("provenance_confidence", value)?;
+        }
+        if let Some(value) = &self.provenance_merged_from {
+            state.serialize_field("provenance_merged_from", value)?;
+        }
         state.end()
     }
 }
@@ -1913,6 +1974,17 @@ impl RedactionEntry {
             collision_family: None,
             collision_variant: None,
             fallback_triggered: None,
+            provenance_stage: None,
+            provenance_model_id: None,
+            provenance_model_version: None,
+            provenance_artifact_sha256: None,
+            provenance_tokenizer_sha256: None,
+            provenance_locale_resolved: None,
+            provenance_locale_match_kind: None,
+            provenance_canonical_class: None,
+            provenance_native_class: None,
+            provenance_confidence: None,
+            provenance_merged_from: None,
         }
     }
 
@@ -1953,6 +2025,35 @@ impl RedactionEntry {
     ) -> Self {
         self.recognizer_id = recognizer_id;
         self.recognizer_version_id = recognizer_version_id;
+        self
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_provenance_metadata(
+        mut self,
+        stage: Option<String>,
+        model_id: Option<String>,
+        model_version: Option<String>,
+        artifact_sha256: Option<String>,
+        tokenizer_sha256: Option<String>,
+        locale_resolved: Option<String>,
+        locale_match_kind: Option<String>,
+        canonical_class: Option<String>,
+        native_class: Option<String>,
+        confidence: Option<f64>,
+        merged_from: Option<String>,
+    ) -> Self {
+        self.provenance_stage = stage;
+        self.provenance_model_id = model_id;
+        self.provenance_model_version = model_version;
+        self.provenance_artifact_sha256 = artifact_sha256;
+        self.provenance_tokenizer_sha256 = tokenizer_sha256;
+        self.provenance_locale_resolved = locale_resolved;
+        self.provenance_locale_match_kind = locale_match_kind;
+        self.provenance_canonical_class = canonical_class;
+        self.provenance_native_class = native_class;
+        self.provenance_confidence = confidence.map(|value| value.to_string());
+        self.provenance_merged_from = merged_from;
         self
     }
 }
@@ -2578,6 +2679,17 @@ mod redaction_logger_tests {
             collision_family: None,
             collision_variant: None,
             fallback_triggered: None,
+            provenance_stage: None,
+            provenance_model_id: None,
+            provenance_model_version: None,
+            provenance_artifact_sha256: None,
+            provenance_tokenizer_sha256: None,
+            provenance_locale_resolved: None,
+            provenance_locale_match_kind: None,
+            provenance_canonical_class: None,
+            provenance_native_class: None,
+            provenance_confidence: None,
+            provenance_merged_from: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;
