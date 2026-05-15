@@ -383,7 +383,7 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 - Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries today. Build from source.
-- The Kiji benchmark in research ships rule-floor numbers only; the Kiji-as-detector and observer-residual cells are `not_run` pending a pinned-model SHA snapshot.
+- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in [`docs/research/v0.9-safety-net-benchmark.md`](docs/research/v0.9-safety-net-benchmark.md); observer-residual mode remains deferred.
 - `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, and transparent MITM are out of scope here — those belong in [`gaze-lens`](https://github.com/EmpireTwo/gaze-lens), not the core proxy.
 
 ## Use from Rust

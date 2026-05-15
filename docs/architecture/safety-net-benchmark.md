@@ -6,7 +6,7 @@ The tracked benchmark snapshot lives at
 validates that the snapshot pins match runtime constants and prints the JSON
 for CI logs.
 
-Current status: `kiji_direct_run_v1_observer_residual_deferred`.
+Current status: `opf_kiji_direct_run_v1_observer_residual_deferred`: direct-detector cells are populated for Kiji DistilBERT and OpenAI Privacy Filter; observer-residual cells remain deferred pending the cleaned-output harness.
 
 ## Backend Pins
 
@@ -63,13 +63,12 @@ The top-level `strict_span_leak_rate` block is mode-independent and records
 one nullable headline field for each backend-locale pair. It measures
 end-to-end fail-closed behavior rather than detector precision/recall.
 
-Kiji direct-detector fields are populated from the pinned local model artifact.
-Kiji observer-residual and all OPF result fields remain `null` until their
-separate pinned local backend runs are captured. Publishing numeric OPF claims
-or observer-residual Kiji claims without those pins would violate the Axis 4
-trust contract.
+Kiji and OPF direct-detector fields are populated from pinned local backend
+runs. Observer-residual cells remain `null` until their separate cleaned-output
+harness runs are captured. Publishing observer-residual claims without those
+pins would violate the Axis 4 trust contract.
 
-The methodology and rule-floor baseline are documented in
-[`docs/research/v0.8-kiji-benchmark.md`](../research/v0.8-kiji-benchmark.md);
-the v0.9 snapshot extends that two-mode methodology into the
-backend × locale × mode matrix used for routing decisions.
+The consolidated Kiji-vs-OPF methodology and result tables are documented in
+[`docs/research/v0.9-safety-net-benchmark.md`](../research/v0.9-safety-net-benchmark.md).
+The historical Kiji-only anchor remains in
+[`docs/research/v0.8-kiji-benchmark.md`](../research/v0.8-kiji-benchmark.md).

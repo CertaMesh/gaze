@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `null` until the separate scorer run publishes measured results. The matrix
   bench now compiles under `--features safety-net-openai` so the OPF pin block
   can be validated without also enabling Kiji. (Axis 4 trust.)
+- **OPF direct-detector benchmark cells**: `scripts/opf-bench-scorer.py`
+  populated the OpenAI Privacy Filter direct-detector cells in the safety-net
+  matrix snapshot from the same 150-fixture coverage-loop corpus used for Kiji.
+  The consolidated v0.9 benchmark doc now compares Kiji and OPF with pins,
+  per-locale metrics, per-class strict recall, and observer-residual caveats.
+  (Axis 4 trust.)
 
 ### Changed
 
