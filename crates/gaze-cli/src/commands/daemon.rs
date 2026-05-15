@@ -326,9 +326,7 @@ impl Daemon {
         let expired = self
             .sessions
             .iter()
-            .filter(|(_, entry)| {
-                now.duration_since(entry.last_seen) >= self.session_idle_timeout
-            })
+            .filter(|(_, entry)| now.duration_since(entry.last_seen) >= self.session_idle_timeout)
             .map(|(session_id, _)| session_id.clone())
             .collect::<Vec<_>>();
         for session_id in expired {
