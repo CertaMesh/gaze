@@ -157,7 +157,7 @@ fn assert_clean_response(payload: &Value, expect_source_kind: &str) {
     assert!(clean.contains(":Name_"), "{clean}");
     assert!(clean.contains(":Custom:phone_"), "{clean}");
     assert!(!clean.contains("Jane Doe"), "{clean}");
-    assert!(!clean.contains("@example.com"), "{clean}");
+    assert!(!clean.contains("@example.invalid"), "{clean}");
     assert!(!clean.contains("555-0142"), "{clean}");
     assert!(!payload["manifest_id"].as_str().unwrap().is_empty());
     assert_eq!(payload["file_metadata"]["source_kind"], expect_source_kind);
@@ -188,7 +188,7 @@ async fn stdio_document_tools_return_clean_payloads() {
     assert!(tool_names.contains(&"gaze_read_file"));
 
     let text_args = json!({
-        "text": "Bill to: Jane Doe\nEmail: jane.doe@example.com\nPhone: +1-555-0142"
+        "text": "Bill to: Jane Doe\nEmail: jane.doe@example.invalid\nPhone: +1-555-0142"
     })
     .as_object()
     .cloned()

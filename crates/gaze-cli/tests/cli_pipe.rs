@@ -688,12 +688,12 @@ where
 
 #[test]
 fn t01_roundtrip_email_tokenized_then_restored() {
-    let input = "Contact Alice at alice@example.com for details.";
+    let input = "Contact Alice at alice@example.invalid for details.";
     let (clean_text, blob, detections) = clean_ok(input);
 
     assert_eq!(detections, 1, "stub pipeline tokenizes one email");
     assert!(
-        !clean_text.contains("alice@example.com"),
+        !clean_text.contains("alice@example.invalid"),
         "raw email leaked"
     );
     assert!(
@@ -714,7 +714,7 @@ fn t01_roundtrip_email_tokenized_then_restored() {
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(
         resp["text"].as_str().unwrap(),
-        "Reply to Alice at alice@example.com for details."
+        "Reply to Alice at alice@example.invalid for details."
     );
 }
 
@@ -775,7 +775,7 @@ fn t02_canary_absent_in_clean_reappears_in_restore() {
 
 #[test]
 fn t03_unknown_token_pascalcase_shape() {
-    let (_, blob, _) = clean_ok("Email is alice@example.com please.");
+    let (_, blob, _) = clean_ok("Email is alice@example.invalid please.");
     // Session has <Email_1>. LLM invents <Email_999>.
     let (code, stdout, stderr) = restore_json(&blob, "Your <Email_999> is queued.");
     assert_eq!(
@@ -3248,7 +3248,7 @@ fn t05_adjacency_corruption_name_inside_larger_word() {
 
 #[test]
 fn t06_tamper_flipped_byte_in_payload_rejected() {
-    let (_, blob, _) = clean_ok("Email: alice@example.com");
+    let (_, blob, _) = clean_ok("Email: alice@example.invalid");
     let mut raw = BASE64.decode(blob.as_bytes()).unwrap();
     // Flip a byte inside the JSON payload region (skip header: 1+32+64=97).
     let flip_idx = raw.len() - 5;
@@ -3269,7 +3269,7 @@ fn t06_tamper_flipped_byte_in_payload_rejected() {
 
 #[test]
 fn t07_version_byte_rejection() {
-    let (_, blob, _) = clean_ok("Email: alice@example.com");
+    let (_, blob, _) = clean_ok("Email: alice@example.invalid");
     let mut raw = BASE64.decode(blob.as_bytes()).unwrap();
     raw[0] = 99;
     let bad_version = BASE64.encode(&raw);
@@ -3288,7 +3288,7 @@ fn t07_version_byte_rejection() {
 
 #[test]
 fn t07b_restore_rejects_expired_blob() {
-    let (_, blob, _) = clean_ok_with_args(&["--session-ttl=1"], "Email: alice@example.com");
+    let (_, blob, _) = clean_ok_with_args(&["--session-ttl=1"], "Email: alice@example.invalid");
     sleep(Duration::from_secs(2));
 
     let (code, _, stderr) = restore_json(&blob, "Hello <Email_1>.");
@@ -3499,7 +3499,7 @@ fn t15_stats_detections_excludes_preserve() {
     // `stats.detections == 1`, and the code path excluding `Action::Preserve`
     // in `CountingLogger::log` is unit-exercised here via the absence of
     // any extra counts on text that contains only one detection.
-    let (_, _, detections) = clean_ok("Reach Alice via alice@example.com tomorrow.");
+    let (_, _, detections) = clean_ok("Reach Alice via alice@example.invalid tomorrow.");
     assert_eq!(
         detections, 1,
         "one tokenized email must yield stats.detections == 1"
@@ -3516,7 +3516,7 @@ fn t15_stats_detections_excludes_preserve() {
 #[test]
 #[ignore = "requires policy loader (solo #3) to drive an Organization detector with Preserve"]
 fn t15b_stats_detections_excludes_preserve_verbatim_spec() {
-    let (_, _, detections) = clean_ok("Alice at alice@example.com works at Acme Corp.");
+    let (_, _, detections) = clean_ok("Alice at alice@example.invalid works at Acme Corp.");
     assert_eq!(
         detections, 1,
         "tokenized email counts; preserved Organization does not"
@@ -3529,7 +3529,7 @@ fn t16_clean_with_policy_tokenizes_email() {
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", &format!("--policy={}", policy_path.display())])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert!(
@@ -3575,7 +3575,7 @@ action = "preserve"
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", &format!("--policy={}", path.display())])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert!(
@@ -3624,7 +3624,7 @@ action = "preserve"
             &format!("--policy={}", path.display()),
             "--session-ttl=1800",
         ])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert!(
@@ -3676,7 +3676,7 @@ action = "preserve"
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", &format!("--policy={}", path.display())])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -3715,7 +3715,7 @@ action = "preserve"
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", &format!("--policy={}", path.display())])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
@@ -3767,8 +3767,9 @@ fn t20_restore_custom_hallucination_exits_3() {
 fn t21_restore_wrapped_token_in_prose() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![
-            s.tokenize(&PiiClass::Email, "alice@example.com").unwrap(),
-            s.tokenize(&PiiClass::Email, "bob@example.com").unwrap(),
+            s.tokenize(&PiiClass::Email, "alice@example.invalid")
+                .unwrap(),
+            s.tokenize(&PiiClass::Email, "bob@example.invalid").unwrap(),
         ]
     });
     let text = format!("See {}. Reply {}", tokens[0], tokens[1]);
@@ -3778,7 +3779,7 @@ fn t21_restore_wrapped_token_in_prose() {
     let resp: Value = serde_json::from_slice(&stdout).unwrap();
     assert_eq!(
         resp["text"].as_str().unwrap(),
-        "See alice@example.com. Reply bob@example.com"
+        "See alice@example.invalid. Reply bob@example.invalid"
     );
 }
 
@@ -3787,7 +3788,7 @@ fn t17_missing_policy_path_emits_policy_open() {
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", "--policy=/definitely/missing/policy.toml"])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(4));
@@ -3825,7 +3826,7 @@ action = "preserve"
     let out = Command::cargo_bin("gaze")
         .unwrap()
         .args(["clean", &format!("--policy={}", path.display())])
-        .write_stdin(b"Email alice@example.com now".to_vec())
+        .write_stdin(b"Email alice@example.invalid now".to_vec())
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));

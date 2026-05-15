@@ -1697,7 +1697,7 @@ mod tests {
         let clean = pipeline
             .redact(
                 &session,
-                RawDocument::Text("Reach alice@example.com today".to_string()),
+                RawDocument::Text("Reach alice@example.invalid today".to_string()),
             )
             .unwrap();
 

@@ -131,7 +131,7 @@ common artifact in practice (and the most dangerous for axis-1
 reliability) is a single space inserted next to the `@` of an email:
 
 ```text
-jane.doe@example.com   →   "jane.doe @example.com"
+jane.doe@example.invalid   →   "jane.doe @example.invalid"
 ```
 
 The corrupted form is still unmistakably an email to a human or LLM but
@@ -165,7 +165,7 @@ non-Latin scripts without the right `--lang` setting may still leak.
 Two mitigations land at the test boundary so future drift fails loudly:
 
 * The `tests/e2e.rs` fixtures assert with belt-and-braces negative
-  substring checks (`!contains("@example.com")`, `!contains("Jane Doe")`,
+  substring checks (`!contains("@example.invalid")`, `!contains("Jane Doe")`,
   `!contains("555-0142")`) **in addition** to the positive `:Email_`,
   `:Name_`, `:Custom:phone_` token assertions.
 * `BundleReport.pages[].confidence` and `pages[].low_confidence` are always

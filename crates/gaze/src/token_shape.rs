@@ -127,7 +127,7 @@ mod tests {
 
     fn raw_for(class: &PiiClass) -> &'static str {
         match class {
-            PiiClass::Email => "alice@example.com",
+            PiiClass::Email => "alice@example.invalid",
             PiiClass::Name => "Alice Smith",
             PiiClass::Location => "Dublin",
             PiiClass::Organization => "Acme Inc",
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn rejects_non_tokens() {
         assert!(!contains_token("See <Email_1bar>."));
-        assert!(!contains_token("literal email@example.com address"));
+        assert!(!contains_token("literal email@example.invalid address"));
         assert!(!contains_token("<Custom:-_1>"));
     }
 
@@ -307,10 +307,10 @@ mod tests {
     fn restore_wrapped_token_in_prose() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let first = session
-            .tokenize(&PiiClass::Email, "alice@example.com")
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
             .expect("first token");
         let second = session
-            .tokenize(&PiiClass::Email, "bob@example.com")
+            .tokenize(&PiiClass::Email, "bob@example.invalid")
             .expect("second token");
 
         let rendered = format!("See {first}. Reply {second}");
@@ -318,6 +318,9 @@ mod tests {
             session.restore_strict(&captures[0]).expect("known token")
         });
 
-        assert_eq!(restored, "See alice@example.com. Reply bob@example.com");
+        assert_eq!(
+            restored,
+            "See alice@example.invalid. Reply bob@example.invalid"
+        );
     }
 }

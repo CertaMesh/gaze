@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Synthetic email fixtures** now use the IANA-reserved
+  `@example.invalid` domain instead of reachable `@example.com` examples across
+  crates and document fixtures. (Axis 4 trust.)
+
 - **Safety-net benchmark snapshot schema v2**: the internal benchmark artifact
   moves from the single-backend Kiji schema to a backend × locale × mode matrix
   with mode-independent `strict_span_leak_rate` entries. Adopter impact is
