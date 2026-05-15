@@ -1811,6 +1811,8 @@ pub struct RedactionEntry {
     pub provenance_native_class: Option<String>,
     pub provenance_confidence: Option<String>,
     pub provenance_merged_from: Option<String>,
+    /// Locale-aware safety-net backend ids dropped by first-match-wins routing.
+    pub backend_silently_dropped: Option<Vec<String>>,
 }
 
 impl Serialize for RedactionEntry {
@@ -1843,6 +1845,9 @@ impl Serialize for RedactionEntry {
         .into_iter()
         .filter(|value| value.is_some())
         .count();
+        if self.backend_silently_dropped.is_some() {
+            len += 1;
+        }
         let mut state = serializer.serialize_struct("RedactionEntry", len)?;
         state.serialize_field("source", &self.source)?;
         if let Some(recognizer_id) = &self.recognizer_id {
@@ -1902,6 +1907,9 @@ impl Serialize for RedactionEntry {
         }
         if let Some(value) = &self.provenance_merged_from {
             state.serialize_field("provenance_merged_from", value)?;
+        }
+        if let Some(dropped) = &self.backend_silently_dropped {
+            state.serialize_field("backend_silently_dropped", dropped)?;
         }
         state.end()
     }
@@ -1985,6 +1993,7 @@ impl RedactionEntry {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            backend_silently_dropped: None,
         }
     }
 
@@ -2014,6 +2023,12 @@ impl RedactionEntry {
     /// Attaches safety-net fallback metadata to this row.
     pub fn with_fallback_triggered(mut self, reason: FallbackReason) -> Self {
         self.fallback_triggered = Some(reason);
+        self
+    }
+
+    /// Attaches locale-aware backend ids dropped by first-match-wins routing.
+    pub fn with_backend_silently_dropped(mut self, dropped: Vec<String>) -> Self {
+        self.backend_silently_dropped = Some(dropped);
         self
     }
 
@@ -2690,6 +2705,7 @@ mod redaction_logger_tests {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            backend_silently_dropped: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use gaze::{
     CleanDocument, LeakKind, LocaleTag, Pipeline, RawDocument, SafetyNetFallback, SafetyNetMode,
@@ -208,9 +208,7 @@ fn build_pipeline(
             pipeline = register_opf(pipeline)?;
         }
         BenchConfig::Pass3LocaleAware => {
-            return Err(
-                "LocaleAwareModelRegistry has no Pipeline SafetyNet adapter in this stack".into(),
-            );
+            pipeline = register_locale_aware(pipeline)?;
         }
     }
     Ok(pipeline)
@@ -238,6 +236,58 @@ fn register_opf(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Erro
 #[cfg(not(feature = "safety-net-openai"))]
 fn register_opf(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
     Err("compile with gaze-recognizers feature safety-net-openai".into())
+}
+
+#[cfg(all(feature = "safety-net-kiji", feature = "safety-net-openai"))]
+fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    use gaze_recognizers::safety_net::kiji_distilbert::{
+        KijiDistilbertSafetyNet, SubprocessKijiConfig,
+    };
+    use gaze_recognizers::safety_net::openai_filter::{
+        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
+    };
+    use gaze_recognizers::LocaleAwareModelRegistry;
+
+    let kiji_command = std::env::var_os("GAZE_KIJI_DISTILBERT_COMMAND")
+        .ok_or("GAZE_KIJI_DISTILBERT_COMMAND is not set")?;
+    let kiji_model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+        .ok_or("GAZE_KIJI_DISTILBERT_MODEL_DIR is not set")?;
+    let opf_command =
+        std::env::var_os("GAZE_OPENAI_FILTER_OPF").ok_or("GAZE_OPENAI_FILTER_OPF is not set")?;
+    let opf_checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
+
+    let mut registry = LocaleAwareModelRegistry::new();
+    registry.register(
+        OpenAiFilterSafetyNet::new(
+            SubprocessOpenAiFilterConfig::new(opf_command)
+                .with_checkpoint_path(opf_checkpoint)
+                .with_timeout(Duration::from_secs(30))
+                .with_args([
+                    "--format",
+                    "json",
+                    "--output-mode",
+                    "typed",
+                    "--no-print-color-coded-text",
+                    "--device",
+                    "cpu",
+                ]),
+        )
+        .with_locales(vec![LocaleTag::Global, LocaleTag::EnUs]),
+    );
+    registry.register(
+        KijiDistilbertSafetyNet::new(
+            SubprocessKijiConfig::new(kiji_command)
+                .with_model_dir(kiji_model_dir)
+                .with_timeout(Duration::from_secs(30)),
+        )
+        .with_locales(vec![LocaleTag::DeDe]),
+    );
+    Ok(pipeline.with_safety_net_registry(registry))
+}
+
+#[cfg(not(all(feature = "safety-net-kiji", feature = "safety-net-openai")))]
+fn register_locale_aware(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    Err("compile with gaze-recognizers features safety-net-kiji,safety-net-openai".into())
 }
 
 fn leak_kind_name(kind: &LeakKind) -> &'static str {

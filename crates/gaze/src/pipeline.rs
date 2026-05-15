@@ -651,6 +651,26 @@ impl Pipeline {
             let selected = registry
                 .resolve(&locale, ModelStage::Pass3SafetyNet)
                 .map_err(model_error_to_safety_net_error)?;
+            if selected.len() > 1 {
+                let selected_backend = selected[0].name();
+                let dropped = selected
+                    .iter()
+                    .skip(1)
+                    .map(|backend| backend.name().to_string())
+                    .collect::<Vec<_>>();
+                tracing::debug!(
+                    selected_backend,
+                    backend_silently_dropped = ?dropped,
+                    "locale-aware safety-net registry resolved multiple backends; using first"
+                );
+                self.log_backend_silently_dropped(
+                    session,
+                    document_kind,
+                    field_path,
+                    selected_backend,
+                    dropped,
+                )?;
+            }
             if let Some(model) = selected.first() {
                 let spans = model
                     .infer(
@@ -933,6 +953,32 @@ impl Pipeline {
         if let Some(reason) = fallback_reason {
             entry = entry.with_fallback_triggered(reason);
         }
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
+        }
+        Ok(())
+    }
+
+    fn log_backend_silently_dropped(
+        &self,
+        session: &Session,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+        selected_backend: &str,
+        dropped: Vec<String>,
+    ) -> Result<()> {
+        let entry = RedactionEntry::new(
+            format!("safety_net.{selected_backend}"),
+            PiiClass::Custom("safety_net.backend".to_string()),
+            Action::Preserve,
+            field_path.map(str::to_string),
+            document_kind,
+            true,
+            ConflictTier::None,
+            crate::redaction_log::current_epoch_ms(),
+            Some(session.audit_session_id().to_string()),
+        )
+        .with_backend_silently_dropped(dropped);
         for logger in &self.redaction_loggers {
             logger.log(&entry)?;
         }
@@ -2204,6 +2250,66 @@ mod tests {
             entries[0].recognizer_version_id.as_deref(),
             Some("name.semantic.v2")
         );
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn locale_safety_net_registry_logs_dropped_backends() {
+        struct EmptyLocaleModel {
+            name: &'static str,
+            locales: Vec<crate::LocaleTag>,
+        }
+
+        impl gaze_recognizers::LocaleAwareModel for EmptyLocaleModel {
+            fn name(&self) -> &str {
+                self.name
+            }
+
+            fn native_locales(&self) -> &[crate::LocaleTag] {
+                &self.locales
+            }
+
+            fn infer(
+                &self,
+                _input: ModelInput,
+                _hints: ModelHints,
+            ) -> std::result::Result<Vec<ModelSpan>, ModelError> {
+                Ok(Vec::new())
+            }
+        }
+
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let registry = LocaleAwareModelRegistry::from_backends(vec![
+            Box::new(EmptyLocaleModel {
+                name: "opf-primary",
+                locales: vec![crate::LocaleTag::EnUs],
+            }),
+            Box::new(EmptyLocaleModel {
+                name: "opf-shadow",
+                locales: vec![crate::LocaleTag::EnUs],
+            }),
+        ]);
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .register_safety_net_registry(registry)
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        pipeline
+            .scan_safety_nets(&session, "plain text", &[crate::LocaleTag::EnUs])
+            .expect("safety net scan");
+
+        let entries = entries.lock().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(
+            entries[0].backend_silently_dropped.as_deref(),
+            Some(&["opf-shadow".to_string()][..])
+        );
+        assert_eq!(entries[0].source, "safety_net.opf-primary");
     }
 
     #[test]

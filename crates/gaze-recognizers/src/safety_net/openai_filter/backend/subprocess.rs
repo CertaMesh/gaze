@@ -43,6 +43,26 @@ pub const REQUIRED_OPF_ARTIFACTS: &[&str] = &[
     "viterbi_calibration.json",
 ];
 
+#[cfg(test)]
+const OPF_CHECKPOINT_ARTIFACT_SHA256SUMS: &[(&str, &str)] = &[
+    (
+        "config.json",
+        "048a20604a3622de208d30df57cd5424bb583639b9ba20ddd7da593d3f89a248",
+    ),
+    (
+        "dtypes.json",
+        "e936acb3d039b35ec55438af2fffd424a53c7685b895775c186b26c7df79fcc7",
+    ),
+    (
+        "model.safetensors",
+        "9c262cbe68a0c8a50590a648ef8341a2b7d3be1fa11dfb79893fe0b03ce57b5c",
+    ),
+    (
+        "viterbi_calibration.json",
+        "bbc8611ef08a55ed72d64856cbbbb9a91db8dfa881f0a92e2afbad6e4bbc775a",
+    ),
+];
+
 /// Configuration for the local OPF subprocess backend.
 #[derive(Debug, Clone)]
 pub struct SubprocessOpenAiFilterConfig {
@@ -659,10 +679,7 @@ fn verify_checkpoint_bundle_integrity(
         let bytes = std::fs::read(&artifact).map_err(|_| SafetyNetError::WeightsMissing {
             path: sanitize_path(&artifact),
         })?;
-        manifest.push_str(&hex_sha256(&bytes));
-        manifest.push_str("  ");
-        manifest.push_str(required);
-        manifest.push('\n');
+        push_sha256sum_manifest_line(&mut manifest, required, &hex_sha256(&bytes));
     }
 
     let actual_sha256 = hex_sha256(manifest.as_bytes());
@@ -683,6 +700,13 @@ fn default_checkpoint_path() -> Option<PathBuf> {
 
 fn hex_sha256(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
+}
+
+fn push_sha256sum_manifest_line(manifest: &mut String, artifact: &str, sha256: &str) {
+    manifest.push_str(sha256);
+    manifest.push_str("  ");
+    manifest.push_str(artifact);
+    manifest.push('\n');
 }
 
 fn ensure_secure_dir(path: &Path) -> Result<(), SafetyNetError> {
@@ -847,6 +871,27 @@ mod tests {
         assert!(!stderr.contains("alice@example.invalid"));
         assert!(!stderr.contains("+1-555-0101"));
         assert!(stderr.contains("<redacted>"));
+    }
+
+    #[test]
+    fn opf_checkpoint_bundle_hash_matches_documented_artifacts() {
+        let required = REQUIRED_OPF_ARTIFACTS.to_vec();
+        let documented = OPF_CHECKPOINT_ARTIFACT_SHA256SUMS
+            .iter()
+            .map(|(artifact, _)| *artifact)
+            .collect::<Vec<_>>();
+        assert_eq!(documented, required);
+
+        let mut manifest = String::new();
+        for (artifact, sha256) in OPF_CHECKPOINT_ARTIFACT_SHA256SUMS {
+            assert_eq!(sha256.len(), 64, "{artifact}");
+            push_sha256sum_manifest_line(&mut manifest, artifact, sha256);
+        }
+
+        assert_eq!(
+            Some(hex_sha256(manifest.as_bytes()).as_str()),
+            OPF_CHECKPOINT_BUNDLE_SHA256
+        );
     }
 
     #[test]
