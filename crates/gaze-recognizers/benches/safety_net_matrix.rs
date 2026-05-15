@@ -1,3 +1,4 @@
+#[cfg(feature = "safety-net-kiji")]
 use gaze_recognizers::safety_net::kiji_distilbert::{
     KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
     KIJI_DISTILBERT_SHA256SUMS,
@@ -31,6 +32,7 @@ fn main() {
     println!("{SNAPSHOT}");
 }
 
+#[cfg(feature = "safety-net-kiji")]
 fn assert_kiji_pins(snapshot: &Value) {
     let pins = &snapshot["backends"]["kiji_distilbert"]["pins"];
     assert_eq!(
@@ -59,6 +61,7 @@ fn assert_kiji_pins(snapshot: &Value) {
     );
 }
 
+#[cfg(feature = "safety-net-kiji")]
 fn checksum_for(filename: &str) -> &str {
     KIJI_DISTILBERT_SHA256SUMS
         .lines()
@@ -67,6 +70,23 @@ fn checksum_for(filename: &str) -> &str {
             (path == filename).then_some(sha256)
         })
         .expect("checksum present in Kiji SHA256SUMS")
+}
+
+#[cfg(not(feature = "safety-net-kiji"))]
+fn assert_kiji_pins(snapshot: &Value) {
+    let pins = snapshot["backends"]["kiji_distilbert"]["pins"]
+        .as_object()
+        .expect("Kiji pins object");
+    for key in [
+        "source_repo",
+        "source_commit",
+        "bundle_sha256",
+        "model_sha256",
+        "tokenizer_sha256",
+        "label_map_sha256",
+    ] {
+        assert!(pins.contains_key(key), "missing Kiji pin key: {key}");
+    }
 }
 
 #[cfg(feature = "safety-net-openai")]

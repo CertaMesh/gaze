@@ -17,8 +17,13 @@
       "pins": {
         "source_repo": "openai/privacy-filter",
         "source_commit": "f7f00ca7fb869683eb732c010299d901457f19c3",
-        "checkpoint_bundle_sha256": null,
-        "required_opf_artifacts": []
+        "checkpoint_bundle_sha256": "4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae",
+        "required_opf_artifacts": [
+          "config.json",
+          "dtypes.json",
+          "model.safetensors",
+          "viterbi_calibration.json"
+        ]
       }
     }
   },
