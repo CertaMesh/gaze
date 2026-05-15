@@ -74,7 +74,7 @@ Gaze is the fourth path: deterministic detection, signed restore manifest, every
 
 Each feature, what you get, where the proof lives.
 
-- **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` without translating between them. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
+- **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) route through web endpoints with cookie auth — those are [`gaze-lens`](https://github.com/EmpireTwo/gaze-lens) territory, not this proxy. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
 - **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
 - **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 - **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
@@ -103,7 +103,7 @@ Three execution layers, one core invariant: PII crosses the agent boundary only 
 
 - **Library** — link `gaze-pii` and own the data path. Use when your app already controls the LLM call.
 - **MCP chokepoint** — every agent tool call passes through `PiiEnvelope::dispatch` before reaching its source. Use when your agent host already speaks MCP and you want one redaction boundary across many tools.
-- **Proxy** — SDK base-URL swap. Use when the agent is a hosted product or vendor SDK, and you cannot link a library or rewrite its tool layer.
+- **Proxy** — SDK base-URL swap, API-key path only. Use when the agent is a hosted product or vendor SDK that talks to `api.openai.com` / `api.anthropic.com` / `generativelanguage.googleapis.com` with an API key, and you cannot link a library or rewrite its tool layer. Subscription-tier web clients are out of scope; see [`gaze-lens`](https://github.com/EmpireTwo/gaze-lens).
 
 Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -431,7 +431,7 @@ Ten published crates. Pick the smallest surface that does the job.
 | [`gaze-document`](https://crates.io/crates/gaze-document) | You want PNG / JPG / PDF ingestion into `SafeBundle`s or MCP document tools. |
 | [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | You're building an MCP tool host and want every call to pass through Gaze's chokepoint. |
 | [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
-| [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of OpenAI / Anthropic / Gemini, daemon-managed via `gaze proxy`. |
+| [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of API-key traffic to OpenAI / Anthropic / Gemini (not consumer subscription tiers; see [`gaze-lens`](https://github.com/EmpireTwo/gaze-lens)), daemon-managed via `gaze proxy`. |
 
 ```sh
 cargo add gaze-pii
