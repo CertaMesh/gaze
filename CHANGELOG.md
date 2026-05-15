@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **CLI plaintext JSON `entries` field**: `gaze clean --format=json` now emits
+  top-level `entries` mirroring the session snapshot entries (`class`, `raw`,
+  `token`, `family`) while preserving the existing signed `session_blob`.
+  Empty detections emit `entries: []`. (Axis 5 ergonomics; unblocks
+  gaze-laravel `GazeSession::$entries`.)
+
 ### Changed
 
 - **Safety-net benchmark snapshot schema v2**: the internal benchmark artifact

@@ -7,7 +7,8 @@ use std::time::Duration;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use gaze::{
     dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
@@ -232,11 +233,14 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     };
 
     let snapshot: SensitiveSnapshot = session.export().map_err(|_| CliError::Pipeline)?;
-    let session_blob = BASE64.encode(snapshot.into_bytes());
+    let snapshot_bytes = snapshot.into_bytes();
+    let entries = entries_from_snapshot(&snapshot_bytes)?;
+    let session_blob = BASE64.encode(&snapshot_bytes);
 
     let response = CleanResponse {
         clean_text,
         session_blob,
+        entries,
         stats: Stats {
             detections: counter.detections.load(Ordering::Relaxed),
             locale_chain: locale_chain.to_strings(),
@@ -251,6 +255,21 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
     println!("{json}");
     Ok(())
+}
+
+fn entries_from_snapshot(snapshot: &[u8]) -> std::result::Result<Vec<EntryJson>, CliError> {
+    const SIGNED_SNAPSHOT_PAYLOAD_OFFSET: usize = 97;
+
+    let payload = snapshot
+        .get(SIGNED_SNAPSHOT_PAYLOAD_OFFSET..)
+        .ok_or(CliError::Pipeline)?;
+    let payload: SnapshotPayloadJson =
+        serde_json::from_slice(payload).map_err(|_| CliError::Pipeline)?;
+    payload
+        .entries
+        .into_iter()
+        .map(EntryJson::try_from)
+        .collect()
 }
 
 fn maybe_register_safety_net(
@@ -633,8 +652,55 @@ impl RedactionLogger for CountingLogger {
 struct CleanResponse {
     clean_text: String,
     session_blob: String,
+    entries: Vec<EntryJson>,
     stats: Stats,
     leak_report: LeakReportResponse,
+}
+
+#[derive(Deserialize)]
+struct SnapshotPayloadJson {
+    entries: Vec<SnapshotEntryJson>,
+}
+
+#[derive(Deserialize)]
+struct SnapshotEntryJson {
+    class: Value,
+    raw: String,
+    token: String,
+    family: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct EntryJson {
+    class: String,
+    raw: String,
+    token: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    family: Option<String>,
+}
+
+impl TryFrom<SnapshotEntryJson> for EntryJson {
+    type Error = CliError;
+
+    fn try_from(entry: SnapshotEntryJson) -> std::result::Result<Self, Self::Error> {
+        Ok(Self {
+            class: snapshot_class_to_string(entry.class)?,
+            raw: entry.raw,
+            token: entry.token,
+            family: entry.family,
+        })
+    }
+}
+
+fn snapshot_class_to_string(class: Value) -> std::result::Result<String, CliError> {
+    match class {
+        Value::String(class) => Ok(class),
+        Value::Object(mut class) => match class.remove("Custom") {
+            Some(Value::String(name)) if !name.is_empty() => Ok(format!("Custom:{name}")),
+            _ => Err(CliError::Pipeline),
+        },
+        _ => Err(CliError::Pipeline),
+    }
 }
 
 #[derive(Serialize)]
