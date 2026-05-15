@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -180,10 +179,6 @@ def run(model_dir: Path, text: str) -> list[dict[str, Any]]:
     for path in [model_path, tokenizer_path, labels_path]:
         if not path.is_file():
             raise KijiRunnerError(f"missing model artifact: {path.name}")
-
-    # Preserve caller byte offsets. Normalized NFC/NFKC inputs are supported as-is.
-    unicodedata.normalize("NFC", text)
-    unicodedata.normalize("NFKC", text)
 
     tokenizer = Tokenizer.from_file(str(tokenizer_path))
     encoding = tokenizer.encode(text)
