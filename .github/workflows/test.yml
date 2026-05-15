@@ -13,6 +13,16 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Free disk space (ubuntu-latest preinstalled bloat removal)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Install Tesseract + English language pack (gaze-document)
