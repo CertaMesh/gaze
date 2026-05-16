@@ -24,9 +24,9 @@ Every design, implementation, and review decision MUST be evaluated against thes
 
 All design, implementation, and review decisions in this repo are evaluated against the five axes above. If a decision weakens any axis, call it out in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
 
-## Workspace shape (v0.7)
+## Workspace shape (v0.9)
 
-As of v0.7.1, the workspace has nine published-shape crates plus `xtask`:
+As of v0.9.0-rc.1, the workspace has nine published-shape crates plus `xtask`:
 
 - `gaze` — core (pipeline, session, policy, registry, locale, rulepack). Re-exports `gaze_types::RedactionLogger` for source-compat. No `rusqlite` dep in any feature graph.
 - `gaze-types` — shared value contracts including the canonical `RedactionLogger` trait (serde-only, no ML/sql deps). Introduced in v0.5 Phase B.
