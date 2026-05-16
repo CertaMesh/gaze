@@ -64,6 +64,11 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "locale-cue-bundle-coherence"],
     },
     MatrixCommand {
+        label: "cargo run -p xtask -- readme-version-check",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "readme-version-check"],
+    },
+    MatrixCommand {
         label: "cargo test -p gaze-recognizers --no-default-features",
         program: "cargo",
         args: &["test", "-p", "gaze-recognizers", "--no-default-features"],
@@ -131,6 +136,7 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
 const REQUIRED_PACKAGE_TARGET: &str = "gaze-recognizers";
 const REQUIRED_NO_DEFAULT_FEATURES: &str = "--no-default-features";
 const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
+const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
 
 #[derive(Debug, Clone, Copy)]
 struct MatrixCommand {
@@ -173,6 +179,16 @@ fn ensure_matrix_contract() -> Result<()> {
         bail!(
             "ci_feature_matrix: feature matrix must run xtask {}",
             REQUIRED_SAFETY_NET_SANITY_TASK
+        );
+    }
+
+    if !FEATURE_MATRIX
+        .iter()
+        .any(|command| command.args.contains(&REQUIRED_README_VERSION_CHECK_TASK))
+    {
+        bail!(
+            "ci_feature_matrix: feature matrix must run xtask {}",
+            REQUIRED_README_VERSION_CHECK_TASK
         );
     }
 

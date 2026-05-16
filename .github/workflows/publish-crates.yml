@@ -24,6 +24,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
 
+      - name: README version check
+        run: cargo run -p xtask -- readme-version-check
+
       - name: Authenticate to crates.io via OIDC
         uses: rust-lang/crates-io-auth-action@v1.0.4
         id: cargo-auth
