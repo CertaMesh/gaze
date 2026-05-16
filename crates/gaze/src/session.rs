@@ -1,5 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
+use std::ops::Range;
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -11,6 +13,7 @@ use regex::Regex;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
+use sha2::{Digest, Sha256};
 
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
@@ -25,6 +28,31 @@ const SNAPSHOT_VERSION_V4: u8 = 4;
 const SNAPSHOT_VERSION_V5: u8 = 5;
 
 pub type RestoreError = Error;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RestoreEventKind {
+    ManifestBypass,
+    FreshPiiDetected,
+}
+
+impl RestoreEventKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ManifestBypass => "manifest_bypass",
+            Self::FreshPiiDetected => "fresh_pii_detected",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RestoreEvent {
+    pub kind: RestoreEventKind,
+    pub class: PiiClass,
+    pub raw_sha256: String,
+    pub location: Range<usize>,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ParsedRestoreToken {
@@ -443,6 +471,19 @@ impl Session {
         Ok(restored)
     }
 
+    pub fn restore_strict_text_with_events(
+        &self,
+        text: &str,
+    ) -> std::result::Result<(String, Vec<RestoreEvent>), RestoreError> {
+        let events = self.restore_boundary_events(text);
+        let restored = self.restore_strict_text(text)?;
+        Ok((restored, events))
+    }
+
+    pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
+        restore_boundary_events(text, &authorized_structural_values(self))
+    }
+
     pub fn restore(&self, token: &str) -> Option<String> {
         self.value_by_token
             .get(token)
@@ -825,6 +866,268 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
             ttl: Duration::from_secs(ttl_secs),
         },
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct StructuralFinding {
+    class: PiiClass,
+    raw: String,
+    canonical: String,
+    location: Range<usize>,
+}
+
+fn authorized_structural_values(session: &Session) -> BTreeSet<(PiiClass, String)> {
+    let mut authorized = BTreeSet::new();
+    for entry in session.snapshot_entries() {
+        for finding in structural_findings(&entry.raw) {
+            authorized.insert((finding.class, finding.canonical));
+        }
+    }
+    authorized
+}
+
+fn restore_boundary_events(
+    text: &str,
+    authorized: &BTreeSet<(PiiClass, String)>,
+) -> Vec<RestoreEvent> {
+    structural_findings(text)
+        .into_iter()
+        .map(|finding| RestoreEvent {
+            kind: if authorized.contains(&(finding.class.clone(), finding.canonical)) {
+                RestoreEventKind::ManifestBypass
+            } else {
+                RestoreEventKind::FreshPiiDetected
+            },
+            class: finding.class,
+            raw_sha256: raw_sha256(&finding.raw),
+            location: finding.location,
+        })
+        .collect()
+}
+
+fn structural_findings(text: &str) -> Vec<StructuralFinding> {
+    let mut findings = Vec::new();
+    collect_email_findings(text, &mut findings);
+    collect_phone_findings(text, &mut findings);
+    collect_iban_findings(text, &mut findings);
+    collect_credit_card_findings(text, &mut findings);
+    collect_api_key_findings(text, &mut findings);
+    findings.sort_by(|left, right| {
+        left.location
+            .start
+            .cmp(&right.location.start)
+            .then_with(|| {
+                (right.location.end - right.location.start)
+                    .cmp(&(left.location.end - left.location.start))
+            })
+    });
+    let mut accepted = Vec::new();
+    for finding in findings {
+        if accepted.iter().any(|existing: &StructuralFinding| {
+            finding.location.start < existing.location.end
+                && existing.location.start < finding.location.end
+        }) {
+            continue;
+        }
+        accepted.push(finding);
+    }
+    accepted
+}
+
+fn collect_email_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
+    for matched in email_pattern().find_iter(text) {
+        let raw = matched.as_str();
+        if !is_basic_restore_email(raw) {
+            continue;
+        }
+        findings.push(StructuralFinding {
+            class: PiiClass::Email,
+            raw: raw.to_string(),
+            canonical: raw.to_ascii_lowercase(),
+            location: matched.range(),
+        });
+    }
+}
+
+fn collect_phone_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
+    for matched in phone_pattern().find_iter(text) {
+        let raw = matched.as_str();
+        findings.push(StructuralFinding {
+            class: PiiClass::custom("phone"),
+            raw: raw.to_string(),
+            canonical: ascii_digits(raw),
+            location: matched.range(),
+        });
+    }
+}
+
+fn collect_iban_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
+    for matched in iban_pattern().find_iter(text) {
+        let raw = matched.as_str();
+        let canonical = iban_canonicalize(raw);
+        if !iban_mod97_check(&canonical) {
+            continue;
+        }
+        findings.push(StructuralFinding {
+            class: PiiClass::custom("iban"),
+            raw: raw.to_string(),
+            canonical,
+            location: matched.range(),
+        });
+    }
+}
+
+fn collect_credit_card_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
+    for matched in card_pattern().find_iter(text) {
+        let raw = matched.as_str();
+        let canonical = ascii_digits(raw);
+        if !luhn_check(&canonical) {
+            continue;
+        }
+        findings.push(StructuralFinding {
+            class: PiiClass::custom("credit_card"),
+            raw: raw.to_string(),
+            canonical,
+            location: matched.range(),
+        });
+    }
+}
+
+fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
+    for matched in api_key_pattern().find_iter(text) {
+        let raw = matched.as_str();
+        findings.push(StructuralFinding {
+            class: PiiClass::custom("api_key"),
+            raw: raw.to_string(),
+            canonical: raw.to_string(),
+            location: matched.range(),
+        });
+    }
+}
+
+fn email_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
+            .expect("email restore DLP regex compiles")
+    })
+}
+
+fn phone_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(
+            r"(?x)(?:
+                \+?1[\s.-]+555[\s.-]*01\d{2}
+                |\+44[\s.-]*7700[\s.-]*900\d{3}
+                |\+49[\s.-]*1555[\s.-]*0112233
+            )\b",
+        )
+        .expect("phone restore DLP regex compiles")
+    })
+}
+
+fn iban_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b")
+            .expect("IBAN restore DLP regex compiles")
+    })
+}
+
+fn card_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"\b\d(?:[\s-]?\d){12,18}\b").expect("credit-card restore DLP regex compiles")
+    })
+}
+
+fn api_key_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"\b(?:sk-test-[A-Za-z0-9]{20,}|gaze_test_[A-Za-z0-9]{16,})\b")
+            .expect("API-key restore DLP regex compiles")
+    })
+}
+
+fn is_basic_restore_email(input: &str) -> bool {
+    let Some((local, domain)) = input.split_once('@') else {
+        return false;
+    };
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+fn ascii_digits(input: &str) -> String {
+    input.chars().filter(char::is_ascii_digit).collect()
+}
+
+fn raw_sha256(input: &str) -> String {
+    let digest = Sha256::digest(input.as_bytes());
+    hex::encode(digest)
+}
+
+fn iban_canonicalize(input: &str) -> String {
+    input
+        .chars()
+        .filter(|ch| !ch.is_ascii_whitespace())
+        .flat_map(char::to_uppercase)
+        .collect()
+}
+
+fn iban_mod97_check(input: &str) -> bool {
+    let canonical = iban_canonicalize(input);
+    if !(15..=34).contains(&canonical.len()) {
+        return false;
+    }
+    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+
+    let mut remainder = 0u32;
+    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
+        match ch {
+            '0'..='9' => {
+                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
+            }
+            'A'..='Z' => {
+                let value = u32::from(ch) - u32::from('A') + 10;
+                remainder = (remainder * 10 + value / 10) % 97;
+                remainder = (remainder * 10 + value % 10) % 97;
+            }
+            _ => return false,
+        }
+    }
+    remainder == 1
+}
+
+fn luhn_check(input: &str) -> bool {
+    let mut digits = Vec::new();
+    for byte in input.bytes() {
+        if !byte.is_ascii_digit() {
+            return false;
+        }
+        digits.push(byte - b'0');
+    }
+    if !(13..=19).contains(&digits.len()) {
+        return false;
+    }
+
+    let sum: u32 = digits
+        .iter()
+        .rev()
+        .enumerate()
+        .map(|(index, digit)| {
+            let mut value = u32::from(*digit);
+            if index % 2 == 1 {
+                value *= 2;
+                if value > 9 {
+                    value -= 9;
+                }
+            }
+            value
+        })
+        .sum();
+    sum.is_multiple_of(10)
 }
 
 #[derive(Debug, Clone)]
@@ -1575,5 +1878,85 @@ mod tests {
                 raw,
             } if raw == "<deadbeef:Email_9>"
         ));
+    }
+
+    #[test]
+    fn restore_boundary_events_distinguish_manifest_bypass_from_fresh_pii() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("token");
+
+        let (restored, events) = session
+            .restore_strict_text_with_events(&format!(
+                "{token} raw alice@example.invalid fresh bob@example.invalid"
+            ))
+            .expect("restore continues in audit-only mode");
+
+        assert!(restored.contains("alice@example.invalid"));
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].kind, RestoreEventKind::ManifestBypass);
+        assert_eq!(events[0].class, PiiClass::Email);
+        assert_eq!(events[0].raw_sha256.len(), 64);
+        assert_ne!(events[0].raw_sha256, "alice@example.invalid");
+        assert_eq!(events[1].kind, RestoreEventKind::FreshPiiDetected);
+        assert_eq!(events[1].class, PiiClass::Email);
+    }
+
+    #[test]
+    fn restore_boundary_events_cover_structural_identifier_scope() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        session
+            .tokenize(&PiiClass::custom("phone"), "+1-555-0101")
+            .expect("phone token");
+        session
+            .tokenize(&PiiClass::custom("iban"), "DE89 3704 0044 0532 0130 00")
+            .expect("iban token");
+        session
+            .tokenize(&PiiClass::custom("credit_card"), "4111 1111 1111 1111")
+            .expect("card token");
+        session
+            .tokenize(&PiiClass::custom("api_key"), "sk-test-00000000000000000000")
+            .expect("api key token");
+
+        let events = session.restore_boundary_events(
+            "known +1-555-0101 UK +44 7700 900123 DE +49 1555 0112233 \
+             known DE89370400440532013000 fresh GB82 WEST 1234 5698 7654 32 \
+             known 4111111111111111 fresh 4012-8888-8888-1881 \
+             known sk-test-00000000000000000000 fresh gaze_test_0000000000000000",
+        );
+
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::ManifestBypass
+                && event.class == PiiClass::custom("phone")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::FreshPiiDetected
+                && event.class == PiiClass::custom("phone")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::ManifestBypass
+                && event.class == PiiClass::custom("iban")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::FreshPiiDetected
+                && event.class == PiiClass::custom("iban")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::ManifestBypass
+                && event.class == PiiClass::custom("credit_card")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::FreshPiiDetected
+                && event.class == PiiClass::custom("credit_card")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::ManifestBypass
+                && event.class == PiiClass::custom("api_key")
+        }));
+        assert!(events.iter().any(|event| {
+            event.kind == RestoreEventKind::FreshPiiDetected
+                && event.class == PiiClass::custom("api_key")
+        }));
     }
 }
