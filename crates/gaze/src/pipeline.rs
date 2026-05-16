@@ -20,7 +20,7 @@ use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
-use crate::session::Session;
+use crate::session::{RestoreEvent, Session};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
 
@@ -182,6 +182,7 @@ pub struct Pipeline {
     #[cfg(feature = "bundled-recognizers")]
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     optimization_config: PipelineOptimizationConfig,
+    restore_boundary_dlp_audit: bool,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -409,8 +410,13 @@ impl Pipeline {
     }
 
     pub fn restore_strict_text(&self, session: &Session, text: &str) -> Result<String> {
-        match session.restore_strict_text(text) {
-            Ok(restored) => Ok(restored),
+        match session.restore_strict_text_with_events(text) {
+            Ok((restored, events)) => {
+                if self.restore_boundary_dlp_audit {
+                    self.log_restore_events(session, &events)?;
+                }
+                Ok(restored)
+            }
             Err(Error::UnknownToken {
                 class,
                 ordinal,
@@ -1139,6 +1145,43 @@ impl Pipeline {
         Ok(())
     }
 
+    fn log_restore_events(&self, session: &Session, events: &[RestoreEvent]) -> Result<()> {
+        for event in events {
+            let entry = RedactionEntry::new(
+                event.kind.as_str(),
+                event.class.clone(),
+                Action::Preserve,
+                None,
+                DocumentKind::Text,
+                false,
+                ConflictTier::None,
+                crate::redaction_log::current_epoch_ms(),
+                Some(session.audit_session_id().to_string()),
+            )
+            .with_recognizer_metadata(Some("restore_boundary_dlp".to_string()), None)
+            .with_provenance_metadata(
+                Some("restore_boundary_dlp".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(event.kind.as_str().to_string()),
+                Some(event.class.to_canonical_str()),
+                Some(event.class.to_canonical_str()),
+                None,
+                Some(format!(
+                    "sha256:{};span:{}..{}",
+                    event.raw_sha256, event.location.start, event.location.end
+                )),
+            );
+            for logger in &self.redaction_loggers {
+                logger.log(&entry)?;
+            }
+        }
+        Ok(())
+    }
+
     fn log_vetoed_entry(
         &self,
         session: &Session,
@@ -1349,6 +1392,7 @@ pub struct PipelineBuilder {
     #[cfg(feature = "bundled-recognizers")]
     safety_net_registry: Option<Arc<LocaleAwareModelRegistry>>,
     optimization_config: PipelineOptimizationConfig,
+    restore_boundary_dlp_audit: bool,
     rules: Vec<Arc<dyn Rule>>,
 }
 
@@ -1421,6 +1465,11 @@ impl PipelineBuilder {
         self
     }
 
+    pub fn enable_restore_boundary_dlp_audit(mut self) -> Self {
+        self.restore_boundary_dlp_audit = true;
+        self
+    }
+
     pub fn enable_skip_class_gating(mut self) -> Self {
         self.optimization_config.skip_class_gating = true;
         self
@@ -1465,6 +1514,7 @@ impl PipelineBuilder {
             #[cfg(feature = "bundled-recognizers")]
             safety_net_registry: self.safety_net_registry,
             optimization_config: self.optimization_config,
+            restore_boundary_dlp_audit: self.restore_boundary_dlp_audit,
             rules: self.rules,
         })
     }
@@ -2189,6 +2239,65 @@ mod tests {
             entries[0].provenance_stage.as_deref(),
             Some("restore_strict")
         );
+    }
+
+    #[test]
+    fn restore_boundary_dlp_emits_metadata_only_audit_rows() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .enable_restore_boundary_dlp_audit()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("token");
+
+        let restored = pipeline
+            .restore_strict_text(
+                &session,
+                &format!("{token} raw alice@example.invalid fresh bob@example.invalid"),
+            )
+            .expect("restore remains audit-only");
+
+        assert!(restored.contains("alice@example.invalid"));
+        let entries = entries.lock().unwrap();
+        let dlp_entries = entries
+            .iter()
+            .filter(|entry| entry.provenance_stage.as_deref() == Some("restore_boundary_dlp"))
+            .collect::<Vec<_>>();
+        assert_eq!(dlp_entries.len(), 2);
+        assert!(dlp_entries
+            .iter()
+            .any(|entry| entry.source == "manifest_bypass"));
+        assert!(dlp_entries
+            .iter()
+            .any(|entry| entry.source == "fresh_pii_detected"));
+        let serialized = serde_json::to_string(&dlp_entries).expect("audit json");
+        assert!(!serialized.contains("alice@example.invalid"));
+        assert!(!serialized.contains("bob@example.invalid"));
+        assert!(serialized.contains("sha256:"));
+    }
+
+    #[test]
+    fn restore_boundary_dlp_audit_is_default_off() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        pipeline
+            .restore_strict_text(&session, "fresh bob@example.invalid")
+            .expect("restore remains audit-only");
+
+        assert!(entries.lock().unwrap().is_empty());
     }
 
     #[test]
