@@ -1,13 +1,24 @@
 # gaze-proxy
 
+[![Crates.io](https://img.shields.io/crates/v/gaze-proxy.svg)](https://crates.io/crates/gaze-proxy)
+[![docs.rs](https://docs.rs/gaze-proxy/badge.svg)](https://docs.rs/gaze-proxy)
+[![License](https://img.shields.io/crates/l/gaze-proxy.svg)](https://github.com/EmpireTwo/gaze#license)
+
 `gaze-proxy` is the feature-gated HTTP proxy runtime for LLM SDK base-URL swaps.
 It preserves each provider's native wire shape and uses adapters only to locate
 PII-bearing fields before calling the supplied `gaze::Pipeline`.
 
+## Cargo
+
+```toml
+[dependencies]
+gaze-proxy = "0.9.0"
+```
+
 ## Quickstart
 
 ```bash
-cargo install gaze-cli
+cargo install gaze-cli --version 0.9.0
 gaze proxy start
 ```
 
@@ -16,6 +27,7 @@ Then point SDKs at the daemon:
 ```bash
 export OPENAI_BASE_URL=http://127.0.0.1:8787/v1
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
+export GEMINI_BASE_URL=http://127.0.0.1:8787
 ```
 
 The default config is written to `~/.config/gaze/proxy.toml` and includes:
@@ -50,13 +62,14 @@ in that provider's native JSON. The proxy does not transcode requests.
 gaze proxy serve
 gaze proxy start
 gaze proxy status
-gaze proxy logs --follow
 gaze proxy stop
 gaze proxy restart
 ```
 
 Pidfiles live under the platform local-data directory, never `/tmp`. Stale
 pidfiles are revalidated with process liveness checks and cleaned before start.
+
+`gaze proxy logs --follow` is also available for local daemon inspection.
 
 ## Security Notes
 

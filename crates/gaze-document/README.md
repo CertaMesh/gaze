@@ -20,13 +20,13 @@ contract that always restores. OCR is a subprocess call to the standard
 
 ```toml
 [dependencies]
-gaze-document = "0.7.2"
+gaze-document = "0.9.0"
 ```
 
 ### CLI
 
 ```bash
-cargo install gaze-cli --features document
+cargo install gaze-cli --version 0.9.0 --features document
 ```
 
 The `document` feature is opt-in on `gaze-cli` so the default install stays
@@ -218,8 +218,8 @@ Both tools return a JSON object:
 
 `gaze_read_file` defaults to a 25 MiB input cap. Override it with
 `GazeReadFile::with_max_file_size(bytes)` or `GazeReadOpts`.
-`gaze mcp install` is planned as a separate `gaze-cli` flow; this crate only
-provides the opt-in tool implementations.
+`gaze-cli` provides `gaze mcp install`, `gaze mcp doctor`, and `gaze mcp serve`;
+this crate only provides the opt-in tool implementations.
 
 ## Feature flags
 
@@ -232,7 +232,7 @@ provides the opt-in tool implementations.
 | `render-image`    | no      | Reserved — future redacted-preview renderer.         |
 
 The `extract-docling` and `render-image` features are intentionally empty
-in v0.0.x so adopters can pin against the eventual flag names early.
+in v0.9.0 so adopters can pin against the eventual flag names early.
 
 ## License
 

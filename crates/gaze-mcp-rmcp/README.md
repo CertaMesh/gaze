@@ -8,7 +8,7 @@
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
 
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (planned for v0.8 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini).
+`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, use `gaze-proxy`, the v0.8+ multi-vendor reverse proxy supporting OpenAI, Anthropic, and Gemini SDK base-URL swaps.
 
 `gaze-mcp-rmcp` is the [rmcp](https://crates.io/crates/rmcp) transport sink for [`gaze-mcp-core`]. It exposes `RmcpFrontend`, a `gaze_mcp_core::Frontend` implementation that wires rmcp `tools/list` and `tools/call` requests to a `DispatchHost`.
 
@@ -23,8 +23,8 @@
 
 ```toml
 [dependencies]
-gaze-mcp-core = "0.7"
-gaze-mcp-rmcp = "0.7"
+gaze-mcp-core = "0.9.0"
+gaze-mcp-rmcp = "0.9.0"
 ```
 
 ```rust

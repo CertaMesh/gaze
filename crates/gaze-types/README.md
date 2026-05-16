@@ -20,6 +20,13 @@ Use `gaze-types` instead of `gaze` when building:
 
 Otherwise depend on `gaze` — it re-exports the public types from this crate.
 
+## Cargo
+
+```toml
+[dependencies]
+gaze-types = "0.9.0"
+```
+
 ## Key types
 
 | Type | Purpose |

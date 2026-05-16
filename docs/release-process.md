@@ -19,7 +19,7 @@ Source: [`.github/workflows/publish-crates.yml`](../.github/workflows/publish-cr
 
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
-- Publishes all nine workspace crates in topological order: `gaze-types` → `gaze-audit` → `gaze-recognizers` → `gaze-pii` → `gaze-assembly` → `gaze-mcp-core` → `gaze-mcp-rmcp` → `gaze-document` → `gaze-cli`. The core crate is published as `gaze-pii` while its library target remains `gaze`.
+- Publishes all ten workspace crates in topological order: `gaze-types` → `gaze-audit` → `gaze-recognizers` → `gaze-pii` → `gaze-assembly` → `gaze-mcp-core` → `gaze-mcp-rmcp` → `gaze-document` → `gaze-proxy` → `gaze-cli`. The core crate is published as `gaze-pii` while its library target remains `gaze`.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
