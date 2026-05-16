@@ -1535,19 +1535,19 @@
       "locale": "DeDe",
       "mode": "observer_residual",
       "metrics": {
-        "precision": 0.118852,
+        "precision": 0.116,
         "recall": 1.0,
-        "f1": 0.212454,
+        "f1": 0.207885,
         "per_class": {
           "Name": {
             "support": 29,
-            "predicted": 244,
+            "predicted": 250,
             "true_positive": 29,
-            "false_positive": 215,
+            "false_positive": 221,
             "false_negative": 0,
-            "precision": 0.118852,
+            "precision": 0.116,
             "recall": 1.0,
-            "f1": 0.212454
+            "f1": 0.207885
           }
         },
         "observer_residual_recall": 1.0,
