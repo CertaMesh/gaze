@@ -841,6 +841,51 @@ fn t04b_tolerant_restore_reports_warning_and_preserves_text() {
 }
 
 #[test]
+fn t04d_restore_telemetry_json_and_audit_query_are_metadata_only() {
+    let (clean, blob, _) = clean_ok("Email is alice@example.invalid please.");
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("restore.sqlite");
+    let audit_arg = format!("--audit-db={}", audit_path.display());
+    let (code, stdout, stderr) = restore_json_with_args(
+        &["--policy=strict", "--telemetry", &audit_arg],
+        &blob,
+        &clean,
+    );
+
+    assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
+    let resp: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(resp["text"], "Email is alice@example.invalid please.");
+    assert_eq!(resp["restore_telemetry"]["unknown_token_count"], 0);
+    assert_eq!(resp["restore_telemetry"]["manifest_bypass_count"], 0);
+    assert_eq!(resp["restore_telemetry"]["fresh_pii_detected_count"], 0);
+    assert_eq!(resp["restore_telemetry"]["restore_policy"], "strict");
+    assert_eq!(resp["restore_telemetry"]["restore_decision"], "success");
+
+    let out = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "query",
+            "--restore-events",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "query failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains("restore_policy"));
+    assert!(stdout.contains("\tcustom:restore.telemetry\t"));
+    assert!(stdout.contains("\tstrict\tsuccess\t0\t0\t0\t"));
+    assert!(!stdout.contains("alice@example.invalid"));
+    assert!(!stdout.contains("<Email_1>"));
+}
+
+#[test]
 fn t04c_tolerant_restore_omits_empty_warning_array() {
     let (_, blob, _) = clean_ok("No PII here.");
     let (code, stdout, stderr) =
@@ -1239,7 +1284,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\n"
     ));
     assert!(
         stdout
@@ -1822,6 +1867,12 @@ fn s4_audit_query_columns_are_restricted() {
         true,
         true,
         true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
     );
     assert!(
         values.is_empty(),
@@ -1878,6 +1929,12 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
     assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
     let (sql, values) = build_audit_query_sql(
         &AuditFilter::default(),
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
         true,
         true,
         true,

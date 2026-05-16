@@ -78,6 +78,91 @@ pub const RESERVED_BUNDLED_FAMILIES: &[&str] = &[
     "finnish-hetu",
 ];
 
+pub const RESTORE_PHASE_MANIFEST_LOOKUP: u32 = 1 << 0;
+pub const RESTORE_PHASE_UNKNOWN_TOKEN_SCAN: u32 = 1 << 1;
+pub const RESTORE_PHASE_MANIFEST_BYPASS_SCAN: u32 = 1 << 2;
+pub const RESTORE_PHASE_FRESH_PII_SCAN: u32 = 1 << 3;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct RestoredText {
+    pub text: String,
+}
+
+impl RestoredText {
+    pub fn new(text: impl Into<String>) -> Self {
+        Self { text: text.into() }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RestorePolicy {
+    Strict,
+    Lenient,
+}
+
+impl RestorePolicy {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Strict => "strict",
+            Self::Lenient => "lenient",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum RestoreDecision {
+    Success,
+    Partial,
+    Failed,
+}
+
+impl RestoreDecision {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Success => "success",
+            Self::Partial => "partial",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct RestoreTelemetry {
+    pub unknown_token_count: u64,
+    pub manifest_bypass_count: u64,
+    pub fresh_pii_detected_count: u64,
+    pub restore_policy: RestorePolicy,
+    pub restore_decision: RestoreDecision,
+    pub phase_execution_mask: u32,
+}
+
+impl RestoreTelemetry {
+    pub fn new(restore_policy: RestorePolicy) -> Self {
+        Self {
+            unknown_token_count: 0,
+            manifest_bypass_count: 0,
+            fresh_pii_detected_count: 0,
+            restore_policy,
+            restore_decision: RestoreDecision::Success,
+            phase_execution_mask: 0,
+        }
+    }
+
+    pub fn restore_policy_str(&self) -> &'static str {
+        self.restore_policy.as_str()
+    }
+
+    pub fn restore_decision_str(&self) -> &'static str {
+        self.restore_decision.as_str()
+    }
+}
+
 /// Collision-family membership metadata for one recognizer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -1813,6 +1898,12 @@ pub struct RedactionEntry {
     pub provenance_merged_from: Option<String>,
     /// Locale-aware safety-net backend ids dropped by first-match-wins routing.
     pub backend_silently_dropped: Option<Vec<String>>,
+    pub restore_policy: Option<String>,
+    pub restore_decision: Option<String>,
+    pub restore_unknown_token_count: Option<u64>,
+    pub restore_manifest_bypass_count: Option<u64>,
+    pub restore_fresh_pii_count: Option<u64>,
+    pub restore_phase_mask: Option<u32>,
 }
 
 impl Serialize for RedactionEntry {
@@ -1848,6 +1939,19 @@ impl Serialize for RedactionEntry {
         if self.backend_silently_dropped.is_some() {
             len += 1;
         }
+        len += [self.restore_policy.as_ref(), self.restore_decision.as_ref()]
+            .into_iter()
+            .filter(|value| value.is_some())
+            .count();
+        len += [
+            self.restore_unknown_token_count.is_some(),
+            self.restore_manifest_bypass_count.is_some(),
+            self.restore_fresh_pii_count.is_some(),
+            self.restore_phase_mask.is_some(),
+        ]
+        .into_iter()
+        .filter(|value| *value)
+        .count();
         let mut state = serializer.serialize_struct("RedactionEntry", len)?;
         state.serialize_field("source", &self.source)?;
         if let Some(recognizer_id) = &self.recognizer_id {
@@ -1910,6 +2014,24 @@ impl Serialize for RedactionEntry {
         }
         if let Some(dropped) = &self.backend_silently_dropped {
             state.serialize_field("backend_silently_dropped", dropped)?;
+        }
+        if let Some(value) = &self.restore_policy {
+            state.serialize_field("restore_policy", value)?;
+        }
+        if let Some(value) = &self.restore_decision {
+            state.serialize_field("restore_decision", value)?;
+        }
+        if let Some(value) = self.restore_unknown_token_count {
+            state.serialize_field("restore_unknown_token_count", &value)?;
+        }
+        if let Some(value) = self.restore_manifest_bypass_count {
+            state.serialize_field("restore_manifest_bypass_count", &value)?;
+        }
+        if let Some(value) = self.restore_fresh_pii_count {
+            state.serialize_field("restore_fresh_pii_count", &value)?;
+        }
+        if let Some(value) = self.restore_phase_mask {
+            state.serialize_field("restore_phase_mask", &value)?;
         }
         state.end()
     }
@@ -1994,6 +2116,12 @@ impl RedactionEntry {
             provenance_confidence: None,
             provenance_merged_from: None,
             backend_silently_dropped: None,
+            restore_policy: None,
+            restore_decision: None,
+            restore_unknown_token_count: None,
+            restore_manifest_bypass_count: None,
+            restore_fresh_pii_count: None,
+            restore_phase_mask: None,
         }
     }
 
@@ -2029,6 +2157,16 @@ impl RedactionEntry {
     /// Attaches locale-aware backend ids dropped by first-match-wins routing.
     pub fn with_backend_silently_dropped(mut self, dropped: Vec<String>) -> Self {
         self.backend_silently_dropped = Some(dropped);
+        self
+    }
+
+    pub fn with_restore_telemetry(mut self, telemetry: RestoreTelemetry) -> Self {
+        self.restore_policy = Some(telemetry.restore_policy_str().to_string());
+        self.restore_decision = Some(telemetry.restore_decision_str().to_string());
+        self.restore_unknown_token_count = Some(telemetry.unknown_token_count);
+        self.restore_manifest_bypass_count = Some(telemetry.manifest_bypass_count);
+        self.restore_fresh_pii_count = Some(telemetry.fresh_pii_detected_count);
+        self.restore_phase_mask = Some(telemetry.phase_execution_mask);
         self
     }
 
@@ -2706,6 +2844,12 @@ mod redaction_logger_tests {
             provenance_confidence: None,
             provenance_merged_from: None,
             backend_silently_dropped: None,
+            restore_policy: None,
+            restore_decision: None,
+            restore_unknown_token_count: None,
+            restore_manifest_bypass_count: None,
+            restore_fresh_pii_count: None,
+            restore_phase_mask: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

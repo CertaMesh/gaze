@@ -218,6 +218,15 @@ enum Cmd {
         /// Unknown-token handling during restore.
         #[arg(long, value_enum, default_value_t = RestoreMode::Strict)]
         restore_mode: RestoreMode,
+        /// Alias for `--restore-mode` used by restore-boundary telemetry.
+        #[arg(long = "policy", value_enum)]
+        restore_policy: Option<RestoreMode>,
+        /// Emit restore telemetry in the JSON response.
+        #[arg(long)]
+        telemetry: bool,
+        /// Optional SQLite redaction-log database path for restore telemetry rows.
+        #[arg(long)]
+        audit_db: Option<PathBuf>,
         /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
         #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
         max_bytes: u64,
@@ -418,6 +427,9 @@ enum AuditCmd {
         /// Filter by collision variant identifier.
         #[arg(long)]
         collision_variant: Option<String>,
+        /// Include only restore telemetry rows.
+        #[arg(long)]
+        restore_events: bool,
     },
     /// Export filtered audit metadata rows.
     Export {
@@ -463,6 +475,9 @@ enum AuditCmd {
         /// Filter by collision variant identifier.
         #[arg(long)]
         collision_variant: Option<String>,
+        /// Include only restore telemetry rows.
+        #[arg(long)]
+        restore_events: bool,
     },
     /// Purge audit metadata rows older than an ISO 8601 UTC timestamp.
     Purge {
@@ -680,10 +695,15 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
         Cmd::Restore {
             format,
             restore_mode,
+            restore_policy,
+            telemetry,
+            audit_db,
             max_bytes,
         } => restore::run(restore::Args {
             format,
-            restore_mode,
+            restore_mode: restore_policy.unwrap_or(restore_mode),
+            telemetry,
+            audit_db,
             max_bytes,
         }),
         Cmd::Daemon {
@@ -749,6 +769,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 ambiguity_reason,
                 collision_family,
                 collision_variant,
+                restore_events,
             } => audit::query(audit::Args {
                 audit_db,
                 class: pii_class,
@@ -762,6 +783,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 ambiguity_reason,
                 collision_family,
                 collision_variant,
+                restore_events_only: restore_events,
             }),
             AuditCmd::Export {
                 audit_db,
@@ -778,6 +800,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 ambiguity_reason,
                 collision_family,
                 collision_variant,
+                restore_events,
             } => audit::export(
                 audit::Args {
                     audit_db,
@@ -792,6 +815,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                     ambiguity_reason,
                     collision_family,
                     collision_variant,
+                    restore_events_only: restore_events,
                 },
                 format,
                 output,

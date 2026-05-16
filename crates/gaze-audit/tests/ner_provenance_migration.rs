@@ -205,7 +205,8 @@ fn ner_provenance_filters_bind_expected_sql() {
 fn build_current_audit_query_sql(filter: &AuditFilter) -> (String, Vec<SqlValue>) {
     build_audit_query_sql(
         filter, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true,
+        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
+        true,
     )
 }
 

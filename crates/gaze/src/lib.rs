@@ -33,8 +33,11 @@ pub use gaze_types::{
     CodecAuditRow, CodecCapabilitySet, CollisionMembership, DocumentExtension,
     DocumentExtensionBuilder, DocumentExtensionError, EmittedTokenSpan, ExtractionDensityPolicy,
     FallbackReason, LeakKind, LeakReport, LeakReportStats, LeakReportTelemetry, LeakSuspect,
-    Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
-    SafetyNetError, SafetyNetPiiClass, SafetyTier, TextOrigin, RESERVED_BUNDLED_FAMILIES,
+    Manifest, OpenAiPrivateLabel, RedactionLogError, RedactionLogger, RestoreDecision,
+    RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext, SafetyNetError,
+    SafetyNetPiiClass, SafetyTier, TextOrigin, RESERVED_BUNDLED_FAMILIES,
+    RESTORE_PHASE_FRESH_PII_SCAN, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{

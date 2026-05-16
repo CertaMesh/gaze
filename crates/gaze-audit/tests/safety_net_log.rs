@@ -176,6 +176,7 @@ fn safety_net_query_filter_maps_to_safety_net_columns() {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            restore_events_only: false,
         },
     )
     .expect("filtered query");
@@ -310,6 +311,12 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            restore_policy: None,
+            restore_decision: None,
+            restore_unknown_token_count: None,
+            restore_manifest_bypass_count: None,
+            restore_fresh_pii_count: None,
+            restore_phase_mask: None,
         },
         AuditLogRow {
             source: "dictionary".to_string(),
@@ -342,6 +349,12 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             provenance_native_class: None,
             provenance_confidence: None,
             provenance_merged_from: None,
+            restore_policy: None,
+            restore_decision: None,
+            restore_unknown_token_count: None,
+            restore_manifest_bypass_count: None,
+            restore_fresh_pii_count: None,
+            restore_phase_mask: None,
         },
     ]
 }
