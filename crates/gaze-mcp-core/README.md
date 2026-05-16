@@ -4,7 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-mcp-core/badge.svg)](https://docs.rs/gaze-mcp-core)
 [![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/EmpireTwo/gaze#license)
 
-> **Adding `gaze-mcp-core` (v0.7.2) to your crate enables:** the transport-free
+> **Adding `gaze-mcp-core` (v0.9.0) to your crate enables:** the transport-free
 > MCP chokepoint runtime — `Tool` trait, `PiiEnvelope::dispatch`,
 > `ToolRegistry`, `ManifestStore` / `AuthHook` / `SessionIdPolicy` plug-in
 > points, and the optional `core-tools` agent-tier tool set.
@@ -17,7 +17,7 @@
 
 `gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
 
-`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (planned for v0.8 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini).
+`gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, use `gaze-proxy`, the v0.8+ multi-vendor reverse proxy supporting OpenAI, Anthropic, and Gemini SDK base-URL swaps.
 
 ---
 
@@ -213,9 +213,9 @@ exposing restore.
 
 - `gaze-mcp-rmcp` ships alongside this crate as the reference rmcp
   transport sink.
-- `gaze-proxy` (the user-input axis sibling, multi-vendor LLM API
-  reverse proxy) is planned for v0.8 — see the `## Scope` boundary
-  statement at the top of this README.
+- `gaze-proxy` is the user-input axis sibling: a multi-vendor LLM API
+  reverse proxy for OpenAI, Anthropic, and Gemini SDK base-URL swaps. See the
+  `## Scope` boundary statement at the top of this README.
 
 See [`docs/architecture/mcp-runtime.md`](../../docs/architecture/mcp-runtime.md)
 for the full chokepoint contract + audit-row schema + threat model.
