@@ -100,25 +100,26 @@ MCP source chokepoint
     -> gaze-mcp-core PiiEnvelope::dispatch
     -> source system, with safe results returned to the agent
 
-LLM API proxy (v0.8 new / planned)
-  User or agent LLM request
+LLM API proxy (shipped in v0.8)
+  User or agent LLM request authenticated by API key
     -> gaze-proxy provider driver
-    -> vendor API
+    -> vendor API (OpenAI / Anthropic / Gemini)
     -> restore path under owner control
 ```
 
 `gaze::Pipeline` is the library API for applications that already control their
 data path. `gaze-mcp-core` and `gaze-mcp-rmcp` cover the model-to-source axis:
 agent tool calls, document tools, manifest handles, and tiered restore access.
-They explicitly do not cover raw user paste/upload/screenshot traffic in an
-agent host chat UI; that belongs to `gaze-proxy` in the v0.8 proxy runtime.
+They explicitly do not cover raw API-key-authenticated request traffic from an
+SDK or agent host; that belongs to `gaze-proxy`.
 
-The planned `gaze-proxy` layer is a provider-driver runtime for the
-user-to-model axis. Its architecture should stay adapter-oriented: one proxy
-core owns request/response pseudonymization, while provider drivers isolate
-vendor-specific request shapes and streaming behavior. Until that crate and
-`docs/architecture/proxy-runtime.md` land, references to `gaze-proxy` are v0.8
-new/planned, not shipped behavior.
+The `gaze-proxy` layer (shipped in v0.8) is a provider-driver runtime for the
+user-to-model axis. Its architecture is adapter-oriented: one proxy core owns
+request/response pseudonymization, while provider drivers isolate
+vendor-specific request shapes and streaming behavior. Scope is
+API-key-authenticated traffic to `api.openai.com`, `api.anthropic.com`, and
+`generativelanguage.googleapis.com`; consumer subscription tiers (web-tier
+cookie auth) are out of scope and covered by a separate browser-MITM project.
 
 Source anchors: [crates/gaze/src/pipeline.rs](./crates/gaze/src/pipeline.rs),
 [docs/architecture/mcp-runtime.md](./docs/architecture/mcp-runtime.md),
@@ -209,12 +210,12 @@ Source anchors: [docs/architecture/safety-nets.md](./docs/architecture/safety-ne
 [crates/gaze-recognizers/src/safety_net/test_support.rs](./crates/gaze-recognizers/src/safety_net/test_support.rs),
 and [crates/gaze/tests/safety_net.rs](./crates/gaze/tests/safety_net.rs).
 
-### KDD-8: Proxy Providers Use Adapter Drivers (v0.8 New / Planned)
+### KDD-8: Proxy Providers Use Adapter Drivers (shipped in v0.8)
 
-The v0.8 `gaze-proxy` runtime should isolate vendor-specific API shape in
-provider drivers while the proxy core owns pseudonymization, manifest handling,
-restore boundaries, and fail-closed behavior. Until the proxy crate lands, this
-is an architecture direction, not shipped behavior.
+The `gaze-proxy` runtime (shipped in v0.8.0) isolates vendor-specific API
+shape in provider drivers while the proxy core owns pseudonymization, manifest
+handling, restore boundaries, and fail-closed behavior. Adapters ship for
+OpenAI, Anthropic, and Gemini API-key paths.
 
 Source anchors: [docs/architecture/mcp-runtime.md](./docs/architecture/mcp-runtime.md),
 [crates/gaze-mcp-core/src/lib.rs](./crates/gaze-mcp-core/src/lib.rs), and
@@ -273,8 +274,8 @@ and [crates/gaze-audit/src/sqlite.rs](./crates/gaze-audit/src/sqlite.rs).
   (audit-row columns, conflict tiers, SafetyNet benchmark snapshot fields,
   recognizer registry, pipeline observability, `BundleReport`, MCP `ToolCtx`,
   and CLI exit codes) with file-line pointers and stability guarantees.
-- `docs/architecture/proxy-runtime.md` is the v0.8 new/planned deep dive for
-  the user-to-model proxy runtime and provider-driver pattern.
+- `docs/architecture/proxy-runtime.md` is the deep dive for the user-to-model
+  proxy runtime and provider-driver pattern (shipped in v0.8).
 
 Related companion docs:
 [docs/architecture/crates.md](./docs/architecture/crates.md),
