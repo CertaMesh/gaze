@@ -29,8 +29,8 @@ Do **not** use the audit log to restore PII. The restore contract lives in `Sens
 
 ```toml
 [dependencies]
-gaze-pii = "0.9.0-rc.1"
-gaze-audit = "0.9.0-rc.1"
+gaze-pii = "0.9.0"
+gaze-audit = "0.9.0"
 ```
 
 Wire the logger when building the pipeline. Note: `SqliteLogger` is **not** `Clone`;

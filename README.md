@@ -407,8 +407,8 @@ The CLI is a process boundary around the Rust runtime; you can link the runtime 
 
 ```toml
 [dependencies]
-gaze-pii = "0.9.0-rc.1"
-gaze-assembly = "0.9.0-rc.1"
+gaze-pii = "0.9.0"
+gaze-assembly = "0.9.0"
 ```
 
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.

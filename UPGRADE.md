@@ -298,11 +298,11 @@ restore on a newer minor, that is a bug. Open an issue tagged
 against north-star axis 2. There is no migration step that asks you to
 re-tokenize stored manifests.
 
-# v0.9.0-rc.1
+# v0.9.0
 
 ## Perf wave
 
-v0.9.0-rc.1 is a performance and deployment release: in-process Kiji ORT
+v0.9.0 is a performance and deployment release: in-process Kiji ORT
 removes the Python subprocess boundary for adopters who select it, int8 dynamic
 quantization adds a separately SHA-pinned smaller/faster model path, `gaze
 daemon` keeps multi-session state behind a JSONL stdio process boundary,

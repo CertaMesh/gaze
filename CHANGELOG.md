@@ -19,9 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-## [0.9.0-rc.1] - 2026-05-16
+## [0.9.0] - 2026-05-16
 
-v0.9.0-rc.1 is the performance-wave release candidate: Kiji warm p50 moves from 323ms (subprocess) to 2.981ms (in-process ORT fp32), int8 warm p50 lands at 1.849ms, int8 cold start is 297ms, the Kiji bundle shrinks from 249MB to 63MB, and int8 preserves F1 recall with a 0.000 delta across all locales/modes. Pipeline skip + capitals gates can reduce best-case SafetyNet calls from 100% to 0% on numeric input, prefix-cache hit latency drops -50.8%, `gaze daemon` removes full binary fork + model-load overhead for repeated calls, and `tract` provides the new opt-in static-binary path. Manifest restore semantics and the signed snapshot wire format are unchanged from v0.8.1.
+v0.9.0 is the performance-wave final release: Kiji warm p50 moves from 323ms
+(subprocess) to 2.981ms (in-process ORT fp32), int8 warm p50 lands at 1.849ms,
+int8 cold start is 297ms, the Kiji bundle shrinks from 249MB to 63MB, and int8
+preserves F1 recall with a 0.000 delta across all locales/modes. Pipeline skip
+and capitals gates can reduce best-case SafetyNet calls from 100% to 0% on
+numeric input, prefix-cache hit latency drops -50.8%, `gaze daemon` removes full
+binary fork + model-load overhead for repeated calls, and `tract` provides the
+new opt-in static-binary path. Manifest restore semantics and the signed
+snapshot wire format are unchanged from v0.8.1.
 
 ### Added
 
@@ -78,7 +86,7 @@ v0.9.0-rc.1 is the performance-wave release candidate: Kiji warm p50 moves from 
 
 ### Changed
 
-- **Workspace version pin** `0.8.1` -> `0.9.0-rc.1` across all ten published
+- **Workspace version pin** `0.8.1` -> `0.9.0` across all ten published
   crates.
 - **Synthetic email fixtures** (PR #233 `e48901b`) now use the IANA-reserved
   `@example.invalid` domain instead of reachable `@example.com` examples across
@@ -116,10 +124,18 @@ v0.9.0-rc.1 is the performance-wave release candidate: Kiji warm p50 moves from 
   snapshot accessor, OPF artifact-hash gate, silent-drop telemetry, and
   locale-aware benchmark re-run.
 
-### Migration notes
+### Release validation notes
 
-- `0.9.0-rc.1` is a pre-release. It is intended for adopter validation and may
-  revert or adjust performance internals before final `0.9.0`.
+- Final validation re-ran the coverage-loop recall pass, the Kiji int8
+  direct/observer scorer, the ORT int8 benchmark, and
+  `cargo run -p xtask -- ci-feature-matrix` on `origin/main` commit `79ba82f`
+  (`v0.9.0-rc.1`) before promoting the release notes.
+- The PR #240 checkpoint-pinning caveat remains scoped to benchmark
+  reproducibility: the old release checksum URL returned the expected pre-tag
+  404, so the validation used the local Kiji cache after checksum verification.
+  Kiji int8 observer-residual macro recall held at `0.666667`; the one-shot
+  Python scorer's p99 row was an outlier while median and p95 remained inside
+  the drift band.
 - Reversibility is unchanged: manifest restore semantics and the signed snapshot
   wire format remain compatible with v0.8.1.
 - ORT is the recommended runtime default; use the opt-in `tract` path when a
