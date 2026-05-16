@@ -158,7 +158,7 @@ def add_common_args(parser: argparse.ArgumentParser, backend: Literal["kiji", "o
             "--model-dir",
             type=Path,
             default=Path(
-                "/Users/krishankoenig/.cache/gaze/"
+                "~/.cache/gaze/"
                 "kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67"
             ),
         )
