@@ -21,6 +21,7 @@ $ cargo run -p xtask -- locale-cue-bundle-coherence
 $ cargo run -p xtask -- fixture-citation-lint
 $ cargo run -p xtask -- ci-feature-matrix
 $ cargo run -p xtask -- cargo-metadata-audit-isolation
+$ cargo run -p xtask -- readme-version-check
 $ cargo run -p xtask -- dylint-gate
 $ cargo run -p xtask -- safety-net-sanity
 ```
@@ -46,6 +47,7 @@ that list.
 | `FixtureCitationLint` | `fixture-citation-lint` | Production-code lint scanner for fixture-shaped PII literals. Each production fixture literal must cite a test that exists in `cargo test --workspace -- --list`. |
 | `CiFeatureMatrix` | `ci-feature-matrix` | Runs the local feature matrix, including document-ingestion, MCP, safety-net, no-phone-parser, and gate wrapper checks. |
 | `CargoMetadataAuditIsolation` | `cargo-metadata-audit-isolation` | Parses `cargo metadata` and rejects normal dependency paths from non-audit-responsible packages to `gaze-audit` across default, no-default-features, and safety-net graphs. |
+| `ReadmeVersionCheck` | `readme-version-check` | Parses workspace package versions via `cargo metadata`, scans published crate READMEs for pinned Cargo/container versions, and fails when README pins drift from `Cargo.toml`. |
 | `DylintGate` | `dylint-gate` | Canonical audit-sink protected-path isolation gate. Verifies the Dylint UI fixture corpus and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. |
 | `SafetyNetSanity` | `safety-net-sanity` | Runs mock-driven safety-net behavioral suites across core, recognizers, CLI, and audit. Nightly/live OPF corpus hardening is deferred to v0.6.2+ follow-up todo #328. |
 

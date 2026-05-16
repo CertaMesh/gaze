@@ -50,6 +50,8 @@ jobs:
             ${{ runner.os }}-cargo-test-
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
+      - name: README version check
+        run: cargo run -p xtask -- readme-version-check
       - name: cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
       - name: cargo test gaze-document mcp feature
