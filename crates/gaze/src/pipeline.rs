@@ -31,8 +31,12 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
-    #[error("unknown token: {0}")]
-    UnknownToken(String),
+    #[error("unknown token: [REDACTED]")]
+    UnknownToken {
+        class: PiiClass,
+        ordinal: u32,
+        raw: String,
+    },
     #[error("ephemeral sessions cannot be exported")]
     ExportForbidden,
     #[error("document extension integrity fields cannot be empty")]
@@ -402,6 +406,25 @@ impl Pipeline {
             walk_value_for_safety_net_scan(self, session, value, key, locale_chain, &mut report)?;
         }
         Ok(SafetyNetResult { nets_run, report })
+    }
+
+    pub fn restore_strict_text(&self, session: &Session, text: &str) -> Result<String> {
+        match session.restore_strict_text(text) {
+            Ok(restored) => Ok(restored),
+            Err(Error::UnknownToken {
+                class,
+                ordinal,
+                raw,
+            }) => {
+                self.log_restore_strict_rejection(session, class.clone(), ordinal)?;
+                Err(Error::UnknownToken {
+                    class,
+                    ordinal,
+                    raw,
+                })
+            }
+            Err(err) => Err(err),
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1075,6 +1098,43 @@ impl Pipeline {
             for logger in &self.redaction_loggers {
                 logger.log(&entry)?;
             }
+        }
+        Ok(())
+    }
+
+    fn log_restore_strict_rejection(
+        &self,
+        session: &Session,
+        class: PiiClass,
+        ordinal: u32,
+    ) -> Result<()> {
+        let entry = RedactionEntry::new(
+            "restore_strict",
+            class.clone(),
+            Action::Preserve,
+            None,
+            DocumentKind::Text,
+            true,
+            ConflictTier::None,
+            crate::redaction_log::current_epoch_ms(),
+            Some(session.audit_session_id().to_string()),
+        )
+        .with_recognizer_metadata(Some("restore_strict".to_string()), None)
+        .with_provenance_metadata(
+            Some("restore_strict".to_string()),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(class.to_canonical_str()),
+            Some(class.to_canonical_str()),
+            None,
+            Some(format!("ordinal:{ordinal}")),
+        );
+        for logger in &self.redaction_loggers {
+            logger.log(&entry)?;
         }
         Ok(())
     }
@@ -2095,6 +2155,40 @@ mod tests {
             entry.source == "prefix_cache"
                 && entry.provenance_stage.as_deref() == Some("prefix_cache")
         }));
+    }
+
+    #[test]
+    fn restore_strict_rejection_emits_audit_provenance() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let err = pipeline
+            .restore_strict_text(&session, "Reply to <deadbeef:Email_1>.")
+            .expect_err("unknown token must fail closed");
+
+        assert!(matches!(
+            err,
+            Error::UnknownToken {
+                class: PiiClass::Email,
+                ordinal: 1,
+                raw,
+            } if raw == "<deadbeef:Email_1>"
+        ));
+        let entries = entries.lock().unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].source, "restore_strict");
+        assert_eq!(entries[0].class, PiiClass::Email);
+        assert_eq!(entries[0].action, Action::Preserve);
+        assert_eq!(
+            entries[0].provenance_stage.as_deref(),
+            Some("restore_strict")
+        );
     }
 
     #[test]
