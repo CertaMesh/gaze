@@ -297,6 +297,46 @@ restore on a newer minor, that is a bug. Open an issue tagged
 `reversibility-regression` and we will treat it as a critical defect
 against north-star axis 2. There is no migration step that asks you to
 re-tokenize stored manifests.
+
+# v0.9.0-rc.1
+
+## Perf wave
+
+v0.9.0-rc.1 is a performance and deployment release: in-process Kiji ORT
+removes the Python subprocess boundary for adopters who select it, int8 dynamic
+quantization adds a separately SHA-pinned smaller/faster model path, `gaze
+daemon` keeps multi-session state behind a JSONL stdio process boundary,
+pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
+available behind explicit opt-in flags, and `tract`/`candle` feature gates give
+static-binary deployments alternatives to the default `ort` runtime. Headline
+Kiji numbers from the rc cycle: warm ORT p50 2.981ms fp32 / 1.849ms int8, int8
+cold 297ms, and measured F1 delta 0.000.
+
+## New CLI flags (opt-in)
+
+- `--kiji-backend {subprocess|ort}` (default `subprocess`): selects Kiji DistilBERT runtime.
+- `--kiji-distilbert-precision {fp32|int8}` (default `fp32`): selects precision for ORT path.
+- Pipeline-optimization flags wired through CLI: skip-class-gating, capitals-heuristic-gate, prefix-cache, length-bucketing (opt-in default-off).
+
+## New subcommand
+
+- `gaze daemon --policy <path> [--idle-timeout <secs>]` — long-lived JSONL stdio session manager. Protocol: `{session_id, text}` request, `{session_id, clean_text, manifest, tokens}` response. SIGTERM-graceful, multi-session-isolated.
+
+## New opt-in features (Cargo)
+
+- `gaze-recognizers` features: `runtime-tract`, `runtime-candle` — alternative ONNX runtimes for static-binary deployments.
+
+## Reversibility
+
+Manifest restore semantics + signed snapshot wire format unchanged from v0.8.1.
+
+# v0.8.1
+
+v0.8.1 made SafetyNet `resolve` the default mode, added Kiji DistilBERT bundle
+SHA verification, and introduced the `LocaleAwareModel` registry groundwork in
+`gaze-recognizers`. The public default `--safety-net-mode` flipped from
+`strict` to `resolve`; adopters who require strict hard-fail semantics must opt
+back in explicitly with `--safety-net-mode=strict`.
 # v0.8.0
 
 ## gaze-proxy
