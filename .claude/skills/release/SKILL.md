@@ -1,18 +1,18 @@
 ---
 name: release
-description: Use when orchestrating a Gaze release end to end, including trigger phrases like "cut release", "ship vX.Y.Z", "tag vX.Y.Z", "publish vX.Y.Z", or "release vX.Y.Z". Covers pre-flight gates, explicit tag authorization, GitHub/crates.io workflow expectations, post-tag verification, and escalation rules. Counter-pattern: do not just push a tag and hope.
+description: "Use when orchestrating an EmpireTwo/gaze release end to end, especially when the user says cut release, ship vX.Y.Z, tag vX.Y.Z, publish vX.Y.Z, or release vX.Y.Z. Covers pre-flight gates, explicit tag authorization, GitHub and crates.io workflow expectations, post-tag verification, escalation rules, and the counter-pattern to avoid: do not just push a tag and hope."
 ---
 
 # Release Orchestration
 
-This skill governs release execution for `EmpireTwo/gaze`. It complements the
-`release-notes` skill, which controls release-note voice only.
+Use this skill for Gaze release execution. It complements the `release-notes`
+skill, which controls release-note voice only.
 
 Do not cut a release, push a tag, or trigger publish workflows until the
-checklist below is green and the user gives an explicit lock signal such as
-"Do it yourself", "Tag + push", or an equivalent direct instruction.
+pre-flight checklist is green and the user gives an explicit lock signal such
+as "Do it yourself", "Tag + push", or an equivalent direct instruction.
 
-## Pre-Flight
+## Pre-Flight Gates
 
 Run from `main` after all release-blocker PRs are merged.
 
@@ -75,8 +75,8 @@ After the workflows finish:
 
 - Do not push tags without an explicit user lock signal.
 - Do not publish to crates.io manually.
-- Do not amend, delete, or force-push a tag after it has been pushed.
-  If a released tag is wrong, make a new patch release.
+- Do not amend, delete, or force-push a tag after it has been pushed. If a
+  released tag is wrong, make a new patch release.
 - Do not put local absolute paths in release notes, PR bodies, or commit
   messages. Use `~/` or `$HOME`.
 - If release notes need prose changes, use the `release-notes` skill before
