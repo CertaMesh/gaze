@@ -33,15 +33,15 @@ Out of scope:
 - Issues only reproducible in adopter code that bypasses the documented
   `Pipeline` / MCP `ToolCtx` chokepoints.
 - Performance-only regressions with no reliability impact.
-- Issues in `gaze-lens` (separate repo: `EmpireTwo/gaze-lens`) — please
-  report there.
+- Issues in any of our private downstream projects — those will be tracked
+  separately when those projects become public.
 
 ## Supported versions
 
-We currently support security fixes on the latest minor of the `0.7.x`
-series (`v0.7.2` at the time of writing). The last released minor of
-`0.6.x` receives one-cycle backports for high-severity findings while
-adopters complete the `0.7.x` upgrade. Earlier versions do not receive
+We currently support security fixes on the latest minor of the `0.9.x`
+series (`v0.9.0-rc.1` at the time of writing). The last released minor of
+`0.8.x` receives one-cycle backports for high-severity findings while
+adopters complete the `0.9.x` upgrade. Earlier versions do not receive
 backports.
 
 ## Coordinated disclosure
