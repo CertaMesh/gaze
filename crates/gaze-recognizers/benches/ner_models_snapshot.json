@@ -25,7 +25,7 @@
       "runtime": "onnxruntime",
       "wrapper": "scripts/kiji-runner.py",
       "model_file": null,
-      "checkpoint": "/Users/krishankoenig/.cache/gaze/kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67",
+      "checkpoint": "~/.cache/gaze/kiji-distilbert-3a19fe9404a4469d91aa3d551558a97f68872f67",
       "native_locales": [
         "Global"
       ],
@@ -71,7 +71,7 @@
       "license": "cc-by-nc-sa-4.0",
       "runtime": "transformers",
       "wrapper": "scripts/transformers-runner.py",
-      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/wikineural-multilingual",
+      "checkpoint": "~/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/wikineural-multilingual",
       "native_locales": [
         "EnUs",
         "DeDe",
@@ -115,7 +115,7 @@
       "license": "mit",
       "runtime": "transformers",
       "wrapper": "scripts/transformers-runner.py",
-      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/dslim-bert-base-ner",
+      "checkpoint": "~/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/dslim-bert-base-ner",
       "native_locales": [
         "EnUs",
         "EnGb"
@@ -155,7 +155,7 @@
       "license": "afl-3.0",
       "runtime": "transformers",
       "wrapper": "scripts/transformers-runner.py",
-      "checkpoint": "/Users/krishankoenig/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/davlan-bert-multilingual",
+      "checkpoint": "~/.anvil/worktrees/gaze-empiretwo/v0.9-multi-ner-bench/.huggingface-cache/models/davlan-bert-multilingual",
       "native_locales": [
         "EnUs",
         "DeDe",
