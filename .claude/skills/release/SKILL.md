@@ -22,14 +22,13 @@ Run from `main` after all release-blocker PRs are merged.
    root `Cargo.toml` and all per-crate `Cargo.toml` files.
 4. Run `cargo run -p xtask -- ci-feature-matrix` and require green.
 5. Run `cargo run -p xtask -- readme-version-check` and require green.
-6. Run `git grep krishankoenig` and require zero tracked-file matches.
-7. Run `git grep -E '/Users/[a-z]+'` and require zero tracked-file matches.
+6. Run `git grep -E '/Users/[a-z]+'` and require zero tracked-file matches.
    Path-leak output is release-blocking until scrubbed to `~/` or `$HOME`.
-8. Dogfood Gaze on its own release text: pipe `dist/release-notes/vX.Y.Z.md`
+7. Dogfood Gaze on its own release text: pipe `dist/release-notes/vX.Y.Z.md`
    plus the modified `CHANGELOG.md` section through `gaze clean` and verify
    zero detections. This preserves the `feedback-dogfood-gaze-on-own-output`
    memory.
-9. Verify benchmark claims in release notes link to the script and hardware
+8. Verify benchmark claims in release notes link to the script and hardware
    specification that produced them. This preserves the
    `feedback-bench-claims-reproducible` memory.
 
