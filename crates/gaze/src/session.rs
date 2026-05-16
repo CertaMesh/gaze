@@ -1,11 +1,13 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
+use regex::Regex;
 use secrecy::{ExposeSecret, SecretBox};
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value as JsonValue;
@@ -21,6 +23,15 @@ const SNAPSHOT_VERSION_V2: u8 = 2;
 const SNAPSHOT_VERSION_V3: u8 = 3;
 const SNAPSHOT_VERSION_V4: u8 = 4;
 const SNAPSHOT_VERSION_V5: u8 = 5;
+
+pub type RestoreError = Error;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ParsedRestoreToken {
+    pub class: PiiClass,
+    pub ordinal: u32,
+    pub raw: String,
+}
 
 /// Lifetime scope of a [`Session`]'s token manifest.
 ///
@@ -406,7 +417,30 @@ impl Session {
         self.value_by_token
             .get(token)
             .map(|value| value.value().clone())
-            .ok_or_else(|| Error::UnknownToken(token.to_string()))
+            .ok_or_else(|| unknown_token_error(token))
+    }
+
+    pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
+        let tokens = strict_restore_tokens(text)?;
+        for token in &tokens {
+            if !self.value_by_token.contains_key(token.parsed.raw.as_str()) {
+                return Err(unknown_token_error(token.parsed.raw.as_str()));
+            }
+        }
+
+        let mut restored = String::with_capacity(text.len());
+        let mut cursor = 0usize;
+        for token in tokens {
+            restored.push_str(&text[cursor..token.start]);
+            let raw = self
+                .value_by_token
+                .get(token.parsed.raw.as_str())
+                .expect("validated manifest token must remain present");
+            restored.push_str(raw.value());
+            cursor = token.end;
+        }
+        restored.push_str(&text[cursor..]);
+        Ok(restored)
     }
 
     pub fn restore(&self, token: &str) -> Option<String> {
@@ -791,6 +825,93 @@ fn scope_from_snapshot(scope: SnapshotScope) -> Scope {
             ttl: Duration::from_secs(ttl_secs),
         },
     }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct StrictRestoreToken {
+    pub start: usize,
+    pub end: usize,
+    pub parsed: ParsedRestoreToken,
+}
+
+pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken>> {
+    let mut tokens = Vec::new();
+    for matched in crate::token_shape::pattern().find_iter(text) {
+        tokens.push(StrictRestoreToken {
+            start: matched.start(),
+            end: matched.end(),
+            parsed: parsed_restore_token(matched.as_str()),
+        });
+    }
+
+    for matched in malformed_restore_token_pattern().find_iter(text) {
+        if tokens
+            .iter()
+            .any(|token| matched.start() < token.end && token.start < matched.end())
+        {
+            continue;
+        }
+        return Err(unknown_token_error(matched.as_str()));
+    }
+
+    tokens.sort_by_key(|token| token.start);
+    Ok(tokens)
+}
+
+pub(crate) fn unknown_token_error(raw: &str) -> Error {
+    let parsed = parsed_restore_token(raw);
+    Error::UnknownToken {
+        class: parsed.class,
+        ordinal: parsed.ordinal,
+        raw: parsed.raw,
+    }
+}
+
+pub(crate) fn parsed_restore_token(raw: &str) -> ParsedRestoreToken {
+    let (class, ordinal) = parse_restore_token_parts(raw)
+        .unwrap_or_else(|| (PiiClass::Custom("unknown".to_string()), 0));
+    ParsedRestoreToken {
+        class,
+        ordinal,
+        raw: raw.to_string(),
+    }
+}
+
+fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
+    if let Some(rest) = raw.strip_prefix("email") {
+        let (ordinal, tail) = rest.split_once('.')?;
+        if tail.ends_with("@gaze-fake.invalid") || tail.ends_with("@example.test") {
+            return Some((PiiClass::Email, ordinal.parse().ok()?));
+        }
+    }
+
+    let mut body = raw.strip_prefix('<').unwrap_or(raw);
+    body = body.strip_suffix('>').unwrap_or(body);
+    if body.len() > 9 && body.as_bytes().get(8) == Some(&b':') && is_session_hex(&body[..8]) {
+        body = &body[9..];
+    }
+
+    if let Some(rest) = body.strip_prefix("Custom:") {
+        let (name, ordinal) = rest.rsplit_once('_')?;
+        return Some((PiiClass::Custom(name.to_string()), ordinal.parse().ok()?));
+    }
+    if let Some(rest) = body.strip_prefix("custom:") {
+        let (name, ordinal) = rest.rsplit_once('_')?;
+        return Some((PiiClass::Custom(name.to_string()), ordinal.parse().ok()?));
+    }
+
+    let (class, ordinal) = body.rsplit_once('_')?;
+    let ordinal = ordinal.parse().ok()?;
+    let class = PiiClass::from_canonical_str(class).unwrap_or_else(|| PiiClass::custom(class));
+    Some((class, ordinal))
+}
+
+fn malformed_restore_token_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        Regex::new(r"<(?:[0-9a-f]{8}:)?(?:Email|Name|Location|Organization|email|name|location|organization|Custom:[a-z0-9_]*|custom:[a-z0-9_]*)_?>")
+            .expect("malformed restore token regex must compile")
+    })
 }
 
 fn random_session_hex() -> [u8; 4] {
@@ -1377,5 +1498,82 @@ mod tests {
                 .expect("beta stable"),
             beta
         );
+    }
+
+    #[test]
+    fn restore_strict_text_rejects_unknown_token() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let err = session
+            .restore_strict_text("Reply to <deadbeef:Email_999>.")
+            .expect_err("unknown token must fail closed");
+
+        assert!(matches!(
+            err,
+            Error::UnknownToken {
+                class: PiiClass::Email,
+                ordinal: 999,
+                raw,
+            } if raw == "<deadbeef:Email_999>"
+        ));
+    }
+
+    #[test]
+    fn restore_strict_text_rejects_malformed_token() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let err = session
+            .restore_strict_text("Reply to <Email_>.")
+            .expect_err("malformed token must fail closed");
+
+        assert!(matches!(
+            err,
+            Error::UnknownToken {
+                class: PiiClass::Custom(name),
+                ordinal: 0,
+                raw,
+            } if name == "unknown" && raw == "<Email_>"
+        ));
+    }
+
+    #[test]
+    fn restore_strict_text_rejects_cross_session_token_as_unknown() {
+        let source = Session::new(Scope::Ephemeral).expect("source session");
+        let token = source
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("token");
+        let target = Session::new(Scope::Ephemeral).expect("target session");
+
+        let err = target
+            .restore_strict_text(&format!("Reply to {token}."))
+            .expect_err("wrong-session token must fail closed");
+
+        assert!(matches!(
+            err,
+            Error::UnknownToken {
+                class: PiiClass::Email,
+                ordinal: 1,
+                raw,
+            } if raw == token
+        ));
+    }
+
+    #[test]
+    fn restore_strict_text_is_atomic_on_failure() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("token");
+
+        let err = session
+            .restore_strict_text(&format!("{token} then <deadbeef:Email_9>"))
+            .expect_err("unknown token must prevent partial restore output");
+
+        assert!(matches!(
+            err,
+            Error::UnknownToken {
+                class: PiiClass::Email,
+                ordinal: 9,
+                raw,
+            } if raw == "<deadbeef:Email_9>"
+        ));
     }
 }

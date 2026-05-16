@@ -61,24 +61,13 @@ impl Tool for RestoreStrictTool {
             .get("text")
             .and_then(|value| value.as_str())
             .ok_or_else(|| ToolError::InvalidArgs("missing required field `text`".into()))?;
-        let restored = restore_strict_text(ctx.resources().session(), text)?;
+        let restored = ctx
+            .resources()
+            .pipeline()
+            .restore_strict_text(ctx.resources().session(), text)
+            .map_err(|err| ToolError::NotFound(err.to_string()))?;
         Ok(ToolResponse::json(json!({ "text": restored })))
     }
-}
-
-fn restore_strict_text(session: &gaze::Session, text: &str) -> Result<String, ToolError> {
-    let mut restored = String::with_capacity(text.len());
-    let mut cursor = 0usize;
-    for token in gaze::token_shape::pattern().find_iter(text) {
-        restored.push_str(&text[cursor..token.start()]);
-        let raw = session.restore(token.as_str()).ok_or_else(|| {
-            ToolError::NotFound(format!("token {} not in session", token.as_str()))
-        })?;
-        restored.push_str(&raw);
-        cursor = token.end();
-    }
-    restored.push_str(&text[cursor..]);
-    Ok(restored)
 }
 
 #[cfg(test)]
