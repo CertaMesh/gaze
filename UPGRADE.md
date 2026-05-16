@@ -298,19 +298,23 @@ restore on a newer minor, that is a bug. Open an issue tagged
 against north-star axis 2. There is no migration step that asks you to
 re-tokenize stored manifests.
 
-# v0.9.0-rc.1
+# v0.9.0
 
 ## Perf wave
 
-v0.9.0-rc.1 is a performance and deployment release: in-process Kiji ORT
+v0.9.0 is a performance and deployment release: in-process Kiji ORT
 removes the Python subprocess boundary for adopters who select it, int8 dynamic
 quantization adds a separately SHA-pinned smaller/faster model path, `gaze
 daemon` keeps multi-session state behind a JSONL stdio process boundary,
 pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
 available behind explicit opt-in flags, and `tract`/`candle` feature gates give
-static-binary deployments alternatives to the default `ort` runtime. Headline
-Kiji numbers from the rc cycle: warm ORT p50 2.981ms fp32 / 1.849ms int8, int8
-cold 297ms, and measured F1 delta 0.000.
+static-binary deployments alternatives to the default `ort` runtime. Public
+benchmark claims are documented in [`docs/benchmarks.md`](docs/benchmarks.md):
+Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
+and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
+
+Measured on: Apple M5 Max / macOS 26.5 hosts in the committed v0.9 snapshots
+and final rc revalidation.
 
 ## New CLI flags (opt-in)
 

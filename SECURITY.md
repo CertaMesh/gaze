@@ -39,7 +39,7 @@ Out of scope:
 ## Supported versions
 
 We currently support security fixes on the latest minor of the `0.9.x`
-series (`v0.9.0-rc.1` at the time of writing). The last released minor of
+series (`v0.9.0` at the time of writing). The last released minor of
 `0.8.x` receives one-cycle backports for high-severity findings while
 adopters complete the `0.9.x` upgrade. Earlier versions do not receive
 backports.
