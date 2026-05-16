@@ -14,6 +14,7 @@ mod fixture_citation;
 mod locale_cue_bundle_coherence;
 mod mcp_tier_isolation;
 mod no_tenant_knowledge;
+mod readme_version_check;
 mod safety_net_sanity;
 
 #[derive(Debug, Parser)]
@@ -39,6 +40,7 @@ enum Command {
     CiFeatureMatrix,
     SafetyNetSanity,
     McpTierIsolation,
+    ReadmeVersionCheck,
 }
 
 fn main() -> Result<()> {
@@ -58,6 +60,7 @@ fn main() -> Result<()> {
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
+        Command::ReadmeVersionCheck => readme_version_check::run(),
     }
 }
 
