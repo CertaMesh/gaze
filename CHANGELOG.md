@@ -21,32 +21,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.9.0] - 2026-05-16
 
-v0.9.0 is the performance-wave final release: Kiji warm p50 moves from 323ms
-(subprocess) to 2.981ms (in-process ORT fp32), int8 warm p50 lands at 1.849ms,
-int8 cold start is 297ms, the Kiji bundle shrinks from 249MB to 63MB, and int8
-preserves F1 recall with a 0.000 delta across all locales/modes. Pipeline skip
-and capitals gates can reduce best-case SafetyNet calls from 100% to 0% on
-numeric input, prefix-cache hit latency drops -50.8%, `gaze daemon` removes full
-binary fork + model-load overhead for repeated calls, and `tract` provides the
-new opt-in static-binary path. Manifest restore semantics and the signed
-snapshot wire format are unchanged from v0.8.1.
+v0.9.0 is the performance-wave final release: Kiji int8 ORT warm p50 lands at
+1.849ms in the committed model leaderboard snapshot, int8 preserves F1 recall
+with a 0.000 delta across the safety-net matrix, opt-in pipeline skip/capitals
+gates reduce the synthetic numeric bench from 300 SafetyNet calls to 0, and the
+documented prefix-cache run reduces detector bytes by 52.7% and latency by
+50.8%. `gaze daemon` removes full binary fork + model-load overhead for repeated
+calls, and `tract` provides the new opt-in static-binary path. Manifest restore
+semantics and the signed snapshot wire format are unchanged from v0.8.1.
+
+Measured on: Apple M5 Max / macOS 26.5 hosts in the committed v0.9 snapshots
+and final rc revalidation. Methodology, runnable commands, fixture SHAs, and
+model pins: [`docs/benchmarks.md`](docs/benchmarks.md).
 
 ### Added
 
 - **In-process Kiji ORT backend** (PR #250 `4b8db66`): Kiji DistilBERT now runs
-  inside the process instead of through the Python subprocess path, headlining a
-  measured 2.981ms warm p50 on fp32 ORT. (Axis 1 reliability, Axis 5 ergonomics.)
+  inside the process instead of through the Python subprocess path; the final
+  public latency claims are tied to the committed benchmark snapshots and
+  [`docs/benchmarks.md`](docs/benchmarks.md). (Axis 1 reliability, Axis 5 ergonomics.)
 - **Kiji int8 dynamic quantization** (PR #256 `0a35f8e`): shipped the quantized
-  Kiji bundle with 1.849ms warm p50, 297ms cold start, 63MB bundle size, and
-  0.000 F1 recall delta across all locales/modes. (Axis 1 reliability, Axis 4 trust.)
+  Kiji bundle with 1.849ms warm p50 in
+  `crates/gaze-recognizers/benches/ner_models_snapshot.json` and a 0.000 F1
+  recall delta in
+  `crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`.
+  Measured on: Apple M5 Max / macOS 26.5; see
+  [`docs/benchmarks.md`](docs/benchmarks.md). (Axis 1 reliability, Axis 4 trust.)
 - **`gaze daemon` JSONL stdio mode** (PR #255 `cddbea4`): a persistent,
   multi-session CLI daemon removes per-call binary fork and model-load overhead
   while preserving the same reversible session contract. (Axis 3 agentic-first,
   Axis 5 ergonomics.)
 - **Tier 4 pipeline gating and prefix cache** (PR #252 `67374cb`): opt-in skip
   gates, capitals heuristic, prefix cache, and length bucketing reduce avoidable
-  SafetyNet work; best-case numeric input drops SafetyNet calls from 100% to 0%,
-  and prefix-cache hit latency drops -50.8%. (Axis 1 reliability, Axis 5 ergonomics.)
+  SafetyNet work; the synthetic numeric bench drops SafetyNet calls from 300 to
+  0, and the documented prefix-cache run reduces detector bytes by 52.7% and
+  latency by 50.8%. Measured on: Apple M5 Max / macOS 26.5; see
+  [`docs/benchmarks.md`](docs/benchmarks.md) and
+  `crates/gaze/benches/tier4_pipeline_gating.rs`. (Axis 1 reliability,
+  Axis 5 ergonomics.)
 - **Runtime comparison benchmark** (PR #257 `0fd7c8e`): published ORT vs tract
   vs candle results; recommendation is ORT by default and tract for opt-in
   static binaries. (Axis 4 trust.)
@@ -129,7 +141,9 @@ snapshot wire format are unchanged from v0.8.1.
 - Final validation re-ran the coverage-loop recall pass, the Kiji int8
   direct/observer scorer, the ORT int8 benchmark, and
   `cargo run -p xtask -- ci-feature-matrix` on `origin/main` commit `79ba82f`
-  (`v0.9.0-rc.1`) before promoting the release notes.
+  (`v0.9.0-rc.1`) before promoting the release notes. Measured on: Apple M5 Max
+  / macOS 26.5; see [`docs/benchmarks.md`](docs/benchmarks.md) and
+  `docs/research/v0.9.0-rc1-combined-revalidation.md`.
 - The PR #240 checkpoint-pinning caveat remains scoped to benchmark
   reproducibility: the old release checksum URL returned the expected pre-tag
   404, so the validation used the local Kiji cache after checksum verification.

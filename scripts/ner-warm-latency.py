@@ -10,10 +10,6 @@ import statistics
 import time
 from pathlib import Path
 
-import numpy as np
-import onnxruntime as ort
-from transformers import pipeline
-
 from safety_net_bench_lib import load_fixtures
 
 
@@ -54,6 +50,9 @@ def load_onnx_runner(root: Path):
 
 
 def measure_tinybert(root: Path, texts: list[str]) -> dict[str, float | int]:
+    import numpy as np
+    import onnxruntime as ort
+
     runner = load_onnx_runner(root)
     model_dir = root / ".huggingface-cache/models/openobscure-tinybert4l-pii-ner-int8"
     tokenizer = runner.load_tokenizer(model_dir)
@@ -92,6 +91,8 @@ def measure_tinybert(root: Path, texts: list[str]) -> dict[str, float | int]:
 
 
 def measure_transformers(model_dir: Path, texts: list[str]) -> dict[str, float | int]:
+    from transformers import pipeline
+
     ner = pipeline(
         "ner",
         model=str(model_dir),
