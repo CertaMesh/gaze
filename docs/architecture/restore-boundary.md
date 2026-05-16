@@ -4,6 +4,8 @@ Gaze enforces **manifest-authorized re-materialization** of sensitive data at th
 
 This is **restore-boundary integrity**: only values explicitly authorized by the session manifest may cross from pseudonymous form back into raw form. Restore is a privileged egress boundary, so Gaze treats it as deterministic **outbound DLP** and manifest-integrity enforcement.
 
+This is manifest-integrity enforcement, not prompt-injection detection.
+
 Gaze is NOT trying to determine: "Is this prompt malicious?"
 
 Gaze IS trying to determine: "Was this sensitive value authorized to exist in this restore context?"
@@ -91,6 +93,7 @@ This initiative does NOT attempt to solve:
 - generic prompt injection
 - jailbreak prevention
 - semantic adversarial reasoning
+- LLM-as-judge gating
 - malicious intent classification
 - agent policy alignment
 - tool permission enforcement
