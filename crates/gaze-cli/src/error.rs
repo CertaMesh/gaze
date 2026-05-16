@@ -23,6 +23,7 @@ pub(crate) enum CliError {
     /// Pinned-artifact contract violation: a safety-net backend was requested
     /// but its required artifact (e.g. `SHA256SUMS`) is missing on disk. Exit
     /// code 2 (config-level error). Axis-1 fail-closed: never silent-disable.
+    #[allow(dead_code)]
     SafetyNetArtifactMissing {
         backend: &'static str,
         path: String,

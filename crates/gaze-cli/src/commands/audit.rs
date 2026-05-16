@@ -27,6 +27,7 @@ pub(crate) struct Args {
     pub(crate) ambiguity_reason: Option<String>,
     pub(crate) collision_family: Option<String>,
     pub(crate) collision_variant: Option<String>,
+    pub(crate) restore_events_only: bool,
 }
 
 pub(crate) struct PurgeArgs {
@@ -69,7 +70,7 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
     }
     for row in rows {
         let base = format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             row.source,
             row.recognizer_id.as_deref().unwrap_or(""),
             row.recognizer_version_id.as_deref().unwrap_or(""),
@@ -105,7 +106,21 @@ pub(crate) fn query(args: Args) -> std::result::Result<(), CliError> {
             row.provenance_confidence
                 .map(|confidence| confidence.to_string())
                 .unwrap_or_default(),
-            row.provenance_merged_from.as_deref().unwrap_or("")
+            row.provenance_merged_from.as_deref().unwrap_or(""),
+            row.restore_policy.as_deref().unwrap_or(""),
+            row.restore_decision.as_deref().unwrap_or(""),
+            row.restore_unknown_token_count
+                .map(|count| count.to_string())
+                .unwrap_or_default(),
+            row.restore_manifest_bypass_count
+                .map(|count| count.to_string())
+                .unwrap_or_default(),
+            row.restore_fresh_pii_count
+                .map(|count| count.to_string())
+                .unwrap_or_default(),
+            row.restore_phase_mask
+                .map(|mask| mask.to_string())
+                .unwrap_or_default()
         );
         if include_ambiguity {
             writeln!(
@@ -224,6 +239,7 @@ fn read_rows(args: &Args) -> std::result::Result<Vec<AuditLogRow>, CliError> {
         provenance_native_class: None,
         provenance_confidence: None,
         provenance_merged_from: None,
+        restore_events_only: args.restore_events_only,
     };
     SqliteLogger::query(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }
@@ -263,6 +279,7 @@ fn read_safety_net_rows(
         provenance_native_class: None,
         provenance_confidence: None,
         provenance_merged_from: None,
+        restore_events_only: false,
     };
     SqliteLogger::query_safety_net(&args.audit_db, &filter).map_err(|_| CliError::Pipeline)
 }

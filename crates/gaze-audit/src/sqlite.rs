@@ -166,7 +166,13 @@ impl SqliteLogger {
                 provenance_canonical_class TEXT NULL,
                 provenance_native_class TEXT NULL,
                 provenance_confidence REAL NULL,
-                provenance_merged_from TEXT NULL
+                provenance_merged_from TEXT NULL,
+                restore_policy TEXT NULL,
+                restore_decision TEXT NULL,
+                restore_unknown_token_count INTEGER NULL,
+                restore_manifest_bypass_count INTEGER NULL,
+                restore_fresh_pii_count INTEGER NULL,
+                restore_phase_mask INTEGER NULL
             );
 
             CREATE TABLE IF NOT EXISTS safety_net_log (
@@ -337,6 +343,12 @@ impl SqliteLogger {
             ("provenance_native_class", "TEXT"),
             ("provenance_confidence", "REAL"),
             ("provenance_merged_from", "TEXT"),
+            ("restore_policy", "TEXT"),
+            ("restore_decision", "TEXT"),
+            ("restore_unknown_token_count", "INTEGER"),
+            ("restore_manifest_bypass_count", "INTEGER"),
+            ("restore_fresh_pii_count", "INTEGER"),
+            ("restore_phase_mask", "INTEGER"),
         ] {
             if !columns.iter().any(|existing| existing == column) {
                 conn.execute(
@@ -366,7 +378,7 @@ impl SqliteLogger {
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -396,6 +408,12 @@ impl SqliteLogger {
                 provenance_confidence,
                 entry.provenance_merged_from,
                 backend_silently_dropped,
+                entry.restore_policy,
+                entry.restore_decision,
+                entry.restore_unknown_token_count.map(|value| value as i64),
+                entry.restore_manifest_bypass_count.map(|value| value as i64),
+                entry.restore_fresh_pii_count.map(|value| value as i64),
+                entry.restore_phase_mask.map(i64::from),
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -409,7 +427,7 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -446,6 +464,15 @@ impl SqliteLogger {
                 if let Some(dropped) = deserialize_json_column::<Vec<String>>(row.get(16)?, 16)? {
                     entry = entry.with_backend_silently_dropped(dropped);
                 }
+                entry.restore_policy = row.get(17)?;
+                entry.restore_decision = row.get(18)?;
+                entry.restore_unknown_token_count =
+                    row.get::<_, Option<i64>>(19)?.map(|value| value as u64);
+                entry.restore_manifest_bypass_count =
+                    row.get::<_, Option<i64>>(20)?.map(|value| value as u64);
+                entry.restore_fresh_pii_count =
+                    row.get::<_, Option<i64>>(21)?.map(|value| value as u64);
+                entry.restore_phase_mask = row.get::<_, Option<i64>>(22)?.map(|value| value as u32);
                 Ok(entry)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -490,6 +517,14 @@ impl SqliteLogger {
         let has_provenance_native_class = table_has_column(&conn, "provenance_native_class")?;
         let has_provenance_confidence = table_has_column(&conn, "provenance_confidence")?;
         let has_provenance_merged_from = table_has_column(&conn, "provenance_merged_from")?;
+        let has_restore_policy = table_has_column(&conn, "restore_policy")?;
+        let has_restore_decision = table_has_column(&conn, "restore_decision")?;
+        let has_restore_unknown_token_count =
+            table_has_column(&conn, "restore_unknown_token_count")?;
+        let has_restore_manifest_bypass_count =
+            table_has_column(&conn, "restore_manifest_bypass_count")?;
+        let has_restore_fresh_pii_count = table_has_column(&conn, "restore_fresh_pii_count")?;
+        let has_restore_phase_mask = table_has_column(&conn, "restore_phase_mask")?;
         let (sql, values) = build_audit_query_sql(
             filter,
             has_decided_by,
@@ -516,6 +551,12 @@ impl SqliteLogger {
             has_provenance_native_class,
             has_provenance_confidence,
             has_provenance_merged_from,
+            has_restore_policy,
+            has_restore_decision,
+            has_restore_unknown_token_count,
+            has_restore_manifest_bypass_count,
+            has_restore_fresh_pii_count,
+            has_restore_phase_mask,
         );
         let mut stmt = conn
             .prepare(&sql)
@@ -553,6 +594,12 @@ impl SqliteLogger {
                     provenance_native_class: row.get(27)?,
                     provenance_confidence: row.get(28)?,
                     provenance_merged_from: row.get(29)?,
+                    restore_policy: row.get(30)?,
+                    restore_decision: row.get(31)?,
+                    restore_unknown_token_count: row.get(32)?,
+                    restore_manifest_bypass_count: row.get(33)?,
+                    restore_fresh_pii_count: row.get(34)?,
+                    restore_phase_mask: row.get(35)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -895,6 +942,10 @@ fn document_kind_from_db(value: &str) -> std::result::Result<DocumentKind, rusql
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gaze_types::{
+        RestoreDecision, RestorePolicy, RestoreTelemetry, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+        RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    };
 
     fn create_legacy_redaction_log(path: &Path) {
         let conn = Connection::open(path).expect("legacy sqlite");
@@ -1024,5 +1075,61 @@ mod tests {
             .expect_err("audit query connection must reject writes");
 
         assert_eq!(err.sqlite_error_code(), Some(rusqlite::ErrorCode::ReadOnly));
+    }
+
+    #[test]
+    fn restore_telemetry_persists_metadata_only_columns() {
+        let temp_db = tempfile::NamedTempFile::new().unwrap();
+        let logger = SqliteLogger::new(temp_db.path()).unwrap();
+        let mut telemetry = RestoreTelemetry::new(RestorePolicy::Lenient);
+        telemetry.unknown_token_count = 2;
+        telemetry.manifest_bypass_count = 2;
+        telemetry.fresh_pii_detected_count = 0;
+        telemetry.restore_decision = RestoreDecision::Partial;
+        telemetry.phase_execution_mask = RESTORE_PHASE_MANIFEST_LOOKUP
+            | RESTORE_PHASE_UNKNOWN_TOKEN_SCAN
+            | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
+
+        logger
+            .log(
+                &RedactionEntry::new(
+                    "restore",
+                    PiiClass::Custom("restore.telemetry".to_string()),
+                    Action::Preserve,
+                    None,
+                    DocumentKind::Text,
+                    false,
+                    ConflictTier::None,
+                    0,
+                    Some("audit-session".to_string()),
+                )
+                .with_restore_telemetry(telemetry.clone()),
+            )
+            .unwrap();
+
+        let rows = SqliteLogger::query(
+            temp_db.path(),
+            &AuditFilter {
+                restore_events_only: true,
+                ..AuditFilter::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].restore_policy.as_deref(), Some("lenient"));
+        assert_eq!(rows[0].restore_decision.as_deref(), Some("partial"));
+        assert_eq!(rows[0].restore_unknown_token_count, Some(2));
+        assert_eq!(rows[0].restore_manifest_bypass_count, Some(2));
+        assert_eq!(rows[0].restore_fresh_pii_count, Some(0));
+        assert_eq!(
+            rows[0].restore_phase_mask,
+            Some(i64::from(
+                RESTORE_PHASE_MANIFEST_LOOKUP
+                    | RESTORE_PHASE_UNKNOWN_TOKEN_SCAN
+                    | RESTORE_PHASE_MANIFEST_BYPASS_SCAN
+            ))
+        );
+        assert!(rows[0].field_name.is_none());
+        assert_eq!(rows[0].source, "restore");
     }
 }

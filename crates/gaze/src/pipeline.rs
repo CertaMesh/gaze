@@ -9,7 +9,9 @@ use gaze_recognizers::{
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError,
+    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
+    SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 use thiserror::Error;
 
@@ -216,6 +218,37 @@ impl Pipeline {
     {
         self.safety_nets.push(Arc::new(safety_net));
         self
+    }
+
+    pub fn restore_with_telemetry(
+        &self,
+        session: &Session,
+        text: &str,
+    ) -> Result<(RestoredText, RestoreTelemetry)> {
+        self.restore_with_policy_telemetry(session, text, RestorePolicy::Strict)
+    }
+
+    pub fn restore_with_policy_telemetry(
+        &self,
+        session: &Session,
+        text: &str,
+        policy: RestorePolicy,
+    ) -> Result<(RestoredText, RestoreTelemetry)> {
+        let mut telemetry = RestoreTelemetry::new(policy);
+        telemetry.phase_execution_mask |= RESTORE_PHASE_MANIFEST_LOOKUP;
+        let restored = restore_known_tokens(session, text)?;
+        telemetry.phase_execution_mask |=
+            RESTORE_PHASE_UNKNOWN_TOKEN_SCAN | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
+        let unknown_token_count = count_unknown_restore_tokens(session, &restored);
+        telemetry.unknown_token_count = unknown_token_count;
+        telemetry.manifest_bypass_count = unknown_token_count;
+        telemetry.restore_decision = match (policy, unknown_token_count) {
+            (_, 0) => RestoreDecision::Success,
+            (RestorePolicy::Strict, _) => RestoreDecision::Failed,
+            (RestorePolicy::Lenient, _) => RestoreDecision::Partial,
+            (_, _) => RestoreDecision::Failed,
+        };
+        Ok((RestoredText::new(restored), telemetry))
     }
 
     pub fn with_pipeline_optimizations(mut self, config: PipelineOptimizationConfig) -> Pipeline {
@@ -1248,6 +1281,46 @@ fn replace_clean_span(
     clean.manifest.sort_by_key(|span| span.clean_span.start);
 }
 
+fn restore_known_tokens(session: &Session, text: &str) -> Result<String> {
+    let mut tokens = session.tokens();
+    if tokens.is_empty() {
+        return Ok(text.to_string());
+    }
+    tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    let pattern = tokens
+        .iter()
+        .map(|token| {
+            let escaped = regex::escape(token);
+            if token.starts_with('<') && token.ends_with('>') {
+                escaped
+            } else {
+                format!(r"\b(?:{escaped})\b")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    let re = regex::Regex::new(&pattern).map_err(Error::InvalidRegex)?;
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0usize;
+    for matched in re.find_iter(text) {
+        out.push_str(&text[last..matched.start()]);
+        out.push_str(&session.restore_strict(matched.as_str())?);
+        last = matched.end();
+    }
+    out.push_str(&text[last..]);
+    Ok(out)
+}
+
+fn count_unknown_restore_tokens(session: &Session, text: &str) -> u64 {
+    crate::token_shape::pattern()
+        .find_iter(text)
+        .filter(|matched| {
+            let matched_text = matched.as_str();
+            crate::token_shape::is_trap(matched_text) || !session.contains_token(matched_text)
+        })
+        .count() as u64
+}
+
 fn adjust_emitted_span(
     existing: &EmittedTokenSpan,
     edited: &Range<usize>,
@@ -1938,6 +2011,44 @@ mod tests {
             self.entries.lock().unwrap().push(entry.clone());
             Ok(())
         }
+    }
+
+    #[test]
+    fn restore_with_telemetry_counts_unknown_tokens_deterministically() {
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+        let session =
+            Session::new(Scope::Conversation("restore-telemetry".to_string())).expect("session");
+        let clean = pipeline
+            .redact(
+                &session,
+                RawDocument::Text("Reach alice@example.invalid".to_string()),
+            )
+            .expect("redact");
+        let CleanDocument::Text(clean) = clean else {
+            panic!("expected text");
+        };
+        let input = format!("{clean} <Email_999> <Name_100>");
+
+        let (restored, telemetry) = pipeline
+            .restore_with_policy_telemetry(&session, &input, RestorePolicy::Lenient)
+            .expect("restore telemetry");
+        let (_, telemetry_again) = pipeline
+            .restore_with_policy_telemetry(&session, &input, RestorePolicy::Lenient)
+            .expect("restore telemetry");
+
+        assert!(restored.text.contains("alice@example.invalid"));
+        assert_eq!(telemetry.unknown_token_count, 2);
+        assert_eq!(telemetry.manifest_bypass_count, 2);
+        assert_eq!(telemetry.fresh_pii_detected_count, 0);
+        assert_eq!(telemetry.restore_policy, RestorePolicy::Lenient);
+        assert_eq!(telemetry.restore_decision, RestoreDecision::Partial);
+        assert_eq!(
+            telemetry.phase_execution_mask,
+            RESTORE_PHASE_MANIFEST_LOOKUP
+                | RESTORE_PHASE_UNKNOWN_TOKEN_SCAN
+                | RESTORE_PHASE_MANIFEST_BYPASS_SCAN
+        );
+        assert_eq!(telemetry_again, telemetry);
     }
 
     struct CountingSafetyNet {

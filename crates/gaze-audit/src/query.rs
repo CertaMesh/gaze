@@ -40,6 +40,7 @@ pub struct AuditFilter {
     pub provenance_native_class: Option<String>,
     pub provenance_confidence: Option<f64>,
     pub provenance_merged_from: Option<String>,
+    pub restore_events_only: bool,
 }
 
 /// Metadata-only redaction audit row returned by [`crate::SqliteLogger::query`].
@@ -79,6 +80,12 @@ pub struct AuditLogRow {
     pub provenance_native_class: Option<String>,
     pub provenance_confidence: Option<f64>,
     pub provenance_merged_from: Option<String>,
+    pub restore_policy: Option<String>,
+    pub restore_decision: Option<String>,
+    pub restore_unknown_token_count: Option<i64>,
+    pub restore_manifest_bypass_count: Option<i64>,
+    pub restore_fresh_pii_count: Option<i64>,
+    pub restore_phase_mask: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -140,6 +147,12 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "provenance_native_class",
     "provenance_confidence",
     "provenance_merged_from",
+    "restore_policy",
+    "restore_decision",
+    "restore_unknown_token_count",
+    "restore_manifest_bypass_count",
+    "restore_fresh_pii_count",
+    "restore_phase_mask",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -192,6 +205,12 @@ pub fn build_audit_query_sql(
     has_provenance_native_class: bool,
     has_provenance_confidence: bool,
     has_provenance_merged_from: bool,
+    has_restore_policy: bool,
+    has_restore_decision: bool,
+    has_restore_unknown_token_count: bool,
+    has_restore_manifest_bypass_count: bool,
+    has_restore_fresh_pii_count: bool,
+    has_restore_phase_mask: bool,
 ) -> (String, Vec<Value>) {
     let decided_by_column = if has_decided_by {
         "decided_by"
@@ -283,8 +302,21 @@ pub fn build_audit_query_sql(
         nullable_column(has_provenance_confidence, "provenance_confidence");
     let provenance_merged_from_column =
         nullable_column(has_provenance_merged_from, "provenance_merged_from");
+    let restore_policy_column = nullable_column(has_restore_policy, "restore_policy");
+    let restore_decision_column = nullable_column(has_restore_decision, "restore_decision");
+    let restore_unknown_token_count_column = nullable_column(
+        has_restore_unknown_token_count,
+        "restore_unknown_token_count",
+    );
+    let restore_manifest_bypass_count_column = nullable_column(
+        has_restore_manifest_bypass_count,
+        "restore_manifest_bypass_count",
+    );
+    let restore_fresh_pii_count_column =
+        nullable_column(has_restore_fresh_pii_count, "restore_fresh_pii_count");
+    let restore_phase_mask_column = nullable_column(has_restore_phase_mask, "restore_phase_mask");
     let mut sql = format!(
-        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column}, {provenance_stage_column}, {provenance_model_id_column}, {provenance_model_version_column}, {provenance_artifact_sha256_column}, {provenance_tokenizer_sha256_column}, {provenance_locale_resolved_column}, {provenance_locale_match_kind_column}, {provenance_canonical_class_column}, {provenance_native_class_column}, {provenance_confidence_column}, {provenance_merged_from_column} FROM redaction_log"
+        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column}, {provenance_stage_column}, {provenance_model_id_column}, {provenance_model_version_column}, {provenance_artifact_sha256_column}, {provenance_tokenizer_sha256_column}, {provenance_locale_resolved_column}, {provenance_locale_match_kind_column}, {provenance_canonical_class_column}, {provenance_native_class_column}, {provenance_confidence_column}, {provenance_merged_from_column}, {restore_policy_column}, {restore_decision_column}, {restore_unknown_token_count_column}, {restore_manifest_bypass_count_column}, {restore_fresh_pii_count_column}, {restore_phase_mask_column} FROM redaction_log"
     );
     let mut predicates = Vec::new();
     let mut values = Vec::new();
@@ -485,6 +517,13 @@ pub fn build_audit_query_sql(
         "provenance_merged_from",
         &filter.provenance_merged_from,
     );
+    if filter.restore_events_only {
+        if has_restore_policy {
+            predicates.push("restore_policy IS NOT NULL");
+        } else {
+            predicates.push("NULL IS NOT NULL");
+        }
+    }
     if !predicates.is_empty() {
         sql.push_str(" WHERE ");
         sql.push_str(&predicates.join(" AND "));
