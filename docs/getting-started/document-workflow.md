@@ -13,16 +13,24 @@ bundle that is safe to hand to an agent workspace:
 source document -> OCR / PDF text extraction -> Gaze redact -> SafeBundle
 ```
 
-The output directory contains:
+The bundle is split across two output directories:
 
 ```text
-clean.md
-manifest.json
-report.json
+agent/
+  clean.md
+  report.json
+
+owner/
+  manifest.json
 ```
 
-`clean.md` is the tokenized Markdown. `manifest.json` is the restorable
-`gaze::Manifest`. `report.json` carries OCR, layout, and PII-count provenance.
+`clean.md` is the tokenized Markdown. `report.json` carries OCR, layout, and
+PII-count provenance. `manifest.json` is the restorable `gaze::Manifest`.
+
+Keep `owner/manifest.json` out of LLM workspaces. It carries the restore mapping
+for the original PII, so uploading it with `clean.md` defeats the
+pseudonymization boundary. The split layout exists so the agent-visible path can
+be shared without owner-only restore material riding along.
 
 ## Prerequisites
 
@@ -51,33 +59,39 @@ with your platform's dynamic-library path.
 Run OCR plus Gaze redaction:
 
 ```sh
+# Convenience shorthand: --out creates agent/ + owner/ subdirs.
 gaze document clean ./invoice.pdf --out ./safe-bundle/
+
+# Explicit: caller controls both paths.
+gaze document clean ./invoice.pdf --agent-out ./agent-bundle/ --owner-out ./owner-vault/
 ```
 
 The source document can be a synthetic fixture such as an invoice PDF containing
-`alice@example.invalid`. The output directory is created if it does not exist.
+`alice@example.invalid`. Output directories are created if they do not exist.
 
 Successful stdout is a one-line JSON summary; the bundle files are written to
-`--out`.
+the resolved agent and owner outputs.
 
 ```text
 safe-bundle/
-  clean.md
-  manifest.json
-  report.json
+  agent/
+    clean.md
+    report.json
+  owner/
+    manifest.json
 ```
 
 ## SafeBundle Anatomy
 
-`clean.md` contains Markdown with PII replaced by reversible Gaze tokens. It is
-the file to provide to the agent or model-facing workflow.
+`agent/clean.md` contains Markdown with PII replaced by reversible Gaze tokens.
+It is the file to provide to the agent or model-facing workflow.
 
-`manifest.json` contains the `gaze::Manifest` needed for restore. Keep it on the
-owner side with the same controls used for other restore material.
-
-`report.json` serializes `BundleReport`. New emissions use
+`agent/report.json` serializes `BundleReport`. New emissions use
 `bundle_version = 2`; older v1 reports still deserialize, but v2 is the current
 layout-report shape.
+
+`owner/manifest.json` contains the `gaze::Manifest` needed for restore. Keep it
+on the owner side with the same controls used for other restore material.
 
 Important per-page fields:
 
@@ -134,15 +148,16 @@ the restore contract in
 ## Five-Axis Pitch
 
 - Reliability: OCR output is normalized before redaction, and low-confidence
-  pages are surfaced for downstream routing.
-- Reversibility: `manifest.json` carries the same restore contract as the rest
-  of Gaze.
-- Agentic-first: `clean.md` is safe Markdown for agent workspaces; the owner
-  keeps restore material.
+  pages are surfaced for downstream routing. The agent and owner output
+  directories are separated by runtime path validation.
+- Reversibility: `owner/manifest.json` carries the same restore contract as the
+  rest of Gaze.
+- Agentic-first: `agent/clean.md` and `agent/report.json` are safe for agent
+  workspaces; the owner keeps restore material.
 - Trust: `report.json` records OCR source, backend, confidence, layout, and PII
   counts without raw PII.
-- Adopter ergonomics: one CLI verb turns PNG, JPG, or PDF input into a
-  three-file SafeBundle.
+- Adopter ergonomics: one CLI verb turns PNG, JPG, or PDF input into a split
+  SafeBundle, with `--out` preserving the one-flag workflow.
 
 ## Next Steps
 

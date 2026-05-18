@@ -3,20 +3,22 @@
 //! The top-level [`clean`] function is the public adopter entry point. It
 //! routes any supported input (PNG / JPG / single-page PDF) through OCR,
 //! pipes the extracted text through a [`gaze::Pipeline`], and persists the
-//! result as three files in a target directory:
+//! result as three files split across agent and owner target directories:
 //!
 //! ```text
-//! out/
+//! agent_out/
 //!   clean.md        # OCR text with PII replaced by reversible tokens
-//!   manifest.json   # gaze::Manifest — restorable, canonical
 //!   report.json     # BundleReport — OCR + PII counts + provenance
+//!
+//! owner_out/
+//!   manifest.json   # gaze::Manifest — restorable, canonical
 //! ```
 //!
 //! The manifest contract is the same one the rest of the gaze runtime
-//! uses (`gaze::Manifest`). Adopters can pair `clean.md` with `manifest.json`
-//! and restore via the standard gaze session APIs.
+//! uses (`gaze::Manifest`). Because it carries restore material, it is written
+//! only to the owner output directory.
 
-use std::path::PathBuf;
+use std::path::{Component, Path, PathBuf};
 
 use gaze::Manifest;
 use serde::{Deserialize, Serialize};
@@ -29,8 +31,6 @@ use crate::ocr::{
 use std::collections::BTreeMap;
 #[cfg(feature = "ocr-tesseract")]
 use std::fs;
-#[cfg(feature = "ocr-tesseract")]
-use std::path::Path;
 
 #[cfg(any(feature = "ocr-tesseract", feature = "mcp"))]
 use gaze::{
@@ -47,18 +47,62 @@ use gaze_types::{EmittedTokenSpan, PiiClass};
 #[cfg(feature = "ocr-tesseract")]
 use crate::extract::InputKind;
 #[cfg(feature = "ocr-tesseract")]
-use crate::DocumentError;
+use crate::{BundleLayoutInvalidReason, DocumentError};
 
 /// Versioned `report.json` schema tag (bump on breaking shape changes).
 pub const BUNDLE_VERSION: u32 = 2;
 const DEFAULT_LOW_CONFIDENCE_THRESHOLD: f32 = 0.65;
 
-/// Bundle filename written into `--out` for tokenized Markdown.
+/// Bundle filename written into the agent output directory for tokenized Markdown.
 pub const CLEAN_MARKDOWN_FILE: &str = "clean.md";
-/// Bundle filename written into `--out` for the restorable manifest.
+/// Bundle filename written into the owner output directory for the restorable manifest.
 pub const MANIFEST_FILE: &str = "manifest.json";
-/// Bundle filename written into `--out` for the OCR + PII provenance report.
+/// Bundle filename written into the agent output directory for the OCR + PII provenance report.
 pub const REPORT_FILE: &str = "report.json";
+
+/// Agent-visible SafeBundle output directory.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentBundleDir(PathBuf);
+
+impl AgentBundleDir {
+    /// Build an agent output directory wrapper.
+    ///
+    /// The directory is created later, after the paired owner directory has
+    /// been validated so equal and nested layouts fail before any bundle write.
+    pub fn new(path: impl Into<PathBuf>) -> Result<Self, DocumentError> {
+        let path = path.into();
+        validate_non_empty_path(&path)?;
+        Ok(Self(path))
+    }
+
+    /// Return the wrapped filesystem path.
+    pub fn as_path(&self) -> &Path {
+        &self.0
+    }
+}
+
+/// Owner-only SafeBundle output directory.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OwnerBundleDir(PathBuf);
+
+impl OwnerBundleDir {
+    /// Build an owner output directory wrapper.
+    ///
+    /// The directory is created later, after the paired agent directory has
+    /// been validated so equal and nested layouts fail before any bundle write.
+    pub fn new(path: impl Into<PathBuf>) -> Result<Self, DocumentError> {
+        let path = path.into();
+        validate_non_empty_path(&path)?;
+        Ok(Self(path))
+    }
+
+    /// Return the wrapped filesystem path.
+    pub fn as_path(&self) -> &Path {
+        &self.0
+    }
+}
 
 /// Post-ingestion artifact paired with a Gaze [`Manifest`].
 #[non_exhaustive]
@@ -76,12 +120,15 @@ pub struct SafeBundle {
     pub report: BundleReport,
     /// Absolute path of the input that produced this bundle.
     pub source_path: PathBuf,
-    /// Absolute path of the output directory that received this bundle.
-    pub out_dir: PathBuf,
+    /// Absolute path of the agent-visible output directory.
+    pub agent_out_dir: PathBuf,
+    /// Absolute path of the owner-only output directory.
+    pub owner_out_dir: PathBuf,
 }
 
 impl SafeBundle {
     /// Build a [`SafeBundle`] from its component parts.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         clean_markdown: String,
         manifest: Manifest,
@@ -89,7 +136,8 @@ impl SafeBundle {
         preview_png: Option<Vec<u8>>,
         report: BundleReport,
         source_path: PathBuf,
-        out_dir: PathBuf,
+        agent_out_dir: PathBuf,
+        owner_out_dir: PathBuf,
     ) -> Self {
         Self {
             clean_markdown,
@@ -98,7 +146,8 @@ impl SafeBundle {
             preview_png,
             report,
             source_path,
-            out_dir,
+            agent_out_dir,
+            owner_out_dir,
         }
     }
 }
@@ -289,10 +338,11 @@ impl Pipeline {
     pub fn clean_with_ocr_backend(
         &self,
         input: &Path,
-        out_dir: &Path,
+        agent_out: AgentBundleDir,
+        owner_out: OwnerBundleDir,
         ocr_backend: &dyn OcrBackend,
     ) -> Result<SafeBundle, DocumentError> {
-        clean_with_options(input, out_dir, ocr_backend, *self)
+        clean_with_options(input, agent_out, owner_out, ocr_backend, *self)
     }
 }
 
@@ -328,8 +378,8 @@ impl LayoutSummary {
 /// Top-level entry point: ingest one document, write a [`SafeBundle`] to disk.
 ///
 /// `input` must be a regular file with extension `.png`, `.jpg`, `.jpeg`, or
-/// `.pdf`. `out_dir` is created if missing and populated with three files
-/// (see module docs).
+/// `.pdf`. `agent_out` and `owner_out` are created if missing and populated
+/// with the split artifact layout described in the module docs.
 ///
 /// # Errors
 ///
@@ -338,9 +388,13 @@ impl LayoutSummary {
 /// diagnose without inspecting partial bundle state.
 #[cfg(feature = "ocr-tesseract")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
-pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> {
+pub fn clean(
+    input: &Path,
+    agent_out: AgentBundleDir,
+    owner_out: OwnerBundleDir,
+) -> Result<SafeBundle, DocumentError> {
     let backend = crate::ocr::TesseractBackend::new();
-    Pipeline::new().clean_with_ocr_backend(input, out_dir, &backend)
+    Pipeline::new().clean_with_ocr_backend(input, agent_out, owner_out, &backend)
 }
 
 /// Top-level entry point with an adopter-supplied OCR backend.
@@ -357,25 +411,24 @@ pub fn clean(input: &Path, out_dir: &Path) -> Result<SafeBundle, DocumentError> 
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub fn clean_with_ocr_backend(
     input: &Path,
-    out_dir: &Path,
+    agent_out: AgentBundleDir,
+    owner_out: OwnerBundleDir,
     ocr_backend: &dyn OcrBackend,
 ) -> Result<SafeBundle, DocumentError> {
-    Pipeline::new().clean_with_ocr_backend(input, out_dir, ocr_backend)
+    Pipeline::new().clean_with_ocr_backend(input, agent_out, owner_out, ocr_backend)
 }
 
 #[cfg(feature = "ocr-tesseract")]
 fn clean_with_options(
     input: &Path,
-    out_dir: &Path,
+    agent_out: AgentBundleDir,
+    owner_out: OwnerBundleDir,
     ocr_backend: &dyn OcrBackend,
     options: Pipeline,
 ) -> Result<SafeBundle, DocumentError> {
     let kind = InputKind::detect(input)?;
     let absolute_input = absolutize(input);
-    let absolute_out = absolutize(out_dir);
-
-    fs::create_dir_all(out_dir)
-        .map_err(|err| DocumentError::OutputDir(absolute_out.clone(), err))?;
+    let (absolute_agent_out, absolute_owner_out) = prepare_bundle_dirs(&agent_out, &owner_out)?;
 
     let extraction = run_document_extraction(input, kind, ocr_backend, options)?;
     // Repair known narrow OCR artifacts (e.g. spurious whitespace around
@@ -418,7 +471,7 @@ fn clean_with_options(
     );
 
     let clean_markdown = format_clean_markdown(&clean_text, kind);
-    write_bundle(out_dir, &clean_markdown, &manifest, &report)?;
+    write_bundle(&agent_out, &owner_out, &clean_markdown, &manifest, &report)?;
 
     Ok(SafeBundle::new(
         clean_markdown,
@@ -427,7 +480,8 @@ fn clean_with_options(
         None,
         report,
         absolute_input,
-        absolute_out,
+        absolute_agent_out,
+        absolute_owner_out,
     ))
 }
 
@@ -687,17 +741,86 @@ fn count_pii_by_class(spans: &[EmittedTokenSpan]) -> Vec<ClassCount> {
 
 #[cfg(feature = "ocr-tesseract")]
 fn write_bundle(
-    out_dir: &Path,
+    agent_out: &AgentBundleDir,
+    owner_out: &OwnerBundleDir,
     clean_markdown: &str,
     manifest: &Manifest,
     report: &BundleReport,
 ) -> Result<(), DocumentError> {
-    fs::write(out_dir.join(CLEAN_MARKDOWN_FILE), clean_markdown)?;
+    fs::write(
+        agent_out.as_path().join(CLEAN_MARKDOWN_FILE),
+        clean_markdown,
+    )?;
     let manifest_json = serde_json::to_vec_pretty(manifest)?;
-    fs::write(out_dir.join(MANIFEST_FILE), manifest_json)?;
+    fs::write(owner_out.as_path().join(MANIFEST_FILE), manifest_json)?;
     let report_json = serde_json::to_vec_pretty(report)?;
-    fs::write(out_dir.join(REPORT_FILE), report_json)?;
+    fs::write(agent_out.as_path().join(REPORT_FILE), report_json)?;
     Ok(())
+}
+
+#[cfg(feature = "ocr-tesseract")]
+fn prepare_bundle_dirs(
+    agent_out: &AgentBundleDir,
+    owner_out: &OwnerBundleDir,
+) -> Result<(PathBuf, PathBuf), DocumentError> {
+    let agent = normalize_for_layout(agent_out.as_path());
+    let owner = normalize_for_layout(owner_out.as_path());
+    validate_bundle_layout(&agent, &owner)?;
+
+    fs::create_dir_all(agent_out.as_path())
+        .map_err(|err| DocumentError::OutputDir(agent.clone(), err))?;
+    fs::create_dir_all(owner_out.as_path())
+        .map_err(|err| DocumentError::OutputDir(owner.clone(), err))?;
+
+    let agent = fs::canonicalize(agent_out.as_path()).unwrap_or(agent);
+    let owner = fs::canonicalize(owner_out.as_path()).unwrap_or(owner);
+    validate_bundle_layout(&agent, &owner)?;
+    Ok((agent, owner))
+}
+
+fn validate_non_empty_path(path: &Path) -> Result<(), DocumentError> {
+    if path.as_os_str().is_empty() {
+        return Err(DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::EmptyPath,
+        });
+    }
+    Ok(())
+}
+
+fn validate_bundle_layout(agent: &Path, owner: &Path) -> Result<(), DocumentError> {
+    if agent == owner {
+        return Err(DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::AgentEqualsOwner,
+        });
+    }
+    if agent.starts_with(owner) {
+        return Err(DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::AgentNestedInOwner,
+        });
+    }
+    if owner.starts_with(agent) {
+        return Err(DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::OwnerNestedInAgent,
+        });
+    }
+    Ok(())
+}
+
+fn normalize_for_layout(path: &Path) -> PathBuf {
+    let absolute = absolutize(path);
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                normalized.pop();
+            }
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+            Component::Normal(part) => normalized.push(part),
+        }
+    }
+    normalized
 }
 
 #[cfg(feature = "ocr-tesseract")]
@@ -722,7 +845,6 @@ pub(crate) fn kind_label(kind: InputKind) -> &'static str {
     }
 }
 
-#[cfg(feature = "ocr-tesseract")]
 fn absolutize(path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -768,6 +890,13 @@ mod tests {
             bbox: BBox { x, y, w: 90, h: 16 },
             confidence: Some(confidence),
         }
+    }
+
+    fn bundle_dirs(tmp: &tempfile::TempDir) -> (AgentBundleDir, OwnerBundleDir) {
+        (
+            AgentBundleDir::new(tmp.path().join("agent")).expect("agent dir"),
+            OwnerBundleDir::new(tmp.path().join("owner")).expect("owner dir"),
+        )
     }
 
     #[test]
@@ -859,10 +988,11 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
         fs::write(&input, b"\x89PNG\r\n\x1A\nnot-real-image").expect("write input");
+        let (agent_out, owner_out) = bundle_dirs(&tmp);
 
         let bundle = Pipeline::new()
             .with_low_confidence_threshold(0.65)
-            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .clean_with_ocr_backend(&input, agent_out, owner_out, &backend)
             .expect("clean succeeds");
 
         assert_eq!(bundle.report.bundle_version, 2);
@@ -899,9 +1029,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
         fs::write(&input, b"\x89PNG\r\n\x1A\nnot-real-image").expect("write input");
+        let (agent_out, owner_out) = bundle_dirs(&tmp);
 
         let bundle = Pipeline::new()
-            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .clean_with_ocr_backend(&input, agent_out, owner_out, &backend)
             .expect("clean succeeds");
 
         assert_eq!(bundle.report.pages[0].column_count, 1);
@@ -966,9 +1097,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
         fs::write(&input, bytes).expect("write input");
+        let (agent_out, owner_out) = bundle_dirs(&tmp);
 
         let bundle = Pipeline::new()
-            .clean_with_ocr_backend(&input, tmp.path(), &OrientationSensitiveBackend)
+            .clean_with_ocr_backend(&input, agent_out, owner_out, &OrientationSensitiveBackend)
             .expect("clean succeeds");
 
         assert!(
@@ -1068,9 +1200,10 @@ mod tests {
         let tmp = tempfile::tempdir().expect("tempdir");
         let input = tmp.path().join("input.png");
         fs::write(&input, bytes).expect("write input");
+        let (agent_out, owner_out) = bundle_dirs(&tmp);
 
         let bundle = Pipeline::new()
-            .clean_with_ocr_backend(&input, tmp.path(), &backend)
+            .clean_with_ocr_backend(&input, agent_out, owner_out, &backend)
             .expect("clean succeeds");
 
         assert!(

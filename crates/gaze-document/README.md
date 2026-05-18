@@ -73,7 +73,8 @@ use std::path::Path;
 
 let bundle = gaze_document::clean(
     Path::new("invoice.pdf"),
-    Path::new("./safe-out"),
+    gaze_document::AgentBundleDir::new("./agent-bundle")?,
+    gaze_document::OwnerBundleDir::new("./owner-vault")?,
 )?;
 
 // Tokenized Markdown safe to hand to an LLM.
@@ -94,28 +95,38 @@ println!(
 ## Quickstart (CLI)
 
 ```bash
+# Convenience shorthand: --out creates agent/ + owner/ subdirs
 gaze document clean ./invoice.pdf --out ./safe/
+
+# Explicit: caller controls both paths
+gaze document clean ./invoice.pdf --agent-out ./agent-bundle/ --owner-out ./owner-vault/
 ```
 
 Writes:
 
 ```
-safe/
+agent/
   clean.md        # OCR text with PII replaced by reversible tokens
-  manifest.json   # gaze::Manifest — restorable, canonical
   report.json     # BundleReport — OCR + PII counts + provenance
+owner/
+  manifest.json   # gaze::Manifest — restorable, canonical
 ```
 
 Stdout carries a one-line JSON summary so callers can pipe it.
 
+`manifest.json` carries restorable PII mapping material. It belongs in an
+owner-only path; uploading it alongside `clean.md` to an LLM workspace defeats
+pseudonymization. The split layout makes that axis-1 boundary a runtime
+contract instead of caller discipline.
+
 ## Bundle on-disk shapes
 
-* **`clean.md`** — Markdown with a short header (`# gaze-document safe
+* **`agent/clean.md`** — Markdown with a short header (`# gaze-document safe
   bundle`) plus the OCR text after token substitution.
-* **`manifest.json`** — serialized `gaze::Manifest` (re-exported from
+* **`owner/manifest.json`** — serialized `gaze::Manifest` (re-exported from
   `gaze-types`). Compatible with `gaze restore` and the rest of the
   `gaze` runtime.
-* **`report.json`** — `BundleReport`. Schema versioned via
+* **`agent/report.json`** — `BundleReport`. Schema versioned via
   `bundle_version: u32 = 2`; field set is `#[non_exhaustive]` so additive
   fields are SemVer-safe. Includes per-page extraction source
   (`vector_pdf` or `ocr`), OCR backend, normalized confidence,
