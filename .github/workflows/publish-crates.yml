@@ -34,10 +34,12 @@ jobs:
       - name: Publish workspace crates (topological order, skip already-published)
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.cargo-auth.outputs.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -eu
           DRY_RUN=""
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$INPUT_DRY_RUN" = "true" ]; then
             DRY_RUN="--dry-run"
           fi
 
