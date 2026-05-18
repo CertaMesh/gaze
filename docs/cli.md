@@ -13,16 +13,17 @@ Every verb below is defined by the clap `Subcommand` enum in
 | Subcommand | One-line summary | Feature gate |
 |------------|------------------|--------------|
 | [`gaze clean`](../crates/gaze-cli/README.md#clean) | Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON. | always |
-| `gaze daemon` | Run a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. See [Guides](#gaze-daemon). | always |
+| `gaze daemon` | Run a long-lived JSONL stdio cleaner with one process-level pipeline and per-`session_id` manifests. See [guide](#gaze-daemon). | always |
 | [`gaze restore`](../crates/gaze-cli/README.md#restore) | Read `{session_blob, text}` JSON from stdin; emit restored `{text}` JSON. | always |
 | [`gaze audit query`](../crates/gaze-cli/README.md#audit-query) | Print filtered redaction-log metadata rows as TSV from a read-only SQLite DB. | always |
 | [`gaze audit export`](../crates/gaze-cli/README.md#audit-export) | Export filtered redaction-log metadata rows as JSONL for downstream processing. | always |
-| `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [Guides](#guides). | always |
-| [`gaze audit safety-net query`](../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. | always |
-| `gaze document clean` | OCR a PNG/JPG/PDF into a `SafeBundle` (`clean.md` + `manifest.json` + `report.json`). | `document` |
-| [`gaze mcp install`](../crates/gaze-cli/README.md#mcp-installation) | Install `gaze mcp serve` into a supported MCP client config. | `mcp` |
-| [`gaze mcp doctor`](../crates/gaze-cli/README.md#mcp-installation) | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. | `mcp` |
-| [`gaze mcp serve`](../crates/gaze-cli/README.md#mcp-installation) | Run the stdio MCP server exposing agent-tier document tools. | `mcp` |
+| `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [guide](#gaze-audit-purge). | always |
+| [`gaze audit safety-net query`](../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. See [guide](#gaze-audit-safety-net-query). | always |
+| `gaze document clean` | OCR a PNG/JPG/PDF into a `SafeBundle` (`clean.md` + `manifest.json` + `report.json`). See [guide](#gaze-document-clean) and [crate README](../crates/gaze-document/README.md). | `document` |
+| `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
+| `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
+| `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
+| `gaze proxy` | Run or manage the multi-provider HTTP chokepoint daemon. See [guide](#gaze-proxy) and [crate README](../crates/gaze-proxy/README.md). | built into the default release binary since v0.8.1 |
 
 For exit codes and stderr error JSON, see
 [Exit codes](../crates/gaze-cli/README.md#exit-codes) in the crate README.
