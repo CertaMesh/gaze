@@ -66,6 +66,55 @@ fn same_session_reuses_token_for_same_raw_value() {
 }
 
 #[test]
+fn distinct_conversation_sessions_produce_distinct_pseudonyms_for_identical_raw_values() {
+    let pipeline = email_token_pipeline();
+    let a = Session::new(Scope::Conversation("a".to_string())).expect("session a");
+    let b = Session::new(Scope::Conversation("b".to_string())).expect("session b");
+
+    let clean_a = redact_text(&pipeline, &a, "x@y.invalid");
+    let clean_b = redact_text(&pipeline, &b, "x@y.invalid");
+
+    assert_ne!(
+        clean_a, clean_b,
+        "two Sessions must never produce the same pseudonym for identical input"
+    );
+}
+
+#[test]
+fn two_ephemeral_sessions_are_independent_namespaces() {
+    let pipeline = email_token_pipeline();
+    let a = Session::new(Scope::Ephemeral).expect("session a");
+    let b = Session::new(Scope::Ephemeral).expect("session b");
+
+    let clean_a = redact_text(&pipeline, &a, "x@y.invalid");
+    let clean_b = redact_text(&pipeline, &b, "x@y.invalid");
+
+    assert_ne!(
+        clean_a, clean_b,
+        "two Ephemeral Sessions must not share counters or value-keyed lookups"
+    );
+}
+
+fn email_token_pipeline() -> Pipeline {
+    Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .expect("pipeline")
+}
+
+fn redact_text(pipeline: &Pipeline, session: &Session, text: &str) -> String {
+    let clean = pipeline
+        .redact(session, RawDocument::Text(text.to_string()))
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+    text
+}
+
+#[test]
 fn raw_document_is_not_serializable() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/ui/raw_document_serialize.rs");
