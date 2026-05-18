@@ -6,7 +6,8 @@
 //!
 //! * `clean.md` exists, contains the canonical tokenized substrings, and
 //!   carries **none** of the original PII literals.
-//! * `manifest.json` deserializes back into a `gaze::Manifest` and contains
+//! * `manifest.json` in the owner directory deserializes back into a
+//!   `gaze::Manifest` and contains
 //!   at least one `Email` + one `Custom("phone")` span.
 //! * `report.json` deserializes into a `BundleReport` shape with
 //!   `bundle_version = 2`, per-page provenance, and non-zero PII counts.
@@ -23,7 +24,10 @@
 use std::path::{Path, PathBuf};
 
 use gaze::Manifest;
-use gaze_document::{BundleReport, DocumentError, OcrSource, BUNDLE_VERSION};
+use gaze_document::{
+    AgentBundleDir, BundleLayoutInvalidReason, BundleReport, DocumentError, OcrSource,
+    OwnerBundleDir, BUNDLE_VERSION,
+};
 use gaze_types::PiiClass;
 
 const ORIGINAL_EMAIL: &str = "jane.doe@example.invalid";
@@ -46,7 +50,13 @@ fn skip_reason(err: &DocumentError) -> Option<&'static str> {
 
 fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     let tmp = tempfile::tempdir().expect("tempdir");
-    let bundle = match gaze_document::clean(input, tmp.path()) {
+    let agent_dir = tmp.path().join("agent");
+    let owner_dir = tmp.path().join("owner");
+    let bundle = match gaze_document::clean(
+        input,
+        AgentBundleDir::new(&agent_dir).expect("agent dir"),
+        OwnerBundleDir::new(&owner_dir).expect("owner dir"),
+    ) {
         Ok(b) => b,
         Err(err) => {
             if let Some(why) = skip_reason(&err) {
@@ -57,12 +67,16 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
         }
     };
 
-    let clean_md_path = tmp.path().join("clean.md");
-    let manifest_path = tmp.path().join("manifest.json");
-    let report_path = tmp.path().join("report.json");
+    let clean_md_path = agent_dir.join("clean.md");
+    let manifest_path = owner_dir.join("manifest.json");
+    let report_path = agent_dir.join("report.json");
     assert!(clean_md_path.exists(), "clean.md missing");
     assert!(manifest_path.exists(), "manifest.json missing");
     assert!(report_path.exists(), "report.json missing");
+    assert!(
+        !agent_dir.join("manifest.json").exists(),
+        "agent dir must not contain restorable manifest material"
+    );
 
     let clean_text = std::fs::read_to_string(&clean_md_path).expect("clean.md readable");
     // Belt-and-braces negative substring checks. Each one independently
@@ -159,6 +173,14 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     // Sanity: the in-memory bundle matches the written report.
     assert_eq!(bundle.report.bundle_version, BUNDLE_VERSION);
     assert_eq!(bundle.report.pii_token_count, report.pii_token_count);
+    assert_eq!(
+        bundle.agent_out_dir,
+        std::fs::canonicalize(&agent_dir).unwrap()
+    );
+    assert_eq!(
+        bundle.owner_out_dir,
+        std::fs::canonicalize(&owner_dir).unwrap()
+    );
 }
 
 #[test]
@@ -174,4 +196,117 @@ fn synthetic_doc_pdf_clean_emits_safe_bundle() {
     let input = testdata_dir().join("synthetic_doc.pdf");
     assert!(input.exists(), "missing fixture: {}", input.display());
     assert_clean_bundle(&input, true);
+}
+
+#[test]
+fn bundle_writer_rejects_equal_agent_and_owner_paths() {
+    let input = testdata_dir().join("synthetic_image.png");
+    assert!(input.exists(), "missing fixture: {}", input.display());
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let err = gaze_document::clean(
+        &input,
+        AgentBundleDir::new(tmp.path()).expect("agent dir"),
+        OwnerBundleDir::new(tmp.path()).expect("owner dir"),
+    )
+    .expect_err("equal bundle paths must be rejected");
+
+    assert!(matches!(
+        err,
+        DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::AgentEqualsOwner
+        }
+    ));
+}
+
+#[test]
+fn bundle_writer_rejects_nested_paths() {
+    let input = testdata_dir().join("synthetic_image.png");
+    assert!(input.exists(), "missing fixture: {}", input.display());
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let err = gaze_document::clean(
+        &input,
+        AgentBundleDir::new(tmp.path().join("agent")).expect("agent dir"),
+        OwnerBundleDir::new(tmp.path().join("agent").join("owner")).expect("owner dir"),
+    )
+    .expect_err("nested bundle paths must be rejected");
+
+    assert!(matches!(
+        err,
+        DocumentError::BundleLayoutInvalid {
+            reason: BundleLayoutInvalidReason::OwnerNestedInAgent
+        }
+    ));
+}
+
+#[test]
+fn agent_dir_contains_no_manifest_material() {
+    let input = testdata_dir().join("synthetic_image.png");
+    assert!(input.exists(), "missing fixture: {}", input.display());
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let agent_dir = tmp.path().join("agent");
+    let owner_dir = tmp.path().join("owner");
+    match gaze_document::clean(
+        &input,
+        AgentBundleDir::new(&agent_dir).expect("agent dir"),
+        OwnerBundleDir::new(&owner_dir).expect("owner dir"),
+    ) {
+        Ok(_) => {}
+        Err(err) => {
+            if let Some(why) = skip_reason(&err) {
+                eprintln!("SKIP: {why}: {err}");
+                return;
+            }
+            panic!("gaze_document::clean failed: {err}");
+        }
+    }
+
+    let names = dir_entry_names(&agent_dir);
+    assert_eq!(
+        names,
+        vec!["clean.md".to_string(), "report.json".to_string()]
+    );
+    assert!(!names.iter().any(|name| name == "manifest.json"));
+}
+
+#[test]
+fn owner_dir_contains_only_manifest() {
+    let input = testdata_dir().join("synthetic_image.png");
+    assert!(input.exists(), "missing fixture: {}", input.display());
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let agent_dir = tmp.path().join("agent");
+    let owner_dir = tmp.path().join("owner");
+    match gaze_document::clean(
+        &input,
+        AgentBundleDir::new(&agent_dir).expect("agent dir"),
+        OwnerBundleDir::new(&owner_dir).expect("owner dir"),
+    ) {
+        Ok(_) => {}
+        Err(err) => {
+            if let Some(why) = skip_reason(&err) {
+                eprintln!("SKIP: {why}: {err}");
+                return;
+            }
+            panic!("gaze_document::clean failed: {err}");
+        }
+    }
+
+    assert_eq!(
+        dir_entry_names(&owner_dir),
+        vec!["manifest.json".to_string()]
+    );
+}
+
+fn dir_entry_names(path: &Path) -> Vec<String> {
+    let mut names = std::fs::read_dir(path)
+        .expect("read dir")
+        .map(|entry| {
+            entry
+                .expect("dir entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names
 }

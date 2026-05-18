@@ -236,7 +236,7 @@ enum Cmd {
         #[command(subcommand)]
         command: AuditCmd,
     },
-    /// Ingest a document (PNG/JPG/PDF) into a SafeBundle (clean.md + manifest + report).
+    /// Ingest a document (PNG/JPG/PDF) into a split SafeBundle.
     ///
     /// Requires the binary to be built with `--features document`.
     #[cfg(feature = "document")]
@@ -265,14 +265,24 @@ enum Cmd {
 #[cfg(feature = "document")]
 #[derive(Subcommand, Debug)]
 enum DocumentCmd {
-    /// Run OCR + Gaze redact on `<input>`, write `clean.md`, `manifest.json`,
-    /// and `report.json` to `--out`.
+    /// Run OCR + Gaze redact on `<input>` and split agent-safe files from owner restore material.
+    #[command(group(
+        clap::ArgGroup::new("document_output")
+            .required(true)
+            .args(["out", "agent_out"])
+    ))]
     Clean {
         /// Source file. Must be `.png`, `.jpg`, `.jpeg`, or `.pdf` (single-page).
         input: PathBuf,
-        /// Output directory. Created if missing.
-        #[arg(long)]
-        out: PathBuf,
+        /// Convenience output root. Creates `<PATH>/agent` and `<PATH>/owner`.
+        #[arg(long, conflicts_with_all = ["agent_out", "owner_out"])]
+        out: Option<PathBuf>,
+        /// Agent-visible output directory for `clean.md` and `report.json`.
+        #[arg(long, requires = "owner_out")]
+        agent_out: Option<PathBuf>,
+        /// Owner-only output directory for `manifest.json`.
+        #[arg(long, requires = "agent_out")]
+        owner_out: Option<PathBuf>,
     },
 }
 
@@ -851,9 +861,17 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
         },
         #[cfg(feature = "document")]
         Cmd::Document { command } => match command {
-            DocumentCmd::Clean { input, out } => {
-                document::run_clean(document::CleanArgs { input, out })
-            }
+            DocumentCmd::Clean {
+                input,
+                out,
+                agent_out,
+                owner_out,
+            } => document::run_clean(document::CleanArgs {
+                input,
+                out,
+                agent_out,
+                owner_out,
+            }),
         },
         #[cfg(feature = "mcp")]
         Cmd::Mcp { command } => match command {

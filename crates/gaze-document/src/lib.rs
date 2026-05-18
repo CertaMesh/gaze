@@ -2,9 +2,10 @@
 //!
 //! `gaze-document` turns a single image (PNG / JPG) or PDF into a
 //! [`SafeBundle`]: tokenized Markdown, a restorable [`gaze::Manifest`], and a
-//! structured OCR + PII [`BundleReport`]. PII detection flows through the
-//! standard [`gaze::Pipeline`] so the manifest stays canonical and reversible
-//! (Axis 2 reversibility).
+//! structured OCR + PII [`BundleReport`]. Agent-safe files and owner-only
+//! restore material are written to separate output directories. PII detection
+//! flows through the standard [`gaze::Pipeline`] so the manifest stays
+//! canonical and reversible (Axis 2 reversibility).
 //!
 //! # Quickstart
 //!
@@ -13,7 +14,8 @@
 //!
 //! let bundle = gaze_document::clean(
 //!     Path::new("invoice.pdf"),
-//!     Path::new("./safe-out"),
+//!     gaze_document::AgentBundleDir::new("./agent-out")?,
+//!     gaze_document::OwnerBundleDir::new("./owner-out")?,
 //! )?;
 //! assert!(!bundle.clean_markdown.is_empty());
 //! # Ok::<(), gaze_document::DocumentError>(())
@@ -54,8 +56,8 @@ pub mod render;
 #[cfg_attr(docsrs, doc(cfg(feature = "ocr-tesseract")))]
 pub use bundle::{clean, clean_with_ocr_backend};
 pub use bundle::{
-    BundleReport, ClassCount, LayoutSummary, OcrSource, PageReport, Pipeline, SafeBundle,
-    BUNDLE_VERSION,
+    AgentBundleDir, BundleReport, ClassCount, LayoutSummary, OcrSource, OwnerBundleDir, PageReport,
+    Pipeline, SafeBundle, BUNDLE_VERSION,
 };
 pub use layout::ReadingOrder;
 #[cfg(feature = "ocr-tesseract")]
@@ -102,6 +104,12 @@ pub enum DocumentError {
     Io(std::io::Error),
     /// The bundle output directory could not be prepared.
     OutputDir(std::path::PathBuf, std::io::Error),
+    /// The requested agent/owner bundle directory pair violates the runtime
+    /// partition contract.
+    BundleLayoutInvalid {
+        /// Machine-readable reason for the layout rejection.
+        reason: BundleLayoutInvalidReason,
+    },
     /// `gaze::Pipeline` construction or invocation failed.
     Pipeline(String),
     /// `serde_json` serialization of the bundle report or manifest failed.
@@ -110,6 +118,20 @@ pub enum DocumentError {
     /// implementation yet. Returned by reserved stubs (Renderer trait,
     /// ReadingOrder) until follow-up PRs land.
     NotImplemented(&'static str),
+}
+
+/// Closed reason set for invalid SafeBundle agent/owner output layouts.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BundleLayoutInvalidReason {
+    /// Agent and owner outputs resolve to the same directory.
+    AgentEqualsOwner,
+    /// The agent output directory is nested inside the owner output directory.
+    AgentNestedInOwner,
+    /// The owner output directory is nested inside the agent output directory.
+    OwnerNestedInAgent,
+    /// One output path was empty and cannot name a directory.
+    EmptyPath,
 }
 
 impl core::fmt::Display for DocumentError {
@@ -140,11 +162,35 @@ impl core::fmt::Display for DocumentError {
                 "gaze-document: cannot prepare output dir `{}`: {err}",
                 path.display()
             ),
+            Self::BundleLayoutInvalid { reason } => {
+                write!(f, "gaze-document: invalid bundle layout: {reason}")
+            }
             Self::Pipeline(detail) => write!(f, "gaze-document: pipeline error: {detail}"),
             Self::Serde(err) => write!(f, "gaze-document: serialize error: {err}"),
             Self::NotImplemented(what) => {
                 write!(f, "gaze-document: {what} is not yet implemented")
             }
+        }
+    }
+}
+
+impl core::fmt::Display for BundleLayoutInvalidReason {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::AgentEqualsOwner => write!(f, "agent and owner output directories are equal"),
+            Self::AgentNestedInOwner => {
+                write!(
+                    f,
+                    "agent output directory is nested inside owner output directory"
+                )
+            }
+            Self::OwnerNestedInAgent => {
+                write!(
+                    f,
+                    "owner output directory is nested inside agent output directory"
+                )
+            }
+            Self::EmptyPath => write!(f, "bundle output directory path is empty"),
         }
     }
 }
