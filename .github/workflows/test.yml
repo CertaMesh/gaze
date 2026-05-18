@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
-        uses: jlumbroso/free-disk-space@main
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
         with:
           tool-cache: true
           android: true
@@ -24,7 +24,7 @@ jobs:
           docker-images: true
           swap-storage: false
       - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - name: Install Tesseract + English language pack (gaze-document) + protoc (candle-onnx build dep)
         run: |
           sudo apt-get update
