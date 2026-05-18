@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pipeline = core.pipeline();
 
     // One Session per conversation -- it owns the token map.
+    // Share a Session only within the same logical isolation boundary.
     let session = Session::new(Scope::Conversation("conv-abc".into()))?;
 
     let cleaned = pipeline.redact(
