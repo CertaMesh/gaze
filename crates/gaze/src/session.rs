@@ -61,13 +61,21 @@ pub(crate) struct ParsedRestoreToken {
     pub raw: String,
 }
 
-/// Lifetime scope of a [`Session`]'s token manifest.
+/// Persistence scope of a [`Session`]'s token manifest.
+///
+/// `Scope` chooses *persistence*, not *isolation*. A [`Session`] instance is the
+/// pseudonym namespace boundary; two Sessions never share counters or value-keyed
+/// lookups, regardless of which `Scope` variant they use.
 ///
 /// | Variant | Use case | `export()` allowed |
 /// |---------|----------|--------------------|
-/// | `Ephemeral` | Single-pass sanitization, no restore needed | No |
-/// | `Conversation(id)` | Multi-turn LLM sessions | Yes |
+/// | `Ephemeral` | Process-bound one-off redaction; namespace lives until the Session is dropped | No |
+/// | `Conversation(id)` | Keyed multi-turn LLM sessions that can be re-opened across process restarts, storage backend-dependent | Yes |
 /// | `Persistent { ttl: Duration }` | Long-lived sessions across restarts | Yes |
+///
+/// Do not share one `Scope::Ephemeral` Session across logical conversations if
+/// each conversation should start with independent `Email_1` / `Person_1`
+/// counters. Use one [`Session`] per logical isolation boundary.
 ///
 /// `Persistent`'s `ttl` is a [`std::time::Duration`]. `SensitiveSnapshot`s exported from a
 /// persistent session carry the TTL; [`Session::import`] returns `Error::BlobExpired { .. }` once
@@ -168,10 +176,32 @@ struct PrefixCacheEntry {
     manifest: Vec<gaze_types::EmittedTokenSpan>,
 }
 
-/// Owns the token manifest for one conversation or request.
+/// Owns the token manifest for one pseudonym namespace.
 ///
 /// A `Session` holds the bidirectional map between PII values and their pseudonymous tokens.
 /// Create one per conversation and thread it through every [`Pipeline::redact`] call.
+///
+/// A `Session` is the boundary of a pseudonym namespace. Each new `Session`
+/// starts with fresh per-class counters (`Person_1`, `Email_1`, etc.) and a
+/// fresh `session_hex` prefix. Two Sessions never share `next_by_class`,
+/// `token_by_value`, or `value_by_token`, regardless of `Scope` variant.
+///
+/// The [`Scope`] variant chooses *persistence*, not *isolation*:
+///
+/// - `Scope::Ephemeral` is process-bound. Its namespace lives until the
+///   Session is dropped. Use it for ad-hoc one-off redaction. Do not share one
+///   `Ephemeral` Session across logical conversations if those conversations
+///   should have independent counters and value-to-token mappings.
+/// - `Scope::Conversation(String)` is a keyed namespace that can be re-opened
+///   across process restarts when the adopter stores and imports the session
+///   snapshot. Use it for per-conversation chat or per-thread agents.
+/// - `Scope::Persistent { .. }` is a long-lived namespace with a TTL encoded in
+///   exported snapshots.
+///
+/// Picking the wrong variant does not break single-call redaction correctness,
+/// but it can produce cross-call linkability: identical raw values fed into one
+/// Session always map to the same pseudonym, so downstream consumers can link
+/// mentions across contexts that the adopter intended to keep independent.
 ///
 /// # Restore workflow
 ///
