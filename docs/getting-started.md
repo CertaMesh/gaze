@@ -54,6 +54,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+> Use one `Session` per logical isolation boundary; share across calls within a boundary only. See [Session Contract](architecture/session-contract.md) for the full contract and common pitfalls.
+
 ## 3. Export the restore key before calling the LLM
 
 ```rust
