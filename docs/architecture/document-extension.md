@@ -10,18 +10,19 @@ Only the owner-side snapshot envelope may contain reversible PII. Agent-facing
 files must be safe to upload to an LLM workspace as a unit.
 
 ```text
-<base>-agent/
+agent_out/
   clean.md
-  layout.json
-  preview-redacted.png
   report.json
 
-<base>-owner/
-  manifest.bin
+owner_out/
+  manifest.json
 ```
 
-`<base>-agent/` is the agent-shippable directory. `<base>-owner/manifest.bin` is
-owner-only restore material produced by `Session::export_with_extension`.
+`agent_out` is the agent-shippable directory. `owner_out/manifest.json` is
+owner-only restore material. The original `manifest.bin` signed-envelope binding
+remains a v0.11+ Design B follow-up; v0.10 Design A keeps the shipped JSON
+manifest and enforces the partition with `AgentBundleDir` / `OwnerBundleDir`
+newtypes plus path validation.
 
 ## File Shapes
 
@@ -31,11 +32,12 @@ owner-only restore material produced by `Session::export_with_extension`.
 frontmatter, comments, or duplicated metadata. Byte spans are relative to this
 normalized file.
 
-### manifest.bin
+### manifest.json
 
-`manifest.bin` is the existing signed snapshot envelope with an optional
-`DocumentExtension` field inside the payload. It is the only v0.7.0 bundle file
-that can carry reversible PII, so it stays in `<base>-owner/`.
+`manifest.json` is the shipped `gaze::Manifest` restore mapping. It is the only
+v0.10 bundle file that can carry reversible PII, so it stays in `owner_out`.
+Moving the owner restore material to the signed snapshot envelope
+(`Session::export_with_extension` -> `manifest.bin`) is deferred to v0.11+.
 
 ### layout.json
 
@@ -83,6 +85,8 @@ continues to restore both plain v3 and document-extended v4 snapshots.
 
 ## Shipped in v0.7.1
 
-`gaze-document` now ships the OSS document-ingestion path on top of this hook:
-PNG/JPG/PDF input, Tesseract OCR, optional PDF rasterization, `write_bundle`
-runtime separation, and a versioned `BundleReport` with `bundle_version = 1`.
+`gaze-document` now ships the OSS document-ingestion path with PNG/JPG/PDF
+input, Tesseract OCR, optional PDF rasterization, `write_bundle` runtime
+separation, and a versioned `BundleReport` with `bundle_version = 2`. The
+signed `DocumentExtension` envelope shown above is still the intended Design B
+integrity upgrade, not the v0.10 on-disk owner manifest.

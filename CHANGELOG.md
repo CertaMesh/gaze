@@ -18,11 +18,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   canonical alias is planned for v0.10 (todo #486). External adopter feedback
   prompted the reframe. (Axis 4 trust, Axis 5 ergonomics.)
 
+- **`gaze document clean` bundle layout splits into agent + owner paths**
+  (axis 1 enforcement). `Bundle::write` now requires distinct `AgentBundleDir`
+  and `OwnerBundleDir` newtypes; the writer rejects equal or nested paths
+  with typed `DocumentError::BundleLayoutInvalid`. The CLI gains
+  `--agent-out` + `--owner-out` and retains `--out` as a shorthand that
+  auto-creates `<PATH>/agent` + `<PATH>/owner` subdirs.
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
+
+- **Axis-1 bundle leak risk** (closes todo #489): `gaze document clean`
+  previously wrote `manifest.json` next to `clean.md` in a single caller-
+  selected `out_dir`, with no runtime enforcement of the agent / owner
+  partition. Adopters following the README who uploaded the bundle directory
+  to an LLM workspace leaked restorable manifest material. The new split-path
+  bundle layout enforces the agent / owner partition at type and path-validation
+  level. Original two-directory `manifest.bin` signed-envelope binding (the
+  v0.7.0 architectural spec in `docs/architecture/document-extension.md`)
+  remains a v0.11+ follow-up.
 
 ### Security
 

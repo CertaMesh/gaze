@@ -19,7 +19,7 @@ Every verb below is defined by the clap `Subcommand` enum in
 | [`gaze audit export`](../crates/gaze-cli/README.md#audit-export) | Export filtered redaction-log metadata rows as JSONL for downstream processing. | always |
 | `gaze audit purge` | Manually delete redaction-log metadata rows older than an ISO 8601 UTC timestamp. See [guide](#gaze-audit-purge). | always |
 | [`gaze audit safety-net query`](../crates/gaze-cli/README.md#audit-safety-net-query) | Print filtered `safety_net_log` rows as TSV. See [guide](#gaze-audit-safety-net-query). | always |
-| `gaze document clean` | OCR a PNG/JPG/PDF into a `SafeBundle` (`clean.md` + `manifest.json` + `report.json`). See [guide](#gaze-document-clean) and [crate README](../crates/gaze-document/README.md). | `document` |
+| `gaze document clean` | OCR a PNG/JPG/PDF into a split `SafeBundle` (`agent/clean.md`, `agent/report.json`, `owner/manifest.json`). See [guide](#gaze-document-clean) and [crate README](../crates/gaze-document/README.md). | `document` |
 | `gaze mcp install` | Install `gaze mcp serve` into a supported MCP client config. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
 | `gaze mcp doctor` | Diagnose MCP runtime dependencies, client config, and AGENTS.md guidance. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
 | `gaze mcp serve` | Run the stdio MCP server exposing agent-tier document tools. See [guide](#gaze-mcp-install--doctor--serve) and [crate README](../crates/gaze-cli/README.md#mcp-installation). | `mcp` |
@@ -259,18 +259,33 @@ input:
 
 `gaze document clean` is the OSS document ingestion verb. It OCRs the input
 through Tesseract, redacts the recognized text through the standard Gaze
-pipeline, and writes a `SafeBundle` to `--out`: `clean.md` (tokenized text),
-`manifest.json` (restore mapping), and `report.json` (per-detection metadata).
+pipeline, and writes a split `SafeBundle`: `clean.md` and `report.json` go to
+the agent-visible output, while `manifest.json` goes to the owner-only output.
 Requires the binary to be built with `--features document`, and the host must
 have `tesseract` on PATH plus the pdfium runtime for PDF input.
 
 ```sh
 cargo install gaze-cli --features document
+
+# Convenience shorthand: creates ./safe-bundle/agent and ./safe-bundle/owner.
 gaze document clean ./invoice.pdf --out ./safe-bundle/
+
+# Explicit: caller controls both sides of the partition.
+gaze document clean ./invoice.pdf --agent-out ./agent-bundle/ --owner-out ./owner-vault/
 ```
 
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--out <PATH>` | Either this or both explicit flags | Convenience shorthand that creates `<PATH>/agent` and `<PATH>/owner`. |
+| `--agent-out <PATH>` | With `--owner-out` | Agent-visible directory for `clean.md` and `report.json`. |
+| `--owner-out <PATH>` | With `--agent-out` | Owner-only directory for `manifest.json`. |
+
+Do not upload `owner/manifest.json` to an LLM workspace. It carries restorable
+PII mapping material; placing it beside `clean.md` defeats pseudonymization.
+The split output layout makes that axis-1 boundary a runtime contract.
+
 The supported inputs are `.png`, `.jpg`, `.jpeg`, and single-page `.pdf`. The
-`BundleReport` schema is versioned via `bundle_version = 1`. See the
+`BundleReport` schema is versioned via `bundle_version = 2`. See the
 `gaze-document` crate for the full bundle contract.
 
 ### Legacy audit databases

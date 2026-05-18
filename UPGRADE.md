@@ -33,6 +33,41 @@ exists today.)
 
 ---
 
+## v0.9.x → v0.10.0
+
+Status: **unreleased.**
+
+### TL;DR
+
+1. **Document bundles now split agent and owner outputs.** `gaze document clean`
+   requires either `--agent-out` + `--owner-out` or the `--out` shorthand that
+   creates `<PATH>/agent` + `<PATH>/owner`.
+
+### gaze document clean — bundle layout split (axis 1)
+
+Previous behavior: `gaze document clean --out <PATH>` wrote `clean.md`,
+`manifest.json`, and `report.json` into a single directory. Uploading
+that directory to an LLM workspace leaked restorable manifest material —
+an axis-1 violation that depended on caller discipline rather than
+runtime enforcement.
+
+New behavior: `gaze document clean` requires `--agent-out` + `--owner-out`
+or the `--out` shorthand that auto-creates `<PATH>/agent` + `<PATH>/owner`
+subdirs. `clean.md` and `report.json` land in the agent path; `manifest.json`
+lands in the owner path. The writer rejects equal or nested agent/owner
+paths with a typed `DocumentError::BundleLayoutInvalid`.
+
+Migration:
+
+- If you used `--out <PATH>` and you intend `<PATH>` to remain agent-shippable,
+  switch to `--agent-out <PATH> --owner-out <SOMEWHERE_ELSE>`.
+- If you can accept the agent/ + owner/ subdir split, keep `--out <PATH>` —
+  the shorthand now creates both subdirs for you.
+- Downstream tooling that read files from `<PATH>` must move manifest reads
+  to `<PATH>/owner/manifest.json` (or the explicit owner path).
+
+---
+
 ## v0.7.x → v0.8.0
 
 Status: **shipped.** v0.8.0 is published to crates.io; the workspace
