@@ -1,5 +1,12 @@
 # Gaze Daemon Mode
 
+> **Terminology note.** `gaze daemon` is a long-lived stdio server in the LSP /
+> MCP tradition, not a Unix daemon in the strict sense. The subcommand verb is
+> preserved through v0.9.x for binary stability; a `gaze serve` canonical alias
+> lands in v0.10 with a deprecation warning on `gaze daemon`. For the actual
+> backgrounded supervised daemon, see
+> [`docs/architecture/proxy-runtime.md`](proxy-runtime.md).
+
 `gaze daemon` is the long-lived stdio runtime for adapters that need repeated
 low-latency pseudonymization without paying a binary startup and model-load cost
 for every request.
@@ -66,8 +73,8 @@ separately from one-shot `gaze clean` invocations without storing raw PII.
 
 ## Five-Axis Check
 
-Reliability: malformed protocol input produces typed JSON errors and the daemon
-continues. Safety-net artifact verification remains fail-closed.
+Reliability: malformed protocol input produces typed JSON errors and the stdio
+server continues. Safety-net artifact verification remains fail-closed.
 
 Reversibility: session manifests are owned by one `session_id` and live only in
 that session entry. Eviction drops the restore map for that session.
@@ -75,8 +82,8 @@ that session entry. Eviction drops the restore map for that session.
 Agentic-first: JSONL keeps a single stdio connection hot for keystroke and
 multi-turn agent workflows.
 
-Trust: audit rows identify daemon provenance and session IDs remain opaque audit
-IDs, not token session hexes.
+Trust: audit rows identify stdio-runtime provenance and session IDs remain
+opaque audit IDs, not token session hexes.
 
 Adopter ergonomics: adapters can start one process, stream line-delimited JSON,
 and avoid per-call binary startup or model cold starts.
