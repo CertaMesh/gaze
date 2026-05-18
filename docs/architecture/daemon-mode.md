@@ -50,27 +50,7 @@ manifest.
 
 ## Common Pitfalls
 
-### Single Shared Session Across Conversations
-
-**Symptom:** the same email or person name in two adapter-side conversations
-produces the same pseudonym. Per-class counters (`Email_N`, `Person_N`) grow
-monotonically across the entire app lifetime. Internal value-to-token maps grow
-unboundedly.
-
-**Cause:** one `Session::new(Scope::Ephemeral)` shared across all calls. The
-`Scope` variant controls *persistence* (whether the namespace survives process
-restart), not *isolation* (whether two logical conversations share a namespace).
-
-**Fix:** use one `Session` per logical isolation boundary. For chat or agent
-threads, `Scope::Conversation(conv_id)` re-opens the same namespace on a key,
-which is useful across restarts. For ad-hoc one-shot redaction with no reuse,
-`Scope::Ephemeral` is fine.
-
-**Why this matters (axis 1):** cross-context linkability through pseudonym reuse
-is the failure mode that GDPR Art. 4(5) pseudonymization is meant to prevent. If
-two contexts that should be independent share a `Session`, the pseudonym becomes
-a stable identifier across them, which is exactly the property an attacker
-correlating two logs would exploit.
+The cross-conversation pseudonym linkability pitfall (sharing one `Session::new(Scope::Ephemeral)` across logical conversations) applies to all `Session` consumers, not just daemon mode. See [`docs/architecture/session-contract.md#single-shared-session-across-conversations`](session-contract.md#single-shared-session-across-conversations).
 
 ## Session Lifecycle
 

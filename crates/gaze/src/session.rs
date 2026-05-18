@@ -275,6 +275,8 @@ struct PrefixCacheEntry {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
+/// See: `docs/architecture/session-contract.md` for the full architecture contract.
+///
 /// [`Pipeline::redact`]: crate::Pipeline::redact
 // intentionally not Debug: contains session signing key and token manifest
 pub struct Session {
