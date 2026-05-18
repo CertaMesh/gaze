@@ -1,15 +1,37 @@
 # Daemon Adapter Quickstart
 
-This page is an adopter setup guide for `gaze daemon`, the long-lived JSONL
-stdio runtime for repeated redaction. For the full daemon contract, see
+This page is an adopter setup guide for `gaze daemon`, a long-lived **stdio
+server** in the LSP / MCP / language-server-protocol tradition: a foreground
+child process that inherits stdin/stdout from its parent and exchanges one JSON
+object per line. Despite the subcommand name, this is not a Unix daemon in the
+strict sense (detached, backgrounded, no controlling terminal). The historical
+name is preserved for binary stability; a `gaze serve` alias is planned for
+v0.10. For the full runtime contract, see
 [`docs/architecture/daemon-mode.md`](../architecture/daemon-mode.md).
 
 ## When To Use
 
-Use daemon mode when an adapter needs repeated low-latency redaction for a
-multi-turn agent, chat session, or worker loop. The daemon keeps one process,
-one policy-loaded pipeline, and any configured model load hot across requests,
-so callers avoid paying binary startup and model cold-start cost on every turn.
+Use this stdio server when an adapter needs repeated low-latency redaction for
+a multi-turn agent, chat session, or worker loop. The long-lived stdio runtime
+keeps one process, one policy-loaded pipeline, and any configured model load hot
+across requests, so callers avoid paying binary startup and model cold-start
+cost on every turn.
+
+## Terminology
+
+`gaze daemon` is not a Unix daemon in the strict sense. A classic daemon (sshd,
+cupsd, cron) is a backgrounded process detached from any controlling terminal,
+with stdin/stdout closed or redirected to log files. `gaze daemon` is a
+long-lived foreground child that owns stdin/stdout for line-delimited JSON
+request/response - the same pattern as LSP language servers, MCP servers,
+tsserver, and rust-analyzer.
+
+The subcommand verb is kept as `gaze daemon` for binary stability through
+v0.9.x. A `gaze serve` canonical alias lands in v0.10 with a deprecation
+warning on the legacy verb; the alias drops in v0.11.
+
+If you need an actual Unix daemon (backgrounded, supervised, persistent), use
+`gaze proxy start` - the proxy is the daemon-style surface in this binary.
 
 Use one-shot `gaze clean` when a shell pipeline or batch job only needs one
 document and does not benefit from a resident process.
@@ -19,20 +41,20 @@ document and does not benefit from a resident process.
 - A `gaze` binary on PATH.
 - A policy TOML file on disk. See [`docs/policy.md`](../policy.md) for policy
   authoring.
-- Optional: an audit database path if you want daemon-emitted metadata rows
+- Optional: an audit database path if you want stdio-server metadata rows
   stamped with `provenance_stage = "daemon"`.
 
-## Spawn The Daemon
+## Spawn The Stdio Server
 
-Start one daemon process per adapter worker or trust boundary:
+Start one `gaze daemon` process per adapter worker or trust boundary:
 
 ```sh
 gaze daemon --policy ./policy.toml --session-cap 1000 --session-idle-timeout 3600 --idle-timeout 1800
 ```
 
-The daemon reads one JSON request per stdin line and writes one JSON response
-per stdout line. Keep stderr for logs and diagnostics; do not parse stderr as
-protocol output.
+The stdio server reads one JSON request per stdin line and writes one JSON
+response per stdout line. Keep stderr for logs and diagnostics; do not parse
+stderr as protocol output.
 
 ## Send A Request
 
@@ -43,8 +65,8 @@ Write a single JSON object plus a newline:
 ```
 
 `session_id` is supplied by the adapter. Reusing the same ID reuses that
-session's manifest state inside the daemon. A different ID gets a different
-session and cannot see the first session's restore material.
+session's manifest state inside the stdio runtime. A different ID gets a
+different session and cannot see the first session's restore material.
 
 ## Read The Response
 
@@ -70,10 +92,10 @@ caller logs can record the variant and detail without storing raw PII.
 
 ## Restore Round-Trip
 
-Daemon mode is a one-way clean protocol. It does not expose a `restore` request
-or emit the `session_blob` consumed by `gaze restore`.
+The stdio runtime is a one-way clean protocol. It does not expose a `restore`
+request or emit the `session_blob` consumed by `gaze restore`.
 
-For the inverse direction, use the existing restore flow outside daemon mode:
+For the inverse direction, use the existing restore flow outside this runtime:
 produce a signed restore manifest with `gaze clean`, send only `clean_text` to
 the LLM, then pass `{session_blob, text}` to `gaze restore`. The CLI restore
 contract is documented in
@@ -83,7 +105,7 @@ contract is documented in
 
 SIGINT and SIGTERM set a shutdown flag. The foreground loop finishes the
 current line, flushes stdout and audit writes, then exits. If no request line
-arrives for `--idle-timeout` seconds, the daemon also exits cleanly.
+arrives for `--idle-timeout` seconds, the stdio server also exits cleanly.
 
 Session eviction is independent of process shutdown. When `--session-cap` is
 exceeded, the least recently used session is evicted. Sessions idle longer than
@@ -149,28 +171,28 @@ daemon.terminate()
 daemon.wait(timeout=10)
 ```
 
-The two `session_id` values produce isolated daemon sessions. Token counters,
-manifest state, and eviction lifecycle are scoped per session ID, so a later
-request for `agent-thread-a` must only use the `agent-thread-a` entry in
+The two `session_id` values produce isolated stdio-runtime sessions. Token
+counters, manifest state, and eviction lifecycle are scoped per session ID, so
+a later request for `agent-thread-a` must only use the `agent-thread-a` entry in
 `tokens_by_session`.
 
 ## Five-Axis Pitch
 
 - Reliability: malformed JSON and pipeline failures return typed errors without
   echoing input.
-- Reversibility: each live daemon session owns its manifest state; daemon mode
-  does not merge restore material across sessions.
+- Reversibility: each live stdio-runtime session owns its manifest state; this
+  mode does not merge restore material across sessions.
 - Agentic-first: JSONL stdio lets an adapter keep the redaction boundary hot
   across multi-turn agent loops.
-- Trust: daemon audit rows identify `provenance_stage = "daemon"` and session
-  eviction uses `daemon.session_eviction` metadata.
+- Trust: stdio-runtime audit rows identify `provenance_stage = "daemon"` and
+  session eviction uses `daemon.session_eviction` metadata.
 - Adopter ergonomics: one process, one line in, one line out, with no per-turn
   binary startup or model load.
 
 ## Next Steps
 
 - [`docs/architecture/daemon-mode.md`](../architecture/daemon-mode.md) — full
-  daemon-mode contract.
+  stdio-runtime contract.
 - [`docs/cli.md#gaze-daemon`](../cli.md#gaze-daemon) — CLI reference and flag
   summary.
 - [`docs/policy.md`](../policy.md) — policy authoring.

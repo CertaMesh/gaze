@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Daemon-mode docs reframed as stdio server.** `gaze daemon` is now
+  documented as a long-lived stdio server in the LSP / MCP /
+  language-server-protocol tradition rather than a Unix daemon in the strict
+  sense. The subcommand verb is unchanged through v0.9.x; a `gaze serve`
+  canonical alias is planned for v0.10 (todo #486). External adopter feedback
+  prompted the reframe. (Axis 4 trust, Axis 5 ergonomics.)
+
 ### Deprecated
 
 ### Removed

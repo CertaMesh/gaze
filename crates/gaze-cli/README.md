@@ -68,6 +68,11 @@ Audit logging is captured on `clean` via `--audit-db <path>`; the
 
 ## Daemon mode
 
+`gaze daemon` is a stdio server in the LSP / MCP tradition, not a Unix daemon
+in the strict sense. The subcommand verb is preserved for binary stability; see
+[`docs/architecture/daemon-mode.md`](../../docs/architecture/daemon-mode.md)
+for the terminology note.
+
 `gaze daemon --policy policy.toml` keeps one pipeline alive and reads one JSON
 request per stdin line:
 
