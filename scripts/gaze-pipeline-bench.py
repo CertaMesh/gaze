@@ -189,8 +189,10 @@ def run_config(root: Path, fixtures: list[Fixture], config: str) -> dict[str, An
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    assert proc.stdin is not None
-    assert proc.stdout is not None
+    if proc.stdin is None:
+        raise AssertionError
+    if proc.stdout is None:
+        raise AssertionError
     for fixture in fixtures:
         try:
             proc.stdin.write(

@@ -255,7 +255,8 @@ def run_one_model(
         for index, fixture in enumerate(fixtures, start=1):
             input_text = fixture.text
             if mode == "observer-residual":
-                assert clean is not None
+                if clean is None:
+                    raise AssertionError
                 input_text = clean[fixture.fixture_id].clean_text
             predictions[fixture.fixture_id] = run_model(
                 root,

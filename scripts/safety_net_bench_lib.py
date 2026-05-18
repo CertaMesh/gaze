@@ -429,8 +429,10 @@ def clean_fixtures(root: Path, fixtures: list[Fixture]) -> dict[str, CleanFixtur
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    assert proc.stdin is not None
-    assert proc.stdout is not None
+    if proc.stdin is None:
+        raise AssertionError
+    if proc.stdout is None:
+        raise AssertionError
     for fixture in fixtures:
         proc.stdin.write(
             json.dumps(
@@ -636,7 +638,8 @@ def scorer_main(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -> in
         for index, fixture in enumerate(fixtures, start=1):
             input_text = fixture.text
             if mode == "observer-residual":
-                assert clean is not None
+                if clean is None:
+                    raise AssertionError
                 input_text = clean[fixture.fixture_id].clean_text
             predictions[fixture.fixture_id] = run_backend(
                 args, backend, fixture.fixture_id, input_text, mode_latency
