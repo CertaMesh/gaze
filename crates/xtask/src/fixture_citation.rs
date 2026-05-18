@@ -163,6 +163,16 @@ fn package_source_dir(package_name: &str) -> &str {
 }
 
 fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
+    // Prevent path traversal attacks by rejecting paths containing '..'.
+    if dir
+        .components()
+        .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(FixtureCitationError::Io {
+            path: dir.to_path_buf(),
+            message: format!("Invalid input: {}", dir.display()),
+        });
+    }
     for entry in fs::read_dir(dir).map_err(|error| io_error(dir, error))? {
         let entry = entry.map_err(|error| io_error(dir, error))?;
         let path = entry.path();
