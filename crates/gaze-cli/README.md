@@ -93,6 +93,11 @@ Sessions are isolated by `session_id`, evicted by LRU after `--session-cap`
 SIGINT and SIGTERM finish the current line, flush stdout/audit writes, and exit.
 Daemon audit rows are stamped with `provenance_stage = "daemon"`.
 
+For end-to-end adapter examples, see
+[`docs/getting-started/daemon-adapter.md`](../../docs/getting-started/daemon-adapter.md).
+For the full runtime contract, see
+[`docs/architecture/daemon-mode.md`](../../docs/architecture/daemon-mode.md).
+
 ## MCP installation
 
 The `mcp` feature embeds the rmcp stdio server into the `gaze` binary and

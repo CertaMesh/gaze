@@ -80,3 +80,8 @@ IDs, not token session hexes.
 
 Adopter ergonomics: adapters can start one process, stream line-delimited JSON,
 and avoid per-call binary startup or model cold starts.
+
+## See Also
+
+- [Daemon adapter quickstart](../getting-started/daemon-adapter.md)
+- [`gaze daemon` CLI guide](../cli.md#gaze-daemon)
