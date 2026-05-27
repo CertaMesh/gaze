@@ -79,6 +79,7 @@ Each feature, what you get, where the proof lives.
 - **Long-lived stdio server for repeated redaction.** `gaze daemon` keeps one pipeline and model load hot, then serves JSON-per-line requests with per-`session_id` manifest isolation. It avoids binary/model cold starts on every agent turn, exits gracefully on SIGTERM, and evicts sessions by LRU or idle timeout. Adopter quickstart: [`docs/getting-started/daemon-adapter.md`](docs/getting-started/daemon-adapter.md). Full contract: [`docs/architecture/daemon-mode.md`](docs/architecture/daemon-mode.md).
 - **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
 - **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+- **Runtime context dictionaries.** `--context-json` lets an adopter inject per-tenant values such as order IDs, account handles, internal project names, song titles, or artist names at clean time. The policy defines the class and action; the request-specific context supplies the sensitive vocabulary. See [Add tenant context](#2-add-tenant-context) and [`docs/policy.md`](docs/policy.md#runtime-context-dictionaries).
 - **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
 - **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
 - **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
@@ -199,7 +200,64 @@ printf '{"session_blob":"<base64>","text":"Re: <{session_hex}:Email_1>"}' \
 
 Schema and every rule kind / action live in [`docs/policy.md`](docs/policy.md).
 
-### 2. Add NER
+### 2. Add tenant context
+
+Use `--context-json` when the PII list is tenant-specific or changes per
+request. Keep the durable policy stable, and pass the live dictionary separately:
+
+```toml
+# tenant-policy.toml
+schema_version = "0.1.0"
+
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_orders"
+terms_from_context = "orders"
+class = "custom:order_id"
+case_sensitive = true
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+```
+
+```json
+{
+  "dictionaries": {
+    "orders": {
+      "terms": ["ORD-2026-000123", "ORD-2026-000124"],
+      "case_sensitive": true
+    }
+  }
+}
+```
+
+```sh
+printf '%s' 'Reference ORD-2026-000123 is ready.' \
+  | gaze clean --policy tenant-policy.toml --context-json tenant-context.json
+```
+
+Only the tokenized output may leave the owner boundary:
+
+```json
+{
+  "clean_text": "Reference <{session_hex}:Custom:order_id_1> is ready.",
+  "session_blob": "<base64>"
+}
+```
+
+Full context-envelope rules: [`docs/policy.md#runtime-context-dictionaries`](docs/policy.md#runtime-context-dictionaries).
+
+### 3. Add NER
 
 NER is opt-in and stacks on top of the deterministic regex and dictionary passes. Turn it on when the input has free-prose names that the cue-anchored Name recognizer in `core` does not cover.
 
@@ -244,7 +302,7 @@ NER contributes a `Name_*` span via the model's `PER` label:
 
 Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](docs/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
 
-### 3. Add a SafetyNet (Pass-3 observer)
+### 4. Add a SafetyNet (Pass-3 observer)
 
 The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
 

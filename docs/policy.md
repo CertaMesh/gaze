@@ -270,6 +270,54 @@ Input:  "Reference ORD-12345 is shipped."
 Output: "Reference <{session_hex}:Custom:order_id_1> is shipped."
 ```
 
+### Runtime context dictionaries
+
+`--context-json` is the runtime context envelope for values that are sensitive
+because of the current tenant, account, project, or request. Use it when the
+policy should stay stable but the dictionary contents change per invocation:
+order IDs, account handles, internal project names, song titles, artist names,
+or any bounded private vocabulary the host application already knows.
+
+The policy owns the audited contract: recognizer name, class, case sensitivity,
+token family, and rule action. The context file owns the live vocabulary:
+
+```toml
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_orders"
+terms_from_context = "orders"
+class = "custom:order_id"
+case_sensitive = true
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+```
+
+```json
+{
+  "dictionaries": {
+    "orders": {
+      "terms": ["ORD-2026-000123", "ORD-2026-000124"],
+      "case_sensitive": true
+    }
+  }
+}
+```
+
+```sh
+printf '%s' 'Reference ORD-2026-000123 is ready.' \
+  | gaze clean --policy tenant-policy.toml --context-json tenant-context.json
+```
+
+`--context-json` can also supply dictionaries without a matching
+`[[policy.custom_recognizers]]` block. In that mode, Gaze registers one
+dictionary recognizer per context dictionary and uses `class_map` for the class,
+falling back to `custom:<dictionary_name>` when a mapping is absent. Define an
+explicit policy recognizer when the class name, source label, or case-sensitivity
+setting should be part of the reviewed policy.
+
 ### Class naming rules
 
 - Built-in class names (`Email`, `Name`, `Location`, `Organization`) live in the

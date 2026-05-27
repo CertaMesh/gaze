@@ -200,6 +200,45 @@ Flags:
 | `--safety-net-fallback <strict\|tolerant\|redact>` | Cascade action when `--safety-net-mode` is `redact` or `resolve` and the primary action cannot be honored for a specific suspect (manifest overlap or grapheme-cluster break for `redact`; validator-veto, missing mandatory anchor, or residual suspect after the one-shot resolve pass for `resolve`). Ignored when `--safety-net-mode` is `strict` or `tolerant`. Defaults to `redact`. One-hop cascade only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Composition matrix and audit-row delta: [`docs/architecture/safety-net-modes.md`](../../docs/architecture/safety-net-modes.md#6-fallback-flag). |
 | `--safety-net-resolve-threshold <float>` | Confidence threshold for `--safety-net-mode resolve`. Suspects below threshold are dropped before candidate construction. Defaults to `0.7`. `0.0` disables filtering; `1.0` disables resolve entirely. |
 
+### Runtime context
+
+`--context-json` supplies request- or tenant-specific dictionaries without
+rewriting the policy. Use it for bounded private vocabularies such as order IDs,
+account handles, internal project names, song titles, or artist names.
+
+```toml
+[[policy.custom_recognizers]]
+kind = "dictionary"
+name = "tenant_orders"
+terms_from_context = "orders"
+class = "custom:order_id"
+case_sensitive = true
+
+[[rule]]
+kind = "class"
+class = "custom:order_id"
+action = "tokenize"
+```
+
+```json
+{
+  "dictionaries": {
+    "orders": {
+      "terms": ["ORD-2026-000123"],
+      "case_sensitive": true
+    }
+  }
+}
+```
+
+```console
+$ printf '%s' 'Reference ORD-2026-000123 is ready.' \
+  | gaze clean --policy tenant-policy.toml --context-json tenant-context.json
+```
+
+See [`docs/policy.md#runtime-context-dictionaries`](../../docs/policy.md#runtime-context-dictionaries)
+for the context envelope contract.
+
 When `--policy` is omitted, the CLI runs a stub email pipeline so the process
 surface can be exercised. Production use should pass `--policy`.
 
