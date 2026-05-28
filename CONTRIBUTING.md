@@ -1,5 +1,40 @@
 # Contributing
 
+Thanks for considering a contribution to Gaze. The rest of this document is
+the technical workflow (gates, fixtures, test rituals). Before you open a PR,
+two project-wide rules apply:
+
+## Licence
+
+By submitting a contribution to this project you agree to licence it under
+**Apache-2.0 OR MIT** at the user's option — the same dual permissive licence
+the project ships under. Both licence files live at the repo root:
+[`LICENSE-APACHE`](LICENSE-APACHE) and [`LICENSE-MIT`](LICENSE-MIT).
+
+We do **not** require a Contributor Licence Agreement (CLA). Contributors
+retain their copyright; the project cannot be silently re-licensed by any
+later maintainer without contributor agreement. See [`docs/governance.md`](docs/governance.md)
+for the full governance model and the structural commitments that keep the
+project a commons.
+
+## Developer Certificate of Origin (DCO)
+
+Every commit must be signed off with `git commit -s`, which appends a
+`Signed-off-by:` trailer asserting that you have the right to submit the work
+under the project's licence. This is the only contribution gate; there is no
+CLA. The DCO text is the standard [developercertificate.org](https://developercertificate.org/)
+version 1.1.
+
+If you forget the `-s` on a commit, amend it with
+`git commit --amend --signoff` (or for a series, `git rebase --signoff main`).
+
+## Code of Conduct
+
+Community interactions are governed by the [Contributor Covenant](CODE_OF_CONDUCT.md).
+Reporting channels live in that file.
+
+---
+
 ## Setup
 
 Clone the repo and run the toolchain check:
