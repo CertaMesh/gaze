@@ -8,7 +8,7 @@ The `gaze` binary is the primary user-facing surface. It operates over stdin/std
 
 - Never encode information through color alone. ANSI styling, when used in diagnostics, always carries the same information in the text itself (e.g. `[error]` prefixes, not just red text).
 - Keep error messages self-describing — the reader does not need visual context (such as a TUI panel position) to understand what went wrong.
-- Respect `NO_COLOR` and non-TTY environments by suppressing ANSI escapes.
+- Respect `NO_COLOR` and non-TTY environments by suppressing ANSI escapes. Human-facing CLI styling is behind one std `IsTerminal` gate: non-empty `NO_COLOR` disables ANSI, non-empty `CLICOLOR_FORCE` enables ANSI only when `NO_COLOR` is absent, and otherwise styling is emitted only for terminal streams. The `gaze mcp doctor` human table uses this gate for decorative state-column color while still printing the literal `pass`, `warn`, and `fail` words; `--json` output is never colored. Regression tests cover forced color, `NO_COLOR`, non-TTY stdout, text-only state words, and JSON output.
 
 ## Documentation
 
