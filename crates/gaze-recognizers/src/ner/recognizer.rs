@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use gaze_types::{Candidate, ConflictTier, DetectContext, PiiClass, Recognizer};
+use gaze_types::{
+    Candidate, ConflictTier, DetectContext, PiiClass, Recognizer, RecognizerRuntimeError,
+};
 
 #[cfg(feature = "test-support")]
 use super::backend::test_support::load_test_support_recognizer;
@@ -35,31 +37,42 @@ impl Recognizer for NerRecognizer {
     }
 
     fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-        match self.detector.backend.detect(input) {
-            Ok(spans) => spans
-                .into_iter()
-                .filter(|span| span.score >= self.detector.threshold)
-                .map(|span| {
-                    Candidate::new(
-                        span.span,
-                        span.class,
-                        self.id(),
-                        span.score,
-                        0,
-                        None,
-                        self.token_family(),
-                        format!("ner/{}", self.detector.backend_kind.as_str()),
-                        ConflictTier::None,
-                        Vec::new(),
-                    )
-                    .with_recognizer_version_id(self.detector.recognizer_version_id())
-                })
-                .collect(),
-            Err(err) => {
+        self.try_detect(input, _ctx)
+            .expect("ner recognizer backend failure is fail-closed")
+    }
+
+    fn try_detect(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> Result<Vec<Candidate>, RecognizerRuntimeError> {
+        self.detector
+            .detect_span_results(input)
+            .map(|spans| {
+                spans
+                    .into_iter()
+                    .filter(|span| span.score >= self.detector.threshold)
+                    .map(|span| {
+                        Candidate::new(
+                            span.span,
+                            span.class,
+                            self.id(),
+                            span.score,
+                            0,
+                            None,
+                            self.token_family(),
+                            format!("ner/{}", self.detector.backend_kind.as_str()),
+                            ConflictTier::None,
+                            Vec::new(),
+                        )
+                        .with_recognizer_version_id(self.detector.recognizer_version_id())
+                    })
+                    .collect()
+            })
+            .map_err(|err| {
                 tracing::warn!(backend = self.detector.backend_kind.as_str(), error = %err, "ner: backend detect failed");
-                Vec::new()
-            }
-        }
+                RecognizerRuntimeError::new(self.id(), err.to_string())
+            })
     }
 
     fn token_family(&self) -> &str {

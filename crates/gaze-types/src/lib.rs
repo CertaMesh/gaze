@@ -13,7 +13,41 @@ use thiserror::Error;
 pub trait Detector: Send + Sync {
     /// Detect PII spans in the supplied input string.
     fn detect(&self, input: &str) -> Vec<Detection>;
+
+    /// Fallible detection entrypoint for detectors backed by runtime systems.
+    fn try_detect(&self, input: &str) -> Result<Vec<Detection>, RecognizerRuntimeError> {
+        Ok(self.detect(input))
+    }
 }
+
+/// Runtime failure raised by a recognizer or detector backend during detection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RecognizerRuntimeError {
+    pub recognizer_id: String,
+    pub message: String,
+}
+
+impl RecognizerRuntimeError {
+    pub fn new(recognizer_id: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            recognizer_id: recognizer_id.into(),
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for RecognizerRuntimeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "recognizer '{}' backend failed: {}",
+            self.recognizer_id, self.message
+        )
+    }
+}
+
+impl std::error::Error for RecognizerRuntimeError {}
 
 /// The category of a detected PII span.
 ///
@@ -3111,6 +3145,14 @@ pub trait Recognizer: Send + Sync {
     fn supported_class(&self) -> &PiiClass;
     /// Detects PII candidates in the supplied input and context.
     fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate>;
+    /// Fallible detection entrypoint for recognizers backed by runtime systems.
+    fn try_detect(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> Result<Vec<Candidate>, RecognizerRuntimeError> {
+        Ok(self.detect(input, ctx))
+    }
     /// Token family used for candidate token emission.
     fn token_family(&self) -> &str;
     /// Optional validator kind used by pre-resolver validator-veto.

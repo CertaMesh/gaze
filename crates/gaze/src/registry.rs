@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::anchor_resolver::AnchorResolver;
 use crate::resolver::resolve_candidates_with_policy_and_anchors;
 pub use gaze_types::{Candidate, DetectContext, Recognizer};
-use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass};
+use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass, RecognizerRuntimeError};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -187,12 +187,14 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
-        let candidates = registry.detect_all("input", &ctx);
+        let candidates = registry.detect_all("input", &ctx).expect("detect all");
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].class, PiiClass::Email);
         assert_eq!(candidates[0].token_family, "counter");
 
-        let (candidates, vetoed) = registry.detect_all_resolved("input", &ctx);
+        let (candidates, vetoed) = registry
+            .detect_all_resolved("input", &ctx)
+            .expect("detect all resolved");
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].class, PiiClass::Email);
         assert!(vetoed.is_empty());
@@ -254,7 +256,10 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::EnUs, LocaleTag::Global], &dictionaries);
 
-        assert!(registry.detect_all("input", &ctx).is_empty());
+        assert!(registry
+            .detect_all("input", &ctx)
+            .expect("detect all")
+            .is_empty());
     }
 
     #[test]
@@ -312,21 +317,26 @@ impl RecognizerRegistry {
         RecognizerRegistryBuilder::default()
     }
 
-    pub fn detect_all(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
-        self.entries
-            .iter()
-            .filter(|recognizer| {
-                LocaleChain::from(ctx.locale_chain).intersects(recognizer.locales())
-            })
-            .flat_map(|recognizer| recognizer.detect(input, ctx))
-            .collect()
+    pub fn detect_all(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> Result<Vec<Candidate>, RecognizerRuntimeError> {
+        let mut candidates = Vec::new();
+        for recognizer in self.entries.iter().filter(|recognizer| {
+            LocaleChain::from(ctx.locale_chain).intersects(recognizer.locales())
+        }) {
+            candidates.extend(recognizer.try_detect(input, ctx)?);
+        }
+        Ok(candidates)
     }
 
     pub fn detect_all_resolved(
         &self,
         input: &str,
         ctx: &DetectContext<'_>,
-    ) -> (Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>) {
+    ) -> Result<(Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>), RecognizerRuntimeError>
+    {
         let classes = self
             .entries
             .iter()
@@ -338,16 +348,22 @@ impl RecognizerRegistry {
             for locale in ctx.locale_chain {
                 let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.degraded.set(ctx.degraded.get());
-                let class_candidates = self
+                let mut class_candidates = Vec::new();
+                for recognizer in self
                     .entries
                     .iter()
                     .filter(|recognizer| recognizer.supported_class() == &class)
                     .filter(|recognizer| {
                         LocaleChain::from(locale_ctx.locale_chain).intersects(recognizer.locales())
                     })
-                    .flat_map(|recognizer| recognizer.detect(input, &locale_ctx))
-                    .filter(|candidate| candidate.score >= min_score(&class))
-                    .collect::<Vec<_>>();
+                {
+                    class_candidates.extend(
+                        recognizer
+                            .try_detect(input, &locale_ctx)?
+                            .into_iter()
+                            .filter(|candidate| candidate.score >= min_score(&class)),
+                    );
+                }
                 if !class_candidates.is_empty() {
                     candidates.extend(class_candidates);
                     break;
@@ -356,7 +372,7 @@ impl RecognizerRegistry {
         }
 
         let (candidates, vetoed) = crate::validator_veto::apply(candidates, self, input);
-        (
+        Ok((
             resolve_candidates_with_policy_and_anchors(
                 candidates,
                 self.family_policy(),
@@ -365,7 +381,7 @@ impl RecognizerRegistry {
                 ctx.locale_chain,
             ),
             vetoed,
-        )
+        ))
     }
 
     pub fn recognizer(&self, id: &str) -> Option<&Arc<dyn Recognizer>> {
