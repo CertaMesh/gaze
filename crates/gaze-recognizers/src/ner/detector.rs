@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use gaze_types::{Detection, Detector};
+use gaze_types::{Detection, Detector, RecognizerRuntimeError};
 
 use super::backend::{load_backend, NerBackend};
 use super::decode;
@@ -88,6 +88,22 @@ impl NerDetector {
         &self.recognizer_version_id
     }
 
+    pub(crate) fn detect_span_results(
+        &self,
+        input: &str,
+    ) -> Result<Vec<NerSpanResult>, super::error::NerRuntimeError> {
+        let mut spans = Vec::new();
+        for chunk in input_chunks(input) {
+            spans.extend(self.backend.detect(&input[chunk.clone()])?.into_iter().map(
+                |mut span| {
+                    span.span = span.span.start + chunk.start..span.span.end + chunk.start;
+                    span
+                },
+            ));
+        }
+        Ok(merge_overlapping_spans(spans))
+    }
+
     /// Label/offset reconstruction helper. Public for testing the BIO merge.
     /// `subword_spans` are byte ranges against the tokenizer input string,
     /// `subword_labels` are CoNLL-style labels per subword (e.g. `O`, `B-PER`,
@@ -121,21 +137,87 @@ impl NerDetector {
 
 impl Detector for NerDetector {
     fn detect(&self, input: &str) -> Vec<Detection> {
-        match self.backend.detect(input) {
-            Ok(detections) => detections
-                .into_iter()
-                .map(|span| {
-                    Detection::new(
-                        span.span,
-                        span.class,
-                        format!("ner/{}", self.backend_kind.as_str()),
-                    )
-                })
-                .collect(),
-            Err(err) => {
+        self.try_detect(input)
+            .expect("ner detector backend failure is fail-closed")
+    }
+
+    fn try_detect(&self, input: &str) -> Result<Vec<Detection>, RecognizerRuntimeError> {
+        self.detect_span_results(input)
+            .map(|detections| {
+                detections
+                    .into_iter()
+                    .map(|span| {
+                        Detection::new(
+                            span.span,
+                            span.class,
+                            format!("ner/{}", self.backend_kind.as_str()),
+                        )
+                    })
+                    .collect()
+            })
+            .map_err(|err| {
                 tracing::warn!(backend = self.backend_kind.as_str(), error = %err, "ner: backend detect failed");
-                Vec::new()
+                RecognizerRuntimeError::new("ner", err.to_string())
+            })
+    }
+}
+
+const NER_CHUNK_TOKEN_WINDOW: usize = 512;
+const NER_CHUNK_TOKEN_OVERLAP: usize = 32;
+
+fn input_chunks(input: &str) -> Vec<std::ops::Range<usize>> {
+    let mut tokens = Vec::new();
+    let mut token_start = None;
+    for (idx, ch) in input.char_indices() {
+        if ch.is_whitespace() {
+            if let Some(start) = token_start.take() {
+                tokens.push(start..idx);
             }
+        } else if token_start.is_none() {
+            token_start = Some(idx);
         }
     }
+    if let Some(start) = token_start {
+        tokens.push(start..input.len());
+    }
+
+    if tokens.len() <= NER_CHUNK_TOKEN_WINDOW {
+        return std::iter::once(0..input.len()).collect();
+    }
+
+    let stride = NER_CHUNK_TOKEN_WINDOW - NER_CHUNK_TOKEN_OVERLAP;
+    let mut chunks = Vec::new();
+    let mut token_start = 0;
+    while token_start < tokens.len() {
+        let token_end = (token_start + NER_CHUNK_TOKEN_WINDOW).min(tokens.len());
+        chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
+        if token_end == tokens.len() {
+            break;
+        }
+        token_start += stride;
+    }
+    chunks
+}
+
+fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {
+    spans.sort_by(|left, right| {
+        left.span
+            .start
+            .cmp(&right.span.start)
+            .then(left.span.end.cmp(&right.span.end))
+            .then(left.class.cmp(&right.class))
+    });
+
+    let mut merged: Vec<NerSpanResult> = Vec::new();
+    for span in spans {
+        if let Some(last) = merged.last_mut() {
+            if last.class == span.class && last.span.end >= span.span.start {
+                last.span.end = last.span.end.max(span.span.end);
+                last.score = last.score.max(span.score);
+                continue;
+            }
+        }
+        merged.push(span);
+    }
+    merged
 }

@@ -433,4 +433,81 @@ mod tests {
         assert_eq!(default_candidates[0].score, 0.40);
         assert!(stricter_candidates.is_empty());
     }
+
+    #[test]
+    fn ner_backend_error_fails_closed() {
+        struct ErrorBackend;
+
+        impl NerBackend for ErrorBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Err(NerRuntimeError::Inference(
+                    "forced backend failure".to_string(),
+                ))
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(ErrorBackend),
+            },
+        };
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let err = recognizer
+            .try_detect("Alice Example", &ctx)
+            .expect_err("backend runtime failures must surface");
+
+        assert_eq!(err.recognizer_id, "ner");
+        assert!(err.message.contains("forced backend failure"));
+    }
+
+    #[test]
+    fn ner_long_input_chunked_detects() {
+        struct FixedAliceBackend;
+
+        impl NerBackend for FixedAliceBackend {
+            fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Ok(input
+                    .find("Alice Example")
+                    .map(|start| NerSpanResult {
+                        span: start..start + "Alice Example".len(),
+                        class: PiiClass::Name,
+                        score: 0.40,
+                    })
+                    .into_iter()
+                    .collect())
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.3,
+                backend: Arc::new(FixedAliceBackend),
+            },
+        };
+        let prefix = (0..540)
+            .map(|idx| format!("word{idx}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let input = format!("{prefix} Alice Example met the team.");
+        let start = input.find("Alice Example").expect("name span start");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = recognizer.try_detect(&input, &ctx).expect("detect");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].span, start..start + "Alice Example".len());
+        assert_eq!(&input[candidates[0].span.clone()], "Alice Example");
+    }
 }

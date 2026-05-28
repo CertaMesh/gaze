@@ -229,7 +229,9 @@ mod tests {
         );
 
         let registry = RecognizerRegistry::builder().register(recognizer).build();
-        let hits = registry.detect_all("Listening to bohemian rhapsody", &detect_context);
+        let hits = registry
+            .detect_all("Listening to bohemian rhapsody", &detect_context)
+            .expect("detect all");
         assert!(hits.is_empty());
     }
 

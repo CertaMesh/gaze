@@ -11,6 +11,8 @@ use crate::ner::types::{NerBackendKind, NerOptions, NerSpanResult};
 
 struct TestSupportBackend;
 
+struct ErrorBackend;
+
 impl NerBackend for TestSupportBackend {
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         Ok(input
@@ -30,13 +32,23 @@ impl NerBackend for TestSupportBackend {
     }
 }
 
+impl NerBackend for ErrorBackend {
+    fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+        Err(NerRuntimeError::Inference(
+            "forced test-support backend failure".to_string(),
+        ))
+    }
+}
+
 pub(crate) fn load_test_support_recognizer(
     model_dir: &Path,
     options: &NerOptions,
 ) -> Option<NerRecognizer> {
-    if model_dir.file_name().and_then(|name| name.to_str()) != Some("__gaze_test_fixed_ner") {
-        return None;
-    }
+    let backend: Arc<dyn NerBackend> = match model_dir.file_name().and_then(|name| name.to_str()) {
+        Some("__gaze_test_fixed_ner") => Arc::new(TestSupportBackend),
+        Some("__gaze_test_error_ner") => Arc::new(ErrorBackend),
+        _ => return None,
+    };
 
     Some(NerRecognizer {
         detector: NerDetector {
@@ -45,7 +57,7 @@ pub(crate) fn load_test_support_recognizer(
             recognizer_version_id: "ner.test-support.v1".to_string(),
             locale: options.locale.clone(),
             threshold: options.threshold,
-            backend: Arc::new(TestSupportBackend),
+            backend,
         },
     })
 }

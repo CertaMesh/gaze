@@ -8,9 +8,9 @@ use gaze_recognizers::{
 };
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
-    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
-    SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RecognizerRuntimeError,
+    RedactionLogError, RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry,
+    RestoredText, SafetyNet, SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
     RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 use thiserror::Error;
@@ -63,6 +63,11 @@ pub enum Error {
     SafetyNet(#[from] SafetyNetError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
+    #[error("detection backend failed for recognizer '{recognizer_id}': {message}")]
+    DetectionBackendFailed {
+        recognizer_id: String,
+        message: String,
+    },
     #[error("safety net fallback failed closed: {0:?}")]
     SafetyNetFallback(FallbackReason),
     #[error("capitals heuristic gate is unsupported for locale {locale}")]
@@ -73,6 +78,15 @@ pub enum Error {
     UnsupportedValueVariant,
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
+}
+
+impl From<RecognizerRuntimeError> for Error {
+    fn from(err: RecognizerRuntimeError) -> Self {
+        Self::DetectionBackendFailed {
+            recognizer_id: err.recognizer_id,
+            message: err.message,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -566,7 +580,7 @@ impl Pipeline {
         let normalized = normalize(text);
         let spans = &normalized.spans;
         let ctx = DetectContext::new(locale_chain, dictionaries);
-        let (resolved, vetoed) = self.registry.detect_all_resolved(&normalized.text, &ctx);
+        let (resolved, vetoed) = self.registry.detect_all_resolved(&normalized.text, &ctx)?;
         let vetoed = vetoed
             .into_iter()
             .filter_map(|vetoed| translate_vetoed_candidate(vetoed, spans))
@@ -2055,6 +2069,33 @@ where
                 )
             })
             .collect()
+    }
+
+    fn try_detect(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, RecognizerRuntimeError> {
+        Ok(self
+            .detector
+            .try_detect(input)?
+            .into_iter()
+            .map(|detection| {
+                let source = detection.source;
+                Candidate::new(
+                    detection.span,
+                    detection.class,
+                    source.clone(),
+                    1.0,
+                    0,
+                    None,
+                    "counter",
+                    source,
+                    ConflictTier::None,
+                    Vec::new(),
+                )
+            })
+            .collect())
     }
 
     fn token_family(&self) -> &str {
