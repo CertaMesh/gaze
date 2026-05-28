@@ -4,11 +4,10 @@ Gaze treats accessibility as a baseline expectation, not a feature to be added l
 
 ## CLI (`gaze clean` / `gaze restore`)
 
-The `gaze` binary is the primary user-facing surface. It operates over stdin/stdout with plain-text input and output, which makes it screen-reader friendly and compatible with assistive tooling that pipes terminal sessions. We deliberately:
+The `gaze` binary is the primary user-facing surface. It operates over stdin/stdout with plain-text input and output. Gaze emits **no ANSI color or styling at all** — there is no color/styling crate in the dependency graph and no escape sequences in the output — so the result is screen-reader friendly and compatible with assistive tooling that pipes terminal sessions. Because nothing is ever colored, there is nothing to suppress: `NO_COLOR` is satisfied by construction. We deliberately:
 
-- Never encode information through color alone. ANSI styling, when used in diagnostics, always carries the same information in the text itself (e.g. `[error]` prefixes, not just red text).
+- Never encode information through color, because we emit none — every diagnostic carries its full meaning in plain text.
 - Keep error messages self-describing — the reader does not need visual context (such as a TUI panel position) to understand what went wrong.
-- Respect `NO_COLOR` and non-TTY environments by suppressing ANSI escapes.
 
 ## Documentation
 
