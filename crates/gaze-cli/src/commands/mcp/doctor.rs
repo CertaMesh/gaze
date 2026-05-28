@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::CliError;
+use crate::style;
 
 use super::install::{targets, ClientTarget};
 use super::serve::default_manifest_dir;
@@ -33,11 +34,12 @@ pub(crate) fn run(args: DoctorArgs) -> Result<(), CliError> {
                 .map_err(|err| CliError::McpDetail(format!("doctor JSON failed: {err}")))?
         );
     } else {
+        let ansi_enabled = style::ansi_enabled(&std::io::stdout());
         println!("{:<5}\t{:<28}\tevidence", "state", "check");
         for check in &checks {
             println!(
-                "{:<5}\t{:<28}\t{}",
-                check.state.as_str(),
+                "{}\t{:<28}\t{}",
+                check.state.styled(ansi_enabled),
                 check.name,
                 check.evidence
             );
@@ -75,6 +77,14 @@ impl CheckState {
             Self::Pass => "pass",
             Self::Warn => "warn",
             Self::Fail => "fail",
+        }
+    }
+
+    fn styled(self, ansi_enabled: bool) -> String {
+        match self {
+            Self::Pass => style::paint(self.as_str(), style::GREEN, ansi_enabled),
+            Self::Warn => style::paint(self.as_str(), style::YELLOW, ansi_enabled),
+            Self::Fail => style::paint(self.as_str(), style::RED, ansi_enabled),
         }
     }
 }
