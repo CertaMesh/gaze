@@ -247,4 +247,4 @@ in v0.9.0 so adopters can pin against the eventual flag names early.
 
 ## License
 
-Apache-2.0
+Dual-licensed under either of [Apache-2.0](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-MIT), at your option.
