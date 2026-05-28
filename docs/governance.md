@@ -9,7 +9,7 @@ It is deliberately short: governance for a small project should describe what ac
 Gaze is currently maintained by two people:
 
 - **Markus Gottschau** (Ireland) — founder, lead maintainer. Merge rights on all repositories under the `EmpireTwo` GitHub organisation.
-- **Krishan** (Germany) — co-maintainer. Merge rights on all repositories under the `EmpireTwo` GitHub organisation.
+- **Krishan Koenig** (Germany) — co-maintainer. Merge rights on all repositories under the `EmpireTwo` GitHub organisation.
 
 Both maintainers have equal merge authority. Either can land changes; either can block changes that violate the licence, the recognizer-class commitments below, or the project's stated north star ("zero PII leaks between agent and data owner").
 
