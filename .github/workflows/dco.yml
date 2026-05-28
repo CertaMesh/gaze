@@ -1,0 +1,35 @@
+name: DCO
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dco:
+    name: Check DCO sign-off
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify Signed-off-by trailers
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          fail=0
+          for sha in $(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA"); do
+            author="$(git show -s --format='%an <%ae>' "$sha")"
+            if ! git show -s --format='%B' "$sha" | grep -qiF "Signed-off-by: $author"; then
+              echo "::error::Commit $sha missing matching 'Signed-off-by: $author'"
+              fail=1
+            fi
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "DCO check failed. Sign off your commits: 'git commit -s' (or 'git rebase --signoff <base>' to fix existing commits). See https://developercertificate.org/"
+            exit 1
+          fi
+          echo "All non-merge commits carry a matching Signed-off-by trailer."

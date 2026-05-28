@@ -19,14 +19,19 @@ project a commons.
 
 ## Developer Certificate of Origin (DCO)
 
-Every commit must be signed off with `git commit -s`, which appends a
-`Signed-off-by:` trailer asserting that you have the right to submit the work
-under the project's licence. This is the only contribution gate; there is no
-CLA. The DCO text is the standard [developercertificate.org](https://developercertificate.org/)
-version 1.1.
+Every commit MUST carry a `Signed-off-by:` trailer matching the commit author,
+certifying the [Developer Certificate of Origin](https://developercertificate.org/).
+Add it automatically:
 
-If you forget the `-s` on a commit, amend it with
-`git commit --amend --signoff` (or for a series, `git rebase --signoff main`).
+```bash
+git commit -s
+```
+
+The `.github/workflows/dco.yml` check enforces this on every pull request: each
+non-merge commit must contain a `Signed-off-by: Name <email>` line matching its
+author identity. Fix existing commits with `git rebase --signoff <base>` (or
+`git commit --amend -s` for the latest). Enforcement is forward-looking on PRs;
+commits predating this gate are not retroactively signed.
 
 ## Code of Conduct
 
