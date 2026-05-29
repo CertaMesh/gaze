@@ -1,6 +1,6 @@
 [package]
 name = "gaze-mcp-rmcp"
-version = "0.9.0"
+version = "0.9.1"
 edition = "2024"
 rust-version = "1.89"
 license.workspace = true
@@ -12,7 +12,7 @@ keywords = ["pii", "mcp", "rmcp", "agent"]
 categories = ["development-tools"]
 
 [dependencies]
-gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.9.0" }
+gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.9.1" }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 async-trait = "0.1"
@@ -22,7 +22,7 @@ rmcp = { version = "1.6.0", features = ["server", "macros", "transport-io"] }
 axum = { version = "0.8", optional = true }
 
 [dev-dependencies]
-gaze = { package = "gaze-pii", path = "../gaze", version = "0.9.0" }
+gaze = { package = "gaze-pii", path = "../gaze", version = "0.9.1" }
 rmcp = { version = "1.6.0", features = ["client", "server", "macros", "transport-async-rw"] }
 
 [features]

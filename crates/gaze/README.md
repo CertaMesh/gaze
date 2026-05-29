@@ -16,9 +16,9 @@ The crate is published as `gaze-pii`; the import path remains `use gaze::...` be
 
 ```toml
 [dependencies]
-gaze-pii = "0.9.0"
-gaze-assembly = "0.9.0"
-gaze-recognizers = "0.9.0"
+gaze-pii = "0.9.1"
+gaze-assembly = "0.9.1"
+gaze-recognizers = "0.9.1"
 ```
 
 `gaze-assembly` provides `CorePipelineConfig` — bundled defaults so you don't hand-wire the `core` rulepack (emails, names, locations, organizations, locale cues).
