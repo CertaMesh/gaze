@@ -11,37 +11,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Daemon-mode docs reframed as stdio server.** `gaze daemon` is now
-  documented as a long-lived stdio server in the LSP / MCP /
-  language-server-protocol tradition rather than a Unix daemon in the strict
-  sense. The subcommand verb is unchanged through v0.9.x; a `gaze serve`
-  canonical alias is planned for v0.10 (todo #486). External adopter feedback
-  prompted the reframe. (Axis 4 trust, Axis 5 ergonomics.)
-
-- **`gaze document clean` bundle layout splits into agent + owner paths**
-  (axis 1 enforcement). `Bundle::write` now requires distinct `AgentBundleDir`
-  and `OwnerBundleDir` newtypes; the writer rejects equal or nested paths
-  with typed `DocumentError::BundleLayoutInvalid`. The CLI gains
-  `--agent-out` + `--owner-out` and retains `--out` as a shorthand that
-  auto-creates `<PATH>/agent` + `<PATH>/owner` subdirs.
-
 ### Deprecated
 
 ### Removed
 
 ### Fixed
 
-- **Axis-1 bundle leak risk** (closes todo #489): `gaze document clean`
-  previously wrote `manifest.json` next to `clean.md` in a single caller-
-  selected `out_dir`, with no runtime enforcement of the agent / owner
-  partition. Adopters following the README who uploaded the bundle directory
-  to an LLM workspace leaked restorable manifest material. The new split-path
-  bundle layout enforces the agent / owner partition at type and path-validation
-  level. Original two-directory `manifest.bin` signed-envelope binding (the
-  v0.7.0 architectural spec in `docs/architecture/document-extension.md`)
-  remains a v0.11+ follow-up.
+### Security
+
+## [0.9.1] - 2026-05-29
+
+v0.9.1 is a reliability and adopter-trust patch. The headline is an Axis-1
+never-leak fix: NER `detect()` now fails **closed**. Previously a detector-backend
+error returned an empty detection set, silently passing the raw text through
+unredacted — a critical leak path that let PII reach an LLM outside the manifest
+contract. The backend error now propagates as a typed failure instead of an empty
+result, and inputs longer than the NER window (>512 tokens) are chunked so long
+documents can no longer slip past the model unscanned. Manifest restore semantics
+and the signed snapshot wire format are unchanged from v0.9.0.
+
+### Added
+
+- **Accessibility-aware CLI output gate** (PR #287): the CLI honours `NO_COLOR`
+  and `CLICOLOR_FORCE` and performs TTY detection; informational output is never
+  conveyed by colour alone. (Axis 5 ergonomics.)
+
+### Changed
+
+- **Daemon-mode docs reframed as stdio server.** `gaze daemon` is now documented
+  as a long-lived stdio server in the LSP / MCP / language-server-protocol
+  tradition rather than a Unix daemon in the strict sense. The subcommand verb is
+  unchanged through v0.9.x; a `gaze serve` canonical alias is planned for v0.10
+  (todo #486). External adopter feedback prompted the reframe. (Axis 4 trust,
+  Axis 5 ergonomics.)
+- **`gaze document clean` bundle layout splits into agent + owner paths** (axis 1
+  enforcement). `Bundle::write` now requires distinct `AgentBundleDir` and
+  `OwnerBundleDir` newtypes; the writer rejects equal or nested paths with typed
+  `DocumentError::BundleLayoutInvalid`. The CLI gains `--agent-out` + `--owner-out`
+  and retains `--out` as a shorthand that auto-creates `<PATH>/agent` +
+  `<PATH>/owner` subdirs.
+- **CI: DCO sign-off is now enforced on pull requests** (PR #288), and the Rust
+  toolchain is pinned to 1.96.0 for reproducible trybuild output (PR #289).
+  Contributor-facing; no adopter API change. (Axis 4 trust.)
+
+### Fixed
+
+- **Axis-1 bundle leak risk** (closes todo #489): `gaze document clean` previously
+  wrote `manifest.json` next to `clean.md` in a single caller-selected `out_dir`,
+  with no runtime enforcement of the agent / owner partition. Adopters following
+  the README who uploaded the bundle directory to an LLM workspace leaked
+  restorable manifest material. The new split-path bundle layout enforces the
+  agent / owner partition at type and path-validation level. Original two-directory
+  `manifest.bin` signed-envelope binding (the v0.7.0 architectural spec in
+  `docs/architecture/document-extension.md`) remains a v0.11+ follow-up.
 
 ### Security
+
+- **NER fail-closed never-leak fix** (PR #290): a recognizer/NER-backend error no
+  longer returns an empty detection set that passes raw text through unredacted;
+  the error now propagates and inputs exceeding the NER window (>512 tokens) are
+  chunked. Any byte of PII reaching an LLM outside the manifest contract is a
+  critical defect — this closes a detector-error bypass of the redaction pipeline.
+  (Axis 1 reliability.)
 
 ## [0.9.0] - 2026-05-16
 
