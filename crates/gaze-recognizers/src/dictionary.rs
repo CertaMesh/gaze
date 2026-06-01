@@ -136,6 +136,7 @@ impl Recognizer for DictionaryRecognizer {
 
         Ok(automaton
             .find_iter(input)
+            .filter(|m| is_token_boundary_match(input, m.start(), m.end()))
             .map(|m| {
                 Candidate::new(
                     m.start()..m.end(),
@@ -164,6 +165,25 @@ impl Recognizer for DictionaryRecognizer {
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
     }
+}
+
+fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
+    !has_identifier_char_before(input, start) && !has_identifier_char_after(input, end)
+}
+
+fn has_identifier_char_before(input: &str, start: usize) -> bool {
+    input[..start]
+        .chars()
+        .next_back()
+        .is_some_and(is_identifier_char)
+}
+
+fn has_identifier_char_after(input: &str, end: usize) -> bool {
+    input[end..].chars().next().is_some_and(is_identifier_char)
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_alphanumeric()
 }
 
 #[cfg(test)]
@@ -323,5 +343,35 @@ mod tests {
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].source, "dictionary:songs[#0]");
         assert_eq!(hits[1].source, "dictionary:songs[#2]");
+    }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_inside_identifier() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "artist_refs".to_string(),
+                ContextDictionary {
+                    terms: vec!["Artist".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "dict/artist_refs",
+            PiiClass::Custom("artist_ref".to_string()),
+            "artist_refs",
+            true,
+            "counter",
+        );
+
+        let hits = recognizer
+            .detect("Du antwortest als Artistfy-Support.", &detect_context)
+            .unwrap();
+
+        assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
     }
 }
