@@ -11,13 +11,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING (`gaze-types`, custom recognizer authors): `Recognizer::detect`
+  is now fallible** (P0 #908, PR #293). The trait method signature changed from
+  the infallible
+
+  ```rust
+  fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate>;
+  ```
+
+  to
+
+  ```rust
+  fn detect(&self, input: &str, ctx: &DetectContext<'_>)
+      -> Result<Vec<Candidate>, gaze_types::DetectError>;
+  ```
+
+  A recognizer backend can no longer represent "scan failed" as an empty
+  candidate list — the only way a leak could previously slip through. The
+  shared `DetectError` type lives in `gaze-types` (`DetectError::Backend {
+  recognizer_id, message }`). `RecognizerRegistry` aggregation propagates the
+  error, and the pipeline surfaces it as the new
+  `gaze::pipeline::Error::RecognizerDetect(DetectError)` variant.
+
+  **Migration for custom `Recognizer` impls:** wrap your existing return value
+  in `Ok(...)`, and map any backend/runtime failure to
+  `DetectError::backend(self.id(), <message>)` instead of swallowing it and
+  returning an empty `Vec`. Infallible recognizers (pure regex/dictionary
+  logic that cannot fail) simply return `Ok(candidates)`. See the fail-closed
+  design contract in
+  [`docs/architecture/p0-908-ner-failclosed.md`](docs/architecture/p0-908-ner-failclosed.md).
+
 ### Deprecated
 
 ### Removed
 
 ### Fixed
 
+- **Byte-exact restore for adjacent and path-like tokens** (P0 #923, PR #295).
+  Restore no longer inserts stray whitespace between adjacent spans, so
+  path-like and back-to-back token sequences round-trip byte-for-byte. (Axis 2
+  reversibility.)
+- **Recognizer spans respect token boundaries** (P0 #923, PR #295). A
+  recognizer no longer matches a substring inside a larger token — e.g.
+  `Artist` is not tokenized inside `Artistfy`. A single-token common word such
+  as `Workspace` is no longer promoted to an `Organization` span. (Axis 4
+  determinism, fewer false-positive leaks of surrounding context.)
+
 ### Security
+
+- **NER detection fails closed on backend error** (P0 #908, PR #293).
+  Previously a NER backend runtime failure mapped to an empty detection set,
+  silently passing raw text through unredacted — a critical PII-leak path. The
+  failure now propagates as `DetectError::Backend` and the pipeline aborts
+  outbound redaction (`Error::RecognizerDetect`) rather than emitting partially
+  cleaned output. (Axis 1 never-leak.)
+- **Long NER inputs are chunked into bounded, overlapping tokenizer-token
+  windows** (P0 #908, PR #293). Inputs longer than the model's 512-token
+  ceiling are scanned in overlapping WordPiece-token windows (480-token payload
+  budget, 30-token overlap) so a long document can no longer slip past the
+  model unscanned. The overlap is a documented security invariant —
+  `overlap_tokens >= longest detectable entity + margin` — not a throughput
+  knob; spans are remapped to original byte offsets before de-duplication.
+  Contract:
+  [`docs/architecture/p0-908-ner-failclosed.md`](docs/architecture/p0-908-ner-failclosed.md).
 
 ## [0.9.1] - 2026-05-29
 
