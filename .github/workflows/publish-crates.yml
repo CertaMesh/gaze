@@ -27,13 +27,13 @@ jobs:
       - name: README version check
         run: cargo run -p xtask -- readme-version-check
 
-      - name: Scrub public release text
+      - name: Scrub public changelog text
         shell: bash
         run: |
           set -euo pipefail
 
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            echo "scrub-public-text skipped: workflow_dispatch has no tag-scoped release notes"
+            echo "scrub-public-text skipped: workflow_dispatch has no tag-scoped changelog section"
             exit 0
           fi
 
@@ -50,13 +50,7 @@ jobs:
             exit 1
           fi
 
-          release_notes="dist/release-notes/${GITHUB_REF_NAME}.md"
-          if [ ! -f "$release_notes" ]; then
-            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
-            exit 1
-          fi
-
-          cargo run -p xtask -- scrub-public-text "$changelog_section" "$release_notes"
+          cargo run -p xtask -- scrub-public-text "$changelog_section"
 
       - name: Authenticate to crates.io via OIDC
         uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
