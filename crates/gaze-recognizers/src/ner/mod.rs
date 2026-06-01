@@ -19,13 +19,14 @@ pub(crate) use types::NerSpanResult;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ner::backend::NerBackend;
+    use crate::ner::backend::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
     use crate::ner::error::NerRuntimeError;
     use crate::ner::types::{CHECKSUMS_FILE, CONFIG_FILE, LABELS_FILE, MODEL_FILE, TOKENIZER_FILE};
     use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
     use std::fs;
+    use std::ops::Range;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -74,6 +75,69 @@ mod tests {
         );
         write(&path.join(CHECKSUMS_FILE), sums.as_bytes());
         dir
+    }
+
+    struct WordPieceFixtureBackend {
+        entity: &'static str,
+        fail_on_oversized_window: bool,
+    }
+
+    fn fake_wordpiece_ranges(input: &str) -> Vec<Range<usize>> {
+        input
+            .char_indices()
+            .filter_map(|(start, ch)| {
+                if ch.is_whitespace() {
+                    None
+                } else {
+                    Some(start..start + ch.len_utf8())
+                }
+            })
+            .collect()
+    }
+
+    fn fake_wordpiece_chunks(input: &str) -> Vec<Range<usize>> {
+        let tokens = fake_wordpiece_ranges(input);
+        if tokens.len() <= NER_CHUNK_TOKEN_BUDGET {
+            return std::iter::once(0..input.len()).collect();
+        }
+
+        let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
+        let mut chunks = Vec::new();
+        let mut token_start = 0;
+        while token_start < tokens.len() {
+            let token_end = (token_start + NER_CHUNK_TOKEN_BUDGET).min(tokens.len());
+            chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
+            if token_end == tokens.len() {
+                break;
+            }
+            token_start += stride;
+        }
+        chunks
+    }
+
+    impl NerBackend for WordPieceFixtureBackend {
+        fn chunk_ranges(&self, input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+            Ok(fake_wordpiece_chunks(input))
+        }
+
+        fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            if self.fail_on_oversized_window
+                && fake_wordpiece_ranges(input).len() > NER_CHUNK_TOKEN_BUDGET
+            {
+                return Err(NerRuntimeError::Inference(
+                    "window exceeded model limit".to_string(),
+                ));
+            }
+            Ok(input
+                .find(self.entity)
+                .map(|start| NerSpanResult {
+                    span: start..start + self.entity.len(),
+                    class: PiiClass::Name,
+                    score: 0.91,
+                })
+                .into_iter()
+                .collect())
+        }
     }
 
     #[test]
@@ -417,27 +481,6 @@ mod tests {
 
     #[test]
     fn ner_recognizer_chunks_long_input_and_offsets_spans() {
-        struct WindowBackend;
-
-        impl NerBackend for WindowBackend {
-            fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
-                if input.split_whitespace().count() > 512 {
-                    return Err(NerRuntimeError::Inference(
-                        "window exceeded model limit".to_string(),
-                    ));
-                }
-                Ok(input
-                    .find("Dr. Schmidt")
-                    .map(|start| NerSpanResult {
-                        span: start..start + "Dr. Schmidt".len(),
-                        class: PiiClass::Name,
-                        score: 0.91,
-                    })
-                    .into_iter()
-                    .collect())
-            }
-        }
-
         let recognizer = NerRecognizer {
             detector: NerDetector {
                 model_dir: PathBuf::from("/test/fake"),
@@ -445,10 +488,14 @@ mod tests {
                 recognizer_version_id: "ner.fixed.v1".to_string(),
                 locale: None,
                 threshold: 0.5,
-                backend: Arc::new(WindowBackend),
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Dr. Schmidt",
+                    fail_on_oversized_window: true,
+                }),
             },
         };
-        let input = format!("{} Dr. Schmidt", vec!["word"; 520].join(" "));
+        let dense_prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET + NER_CHUNK_TOKEN_OVERLAP + 80);
+        let input = format!("{dense_prefix}/Users/krishan/Workspace/Artistfy Dr. Schmidt");
         let entity_start = input.find("Dr. Schmidt").expect("fixture entity");
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
@@ -461,6 +508,68 @@ mod tests {
             entity_start..entity_start + "Dr. Schmidt".len()
         );
         assert_eq!(candidates[0].class, PiiClass::Name);
+    }
+
+    #[test]
+    fn ner_overlap_merges_duplicate_spans_once() {
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Alice Example",
+                    fail_on_oversized_window: false,
+                }),
+            },
+        };
+        let prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP + 5);
+        let input = format!("{prefix} Alice Example met the team.");
+        let entity_start = input.find("Alice Example").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Alice Example".len()
+        );
+    }
+
+    #[test]
+    fn ner_boundary_straddling_entity_inside_overlap_detects_once() {
+        assert!("AliceExample".len() <= NER_CHUNK_TOKEN_OVERLAP);
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Alice Example",
+                    fail_on_oversized_window: false,
+                }),
+            },
+        };
+        let prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET - "Alice".len());
+        let input = format!("{prefix}Alice Example met the team.");
+        let entity_start = input.find("Alice Example").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Alice Example".len()
+        );
     }
 
     #[test]

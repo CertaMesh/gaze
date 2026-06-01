@@ -1,7 +1,8 @@
+use std::ops::Range;
 use std::path::Path;
 use std::sync::Mutex;
 
-use super::NerBackend;
+use super::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
 use crate::ner::decode::softmax_confidence;
 use crate::ner::detector::NerDetector;
 use crate::ner::error::{NerLoadError, NerRuntimeError};
@@ -41,6 +42,10 @@ impl OrtBackend {
 }
 
 impl NerBackend for OrtBackend {
+    fn chunk_ranges(&self, input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+        tokenized_chunk_ranges(&self.tokenizer, input)
+    }
+
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         let labels = &self.labels;
         let id2label: &[String] = &self.id2label;
@@ -127,4 +132,51 @@ impl NerBackend for OrtBackend {
         .filter(|span| span.span.end <= input.len())
         .collect())
     }
+}
+
+fn tokenized_chunk_ranges(
+    tokenizer: &tokenizers::Tokenizer,
+    input: &str,
+) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+    let mut tokenizer = tokenizer.clone();
+    tokenizer
+        .with_truncation(None)
+        .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+    let encoded = tokenizer
+        .encode(input, true)
+        .map_err(|err| NerRuntimeError::Tokenizer(err.to_string()))?;
+    let tokens: Vec<Range<usize>> = encoded
+        .get_offsets()
+        .iter()
+        .filter_map(|&(start, end)| {
+            if start < end
+                && end <= input.len()
+                && input.is_char_boundary(start)
+                && input.is_char_boundary(end)
+            {
+                Some(start..end)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if tokens.len() <= NER_CHUNK_TOKEN_BUDGET {
+        return Ok(std::iter::once(0..input.len()).collect());
+    }
+
+    debug_assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
+    let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
+    let mut chunks = Vec::new();
+    let mut token_start = 0;
+    while token_start < tokens.len() {
+        let token_end = (token_start + NER_CHUNK_TOKEN_BUDGET).min(tokens.len());
+        chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
+        if token_end == tokens.len() {
+            break;
+        }
+        token_start += stride;
+    }
+
+    Ok(chunks)
 }
