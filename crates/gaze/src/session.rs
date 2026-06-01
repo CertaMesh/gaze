@@ -1915,17 +1915,36 @@ mod tests {
     #[test]
     fn restore_strict_text_preserves_path_adjacency_byte_exact() {
         let session = Session::new(Scope::Ephemeral).expect("session");
-        let token = session
+        let workspace = session
             .tokenize(&PiiClass::Organization, "Workspace")
-            .expect("token");
-        let clean = format!("list all folders in ~/{token}");
+            .expect("workspace token");
+        let artist = session
+            .tokenize(&PiiClass::Organization, "Artist")
+            .expect("artist token");
+        let email = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("email token");
+        let cases = [
+            (
+                format!("list all folders in ~/{workspace}"),
+                "list all folders in ~/Workspace".to_string(),
+            ),
+            (format!("{workspace}*"), "Workspace*".to_string()),
+            (format!("~/{workspace}/{artist}"), "~/Workspace/Artist".to_string()),
+            (
+                format!("owner={email};path=~/{workspace}"),
+                "owner=alice@example.invalid;path=~/Workspace".to_string(),
+            ),
+        ];
 
-        let restored = session
-            .restore_strict_text(&clean)
-            .expect("restore must succeed");
+        for (clean, expected) in cases {
+            let restored = session
+                .restore_strict_text(&clean)
+                .expect("restore must succeed");
 
-        assert_eq!(restored, "list all folders in ~/Workspace");
-        assert!(!restored.contains("~/ Workspace"));
+            assert_eq!(restored, expected);
+            assert!(!restored.contains("~/ Workspace"));
+        }
     }
 
     #[test]
