@@ -136,6 +136,7 @@ impl Recognizer for DictionaryRecognizer {
 
         Ok(automaton
             .find_iter(input)
+            .filter(|m| is_token_boundary_match(input, m.start(), m.end()))
             .map(|m| {
                 Candidate::new(
                     m.start()..m.end(),
@@ -164,6 +165,25 @@ impl Recognizer for DictionaryRecognizer {
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
     }
+}
+
+fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
+    !has_identifier_char_before(input, start) && !has_identifier_char_after(input, end)
+}
+
+fn has_identifier_char_before(input: &str, start: usize) -> bool {
+    input[..start]
+        .chars()
+        .next_back()
+        .is_some_and(is_identifier_char)
+}
+
+fn has_identifier_char_after(input: &str, end: usize) -> bool {
+    input[end..].chars().next().is_some_and(is_identifier_char)
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_alphanumeric()
 }
 
 #[cfg(test)]

@@ -1,4 +1,4 @@
-use gaze_types::Detection;
+use gaze_types::{Detection, PiiClass};
 
 use super::types::{LabelMap, NerSpanResult};
 
@@ -25,6 +25,7 @@ pub(crate) fn merge_bio_span_results(
     let mut out = Vec::new();
     let (effective_labels, effective_scores) =
         bridge_joiner_tokens(source, subword_spans, subword_labels, subword_scores);
+    let enforce_source_boundaries = subword_spans.iter().all(|(_, end)| *end <= source.len());
     let mut i = 0usize;
     while i < effective_labels.len() {
         let tag = effective_labels[i].as_str();
@@ -57,14 +58,62 @@ pub(crate) fn merge_bio_span_results(
                 break;
             }
         }
-        out.push(NerSpanResult {
-            span: start..end,
-            class: class.clone(),
-            score: span_score,
-        });
+        if is_valid_entity_span(source, start, end, &class, enforce_source_boundaries) {
+            out.push(NerSpanResult {
+                span: start..end,
+                class: class.clone(),
+                score: span_score,
+            });
+        }
         i = j;
     }
     out
+}
+
+fn is_valid_entity_span(
+    source: &str,
+    start: usize,
+    end: usize,
+    class: &PiiClass,
+    enforce_source_boundaries: bool,
+) -> bool {
+    !enforce_source_boundaries
+        || (is_token_boundary_match(source, start, end)
+            && !is_suppressed_single_token_organization(source, start, end, class))
+}
+
+fn is_token_boundary_match(source: &str, start: usize, end: usize) -> bool {
+    let Some(before) = source.get(..start) else {
+        return true;
+    };
+    let Some(after) = source.get(end..) else {
+        return true;
+    };
+
+    !before
+        .chars()
+        .next_back()
+        .is_some_and(is_identifier_char)
+        && !after.chars().next().is_some_and(is_identifier_char)
+}
+
+fn is_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_alphanumeric()
+}
+
+fn is_suppressed_single_token_organization(
+    source: &str,
+    start: usize,
+    end: usize,
+    class: &PiiClass,
+) -> bool {
+    if class != &PiiClass::Organization {
+        return false;
+    }
+    let Some(text) = source.get(start..end) else {
+        return false;
+    };
+    !text.chars().any(char::is_whitespace) && text.eq_ignore_ascii_case("workspace")
 }
 
 fn bridge_joiner_tokens(
@@ -319,5 +368,25 @@ mod tests {
         let out = merge(source, &["Artist"], &["B-ORG"], &label_map);
 
         assert!(out.is_empty(), "unexpected partial identifier span: {out:?}");
+    }
+
+    #[test]
+    fn suppresses_single_token_workspace_organization() {
+        let source = "list all folders in ~/Workspace";
+        let label_map = labels(&[("ORG", PiiClass::Organization)]);
+        let out = merge(source, &["Workspace"], &["B-ORG"], &label_map);
+
+        assert!(out.is_empty(), "unexpected Workspace org span: {out:?}");
+    }
+
+    #[test]
+    fn keeps_multi_token_organization_recall() {
+        let source = "Acme Corp";
+        let label_map = labels(&[("ORG", PiiClass::Organization)]);
+        let out = merge(source, &["Acme", "Corp"], &["B-ORG", "I-ORG"], &label_map);
+
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].span, 0..source.len());
+        assert_eq!(out[0].class, PiiClass::Organization);
     }
 }
