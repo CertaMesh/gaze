@@ -368,7 +368,9 @@ mod tests {
             "counter",
         );
 
-        let hits = recognizer.detect("Du antwortest als Artistfy-Support.", &detect_context);
+        let hits = recognizer
+            .detect("Du antwortest als Artistfy-Support.", &detect_context)
+            .unwrap();
 
         assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
     }
