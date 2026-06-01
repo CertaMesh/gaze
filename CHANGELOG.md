@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.10.0] - 2026-06-01
 
 ### Changed
 
@@ -41,10 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   design contract in
   [`docs/architecture/p0-908-ner-failclosed.md`](docs/architecture/p0-908-ner-failclosed.md).
 
-### Deprecated
-
-### Removed
-
 ### Fixed
 
 - **Byte-exact restore for adjacent and path-like tokens** (P0 #923, PR #295).
@@ -74,6 +70,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   knob; spans are remapped to original byte offsets before de-duplication.
   Contract:
   [`docs/architecture/p0-908-ner-failclosed.md`](docs/architecture/p0-908-ner-failclosed.md).
+- **Release pre-flight now scrubs public text for local path/PII leaks** (PR #294).
+  The new `scrub-public-text` gate scans release-facing docs and notes before
+  publication, making accidental workspace-path or fixture leaks a release
+  blocker rather than a post-release cleanup. (Axis 1 never-leak, Axis 4 trust.)
 
 ## [0.9.1] - 2026-05-29
 

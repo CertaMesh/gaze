@@ -495,7 +495,7 @@ mod tests {
             },
         };
         let dense_prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET + NER_CHUNK_TOKEN_OVERLAP + 80);
-        let input = format!("{dense_prefix}/Users/krishan/Workspace/Artistfy Dr. Schmidt");
+        let input = format!("{dense_prefix}~/Workspace/Artistfy Dr. Schmidt");
         let entity_start = input.find("Dr. Schmidt").expect("fixture entity");
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
