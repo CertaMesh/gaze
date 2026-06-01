@@ -229,6 +229,22 @@ provide deterministic metadata:
 - canonical form when a validator proves one
 - source labels suitable for audit logs
 
+The detection entry point is **fallible** (P0 #908):
+
+```rust
+fn detect(&self, input: &str, ctx: &DetectContext<'_>)
+    -> Result<Vec<Candidate>, gaze_types::DetectError>;
+```
+
+A backend failure MUST surface as `DetectError::backend(self.id(), <message>)`,
+never as an empty `Vec`. Returning an empty candidate list means "no PII here",
+and the pipeline trusts it — so a backend that fails silently is an axis-1 leak.
+The registry short-circuits on `Err` and the pipeline aborts outbound redaction
+(`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
+cleaned output. Recognizers whose logic cannot fail simply return
+`Ok(candidates)`. Full contract:
+[`docs/architecture/p0-908-ner-failclosed.md`](../../docs/architecture/p0-908-ner-failclosed.md).
+
 Add adopter-specific recognizers outside this crate when the behavior is tied
 to one tenant, one private schema, or one proprietary data source.
 
