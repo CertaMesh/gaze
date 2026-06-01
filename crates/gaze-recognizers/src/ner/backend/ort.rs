@@ -165,7 +165,7 @@ fn tokenized_chunk_ranges(
         return Ok(std::iter::once(0..input.len()).collect());
     }
 
-    debug_assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
+    const _: () = assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
     let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
     let mut chunks = Vec::new();
     let mut token_start = 0;

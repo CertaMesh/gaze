@@ -58,7 +58,7 @@ pub(crate) fn merge_bio_span_results(
                 break;
             }
         }
-        if is_valid_entity_span(source, start, end, &class, enforce_source_boundaries) {
+        if is_valid_entity_span(source, start, end, class, enforce_source_boundaries) {
             out.push(NerSpanResult {
                 span: start..end,
                 class: class.clone(),
@@ -90,10 +90,7 @@ fn is_token_boundary_match(source: &str, start: usize, end: usize) -> bool {
         return true;
     };
 
-    !before
-        .chars()
-        .next_back()
-        .is_some_and(is_identifier_char)
+    !before.chars().next_back().is_some_and(is_identifier_char)
         && !after.chars().next().is_some_and(is_identifier_char)
 }
 
@@ -367,7 +364,10 @@ mod tests {
         let label_map = labels(&[("ORG", PiiClass::Organization)]);
         let out = merge(source, &["Artist"], &["B-ORG"], &label_map);
 
-        assert!(out.is_empty(), "unexpected partial identifier span: {out:?}");
+        assert!(
+            out.is_empty(),
+            "unexpected partial identifier span: {out:?}"
+        );
     }
 
     #[test]
