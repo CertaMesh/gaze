@@ -19,13 +19,14 @@ pub(crate) use types::NerSpanResult;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ner::backend::NerBackend;
+    use crate::ner::backend::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
     use crate::ner::error::NerRuntimeError;
     use crate::ner::types::{CHECKSUMS_FILE, CONFIG_FILE, LABELS_FILE, MODEL_FILE, TOKENIZER_FILE};
     use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
     use std::fs;
+    use std::ops::Range;
     use std::path::{Path, PathBuf};
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -74,6 +75,69 @@ mod tests {
         );
         write(&path.join(CHECKSUMS_FILE), sums.as_bytes());
         dir
+    }
+
+    struct WordPieceFixtureBackend {
+        entity: &'static str,
+        fail_on_oversized_window: bool,
+    }
+
+    fn fake_wordpiece_ranges(input: &str) -> Vec<Range<usize>> {
+        input
+            .char_indices()
+            .filter_map(|(start, ch)| {
+                if ch.is_whitespace() {
+                    None
+                } else {
+                    Some(start..start + ch.len_utf8())
+                }
+            })
+            .collect()
+    }
+
+    fn fake_wordpiece_chunks(input: &str) -> Vec<Range<usize>> {
+        let tokens = fake_wordpiece_ranges(input);
+        if tokens.len() <= NER_CHUNK_TOKEN_BUDGET {
+            return std::iter::once(0..input.len()).collect();
+        }
+
+        let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
+        let mut chunks = Vec::new();
+        let mut token_start = 0;
+        while token_start < tokens.len() {
+            let token_end = (token_start + NER_CHUNK_TOKEN_BUDGET).min(tokens.len());
+            chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
+            if token_end == tokens.len() {
+                break;
+            }
+            token_start += stride;
+        }
+        chunks
+    }
+
+    impl NerBackend for WordPieceFixtureBackend {
+        fn chunk_ranges(&self, input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+            Ok(fake_wordpiece_chunks(input))
+        }
+
+        fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            if self.fail_on_oversized_window
+                && fake_wordpiece_ranges(input).len() > NER_CHUNK_TOKEN_BUDGET
+            {
+                return Err(NerRuntimeError::Inference(
+                    "window exceeded model limit".to_string(),
+                ));
+            }
+            Ok(input
+                .find(self.entity)
+                .map(|start| NerSpanResult {
+                    span: start..start + self.entity.len(),
+                    class: PiiClass::Name,
+                    score: 0.91,
+                })
+                .into_iter()
+                .collect())
+        }
     }
 
     #[test]
@@ -368,7 +432,7 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
-        let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx);
+        let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx).unwrap();
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, 6..11);
@@ -376,6 +440,135 @@ mod tests {
         assert_eq!(
             candidates[0].recognizer_version_id.as_deref(),
             Some("ner.fixed.v1")
+        );
+    }
+
+    #[test]
+    fn ner_recognizer_surfaces_backend_failure() {
+        struct FailingBackend;
+
+        impl NerBackend for FailingBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Err(NerRuntimeError::Inference("synthetic failure".to_string()))
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(FailingBackend),
+            },
+        };
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let err = Recognizer::detect(&recognizer, "Dr. Schmidt", &ctx)
+            .expect_err("backend failure must be caller-visible");
+
+        assert!(matches!(
+            err,
+            gaze_types::DetectError::Backend {
+                recognizer_id,
+                message,
+                ..
+            } if recognizer_id == "ner" && message.contains("synthetic failure")
+        ));
+    }
+
+    #[test]
+    fn ner_recognizer_chunks_long_input_and_offsets_spans() {
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Dr. Schmidt",
+                    fail_on_oversized_window: true,
+                }),
+            },
+        };
+        let dense_prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET + NER_CHUNK_TOKEN_OVERLAP + 80);
+        let input = format!("{dense_prefix}/Users/krishan/Workspace/Artistfy Dr. Schmidt");
+        let entity_start = input.find("Dr. Schmidt").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Dr. Schmidt".len()
+        );
+        assert_eq!(candidates[0].class, PiiClass::Name);
+    }
+
+    #[test]
+    fn ner_overlap_merges_duplicate_spans_once() {
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Alice Example",
+                    fail_on_oversized_window: false,
+                }),
+            },
+        };
+        let prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP + 5);
+        let input = format!("{prefix} Alice Example met the team.");
+        let entity_start = input.find("Alice Example").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Alice Example".len()
+        );
+    }
+
+    #[test]
+    fn ner_boundary_straddling_entity_inside_overlap_detects_once() {
+        assert!("AliceExample".len() <= NER_CHUNK_TOKEN_OVERLAP);
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WordPieceFixtureBackend {
+                    entity: "Alice Example",
+                    fail_on_oversized_window: false,
+                }),
+            },
+        };
+        let prefix = "x".repeat(NER_CHUNK_TOKEN_BUDGET - "Alice".len());
+        let input = format!("{prefix}Alice Example met the team.");
+        let entity_start = input.find("Alice Example").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Alice Example".len()
         );
     }
 
@@ -424,8 +617,8 @@ mod tests {
             },
         };
 
-        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx);
-        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx);
+        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx).unwrap();
+        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx).unwrap();
 
         assert_eq!(default_candidates.len(), 1);
         assert_eq!(default_candidates[0].span, name_start..name_end);
@@ -460,11 +653,17 @@ mod tests {
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
         let err = recognizer
-            .try_detect("Alice Example", &ctx)
+            .detect("Alice Example", &ctx)
             .expect_err("backend runtime failures must surface");
 
-        assert_eq!(err.recognizer_id, "ner");
-        assert!(err.message.contains("forced backend failure"));
+        assert!(matches!(
+            err,
+            gaze_types::DetectError::Backend {
+                recognizer_id,
+                message,
+                ..
+            } if recognizer_id == "ner" && message.contains("forced backend failure")
+        ));
     }
 
     #[test]
@@ -504,7 +703,7 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
-        let candidates = recognizer.try_detect(&input, &ctx).expect("detect");
+        let candidates = recognizer.detect(&input, &ctx).expect("detect");
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, start..start + "Alice Example".len());

@@ -93,7 +93,7 @@ impl NerDetector {
         input: &str,
     ) -> Result<Vec<NerSpanResult>, super::error::NerRuntimeError> {
         let mut spans = Vec::new();
-        for chunk in input_chunks(input) {
+        for chunk in self.backend.chunk_ranges(input)? {
             spans.extend(self.backend.detect(&input[chunk.clone()])?.into_iter().map(
                 |mut span| {
                     span.span = span.span.start + chunk.start..span.span.end + chunk.start;
@@ -160,43 +160,6 @@ impl Detector for NerDetector {
                 RecognizerRuntimeError::new("ner", err.to_string())
             })
     }
-}
-
-const NER_CHUNK_TOKEN_WINDOW: usize = 512;
-const NER_CHUNK_TOKEN_OVERLAP: usize = 32;
-
-fn input_chunks(input: &str) -> Vec<std::ops::Range<usize>> {
-    let mut tokens = Vec::new();
-    let mut token_start = None;
-    for (idx, ch) in input.char_indices() {
-        if ch.is_whitespace() {
-            if let Some(start) = token_start.take() {
-                tokens.push(start..idx);
-            }
-        } else if token_start.is_none() {
-            token_start = Some(idx);
-        }
-    }
-    if let Some(start) = token_start {
-        tokens.push(start..input.len());
-    }
-
-    if tokens.len() <= NER_CHUNK_TOKEN_WINDOW {
-        return std::iter::once(0..input.len()).collect();
-    }
-
-    let stride = NER_CHUNK_TOKEN_WINDOW - NER_CHUNK_TOKEN_OVERLAP;
-    let mut chunks = Vec::new();
-    let mut token_start = 0;
-    while token_start < tokens.len() {
-        let token_end = (token_start + NER_CHUNK_TOKEN_WINDOW).min(tokens.len());
-        chunks.push(tokens[token_start].start..tokens[token_end - 1].end);
-        if token_end == tokens.len() {
-            break;
-        }
-        token_start += stride;
-    }
-    chunks
 }
 
 fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> {

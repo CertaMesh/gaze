@@ -72,6 +72,7 @@ fn detect_recognizer(
     let validator_kind = detector.validator_kind();
 
     Recognizer::detect(&detector, input, &ctx)
+        .unwrap()
         .into_iter()
         .filter(|candidate| {
             validator_kind.is_none_or(|kind| {
@@ -104,6 +105,7 @@ fn detect_recognizer_canonical_forms(
     let validator_kind = detector.validator_kind();
 
     Recognizer::detect(&detector, input, &ctx)
+        .unwrap()
         .into_iter()
         .filter(|candidate| {
             validator_kind.is_none_or(|kind| {

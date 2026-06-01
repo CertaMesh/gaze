@@ -61,6 +61,8 @@ pub enum Error {
     Rulepack(#[from] RulepackError),
     #[error("safety net error: {0}")]
     SafetyNet(#[from] SafetyNetError),
+    #[error("recognizer detection failed: {0}")]
+    RecognizerDetect(#[from] gaze_types::DetectError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
     #[error("detection backend failed for recognizer '{recognizer_id}': {message}")]
@@ -2049,36 +2051,15 @@ where
         &self.class
     }
 
-    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-        self.detector
-            .detect(input)
-            .into_iter()
-            .map(|detection| {
-                let source = detection.source;
-                Candidate::new(
-                    detection.span,
-                    detection.class,
-                    source.clone(),
-                    1.0,
-                    0,
-                    None,
-                    "counter",
-                    source,
-                    ConflictTier::None,
-                    Vec::new(),
-                )
-            })
-            .collect()
-    }
-
-    fn try_detect(
+    fn detect(
         &self,
         input: &str,
         _ctx: &DetectContext<'_>,
-    ) -> std::result::Result<Vec<Candidate>, RecognizerRuntimeError> {
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         Ok(self
             .detector
-            .try_detect(input)?
+            .try_detect(input)
+            .map_err(|err| gaze_types::DetectError::backend(err.recognizer_id, err.message))?
             .into_iter()
             .map(|detection| {
                 let source = detection.source;
@@ -2145,6 +2126,33 @@ mod tests {
         }
     }
 
+    struct FailingRecognizer;
+
+    impl Recognizer for FailingRecognizer {
+        fn id(&self) -> &str {
+            "ner"
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            &PiiClass::Name
+        }
+
+        fn detect(
+            &self,
+            _input: &str,
+            _ctx: &DetectContext<'_>,
+        ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+            Err(gaze_types::DetectError::backend(
+                self.id(),
+                "synthetic backend failure",
+            ))
+        }
+
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+    }
+
     fn detector_with_detections(source: &str, detections: Vec<Detection>) -> FixedDetector {
         FixedDetector {
             detections: detections
@@ -2155,6 +2163,28 @@ mod tests {
                 })
                 .collect(),
         }
+    }
+
+    #[test]
+    fn recognizer_backend_failure_fails_closed_before_output() {
+        let pipeline = Pipeline::builder()
+            .recognizer(FailingRecognizer)
+            .build()
+            .expect("pipeline");
+        let session =
+            Session::new(Scope::Conversation("detect-failclosed".to_string())).expect("session");
+
+        let err = pipeline
+            .redact(&session, RawDocument::Text("Hello Dr. Schmidt".to_string()))
+            .expect_err("recognizer backend failure must abort redaction");
+
+        assert!(matches!(
+            err,
+            Error::RecognizerDetect(gaze_types::DetectError::Backend {
+                recognizer_id,
+                ..
+            }) if recognizer_id == "ner"
+        ));
     }
 
     impl RedactionLogger for CapturingLogger {
@@ -2307,8 +2337,12 @@ mod tests {
             fn supported_class(&self) -> &PiiClass {
                 &PiiClass::Name
             }
-            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-                input
+            fn detect(
+                &self,
+                input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+                Ok(input
                     .find("Dr. Schmidt")
                     .map(|start| {
                         Candidate::new(
@@ -2325,7 +2359,7 @@ mod tests {
                         )
                     })
                     .into_iter()
-                    .collect()
+                    .collect())
             }
             fn token_family(&self) -> &str {
                 "counter"
@@ -2553,12 +2587,16 @@ mod tests {
                 &PiiClass::Name
             }
 
-            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+            fn detect(
+                &self,
+                input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
                 let Some(start) = input.find("Dr. Schmidt") else {
-                    return Vec::new();
+                    return Ok(Vec::new());
                 };
                 let end = start + "Dr. Schmidt".len();
-                vec![Candidate::new(
+                Ok(vec![Candidate::new(
                     start..end,
                     PiiClass::Name,
                     self.id(),
@@ -2570,7 +2608,7 @@ mod tests {
                     ConflictTier::None,
                     Vec::new(),
                 )
-                .with_recognizer_version_id("name.semantic.v2")]
+                .with_recognizer_version_id("name.semantic.v2")])
             }
 
             fn token_family(&self) -> &str {
@@ -2719,12 +2757,16 @@ mod tests {
                 &PiiClass::Name
             }
 
-            fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+            fn detect(
+                &self,
+                input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
                 let Some(start) = input.find("Dr. Schmidt") else {
-                    return Vec::new();
+                    return Ok(Vec::new());
                 };
                 let end = start + "Dr. Schmidt".len();
-                vec![Candidate::new(
+                Ok(vec![Candidate::new(
                     start..end,
                     PiiClass::Name,
                     self.id(),
@@ -2735,7 +2777,7 @@ mod tests {
                     self.id(),
                     ConflictTier::None,
                     Vec::new(),
-                )]
+                )])
             }
 
             fn token_family(&self) -> &str {

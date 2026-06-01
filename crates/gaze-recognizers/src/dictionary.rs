@@ -124,13 +124,17 @@ impl Recognizer for DictionaryRecognizer {
         &self.class
     }
 
-    fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate> {
+    fn detect(
+        &self,
+        input: &str,
+        ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         let Some(entry) = ctx.dictionaries.get(&self.dictionary_name) else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
         let automaton = self.automaton_for(entry);
 
-        automaton
+        Ok(automaton
             .find_iter(input)
             .map(|m| {
                 Candidate::new(
@@ -150,7 +154,7 @@ impl Recognizer for DictionaryRecognizer {
                     Vec::new(),
                 )
             })
-            .collect()
+            .collect())
     }
 
     fn token_family(&self) -> &str {
@@ -196,7 +200,9 @@ mod tests {
             "counter",
         );
 
-        let hits = recognizer.detect("Customer bought AAA-12345", &detect_context);
+        let hits = recognizer
+            .detect("Customer bought AAA-12345", &detect_context)
+            .unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 16..25);
         assert_eq!(hits[0].class, PiiClass::Custom("class_alpha".to_string()));
@@ -262,10 +268,12 @@ mod tests {
             "counter",
         );
 
-        let hits = recognizer.detect(
-            "first alpha-one, second bravo-two, third charlie-three",
-            &detect_context,
-        );
+        let hits = recognizer
+            .detect(
+                "first alpha-one, second bravo-two, third charlie-three",
+                &detect_context,
+            )
+            .unwrap();
 
         assert_eq!(hits.len(), 3);
         let source_shape = regex::Regex::new(r"^dictionary:[a-z_]+\[#\d+\]$").unwrap();
@@ -308,7 +316,9 @@ mod tests {
             "counter",
         );
 
-        let hits = recognizer.detect("same-song then other-song", &detect_context);
+        let hits = recognizer
+            .detect("same-song then other-song", &detect_context)
+            .unwrap();
 
         assert_eq!(hits.len(), 2);
         assert_eq!(hits[0].source, "dictionary:songs[#0]");

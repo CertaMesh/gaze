@@ -134,8 +134,13 @@ impl Recognizer for RegexDetector {
         &self.class
     }
 
-    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-        self.regex
+    fn detect(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+        Ok(self
+            .regex
             .captures_iter(input)
             .filter_map(|caps| {
                 let span = self.span_from_captures(&caps)?;
@@ -157,7 +162,7 @@ impl Recognizer for RegexDetector {
                     Vec::new(),
                 )
             })
-            .collect()
+            .collect())
     }
 
     fn token_family(&self) -> &str {
@@ -240,7 +245,8 @@ mod tests {
         .expect("regex detector");
         let dictionaries = gaze_types::DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
-        let detections = Recognizer::detect(&detector, "Email Alice@Example.invalid", &ctx);
+        let detections =
+            Recognizer::detect(&detector, "Email Alice@Example.invalid", &ctx).unwrap();
 
         assert_eq!(
             detections[0].canonical_form.as_deref(),
@@ -307,7 +313,7 @@ mod tests {
         let input =
             "From: Dana Weber <user@example.invalid>\nFrom: \"Prof. Weber\" <other@example.invalid>";
 
-        let candidates = Recognizer::detect(&detector, input, &ctx);
+        let candidates = Recognizer::detect(&detector, input, &ctx).unwrap();
         let matched = candidates
             .iter()
             .map(|candidate| &input[candidate.span.clone()])

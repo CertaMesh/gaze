@@ -109,9 +109,13 @@ impl Recognizer for AnchoredMatchRecognizer {
         &PiiClass::Name
     }
 
-    fn detect(&self, input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
+    fn detect(
+        &self,
+        input: &str,
+        _ctx: &DetectContext<'_>,
+    ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
         if !matches!(self.name_shape, NameShape::PersonName) {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let mut candidates = Vec::new();
@@ -143,7 +147,7 @@ impl Recognizer for AnchoredMatchRecognizer {
         }
         candidates.sort_by_key(|candidate| candidate.span.start);
         candidates.dedup_by(|a, b| a.span == b.span);
-        candidates
+        Ok(candidates)
     }
 
     fn token_family(&self) -> &str {
@@ -402,7 +406,9 @@ mod tests {
             CuePosition::Before,
             "from",
         );
-        let hits = recognizer.detect("Hello from Alice Example, please reply.", &ctx());
+        let hits = recognizer
+            .detect("Hello from Alice Example, please reply.", &ctx())
+            .unwrap();
 
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].span, 11..24);
@@ -420,7 +426,10 @@ mod tests {
             "from",
         );
         assert_eq!(
-            line_end.detect("Forwarded from Alice Example\nBody", &ctx())[0].span,
+            line_end
+                .detect("Forwarded from Alice Example\nBody", &ctx())
+                .unwrap()[0]
+                .span,
             15..28
         );
 
@@ -432,7 +441,10 @@ mod tests {
             "agent_recipient",
         );
         assert_eq!(
-            whitespace.detect("Please reply to Alice Example today", &ctx())[0].span,
+            whitespace
+                .detect("Please reply to Alice Example today", &ctx())
+                .unwrap()[0]
+                .span,
             16..29
         );
     }
@@ -447,7 +459,10 @@ mod tests {
             "footer",
         );
         assert_eq!(
-            recognizer.detect("Alice Example sent this", &ctx())[0].span,
+            recognizer
+                .detect("Alice Example sent this", &ctx())
+                .unwrap()[0]
+                .span,
             0..13
         );
 
@@ -463,7 +478,10 @@ mod tests {
             0.9,
             10,
         );
-        assert!(short.detect("from Alice Example.", &ctx()).is_empty());
+        assert!(short
+            .detect("from Alice Example.", &ctx())
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -481,7 +499,10 @@ mod tests {
             10,
         );
         assert_eq!(
-            one_component_non_forward.detect("from Alice:", &ctx())[0].span,
+            one_component_non_forward
+                .detect("from Alice:", &ctx())
+                .unwrap()[0]
+                .span,
             5..10
         );
 
@@ -499,6 +520,7 @@ mod tests {
         );
         assert!(two_component_forward
             .detect("from Alice:", &ctx())
+            .unwrap()
             .is_empty());
     }
 
@@ -511,7 +533,9 @@ mod tests {
             CuePosition::Before,
             "forward_marker",
         );
-        let hits = recognizer.detect("Forwarded message from Łukasz Müller:", &ctx());
+        let hits = recognizer
+            .detect("Forwarded message from Łukasz Müller:", &ctx())
+            .unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(
             &"Forwarded message from Łukasz Müller:"[hits[0].span.clone()],
@@ -520,6 +544,7 @@ mod tests {
 
         assert!(recognizer
             .detect("Forwarded message from mailgun:", &ctx())
+            .unwrap()
             .is_empty());
     }
 
@@ -555,7 +580,7 @@ mod tests {
                 CuePosition::Before,
                 short_label,
             );
-            let hits = recognizer.detect(input, &ctx());
+            let hits = recognizer.detect(input, &ctx()).unwrap();
 
             assert_eq!(
                 hits.first().map(|hit| hit.source.as_str()),

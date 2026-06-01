@@ -27,10 +27,11 @@ fn ner_backend_error_fails_closed_pipeline() {
 
     let err = result.expect_err("backend error must fail closed before clean output");
     match err {
-        Error::DetectionBackendFailed {
+        Error::RecognizerDetect(gaze_types::DetectError::Backend {
             recognizer_id,
             message,
-        } => {
+            ..
+        }) => {
             assert_eq!(recognizer_id, "ner");
             assert!(message.contains("forced test-support backend failure"));
         }
@@ -39,7 +40,7 @@ fn ner_backend_error_fails_closed_pipeline() {
 }
 
 #[test]
-fn recognizer_infallible_try_detect_ok() {
+fn recognizer_infallible_detect_ok() {
     let recognizer = DictionaryRecognizer::new(
         "dict.artist",
         PiiClass::Custom("artist".to_string()),
@@ -58,7 +59,7 @@ fn recognizer_infallible_try_detect_ok() {
     let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
     let candidates = recognizer
-        .try_detect("Play Synthetic Artist", &ctx)
+        .detect("Play Synthetic Artist", &ctx)
         .expect("infallible recognizer should use default Ok path");
 
     assert_eq!(candidates.len(), 1);
