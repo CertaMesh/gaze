@@ -8,9 +8,9 @@ use gaze_recognizers::{
 };
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
-    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RecognizerRuntimeError,
-    RedactionLogError, RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry,
-    RestoredText, SafetyNet, SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
+    LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
+    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
+    SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
     RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
 };
 use thiserror::Error;
@@ -65,11 +65,6 @@ pub enum Error {
     RecognizerDetect(#[from] gaze_types::DetectError),
     #[error("redaction log error: {0}")]
     RedactionLog(#[from] RedactionLogError),
-    #[error("detection backend failed for recognizer '{recognizer_id}': {message}")]
-    DetectionBackendFailed {
-        recognizer_id: String,
-        message: String,
-    },
     #[error("safety net fallback failed closed: {0:?}")]
     SafetyNetFallback(FallbackReason),
     #[error("capitals heuristic gate is unsupported for locale {locale}")]
@@ -80,15 +75,6 @@ pub enum Error {
     UnsupportedValueVariant,
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
-}
-
-impl From<RecognizerRuntimeError> for Error {
-    fn from(err: RecognizerRuntimeError) -> Self {
-        Self::DetectionBackendFailed {
-            recognizer_id: err.recognizer_id,
-            message: err.message,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

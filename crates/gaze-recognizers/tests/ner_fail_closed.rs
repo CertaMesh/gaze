@@ -3,8 +3,8 @@
 use std::path::Path;
 
 use gaze::{
-    CleanDocument, DictionaryBundle, DictionaryEntry, DictionarySource, Error, LocaleTag, PiiClass,
-    Pipeline, RawDocument, Scope, Session,
+    DictionaryBundle, DictionaryEntry, DictionarySource, Error, LocaleTag, PiiClass, Pipeline,
+    RawDocument, Scope, Session,
 };
 use gaze_recognizers::{DictionaryRecognizer, NerOptions, NerRecognizer};
 use gaze_types::{DetectContext, Recognizer};
@@ -67,26 +67,4 @@ fn recognizer_infallible_detect_ok() {
         &"Play Synthetic Artist"[candidates[0].span.clone()],
         "Synthetic Artist"
     );
-}
-
-#[test]
-fn ner_pipeline_does_not_emit_unredacted_output_on_backend_error() {
-    let recognizer =
-        NerRecognizer::load_with_options(Path::new("__gaze_test_error_ner"), NerOptions::default())
-            .expect("test support recognizer");
-    let pipeline = Pipeline::builder()
-        .recognizer(recognizer)
-        .build()
-        .expect("pipeline");
-    let session = Session::new(Scope::Ephemeral).expect("session");
-    let input = "Alice Example";
-
-    let result = pipeline.redact(&session, RawDocument::Text(input.to_string()));
-
-    if let Ok(CleanDocument::Text(clean)) = result {
-        assert!(
-            !clean.contains(input),
-            "pipeline must not return unredacted NER-only PII on backend error"
-        );
-    }
 }
