@@ -1,6 +1,22 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to scrub, with or without leading v"
+        required: true
+        type: string
+      release_notes:
+        description: "Release notes path; defaults to dist/release-notes/v<version>.md"
+        required: false
+        type: string
+        default: ""
+      pr_number:
+        description: "Optional release PR number whose body should be scrubbed"
+        required: false
+        type: string
+        default: ""
   push:
     tags:
       - 'v*'
@@ -9,7 +25,64 @@ permissions:
   contents: write
 
 jobs:
+  scrub-public-text-preflight:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Scrub public release text before tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: ${{ inputs.release_notes }}
+          RELEASE_PR_NUMBER: ${{ inputs.pr_number }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          version="${RELEASE_VERSION#v}"
+          if [ -z "$version" ]; then
+            echo "scrub-public-text failed: release preflight requires a version" >&2
+            exit 1
+          fi
+
+          changelog_section="$(mktemp)"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { in_section=1; print; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$changelog_section"
+
+          if [ ! -s "$changelog_section" ]; then
+            echo "scrub-public-text failed: CHANGELOG.md has no section for v${version}" >&2
+            exit 1
+          fi
+
+          release_notes="$RELEASE_NOTES"
+          if [ -z "$release_notes" ]; then
+            release_notes="dist/release-notes/v${version}.md"
+          fi
+          if [ ! -f "$release_notes" ]; then
+            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
+            exit 1
+          fi
+
+          files=("$changelog_section" "$release_notes")
+
+          if [ -n "$RELEASE_PR_NUMBER" ]; then
+            pr_body="$(mktemp)"
+            gh pr view "$RELEASE_PR_NUMBER" --json body --jq .body > "$pr_body"
+            files+=("$pr_body")
+          fi
+
+          cargo run -p xtask -- scrub-public-text "${files[@]}"
+
   build:
+    if: github.event_name == 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -120,14 +193,41 @@ jobs:
           status_out="$("$bin" proxy status)"; grep -q 'not running' <<< "$status_out"
 
   release:
+    if: github.event_name == 'push'
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+      - name: Scrub public release text before publication
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          changelog_section="$(mktemp)"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { in_section=1; print; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$changelog_section"
+
+          if [ ! -s "$changelog_section" ]; then
+            echo "scrub-public-text failed: CHANGELOG.md has no section for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          release_notes="dist/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$release_notes" ]; then
+            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
+            exit 1
+          fi
+
+          cargo run -p xtask -- scrub-public-text "$changelog_section" "$release_notes"
       - name: Generate NER checksums
         shell: bash
         run: |

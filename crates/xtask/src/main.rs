@@ -16,6 +16,7 @@ mod mcp_tier_isolation;
 mod no_tenant_knowledge;
 mod readme_version_check;
 mod safety_net_sanity;
+mod scrub_public_text;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -41,6 +42,7 @@ enum Command {
     SafetyNetSanity,
     McpTierIsolation,
     ReadmeVersionCheck,
+    ScrubPublicText(scrub_public_text::Args),
 }
 
 fn main() -> Result<()> {
@@ -61,6 +63,7 @@ fn main() -> Result<()> {
         Command::SafetyNetSanity => safety_net_sanity::run(),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
         Command::ReadmeVersionCheck => readme_version_check::run(),
+        Command::ScrubPublicText(args) => scrub_public_text::run(args),
     }
 }
 

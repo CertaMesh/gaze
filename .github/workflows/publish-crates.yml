@@ -27,6 +27,31 @@ jobs:
       - name: README version check
         run: cargo run -p xtask -- readme-version-check
 
+      - name: Scrub public changelog text
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "scrub-public-text skipped: workflow_dispatch has no tag-scoped changelog section"
+            exit 0
+          fi
+
+          version="${GITHUB_REF_NAME#v}"
+          changelog_section="$(mktemp)"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { in_section=1; print; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$changelog_section"
+
+          if [ ! -s "$changelog_section" ]; then
+            echo "scrub-public-text failed: CHANGELOG.md has no section for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          cargo run -p xtask -- scrub-public-text "$changelog_section"
+
       - name: Authenticate to crates.io via OIDC
         uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
         id: cargo-auth
