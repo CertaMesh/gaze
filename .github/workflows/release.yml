@@ -124,6 +124,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Scrub public release text
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="${GITHUB_REF_NAME#v}"
+          changelog_section="$(mktemp)"
+          awk -v version="$version" '
+            index($0, "## [" version "]") == 1 { in_section=1; print; next }
+            in_section && /^## \[/ { exit }
+            in_section { print }
+          ' CHANGELOG.md > "$changelog_section"
+
+          if [ ! -s "$changelog_section" ]; then
+            echo "scrub-public-text failed: CHANGELOG.md has no section for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+          release_notes="dist/release-notes/${GITHUB_REF_NAME}.md"
+          if [ ! -f "$release_notes" ]; then
+            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
+            exit 1
+          fi
+
+          cargo run -p xtask -- scrub-public-text "$changelog_section" "$release_notes"
       - uses: actions/download-artifact@v8
         with:
           path: dist
