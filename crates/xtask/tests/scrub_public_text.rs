@@ -54,7 +54,7 @@ fn scrub_public_text_fails_token_and_user_path_fixture() {
         "gate must report already-tokenized public text; {text}"
     );
     assert!(
-        text.contains("OS user path `/Users/<name>/`"),
+        text.contains("OS user path `/home/<name>/`"),
         "gate must report OS user path patterns without echoing the username; {text}"
     );
 }

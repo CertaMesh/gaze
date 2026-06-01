@@ -20,13 +20,13 @@ contract that always restores. OCR is a subprocess call to the standard
 
 ```toml
 [dependencies]
-gaze-document = "0.9.1"
+gaze-document = "0.10.0"
 ```
 
 ### CLI
 
 ```bash
-cargo install gaze-cli --version 0.9.1 --features document
+cargo install gaze-cli --version 0.10.0 --features document
 ```
 
 The `document` feature is opt-in on `gaze-cli` so the default install stays
@@ -243,7 +243,7 @@ this crate only provides the opt-in tool implementations.
 | `render-image`    | no      | Reserved — future redacted-preview renderer.         |
 
 The `extract-docling` and `render-image` features are intentionally empty
-in v0.9.1 so adopters can pin against the eventual flag names early.
+in v0.10.0 so adopters can pin against the eventual flag names early.
 
 ## License
 
