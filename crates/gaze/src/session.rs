@@ -1930,7 +1930,10 @@ mod tests {
                 "list all folders in ~/Workspace".to_string(),
             ),
             (format!("{workspace}*"), "Workspace*".to_string()),
-            (format!("~/{workspace}/{artist}"), "~/Workspace/Artist".to_string()),
+            (
+                format!("~/{workspace}/{artist}"),
+                "~/Workspace/Artist".to_string(),
+            ),
             (
                 format!("owner={email};path=~/{workspace}"),
                 "owner=alice@example.invalid;path=~/Workspace".to_string(),
