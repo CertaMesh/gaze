@@ -3144,15 +3144,11 @@ pub trait Recognizer: Send + Sync {
     /// PII class supported by this recognizer.
     fn supported_class(&self) -> &PiiClass;
     /// Detects PII candidates in the supplied input and context.
-    fn detect(&self, input: &str, ctx: &DetectContext<'_>) -> Vec<Candidate>;
-    /// Fallible detection entrypoint for recognizers backed by runtime systems.
-    fn try_detect(
+    fn detect(
         &self,
         input: &str,
         ctx: &DetectContext<'_>,
-    ) -> Result<Vec<Candidate>, RecognizerRuntimeError> {
-        Ok(self.detect(input, ctx))
-    }
+    ) -> std::result::Result<Vec<Candidate>, DetectError>;
     /// Token family used for candidate token emission.
     fn token_family(&self) -> &str;
     /// Optional validator kind used by pre-resolver validator-veto.
@@ -3162,6 +3158,30 @@ pub trait Recognizer: Send + Sync {
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {
         &[LocaleTag::Global]
+    }
+}
+
+/// Caller-visible recognizer detection failure.
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[non_exhaustive]
+pub enum DetectError {
+    /// A recognizer backend failed while scanning the input.
+    #[error("recognizer {recognizer_id} backend failed: {message}")]
+    Backend {
+        /// Stable recognizer identifier.
+        recognizer_id: String,
+        /// Sanitized backend error message.
+        message: String,
+    },
+}
+
+impl DetectError {
+    /// Build a backend failure without requiring recognizer crates in `gaze-types`.
+    pub fn backend(recognizer_id: impl Into<String>, source: impl Into<String>) -> Self {
+        Self::Backend {
+            recognizer_id: recognizer_id.into(),
+            message: source.into(),
+        }
     }
 }
 

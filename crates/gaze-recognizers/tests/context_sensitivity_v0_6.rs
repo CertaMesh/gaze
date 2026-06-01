@@ -111,7 +111,7 @@ fn anchored_name_count(input: &str) -> usize {
     let ctx = ctx();
     anchored_recognizers()
         .iter()
-        .flat_map(|recognizer| recognizer.detect(input, &ctx))
+        .flat_map(|recognizer| recognizer.detect(input, &ctx).unwrap())
         .count()
 }
 
@@ -133,7 +133,7 @@ fn p6_context_sensitivity_matrix_locks_expected_verdicts() {
     )
     .expect("test-support NER recognizer");
     let row1 = "Hallo, hier ist Alice. Wie geht's?";
-    assert_eq!(ner.detect(row1, &ctx).len(), 1);
+    assert_eq!(ner.detect(row1, &ctx).unwrap().len(), 1);
     assert_eq!(anchored_name_count(row1), 0);
 
     // Synthesis matrix row 2 / R2-Patch-18: no Subject/Re anchor in v0.6.
@@ -144,16 +144,19 @@ fn p6_context_sensitivity_matrix_locks_expected_verdicts() {
 
     // Synthesis matrix row 3 / R2-Patch-8: auto-footer cue catches the sender
     // while single-component and organization-shaped suffixes stay out.
-    let row3 = anchored_recognizers()[2].detect(
-        "Sent by Alice Example via Mailgun on behalf of Acme Corp",
-        &ctx,
-    );
+    let row3 = anchored_recognizers()[2]
+        .detect(
+            "Sent by Alice Example via Mailgun on behalf of Acme Corp",
+            &ctx,
+        )
+        .unwrap();
     assert_eq!(row3.len(), 1);
     assert_eq!(row3[0].source, "structural.footer");
 
     // Synthesis matrix row 4 / R2-Patch-11: GH#24 headline prompt preamble.
     let row4 = anchored_recognizers()[1]
-        .detect("Du antwortest als Artistfy-Support an Alice Example.", &ctx);
+        .detect("Du antwortest als Artistfy-Support an Alice Example.", &ctx)
+        .unwrap();
     assert_eq!(row4.len(), 1);
     assert_eq!(row4[0].source, "structural.agent_recipient");
 
@@ -163,6 +166,7 @@ fn p6_context_sensitivity_matrix_locks_expected_verdicts() {
     assert_eq!(
         paren
             .detect("From: alice@example.invalid (Alice Example)", &ctx)
+            .unwrap()
             .len(),
         1
     );
@@ -172,21 +176,24 @@ fn p6_context_sensitivity_matrix_locks_expected_verdicts() {
                 "From: bob@example.invalid (Bob B), alice@example.invalid (Alice A)",
                 &ctx
             )
+            .unwrap()
             .len(),
         2
     );
 
     // Synthesis matrix row 6 / R2-Patch-13: single forward-marker path.
-    let row6 = anchored_recognizers()[0].detect("Forwarded message from Alice Example:", &ctx);
+    let row6 = anchored_recognizers()[0]
+        .detect("Forwarded message from Alice Example:", &ctx)
+        .unwrap();
     assert_eq!(row6.len(), 1);
     assert_eq!(row6[0].source, "structural.forward_marker");
 
     // Synthesis matrix row 7 / R2-Patch-18: local-parts are not fabricated
     // into Name candidates; only Email candidates are present.
     let row7 = "Cc: bob@example.invalid, alice@example.invalid";
-    assert_eq!(paren.detect(row7, &ctx).len(), 0);
+    assert_eq!(paren.detect(row7, &ctx).unwrap().len(), 0);
     assert_eq!(anchored_name_count(row7), 0);
-    assert_eq!(email_recognizer().detect(row7, &ctx).len(), 2);
+    assert_eq!(email_recognizer().detect(row7, &ctx).unwrap().len(), 2);
 
     // Synthesis matrix row 8 / R2-Patch-18: no structural cue in v0.6.
     assert_eq!(

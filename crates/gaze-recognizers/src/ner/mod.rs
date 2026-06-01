@@ -368,7 +368,7 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
-        let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx);
+        let candidates = Recognizer::detect(&recognizer, "alpha bravo", &ctx).unwrap();
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, 6..11);
@@ -377,6 +377,90 @@ mod tests {
             candidates[0].recognizer_version_id.as_deref(),
             Some("ner.fixed.v1")
         );
+    }
+
+    #[test]
+    fn ner_recognizer_surfaces_backend_failure() {
+        struct FailingBackend;
+
+        impl NerBackend for FailingBackend {
+            fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                Err(NerRuntimeError::Inference("synthetic failure".to_string()))
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(FailingBackend),
+            },
+        };
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let err = Recognizer::detect(&recognizer, "Dr. Schmidt", &ctx)
+            .expect_err("backend failure must be caller-visible");
+
+        assert!(matches!(
+            err,
+            gaze_types::DetectError::Backend {
+                recognizer_id,
+                message,
+                ..
+            } if recognizer_id == "ner" && message.contains("synthetic failure")
+        ));
+    }
+
+    #[test]
+    fn ner_recognizer_chunks_long_input_and_offsets_spans() {
+        struct WindowBackend;
+
+        impl NerBackend for WindowBackend {
+            fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+                if input.split_whitespace().count() > 512 {
+                    return Err(NerRuntimeError::Inference(
+                        "window exceeded model limit".to_string(),
+                    ));
+                }
+                Ok(input
+                    .find("Dr. Schmidt")
+                    .map(|start| NerSpanResult {
+                        span: start..start + "Dr. Schmidt".len(),
+                        class: PiiClass::Name,
+                        score: 0.91,
+                    })
+                    .into_iter()
+                    .collect())
+            }
+        }
+
+        let recognizer = NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(WindowBackend),
+            },
+        };
+        let input = format!("{} Dr. Schmidt", vec!["word"; 520].join(" "));
+        let entity_start = input.find("Dr. Schmidt").expect("fixture entity");
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, &input, &ctx).unwrap();
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0].span,
+            entity_start..entity_start + "Dr. Schmidt".len()
+        );
+        assert_eq!(candidates[0].class, PiiClass::Name);
     }
 
     #[test]
@@ -424,8 +508,8 @@ mod tests {
             },
         };
 
-        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx);
-        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx);
+        let default_candidates = Recognizer::detect(&default_threshold, input, &ctx).unwrap();
+        let stricter_candidates = Recognizer::detect(&stricter_threshold, input, &ctx).unwrap();
 
         assert_eq!(default_candidates.len(), 1);
         assert_eq!(default_candidates[0].span, name_start..name_end);

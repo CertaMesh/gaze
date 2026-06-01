@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use crate::anchor_resolver::AnchorResolver;
 use crate::resolver::resolve_candidates_with_policy_and_anchors;
-pub use gaze_types::{Candidate, DetectContext, Recognizer};
-use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass, RecognizerRuntimeError};
+pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
+use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -157,8 +157,12 @@ mod tests {
             &self.class
         }
 
-        fn detect(&self, _input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-            vec![Candidate::new(
+        fn detect(
+            &self,
+            _input: &str,
+            _ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            Ok(vec![Candidate::new(
                 0..5,
                 self.class.clone(),
                 self.id(),
@@ -169,7 +173,7 @@ mod tests {
                 "test",
                 ConflictTier::None,
                 Vec::new(),
-            )]
+            )])
         }
 
         fn token_family(&self) -> &str {
@@ -224,8 +228,12 @@ mod tests {
                 &PiiClass::Email
             }
 
-            fn detect(&self, _input: &str, _ctx: &DetectContext<'_>) -> Vec<Candidate> {
-                vec![Candidate::new(
+            fn detect(
+                &self,
+                _input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> Result<Vec<Candidate>, DetectError> {
+                Ok(vec![Candidate::new(
                     0..5,
                     PiiClass::Email,
                     self.id(),
@@ -236,7 +244,7 @@ mod tests {
                     self.id(),
                     ConflictTier::None,
                     Vec::new(),
-                )]
+                )])
             }
 
             fn token_family(&self) -> &str {
@@ -321,12 +329,12 @@ impl RecognizerRegistry {
         &self,
         input: &str,
         ctx: &DetectContext<'_>,
-    ) -> Result<Vec<Candidate>, RecognizerRuntimeError> {
+    ) -> Result<Vec<Candidate>, DetectError> {
         let mut candidates = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
             LocaleChain::from(ctx.locale_chain).intersects(recognizer.locales())
         }) {
-            candidates.extend(recognizer.try_detect(input, ctx)?);
+            candidates.extend(recognizer.detect(input, ctx)?);
         }
         Ok(candidates)
     }
@@ -335,8 +343,7 @@ impl RecognizerRegistry {
         &self,
         input: &str,
         ctx: &DetectContext<'_>,
-    ) -> Result<(Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>), RecognizerRuntimeError>
-    {
+    ) -> Result<(Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>), DetectError> {
         let classes = self
             .entries
             .iter()
@@ -359,7 +366,7 @@ impl RecognizerRegistry {
                 {
                     class_candidates.extend(
                         recognizer
-                            .try_detect(input, &locale_ctx)?
+                            .detect(input, &locale_ctx)?
                             .into_iter()
                             .filter(|candidate| candidate.score >= min_score(&class)),
                     );

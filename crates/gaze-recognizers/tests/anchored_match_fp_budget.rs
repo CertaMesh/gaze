@@ -96,9 +96,13 @@ fn name_count(input: &str) -> usize {
     let ctx = ctx();
     let anchored = anchored_recognizers()
         .iter()
-        .flat_map(|recognizer| recognizer.detect(input, &ctx))
+        .flat_map(|recognizer| recognizer.detect(input, &ctx).unwrap())
         .count();
-    anchored + paren_header_name_recognizer().detect(input, &ctx).len()
+    anchored
+        + paren_header_name_recognizer()
+            .detect(input, &ctx)
+            .unwrap()
+            .len()
 }
 
 #[test]
