@@ -324,4 +324,32 @@ mod tests {
         assert_eq!(hits[0].source, "dictionary:songs[#0]");
         assert_eq!(hits[1].source, "dictionary:songs[#2]");
     }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_inside_identifier() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "artist_refs".to_string(),
+                ContextDictionary {
+                    terms: vec!["Artist".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "dict/artist_refs",
+            PiiClass::Custom("artist_ref".to_string()),
+            "artist_refs",
+            true,
+            "counter",
+        );
+
+        let hits = recognizer.detect("Du antwortest als Artistfy-Support.", &detect_context);
+
+        assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
+    }
 }

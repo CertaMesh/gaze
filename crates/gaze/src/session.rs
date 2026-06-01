@@ -1913,6 +1913,22 @@ mod tests {
     }
 
     #[test]
+    fn restore_strict_text_preserves_path_adjacency_byte_exact() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::Organization, "Workspace")
+            .expect("token");
+        let clean = format!("list all folders in ~/{token}");
+
+        let restored = session
+            .restore_strict_text(&clean)
+            .expect("restore must succeed");
+
+        assert_eq!(restored, "list all folders in ~/Workspace");
+        assert!(!restored.contains("~/ Workspace"));
+    }
+
+    #[test]
     fn restore_boundary_events_distinguish_manifest_bypass_from_fresh_pii() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let token = session

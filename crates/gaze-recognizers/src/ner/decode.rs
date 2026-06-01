@@ -311,4 +311,13 @@ mod tests {
         assert_eq!(out[0].span, 0..4);
         assert_eq!(out[1].span, 5..8);
     }
+
+    #[test]
+    fn drops_entity_span_inside_identifier() {
+        let source = "Artistfy";
+        let label_map = labels(&[("ORG", PiiClass::Organization)]);
+        let out = merge(source, &["Artist"], &["B-ORG"], &label_map);
+
+        assert!(out.is_empty(), "unexpected partial identifier span: {out:?}");
+    }
 }
