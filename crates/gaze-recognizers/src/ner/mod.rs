@@ -544,11 +544,17 @@ mod tests {
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
         let err = recognizer
-            .try_detect("Alice Example", &ctx)
+            .detect("Alice Example", &ctx)
             .expect_err("backend runtime failures must surface");
 
-        assert_eq!(err.recognizer_id, "ner");
-        assert!(err.message.contains("forced backend failure"));
+        assert!(matches!(
+            err,
+            gaze_types::DetectError::Backend {
+                recognizer_id,
+                message,
+                ..
+            } if recognizer_id == "ner" && message.contains("forced backend failure")
+        ));
     }
 
     #[test]
@@ -588,7 +594,7 @@ mod tests {
         let dictionaries = DictionaryBundle::default();
         let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
 
-        let candidates = recognizer.try_detect(&input, &ctx).expect("detect");
+        let candidates = recognizer.detect(&input, &ctx).expect("detect");
 
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].span, start..start + "Alice Example".len());
