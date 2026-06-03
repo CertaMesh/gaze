@@ -101,7 +101,10 @@ impl NerDetector {
                 },
             ));
         }
-        Ok(merge_overlapping_spans(spans))
+        Ok(merge_overlapping_spans(spans)
+            .into_iter()
+            .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class, true))
+            .collect())
     }
 
     /// Label/offset reconstruction helper. Public for testing the BIO merge.

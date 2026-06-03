@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gaze_types::{Detection, PiiClass};
 
 use super::types::{LabelMap, NerSpanResult};
@@ -58,7 +60,7 @@ pub(crate) fn merge_bio_span_results(
                 break;
             }
         }
-        if is_valid_entity_span(source, start, end, class, enforce_source_boundaries) {
+        if is_valid_entity_span(source, &(start..end), class, enforce_source_boundaries) {
             out.push(NerSpanResult {
                 span: start..end,
                 class: class.clone(),
@@ -70,16 +72,27 @@ pub(crate) fn merge_bio_span_results(
     out
 }
 
-fn is_valid_entity_span(
+pub(crate) fn is_valid_entity_span(
     source: &str,
-    start: usize,
-    end: usize,
+    span: &Range<usize>,
     class: &PiiClass,
     enforce_source_boundaries: bool,
 ) -> bool {
-    !enforce_source_boundaries
-        || (is_token_boundary_match(source, start, end)
-            && !is_suppressed_single_token_organization(source, start, end, class))
+    let start = span.start;
+    let end = span.end;
+    if enforce_source_boundaries && !is_token_boundary_match(source, start, end) {
+        return false;
+    }
+    if is_suppressed_single_token_organization(source, start, end, class) {
+        return false;
+    }
+    if !matches!(class, PiiClass::Name | PiiClass::Organization) {
+        return true;
+    }
+    let Some(text) = source.get(span.clone()) else {
+        return true;
+    };
+    !is_command_argv_identifier_span(text)
 }
 
 fn is_token_boundary_match(source: &str, start: usize, end: usize) -> bool {
@@ -111,6 +124,58 @@ fn is_suppressed_single_token_organization(
         return false;
     };
     !text.chars().any(char::is_whitespace) && text.eq_ignore_ascii_case("workspace")
+}
+
+fn is_command_argv_identifier_span(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed == "~" || is_cli_flag(trimmed) || is_apple_script_literal(trimmed) {
+        return true;
+    }
+    if trimmed.starts_with("osascript ") && trimmed.contains("tell application") {
+        return true;
+    }
+    let mut parts = trimmed.split_ascii_whitespace().peekable();
+    if parts.peek().is_some() {
+        return parts.all(|part| {
+            let token = part.trim_matches(|ch| matches!(ch, '\'' | '"'));
+            token == "~" || is_cli_flag(token) || is_program_identifier_token(token)
+        });
+    }
+    false
+}
+
+fn is_cli_flag(token: &str) -> bool {
+    token
+        .strip_prefix('-')
+        .filter(|rest| !rest.is_empty())
+        .is_some_and(|rest| {
+            rest.chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+        })
+}
+
+fn is_program_identifier_token(token: &str) -> bool {
+    if token.is_empty() || !token.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+    matches!(token, "cal" | "ls" | "osascript")
+        || starts_lowercase_with_internal_uppercase(token)
+        || token.ends_with("Script")
+}
+
+fn starts_lowercase_with_internal_uppercase(token: &str) -> bool {
+    let mut chars = token.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    first.is_ascii_lowercase() && chars.any(|ch| ch.is_ascii_uppercase())
+}
+
+fn is_apple_script_literal(text: &str) -> bool {
+    text.starts_with("tell application ") && text.contains(" to ")
 }
 
 fn bridge_joiner_tokens(
