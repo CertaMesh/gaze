@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-06-04
+
+### Fixed
+
+- **fix(gaze-952): stop over-redacting camelCase command/argv identifiers + narrow lowerCamel suppression** (PR #302). This patch keeps command and argv-shaped identifiers from being treated as PII while preserving the tighter lowerCamel safety-net suppression.
+
 ## [0.10.0] - 2026-06-01
 
 ### Changed

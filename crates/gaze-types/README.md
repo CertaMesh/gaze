@@ -24,7 +24,7 @@ Otherwise depend on `gaze` — it re-exports the public types from this crate.
 
 ```toml
 [dependencies]
-gaze-types = "0.10.0"
+gaze-types = "0.10.1"
 ```
 
 ## Key types
