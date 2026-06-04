@@ -56,6 +56,9 @@ and the signed snapshot wire format are unchanged from v0.9.0.
 
 ### Fixed
 
+- **Release CI guard:** tag-triggered releases now require a successful `test`
+  check on the tagged commit before building/publishing artifacts, and the
+  `gaze-mcp-core` trybuild seal suite is isolated for clearer CI failures.
 - **Axis-1 bundle leak risk** (closes todo #489): `gaze document clean` previously
   wrote `manifest.json` next to `clean.md` in a single caller-selected `out_dir`,
   with no runtime enforcement of the agent / owner partition. Adopters following

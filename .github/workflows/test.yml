@@ -60,5 +60,9 @@ jobs:
         run: cargo test -p gaze-document --features mcp --no-fail-fast
       - name: cargo test gaze-cli mcp feature
         run: cargo test -p gaze-cli --features mcp --no-fail-fast
-      - name: cargo test
-        run: cargo test --workspace --all-features --no-fail-fast
+      - name: cargo test gaze-mcp-core
+        env:
+          RUST_TEST_THREADS: 1
+        run: cargo test -p gaze-mcp-core --all-features --no-fail-fast
+      - name: cargo test workspace
+        run: cargo test --workspace --exclude gaze-mcp-core --all-features --no-fail-fast

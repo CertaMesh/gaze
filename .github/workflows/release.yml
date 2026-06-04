@@ -7,9 +7,33 @@ on:
 
 permissions:
   contents: write
+  checks: read
 
 jobs:
+  require-test-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require green test workflow for tagged commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          test_conclusion="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
+              --jq '[.check_runs[] | select(.name == "test") | .conclusion] | map(select(. == "success")) | first // ""'
+          )"
+
+          if [ "$test_conclusion" != "success" ]; then
+            echo "release blocked: test workflow has not succeeded for ${GITHUB_SHA}" >&2
+            exit 1
+          fi
+
   build:
+    needs: require-test-check
     strategy:
       fail-fast: false
       matrix:
