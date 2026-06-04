@@ -22,6 +22,9 @@ mod tests {
     use crate::ner::backend::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
     use crate::ner::error::NerRuntimeError;
     use crate::ner::types::{CHECKSUMS_FILE, CONFIG_FILE, LABELS_FILE, MODEL_FILE, TOKENIZER_FILE};
+    use gaze::{
+        Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, Scope, Session,
+    };
     use gaze_types::{DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer};
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
@@ -39,6 +42,57 @@ mod tests {
         let mut hasher = Sha256::new();
         hasher.update(bytes);
         hex::encode(hasher.finalize())
+    }
+
+    struct TestBackend {
+        spans: Vec<NerSpanResult>,
+    }
+
+    impl NerBackend for TestBackend {
+        fn detect(&self, _input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            Ok(self.spans.clone())
+        }
+    }
+
+    fn recognizer_with_spans(spans: Vec<NerSpanResult>) -> NerRecognizer {
+        NerRecognizer {
+            detector: NerDetector {
+                model_dir: PathBuf::from("/test/fake"),
+                backend_kind: NerBackendKind::Ort,
+                recognizer_version_id: "ner.fixed.v1".to_string(),
+                locale: None,
+                threshold: 0.5,
+                backend: Arc::new(TestBackend { spans }),
+            },
+        }
+    }
+
+    fn tokenizing_pipeline(recognizer: NerRecognizer) -> Pipeline {
+        Pipeline::builder()
+            .recognizer(recognizer)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(ClassRule::new(PiiClass::Organization, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline")
+    }
+
+    fn clean_text(clean: CleanDocument) -> String {
+        match clean {
+            CleanDocument::Text(text) => text,
+            _ => panic!("expected text clean document"),
+        }
+    }
+
+    fn token_label(class: &PiiClass) -> &'static str {
+        match class {
+            PiiClass::Email => ":Email_",
+            PiiClass::Name => ":Name_",
+            PiiClass::Organization => ":Organization_",
+            PiiClass::Location => ":Location_",
+            PiiClass::Custom(_) => ":Custom:",
+        }
     }
 
     fn good_labels() -> &'static [u8] {
@@ -392,6 +446,114 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..16);
         assert_eq!(out[0].score, 0.34);
+    }
+
+    #[test]
+    fn ner_command_argv_identifier_false_positives_do_not_tokenize_or_drift() {
+        let cases = [
+            ("icalBuddy", PiiClass::Organization),
+            ("eventsToday", PiiClass::Organization),
+            ("AppleScript", PiiClass::Organization),
+            (
+                r#"tell application "Reminders" to return name of reminders whose completed is false"#,
+                PiiClass::Name,
+            ),
+            (
+                r#"osascript -e 'tell application "Reminders" to return name of reminders whose completed is false'"#,
+                PiiClass::Name,
+            ),
+            ("cal", PiiClass::Organization),
+            ("ls", PiiClass::Organization),
+            ("-l", PiiClass::Organization),
+            ("~", PiiClass::Organization),
+            ("icalBuddy -f eventsToday", PiiClass::Organization),
+            ("ls -l ~", PiiClass::Organization),
+        ];
+
+        for (input, class) in cases {
+            let recognizer = recognizer_with_spans(vec![NerSpanResult {
+                span: 0..input.len(),
+                class,
+                score: 0.99,
+            }]);
+            let pipeline = tokenizing_pipeline(recognizer);
+            let session = Session::new(Scope::Ephemeral).expect("session");
+
+            let redacted = clean_text(
+                pipeline
+                    .redact(&session, RawDocument::Text(input.to_string()))
+                    .expect("first redact"),
+            );
+            let restored = pipeline
+                .restore_with_telemetry(&session, &redacted)
+                .expect("restore")
+                .0
+                .text;
+            let reredacted = clean_text(
+                pipeline
+                    .redact(&session, RawDocument::Text(restored.clone()))
+                    .expect("second redact"),
+            );
+
+            assert_eq!(redacted, input, "argv text must not be pseudonymized");
+            assert_eq!(restored, input, "restore must preserve argv bytes");
+            assert_eq!(reredacted, redacted, "redact(restore(redact(x))) drifted");
+        }
+    }
+
+    #[test]
+    fn ner_pii_spans_still_tokenize_after_command_identifier_suppression() {
+        let cases = [
+            ("Owner Dr. Schmidt", "Dr. Schmidt", PiiClass::Name),
+            (
+                "Email alice@example.invalid",
+                "alice@example.invalid",
+                PiiClass::Email,
+            ),
+            (
+                "Home /Users/alice/project",
+                "/Users/alice/project",
+                PiiClass::Name,
+            ),
+            ("Org Workspace", "Workspace", PiiClass::Organization),
+            ("Org OpenAI", "OpenAI", PiiClass::Organization),
+            ("Org xCorp", "xCorp", PiiClass::Organization),
+            ("Owner deVries", "deVries", PiiClass::Name),
+        ];
+
+        for (input, raw, class) in cases {
+            let start = input.find(raw).expect("raw span");
+            let recognizer = recognizer_with_spans(vec![NerSpanResult {
+                span: start..start + raw.len(),
+                class: class.clone(),
+                score: 0.99,
+            }]);
+            let pipeline = tokenizing_pipeline(recognizer);
+            let session = Session::new(Scope::Ephemeral).expect("session");
+
+            let redacted = clean_text(
+                pipeline
+                    .redact(&session, RawDocument::Text(input.to_string()))
+                    .expect("redact"),
+            );
+
+            assert!(
+                !redacted.contains(raw),
+                "PII span stayed raw after redaction: {redacted}"
+            );
+            assert!(
+                redacted.contains(token_label(&class)),
+                "expected {class:?} token in {redacted}"
+            );
+            assert_eq!(
+                pipeline
+                    .restore_with_telemetry(&session, &redacted)
+                    .expect("restore")
+                    .0
+                    .text,
+                input
+            );
+        }
     }
 
     #[test]

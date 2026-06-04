@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use gaze_types::{Detection, PiiClass};
 
 use super::types::{LabelMap, NerSpanResult};
@@ -58,7 +60,7 @@ pub(crate) fn merge_bio_span_results(
                 break;
             }
         }
-        if is_valid_entity_span(source, start, end, class, enforce_source_boundaries) {
+        if is_valid_entity_span(source, &(start..end), class, enforce_source_boundaries) {
             out.push(NerSpanResult {
                 span: start..end,
                 class: class.clone(),
@@ -70,16 +72,27 @@ pub(crate) fn merge_bio_span_results(
     out
 }
 
-fn is_valid_entity_span(
+pub(crate) fn is_valid_entity_span(
     source: &str,
-    start: usize,
-    end: usize,
+    span: &Range<usize>,
     class: &PiiClass,
     enforce_source_boundaries: bool,
 ) -> bool {
-    !enforce_source_boundaries
-        || (is_token_boundary_match(source, start, end)
-            && !is_suppressed_single_token_organization(source, start, end, class))
+    let start = span.start;
+    let end = span.end;
+    if enforce_source_boundaries && !is_token_boundary_match(source, start, end) {
+        return false;
+    }
+    if is_suppressed_single_token_organization(source, start, end, class) {
+        return false;
+    }
+    if !matches!(class, PiiClass::Name | PiiClass::Organization) {
+        return true;
+    }
+    let Some(text) = source.get(span.clone()) else {
+        return true;
+    };
+    !is_command_argv_identifier_span(text)
 }
 
 fn is_token_boundary_match(source: &str, start: usize, end: usize) -> bool {
@@ -110,7 +123,65 @@ fn is_suppressed_single_token_organization(
     let Some(text) = source.get(start..end) else {
         return false;
     };
-    !text.chars().any(char::is_whitespace) && text.eq_ignore_ascii_case("workspace")
+    if text.chars().any(char::is_whitespace) || !text.eq_ignore_ascii_case("workspace") {
+        return false;
+    }
+    source
+        .get(..start)
+        .is_some_and(|before| before.ends_with("~/") || before.ends_with("/"))
+}
+
+fn is_command_argv_identifier_span(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    if trimmed == "~" || is_cli_flag(trimmed) || is_apple_script_literal(trimmed) {
+        return true;
+    }
+    if trimmed.starts_with("osascript ") && trimmed.contains("tell application") {
+        return true;
+    }
+    let mut parts = trimmed.split_ascii_whitespace().peekable();
+    if parts.peek().is_some() {
+        return parts.all(|part| {
+            let token = part.trim_matches(|ch| matches!(ch, '\'' | '"'));
+            token == "~" || is_cli_flag(token) || is_program_identifier_token(token)
+        });
+    }
+    false
+}
+
+fn is_cli_flag(token: &str) -> bool {
+    token
+        .strip_prefix('-')
+        .filter(|rest| !rest.is_empty())
+        .is_some_and(|rest| {
+            rest.chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-')
+        })
+}
+
+// KNOWN DEBT (stop-gap): this literal command/argv allowlist is a per-symptom
+// suppressor, not the real fix. It does not generalize (grep/awk/git/jq/sed still
+// over-redact) and each enumerated token is a latent under-redaction surface (a real
+// PII string colliding with a command word is silently suppressed). The structural
+// fix is an NER span provenance trust-tier + corroboration gate (reuse anchored_match
+// + locale cues) plus an idempotence xtask invariant and a code/argv distractor
+// corpus. See gaze todo #1024 and scratchpad analysis/gaze-overredaction-architecture.
+// Do not grow this list reflexively; add a corpus row and let the structural gate handle it.
+fn is_program_identifier_token(token: &str) -> bool {
+    if token.is_empty() || !token.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+        return false;
+    }
+    matches!(
+        token,
+        "cal" | "eventsToday" | "icalBuddy" | "ls" | "osascript"
+    ) || token.ends_with("Script")
+}
+
+fn is_apple_script_literal(text: &str) -> bool {
+    text.starts_with("tell application ") && text.contains(" to ")
 }
 
 fn bridge_joiner_tokens(
