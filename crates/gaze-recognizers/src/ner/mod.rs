@@ -517,6 +517,8 @@ mod tests {
             ),
             ("Org Workspace", "Workspace", PiiClass::Organization),
             ("Org OpenAI", "OpenAI", PiiClass::Organization),
+            ("Org xCorp", "xCorp", PiiClass::Organization),
+            ("Owner deVries", "deVries", PiiClass::Name),
         ];
 
         for (input, raw, class) in cases {

@@ -123,7 +123,12 @@ fn is_suppressed_single_token_organization(
     let Some(text) = source.get(start..end) else {
         return false;
     };
-    !text.chars().any(char::is_whitespace) && text.eq_ignore_ascii_case("workspace")
+    if text.chars().any(char::is_whitespace) || !text.eq_ignore_ascii_case("workspace") {
+        return false;
+    }
+    source
+        .get(..start)
+        .is_some_and(|before| before.ends_with("~/") || before.ends_with("/"))
 }
 
 fn is_command_argv_identifier_span(text: &str) -> bool {
@@ -161,17 +166,10 @@ fn is_program_identifier_token(token: &str) -> bool {
     if token.is_empty() || !token.chars().all(|ch| ch.is_ascii_alphanumeric()) {
         return false;
     }
-    matches!(token, "cal" | "ls" | "osascript")
-        || starts_lowercase_with_internal_uppercase(token)
-        || token.ends_with("Script")
-}
-
-fn starts_lowercase_with_internal_uppercase(token: &str) -> bool {
-    let mut chars = token.chars();
-    let Some(first) = chars.next() else {
-        return false;
-    };
-    first.is_ascii_lowercase() && chars.any(|ch| ch.is_ascii_uppercase())
+    matches!(
+        token,
+        "cal" | "eventsToday" | "icalBuddy" | "ls" | "osascript"
+    ) || token.ends_with("Script")
 }
 
 fn is_apple_script_literal(text: &str) -> bool {

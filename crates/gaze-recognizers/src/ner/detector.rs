@@ -103,7 +103,7 @@ impl NerDetector {
         }
         Ok(merge_overlapping_spans(spans)
             .into_iter()
-            .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class, true))
+            .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class, false))
             .collect())
     }
 
