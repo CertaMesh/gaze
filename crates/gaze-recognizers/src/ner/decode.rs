@@ -162,6 +162,14 @@ fn is_cli_flag(token: &str) -> bool {
         })
 }
 
+// KNOWN DEBT (stop-gap): this literal command/argv allowlist is a per-symptom
+// suppressor, not the real fix. It does not generalize (grep/awk/git/jq/sed still
+// over-redact) and each enumerated token is a latent under-redaction surface (a real
+// PII string colliding with a command word is silently suppressed). The structural
+// fix is an NER span provenance trust-tier + corroboration gate (reuse anchored_match
+// + locale cues) plus an idempotence xtask invariant and a code/argv distractor
+// corpus. See gaze todo #1024 and scratchpad analysis/gaze-overredaction-architecture.
+// Do not grow this list reflexively; add a corpus row and let the structural gate handle it.
 fn is_program_identifier_token(token: &str) -> bool {
     if token.is_empty() || !token.chars().all(|ch| ch.is_ascii_alphanumeric()) {
         return false;
