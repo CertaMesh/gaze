@@ -1,39 +1,55 @@
-# Gaze v0.1 policy file.
-# The Datenschutzbeauftragter reviews THIS file.
-# Exactly one [connection.production] block is required in v0.1.
+# Gaze policy example - schema 0.1.0.
+# Reference: docs/policy.md. This file is intended to load with the v0.9 CLI.
 
-[connection.production]
-kind = "mysql"
-ssh_host = "deploy@prod.example.com"
-local_port = 13306
-remote_host = "127.0.0.1"
-remote_port = 3306
-database = "myapp"
-user = "gaze_ro"
-password_env = "GAZE_DB_PASSWORD"
+schema_version = "0.1.0"
 
-[policy.database]
-allowed_tables = ["users", "orders"]
-blocked_columns = ["iban", "tax_id"]
-max_rows = 50
-max_distinct = 50
-count_allowed_columns = ["id", "status", "created_at"]
-distinct_allowed_columns = ["status", "country"]
-allowed_operations = ["schema", "sample", "count", "distinct", "explain"]
+[session]
+scope = "persistent"
+ttl_secs = 86400
 
-[[policy.database.columns]]
-table = "users"
-column = "id"
-class = "id"
+# Active locale chain for locale-gated recognizers. Gaze falls back through
+# the configured tags, rulepack defaults, system locale, then global rules.
+[locale]
+active = ["en-US"]
 
-[[policy.database.columns]]
-table = "users"
-column = "email"
+[policy.rulepacks]
+bundled = ["core"]
+paths = []
+
+[[rule]]
+kind = "class"
 class = "email"
+action = "tokenize"
 
-[policy.logs]
-path = "/var/log/myapp/laravel.log"
-strip_patterns = [
-    "(?i)password[=:][^ ]+",
-    "Bearer [A-Za-z0-9._-]+",
-]
+[[rule]]
+kind = "class"
+class = "name"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "location"
+action = "generalize"
+
+[[rule]]
+kind = "class"
+class = "organization"
+action = "preserve"
+
+# Example tenant recognizer for adopter-owned identifiers. The sample pattern
+# is synthetic and non-reachable; uncomment this block and its rule together.
+#
+# [[policy.custom_recognizers]]
+# kind = "regex"
+# name = "tenant.order_id"
+# pattern = '\bORDER-[0-9]{6}\b'
+# class = "custom:order_id"
+#
+# [[rule]]
+# kind = "class"
+# class = "custom:order_id"
+# action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
