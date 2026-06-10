@@ -38,10 +38,13 @@ cargo test --workspace --all-features
 cargo run -p xtask -- ci-feature-matrix
 ```
 
-PR-triggered CI catches formatting, clippy, workspace tests, selected feature
-tests, README version drift, doc-tests, and rustdoc warnings. Dylint currently
-runs on a weekly/manual workflow; run the remaining xtask gates locally before
-merging changes that touch protected policy, recognizer, or audit boundaries.
+PR-triggered CI catches doc-test and rustdoc warnings
+(`.github/workflows/docs.yml`), MSRV cargo checks, formatting, clippy,
+README version drift, selected feature tests, workspace tests, and the active
+xtask gate roster (`.github/workflows/test.yml`). Dylint runs on relevant
+source/lint PR changes plus its weekly/manual schedule
+(`.github/workflows/dylint.yml`). The cargo-deny workflow runs weekly and on
+PRs that touch `Cargo.lock`, `deny.toml`, or its workflow file.
 
 ## v0.9 architecture primer
 
