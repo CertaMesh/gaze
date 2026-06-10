@@ -1189,7 +1189,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b[a-z0-9._%+\-]+@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.(?:com|org|net|edu|gov|de|uk|fr|nl|io|ai|co))\b'''
+pattern = '''(?i)[a-z0-9_][a-z0-9._%+\-]*@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.(?:com|org|net|edu|gov|de|uk|fr|nl|io|ai|co))'''
 
 [recognizers.context]
 exclusions = ["test.local"]
