@@ -66,7 +66,7 @@ Source anchors: [crates/gaze/src/pipeline.rs](./crates/gaze/src/pipeline.rs),
 
 ## Crate Map
 
-The workspace currently has nine published-shape crates plus internal `xtask`.
+The workspace currently has ten published-shape crates plus internal `xtask`.
 For the fuller crate boundary table, see
 [docs/architecture/crates.md](./docs/architecture/crates.md).
 
@@ -81,6 +81,7 @@ For the fuller crate boundary table, see
 | `gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: tool registry, sealed context, envelope dispatch, manifest store, auth hook, session-id policy. | You are building an MCP tool host and need every tool call through Gaze before reaching a source system. |
 | `gaze-mcp-rmcp` | rmcp transport sink for `gaze-mcp-core`, with stdio default and opt-in streamable HTTP. | You want rmcp framing without reimplementing the transport adapter. |
 | `gaze-document` | OSS document ingestion: PNG/JPG/PDF to Tesseract OCR to Gaze redaction to `SafeBundle`. | You need `clean.md`, `manifest.json`, and `report.json` from scanned or rasterized documents. |
+| `gaze-proxy` | API-key LLM proxy for OpenAI/Anthropic/Gemini request and response pseudonymization. | You need a process-boundary chokepoint for SDK base-URL traffic rather than direct library or MCP integration. |
 | `xtask` | Internal gate runner plus detached Dylint workspace for protected-path enforcement. | You are adding or running repository gates and CI-only checks. |
 
 ## Three Execution Layers
