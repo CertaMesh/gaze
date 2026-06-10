@@ -8,13 +8,39 @@ Clone the repo and run the toolchain check:
 cargo build --workspace --all-features
 ```
 
+Native prerequisites used by the full workspace and CI:
+
+- Tesseract OCR plus the English language pack for `gaze-document` image OCR.
+- A pdfium shared library visible to the dynamic loader when PDF input is used.
+- `protoc` / `protobuf-compiler` for ONNX-related build paths.
+- Local model assets for live NER or SafetyNet work. Fetch pinned bundles with
+  `scripts/fetch-ner-model.sh`, `scripts/fetch-kiji-safetynet-model.sh`, or
+  `scripts/fetch-openai-privacy-filter.sh` as appropriate; Gaze does not fetch
+  model files at `gaze clean` runtime.
+
+On Debian/Ubuntu, CI installs the package-backed prerequisites with:
+
+```bash
+sudo apt-get install -y tesseract-ocr tesseract-ocr-eng protobuf-compiler
+```
+
+On macOS, the equivalent package names are:
+
+```bash
+brew install tesseract protobuf
+```
+
+pdfium installation is platform-specific; follow
+[`docs/getting-started/document-workflow.md`](docs/getting-started/document-workflow.md)
+for the shared-library visibility requirement.
+
 PR-triggered CI (`.github/workflows/docs.yml`) runs `cargo doc -D warnings`
 and `cargo test --doc` on every PR. Workspace tests and xtask gates run
 locally — see the "PR-checks ritual" section below.
 
 ## Workspace shape
 
-As of v0.7.2, the workspace has **nine** published-shape crates plus `xtask`. The ninth crate is `gaze-document` (added in v0.7.1).
+As of v0.9.0, the workspace has **ten** published-shape crates plus `xtask`.
 
 | Crate | Role |
 |---|---|
@@ -27,6 +53,7 @@ As of v0.7.2, the workspace has **nine** published-shape crates plus `xtask`. Th
 | `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. New in v0.7.0. |
 | `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. New in v0.7.0. |
 | `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` schema versioned via `bundle_version = 1`. New in v0.7.1. |
+| `crates/gaze-proxy` | API-key LLM proxy for OpenAI/Anthropic/Gemini request and response pseudonymization. New in v0.8.0. |
 | `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D). |
 | `xtask/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
 
