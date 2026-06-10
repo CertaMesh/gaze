@@ -93,6 +93,8 @@ impl RegexDetector {
         normalizer_kind: Option<NormalizerKind>,
     ) -> Result<Self> {
         let regex = Regex::new(pattern).map_err(RecognizerError::InvalidRegex)?;
+        let ascii_email_boundary = class == PiiClass::Email && source == "email.global";
+
         Ok(Self {
             regex,
             class,
@@ -105,7 +107,7 @@ impl RegexDetector {
             exclusions,
             validator_kind,
             normalizer_kind,
-            ascii_email_boundary: false,
+            ascii_email_boundary,
         })
     }
 
