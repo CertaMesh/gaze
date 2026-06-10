@@ -1189,7 +1189,7 @@ locales = ["global"]
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b[a-z0-9._%+\-]+@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+(?:[a-z]{2,3}|[a-su-z][a-z]{3}|t[a-df-z][a-z]{2}|te[a-rt-z][a-z]|tes[a-su-z]|[a-z]{5,6}|[a-hj-z][a-z]{6}|i[a-mo-z][a-z]{5}|in[a-uw-z][a-z]{4}|inv[b-z][a-z]{3}|inva[a-km-z][a-z]{2}|inval[a-hj-z][a-z]|invali[a-ce-z]|[a-z]{8,}))\b'''
+pattern = '''(?i)[a-z0-9_][a-z0-9._%+\-]*@(?:(?:[a-z0-9\-]+\.)*example\.invalid|test\.local|(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+(?:[a-z]{2,3}|[a-su-z][a-z]{3}|t[a-df-z][a-z]{2}|te[a-rt-z][a-z]|tes[a-su-z]|[a-z]{5,6}|[a-hj-z][a-z]{6}|i[a-mo-z][a-z]{5}|in[a-uw-z][a-z]{4}|inv[b-z][a-z]{3}|inva[a-km-z][a-z]{2}|inval[a-hj-z][a-z]|invali[a-ce-z]|[a-z]{8,}))'''
 
 [recognizers.context]
 exclusions = ["test.local"]

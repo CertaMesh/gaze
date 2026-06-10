@@ -1426,11 +1426,32 @@ fn core_email_global_matches_non_ascii_and_punctuation_boundaries() {
         "a@example.invalid. Thanks",
         "a@example.invalid- call me",
         "a@example.invalid+",
+        "a@example.invalid%",
         ".a@example.invalid",
     ] {
         assert_eq!(
             detect_recognizer(&core, "email.global", input, LocaleTag::EnUs),
             vec!["a@example.invalid".to_string()],
+            "{input}"
+        );
+    }
+
+    assert_eq!(
+        detect_recognizer(
+            &core,
+            "email.global",
+            "a@example.invalid,b@example.invalid",
+            LocaleTag::EnUs
+        ),
+        vec![
+            "a@example.invalid".to_string(),
+            "b@example.invalid".to_string()
+        ]
+    );
+
+    for input in ["a@example.invalid1", "a@example.invalid_"] {
+        assert!(
+            detect_recognizer(&core, "email.global", input, LocaleTag::EnUs).is_empty(),
             "{input}"
         );
     }
