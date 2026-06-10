@@ -8,6 +8,8 @@ use crate::ner::detector::NerDetector;
 use crate::ner::error::{NerLoadError, NerRuntimeError};
 use crate::ner::types::{LabelMap, NerBackendKind, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
 
+const _: () = assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
+
 /// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
 /// label map, `id2label` vocab, and pre-computed source tag. BIO/IOB2 subword
 /// tags are merged via `NerDetector::merge_bio_spans`.
@@ -165,7 +167,6 @@ fn tokenized_chunk_ranges(
         return Ok(std::iter::once(0..input.len()).collect());
     }
 
-    debug_assert!(NER_CHUNK_TOKEN_OVERLAP < NER_CHUNK_TOKEN_BUDGET);
     let stride = NER_CHUNK_TOKEN_BUDGET - NER_CHUNK_TOKEN_OVERLAP;
     let mut chunks = Vec::new();
     let mut token_start = 0;
