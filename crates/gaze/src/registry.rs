@@ -344,6 +344,7 @@ impl RecognizerRegistry {
         input: &str,
         ctx: &DetectContext<'_>,
     ) -> Result<(Vec<Candidate>, Vec<crate::validator_veto::VetoedCandidate>), DetectError> {
+        let locale_chain = LocaleChain::from(ctx.locale_chain);
         let classes = self
             .entries
             .iter()
@@ -352,7 +353,7 @@ impl RecognizerRegistry {
         let mut candidates = Vec::new();
 
         for class in classes {
-            for locale in ctx.locale_chain {
+            for locale in locale_chain.as_slice() {
                 let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.degraded.set(ctx.degraded.get());
                 let mut class_candidates = Vec::new();
@@ -385,7 +386,7 @@ impl RecognizerRegistry {
                 self.family_policy(),
                 &self.anchor_resolver,
                 input,
-                ctx.locale_chain,
+                locale_chain.as_slice(),
             ),
             vetoed,
         ))
