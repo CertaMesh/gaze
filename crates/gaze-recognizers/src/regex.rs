@@ -111,7 +111,7 @@ impl RegexDetector {
 
     pub fn emails() -> Result<Self> {
         let mut detector = Self::new(
-            r"(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}",
+            r"(?i)[a-z0-9_][a-z0-9._%+\-]*@[a-z0-9.\-]+\.[a-z]{2,}",
             PiiClass::Email,
         )?;
         detector.ascii_email_boundary = true;
@@ -225,11 +225,11 @@ impl RegexDetector {
         let previous_ok = input[..span.start]
             .chars()
             .next_back()
-            .map_or(true, |ch| !is_ascii_email_continuation(ch));
+            .is_none_or(|ch| !is_ascii_email_continuation(ch));
         let next_ok = input[span.end..]
             .chars()
             .next()
-            .map_or(true, |ch| !is_ascii_email_continuation(ch));
+            .is_none_or(|ch| !is_ascii_email_continuation(ch));
 
         previous_ok && next_ok
     }
@@ -244,7 +244,7 @@ fn iban_canonicalize(input: &str) -> String {
 }
 
 fn is_ascii_email_continuation(ch: char) -> bool {
-    ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '%' | '+' | '-')
+    ch.is_ascii_alphanumeric() || ch == '_'
 }
 
 #[cfg(test)]
@@ -277,6 +277,37 @@ mod tests {
         assert_eq!(detections.len(), 2);
         assert_eq!(detections[0].span, 0..17);
         assert_eq!(detections[1].span, 18..35);
+    }
+
+    #[test]
+    fn bundled_email_detector_accepts_ascii_punctuation_suffixes() {
+        let detector = RegexDetector::emails().expect("email detector");
+
+        for (input, span) in [
+            ("Contact a@example.invalid. Thanks", 8..25),
+            ("a@example.invalid- call me", 0..17),
+            ("a@example.invalid+", 0..17),
+            ("a@example.invalid%", 0..17),
+        ] {
+            let detections = Detector::detect(&detector, input);
+            assert_eq!(detections.len(), 1, "{input}");
+            assert_eq!(detections[0].span, span, "{input}");
+        }
+    }
+
+    #[test]
+    fn bundled_email_detector_keeps_leading_delimiters_out_of_span() {
+        let detector = RegexDetector::emails().expect("email detector");
+
+        for input in [
+            ".a@example.invalid",
+            "-a@example.invalid",
+            "+a@example.invalid",
+        ] {
+            let detections = Detector::detect(&detector, input);
+            assert_eq!(detections.len(), 1, "{input}");
+            assert_eq!(detections[0].span, 1..18, "{input}");
+        }
     }
 
     #[test]
