@@ -1457,24 +1457,9 @@ fn replace_clean_span(
 }
 
 fn restore_known_tokens(session: &Session, text: &str) -> Result<String> {
-    let mut tokens = session.tokens();
-    if tokens.is_empty() {
+    let Some(re) = session.restore_regex()? else {
         return Ok(text.to_string());
-    }
-    tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-    let pattern = tokens
-        .iter()
-        .map(|token| {
-            let escaped = regex::escape(token);
-            if token.starts_with('<') && token.ends_with('>') {
-                escaped
-            } else {
-                format!(r"\b(?:{escaped})\b")
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("|");
-    let re = regex::Regex::new(&pattern).map_err(Error::InvalidRegex)?;
+    };
     let mut out = String::with_capacity(text.len());
     let mut last = 0usize;
     for matched in re.find_iter(text) {
