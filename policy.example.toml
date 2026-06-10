@@ -1,38 +1,21 @@
-# Gaze policy.toml example for the current loader.
-# This file is intentionally parse-tested by crates/gaze/tests/policy_example.rs.
+# Gaze policy example - schema 0.1.0.
+# Reference: docs/policy.md. This file is intended to load with the v0.9 CLI.
 
 schema_version = "0.1.0"
 
 [session]
-# Use "ephemeral" for one-shot requests, "conversation" for one chat/session,
-# or "persistent" when restore must survive across process restarts.
 scope = "persistent"
 ttl_secs = 86400
 
+# Active locale chain for locale-gated recognizers. Gaze falls back through
+# the configured tags, rulepack defaults, system locale, then global rules.
 [locale]
-# Locale-gated bundled recognizers run only when the active chain matches.
-active = ["en-US", "global"]
+active = ["en-US"]
 
 [policy.rulepacks]
-# "core" is the default bundled rulepack; spell it out here for reviewability.
 bundled = ["core"]
 paths = []
 
-[[policy.custom_recognizers]]
-kind = "regex"
-name = "synthetic_support_email"
-pattern = '[A-Za-z0-9._%+-]+@example[.]invalid'
-class = "email"
-safety_tier = "safe_default"
-
-[[policy.custom_recognizers]]
-kind = "dictionary"
-name = "synthetic_reviewer_names"
-class = "name"
-terms = ["Dr. Schmidt"]
-case_sensitive = true
-safety_tier = "safe_default"
-
 [[rule]]
 kind = "class"
 class = "email"
@@ -42,6 +25,30 @@ action = "tokenize"
 kind = "class"
 class = "name"
 action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "location"
+action = "generalize"
+
+[[rule]]
+kind = "class"
+class = "organization"
+action = "preserve"
+
+# Example tenant recognizer for adopter-owned identifiers. The sample pattern
+# is synthetic and non-reachable; uncomment this block and its rule together.
+#
+# [[policy.custom_recognizers]]
+# kind = "regex"
+# name = "tenant.order_id"
+# pattern = '\bORDER-[0-9]{6}\b'
+# class = "custom:order_id"
+#
+# [[rule]]
+# kind = "class"
+# class = "custom:order_id"
+# action = "tokenize"
 
 [[rule]]
 kind = "default"
