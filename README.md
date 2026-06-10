@@ -112,6 +112,10 @@ Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHI
 
 ## Install
 
+The workspace MSRV is Rust 1.89, matching the `rust-version` declared in every
+crate manifest. `rust-toolchain.toml` pins Rust 1.96.0 for reproducible local
+tooling, but CI also checks that the workspace still builds on Rust 1.89.
+
 ```sh
 git clone https://github.com/EmpireTwo/gaze.git
 cd gaze
