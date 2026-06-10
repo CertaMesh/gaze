@@ -17,14 +17,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = ["proxy-daemon"]
-proxy-daemon = ["dep:chrono", "dep:dirs", "dep:fs2", "dep:daemonize", "dep:tracing-appender"]
+proxy-daemon = ["dep:chrono", "dep:dirs", "dep:fs2", "dep:tracing-appender"]
 
 [dependencies]
 async-trait = "0.1"
 axum = "0.8"
 bytes = "1"
 chrono = { version = "0.4", optional = true, default-features = false, features = ["clock", "std"] }
-daemonize = { version = "0.5", optional = true }
 dirs = { version = "6", optional = true }
 fs2 = { version = "0.4", optional = true }
 futures-util = "0.3"

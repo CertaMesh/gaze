@@ -20,6 +20,14 @@ allow = [
     "Zlib",
 ]
 
+# MPL-2.0 is allowed only for `option-ext`, a tiny transitive helper pulled in by
+# dirs-sys -> dirs -> gaze-proxy for platform data/config path resolution. Keep
+# this bounded to the exact crate and revisit after replacing `dirs`, after
+# dirs-sys drops option-ext, or by 2026-12-10.
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "option-ext" },
+]
+
 private = { ignore = true }
 
 [bans]
