@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::BTreeSet;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::mapref::entry::Entry;
@@ -287,6 +287,7 @@ pub struct Session {
     token_by_value: DashMap<TokenKey, String>,
     value_by_token: DashMap<String, String>,
     prefix_cache: DashMap<u64, PrefixCacheEntry>,
+    restore_regex_cache: RwLock<Option<(usize, Arc<Regex>)>>,
     signing_key: SessionKey,
 }
 
@@ -300,6 +301,7 @@ impl Session {
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
             prefix_cache: DashMap::new(),
+            restore_regex_cache: RwLock::new(None),
             signing_key: SessionKey::generate()?,
         })
     }
@@ -407,6 +409,56 @@ impl Session {
             .iter()
             .map(|entry| entry.key().clone())
             .collect()
+    }
+
+    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
+        let token_count = self.value_by_token.len();
+        if token_count == 0 {
+            return Ok(None);
+        }
+
+        {
+            let cache = self.restore_regex_cache_read();
+            if let Some((cached_count, cached_regex)) = cache.as_ref() {
+                if *cached_count == token_count {
+                    return Ok(Some(Arc::clone(cached_regex)));
+                }
+            }
+        }
+
+        let mut tokens = self.tokens();
+        if tokens.is_empty() {
+            return Ok(None);
+        }
+        tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+        let pattern = tokens
+            .iter()
+            .map(|token| {
+                let escaped = regex::escape(token);
+                if token.starts_with('<') && token.ends_with('>') {
+                    escaped
+                } else {
+                    format!(r"\b(?:{escaped})\b")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("|");
+        let regex = Arc::new(Regex::new(&pattern).map_err(Error::InvalidRegex)?);
+        let cached_count = tokens.len();
+        *self.restore_regex_cache_write() = Some((cached_count, Arc::clone(&regex)));
+        Ok(Some(regex))
+    }
+
+    fn restore_regex_cache_read(&self) -> RwLockReadGuard<'_, Option<(usize, Arc<Regex>)>> {
+        self.restore_regex_cache
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    fn restore_regex_cache_write(&self) -> RwLockWriteGuard<'_, Option<(usize, Arc<Regex>)>> {
+        self.restore_regex_cache
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -707,6 +759,7 @@ impl Session {
             token_by_value: DashMap::new(),
             value_by_token: DashMap::new(),
             prefix_cache: DashMap::new(),
+            restore_regex_cache: RwLock::new(None),
             signing_key: SessionKey::generate()?,
         };
         for entry in payload.entries {
