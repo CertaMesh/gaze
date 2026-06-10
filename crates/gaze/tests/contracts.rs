@@ -111,6 +111,37 @@ fn distinct_conversation_sessions_produce_distinct_pseudonyms_for_identical_raw_
 }
 
 #[test]
+fn clean_with_safety_net_tokenizes_minimal_email() {
+    let pipeline = Pipeline::builder()
+        .detector(RegexDetector::emails().expect("email detector"))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .build()
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+
+    let (clean, _manifest, _report) = pipeline
+        .clean_with_safety_net(
+            &session,
+            RawDocument::Text("a@example.invalid".to_string()),
+            &[],
+        )
+        .expect("redact");
+    let CleanDocument::Text(text) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(
+        !text.contains("a@example.invalid"),
+        "minimal email leaked through clean text: {text:?}"
+    );
+    assert!(text.starts_with('<') && text.ends_with(":Email_1>"));
+    assert_eq!(
+        session.restore_strict(&text).expect("restore"),
+        "a@example.invalid"
+    );
+}
+
+#[test]
 fn two_ephemeral_sessions_are_independent_namespaces() {
     let pipeline = email_token_pipeline();
     let a = Session::new(Scope::Ephemeral).expect("session a");
