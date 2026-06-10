@@ -145,6 +145,26 @@ fn normalization_runs_before_detection() {
 }
 
 #[test]
+fn email_tokenization_handles_non_ascii_boundary_suffix() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let pipeline = email_token_pipeline();
+
+    let text = redact_text(&pipeline, &session, "a@example.invalidø");
+
+    assert!(
+        !text.contains("a@example.invalid"),
+        "email substring leaked through clean text: {text}"
+    );
+    assert!(text.starts_with('<') && text.ends_with(":Email_1>ø"));
+
+    let token = text.trim_end_matches('ø');
+    assert_eq!(
+        session.restore_strict(token).expect("restore token"),
+        "a@example.invalid"
+    );
+}
+
+#[test]
 fn longest_span_wins_for_overlaps() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let pipeline = Pipeline::builder()
