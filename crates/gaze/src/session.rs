@@ -967,7 +967,10 @@ fn structural_findings(text: &str) -> Vec<StructuralFinding> {
 }
 
 fn collect_email_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
-    for matched in email_pattern().find_iter(text) {
+    for caps in email_pattern().captures_iter(text) {
+        let Some(matched) = caps.get(1) else {
+            continue;
+        };
         let raw = matched.as_str();
         if !is_basic_restore_email(raw) {
             continue;
@@ -1040,7 +1043,7 @@ fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
 fn email_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
-        Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
+        Regex::new(r"(?i)(?:^|[^a-z0-9_])([a-z0-9_][a-z0-9._%+\-]*@[a-z0-9.\-]+\.[a-z]{2,})(?:$|[^a-z0-9_])")
             .expect("email restore DLP regex compiles")
     })
 }
@@ -1971,6 +1974,24 @@ mod tests {
         assert_ne!(events[0].raw_sha256, "alice@example.invalid");
         assert_eq!(events[1].kind, RestoreEventKind::FreshPiiDetected);
         assert_eq!(events[1].class, PiiClass::Email);
+    }
+
+    #[test]
+    fn restore_dlp_email_boundary_accepts_non_ascii_and_punctuation_delimiters() {
+        for (input, location) in [
+            ("a@example.invalidø", 0..17),
+            ("a@example.invalid. Thanks", 0..17),
+            (".a@example.invalid", 1..18),
+        ] {
+            let findings = structural_findings(input);
+            let finding = findings
+                .iter()
+                .find(|finding| finding.class == PiiClass::Email)
+                .unwrap_or_else(|| panic!("missing email finding for {input}"));
+
+            assert_eq!(finding.raw, "a@example.invalid", "{input}");
+            assert_eq!(finding.location, location, "{input}");
+        }
     }
 
     #[test]

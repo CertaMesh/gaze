@@ -1418,6 +1418,25 @@ fn phase2_iban_and_cards_are_universal_and_solo_classes() {
 }
 
 #[test]
+fn core_email_global_matches_non_ascii_and_punctuation_boundaries() {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+
+    for input in [
+        "a@example.invalidø",
+        "a@example.invalid. Thanks",
+        "a@example.invalid- call me",
+        "a@example.invalid+",
+        ".a@example.invalid",
+    ] {
+        assert_eq!(
+            detect_recognizer(&core, "email.global", input, LocaleTag::EnUs),
+            vec!["a@example.invalid".to_string()],
+            "{input}"
+        );
+    }
+}
+
+#[test]
 fn core_and_core_extended_compose_without_counter_collision() {
     let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
     let extended = core_extended();

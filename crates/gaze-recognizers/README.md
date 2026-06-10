@@ -59,13 +59,9 @@ The public surface is re-exported from [`src/lib.rs`](src/lib.rs).
 `RegexDetector` can be constructed directly:
 
 ```rust
-use gaze::PiiClass;
 use gaze_recognizers::RegexDetector;
 
-let recognizer = RegexDetector::new(
-    r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b",
-    PiiClass::Email,
-)?;
+let recognizer = RegexDetector::emails()?;
 ```
 
 Use `RegexDetector::emails()` for the built-in email recognizer. Rulepack
