@@ -70,7 +70,9 @@ fn all_official_labels_map_exactly_to_gaze_classes() {
     for (raw, expected) in cases {
         let label = map_openai_label(raw).unwrap();
         assert_eq!(
-            openai_label_to_safety_net_class(label).to_pii_class(),
+            openai_label_to_safety_net_class(label)
+                .expect("official label maps to safety-net class")
+                .to_pii_class(),
             expected
         );
     }
