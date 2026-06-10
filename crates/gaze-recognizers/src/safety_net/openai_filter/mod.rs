@@ -144,7 +144,9 @@ fn raw_span_to_model_span(
 
     let private_label = map_openai_label(&raw.label)
         .map_err(|error| ModelError::InferenceFailed(error.to_string()))?;
-    let class = openai_label_to_safety_net_class(private_label).to_pii_class();
+    let class = openai_label_to_safety_net_class(private_label)
+        .map_err(|error| ModelError::InferenceFailed(error.to_string()))?
+        .to_pii_class();
     let byte_range = raw.start..raw.end;
     let text = input[byte_range.clone()].to_string();
 
@@ -163,7 +165,7 @@ fn raw_span_to_suspect(
     context: SafetyNetContext<'_>,
 ) -> Result<Option<LeakSuspect>, SafetyNetError> {
     let private_label = map_openai_label(&raw.label)?;
-    let class = openai_label_to_safety_net_class(private_label).to_pii_class();
+    let class = openai_label_to_safety_net_class(private_label)?.to_pii_class();
     let span = raw.start..raw.end;
     let Some(kind) = context.manifest.diff_against(&span, &class) else {
         return Ok(None);
