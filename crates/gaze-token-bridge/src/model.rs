@@ -12,6 +12,7 @@
 use gaze::PiiClass;
 use serde::{Deserialize, Serialize};
 
+use crate::error::DenyReason;
 use crate::util::collapse_ascii_whitespace;
 
 /// `tenant/corpus/version` identifier, e.g. `tenant_demo/customer_docs/v1`.
@@ -277,6 +278,34 @@ pub enum BridgeDecision {
     },
     Deny {
         reason: crate::error::DenyReason,
+    },
+}
+
+/// Authorization grant emitted by Track A policy evaluation. Track C turns this into
+/// a short-lived capability; Track A does not mint handles.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthGrant {
+    pub entity_ref: IndexedEntityRef,
+    pub entity_class: PiiClass,
+    pub effective_purpose: String,
+    pub max_results: usize,
+    pub allowed_filters: Vec<String>,
+    pub elevated_audit: bool,
+    pub raw_sha256: String,
+}
+
+/// Policy outcome: either enough owner-side authorization data for Track C to issue
+/// a capability, or a typed fail-closed deny.
+// Transient decision value matched immediately by bridge runtime; keep it direct to
+// mirror BridgeDecision and avoid allocation in the hot path.
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PolicyOutcome {
+    Grant(AuthGrant),
+    Deny {
+        reason: DenyReason,
+        entity_class: Option<PiiClass>,
+        raw_sha256: Option<String>,
     },
 }
 
