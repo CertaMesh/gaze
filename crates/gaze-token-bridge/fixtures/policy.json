@@ -1,0 +1,74 @@
+{
+  "domains": [
+    {
+      "domain_id": "tenant_demo/customer_docs/v1",
+      "tenant_id": "tenant_demo",
+      "corpus_type": "customer_docs",
+      "purpose": "support_lookup",
+      "allowed_roles": ["support", "admin"],
+      "allowed_tools": ["support_search", "legal_search"],
+      "allowed_actions": ["search_documents"],
+      "allowed_entity_classes": ["name", "email", "custom:customer_id", "organization"],
+      "snippets_allowed": true,
+      "raw_restore_allowed": false,
+      "co_searchable_with": ["tenant_demo/legal_docs/v1"],
+      "projection_key_id": "customer-v2"
+    },
+    {
+      "domain_id": "tenant_demo/legal_docs/v1",
+      "tenant_id": "tenant_demo",
+      "corpus_type": "legal_docs",
+      "purpose": "legal_lookup",
+      "allowed_roles": ["admin"],
+      "allowed_tools": ["legal_search"],
+      "allowed_actions": ["search_documents"],
+      "allowed_entity_classes": ["name", "email", "organization"],
+      "snippets_allowed": true,
+      "raw_restore_allowed": false,
+      "co_searchable_with": ["tenant_demo/customer_docs/v1"],
+      "projection_key_id": "legal-v1"
+    }
+  ],
+  "projection_keys": [
+    {
+      "key_id": "customer-v1",
+      "material": "synthetic-customer-domain-projection-key-v1"
+    },
+    {
+      "key_id": "customer-v2",
+      "material": "synthetic-customer-domain-projection-key-v2"
+    },
+    {
+      "key_id": "legal-v1",
+      "material": "synthetic-legal-domain-projection-key"
+    }
+  ],
+  "rules": [
+    {
+      "roles": ["support"],
+      "tenant_id": "tenant_demo",
+      "workspace_id": "workspace_demo",
+      "tool_name": "support_search",
+      "action": "search_documents",
+      "purpose": "support_lookup",
+      "target_domain": "tenant_demo/customer_docs/v1",
+      "allowed_entity_classes": ["name", "email", "custom:customer_id"],
+      "max_results": 20,
+      "allow_cross_domain": false,
+      "elevated_audit_required": false
+    },
+    {
+      "roles": ["admin"],
+      "tenant_id": "tenant_demo",
+      "workspace_id": "workspace_demo",
+      "tool_name": "legal_search",
+      "action": "search_documents",
+      "purpose": "legal_lookup",
+      "target_domain": "tenant_demo/legal_docs/v1",
+      "allowed_entity_classes": ["name", "email", "organization"],
+      "max_results": 20,
+      "allow_cross_domain": false,
+      "elevated_audit_required": false
+    }
+  ]
+}
