@@ -19,6 +19,7 @@ $ cargo run -p xtask -- cargo-metadata-audit-isolation
 $ cargo run -p xtask -- readme-version-check
 $ cargo run -p xtask -- dylint-gate
 $ cargo run -p xtask -- safety-net-sanity
+$ cargo run -p xtask -- tokenbridge-no-raw-index
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
@@ -42,6 +43,7 @@ The canonical active-gate roster is the "Active xtask gates" line in
 | `ReadmeVersionCheck` | `cargo run -p xtask -- readme-version-check` | Added in v0.9.0 release-process hardening. Parses effective workspace package versions via `cargo metadata`, verifies fixture pass/fail tests, then rejects stale crate README install pins before publish. |
 | `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
 | `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Added in v0.6.0 alongside the Pass-3 SafetyNet runtime (todo #65). Behavioral gate over the OpenAI-filter SafetyNet path: lists and runs the `mock_safety_net`, `openai_filter_subprocess`, and `context_sensitivity_v0_6` recognizer-suite tests. Cargo invocations are batched per Phase 7.3 of #65. |
+| `TokenbridgeNoRawIndex` | `cargo run -p xtask -- tokenbridge-no-raw-index` | Added for Index/Search Track B3. Builds a real `gaze::Pipeline`, runs TokenBridge `CorpusIngestor` over synthetic fixture PII, inserts through `InMemoryCorpusIndexStore`, searches through `InMemorySearchAdapter`, and fails if stored snippets or searchable output paths retain raw PII or current-session gaze tokens. |
 
 ## dylint_gate
 
@@ -101,6 +103,25 @@ Then rehearse failure on a throwaway branch or detached worktree:
 4. Revert the TOML edit.
 
 To intentionally update snapshots, run `cargo run -p xtask -- bundle-tokenization-drift --regenerate-baseline`, add or update a nearby `// drift-ack:` source/test comment, and add a `[bundle-tokenization-drift]` line naming each changed bundle under `[Unreleased]` `### Changed` in `CHANGELOG.md`. Then run `cargo run -p xtask -- bundle-tokenization-drift --verify-ack`.
+
+## tokenbridge-no-raw-index adversarial self-test
+
+Run the clean gate first:
+
+```console
+$ cargo run -p xtask -- tokenbridge-no-raw-index
+```
+
+Then rehearse failure with the test-only raw-snippet injection used by the
+integration test:
+
+```console
+$ cargo run -p xtask -- tokenbridge-no-raw-index --inject-adversarial-raw-snippet
+```
+
+The gate must exit non-zero and name the synthetic fixture value plus the
+stored/search output surface that leaked it. The positive path still runs the
+real TokenBridge ingest, index-store, and search-adapter flow.
 
 ## fixture_citation_lint self-test + limitation
 
