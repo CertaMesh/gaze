@@ -5550,6 +5550,7 @@ dependencies = [
  "fake",
  "gaze-pii",
  "gaze-recognizers",
+ "gaze-token-bridge",
  "phonenumber",
  "rand 0.8.6",
  "serde",
