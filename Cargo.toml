@@ -10,6 +10,7 @@ members = [
     "crates/gaze-mcp-core",
     "crates/gaze-mcp-rmcp",
     "crates/gaze-proxy",
+    "crates/gaze-token-bridge",
     "crates/xtask",
 ]
 resolver = "2"

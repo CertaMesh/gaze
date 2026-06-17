@@ -1,0 +1,18 @@
+[package]
+name = "gaze-token-bridge"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0 OR MIT"
+description = "Owner-side authorization + translation bridge between a RedactionSession and IndexDomains (work in progress)."
+
+# FROZEN CONTRACT — master-owned. Sub-orchestrators must NOT edit this file
+# except: Track B may APPEND index/ingest dependencies it needs (it is the only
+# parallel track permitted to touch Cargo.toml). A new dependency that is not a
+# pure addition, or any edit by Track A, is a master decision (raise NEED DIRECTION).
+[dependencies]
+gaze = { path = "../gaze", package = "gaze-pii" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+hmac = "0.12"
+sha2 = "0.10"
