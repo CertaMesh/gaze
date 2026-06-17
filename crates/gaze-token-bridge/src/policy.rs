@@ -4,6 +4,9 @@
 //! Contract: `crate::traits::PolicyGate`, `crate::model::{BridgeRequest, PolicyOutcome}`.
 //! Reference: spike `TokenBridge::try_authorize` + `owner_bound_purpose`.
 
+use std::collections::{HashMap, HashSet};
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use gaze::PiiClass;
 
 use crate::error::DenyReason;
@@ -12,7 +15,7 @@ use crate::model::{
     RequestedScope,
 };
 use crate::projection::HmacDomainProjector;
-use crate::registry::IndexDomainRegistry;
+use crate::registry::{EntityRateLimit, IndexDomainRegistry};
 use crate::session::RedactionSession;
 use crate::traits::{DomainProjector, PolicyGate};
 use crate::util::sha256_hex;
@@ -21,11 +24,15 @@ use crate::util::sha256_hex;
 #[derive(Debug)]
 pub struct RegistryPolicyGate<'a> {
     registry: &'a IndexDomainRegistry,
+    rate_limit_buckets: HashMap<RateLimitBucket, HashSet<String>>,
 }
 
 impl<'a> RegistryPolicyGate<'a> {
     pub fn new(registry: &'a IndexDomainRegistry) -> Self {
-        Self { registry }
+        Self {
+            registry,
+            rate_limit_buckets: HashMap::new(),
+        }
     }
 }
 
@@ -107,7 +114,13 @@ impl RegistryPolicyGate<'_> {
             ));
         }
 
-        let entity = CanonicalEntity::from_raw(resolved_class.clone(), &raw_value);
+        let entity = canonicalize_entity(resolved_class.clone(), &raw_value).ok_or_else(|| {
+            DeniedAuthorization::with_entity(
+                DenyReason::NoMatchingAllowRule,
+                resolved_class.clone(),
+                raw_sha256.clone(),
+            )
+        })?;
         let effective_purpose = self.owner_bound_purpose(request).ok_or_else(|| {
             DeniedAuthorization::with_entity(
                 DenyReason::NoMatchingAllowRule,
@@ -126,13 +139,23 @@ impl RegistryPolicyGate<'_> {
             })?;
 
         let mut saw_cross_domain_denial = false;
-        for rule in self.registry.rules_for_domain(&request.target_domain) {
+        for (rule, rate_limit) in self
+            .registry
+            .rules_for_domain_with_limits(&request.target_domain)
+        {
             if !rule_matches_base(rule, request, &effective_purpose, &resolved_class) {
                 continue;
             }
 
             match scope_authorization(self.registry, domain, rule, request) {
                 ScopeAuthorization::Allowed => {
+                    enforce_rate_limit(
+                        &mut self.rate_limit_buckets,
+                        rate_limit,
+                        request,
+                        &resolved_class,
+                        &raw_sha256,
+                    )?;
                     return Ok(PolicyOutcome::Grant(AuthGrant {
                         entity_ref,
                         entity_class: resolved_class,
@@ -206,6 +229,45 @@ impl DeniedAuthorization {
             raw_sha256: Some(raw_sha256),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RateLimitBucket {
+    principal_id: String,
+    domain_id: DomainId,
+    window: u64,
+}
+
+fn enforce_rate_limit(
+    rate_limit_buckets: &mut HashMap<RateLimitBucket, HashSet<String>>,
+    rate_limit: Option<EntityRateLimit>,
+    request: &BridgeRequest,
+    entity_class: &PiiClass,
+    raw_sha256: &str,
+) -> Result<(), DeniedAuthorization> {
+    let Some(rate_limit) = rate_limit else {
+        return Ok(());
+    };
+
+    let bucket = RateLimitBucket {
+        principal_id: request.principal.id.clone(),
+        domain_id: request.target_domain.clone(),
+        window: current_window(rate_limit.window_seconds),
+    };
+    let entities = rate_limit_buckets.entry(bucket).or_default();
+    if entities.contains(raw_sha256) {
+        return Ok(());
+    }
+    if entities.len() >= rate_limit.max_entities_per_window {
+        return Err(DeniedAuthorization::with_entity(
+            DenyReason::NoMatchingAllowRule,
+            entity_class.clone(),
+            raw_sha256.to_string(),
+        ));
+    }
+
+    entities.insert(raw_sha256.to_string());
+    Ok(())
 }
 
 fn domain_allows_tool_action(domain: &IndexDomain, request: &BridgeRequest) -> bool {
@@ -292,4 +354,22 @@ fn domains_are_mutually_co_searchable(
 
 fn allowed_filters() -> Vec<String> {
     vec!["doc_id".to_string(), "corpus_type".to_string()]
+}
+
+fn canonicalize_entity(class: PiiClass, raw_value: &str) -> Option<CanonicalEntity> {
+    let entity = CanonicalEntity::from_raw(class, raw_value);
+    let value_prefix = format!("{}:", entity.class.to_canonical_str());
+    let normalized = entity.canonical_value.strip_prefix(&value_prefix)?;
+    if normalized.is_empty() {
+        None
+    } else {
+        Some(entity)
+    }
+}
+
+fn current_window(window_seconds: u64) -> u64 {
+    let window_seconds = window_seconds.max(1);
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs() / window_seconds)
 }

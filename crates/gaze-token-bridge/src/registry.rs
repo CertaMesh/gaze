@@ -12,12 +12,21 @@ use crate::keys::ProjectionKeyStore;
 use crate::model::{DomainId, IndexDomain, PolicyRule};
 use crate::traits::KeyManager;
 
+const DEFAULT_RATE_LIMIT_WINDOW_SECONDS: u64 = 60;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EntityRateLimit {
+    pub max_entities_per_window: usize,
+    pub window_seconds: u64,
+}
+
 /// Registry of index domains, allow rules, and all projection keys retained for
 /// active and historical reads.
 #[derive(Debug, Clone)]
 pub struct IndexDomainRegistry {
     domains: HashMap<DomainId, IndexDomain>,
     rules: Vec<PolicyRule>,
+    rate_limits: Vec<Option<EntityRateLimit>>,
     projection_keys: ProjectionKeyStore,
 }
 
@@ -60,7 +69,25 @@ impl IndexDomainRegistry {
         )?;
 
         let mut rules = Vec::with_capacity(raw.rules.len());
+        let mut rate_limits = Vec::with_capacity(raw.rules.len());
         for raw_rule in raw.rules {
+            let rate_limit = raw_rule
+                .max_entities_per_window
+                .map(|max_entities_per_window| {
+                    let window_seconds = raw_rule
+                        .rate_limit_window_seconds
+                        .unwrap_or(DEFAULT_RATE_LIMIT_WINDOW_SECONDS);
+                    if window_seconds == 0 {
+                        return Err(BridgeError::Policy(
+                            "rate_limit_window_seconds must be greater than zero".to_string(),
+                        ));
+                    }
+                    Ok(EntityRateLimit {
+                        max_entities_per_window,
+                        window_seconds,
+                    })
+                })
+                .transpose()?;
             rules.push(PolicyRule {
                 roles: raw_rule.roles,
                 tenant_id: raw_rule.tenant_id,
@@ -74,11 +101,13 @@ impl IndexDomainRegistry {
                 allow_cross_domain: raw_rule.allow_cross_domain,
                 elevated_audit_required: raw_rule.elevated_audit_required,
             });
+            rate_limits.push(rate_limit);
         }
 
         Ok(Self {
             domains,
             rules,
+            rate_limits,
             projection_keys,
         })
     }
@@ -102,6 +131,16 @@ impl IndexDomainRegistry {
         self.rules
             .iter()
             .filter(move |rule| rule.target_domain == domain_id)
+    }
+
+    pub fn rules_for_domain_with_limits<'a>(
+        &'a self,
+        domain_id: &'a str,
+    ) -> impl Iterator<Item = (&'a PolicyRule, Option<EntityRateLimit>)> + 'a {
+        self.rules
+            .iter()
+            .zip(self.rate_limits.iter().copied())
+            .filter(move |(rule, _)| rule.target_domain == domain_id)
     }
 
     pub fn projection_key(&self, key_id: &str) -> Option<&[u8]> {
@@ -169,6 +208,8 @@ struct RawPolicyRule {
     target_domain: DomainId,
     allowed_entity_classes: Vec<String>,
     max_results: usize,
+    max_entities_per_window: Option<usize>,
+    rate_limit_window_seconds: Option<u64>,
     allow_cross_domain: bool,
     elevated_audit_required: bool,
 }
