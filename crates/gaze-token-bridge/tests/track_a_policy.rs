@@ -1,5 +1,5 @@
 use gaze::PiiClass;
-use gaze_token_bridge::policy::RegistryPolicyGate;
+use gaze_token_bridge::policy::{RateLimitState, RegistryPolicyGate};
 use gaze_token_bridge::registry::IndexDomainRegistry;
 use gaze_token_bridge::traits::PolicyGate;
 use gaze_token_bridge::util::sha256_hex;
@@ -165,7 +165,8 @@ fn evaluate_with_registry(
     session: &RedactionSession,
     request: &BridgeRequest,
 ) -> PolicyOutcome {
-    let mut gate = RegistryPolicyGate::new(registry);
+    let mut rate_limit = RateLimitState::new();
+    let mut gate = RegistryPolicyGate::new(registry, &mut rate_limit);
     gate.evaluate(session, request)
 }
 
@@ -379,7 +380,8 @@ fn rate_limit_trips_per_principal_domain_window_without_raw_pii() {
         .tokenize(&PiiClass::Email, "bob@example.invalid")
         .expect("second token mints");
     let registry = registry_with_support_entity_limit(1);
-    let mut gate = RegistryPolicyGate::new(&registry);
+    let mut rate_limit = RateLimitState::new();
+    let mut gate = RegistryPolicyGate::new(&registry, &mut rate_limit);
 
     let first_grant =
         unwrap_grant(gate.evaluate(&session, &support_customer_request(&first_token)));

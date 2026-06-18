@@ -7,8 +7,10 @@
 //! [`crate::policy::RegistryPolicyGate`] borrows its registry, while [`TokenBridge::demo`]
 //! must return an owned value. A struct that owns the registry *and* a gate borrowing it
 //! would be self-referential, so the bridge owns the registry and constructs a fresh gate
-//! per authorization. Consequence: the gate's per-principal rate-limit buckets do not
-//! persist across calls. Tracked as a follow-up (the bundled fixture limit is never hit).
+//! per authorization. The per-principal rate-limit buckets, however, are owned by the bridge
+//! ([`TokenBridge::rate_limit`]) and injected by `&mut` into each per-call gate, so they
+//! persist and accumulate across calls (blocker #1564). The immutable borrow of `registry`
+//! and the mutable borrow of `rate_limit` are disjoint fields, so both are legal at once.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -25,7 +27,7 @@ use crate::model::{
     BridgeSearchOutcome, BridgeSearchResponse, DomainId, IndexSearchHit, PolicyOutcome,
     SearchHandle, SearchRequest,
 };
-use crate::policy::RegistryPolicyGate;
+use crate::policy::{RateLimitState, RegistryPolicyGate};
 use crate::projection::HmacDomainProjector;
 use crate::registry::IndexDomainRegistry;
 use crate::session::RedactionSession;
@@ -62,6 +64,9 @@ pub struct TokenBridge {
     /// The projected filters last handed to the adapter (proves raw filter values are
     /// projected owner-side before the adapter sees them).
     last_adapter_filters: Vec<AdapterFilterClause>,
+    /// Persistent per-principal rate-limit buckets, injected into each per-call policy gate
+    /// so the corpus-enumeration cap accumulates across calls (blocker #1564).
+    rate_limit: RateLimitState,
 }
 
 impl TokenBridge {
@@ -104,6 +109,7 @@ impl TokenBridge {
             audit: VecAuditSink::new(),
             corpus,
             last_adapter_filters: Vec::new(),
+            rate_limit: RateLimitState::new(),
         })
     }
 
@@ -115,10 +121,12 @@ impl TokenBridge {
         session: &RedactionSession,
         request: &BridgeRequest,
     ) -> BridgeDecision {
-        // Scope the gate's borrow of `self.registry` to this block so the subsequent
-        // mutable borrows of `self.capability` / `self.audit` are legal.
+        // Scope the gate's borrows of `self.registry` / `self.rate_limit` to this block so
+        // the subsequent mutable borrows of `self.capability` / `self.audit` are legal. The
+        // gate reads+updates the bridge-owned rate-limit buckets, so the cap persists across
+        // calls (blocker #1564); `registry` and `rate_limit` are disjoint fields.
         let outcome = {
-            let mut gate = RegistryPolicyGate::new(&self.registry);
+            let mut gate = RegistryPolicyGate::new(&self.registry, &mut self.rate_limit);
             gate.evaluate(session, request)
         };
 

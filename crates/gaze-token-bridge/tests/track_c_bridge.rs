@@ -508,6 +508,59 @@ fn session_bound_to_principal_rejects_reuse_by_different_principal() {
     assert_eq!(session.session_id(), "conversation:principal_support_1");
 }
 
+/// A demo bridge whose support→customer rule carries a low per-principal entity cap. Used
+/// to prove the rate-limit bucket persists across separate bridge calls (blocker #1564).
+fn low_rate_limit_customer_bridge(max_entities_per_window: usize) -> TokenBridge {
+    let mut policy: serde_json::Value =
+        serde_json::from_str(POLICY_JSON).expect("fixture policy parses as json");
+    let support_rule = policy
+        .get_mut("rules")
+        .and_then(serde_json::Value::as_array_mut)
+        .and_then(|rules| {
+            rules
+                .iter_mut()
+                .find(|rule| rule["target_domain"] == CUSTOMER_DOMAIN)
+        })
+        .expect("fixture policy has support customer rule");
+    support_rule["max_entities_per_window"] = serde_json::json!(max_entities_per_window);
+    support_rule["rate_limit_window_seconds"] = serde_json::json!(3600);
+    let policy = serde_json::to_string(&policy).expect("rate-limited policy serializes");
+    TokenBridge::from_policy_json(&policy).expect("rate-limited bridge builds")
+}
+
+/// Regression for blocker #1564: the per-principal rate-limit bucket MUST accumulate across
+/// separate bridge calls. The bridge owns the bucket state and injects it into each per-call
+/// policy gate, so distinct-entity lookups count toward the cap instead of resetting every
+/// call. With the cap at 2, two distinct-entity authorizations succeed and the third — issued
+/// as a SEPARATE call — fails closed. Pre-fix the gate was rebuilt empty each call, so the
+/// cap never tripped and the third lookup was (wrongly) allowed.
+#[test]
+fn rate_limit_accumulates_across_separate_authorize_calls() {
+    let principal = support_principal();
+    let session = RedactionSession::ephemeral_for(&principal.id).unwrap();
+    // Three DISTINCT entities for one principal; the bucket counts distinct raw entities.
+    let first = session
+        .tokenize(&PiiClass::Name, "Markus Gottschaue")
+        .unwrap();
+    let second = session.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+    let third = session.tokenize(&PiiClass::Name, "Lena Torres").unwrap();
+
+    let mut bridge = low_rate_limit_customer_bridge(2);
+
+    // First two distinct-entity lookups fit under the cap of 2 — across SEPARATE calls.
+    let _ = authorize_handle(&mut bridge, &session, &support_customer_request(&first));
+    let _ = authorize_handle(&mut bridge, &session, &support_customer_request(&second));
+
+    // The bucket persisted on the bridge across calls, so the third distinct entity trips
+    // the cap and is denied.
+    match bridge.authorize(&session, &support_customer_request(&third)) {
+        BridgeDecision::Deny { reason } => assert_eq!(reason, DenyReason::NoMatchingAllowRule),
+        BridgeDecision::Allow { .. } => {
+            panic!("rate limit did not accumulate across calls: third lookup was allowed")
+        }
+    }
+}
+
 /// Track-C hardening over the spike: a filter field outside the handle's allowlist fails
 /// closed instead of being silently projected (default-deny — north-star axis 1).
 #[test]
