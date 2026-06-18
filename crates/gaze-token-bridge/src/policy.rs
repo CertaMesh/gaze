@@ -20,18 +20,40 @@ use crate::session::RedactionSession;
 use crate::traits::{DomainProjector, PolicyGate};
 use crate::util::sha256_hex;
 
+/// Persistent per-principal rate-limit bucket state. Owned by the long-lived runtime
+/// (e.g. [`crate::bridge::TokenBridge`]) and injected by `&mut` into each short-lived
+/// [`RegistryPolicyGate`]. Keeping the buckets OUTSIDE the per-call gate is what lets the
+/// corpus-enumeration rate limit accumulate across calls instead of resetting every call
+/// (blocker #1564). Default-constructs empty.
+#[derive(Debug, Default)]
+pub struct RateLimitState {
+    buckets: HashMap<RateLimitBucket, HashSet<String>>,
+}
+
+impl RateLimitState {
+    /// Create empty rate-limit state.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 /// Policy gate backed by an [`IndexDomainRegistry`].
+///
+/// The gate is short-lived: a fresh one is built per authorization because it borrows the
+/// registry, while the long-lived runtime owns the registry (a self-referential struct would
+/// otherwise result). The per-principal rate-limit buckets do NOT live on the gate — they are
+/// borrowed from caller-owned [`RateLimitState`] so they persist across gates (blocker #1564).
 #[derive(Debug)]
 pub struct RegistryPolicyGate<'a> {
     registry: &'a IndexDomainRegistry,
-    rate_limit_buckets: HashMap<RateLimitBucket, HashSet<String>>,
+    rate_limit: &'a mut RateLimitState,
 }
 
 impl<'a> RegistryPolicyGate<'a> {
-    pub fn new(registry: &'a IndexDomainRegistry) -> Self {
+    pub fn new(registry: &'a IndexDomainRegistry, rate_limit: &'a mut RateLimitState) -> Self {
         Self {
             registry,
-            rate_limit_buckets: HashMap::new(),
+            rate_limit,
         }
     }
 }
@@ -150,7 +172,7 @@ impl RegistryPolicyGate<'_> {
             match scope_authorization(self.registry, domain, rule, request) {
                 ScopeAuthorization::Allowed => {
                     enforce_rate_limit(
-                        &mut self.rate_limit_buckets,
+                        &mut self.rate_limit.buckets,
                         rate_limit,
                         request,
                         &resolved_class,
