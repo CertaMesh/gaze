@@ -15,7 +15,10 @@
 use std::collections::HashMap;
 use std::ops::Range;
 
-use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, Pipeline};
+use gaze::{
+    Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline, Scope,
+    Session,
+};
 
 use crate::adapter::{CorpusIndexStore, InMemoryCorpusIndexStore, InMemorySearchAdapter};
 use crate::audit::VecAuditSink;
@@ -23,7 +26,7 @@ use crate::capability::CapabilityRuntime;
 use crate::error::{BridgeError, DenyReason};
 use crate::ingest::CorpusIngestor;
 use crate::model::{
-    AdapterFilterClause, AuditDecision, AuditEvent, BridgeDecision, BridgeRequest,
+    AdapterFilterClause, AgentSearchHit, AuditDecision, AuditEvent, BridgeDecision, BridgeRequest,
     BridgeSearchOutcome, BridgeSearchResponse, DomainId, IndexSearchHit, PolicyOutcome,
     SearchHandle, SearchRequest,
 };
@@ -67,6 +70,23 @@ pub struct TokenBridge<S = InMemoryCorpusIndexStore> {
     /// Persistent per-principal rate-limit buckets, injected into each per-call policy gate
     /// so the corpus-enumeration cap accumulates across calls (blocker #1564).
     rate_limit: RateLimitState,
+    /// Required Pass-3 scan over every translated, agent-visible snippet.
+    output_safety_net: Option<OutputSafetyNet>,
+}
+
+#[derive(Clone)]
+struct OutputSafetyNet {
+    pipeline: Pipeline,
+    locale_chain: Vec<LocaleTag>,
+}
+
+impl std::fmt::Debug for OutputSafetyNet {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("OutputSafetyNet")
+            .field("locale_chain", &self.locale_chain)
+            .finish_non_exhaustive()
+    }
 }
 
 impl TokenBridge<InMemoryCorpusIndexStore> {
@@ -110,6 +130,7 @@ impl TokenBridge<InMemoryCorpusIndexStore> {
             corpus,
             last_adapter_filters: Vec::new(),
             rate_limit: RateLimitState::new(),
+            output_safety_net: None,
         })
     }
 }
@@ -128,7 +149,24 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
             corpus: HashMap::new(),
             last_adapter_filters: Vec::new(),
             rate_limit: RateLimitState::new(),
+            output_safety_net: None,
         })
+    }
+
+    /// Install the mandatory output SafetyNet used after response translation.
+    ///
+    /// The bridge denies searches when this scanner is absent or unavailable, so
+    /// callers cannot accidentally return unscanned snippets to an agent.
+    pub fn with_output_safety_net(
+        mut self,
+        pipeline: Pipeline,
+        locale_chain: Vec<LocaleTag>,
+    ) -> Self {
+        self.output_safety_net = Some(OutputSafetyNet {
+            pipeline,
+            locale_chain,
+        });
+        self
     }
 
     /// Authorize a request and, on success, mint a single-use capability. Records exactly
@@ -222,6 +260,7 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
         let now = self.capability.now();
         let hits = self.adapter.search(handle, validated, now)?;
         let results = SessionResponseTranslator::translate(session, hits)?;
+        let results = self.enforce_output_safety_net(results)?;
 
         Ok(BridgeSearchResponse {
             target_domain: handle.target_domain.clone(),
@@ -291,6 +330,40 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
             .entities
             .iter()
             .find(|entity| &entity.class == class)
+    }
+
+    fn enforce_output_safety_net(
+        &self,
+        results: Vec<AgentSearchHit>,
+    ) -> Result<Vec<AgentSearchHit>, DenyReason> {
+        let safety_net = self
+            .output_safety_net
+            .as_ref()
+            .ok_or(DenyReason::TranslatorFailed)?;
+        let scan_session =
+            Session::new(Scope::Ephemeral).map_err(|_| DenyReason::TranslatorFailed)?;
+        let fallback_locale_chain = [LocaleTag::Global];
+        let locale_chain = if safety_net.locale_chain.is_empty() {
+            fallback_locale_chain.as_slice()
+        } else {
+            safety_net.locale_chain.as_slice()
+        };
+
+        let mut safe_results = Vec::with_capacity(results.len());
+        for hit in results {
+            let scan = safety_net
+                .pipeline
+                .scan_safety_nets(&scan_session, &hit.snippet, locale_chain)
+                .map_err(|_| DenyReason::TranslatorFailed)?;
+            if scan.nets_run == 0 {
+                return Err(DenyReason::TranslatorFailed);
+            }
+            if scan.report.stats.suspect_count == 0 {
+                safe_results.push(hit);
+            }
+        }
+
+        Ok(safe_results)
     }
 }
 

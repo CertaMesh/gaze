@@ -7,7 +7,9 @@
 //! `&BridgeRequest`, `audit()` slice). One extra test covers the filter-field allowlist
 //! hardening the bridge adds over the spike.
 
-use gaze::PiiClass;
+use gaze::{
+    LeakSuspect, LocaleTag, PiiClass, Pipeline, SafetyNet, SafetyNetContext, SafetyNetError,
+};
 use gaze_token_bridge::bridge::TokenBridge;
 use gaze_token_bridge::model::{IndexEntity, IndexSearchHit, IndexedEntityRef};
 use gaze_token_bridge::traits::ResponseTranslator;
@@ -21,6 +23,35 @@ use gaze_token_bridge::{
 const POLICY_JSON: &str = include_str!("../fixtures/policy.json");
 const CUSTOMER_DOMAIN: &str = "tenant_demo/customer_docs/v1";
 const LEGAL_DOMAIN: &str = "tenant_demo/legal_docs/v1";
+
+#[derive(Debug)]
+struct NoopOutputSafetyNet;
+
+impl SafetyNet for NoopOutputSafetyNet {
+    fn id(&self) -> &str {
+        "test-noop-output-safety-net"
+    }
+
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        _context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(Vec::new())
+    }
+}
+
+fn with_test_output_safety(bridge: TokenBridge) -> TokenBridge {
+    let pipeline = Pipeline::builder()
+        .register_safety_net(NoopOutputSafetyNet)
+        .build()
+        .expect("test output safety pipeline");
+    bridge.with_output_safety_net(pipeline, vec![LocaleTag::Global])
+}
 
 fn support_principal() -> Principal {
     Principal {
@@ -47,7 +78,7 @@ fn bridge_and_session() -> (TokenBridge, RedactionSession, String) {
 }
 
 fn bridge_and_session_for(principal: &Principal) -> (TokenBridge, RedactionSession, String) {
-    let bridge = TokenBridge::demo().unwrap();
+    let bridge = with_test_output_safety(TokenBridge::demo().unwrap());
     let session = RedactionSession::ephemeral_for(&principal.id).unwrap();
     let token = session
         .tokenize(&PiiClass::Name, "Markus Gottschaue")
@@ -81,7 +112,7 @@ fn cross_domain_bridge_and_session() -> (TokenBridge, RedactionSession, String) 
     }));
     let policy = serde_json::to_string(&policy).expect("augmented policy serializes");
 
-    let bridge = TokenBridge::from_policy_json(&policy).unwrap();
+    let bridge = with_test_output_safety(TokenBridge::from_policy_json(&policy).unwrap());
     let session = RedactionSession::ephemeral_for(&admin_principal().id).unwrap();
     let token = session
         .tokenize(&PiiClass::Name, "Markus Gottschaue")
@@ -582,7 +613,9 @@ fn low_rate_limit_customer_bridge(max_entities_per_window: usize) -> TokenBridge
     support_rule["max_entities_per_window"] = serde_json::json!(max_entities_per_window);
     support_rule["rate_limit_window_seconds"] = serde_json::json!(3600);
     let policy = serde_json::to_string(&policy).expect("rate-limited policy serializes");
-    TokenBridge::from_policy_json(&policy).expect("rate-limited bridge builds")
+    with_test_output_safety(
+        TokenBridge::from_policy_json(&policy).expect("rate-limited bridge builds"),
+    )
 }
 
 /// Regression for blocker #1564: the per-principal rate-limit bucket MUST accumulate across
