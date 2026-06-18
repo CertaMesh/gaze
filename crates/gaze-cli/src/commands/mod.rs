@@ -3,6 +3,8 @@ mod clean;
 mod daemon;
 #[cfg(feature = "document")]
 mod document;
+#[cfg(feature = "index")]
+mod index;
 #[cfg(feature = "mcp")]
 mod mcp;
 #[cfg(feature = "proxy")]
@@ -164,13 +166,13 @@ enum Cmd {
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
-        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        /// Override policy \[ner\] threshold. Must be between 0.0 and 1.0 inclusive.
         #[arg(long)]
         ner_threshold: Option<f32>,
-        /// Override policy [ner].model_dir.
+        /// Override policy \[ner\].model_dir.
         #[arg(long)]
         ner_model_dir: Option<PathBuf>,
-        /// Override policy [ner].locale.
+        /// Override policy \[ner\].locale.
         #[arg(long)]
         ner_locale: Option<String>,
         /// Path to the local OpenAI Privacy Filter `opf` command.
@@ -244,6 +246,14 @@ enum Cmd {
         #[command(subcommand)]
         command: DocumentCmd,
     },
+    /// Owner-side local text/Markdown index ingest and search.
+    ///
+    /// Requires the binary to be built with `--features index`.
+    #[cfg(feature = "index")]
+    Index {
+        #[command(subcommand)]
+        command: IndexCmd,
+    },
     /// Install, diagnose, or run the Gaze MCP stdio server.
     ///
     /// Requires the binary to be built with `--features mcp`.
@@ -283,6 +293,36 @@ enum DocumentCmd {
         /// Owner-only output directory for `manifest.json`.
         #[arg(long, requires = "agent_out")]
         owner_out: Option<PathBuf>,
+    },
+}
+
+#[cfg(feature = "index")]
+#[derive(Subcommand, Debug)]
+enum IndexCmd {
+    /// Ingest `.txt` and `.md` files into a local owner-side index.
+    Ingest {
+        /// Directory containing text/Markdown files.
+        dir: PathBuf,
+        /// Local index domain id.
+        #[arg(long, default_value_t = index::default_domain())]
+        domain: String,
+        /// Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`.
+        #[arg(long)]
+        index_path: Option<PathBuf>,
+    },
+    /// Search the local owner-side index by one entity.
+    Search {
+        /// Entity value to search for. It is tokenized before authorization/search.
+        entity: String,
+        /// Local index domain id.
+        #[arg(long, default_value_t = index::default_domain())]
+        domain: String,
+        /// Entity class: name, email, org, organization, or `custom:<name>`.
+        #[arg(long = "class", value_parser = index::parse_index_class)]
+        class: Option<gaze::PiiClass>,
+        /// Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`.
+        #[arg(long)]
+        index_path: Option<PathBuf>,
     },
 }
 
@@ -871,6 +911,29 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 out,
                 agent_out,
                 owner_out,
+            }),
+        },
+        #[cfg(feature = "index")]
+        Cmd::Index { command } => match command {
+            IndexCmd::Ingest {
+                dir,
+                domain,
+                index_path,
+            } => index::ingest(index::IngestArgs {
+                dir,
+                domain,
+                index_path,
+            }),
+            IndexCmd::Search {
+                entity,
+                domain,
+                class,
+                index_path,
+            } => index::search(index::SearchArgs {
+                entity,
+                domain,
+                class,
+                index_path,
             }),
         },
         #[cfg(feature = "mcp")]
