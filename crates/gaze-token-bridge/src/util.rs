@@ -62,7 +62,6 @@ pub fn collapse_ascii_whitespace(value: &str) -> String {
 pub fn domain_alias(class: &PiiClass, fingerprint_hex: &str) -> String {
     let suffix = fingerprint_hex
         .chars()
-        .take(4)
         .map(|ch| match ch {
             '0'..='9' => ((ch as u8 - b'0') + b'A') as char,
             'a'..='f' => ((ch as u8 - b'a') + b'K') as char,

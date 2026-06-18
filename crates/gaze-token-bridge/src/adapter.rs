@@ -1,5 +1,5 @@
-//! Track B — `SearchAdapter` implementation: the real corpus index (store + query by
-//! `IndexedEntityRef`), replacing the spike's in-memory fake. Enforces
+//! Track B — `SearchAdapter` implementation: an in-memory corpus index (store + query by
+//! `IndexedEntityRef`) for v1, replacing the spike's fake. Enforces
 //! entity_ref/domain/expiry/nonce guards defensively. Owner: sub-orchestrator B.
 //! Contract: `crate::traits::SearchAdapter`, `crate::model::{ValidatedSearchRequest, IndexSearchHit}`.
 //! Reference: spike `InMemorySearchAdapter`.
