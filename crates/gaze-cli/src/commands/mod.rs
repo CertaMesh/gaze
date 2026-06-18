@@ -166,13 +166,13 @@ enum Cmd {
         /// Active locale fallback chain, comma separated and priority ordered.
         #[arg(long, value_delimiter = ',')]
         locale: Vec<String>,
-        /// Override policy [ner] threshold. Must be between 0.0 and 1.0 inclusive.
+        /// Override policy \[ner\] threshold. Must be between 0.0 and 1.0 inclusive.
         #[arg(long)]
         ner_threshold: Option<f32>,
-        /// Override policy [ner].model_dir.
+        /// Override policy \[ner\].model_dir.
         #[arg(long)]
         ner_model_dir: Option<PathBuf>,
-        /// Override policy [ner].locale.
+        /// Override policy \[ner\].locale.
         #[arg(long)]
         ner_locale: Option<String>,
         /// Path to the local OpenAI Privacy Filter `opf` command.
@@ -317,7 +317,7 @@ enum IndexCmd {
         /// Local index domain id.
         #[arg(long, default_value_t = index::default_domain())]
         domain: String,
-        /// Entity class: name, email, org, organization, or custom:<name>.
+        /// Entity class: name, email, org, organization, or `custom:<name>`.
         #[arg(long = "class", value_parser = index::parse_index_class)]
         class: Option<gaze::PiiClass>,
         /// Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`.
