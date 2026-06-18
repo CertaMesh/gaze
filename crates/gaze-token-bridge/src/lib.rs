@@ -37,6 +37,7 @@ pub mod registry;
 // --- Track B: index & search ---
 pub mod adapter;
 pub mod ingest;
+pub mod persistent;
 
 // --- Track C: bridge runtime (gated) ---
 pub mod audit;

@@ -17,7 +17,7 @@ use std::ops::Range;
 
 use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, Pipeline};
 
-use crate::adapter::InMemorySearchAdapter;
+use crate::adapter::{CorpusIndexStore, InMemoryCorpusIndexStore, InMemorySearchAdapter};
 use crate::audit::VecAuditSink;
 use crate::capability::CapabilityRuntime;
 use crate::error::{BridgeError, DenyReason};
@@ -53,9 +53,9 @@ const LEGAL_DOMAIN: &str = "tenant_demo/legal_docs/v1";
 /// Owner-side bridge runtime. Composes the registry-backed policy gate (A), the corpus
 /// search adapter (B), the capability runtime (C), and an append-only audit sink (C).
 #[derive(Debug)]
-pub struct TokenBridge {
+pub struct TokenBridge<S = InMemoryCorpusIndexStore> {
     registry: IndexDomainRegistry,
-    adapter: InMemorySearchAdapter,
+    adapter: InMemorySearchAdapter<S>,
     capability: CapabilityRuntime,
     audit: VecAuditSink,
     /// Owner-side copy of ingested hits, keyed by domain, for test introspection
@@ -69,7 +69,7 @@ pub struct TokenBridge {
     rate_limit: RateLimitState,
 }
 
-impl TokenBridge {
+impl TokenBridge<InMemoryCorpusIndexStore> {
     /// Build the bundled demo bridge: load the demo policy, ingest the synthetic corpus
     /// into both domains via the Track B redact-before-index ingestor, and compose.
     pub fn demo() -> Result<Self, BridgeError> {
@@ -108,6 +108,24 @@ impl TokenBridge {
             capability: CapabilityRuntime::new(),
             audit: VecAuditSink::new(),
             corpus,
+            last_adapter_filters: Vec::new(),
+            rate_limit: RateLimitState::new(),
+        })
+    }
+}
+
+impl<S: CorpusIndexStore> TokenBridge<S> {
+    /// Build a bridge over an already-loaded owner-side corpus store. This is the
+    /// persistent-index entry point: callers load policy/domain/key material and hits
+    /// from disk, then let the normal bridge runtime handle authorization, capability
+    /// issue, adapter search, translation, and audit.
+    pub fn from_policy_json_and_store(policy_json: &str, store: S) -> Result<Self, BridgeError> {
+        Ok(Self {
+            registry: IndexDomainRegistry::from_json(policy_json)?,
+            adapter: InMemorySearchAdapter::with_store(store),
+            capability: CapabilityRuntime::new(),
+            audit: VecAuditSink::new(),
+            corpus: HashMap::new(),
             last_adapter_filters: Vec::new(),
             rate_limit: RateLimitState::new(),
         })

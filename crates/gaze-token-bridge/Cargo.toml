@@ -16,6 +16,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 hmac = "0.12"
 sha2 = "0.10"
+rand = "0.8"
 # Track C chokepoint integration — optional, OFF by default. Pulled in only by
 # the `chokepoint` feature below; the default build/test graph is byte-identical.
 gaze-mcp-core = { path = "../gaze-mcp-core", optional = true }
