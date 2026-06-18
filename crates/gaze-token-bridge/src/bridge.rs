@@ -8,8 +8,8 @@
 //! must return an owned value. A struct that owns the registry *and* a gate borrowing it
 //! would be self-referential, so the bridge owns the registry and constructs a fresh gate
 //! per authorization. The per-principal rate-limit buckets, however, are owned by the bridge
-//! ([`TokenBridge::rate_limit`]) and injected by `&mut` into each per-call gate, so they
-//! persist and accumulate across calls (blocker #1564). The immutable borrow of `registry`
+//! (the `TokenBridge::rate_limit` field) and injected by `&mut` into each per-call gate, so
+//! they persist and accumulate across calls (blocker #1564). The immutable borrow of `registry`
 //! and the mutable borrow of `rate_limit` are disjoint fields, so both are legal at once.
 
 use std::collections::HashMap;
