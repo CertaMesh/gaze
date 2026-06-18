@@ -191,15 +191,14 @@ fn unwrap_deny(outcome: PolicyOutcome) -> (DenyReason, Option<PiiClass>, Option<
 #[test]
 fn default_deny_when_no_allow_rule_matches() {
     let principal = support_principal();
-    let (session, token) = session_with_token(&principal, PiiClass::Name, "Dr. Schmidt");
-    let mut request = support_customer_request(&token);
-    request.tool_name = "legal_search".to_string();
+    let (session, token) = session_with_token(&principal, PiiClass::Organization, "Example GmbH");
+    let request = support_customer_request(&token);
 
     let (reason, entity_class, raw_sha256) = unwrap_deny(evaluate(&session, &request));
 
     assert_eq!(reason, DenyReason::NoMatchingAllowRule);
-    assert_eq!(entity_class, Some(PiiClass::Name));
-    assert_eq!(raw_sha256, Some(sha256_hex("Dr. Schmidt")));
+    assert_eq!(entity_class, Some(PiiClass::Organization));
+    assert_eq!(raw_sha256, Some(sha256_hex("Example GmbH")));
 }
 
 #[test]
