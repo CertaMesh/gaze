@@ -1,0 +1,43 @@
+[package]
+name = "gaze-mcp-bridge"
+version = "0.10.1"
+edition = "2021"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Policy-gated MCP bridge for Gaze pseudonymization sessions"
+readme = "README.md"
+keywords = ["pii", "mcp", "bridge", "pseudonymization"]
+categories = ["text-processing"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+async-trait = "0.1"
+base64 = "0.22"
+chacha20poly1305 = { version = "0.10", features = ["std"] }
+gaze = { workspace = true }
+gaze-assembly = { workspace = true }
+gaze-mcp-core = { workspace = true }
+gaze-mcp-rmcp = { workspace = true }
+gaze-types = { workspace = true }
+hex = "0.4"
+rand = "0.8"
+rmcp = { version = "1.6.0", features = ["client", "transport-child-process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+thiserror = "1"
+tokio = { version = "1", features = ["fs", "io-util", "process", "sync", "time"] }
+tokio-util = "0.7"
+toml = "0.8"
+tracing = "0.1"
+ulid = "1"
+
+[dev-dependencies]
+proptest = "1"
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
