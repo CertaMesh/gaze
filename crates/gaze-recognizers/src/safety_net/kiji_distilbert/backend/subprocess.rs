@@ -669,9 +669,10 @@ mod tests {
 
         let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
         let workspace = manifest_dir.parent().unwrap().parent().unwrap();
-        let setup_doc =
-            std::fs::read_to_string(workspace.join("docs/how-to/safety-net/set-up-kiji-safetynet.md"))
-                .unwrap();
+        let setup_doc = std::fs::read_to_string(
+            workspace.join("docs/how-to/safety-net/set-up-kiji-safetynet.md"),
+        )
+        .unwrap();
         let fetcher =
             std::fs::read_to_string(workspace.join("scripts/fetch-kiji-safetynet-model.sh"))
                 .unwrap();
