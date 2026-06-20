@@ -4,7 +4,7 @@ use anyhow::{bail, Context, Result};
 
 use crate::{ensure_test_exists, run_behavioral_test, BehavioralTest};
 
-const ALLOWLIST_PATH: &str = "xtask/data/safety-net-class-allowlist.toml";
+const ALLOWLIST_PATH: &str = "lint/data/safety-net-class-allowlist.toml";
 const OPENAI_CLASS_MAP_PATH: &str =
     "crates/gaze-recognizers/src/safety_net/openai_filter/class_map.rs";
 const GAZE_TYPES_PATH: &str = "crates/gaze-types/src/lib.rs";

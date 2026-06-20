@@ -37,4 +37,4 @@ thiserror = "1"
 tracing = "0.1"
 
 [workspace.metadata.dylint]
-libraries = [{ path = "xtask/dylint" }]
+libraries = [{ path = "lint/dylint" }]

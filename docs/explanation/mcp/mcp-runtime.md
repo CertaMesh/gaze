@@ -78,7 +78,7 @@ runs the `tier_isolation` integration test under four feature graphs to
 verify the partitioning holds.
 
 The `gaze_dylint` protected-path lint
-([`xtask/dylint`](../../../xtask/dylint)) lists `crates/gaze-mcp-core/src` so
+([`lint/dylint`](../../../lint/dylint)) lists `crates/gaze-mcp-core/src` so
 any future change attempting to pull `gaze_audit::*` (or other
 `forbidden_items`) into the chokepoint runtime is rejected at build time.
 
