@@ -45,6 +45,21 @@ stricter than the core redaction path.
 8. Deny unsupported content and redact all text-bearing result fields.
 9. Persist encrypted session state when file mode is enabled.
 
+## Policy Resolution
+
+Argument policy is fail-closed by default and resolves at top-level argument
+boundaries. A policy entry such as `[policy.tools."email.send".arguments.to]`
+matches `$.to`; nested selectors such as `contact.email` are not interpreted as
+JSONPath and do not match `$.contact.email`. Nested values inherit the nearest
+matching top-level argument policy, or the base tool/server/default policy when
+none exists.
+
+Policy merges are least-privilege only when broad scopes stay restrictive.
+Boolean guard fields are monotonic: if an outer scope sets
+`allow_sensitive_fields` or `requires_approval` to `true`, a narrower scope
+cannot reset that flag to `false`. Keep `[policy.default]` and server-wide
+policy deny-by-default, then allow only the smallest top-level argument needed.
+
 ## Session Storage
 
 Ephemeral mode uses `Scope::Ephemeral` and never exports a session snapshot.

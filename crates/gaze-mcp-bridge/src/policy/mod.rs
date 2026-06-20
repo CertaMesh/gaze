@@ -135,6 +135,17 @@ impl ToolPolicy {
     }
 }
 
+/// Policy applied at default, server, tool, and argument scopes.
+///
+/// Argument-specific policy is selected only by the full audit path
+/// (`$.field`) or by a top-level argument key (`field`). Nested selectors such
+/// as `contact.email` do not match `$.contact.email`; nested values fall back to
+/// the nearest top-level or base policy.
+///
+/// Policy merging is monotonic for boolean guard fields. If an outer scope sets
+/// `allow_sensitive_fields`, `requires_approval`, or `log_raw` to `true`, an
+/// inner scope cannot narrow that value back to `false`. Keep broad scopes
+/// least-privilege and allow only the smallest top-level argument needed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FieldPolicy {
