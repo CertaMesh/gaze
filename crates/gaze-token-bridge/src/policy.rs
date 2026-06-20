@@ -1,8 +1,5 @@
-//! Track A — `PolicyGate` implementation: default-deny evaluation over
+//! `PolicyGate` implementation: default-deny evaluation over
 //! principal/tenant/workspace/role/tool/action/owner-bound-purpose/domain/entity-class/scope.
-//! Owner: sub-orchestrator A.
-//! Contract: `crate::traits::PolicyGate`, `crate::model::{BridgeRequest, PolicyOutcome}`.
-//! Reference: spike `TokenBridge::try_authorize` + `owner_bound_purpose`.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,7 +21,7 @@ use crate::util::sha256_hex;
 /// (e.g. [`crate::bridge::TokenBridge`]) and injected by `&mut` into each short-lived
 /// [`RegistryPolicyGate`]. Keeping the buckets OUTSIDE the per-call gate is what lets the
 /// corpus-enumeration rate limit accumulate across calls instead of resetting every call
-/// (blocker #1564). Default-constructs empty.
+/// Default-constructs empty.
 #[derive(Debug, Default)]
 pub struct RateLimitState {
     buckets: HashMap<RateLimitBucket, HashSet<String>>,
@@ -40,9 +37,8 @@ impl RateLimitState {
 /// Policy gate backed by an [`IndexDomainRegistry`].
 ///
 /// The gate is short-lived: a fresh one is built per authorization because it borrows the
-/// registry, while the long-lived runtime owns the registry (a self-referential struct would
-/// otherwise result). The per-principal rate-limit buckets do NOT live on the gate — they are
-/// borrowed from caller-owned [`RateLimitState`] so they persist across gates (blocker #1564).
+/// registry. The per-principal rate-limit buckets do NOT live on the gate — they are
+/// borrowed from caller-owned [`RateLimitState`] so they persist across gates.
 #[derive(Debug)]
 pub struct RegistryPolicyGate<'a> {
     registry: &'a IndexDomainRegistry,

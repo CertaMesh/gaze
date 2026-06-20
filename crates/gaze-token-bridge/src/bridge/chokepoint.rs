@@ -1,4 +1,4 @@
-//! Track C (gated) — the `search_documents` MCP chokepoint tool.
+//! The `search_documents` MCP chokepoint tool.
 //!
 //! [`SearchDocumentsTool`] implements [`gaze_mcp_core::Tool`] so the bridge can be
 //! driven from a gaze-mcp-core dispatch without touching that crate's published,
@@ -23,7 +23,7 @@
 //! Every failure — unknown principal, malformed args, or any typed [`DenyReason`]
 //! from the bridge — collapses to one uniform `{authorized: false, results: []}`
 //! payload. The typed reason lives only in the bridge audit; the agent-visible
-//! surface never reveals which path fired (north-star axis 1 — never leak).
+//! surface never reveals which path fired.
 
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard, PoisonError};
@@ -44,7 +44,7 @@ use crate::session::RedactionSession;
 /// authorizes it under. Adopters MUST author an allow-rule (and list the tool in
 /// each domain's `allowed_tools`) under `"search_documents"`. The agent never
 /// supplies the policy tool_name — that would hand authorization to the LLM
-/// (north-star axis 4: the LLM never decides authorization).
+/// (the LLM never decides authorization).
 const TOOL_NAME: &str = "search_documents";
 
 /// Bridge action this tool performs. Target domains must list it in

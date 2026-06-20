@@ -1,4 +1,4 @@
-//! Track C — `search_documents` chokepoint tool acceptance tests.
+//! `search_documents` chokepoint tool acceptance tests.
 //!
 //! Drives [`SearchDocumentsTool::run`] directly: the sealed `gaze_mcp_core::ToolCtx`
 //! cannot be constructed outside its crate, so the unit-testable sync core is the

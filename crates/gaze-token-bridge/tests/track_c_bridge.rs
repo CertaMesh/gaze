@@ -1,11 +1,4 @@
-//! Track C — end-to-end bridge runtime acceptance tests.
-//!
-//! Ports the throwaway spike's 22 tests (`crates/spike-token-bridge`) onto the REAL
-//! `TokenBridge::demo()`, which integrates the real Track A policy/projection, Track B
-//! redact-before-index ingest + search adapter, and the Track C capability/translate/audit
-//! runtime. Call sites are adapted to the frozen contract API (e.g. `ephemeral_for(&str)`,
-//! `&BridgeRequest`, `audit()` slice). One extra test covers the filter-field allowlist
-//! hardening the bridge adds over the spike.
+//! End-to-end bridge runtime acceptance tests.
 
 use gaze::{
     LeakSuspect, LocaleTag, PiiClass, Pipeline, SafetyNet, SafetyNetContext, SafetyNetError,
@@ -87,8 +80,8 @@ fn bridge_and_session_for(principal: &Principal) -> (TokenBridge, RedactionSessi
 }
 
 /// A demo bridge whose policy is augmented with an elevated cross-domain admin rule
-/// (mirrors the Track A `registry_with_elevated_cross_domain_rule` helper). The bundled
-/// fixture deliberately ships without this rule; augmenting JSON keeps the fixture frozen.
+/// The bundled fixture deliberately ships without this rule; augmenting JSON keeps
+/// the fixture frozen.
 fn cross_domain_bridge_and_session() -> (TokenBridge, RedactionSession, String) {
     let mut policy: serde_json::Value =
         serde_json::from_str(POLICY_JSON).expect("fixture policy parses as json");
@@ -597,7 +590,7 @@ fn session_bound_to_principal_rejects_reuse_by_different_principal() {
 }
 
 /// A demo bridge whose support→customer rule carries a low per-principal entity cap. Used
-/// to prove the rate-limit bucket persists across separate bridge calls (blocker #1564).
+/// to prove the rate-limit bucket persists across separate bridge calls.
 fn low_rate_limit_customer_bridge(max_entities_per_window: usize) -> TokenBridge {
     let mut policy: serde_json::Value =
         serde_json::from_str(POLICY_JSON).expect("fixture policy parses as json");
@@ -618,12 +611,11 @@ fn low_rate_limit_customer_bridge(max_entities_per_window: usize) -> TokenBridge
     )
 }
 
-/// Regression for blocker #1564: the per-principal rate-limit bucket MUST accumulate across
-/// separate bridge calls. The bridge owns the bucket state and injects it into each per-call
-/// policy gate, so distinct-entity lookups count toward the cap instead of resetting every
-/// call. With the cap at 2, two distinct-entity authorizations succeed and the third — issued
-/// as a SEPARATE call — fails closed. Pre-fix the gate was rebuilt empty each call, so the
-/// cap never tripped and the third lookup was (wrongly) allowed.
+/// The per-principal rate-limit bucket MUST accumulate across separate bridge calls.
+/// The bridge owns the bucket state and injects it into each per-call policy gate, so
+/// distinct-entity lookups count toward the cap instead of resetting every call. With
+/// the cap at 2, two distinct-entity authorizations succeed and the third — issued as
+/// a SEPARATE call — fails closed.
 #[test]
 fn rate_limit_accumulates_across_separate_authorize_calls() {
     let principal = support_principal();
@@ -651,8 +643,8 @@ fn rate_limit_accumulates_across_separate_authorize_calls() {
     }
 }
 
-/// Track-C hardening over the spike: a filter field outside the handle's allowlist fails
-/// closed instead of being silently projected (default-deny — north-star axis 1).
+/// A filter field outside the handle's allowlist fails closed instead of being silently
+/// projected.
 #[test]
 fn filter_field_outside_handle_allowlist_denies() {
     let (mut bridge, session, token) = bridge_and_session();

@@ -1,8 +1,5 @@
-//! Track C (gated) — capability issuance + lifecycle: mint entity-bound `SearchHandle`s
-//! (nonce, expiry, single-use), validate them (entity_ref match, not expired, nonce
-//! unused), project raw filter values before they reach the adapter. Owner: sub-orchestrator C.
-//! Contract: `crate::model::{SearchHandle, SearchRequest, ValidatedSearchRequest}`.
-//! Reference: spike `TokenBridge::{issue_handle, project_search_request}`.
+//! Capability issuance and lifecycle: mint entity-bound `SearchHandle`s, validate them,
+//! and project raw filter values before they reach the adapter.
 
 use std::collections::HashSet;
 
@@ -20,7 +17,7 @@ use crate::util::sha256_hex;
 const HANDLE_TTL_TICKS: u64 = 2;
 
 /// Monotonic logical clock. Tests advance it explicitly; nothing wall-clock-derived
-/// leaks into handle expiry (keeps the contract deterministic — north-star axis 4).
+/// leaks into handle expiry, which keeps the contract deterministic.
 #[derive(Debug, Default)]
 pub struct LogicalClock {
     tick: u64,
@@ -77,7 +74,7 @@ impl CapabilityRuntime {
     /// Validate a handle against the entity_ref it is being used for. Fails closed on
     /// confused-deputy (entity_ref mismatch), domain mismatch, expiry, and replay.
     /// Consuming the nonce is the authoritative single-use gate; the adapter repeats
-    /// these checks defensively (defense in depth — north-star axis 1).
+    /// these checks defensively.
     pub fn validate_handle(
         &mut self,
         handle: &SearchHandle,

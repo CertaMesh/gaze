@@ -1,9 +1,8 @@
-//! FROZEN CONTRACT — shared deterministic helpers. Master-owned.
+//! Shared deterministic helpers.
 //!
-//! These are correctness-critical and shared across tracks (token parsing, the
-//! index-alias format, canonicalization whitespace rules, hashing). Keep them here
-//! so Track A (projection) and Track B (ingest) canonicalize/alias identically —
-//! divergence breaks index lookup.
+//! These are correctness-critical for token parsing, the index-alias format,
+//! canonicalization whitespace rules, projection, ingest, and hashing. Keep them
+//! centralized; divergence breaks index lookup.
 
 use gaze::PiiClass;
 use sha2::{Digest, Sha256};

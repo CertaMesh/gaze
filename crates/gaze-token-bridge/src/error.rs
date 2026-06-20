@@ -1,7 +1,7 @@
-//! FROZEN CONTRACT — error + deny taxonomy. Master-owned.
+//! Error and deny taxonomy.
 //!
-//! `DenyReason` is `#[non_exhaustive]`: adding a variant is a master decision so
-//! all match sites stay exhaustive-with-wildcard. Every deny is typed and audited;
+//! `DenyReason` is `#[non_exhaustive]`: callers should keep wildcard match arms.
+//! Every deny is typed and audited;
 //! the agent-facing surface must never reveal which variant fired (no oracle).
 
 use serde::{Deserialize, Serialize};

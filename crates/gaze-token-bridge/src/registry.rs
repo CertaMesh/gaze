@@ -1,6 +1,5 @@
-//! Track A — `IndexDomainRegistry`: load `IndexDomain`s + `PolicyRule`s from a policy
-//! file, expose domain/rule/key lookup. Owner: sub-orchestrator A.
-//! Contract: `crate::model::{IndexDomain, PolicyRule}`. Reference: spike `IndexDomainRegistry`.
+//! `IndexDomainRegistry`: load `IndexDomain`s and `PolicyRule`s from a policy file,
+//! then expose domain, rule, and key lookup.
 
 use std::collections::HashMap;
 
