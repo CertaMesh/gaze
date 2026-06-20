@@ -325,6 +325,21 @@ enum McpCmd {
         #[arg(long)]
         max_file_size: Option<u64>,
     },
+    /// Run the policy-gated MCP bridge over stdio.
+    Bridge {
+        /// Bridge TOML configuration.
+        #[arg(long)]
+        config: PathBuf,
+        /// Override [session].dir from the config.
+        #[arg(long)]
+        session_dir: Option<PathBuf>,
+        /// Load config and discover downstream surface without serving.
+        #[arg(long)]
+        dry_run: bool,
+        /// Print namespaced downstream tools and denied resource/prompt counts.
+        #[arg(long)]
+        print_tools: bool,
+    },
 }
 
 #[cfg(feature = "proxy")]
@@ -901,6 +916,17 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             } => mcp::serve(mcp::ServeArgs {
                 manifest_dir,
                 max_file_size,
+            }),
+            McpCmd::Bridge {
+                config,
+                session_dir,
+                dry_run,
+                print_tools,
+            } => mcp::bridge(mcp::BridgeArgs {
+                config,
+                session_dir,
+                dry_run,
+                print_tools,
             }),
         },
         #[cfg(feature = "proxy")]

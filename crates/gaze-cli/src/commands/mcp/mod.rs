@@ -1,3 +1,4 @@
+mod bridge;
 mod doctor;
 mod install;
 mod serve;
@@ -37,6 +38,14 @@ pub(crate) struct ServeArgs {
     pub max_file_size: Option<u64>,
 }
 
+#[derive(Debug)]
+pub(crate) struct BridgeArgs {
+    pub config: PathBuf,
+    pub session_dir: Option<PathBuf>,
+    pub dry_run: bool,
+    pub print_tools: bool,
+}
+
 pub(crate) fn install(args: InstallArgs) -> Result<(), CliError> {
     install::run(args)
 }
@@ -47,6 +56,10 @@ pub(crate) fn doctor(args: DoctorArgs) -> Result<(), CliError> {
 
 pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
     serve::run(args)
+}
+
+pub(crate) fn bridge(args: BridgeArgs) -> Result<(), CliError> {
+    bridge::run(args)
 }
 
 #[allow(dead_code)]
