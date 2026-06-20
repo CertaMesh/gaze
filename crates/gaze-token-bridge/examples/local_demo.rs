@@ -22,7 +22,9 @@
 //! This is a demo of the *runtime*, not of detector quality: the corpus is redacted
 //! at ingest by a deterministic literal detector over known synthetic values.
 
-use gaze::PiiClass;
+use gaze::{
+    LeakSuspect, LocaleTag, PiiClass, Pipeline, SafetyNet, SafetyNetContext, SafetyNetError,
+};
 use gaze_token_bridge::bridge::{synthetic_docs, TokenBridge};
 use gaze_token_bridge::{
     BridgeRequest, BridgeSearchOutcome, BridgeSearchResponse, Principal, RedactionSession,
@@ -94,6 +96,65 @@ fn raw_fixture_values() -> Vec<String> {
     values
 }
 
+#[derive(Debug)]
+struct SyntheticFixtureOutputSafetyNet {
+    entries: Vec<(String, PiiClass)>,
+}
+
+impl SyntheticFixtureOutputSafetyNet {
+    fn from_docs(docs: &[gaze_token_bridge::bridge::SyntheticDoc]) -> Self {
+        let mut entries = Vec::with_capacity(docs.len() * 4);
+        for doc in docs {
+            entries.push((doc.name.to_string(), PiiClass::Name));
+            entries.push((doc.email.to_string(), PiiClass::Email));
+            entries.push((doc.customer_id.to_string(), PiiClass::custom("customer_id")));
+            entries.push((doc.organization.to_string(), PiiClass::Organization));
+        }
+        entries.sort_by_key(|entry| std::cmp::Reverse(entry.0.len()));
+        entries.dedup();
+        Self { entries }
+    }
+}
+
+impl SafetyNet for SyntheticFixtureOutputSafetyNet {
+    fn id(&self) -> &str {
+        "synthetic-fixture-output-safety-net"
+    }
+
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        let mut suspects = Vec::new();
+        for (raw, class) in &self.entries {
+            let mut cursor = 0;
+            while let Some(offset) = clean_text[cursor..].find(raw.as_str()) {
+                let start = cursor + offset;
+                let end = start + raw.len();
+                let span = start..end;
+                if let Some(kind) = context.manifest.diff_against(&span, class) {
+                    suspects.push(LeakSuspect::new(
+                        span,
+                        class.clone(),
+                        self.id(),
+                        Some(1.0),
+                        kind,
+                        "synthetic_fixture",
+                        context.field_path.map(str::to_string),
+                    ));
+                }
+                cursor = end;
+            }
+        }
+        Ok(suspects)
+    }
+}
+
 fn print_header(step: &str) {
     println!("\n=== {step} ===");
 }
@@ -110,8 +171,15 @@ fn main() {
 
     // -- Step 1: ingest the synthetic corpus into two policy-scoped IndexDomains. --
     print_header("Step 1 — ingest synthetic corpus (redact-before-index)");
-    let mut bridge = TokenBridge::demo().expect("demo bridge builds");
-    let doc_count = synthetic_docs().len();
+    let docs = synthetic_docs();
+    let output_safety_pipeline = Pipeline::builder()
+        .register_safety_net(SyntheticFixtureOutputSafetyNet::from_docs(&docs))
+        .build()
+        .expect("demo output safety pipeline builds");
+    let mut bridge = TokenBridge::demo()
+        .expect("demo bridge builds")
+        .with_output_safety_net(output_safety_pipeline, vec![LocaleTag::Global]);
+    let doc_count = docs.len();
     println!(
         "Ingested {doc_count} synthetic docs into 2 IndexDomains via the Track B \
          redact-before-index pipeline:"
