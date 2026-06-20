@@ -32,7 +32,7 @@
 //! `gaze-mcp-rmcp` ships an [`rmcp`](https://docs.rs/rmcp) implementation;
 //! adopters who want a different transport implement [`Frontend`] themselves.
 //!
-//! See `docs/architecture/mcp-runtime.md` and the verdict in scratchpad 1453
+//! See `docs/explanation/mcp/mcp-runtime.md` and the verdict in scratchpad 1453
 //! (`brainstorm-gaze-mcp-crate-2026-05-08`) for the architectural rationale.
 
 #![forbid(unsafe_code)]

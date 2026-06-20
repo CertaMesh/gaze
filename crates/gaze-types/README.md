@@ -43,7 +43,7 @@ gaze-types = "0.10.1"
 
 `PiiClass` does **not** include a `Phone` variant. Phone detection is supplied by recognizers
 in `gaze-recognizers` (e.g. the `phone-parser` feature) and emitted as `PiiClass::Custom(...)` or
-via rulepack-defined classes — see `docs/policy.md`.
+via rulepack-defined classes — see `docs/reference/policy.md`.
 
 ## `#[non_exhaustive]` enums
 

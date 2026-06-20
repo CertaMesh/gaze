@@ -2,7 +2,7 @@
 
 This file is a per-minor migration guide for adopters of the `gaze-pii`
 workspace (the published cargo name; the library is imported as `gaze`).
-Pair it with [CHANGELOG.md](./CHANGELOG.md): CHANGELOG records what changed,
+Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
 ## How this file is organized
@@ -201,7 +201,7 @@ permissions on Unix. Missing artifacts fail closed with typed
 `CliError::SafetyNetArtifactMissing` (exit `2`) before the subprocess
 spawns.
 
-Setup walkthrough: [`docs/getting-started/kiji-safetynet-setup.md`](docs/getting-started/kiji-safetynet-setup.md).
+Setup walkthrough: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
 **Action required:** none. The backend is opt-in. If you do not select
 it, your current SafetyNet configuration (OpenAI Privacy Filter or
@@ -266,14 +266,14 @@ Highlights only — backfill in detail if adopter friction surfaces.
 - **Validator-veto pre-resolver** rejects invalid candidates before
   conflict resolution, logs loser-only audit rows with
   `decided_by: ValidatorVeto`. See
-  [`docs/architecture/validator-veto.md`](docs/architecture/validator-veto.md).
+  [`docs/explanation/detection/validator-veto.md`](docs/explanation/detection/validator-veto.md).
 - **Collision-family metadata + `FamilyPolicyTable`** for cross-class
   recognizer rivalries (PAN-vs-IBAN, phone family). See
-  [`docs/architecture/collision-family.md`](docs/architecture/collision-family.md).
+  [`docs/explanation/detection/collision-family.md`](docs/explanation/detection/collision-family.md).
 - **Mandatory-anchor resolution** keeps structural candidates on their
   precise variant when a `[locale.cues.<key>]` cue is in scope, else
   emits a family-level fallback token. See
-  [`docs/architecture/anchor-resolution.md`](docs/architecture/anchor-resolution.md).
+  [`docs/explanation/detection/anchor-resolution.md`](docs/explanation/detection/anchor-resolution.md).
 - **`PiiClass::Custom("eth_address")`** for EIP-55 Ethereum addresses;
   new `Ipv4Parse`/`Ipv6Parse`/`EthEip55` validator kinds.
 - **`gaze_pii::default_policy` falls back to `Tokenize`** (axis-1
@@ -344,7 +344,7 @@ daemon` keeps multi-session state behind a JSONL stdio process boundary,
 pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
 available behind explicit opt-in flags, and `tract`/`candle` feature gates give
 static-binary deployments alternatives to the default `ort` runtime. Public
-benchmark claims are documented in [`docs/benchmarks.md`](docs/benchmarks.md):
+benchmark claims are documented in [`docs/reference/benchmarks/index.md`](docs/reference/benchmarks/index.md):
 Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
 and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
 

@@ -39,12 +39,12 @@ As of v0.9.0, the workspace has nine published-shape crates plus `xtask`:
 - `gaze-document` — OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Introduced in v0.7.1.
 - `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 
-Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](./CONTRIBUTING.md#workspace-shape).
+Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](CONTRIBUTING.md#workspace-shape).
 
 ## Universal rules (ALL agents)
 
 1. **Never weaken an axis without an explicit PR-body note.** If a change regresses reliability, reversibility, agentic fit, trust, or adopter ergonomics — say so in the PR description and justify the tradeoff. Correctness axes 1–4 always beat performance.
-2. **Never leak PII in examples, tests, or fixtures.** Use `alice@example.invalid` / `Dr. Schmidt` / `<Email_1>` — never real PII, even in docs. Phone numbers MUST come from documented synthetic-non-reachable ranges: NANPA `+1-555-01xx` for US, Ofcom `+44-7700-900xxx` for UK, and `+49 1555 0112233`-style mobile shapes for DE (the parser-backed v0.4.5 S2 national-phone recognizers accept these without using real BNetzA-assigned ranges). See [`CONTRIBUTING.md`](./CONTRIBUTING.md#phone-number-fixtures) for the canonical rule + rationale.
+2. **Never leak PII in examples, tests, or fixtures.** Use `alice@example.invalid` / `Dr. Schmidt` / `<Email_1>` — never real PII, even in docs. Phone numbers MUST come from documented synthetic-non-reachable ranges: NANPA `+1-555-01xx` for US, Ofcom `+44-7700-900xxx` for UK, and `+49 1555 0112233`-style mobile shapes for DE (the parser-backed v0.4.5 S2 national-phone recognizers accept these without using real BNetzA-assigned ranges). See [`CONTRIBUTING.md`](CONTRIBUTING.md#phone-number-fixtures) for the canonical rule + rationale.
 3. **Commit discipline:** `[agent]` prefix on every commit. Stage specific files by name. No `git add -A` or `git add .`. No amend, no force-push, no `--no-verify`. Commit after each logical phase, not only at the end.
 4. **Branch per task.** Work on a dedicated branch; keep `main` clean.
 5. **Completion signaling:** every agent brief includes a sentinel line (e.g. `IMPL DONE:`, `REVIEW DONE:`, `DOCS DONE:`). Print it on the final stdout line.

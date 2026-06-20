@@ -31,7 +31,7 @@ Clap converts enum variants to kebab-case command names.
 
 The canonical active-gate roster is the "Active xtask gates" line in
 [`CLAUDE.md`](../../CLAUDE.md); keep this README and
-[`docs/architecture/xtask.md`](../../docs/architecture/xtask.md) in sync with
+[`docs/explanation/contributing/xtask-gates.md`](../../docs/explanation/contributing/xtask-gates.md) in sync with
 that list.
 
 ## Gates
@@ -55,7 +55,7 @@ that list.
 
 The implementation lives in [`src/main.rs`](src/main.rs). The broader gate
 catalog and gate-authoring rules are in
-[docs/architecture/xtask.md](../../docs/architecture/xtask.md).
+[docs/explanation/contributing/xtask-gates.md](../../docs/explanation/contributing/xtask-gates.md).
 
 ## CI integration
 
