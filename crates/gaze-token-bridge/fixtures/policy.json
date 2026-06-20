@@ -54,6 +54,7 @@
       "target_domain": "tenant_demo/customer_docs/v1",
       "allowed_entity_classes": ["name", "email", "custom:customer_id"],
       "max_results": 20,
+      "max_entities_per_window": 1000,
       "allow_cross_domain": false,
       "elevated_audit_required": false
     },
@@ -67,6 +68,7 @@
       "target_domain": "tenant_demo/legal_docs/v1",
       "allowed_entity_classes": ["name", "email", "organization"],
       "max_results": 20,
+      "max_entities_per_window": 1000,
       "allow_cross_domain": false,
       "elevated_audit_required": false
     }
