@@ -58,6 +58,7 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | `audit query` | Prints filtered audit metadata rows from a `--audit-db` SQLite log, opened read-only. |
 | `audit export` | Exports filtered audit metadata rows in JSONL (default) for downstream processing. |
 | `document clean` | OCRs PNG/JPG/PDF input into a SafeBundle. Requires `--features document`. |
+| `index ingest/search` | Builds and searches a local owner-side text/Markdown index. Requires `--features index`. |
 | `mcp install` | Installs `gaze mcp serve` into supported MCP client configs. Requires `--features mcp`. |
 | `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`. |
 | `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`. |
@@ -157,6 +158,26 @@ $ gaze mcp serve --manifest-dir ~/.local/share/gaze/mcp-manifests --max-file-siz
 
 The server covers the data-source to model path only. It does not filter text
 the user pastes directly into a chat UI.
+
+## `index`
+
+The `index` feature adds a local owner-side search index for `.txt` and `.md`
+corpora:
+
+```console
+$ cargo run -p gaze-cli --features index -- index ingest ./notes
+$ cargo run -p gaze-cli --features index -- index search "alice@example.invalid" --class email
+```
+
+By default the index is written under `./.gaze-index/`, or the directory from
+`GAZE_INDEX_PATH`; `--index-path <dir>` overrides both. This store is sensitive
+owner-side material: it contains raw values needed for session-token translation,
+plus generated projection key material. It is gitignored. Encrypt-at-rest support
+is a follow-up; do not place `.gaze-index/` in shared or model-visible storage.
+
+Search output is the bridge's agent-facing response: snippets contain only
+current-session tokens, never raw PII or index-domain aliases. The v1 ingest path
+is text/Markdown only; OCR/PDF/image ingestion stays with `gaze document`.
 
 ## `clean`
 

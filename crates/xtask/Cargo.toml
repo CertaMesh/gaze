@@ -10,6 +10,7 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 gaze = { path = "../gaze", package = "gaze-pii" }
 gaze-recognizers = { path = "../gaze-recognizers" }
+gaze-token-bridge = { path = "../gaze-token-bridge" }
 phonenumber = { version = "0.3.9", default-features = false }
 rand = "0.8"
 regex = "1"
