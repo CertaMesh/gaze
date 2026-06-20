@@ -3,7 +3,7 @@
 This directory holds **test fixtures** for the `NerDetector` load contract.
 No real model weights live here and none ever should. The canonical adopter
 contracts live in `crates/gaze-recognizers/assets/ner/`, and the runtime weights are fetched
-out-of-repo via `scripts/fetch-ner-model.sh`.
+out-of-repo via `scripts/fetch/fetch-ner-model.sh`.
 
 ## What's in here
 
@@ -27,7 +27,7 @@ The unit tests under `crates/gaze/src/ner.rs` cover load-contract failure
 modes without a real model. Real German/English span correctness tests
 need the pinned artifact on disk.
 
-1. Run `scripts/fetch-ner-model.sh` once to populate
+1. Run `scripts/fetch/fetch-ner-model.sh` once to populate
    `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/`.
 2. Export `GAZE_NER_MODEL_DIR` pointing at that directory.
 3. Run `cargo test -p gaze -- --ignored ner_span_correctness`.

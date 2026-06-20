@@ -233,11 +233,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          hf_repo="$(sed -n 's/^HF_REPO="\([^"]*\)"/\1/p' scripts/fetch-ner-model.sh)"
-          hf_commit_sha="$(sed -n 's/^HF_COMMIT_SHA="\([^"]*\)"/\1/p' scripts/fetch-ner-model.sh)"
+          hf_repo="$(sed -n 's/^HF_REPO="\([^"]*\)"/\1/p' scripts/fetch/fetch-ner-model.sh)"
+          hf_commit_sha="$(sed -n 's/^HF_COMMIT_SHA="\([^"]*\)"/\1/p' scripts/fetch/fetch-ner-model.sh)"
 
           if [ -z "$hf_repo" ] || [ -z "$hf_commit_sha" ]; then
-            echo "failed to read HF_REPO/HF_COMMIT_SHA from scripts/fetch-ner-model.sh" >&2
+            echo "failed to read HF_REPO/HF_COMMIT_SHA from scripts/fetch/fetch-ner-model.sh" >&2
             exit 2
           fi
 

@@ -194,7 +194,7 @@ stdout, never mutate the manifest. New CLI flags:
 - `--kiji-distilbert-command <path>`
 - `--kiji-distilbert-model-dir <dir>`
 
-Fetcher: `scripts/fetch-kiji-safetynet-model.sh`. Pinned-artifact
+Fetcher: `scripts/fetch/fetch-kiji-safetynet-model.sh`. Pinned-artifact
 contract: model dir must carry `SHA256SUMS`, `labels.json`,
 `model.onnx`, `tokenizer.json` with `0o700` directory + `0o600` file
 permissions on Unix. Missing artifacts fail closed with typed

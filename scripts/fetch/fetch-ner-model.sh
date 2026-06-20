@@ -1,57 +1,56 @@
 #!/usr/bin/env bash
-# Fetch and verify the pinned Kiji DistilBERT safety-net artifact.
+# Fetch and verify the Gaze default NER model artifact.
 #
-# Mirrors `scripts/fetch-ner-model.sh` exactly in shape: pulls a DistilBERT
-# NER model at a pinned Hugging Face commit SHA, drops it under the same
-# XDG-style cache path, and verifies via shasum against the release-pinned
-# SHA256SUMS.kiji checksum file. No runtime network and no local ONNX export
-# happens in the gaze binary; the binary only consumes the pinned local
-# artifacts produced by this script.
+# Pulls the pre-quantized int8 ONNX mirror for
+# Davlan/bert-base-multilingual-cased-ner-hrl (mBERT, high-resource languages
+# incl. German + English) at a pinned Hugging Face commit SHA. No runtime
+# network and no local ONNX export happen in the gaze binary; the binary only
+# consumes the pinned local artifacts produced by this script.
 #
-# Checksums are published as SHA256SUMS.kiji in each Gaze GitHub release once
-# the first sign-off run lands real hashes.
+# Checksums are published as SHA256SUMS.ner in each Gaze GitHub release.
 #
 # Usage:
-#   scripts/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
+#   scripts/fetch/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 #
-# Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert
+# Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
 
 set -euo pipefail
 
 # ---- Pinned artifact contract -----------------------------------------------
 
-HF_REPO="onnx-community/distilbert-NER-ONNX"
-HF_COMMIT_SHA="3a19fe9404a4469d91aa3d551558a97f68872f67"
-KIJI_BUNDLE_SHA256="c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f"
-KIJI_INT8_BUNDLE_SHA256="6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb"
+HF_REPO="onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
+HF_COMMIT_SHA="cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
 GITHUB_REPO="${GAZE_GITHUB_REPO:-EmpireTwo/gaze}"
 
 # Files that must end up in the destination directory.
 REQUIRED_FILES=(
   "model.onnx"
   "tokenizer.json"
+  "config.json"
+  "tokenizer_config.json"
+  "special_tokens_map.json"
+  "vocab.txt"
   "labels.json"
-  "SHA256SUMS"
 )
 
 # ---- Destination ------------------------------------------------------------
 
-DEFAULT_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert"
+DEFAULT_DEST="${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl"
 DEST=""
 GAZE_VERSION=""
 
-log() { printf '[fetch-kiji-safetynet-model] %s\n' "$*"; }
+log() { printf '[fetch-ner-model] %s\n' "$*"; }
 
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
+  scripts/fetch/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 
 Options:
-  --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.kiji.
+  --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.ner.
   -h, --help            Show this help.
 
-Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert
+Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
 USAGE
 }
 
@@ -119,9 +118,18 @@ require_cmd() {
 
 require_cmd curl
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LABELS_SOURCE="${REPO_ROOT}/crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json"
+
+if [ ! -f "$LABELS_SOURCE" ]; then
+  log "missing Gaze NER labels contract: ${LABELS_SOURCE}"
+  exit 2
+fi
+
 detect_gaze_version_from_git() {
   if command -v git >/dev/null 2>&1; then
-    git -C "$(dirname "${BASH_SOURCE[0]}")/.." describe --tags --abbrev=0 --exclude '*-*' 2>/dev/null || true
+    git -C "$REPO_ROOT" describe --tags --abbrev=0 --exclude '*-*' 2>/dev/null || true
   fi
 }
 
@@ -145,8 +153,8 @@ resolve_gaze_version() {
   fi
 
   if [ -z "$version" ]; then
-    log "could not determine Gaze release version for SHA256SUMS.kiji"
-    log "specify one explicitly: scripts/fetch-kiji-safetynet-model.sh --gaze-version <tag> [dest_dir]"
+    log "could not determine Gaze release version for SHA256SUMS.ner"
+    log "specify one explicitly: scripts/fetch/fetch-ner-model.sh --gaze-version <tag> [dest_dir]"
     exit 2
   fi
 
@@ -155,26 +163,12 @@ resolve_gaze_version() {
 
 fetch_sha256sums() {
   local version="$1"
-  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/SHA256SUMS.kiji"
+  local url="https://github.com/${GITHUB_REPO}/releases/download/${version}/SHA256SUMS.ner"
   log "fetching release checksums ${version} -> SHA256SUMS"
   curl -fL --retry 3 -o SHA256SUMS "$url"
 }
 
 verify_sha256sums() {
-  local actual
-  if command -v shasum >/dev/null 2>&1; then
-    actual="$(shasum -a 256 SHA256SUMS | awk '{print $1}')"
-  elif command -v sha256sum >/dev/null 2>&1; then
-    actual="$(sha256sum SHA256SUMS | awk '{print $1}')"
-  else
-    log "missing required command: shasum or sha256sum"
-    exit 2
-  fi
-  if [ "$actual" != "$KIJI_BUNDLE_SHA256" ]; then
-    log "SHA256SUMS integrity mismatch: expected $KIJI_BUNDLE_SHA256 got $actual"
-    exit 4
-  fi
-
   if command -v shasum >/dev/null 2>&1; then
     shasum -a 256 -c SHA256SUMS
   elif command -v sha256sum >/dev/null 2>&1; then
@@ -186,11 +180,14 @@ verify_sha256sums() {
 }
 
 mkdir -p "$DEST"
-chmod 0700 "$DEST" 2>/dev/null || true
 cd "$DEST"
 GAZE_VERSION="$(resolve_gaze_version)"
 
 # ---- Download pinned HF artifacts ------------------------------------------
+
+# The source int8 model lives at onnx/model_int8.onnx in the mirror. It is
+# installed as model.onnx because the runtime load contract expects that file
+# name in model_dir.
 
 fetch_raw() {
   local source_file="$1"
@@ -198,25 +195,17 @@ fetch_raw() {
   local url="https://huggingface.co/${HF_REPO}/resolve/${HF_COMMIT_SHA}/${source_file}"
   log "fetching ${source_file} -> ${dest_file}"
   curl -fL --retry 3 -o "${dest_file}" "${url}"
-  chmod 0600 "${dest_file}" 2>/dev/null || true
 }
 
-fetch_raw "onnx/model.onnx" "model.onnx"
+fetch_raw "onnx/model_int8.onnx" "model.onnx"
 fetch_raw "tokenizer.json" "tokenizer.json"
-cat > labels.json <<EOF
-{
-  "schema_version": 1,
-  "source": "${HF_REPO}",
-  "source_commit": "${HF_COMMIT_SHA}",
-  "labels": [
-    {"id": "person", "upstream": ["B-PER", "I-PER"]},
-    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
-    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
-    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
-  ]
-}
-EOF
-chmod 0600 labels.json 2>/dev/null || true
+fetch_raw "tokenizer_config.json" "tokenizer_config.json"
+fetch_raw "config.json" "config.json"
+fetch_raw "special_tokens_map.json" "special_tokens_map.json"
+fetch_raw "vocab.txt" "vocab.txt"
+
+log "installing labels.json from crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json"
+cp "$LABELS_SOURCE" labels.json
 
 # ---- Fetch release checksum contract ----------------------------------------
 
@@ -235,5 +224,4 @@ log "verifying checksums"
 verify_sha256sums
 
 log "done. model dir: $DEST"
-log "int8 precision is opt-in: run scripts/quantize-kiji-int8.py \"$DEST\" and verify SHA256SUMS.int8=$KIJI_INT8_BUNDLE_SHA256"
-log "next: pass --safety-net-backend=kiji-distilbert --kiji-distilbert-model-dir=\"$DEST\" to gaze clean"
+log "next: set [ner] model_dir = \"$DEST\" in policy.toml (or rely on the default XDG path)"

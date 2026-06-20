@@ -10,7 +10,7 @@
 # bytes before subprocess execution.
 #
 # Usage:
-#   scripts/fetch-openai-privacy-filter.sh [--install-dir <dir>] [--checkpoint-dir <dir>]
+#   scripts/fetch/fetch-openai-privacy-filter.sh [--install-dir <dir>] [--checkpoint-dir <dir>]
 #
 # Default install_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/openai-privacy-filter
 # Default checkpoint_dir = ${OPF_CHECKPOINT:-$HOME/.opf/privacy_filter}
@@ -35,7 +35,7 @@ log() { printf '[fetch-openai-privacy-filter] %s\n' "$*"; }
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/fetch-openai-privacy-filter.sh [--install-dir <dir>] [--checkpoint-dir <dir>]
+  scripts/fetch/fetch-openai-privacy-filter.sh [--install-dir <dir>] [--checkpoint-dir <dir>]
 
 Options:
   --install-dir <dir>     Source checkout and virtualenv destination.

@@ -216,7 +216,7 @@ def parse_first_json_object(stdout: str) -> Any:
 
 
 def run_kiji(args: argparse.Namespace, fixture_id: str, text: str) -> list[Span]:
-    runner = args.repo_root / "scripts/kiji-runner.py"
+    runner = args.repo_root / "scripts/bench/kiji-runner.py"
     proc = subprocess.run(
         [
             str(args.python),
@@ -598,8 +598,10 @@ def validate_inputs(args: argparse.Namespace, backend: Literal["kiji", "opf"]) -
     if backend == "kiji":
         if not args.model_dir.is_dir():
             raise FileNotFoundError(f"missing Kiji model dir: {args.model_dir}")
-        if not (root / "scripts/kiji-runner.py").is_file():
-            raise FileNotFoundError(f"missing Kiji runner: {root / 'scripts/kiji-runner.py'}")
+        if not (root / "scripts/bench/kiji-runner.py").is_file():
+            raise FileNotFoundError(
+                f"missing Kiji runner: {root / 'scripts/bench/kiji-runner.py'}"
+            )
     else:
         args.opf = repo_path(root, args.opf)
         args.checkpoint = args.checkpoint.expanduser()

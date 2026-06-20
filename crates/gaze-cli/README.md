@@ -289,7 +289,7 @@ errors do not retry on every clean.
 
 The Kiji DistilBERT backend follows the same bring-your-own pattern. The
 model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`,
-and `tokenizer.json`; populate it via `scripts/fetch-kiji-safetynet-model.sh`.
+and `tokenizer.json`; populate it via `scripts/fetch/fetch-kiji-safetynet-model.sh`.
 A missing artifact (including a missing `SHA256SUMS`) fails closed with the
 typed `SafetyNetArtifactMissing` envelope and exit code `2` *before* the
 subprocess is spawned — Axis-1 reliability never silent-disables a

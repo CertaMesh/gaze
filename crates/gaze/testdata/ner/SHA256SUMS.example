@@ -1,5 +1,5 @@
 # Example SHA256SUMS for the pinned Davlan/bert-base-multilingual-cased-ner-hrl
-# artifact. Shape mirrors what `scripts/fetch-ner-model.sh` produces via
+# artifact. Shape mirrors what `scripts/fetch/fetch-ner-model.sh` produces via
 # `shasum -a 256`.
 #
 # All four hashes below are TODO placeholders. Replace with the real hashes

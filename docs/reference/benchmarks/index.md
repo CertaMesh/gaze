@@ -48,8 +48,8 @@ latency separately from in-process ORT warm latency.
 Runnable paths:
 
 ```bash
-python3 scripts/kiji-bench-scorer.py --repo-root . --mode all --measure-latency --precision int8 --model-dir "$HOME/.cache/gaze/<kiji-int8-bundle>" --python python3
-python3 scripts/opf-bench-scorer.py --repo-root . --mode all --measure-latency --python python3
+python3 scripts/bench/kiji-bench-scorer.py --repo-root . --mode all --measure-latency --precision int8 --model-dir "$HOME/.cache/gaze/<kiji-int8-bundle>" --python python3
+python3 scripts/bench/opf-bench-scorer.py --repo-root . --mode all --measure-latency --python python3
 cargo bench -p gaze-recognizers --bench safety_net_matrix
 GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND=ort cargo bench -p gaze-recognizers --features safety-net-kiji --bench safety_net_matrix
 ```
@@ -88,8 +88,8 @@ available.
 Runnable paths:
 
 ```bash
-python3 scripts/ner-bench-scorer.py --repo-root . --python python3 --mode all --model kiji-distilbert --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
-python3 scripts/ner-warm-latency.py --repo-root .
+python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model kiji-distilbert --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
+python3 scripts/bench/ner-warm-latency.py --repo-root .
 ```
 
 Evidence paths:
@@ -138,7 +138,7 @@ and locale-aware configurations. `pass1_ms` is matching rule-floor wall clock;
 Runnable paths:
 
 ```bash
-python3 scripts/gaze-pipeline-bench.py --repo-root . --no-update
+python3 scripts/bench/gaze-pipeline-bench.py --repo-root . --no-update
 cargo bench -p gaze-pii --bench pipeline_end_to_end
 ```
 
@@ -146,7 +146,7 @@ Evidence paths:
 
 | Field | Value |
 | --- | --- |
-| Snapshot generator | `scripts/gaze-pipeline-bench.py` |
+| Snapshot generator | `scripts/bench/gaze-pipeline-bench.py` |
 | Bench snapshot assertion | `crates/gaze/benches/pipeline_end_to_end.rs` |
 | Snapshot | `crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json` |
 | Methodology doc | `docs/reference/benchmarks/v0.9-gaze-pipeline-benchmark.md` |

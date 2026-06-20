@@ -208,7 +208,7 @@ NER is opt-in and stacks on top of the deterministic regex and dictionary passes
 Fetch the pinned mBERT bundle once:
 
 ```sh
-bash scripts/fetch-ner-model.sh
+bash scripts/fetch/fetch-ner-model.sh
 ```
 
 The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
@@ -304,7 +304,7 @@ Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mod
 The Kiji backend is also feature-gated. Fetch the pinned model bundle once, then reinstall the CLI with the Kiji feature compiled in:
 
 ```sh
-bash scripts/fetch-kiji-safetynet-model.sh
+bash scripts/fetch/fetch-kiji-safetynet-model.sh
 cargo install --path crates/gaze-cli --features safety-net-kiji
 ```
 

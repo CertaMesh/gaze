@@ -40,7 +40,7 @@ def latency_summary(samples: list[float]) -> dict[str, float | int]:
 
 
 def load_onnx_runner(root: Path):
-    runner = root / "scripts" / "onnx-token-classification-runner.py"
+    runner = root / "scripts" / "bench" / "onnx-token-classification-runner.py"
     spec = importlib.util.spec_from_file_location("onnx_token_classification_runner", runner)
     if spec is None or spec.loader is None:
         raise RuntimeError(f"could not load {runner}")
