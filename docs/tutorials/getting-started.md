@@ -3,6 +3,11 @@
 Working PII pseudonymization in about 10 minutes. You will clean a document, store the
 restore key, send only safe text to an LLM, and restore original values from the response.
 
+By the end you will have a complete redact → send → restore round trip running locally, and
+you will know where the restore key lives and why it must never travel with the clean text.
+You do not need prior PII-domain knowledge — just a working Rust toolchain. When you want to
+go deeper, each step links to the reference page or the design contract behind it.
+
 ## Prerequisites
 
 - Rust toolchain at MSRV `1.89` or newer (matches the workspace `rust-version`).
@@ -12,8 +17,8 @@ restore key, send only safe text to an LLM, and restore original values from the
 
 ```toml
 [dependencies]
-gaze-pii = "0.8.0"
-gaze-assembly = "0.8.0"
+gaze-pii = "0.10"
+gaze-assembly = "0.10"
 ```
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
@@ -181,4 +186,4 @@ let pipeline = gaze_assembly::build_pipeline(
 - [CLI adapter contract](../../crates/gaze-cli/README.md) -- canonical shell-out protocol (stdin/stdout/stderr) for framework adapters; see [Subcommands](../../crates/gaze-cli/README.md#subcommands) for the `clean` / `restore` / `audit` surface as of v0.7.2
 - [Security review](../reference/security-review.md) -- invariants, threat boundaries, audit isolation
 - [Exit codes](../../crates/gaze-cli/README.md#exit-codes) -- canonical exit code reference
-- `cargo doc --open -p gaze` -- full API reference
+- `cargo doc --open -p gaze-pii` -- full API reference (the crate is published as `gaze-pii`; the import path stays `use gaze::...`)
