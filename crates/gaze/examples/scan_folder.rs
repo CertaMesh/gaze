@@ -76,8 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             CleanDocument::Text(text) => text,
             CleanDocument::Structured(_) => unreachable!("text input returns text output"),
             _ => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
+                return Err(io::Error::other(
                     "text input returned an unsupported clean document variant",
                 )
                 .into());
