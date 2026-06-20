@@ -244,7 +244,7 @@ NER contributes a `Name_*` span via the model's `PER` label:
 }
 ```
 
-Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
+Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json).
 
 ### 3. Add a SafetyNet (Pass-3 observer)
 

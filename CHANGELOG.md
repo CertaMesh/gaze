@@ -841,7 +841,7 @@ for the same list with its design notes.
 
 - **NER adopter assets (GH issue #90 items 1+4):** promoted the
   Davlan mBERT label contract and canonical NER policy snippet to
-  `assets/ner/` for framework adapters and adopters. `assets/ner/README.md`
+  `crates/gaze-recognizers/assets/ner/` for framework adapters and adopters. `crates/gaze-recognizers/assets/ner/README.md`
   documents the BIO tag to Gaze class schema, the `"drop"` sentinel, and the
   future `gaze model fetch <name>` / `gaze policy snippet ner` manifest path.
 
@@ -854,7 +854,7 @@ for the same list with its design notes.
   `labels.json` contract, and verifies all installed bytes against the
   repository-root `SHA256SUMS`.
 - **Policy docs for NER adopters:** `docs/policy.md` now cites the canonical
-  `assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
+  `crates/gaze-recognizers/assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
   and calls out Rust-regex inline flags such as `(?i)` in
   `[[policy.custom_recognizers]].pattern`.
 
