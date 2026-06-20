@@ -24,12 +24,13 @@ Run from `main` after all release-blocker PRs are merged.
 5. Run `cargo run -p xtask -- readme-version-check` and require green.
 6. Run `git grep -E '/Users/[a-z]+'` and require zero tracked-file matches.
    Path-leak output is release-blocking until scrubbed to `~/` or `$HOME`.
-7. Dogfood Gaze on its own release text: pipe `dist/release-notes/vX.Y.Z.md`
-   plus the modified `CHANGELOG.md` section through `gaze clean` and verify
-   zero detections. This preserves the `feedback-dogfood-gaze-on-own-output`
-   memory.
-8. Verify benchmark claims in release notes link to the script and hardware
-   specification that produced them. This preserves the
+7. Dogfood Gaze on its own release text: pipe the modified `CHANGELOG.md`
+   section, plus any optional extra release text passed to the release
+   preflight, through `gaze clean` and verify zero detections. GitHub Release
+   bodies use generated notes; `dist/release-notes/` is not committed. This
+   preserves the `feedback-dogfood-gaze-on-own-output` memory.
+8. Verify benchmark claims in the changelog or release PR body link to the
+   script and hardware specification that produced them. This preserves the
    `feedback-bench-claims-reproducible` memory.
 
 If any step fails, stop and fix the release branch. Do not tag around a red
@@ -78,8 +79,9 @@ After the workflows finish:
   released tag is wrong, make a new patch release.
 - Do not put local absolute paths in release notes, PR bodies, or commit
   messages. Use `~/` or `$HOME`.
-- If release notes need prose changes, use the `release-notes` skill before
-  publishing the GitHub Release body.
+- If generated GitHub release notes need prose changes after publication, edit
+  the GitHub Release body explicitly and keep `CHANGELOG.md` as the curated
+  source.
 
 ## Counter-Pattern
 

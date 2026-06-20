@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       release_notes:
-        description: "Release notes path; defaults to dist/release-notes/v<version>.md"
+        description: "Optional extra release text path to scrub during preflight"
         required: false
         type: string
         default: ""
@@ -62,16 +62,15 @@ jobs:
             exit 1
           fi
 
-          release_notes="$RELEASE_NOTES"
-          if [ -z "$release_notes" ]; then
-            release_notes="dist/release-notes/v${version}.md"
-          fi
-          if [ ! -f "$release_notes" ]; then
-            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
-            exit 1
-          fi
+          files=("$changelog_section")
 
-          files=("$changelog_section" "$release_notes")
+          if [ -n "$RELEASE_NOTES" ]; then
+            if [ ! -f "$RELEASE_NOTES" ]; then
+              echo "scrub-public-text failed: missing release notes file ${RELEASE_NOTES}" >&2
+              exit 1
+            fi
+            files+=("$RELEASE_NOTES")
+          fi
 
           if [ -n "$RELEASE_PR_NUMBER" ]; then
             pr_body="$(mktemp)"
@@ -221,13 +220,7 @@ jobs:
             exit 1
           fi
 
-          release_notes="dist/release-notes/${GITHUB_REF_NAME}.md"
-          if [ ! -f "$release_notes" ]; then
-            echo "scrub-public-text failed: missing release notes file ${release_notes}" >&2
-            exit 1
-          fi
-
-          cargo run -p xtask -- scrub-public-text "$changelog_section" "$release_notes"
+          cargo run -p xtask -- scrub-public-text "$changelog_section"
       - name: Generate NER checksums
         shell: bash
         run: |
@@ -258,7 +251,7 @@ jobs:
           fetch_raw "config.json" "config.json"
           fetch_raw "special_tokens_map.json" "special_tokens_map.json"
           fetch_raw "vocab.txt" "vocab.txt"
-          cp "${GITHUB_WORKSPACE}/assets/ner/labels.davlan-mbert.json" labels.json
+          cp "${GITHUB_WORKSPACE}/crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json" labels.json
 
           shasum -a 256 \
             model.onnx \
