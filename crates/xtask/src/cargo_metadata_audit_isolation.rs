@@ -41,6 +41,10 @@ const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[
         reason: "rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline",
     },
     WorkspaceMemberExemption {
+        workspace_member: "gaze-mcp-bridge",
+        reason: "MCP bridge transport/client boundary; tokio is a downstream MCP runtime dep, not the safety-net pipeline",
+    },
+    WorkspaceMemberExemption {
         workspace_member: "gaze-proxy",
         reason: "HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps",
     },

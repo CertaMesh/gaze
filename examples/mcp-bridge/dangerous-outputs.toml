@@ -1,0 +1,17 @@
+[session]
+mode = "ephemeral"
+
+[servers.lab]
+command = "example-lab-mcp"
+args = ["--stdio"]
+
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+# Unsafe opt-in. This can return raw downstream output to the agent.
+# Use only in isolated tests where no raw PII can be produced.
+[policy.tools."lab.raw_result_demo".result]
+mode = "allow"

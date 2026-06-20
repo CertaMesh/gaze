@@ -1,0 +1,24 @@
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+[policy.default.result]
+mode = "process"
+
+[policy.servers.email]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+[policy.servers.email.tools.send.arguments.to]
+allow_sensitive_fields = true
+
+[policy.servers.email.tools.send.arguments.body]
+allow_sensitive_fields = true
+requires_approval = true
+
+[policy.servers.email.tools.send.result]
+mode = "process"

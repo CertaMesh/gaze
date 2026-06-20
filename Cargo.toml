@@ -7,6 +7,7 @@ members = [
     "crates/gaze-types",
     "crates/gaze-cli",
     "crates/gaze-document",
+    "crates/gaze-mcp-bridge",
     "crates/gaze-mcp-core",
     "crates/gaze-mcp-rmcp",
     "crates/gaze-proxy",
@@ -21,8 +22,13 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 gaze-audit = { path = "crates/gaze-audit", version = "0.10.1" }
-gaze-types = { path = "crates/gaze-types", version = "0.10.1" }
+gaze = { path = "crates/gaze", version = "0.10.1", package = "gaze-pii" }
+gaze-assembly = { path = "crates/gaze-assembly", version = "0.10.1" }
+gaze-mcp-bridge = { path = "crates/gaze-mcp-bridge", version = "0.10.1" }
+gaze-mcp-core = { path = "crates/gaze-mcp-core", version = "0.10.1" }
+gaze-mcp-rmcp = { path = "crates/gaze-mcp-rmcp", version = "0.10.1" }
 gaze-proxy = { path = "crates/gaze-proxy", version = "0.10.1" }
+gaze-types = { path = "crates/gaze-types", version = "0.10.1" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1" }
 serde_json = "1"

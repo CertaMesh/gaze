@@ -1,0 +1,19 @@
+[session]
+mode = "ephemeral"
+
+[limits]
+call_timeout_ms = 30000
+response_bytes = 1048576
+content_blocks = 64
+
+[servers.echo]
+command = "example-safe-mcp-server"
+
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+[policy.default.result]
+mode = "process"
