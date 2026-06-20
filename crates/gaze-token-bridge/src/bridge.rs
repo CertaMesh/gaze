@@ -35,6 +35,14 @@ use crate::traits::{
 use crate::translate::SessionResponseTranslator;
 use crate::util::sha256_hex;
 
+// Track C chokepoint integration — gated, OFF by default. Implements
+// `gaze_mcp_core::Tool` for the owner-side `SearchDocumentsTool` without touching
+// gaze-mcp-core's sealed surface. See `chokepoint` module docs.
+#[cfg(feature = "chokepoint")]
+mod chokepoint;
+#[cfg(feature = "chokepoint")]
+pub use chokepoint::SearchDocumentsTool;
+
 /// Bundled demo policy (two domains, support + admin rules). Owner-side fixture.
 const DEMO_POLICY_JSON: &str = include_str!("../fixtures/policy.json");
 const CUSTOMER_DOMAIN: &str = "tenant_demo/customer_docs/v1";
