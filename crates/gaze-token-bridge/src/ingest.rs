@@ -6,7 +6,10 @@
 
 use std::ops::Range;
 
-use gaze::{CleanDocument, EmittedTokenSpan, LocaleTag, Pipeline, RawDocument, Scope, Session};
+use gaze::{
+    CleanDocument, DictionaryBundle, EmittedTokenSpan, LocaleTag, Pipeline, RawDocument,
+    SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
+};
 
 use crate::adapter::CorpusIndexStore;
 use crate::error::BridgeError;
@@ -25,6 +28,8 @@ pub struct CorpusIngestor<'a> {
     domain: &'a IndexDomain,
     projector: &'a dyn DomainProjector,
     locale_chain: Vec<LocaleTag>,
+    safety_net_policy: SafetyNetPolicy,
+    reject_safety_net_suspects: bool,
 }
 
 impl<'a> CorpusIngestor<'a> {
@@ -47,7 +52,19 @@ impl<'a> CorpusIngestor<'a> {
             domain,
             projector,
             locale_chain,
+            safety_net_policy: SafetyNetPolicy::new(
+                SafetyNetMode::Strict,
+                SafetyNetFallback::Redact,
+            ),
+            reject_safety_net_suspects: true,
         }
+    }
+
+    pub fn with_safety_net_resolution(mut self) -> Self {
+        self.safety_net_policy =
+            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Strict);
+        self.reject_safety_net_suspects = false;
+        self
     }
 
     pub fn ingest_text(
@@ -66,14 +83,16 @@ impl<'a> CorpusIngestor<'a> {
         };
         let (clean_doc, spans, leak_report) = self
             .pipeline
-            .clean_with_safety_net(
+            .clean_with_safety_net_policy_detect_context(
                 &session,
                 RawDocument::Text(raw_text.to_string()),
                 locale_chain,
+                &DictionaryBundle::default(),
+                self.safety_net_policy,
             )
             .map_err(|err| BridgeError::Session(format!("failed to clean corpus text: {err}")))?;
 
-        if leak_report.stats.suspect_count > 0 {
+        if self.reject_safety_net_suspects && leak_report.stats.suspect_count > 0 {
             return Err(BridgeError::Session(format!(
                 "safety net reported {} possible ingest leak(s)",
                 leak_report.stats.suspect_count

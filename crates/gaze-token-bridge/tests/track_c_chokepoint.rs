@@ -13,7 +13,9 @@
 
 use std::collections::HashMap;
 
-use gaze::PiiClass;
+use gaze::{
+    LeakSuspect, LocaleTag, PiiClass, Pipeline, SafetyNet, SafetyNetContext, SafetyNetError,
+};
 use gaze_token_bridge::bridge::{SearchDocumentsTool, TokenBridge};
 use gaze_token_bridge::Principal;
 use serde_json::{json, Value};
@@ -22,6 +24,35 @@ const POLICY_JSON: &str = include_str!("../fixtures/policy.json");
 const CUSTOMER_DOMAIN: &str = "tenant_demo/customer_docs/v1";
 const LEGAL_DOMAIN: &str = "tenant_demo/legal_docs/v1";
 const SUPPORT_ID: &str = "principal_support_1";
+
+#[derive(Debug)]
+struct NoopOutputSafetyNet;
+
+impl SafetyNet for NoopOutputSafetyNet {
+    fn id(&self) -> &str {
+        "test-noop-output-safety-net"
+    }
+
+    fn supported_locales(&self) -> &[LocaleTag] {
+        &[LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        _context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(Vec::new())
+    }
+}
+
+fn with_test_output_safety(bridge: TokenBridge) -> TokenBridge {
+    let pipeline = Pipeline::builder()
+        .register_safety_net(NoopOutputSafetyNet)
+        .build()
+        .expect("test output safety pipeline");
+    bridge.with_output_safety_net(pipeline, vec![LocaleTag::Global])
+}
 
 fn support_principal() -> Principal {
     Principal {
@@ -55,7 +86,10 @@ fn search_documents_policy() -> String {
 }
 
 fn demo_bridge() -> TokenBridge {
-    TokenBridge::from_policy_json(&search_documents_policy()).expect("bridge builds from policy")
+    with_test_output_safety(
+        TokenBridge::from_policy_json(&search_documents_policy())
+            .expect("bridge builds from policy"),
+    )
 }
 
 /// A tool wired with the support principal over the search_documents-keyed bridge.

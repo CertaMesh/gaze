@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, PiiClass, Pipeline};
-use gaze_recognizers::RegexDetector;
+use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline};
+use gaze_recognizers::{LocaleAwareModelRegistry, RegexDetector};
 use gaze_token_bridge::adapter::CorpusIndexStore;
 use gaze_token_bridge::bridge::TokenBridge;
 use gaze_token_bridge::ingest::CorpusIngestor;
@@ -19,9 +19,12 @@ use gaze_token_bridge::persistent::{
 use gaze_token_bridge::projection::HmacDomainProjector;
 use gaze_token_bridge::registry::IndexDomainRegistry;
 use gaze_token_bridge::util::sha256_hex;
-use gaze_token_bridge::{BridgeError, RedactionSession};
+use gaze_token_bridge::{BridgeError, DenyReason, RedactionSession};
 
 use crate::error::CliError;
+
+const KIJI_COMMAND_ENV: &str = "GAZE_KIJI_DISTILBERT_COMMAND";
+const KIJI_MODEL_DIR_ENV: &str = "GAZE_KIJI_DISTILBERT_MODEL_DIR";
 
 pub(crate) struct IngestArgs {
     pub(crate) dir: PathBuf,
@@ -66,7 +69,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let projector = HmacDomainProjector::new(&registry);
-    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector);
+    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector).with_safety_net_resolution();
 
     store.clear_domain(&args.domain);
     let mut ingested_files = 0_usize;
@@ -96,8 +99,10 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let policy_json = store.policy_json().map_err(map_bridge_error)?;
-    let mut bridge =
-        TokenBridge::from_policy_json_and_store(&policy_json, store).map_err(map_bridge_error)?;
+    let output_safety_net = build_index_output_safety_net_pipeline()?;
+    let mut bridge = TokenBridge::from_policy_json_and_store(&policy_json, store)
+        .map_err(map_bridge_error)?
+        .with_output_safety_net(output_safety_net, vec![LocaleTag::Global]);
 
     let principal = local_principal(&domain);
     let session = RedactionSession::ephemeral_for(&principal.id).map_err(map_bridge_error)?;
@@ -126,9 +131,10 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
                 println!("snippet: {}", hit.snippet);
             }
         }
-        BridgeSearchOutcome::Allowed(_) | BridgeSearchOutcome::Denied(_) => {
+        BridgeSearchOutcome::Allowed(_) => {
             println!("no hits");
         }
+        BridgeSearchOutcome::Denied(reason) => return Err(index_denied(reason)),
     }
     println!("raw PII never shown (owner-side only)");
 
@@ -195,6 +201,7 @@ fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
     let mut builder = Pipeline::builder()
         .detector(RegexDetector::emails().map_err(|_| index_failed())?)
         .detector(FieldEntityDetector);
+    builder = builder.register_safety_net_registry(index_kiji_registry()?);
 
     let mut rule_classes =
         BTreeSet::from([PiiClass::Email, PiiClass::Name, PiiClass::Organization]);
@@ -207,6 +214,50 @@ fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .map_err(|_| index_failed())
+}
+
+fn build_index_output_safety_net_pipeline() -> Result<Pipeline, CliError> {
+    Pipeline::builder()
+        .register_safety_net_registry(index_kiji_registry()?)
+        .build()
+        .map_err(|_| index_failed())
+}
+
+fn index_kiji_registry() -> Result<LocaleAwareModelRegistry, CliError> {
+    let mut registry = LocaleAwareModelRegistry::new();
+    registry.register(index_kiji_safety_net()?);
+    Ok(registry)
+}
+
+#[cfg(feature = "safety-net-kiji")]
+fn index_kiji_safety_net(
+) -> Result<gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet, CliError> {
+    use gaze_recognizers::safety_net::kiji_distilbert::{
+        KijiDistilbertConfig, KijiDistilbertSafetyNet, OrtKijiConfig, SubprocessKijiConfig,
+    };
+
+    if let Some(model_dir) = std::env::var_os(KIJI_MODEL_DIR_ENV) {
+        return Ok(KijiDistilbertSafetyNet::new(KijiDistilbertConfig::from(
+            OrtKijiConfig::new(model_dir),
+        )));
+    }
+
+    if let Some(command) = std::env::var_os(KIJI_COMMAND_ENV) {
+        return Ok(KijiDistilbertSafetyNet::new(KijiDistilbertConfig::from(
+            SubprocessKijiConfig::new(command),
+        )));
+    }
+
+    Err(CliError::SafetyNetConfigDetail(format!(
+        "gaze index requires {KIJI_MODEL_DIR_ENV} or {KIJI_COMMAND_ENV}; install the pinned model with scripts/fetch-kiji-safetynet-model.sh"
+    )))
+}
+
+#[cfg(not(feature = "safety-net-kiji"))]
+fn index_kiji_safety_net() -> Result<impl gaze_recognizers::LocaleAwareModel, CliError> {
+    Err(CliError::SafetyNetConfigDetail(
+        "gaze index requires gaze-cli feature safety-net-kiji".to_string(),
+    ))
 }
 
 fn infer_class(entity: &str) -> PiiClass {
@@ -226,8 +277,21 @@ fn local_principal(domain: &gaze_token_bridge::model::IndexDomain) -> Principal 
     }
 }
 
-fn map_bridge_error(_err: BridgeError) -> CliError {
-    index_failed()
+fn map_bridge_error(err: BridgeError) -> CliError {
+    match err {
+        BridgeError::Session(message)
+            if message.contains("safety net") || message.contains("SafetyNet") =>
+        {
+            CliError::SafetyNetFailure {
+                variant: "IndexSafetyNet",
+            }
+        }
+        _ => index_failed(),
+    }
+}
+
+fn index_denied(reason: DenyReason) -> CliError {
+    CliError::PolicyConfigDetail(format!("index search failed closed: {reason:?}"))
 }
 
 fn index_failed() -> CliError {

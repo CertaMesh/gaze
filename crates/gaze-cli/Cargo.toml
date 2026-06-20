@@ -22,7 +22,7 @@ safety-net-kiji = ["gaze-recognizers/safety-net-kiji"]
 runtime-tract = ["safety-net-kiji", "gaze-recognizers/runtime-tract"]
 runtime-candle = ["safety-net-kiji", "gaze-recognizers/runtime-candle"]
 document = ["dep:gaze-document"]
-index = ["dep:gaze-token-bridge"]
+index = ["dep:gaze-token-bridge", "safety-net-kiji"]
 mcp = [
     "dep:async-trait",
     "dep:directories-next",
