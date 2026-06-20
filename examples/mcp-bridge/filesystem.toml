@@ -1,0 +1,28 @@
+[session]
+mode = "ephemeral"
+
+[servers.filesystem]
+command = "example-filesystem-mcp"
+args = ["--root", "/safe/project"]
+
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+[policy.tools."filesystem.read_file".arguments.path]
+allow_sensitive_fields = false
+
+[policy.tools."filesystem.write_file".arguments.path]
+allow_sensitive_fields = false
+
+[policy.tools."filesystem.write_file".arguments.content]
+allow_sensitive_fields = false
+requires_approval = true
+
+[policy.tools."filesystem.read_file".result]
+mode = "process"
+
+[policy.tools."filesystem.write_file".result]
+mode = "process"

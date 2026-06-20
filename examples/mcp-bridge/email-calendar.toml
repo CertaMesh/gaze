@@ -1,0 +1,41 @@
+[session]
+mode = "file"
+dir = ".gaze/sessions"
+key_env = "GAZE_BRIDGE_SESSION_KEY"
+
+[servers.email]
+command = "example-email-mcp"
+args = ["--stdio"]
+
+[servers.calendar]
+command = "example-calendar-mcp"
+args = ["--stdio"]
+
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = false
+on_block = "refuse"
+log_raw = false
+
+[policy.tools."email.send".arguments.to]
+allow_sensitive_fields = true
+
+[policy.tools."email.send".arguments.cc]
+allow_sensitive_fields = true
+
+[policy.tools."email.send".arguments.body]
+allow_sensitive_fields = true
+requires_approval = true
+
+[policy.tools."calendar.create_event".arguments.attendees]
+allow_sensitive_fields = true
+
+[policy.tools."calendar.create_event".arguments.description]
+allow_sensitive_fields = true
+requires_approval = true
+
+[policy.tools."email.send".result]
+mode = "process"
+
+[policy.tools."calendar.create_event".result]
+mode = "process"

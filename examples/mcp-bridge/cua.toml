@@ -1,0 +1,27 @@
+[session]
+mode = "file"
+dir = ".gaze/cua-sessions"
+key_env = "GAZE_BRIDGE_SESSION_KEY"
+
+[servers.cua]
+command = "example-cua-mcp"
+args = ["--stdio"]
+
+[policy.default]
+allow_sensitive_fields = false
+requires_approval = true
+on_block = "refuse"
+log_raw = false
+
+[policy.tools."cua.type_text".arguments.text]
+allow_sensitive_fields = true
+requires_approval = true
+
+[policy.tools."cua.click".arguments.selector]
+allow_sensitive_fields = false
+
+[policy.tools."cua.screenshot".result]
+mode = "deny"
+
+[policy.tools."cua.type_text".result]
+mode = "process"
