@@ -14,6 +14,8 @@ schemas, see the [reference](../reference/index.md).
 
 - **[Set up the MCP adapter](mcp/set-up-mcp-adapter.md)** — expose Gaze's document tools to
   an MCP client and serve the stdio chokepoint.
+- **[Set up the MCP bridge](mcp/set-up-mcp-bridge.md)** — route an agent through Gaze before
+  forwarding approved tool calls to downstream MCP servers.
 
 ## Daemon
 

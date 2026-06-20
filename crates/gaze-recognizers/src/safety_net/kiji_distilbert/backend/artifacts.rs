@@ -24,7 +24,7 @@ pub const REQUIRED_KIJI_INT8_ARTIFACTS: &[&str] = &[
 /// Hugging Face repository for the canonical Kiji DistilBERT ONNX bundle.
 pub const KIJI_DISTILBERT_HF_REPO: &str = "onnx-community/distilbert-NER-ONNX";
 
-/// Immutable upstream revision used by `scripts/fetch-kiji-safetynet-model.sh`.
+/// Immutable upstream revision used by `scripts/fetch/fetch-kiji-safetynet-model.sh`.
 pub const KIJI_DISTILBERT_HF_COMMIT: &str = "3a19fe9404a4469d91aa3d551558a97f68872f67";
 
 /// SHA256 of the canonical `SHA256SUMS` file for the bundle.

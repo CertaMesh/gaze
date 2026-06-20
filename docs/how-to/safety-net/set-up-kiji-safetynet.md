@@ -64,7 +64,7 @@ Source anchors:
 1. Fetch the pinned model bundle:
 
    ```sh
-   bash scripts/fetch-kiji-safetynet-model.sh
+   bash scripts/fetch/fetch-kiji-safetynet-model.sh
    ```
 
    The script installs to
@@ -79,7 +79,7 @@ Source anchors:
    quantization extras available and run:
 
    ```sh
-   python3 scripts/quantize-kiji-int8.py \
+   python3 scripts/bench/quantize-kiji-int8.py \
      "${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert"
    ```
 
@@ -114,8 +114,8 @@ Source anchors:
 
    ```sh
    python3 -m pip install --user onnxruntime tokenizers numpy
-   chmod +x scripts/kiji-runner.py
-   export GAZE_KIJI_DISTILBERT_COMMAND=$PWD/scripts/kiji-runner.py
+   chmod +x scripts/bench/kiji-runner.py
+   export GAZE_KIJI_DISTILBERT_COMMAND=$PWD/scripts/bench/kiji-runner.py
    ```
 
    If `python3 -m pip` is unavailable on macOS, bootstrap user-local pip first:
@@ -144,7 +144,7 @@ cannot produce the required artifact set.
 The Kiji subprocess command is deliberately separate from the model directory.
 That lets you ship a small wrapper around the runtime you operate while keeping
 the pinned model bundle under Gaze's artifact contract. Gaze ships
-[`scripts/kiji-runner.py`][kiji-runner] as the reference wrapper. You may
+[`scripts/bench/kiji-runner.py`][kiji-runner] as the reference wrapper. You may
 replace it with a compiled helper or another local executable, but it must obey
 the stdin/stdout contract described below. Do not emit diagnostics to stdout;
 stdout is reserved for the JSON span array.
@@ -160,7 +160,7 @@ printf '%s' 'Contact alice@example.invalid for details.' \
       --policy quickstart-policy.toml \
       --safety-net kiji-distilbert \
       --safety-net-backend kiji-distilbert \
-      --kiji-distilbert-command "$PWD/scripts/kiji-runner.py" \
+      --kiji-distilbert-command "$PWD/scripts/bench/kiji-runner.py" \
       --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert
 ```
 
@@ -227,7 +227,7 @@ gaze clean \
   --policy quickstart-policy.toml \
   --safety-net openai-filter \
   --safety-net-backend kiji-distilbert \
-  --kiji-distilbert-command "$PWD/scripts/kiji-runner.py" \
+  --kiji-distilbert-command "$PWD/scripts/bench/kiji-runner.py" \
   --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert
 ```
 
@@ -375,5 +375,5 @@ fixtures whenever possible.
 [cli-safety-net]: ../../../crates/gaze-cli/README.md#safety-net
 [kiji-class-map]: ../../../crates/gaze-recognizers/src/safety_net/kiji_distilbert/class_map.rs
 [kiji-mod]: ../../../crates/gaze-recognizers/src/safety_net/kiji_distilbert/mod.rs
-[kiji-runner]: ../../../scripts/kiji-runner.py
+[kiji-runner]: ../../../scripts/bench/kiji-runner.py
 [kiji-subprocess]: ../../../crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/subprocess.rs

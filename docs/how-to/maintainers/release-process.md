@@ -10,7 +10,8 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 
 - Triggered on `v*` tag pushes.
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
-- Release notes follow the curated-narrative voice (see `docs/release-notes-style.md` when present) — past-tense PR-anchored prose with a North-Star tie, not a Keep-a-Changelog dump.
+- The GitHub Release body uses GitHub-generated release notes from the tag history.
+- `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
 - Browse releases at <https://github.com/EmpireTwo/gaze/releases>.
 
 ### crates.io
@@ -19,7 +20,7 @@ Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publ
 
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
-- Publishes all ten workspace crates in topological order: `gaze-types` → `gaze-audit` → `gaze-recognizers` → `gaze-pii` → `gaze-assembly` → `gaze-mcp-core` → `gaze-mcp-rmcp` → `gaze-document` → `gaze-proxy` → `gaze-cli`. The core crate is published as `gaze-pii` while its library target remains `gaze`.
+- Publishes all eleven workspace crates in topological order: `gaze-types` → `gaze-audit` → `gaze-recognizers` → `gaze-pii` → `gaze-assembly` → `gaze-mcp-core` → `gaze-mcp-rmcp` → `gaze-mcp-bridge` → `gaze-document` → `gaze-proxy` → `gaze-cli`. The core crate is published as `gaze-pii` while its library target remains `gaze`.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
@@ -35,6 +36,7 @@ Current state:
 - No public `EmpireTwo/tap` or `EmpireTwo/homebrew-tap` repository exists yet.
 - Repo-public status alone does not enable `brew install` — adopters still need a tap that serves the formula. Until that tap exists, `cargo install gaze-cli` (from crates.io) is the supported install path for the CLI.
 - `.github/workflows/release.yml` intentionally remains artifact-only for Homebrew: it builds and uploads GitHub release assets, but does not push formula updates to an external tap.
+- The release workflow uploads generated GitHub release notes and binary/checksum artifacts; it does not read a committed release-notes file.
 - Modern Homebrew rejects direct install/info commands for formula files outside a tap, so local smoke means staging the formula into a scratch tap rather than installing `./dist/homebrew/gaze.rb` directly.
 
 Axis-5 rationale: documenting the repo-local formula is more ergonomic than advertising a tap that adopters cannot use. It gives collaborators a concrete smoke path while keeping public install instructions honest and reversible when a public tap is created.

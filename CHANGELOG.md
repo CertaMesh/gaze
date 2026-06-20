@@ -315,7 +315,7 @@ Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth 
 
 - **Versioned recognizer lineage** (v0.8 Tier 1, PR #203 `3c95304`): `Candidate.recognizer_version_id` + `RedactionEntry.recognizer_id` + `recognizer_version_id` (all `Option<String>`, additive). Audit boundary in `pipeline.rs` now propagates lineage instead of dropping at `source`. SQLite schema gains nullable `recognizer_id` / `recognizer_version_id` columns; pre-migration rows tagged `legacy_unversioned`. NER recognizer emissions versioned as `ner.<model>.<vN>` from artifact config metadata (`ner.unknown.v0` fallback). `docs/architecture/locale-chain.md` gains a coverage matrix listing every bundled recognizer × supported locales × ValidatorKind. (Axis 4 trust/auditable, Axis 5 ergonomics.)
 - **`SafetyTier` enum on rulepack recognizers** (v0.8 Tier 1.5, PR #201 `8ab9daf`): `SafeDefault`, `LocaleGated`, `OptIn` with `#[non_exhaustive]`. Closed-enum activation gate replaces the dual-bundle activation model. (Axis 1 reliability, Axis 4 trust.)
-- **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5, PR #202 `0cd9ccc`): new `--safety-net-backend kiji-distilbert` flag (default remains `openai-filter` for compat). Pass-3 SafetyNet device with pinned-artifact contract identical to existing OpenAI filter (SHA256SUMS hard-fail on missing). New `CliError::SafetyNetArtifactMissing { backend, path }` typed variant. `scripts/fetch-kiji-safetynet-model.sh` mirror of existing NER fetcher. (Axis 1 defense-in-depth.)
+- **`KijiDistilbertSafetyNet` backend** (v0.8 Tier 2.5, PR #202 `0cd9ccc`): new `--safety-net-backend kiji-distilbert` flag (default remains `openai-filter` for compat). Pass-3 SafetyNet device with pinned-artifact contract identical to existing OpenAI filter (SHA256SUMS hard-fail on missing). New `CliError::SafetyNetArtifactMissing { backend, path }` typed variant. `scripts/fetch/fetch-kiji-safetynet-model.sh` mirror of existing NER fetcher. (Axis 1 defense-in-depth.)
 - **Seven checksum-backed locale validators** (v0.8 Tier 2, PR #207 `16c1fd5`): Aadhaar Verhoeff (IN), French NIR MOD-97 variant (FR), German Steuer-ID MOD 11,10 (DE), Dutch BSN MOD-11 (NL), Brazilian CPF + CNPJ MOD-11 (BR), and UK NHS number MOD-11 (UK). New `ValidatorKind` variants are closed-enum and fail-closed on parse. Five new locale packs ship alongside: `locale-fr`, `locale-nl`, `locale-br`, `locale-in`, `locale-uk`. Every entity ships at `safety_tier = "safe_default"`, so adopters in BR/FR/NL/IN/UK get coverage out of the box once their locale is set. (Axis 1 reliability, Axis 3 agentic-first.)
 - **Three locale-gated regex recognizers** (v0.8 Tier 3, PR #208 `7348690`): US SSN, UK NINO, and Indian PAN. All ship at `safety_tier = "locale_gated"` — no bare 9-digit / 10-character shapes activate without explicit locale + cue context. PAN extends the existing `locale-in` pack from Tier 2 in place. (Axis 1 reliability, Axis 4 trust.)
 - **Corpus rework v2 implementation** (PR #205 `aa9c5fc`): the 61 stochastic status-quo templates + the `fixture_variants` mechanism are replaced with 150 deliberate scenarios. Each scenario declares its expected emissions including `recognizer_version_id` from day one. `fake` crate added as an xtask-only dev dependency; seed pinned in a documented `COVERAGE_CORPUS_SEED` constant. `baseline.json` fully re-snapped. (Axis 4 trust.)
@@ -841,20 +841,20 @@ for the same list with its design notes.
 
 - **NER adopter assets (GH issue #90 items 1+4):** promoted the
   Davlan mBERT label contract and canonical NER policy snippet to
-  `assets/ner/` for framework adapters and adopters. `assets/ner/README.md`
+  `crates/gaze-recognizers/assets/ner/` for framework adapters and adopters. `crates/gaze-recognizers/assets/ner/README.md`
   documents the BIO tag to Gaze class schema, the `"drop"` sentinel, and the
   future `gaze model fetch <name>` / `gaze policy snippet ner` manifest path.
 
 ### Changed
 
 - **Pinned default NER artifact source (GH issue #90 item 2):**
-  `scripts/fetch-ner-model.sh` now installs the pre-quantized int8 ONNX artifact
+  `scripts/fetch/fetch-ner-model.sh` now installs the pre-quantized int8 ONNX artifact
   from `onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX` at commit
   `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, copies the Gaze-authored
   `labels.json` contract, and verifies all installed bytes against the
   repository-root `SHA256SUMS`.
 - **Policy docs for NER adopters:** `docs/policy.md` now cites the canonical
-  `assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
+  `crates/gaze-recognizers/assets/ner/` contracts, documents `[ner].locale` as a single BCP47 string,
   and calls out Rust-regex inline flags such as `(?i)` in
   `[[policy.custom_recognizers]].pattern`.
 
@@ -882,7 +882,7 @@ for the same list with its design notes.
 - **v0.5 Phase C — `cargo-metadata-audit-isolation` xtask gate (PR #75):** parses `cargo metadata --format-version=1` and fails closed if any non-audit-responsible workspace member has a normal-dependency path to `gaze-audit` in default or `--no-default-features` graphs. The audit-responsible allowlist is documented in source; `gaze-cli` is the only allowed consumer because its `audit` subcommands run against the passive sink directly.
 - **v0.5 Phase C — `cargo deny` audit-feature ban (PR #75):** denies enabling `gaze`'s `audit` feature outside the dedicated compatibility tests, blocking accidental reintroduction of `gaze-audit` into the protected default graph.
 - **v0.5 Phase D — `gaze_module_isolation` Dylint lint (PR #76, commit `3e367d1`):** Dylint late-HIR lint replaces the syn-walker `audit-metadata-only` gate. Resolution runs through `LateContext::qpath_res` against rustc's name resolver, not text matching. `check_item`, `check_expr`, `check_ty`, trait references, struct fields, and macro emission are covered. 18 UI fixtures cover all known bypass classes including macro call-site hygiene, `#[path]` modules, `include!`, type positions, trait bounds, and `extern crate gaze_audit`. Pinned toolchain: `nightly-2025-09-18`, `clippy_utils@20ce69b9...`, `dylint_linting`/`dylint_testing` 5.0. New `dylint` GitHub Actions workflow runs the gate on every push to `main` and PR.
-- **v0.5 Phase D — `dylint-gate` xtask command (PR #76):** verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed (skips with a clear message locally when absent; CI installs it explicitly).
+- **v0.5 Phase D — `dylint-gate` xtask command (PR #76):** verifies the `lint/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed (skips with a clear message locally when absent; CI installs it explicitly).
 
 ### Changed
 

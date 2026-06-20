@@ -674,7 +674,7 @@ mod tests {
         )
         .unwrap();
         let fetcher =
-            std::fs::read_to_string(workspace.join("scripts/fetch-kiji-safetynet-model.sh"))
+            std::fs::read_to_string(workspace.join("scripts/fetch/fetch-kiji-safetynet-model.sh"))
                 .unwrap();
 
         for content in [setup_doc, fetcher] {

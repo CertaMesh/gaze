@@ -208,7 +208,7 @@ NER is opt-in and stacks on top of the deterministic regex and dictionary passes
 Fetch the pinned mBERT bundle once:
 
 ```sh
-bash scripts/fetch-ner-model.sh
+bash scripts/fetch/fetch-ner-model.sh
 ```
 
 The script verifies a release-pinned `SHA256SUMS.ner` and installs the artifact set into `${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl` (pass a directory argument to override). No model is downloaded at `gaze clean` runtime — Gaze only consumes the on-disk bundle.
@@ -244,7 +244,7 @@ NER contributes a `Name_*` span via the model's `PER` label:
 }
 ```
 
-Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
+Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json).
 
 ### 3. Add a SafetyNet (Pass-3 observer)
 
@@ -304,7 +304,7 @@ Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mod
 The Kiji backend is also feature-gated. Fetch the pinned model bundle once, then reinstall the CLI with the Kiji feature compiled in:
 
 ```sh
-bash scripts/fetch-kiji-safetynet-model.sh
+bash scripts/fetch/fetch-kiji-safetynet-model.sh
 cargo install --path crates/gaze-cli --features safety-net-kiji
 ```
 
@@ -422,7 +422,7 @@ The crate is published as `gaze-pii` because the bare `gaze` name is in transfer
 
 ## Workspace and crates.io
 
-Ten published crates. Pick the smallest surface that does the job.
+Eleven published crates. Pick the smallest surface that does the job.
 
 | Crate | Use when |
 |---|---|
@@ -435,6 +435,7 @@ Ten published crates. Pick the smallest surface that does the job.
 | [`gaze-document`](https://crates.io/crates/gaze-document) | You want PNG / JPG / PDF ingestion into `SafeBundle`s or MCP document tools. |
 | [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | You're building an MCP tool host and want every call to pass through Gaze's chokepoint. |
 | [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
+| [`gaze-mcp-bridge`](https://crates.io/crates/gaze-mcp-bridge) | You want the policy-gated MCP bridge that restores approved token fields before calling downstream MCP servers. |
 | [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of API-key traffic to OpenAI / Anthropic / Gemini (not consumer subscription tiers — those need a separate browser-MITM project), daemon-managed via `gaze proxy`. |
 
 ```sh

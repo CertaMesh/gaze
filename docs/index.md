@@ -32,7 +32,7 @@ everything in full.
 | Safety nets / NER / Kiji | — | [Set up the Kiji safety net](how-to/safety-net/set-up-kiji-safetynet.md) | [Benchmarks](reference/benchmarks/index.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
 | Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) |
 | MCP adapter & runtime | — | [Set up the MCP adapter](how-to/mcp/set-up-mcp-adapter.md) | — | [MCP runtime](explanation/mcp/mcp-runtime.md) |
-| MCP bridge | — | — | — | [MCP bridge](explanation/mcp/mcp-bridge.md) |
+| MCP bridge | — | [Set up the MCP bridge](how-to/mcp/set-up-mcp-bridge.md) | — | [MCP bridge](explanation/mcp/mcp-bridge.md) |
 | Daemon mode | — | [Run the daemon](how-to/daemon/run-daemon.md) | — | [Daemon mode](explanation/daemon/daemon-mode.md) |
 | Document ingestion / OCR | — | [Ingest documents](how-to/document/ingest-documents.md) | — | [Document extension](explanation/document/document-extension.md) |
 | Audit | — | — | [Metrics & audit columns](reference/metrics.md) · [Crates](reference/crates.md) | [Ambiguity side-channel](explanation/detection/ambiguity-side-channel.md) |

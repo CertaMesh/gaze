@@ -595,7 +595,7 @@ fn validate_kiji_artifacts(
             return Err(CliError::SafetyNetArtifactMissing {
                 backend: "kiji-distilbert",
                 path: format!(
-                    "{} (install via scripts/fetch-kiji-safetynet-model.sh)",
+                    "{} (install via scripts/fetch/fetch-kiji-safetynet-model.sh)",
                     artifact.display()
                 ),
             });

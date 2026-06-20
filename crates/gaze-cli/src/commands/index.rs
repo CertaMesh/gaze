@@ -249,7 +249,7 @@ fn index_kiji_safety_net(
     }
 
     Err(CliError::SafetyNetConfigDetail(format!(
-        "gaze index requires {KIJI_MODEL_DIR_ENV} or {KIJI_COMMAND_ENV}; install the pinned model with scripts/fetch-kiji-safetynet-model.sh"
+        "gaze index requires {KIJI_MODEL_DIR_ENV} or {KIJI_COMMAND_ENV}; install the pinned model with scripts/fetch/fetch-kiji-safetynet-model.sh"
     )))
 }
 

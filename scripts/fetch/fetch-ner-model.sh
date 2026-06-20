@@ -10,7 +10,7 @@
 # Checksums are published as SHA256SUMS.ner in each Gaze GitHub release.
 #
 # Usage:
-#   scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
+#   scripts/fetch/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 #
 # Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/davlan-mbert-ner-hrl
 
@@ -44,7 +44,7 @@ log() { printf '[fetch-ner-model] %s\n' "$*"; }
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
+  scripts/fetch/fetch-ner-model.sh [--gaze-version <tag>] [dest_dir]
 
 Options:
   --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.ner.
@@ -120,7 +120,7 @@ require_cmd curl
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-LABELS_SOURCE="${REPO_ROOT}/assets/ner/labels.davlan-mbert.json"
+LABELS_SOURCE="${REPO_ROOT}/crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json"
 
 if [ ! -f "$LABELS_SOURCE" ]; then
   log "missing Gaze NER labels contract: ${LABELS_SOURCE}"
@@ -154,7 +154,7 @@ resolve_gaze_version() {
 
   if [ -z "$version" ]; then
     log "could not determine Gaze release version for SHA256SUMS.ner"
-    log "specify one explicitly: scripts/fetch-ner-model.sh --gaze-version <tag> [dest_dir]"
+    log "specify one explicitly: scripts/fetch/fetch-ner-model.sh --gaze-version <tag> [dest_dir]"
     exit 2
   fi
 
@@ -204,7 +204,7 @@ fetch_raw "config.json" "config.json"
 fetch_raw "special_tokens_map.json" "special_tokens_map.json"
 fetch_raw "vocab.txt" "vocab.txt"
 
-log "installing labels.json from assets/ner/labels.davlan-mbert.json"
+log "installing labels.json from crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json"
 cp "$LABELS_SOURCE" labels.json
 
 # ---- Fetch release checksum contract ----------------------------------------

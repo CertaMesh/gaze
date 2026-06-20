@@ -59,7 +59,11 @@ class ModelConfig:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
-    parser.add_argument("--config", type=Path, default=Path("benches/ner_models.toml"))
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=Path("crates/gaze-recognizers/benches/ner_models.toml"),
+    )
     parser.add_argument("--coverage-report", type=Path, default=Path("target/coverage-report.json"))
     parser.add_argument(
         "--corpus-dir",

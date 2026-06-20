@@ -2,8 +2,8 @@
 
 This directory holds **test fixtures** for the `NerDetector` load contract.
 No real model weights live here and none ever should. The canonical adopter
-contracts moved to `assets/ner/`, and the runtime weights are fetched
-out-of-repo via `scripts/fetch-ner-model.sh`.
+contracts live in `crates/gaze-recognizers/assets/ner/`, and the runtime weights are fetched
+out-of-repo via `scripts/fetch/fetch-ner-model.sh`.
 
 ## What's in here
 
@@ -13,7 +13,7 @@ out-of-repo via `scripts/fetch-ner-model.sh`.
   checksum / missing-artifact fail-closed paths without any model.
 - `labels.example.json` — schema-only label map for integration tests that
   verify `labels.json` parsing. The adopter-facing label contract lives at
-  `assets/ner/labels.davlan-mbert.json`. `DATE` and `O` map to `"drop"` by
+  `crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`. `DATE` and `O` map to `"drop"` by
   default (the sentinel that causes `NerDetector` to silently skip those
   spans).
 - Production `config.json` may include `"backend": "ort"` (or another
@@ -27,7 +27,7 @@ The unit tests under `crates/gaze/src/ner.rs` cover load-contract failure
 modes without a real model. Real German/English span correctness tests
 need the pinned artifact on disk.
 
-1. Run `scripts/fetch-ner-model.sh` once to populate
+1. Run `scripts/fetch/fetch-ner-model.sh` once to populate
    `${XDG_DATA_HOME:-~/.local/share}/gaze/models/davlan-mbert-ner-hrl/`.
 2. Export `GAZE_NER_MODEL_DIR` pointing at that directory.
 3. Run `cargo test -p gaze -- --ignored ner_span_correctness`.

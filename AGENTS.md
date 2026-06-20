@@ -37,7 +37,7 @@ As of v0.9.0, the workspace has nine published-shape crates plus `xtask`:
 - `gaze-mcp-core` — transport-free MCP-shaped chokepoint runtime (`Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`). Introduced in v0.7.0.
 - `gaze-mcp-rmcp` — rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. Introduced in v0.7.0.
 - `gaze-document` — OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Introduced in v0.7.1.
-- `xtask` (+ `xtask/dylint/`) — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `xtask/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
+- `xtask` — internal gate runner; the Dylint `gaze_module_isolation` lint hosted in `lint/dylint/` is a detached workspace pinned to `nightly-2025-09-18`. The legacy `audit-metadata-only` syn walker was decommissioned in v0.5 Phase E.
 
 Source-of-truth workspace shape table with full role descriptions: [`CONTRIBUTING.md`](CONTRIBUTING.md#workspace-shape).
 

@@ -44,7 +44,7 @@ fn cargo_dylint_available() -> bool {
 }
 
 fn assert_ui_fixture_shape(root: &Path) -> Result<()> {
-    let ui_root = root.join("xtask/dylint/ui");
+    let ui_root = root.join("lint/dylint/ui");
     let fixtures = collect_rs_files(&ui_root)?;
     let disabled = fixtures
         .iter()

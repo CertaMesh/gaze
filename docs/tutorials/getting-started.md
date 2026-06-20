@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("{}", clean_text);
     // "Hi, <hex:Email_1> called about ORD-789012."
-    // ORD-789012 needs a custom recognizer -- see Step 5.
+    // ORD-789012 needs a custom recognizer or context JSON -- see Step 5.
 
     Ok(())
 }
@@ -169,6 +169,25 @@ let pipeline = gaze_assembly::build_pipeline(
     None,
 )?;
 ```
+
+Use the static policy recognizer when the shape is stable across tenants. For
+per-request tenant data, the CLI can also take a context dictionary without a
+full recognizer block:
+
+```json
+{
+  "dictionaries": {
+    "order_ids": { "terms": ["ORD-789012"], "case_sensitive": true }
+  },
+  "class_map": { "order_ids": "custom:order_id" },
+  "fields": { "tenant": "demo" }
+}
+```
+
+Pass it with `gaze clean --context-json context.json`; Gaze builds a call-scoped
+dictionary recognizer and tokenizes `ORD-789012` as `Custom:order_id`. See the
+[policy reference](../reference/policy.md#policycustom_recognizers) for
+`terms_from_context`, standalone context dictionaries, and the full schema.
 
 ## Common errors
 

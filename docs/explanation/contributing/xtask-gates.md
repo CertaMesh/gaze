@@ -41,7 +41,7 @@ The canonical active-gate roster is the "Active xtask gates" line in
 | `CiFeatureMatrix` | `cargo run -p xtask -- ci-feature-matrix` | Added in v0.4.6 S5. Runs the CI feature matrix, including the no-phone-parser fail-closed configuration. |
 | `CargoMetadataAuditIsolation` | `cargo run -p xtask -- cargo-metadata-audit-isolation` | Added in v0.5 Phase C and updated in v0.6 after the `gaze` audit feature shim was removed. Parses `cargo metadata --format-version=1` and fails if any non-audit-responsible workspace package has a normal dependency path to `gaze-audit` in default, `--no-default-features`, or safety-net graphs. The explicit audit-responsible allowlist is documented in source; currently `gaze-cli` is allowed because its audit command consumes the passive sink directly. |
 | `ReadmeVersionCheck` | `cargo run -p xtask -- readme-version-check` | Added in v0.9.0 release-process hardening. Parses effective workspace package versions via `cargo metadata`, verifies fixture pass/fail tests, then rejects stale crate README install pins before publish. |
-| `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `xtask/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
+| `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `lint/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
 | `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Added in v0.6.0 alongside the Pass-3 SafetyNet runtime (todo #65). Behavioral gate over the OpenAI-filter SafetyNet path: lists and runs the `mock_safety_net`, `openai_filter_subprocess`, and `context_sensitivity_v0_6` recognizer-suite tests. Cargo invocations are batched per Phase 7.3 of #65. |
 | `TokenbridgeNoRawIndex` | `cargo run -p xtask -- tokenbridge-no-raw-index` | Added for Index/Search Track B3. Builds a real `gaze::Pipeline`, runs TokenBridge `CorpusIngestor` over synthetic fixture PII, inserts through `InMemoryCorpusIndexStore`, searches through `InMemorySearchAdapter`, and fails if stored snippets or searchable output paths retain raw PII or current-session gaze tokens. |
 
@@ -55,7 +55,7 @@ lint. It is CI-only in practice because local developer machines may not have
 CI runs:
 
 ```console
-$ cd xtask/dylint && cargo test --test ui
+$ cd lint/dylint && cargo test --test ui
 $ cd ../..
 $ cargo run -p xtask -- dylint-gate
 ```

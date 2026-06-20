@@ -155,13 +155,13 @@ and [docs/explanation/safety-net/safety-nets.md](docs/explanation/safety-net/saf
 
 SQLite audit storage is isolated in `gaze-audit`; `gaze` must not grow a
 `rusqlite` feature graph. The canonical protected-path gate is the
-`gaze_module_isolation` Dylint lint in the detached `xtask/dylint` workspace,
+`gaze_module_isolation` Dylint lint in the detached `lint/dylint` workspace,
 with the older syn walker decommissioned.
 
 Source anchors: [CLAUDE.md](CLAUDE.md),
 [docs/explanation/contributing/xtask-gates.md](docs/explanation/contributing/xtask-gates.md),
 [crates/gaze-audit/src/sqlite.rs](crates/gaze-audit/src/sqlite.rs), and
-[xtask/dylint/src/lib.rs](xtask/dylint/src/lib.rs).
+[lint/dylint/src/lib.rs](lint/dylint/src/lib.rs).
 
 ### KDD-4: Closed Validator And Normalizer Surfaces Fail Closed
 

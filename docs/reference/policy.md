@@ -803,9 +803,9 @@ The v0.5.2 default NER bundle is pinned to the Hugging Face mirror
 `cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`. The runtime `model.onnx` is
 downloaded from `onnx/model_int8.onnx` and verified against the repository-root
 `SHA256SUMS`. The canonical adopter label map is
-[`assets/ner/labels.davlan-mbert.json`](../../assets/ner/labels.davlan-mbert.json);
+[`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](../../crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json);
 the canonical copy-paste policy block is
-[`assets/ner/policy-snippet.davlan-mbert.toml`](../../assets/ner/policy-snippet.davlan-mbert.toml).
+[`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
 
 ## Detectors
 
@@ -845,7 +845,7 @@ required files and the canonical install path.
 When loaded with the default label contract, the NER detector emits
 `PiiClass::Name`, `PiiClass::Location`, and `PiiClass::Organization` for
 entities the model recognises. The mirror also exposes `DATE` tags, but
-[`assets/ner/labels.davlan-mbert.json`](../../assets/ner/labels.davlan-mbert.json)
+[`crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json`](../../crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json)
 maps `DATE` to `"drop"` to preserve Gaze's no-default-on date posture. Map
 emitted classes to actions via `kind = "class"` rules — declare detector-side
 once via `[ner]`, then act on the classes the model produces.
@@ -989,7 +989,7 @@ the real address.
 ### Example D — Mixed regex + NER + custom class
 
 The canonical NER subset of this example lives in
-[`assets/ner/policy-snippet.davlan-mbert.toml`](../../assets/ner/policy-snippet.davlan-mbert.toml).
+[`crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml`](../../crates/gaze-recognizers/assets/ner/policy-snippet.davlan-mbert.toml).
 
 ```toml
 [session]

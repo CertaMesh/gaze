@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Fetch and verify the pinned Kiji DistilBERT safety-net artifact.
 #
-# Mirrors `scripts/fetch-ner-model.sh` exactly in shape: pulls a DistilBERT
+# Mirrors `scripts/fetch/fetch-ner-model.sh` exactly in shape: pulls a DistilBERT
 # NER model at a pinned Hugging Face commit SHA, drops it under the same
 # XDG-style cache path, and verifies via shasum against the release-pinned
 # SHA256SUMS.kiji checksum file. No runtime network and no local ONNX export
@@ -12,7 +12,7 @@
 # the first sign-off run lands real hashes.
 #
 # Usage:
-#   scripts/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
+#   scripts/fetch/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
 #
 # Default dest_dir = ${XDG_DATA_HOME:-$HOME/.local/share}/gaze/models/kiji-distilbert
 
@@ -45,7 +45,7 @@ log() { printf '[fetch-kiji-safetynet-model] %s\n' "$*"; }
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
+  scripts/fetch/fetch-kiji-safetynet-model.sh [--gaze-version <tag>] [dest_dir]
 
 Options:
   --gaze-version <tag>  Gaze GitHub release tag that provides SHA256SUMS.kiji.
@@ -146,7 +146,7 @@ resolve_gaze_version() {
 
   if [ -z "$version" ]; then
     log "could not determine Gaze release version for SHA256SUMS.kiji"
-    log "specify one explicitly: scripts/fetch-kiji-safetynet-model.sh --gaze-version <tag> [dest_dir]"
+    log "specify one explicitly: scripts/fetch/fetch-kiji-safetynet-model.sh --gaze-version <tag> [dest_dir]"
     exit 2
   fi
 
@@ -235,5 +235,5 @@ log "verifying checksums"
 verify_sha256sums
 
 log "done. model dir: $DEST"
-log "int8 precision is opt-in: run scripts/quantize-kiji-int8.py \"$DEST\" and verify SHA256SUMS.int8=$KIJI_INT8_BUNDLE_SHA256"
+log "int8 precision is opt-in: run scripts/bench/quantize-kiji-int8.py \"$DEST\" and verify SHA256SUMS.int8=$KIJI_INT8_BUNDLE_SHA256"
 log "next: pass --safety-net-backend=kiji-distilbert --kiji-distilbert-model-dir=\"$DEST\" to gaze clean"
