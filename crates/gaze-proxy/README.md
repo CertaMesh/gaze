@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-proxy.svg)](https://crates.io/crates/gaze-proxy)
 [![docs.rs](https://docs.rs/gaze-proxy/badge.svg)](https://docs.rs/gaze-proxy)
-[![License](https://img.shields.io/crates/l/gaze-proxy.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-proxy.svg)](https://github.com/CertaMesh/gaze#license)
 
 `gaze-proxy` is the feature-gated HTTP proxy runtime for LLM SDK base-URL swaps.
 It preserves each provider's native wire shape and uses adapters only to locate

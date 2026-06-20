@@ -1,12 +1,12 @@
 class Gaze < Formula
   desc "Channel-agnostic PII redaction CLI for AI pipelines"
-  homepage "https://github.com/EmpireTwo/gaze"
+  homepage "https://github.com/CertaMesh/gaze"
   version "0.6.4"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/EmpireTwo/gaze/releases/download/v0.6.4/gaze-aarch64-apple-darwin",
+      url "https://github.com/CertaMesh/gaze/releases/download/v0.6.4/gaze-aarch64-apple-darwin",
           using: :nounzip
       sha256 "dad01b196eeea445291e7c47ddecf61d1143c3a3e4a5b731fc8b647dfc884a07"
     end

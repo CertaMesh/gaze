@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-document.svg)](https://crates.io/crates/gaze-document)
 [![docs.rs](https://docs.rs/gaze-document/badge.svg)](https://docs.rs/gaze-document)
-[![License](https://img.shields.io/crates/l/gaze-document.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-document.svg)](https://github.com/CertaMesh/gaze#license)
 
 Reversible PII pseudonymization for **documents** — image + single-page PDF →
 clean Markdown + a restorable `gaze::Manifest` + an OCR/PII report. Powers
@@ -247,4 +247,4 @@ in v0.10.0 so adopters can pin against the eventual flag names early.
 
 ## License
 
-Dual-licensed under either of [Apache-2.0](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-MIT), at your option.
+Dual-licensed under either of [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT), at your option.

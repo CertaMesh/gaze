@@ -2,11 +2,11 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-recognizers.svg)](https://crates.io/crates/gaze-recognizers)
 [![docs.rs](https://docs.rs/gaze-recognizers/badge.svg)](https://docs.rs/gaze-recognizers)
-[![License](https://img.shields.io/crates/l/gaze-recognizers.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-recognizers.svg)](https://github.com/CertaMesh/gaze#license)
 
 Built-in recognizers for Gaze
 
-Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
+Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 This crate depends on `gaze` and implements concrete `gaze::Recognizer`
 backends. Keeping it separate lets the core crate expose a small, stable

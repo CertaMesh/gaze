@@ -2,11 +2,11 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-audit.svg)](https://crates.io/crates/gaze-audit)
 [![docs.rs](https://docs.rs/gaze-audit/badge.svg)](https://docs.rs/gaze-audit)
-[![License](https://img.shields.io/crates/l/gaze-audit.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-audit.svg)](https://github.com/CertaMesh/gaze#license)
 
 Passive audit sinks for Gaze metadata-only redaction logs
 
-Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
+Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 Provides `SqliteLogger` - the concrete `RedactionLogger` implementation that writes
 session-scoped redaction metadata to a local SQLite database. The audit log is

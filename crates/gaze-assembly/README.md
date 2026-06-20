@@ -2,11 +2,11 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-assembly.svg)](https://crates.io/crates/gaze-assembly)
 [![docs.rs](https://docs.rs/gaze-assembly/badge.svg)](https://docs.rs/gaze-assembly)
-[![License](https://img.shields.io/crates/l/gaze-assembly.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-assembly.svg)](https://github.com/CertaMesh/gaze#license)
 
 Policy-to-pipeline assembly for Gaze
 
-Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
+Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
 This crate joins the core `gaze` policy model with the built-in recognizers
 from `gaze-recognizers`. It exists to keep the dependency direction clean:

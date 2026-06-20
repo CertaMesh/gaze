@@ -96,7 +96,7 @@ opt-in SafetyNet backend).
 
 ### Tier 1 — Versioned recognizer-IDs (additive)
 
-PR [#203](https://github.com/EmpireTwo/gaze/pull/203) (`3c95304`).
+PR [#203](https://github.com/CertaMesh/gaze/pull/203) (`3c95304`).
 
 - `RedactionEntry` now carries both `recognizer_id` (semantic slug used
   for registry/collision lookup, unchanged shape) and
@@ -115,7 +115,7 @@ FROM gaze_audit_log` is forward-safe.
 
 ### Tier 1.5 — Bundled rulepack unification (action required for some)
 
-PR [#201](https://github.com/EmpireTwo/gaze/pull/201) (`8ab9daf`).
+PR [#201](https://github.com/CertaMesh/gaze/pull/201) (`8ab9daf`).
 
 The two embedded rulepacks (`core` with 6 recognizers, `core-extended`
 with 10) have been collapsed into **one unified `core` bundle**. Each
@@ -183,7 +183,7 @@ UK get out-of-box coverage; everyone else sees no behavior change.
 
 ### Tier 2.5 — Kiji DistilBERT SafetyNet backend (opt-in)
 
-PR [#202](https://github.com/EmpireTwo/gaze/pull/202) (`0cd9ccc`).
+PR [#202](https://github.com/CertaMesh/gaze/pull/202) (`0cd9ccc`).
 
 A second Pass-3 SafetyNet observer is available alongside the existing
 OpenAI Privacy Filter. Subprocess contract is identical to
@@ -209,7 +209,7 @@ none) is unchanged.
 
 ### Tier 3 — Regex-only locale recognizers (additive)
 
-PR [#208](https://github.com/EmpireTwo/gaze/pull/208).
+PR [#208](https://github.com/CertaMesh/gaze/pull/208).
 
 Adds US SSN, UK NINO, and Indian PAN as `safety_tier = "locale_gated"`
 recognizers — they fire only when the resolved locale matches. No

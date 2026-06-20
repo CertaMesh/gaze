@@ -17,8 +17,8 @@ members = [
 resolver = "2"
 
 [workspace.package]
-repository = "https://github.com/EmpireTwo/gaze"
-homepage = "https://github.com/EmpireTwo/gaze"
+repository = "https://github.com/CertaMesh/gaze"
+homepage = "https://github.com/CertaMesh/gaze"
 license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]

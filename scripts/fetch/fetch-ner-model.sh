@@ -20,7 +20,7 @@ set -euo pipefail
 
 HF_REPO="onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
 HF_COMMIT_SHA="cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
-GITHUB_REPO="${GAZE_GITHUB_REPO:-EmpireTwo/gaze}"
+GITHUB_REPO="${GAZE_GITHUB_REPO:-CertaMesh/gaze}"
 
 # Files that must end up in the destination directory.
 REQUIRED_FILES=(
