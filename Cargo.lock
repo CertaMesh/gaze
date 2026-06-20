@@ -1398,7 +1398,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -1609,7 +1609,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-token-bridge"
-version = "0.1.0"
+version = "0.11.1"
 dependencies = [
  "async-trait",
  "gaze-mcp-core",

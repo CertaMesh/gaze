@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-06-20
+
+### Added
+
+- **`gaze-token-bridge` is now published to crates.io.** The crate remains
+  experimental and focused on gated index-search; output backstop verification
+  is still pending.
+
+### Fixed
+
+- **`gaze-cli` index installs now resolve from crates.io.** The optional
+  `gaze-token-bridge` dependency now carries a publishable version so
+  `gaze-cli` can publish and install with its `index` feature.
+
 ## [0.11.0] - 2026-06-20
 
 ### Added
