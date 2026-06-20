@@ -422,7 +422,7 @@ The crate is published as `gaze-pii` because the bare `gaze` name is in transfer
 
 ## Workspace and crates.io
 
-Ten published crates. Pick the smallest surface that does the job.
+Eleven published crates. Pick the smallest surface that does the job.
 
 | Crate | Use when |
 |---|---|
@@ -435,6 +435,7 @@ Ten published crates. Pick the smallest surface that does the job.
 | [`gaze-document`](https://crates.io/crates/gaze-document) | You want PNG / JPG / PDF ingestion into `SafeBundle`s or MCP document tools. |
 | [`gaze-mcp-core`](https://crates.io/crates/gaze-mcp-core) | You're building an MCP tool host and want every call to pass through Gaze's chokepoint. |
 | [`gaze-mcp-rmcp`](https://crates.io/crates/gaze-mcp-rmcp) | You want the rmcp transport sink for `gaze-mcp-core` (stdio default, opt-in streamable HTTP). |
+| [`gaze-mcp-bridge`](https://crates.io/crates/gaze-mcp-bridge) | You want the policy-gated MCP bridge that restores approved token fields before calling downstream MCP servers. |
 | [`gaze-proxy`](https://crates.io/crates/gaze-proxy) | You want an HTTP proxy in front of API-key traffic to OpenAI / Anthropic / Gemini (not consumer subscription tiers — those need a separate browser-MITM project), daemon-managed via `gaze proxy`. |
 
 ```sh

@@ -51,7 +51,7 @@ unmerged branch head, or a dirty working tree.
 The tag push auto-fires two workflows:
 
 - `release.yml`: builds binaries and creates the GitHub Release.
-- `publish-crates.yml`: publishes the 10 crates via OIDC trusted publishing.
+- `publish-crates.yml`: publishes the 11 crates via OIDC trusted publishing.
 
 Do not publish to crates.io manually. The workflow owns publication order and
 idempotent retries.
@@ -62,14 +62,14 @@ After the workflows finish:
 
 1. Confirm `gh release view vX.Y.Z` returns the release.
 2. Confirm both workflow runs succeeded: `release.yml` and `publish-crates.yml`.
-3. Confirm all 10 crates are published by checking
+3. Confirm all 11 crates are published by checking
    `https://crates.io/api/v1/crates/<name>` and expecting
    `max_version == X.Y.Z` for:
    `gaze-types`, `gaze-audit`, `gaze-recognizers`, `gaze-pii`,
-   `gaze-assembly`, `gaze-mcp-core`, `gaze-mcp-rmcp`, `gaze-document`,
-   `gaze-proxy`, and `gaze-cli`.
+   `gaze-assembly`, `gaze-mcp-core`, `gaze-mcp-rmcp`, `gaze-mcp-bridge`,
+   `gaze-document`, `gaze-proxy`, and `gaze-cli`.
 4. Update the orchestrator scratchpad with released URLs:
-   GitHub Release URL plus the 10 crates.io URLs.
+   GitHub Release URL plus the 11 crates.io URLs.
 
 ## Escalation Rules
 
@@ -87,5 +87,5 @@ After the workflows finish:
 
 Do not just push a tag and hope. A Gaze release is complete only when the
 pre-flight gates are green, the tag was explicitly authorized, both workflows
-succeeded, all 10 crates report the expected version, and the orchestrator
+succeeded, all 11 crates report the expected version, and the orchestrator
 scratchpad records the shipped URLs.
