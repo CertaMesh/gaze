@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::Path;
+use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -13,7 +14,9 @@ use gaze_mcp_bridge::policy::{
     DecisionOutcome, FieldPolicy, PolicyConfig, ResultMode, ResultPolicy, ToolPolicy,
 };
 use gaze_mcp_bridge::{BridgeHostBuilder, BridgeRegistry, BridgeSessionStore, NamespacedTool};
-use gaze_mcp_core::{AuthError, AuthHook, DispatchError, DispatchHost, Principal, ToolDescriptor};
+use gaze_mcp_core::{
+    AuthError, AuthHook, DispatchError, DispatchHost, Principal, ToolDescriptor, ToolError,
+};
 use proptest::prop_assert;
 use rmcp::model::{CallToolResult, Content, RawResource};
 use serde_json::{json, Value};
@@ -77,6 +80,7 @@ enum FakeResponse {
         message: String,
         data: Option<Value>,
     },
+    ServiceError(String),
 }
 
 struct FakeClient {
@@ -129,6 +133,7 @@ impl DownstreamClient for FakeClient {
         match self.response.lock().await.clone() {
             FakeResponse::Result(result) => Ok(result),
             FakeResponse::McpError { message, data } => Err(DownstreamError::Mcp { message, data }),
+            FakeResponse::ServiceError(message) => Err(DownstreamError::Service(message)),
         }
     }
 }
@@ -451,6 +456,26 @@ async fn raw_pii_in_args_is_blocked_even_without_token() {
 }
 
 #[tokio::test]
+async fn pii_object_key_in_args_fails_closed_without_raw_path() {
+    let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, _) = host_with_fake(client.clone(), allow_to_policy(), audit.clone()).await;
+    let err = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({RAW_EMAIL: "hello"}),
+            Some(SID_A),
+        )
+        .await
+        .expect_err("PII-bearing object key fails closed");
+    assert!(!format!("{err:?}").contains(RAW_EMAIL));
+    assert!(client.calls().await.is_empty());
+    let audit = serde_json::to_string(&*audit.events.lock().await).expect("audit json");
+    assert!(!audit.contains(RAW_EMAIL));
+}
+
+#[tokio::test]
 async fn approval_required_is_structured_and_not_forwarded() {
     let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
     let (host, store) = host_with_fake(
@@ -692,6 +717,50 @@ async fn downstream_json_rpc_error_data_is_redacted() {
 }
 
 #[tokio::test]
+async fn downstream_service_error_detail_is_generic_and_audit_is_clean() {
+    let client = FakeClient::new(FakeResponse::ServiceError(format!(
+        "downstream transport echoed {RAW_EMAIL}"
+    )));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) = host_with_fake(client, allow_to_policy(), audit.clone()).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token}),
+            Some(SID_A),
+        )
+        .await
+        .expect("generic service error response");
+    let rendered = serde_json::to_string(&response.payload).expect("json");
+    assert!(!rendered.contains(RAW_EMAIL));
+    assert_eq!(response.payload["isError"], true);
+    assert_eq!(
+        response.payload["error"]["message"],
+        "downstream service error"
+    );
+
+    let audit = serde_json::to_string(&*audit.events.lock().await).expect("audit json");
+    assert!(!audit.contains(RAW_EMAIL));
+}
+
+#[test]
+fn backend_failure_agent_messages_are_generic() {
+    for err in [
+        gaze_mcp_bridge::BridgeError::SessionStore(format!("session load saw {RAW_EMAIL}")),
+        gaze_mcp_bridge::BridgeError::Downstream(format!("downstream saw {RAW_EMAIL}")),
+        gaze_mcp_bridge::BridgeError::Redaction(format!("redaction saw {RAW_EMAIL}")),
+    ] {
+        let dispatch = err.into_dispatch();
+        let DispatchError::ToolError(ToolError::BackendFailure(message)) = dispatch else {
+            panic!("expected generic backend failure");
+        };
+        assert!(!message.contains(RAW_EMAIL));
+    }
+}
+
+#[tokio::test]
 async fn encrypted_file_store_does_not_write_raw_pii_and_reloads() {
     let dir = TempDir::new().expect("tempdir");
     std::env::set_var("GAZE_BRIDGE_TEST_KEY", "22".repeat(32));
@@ -765,6 +834,8 @@ proptest::proptest! {
     #[test]
     fn audit_event_serializes_paths_only(local in "[a-z]{1,12}") {
         let raw = format!("{local}@example.invalid");
+        prop_assert!(ArgPath::root().child("x@y.z").is_err());
+        prop_assert!(ArgPath::root().child(&raw).is_err());
         let mut event = BridgeAuditEvent::new(
             "01HRT7K6P6X5Q9M0V8YQ4N7TBC".to_string(),
             SID_A,
@@ -830,6 +901,57 @@ async fn rmcp_child_process_fixture_spawns_lists_calls_and_bridge_redacts() {
     assert!(!rendered.contains(RAW_EMAIL));
     let audit = std::fs::read_to_string(audit_path).expect("audit");
     assert!(!audit.contains(RAW_EMAIL));
+}
+
+#[tokio::test]
+async fn child_stderr_is_not_inherited_by_bridge_process() {
+    let temp = TempDir::new().expect("tempdir");
+    let script = temp.path().join("fixture_mcp.py");
+    write_python_fixture(&script);
+
+    let output = Command::new(std::env::current_exe().expect("current test binary"))
+        .arg("--exact")
+        .arg("rmcp_child_stderr_capture_helper")
+        .arg("--ignored")
+        .arg("--nocapture")
+        .env("GAZE_BRIDGE_STDERR_HELPER", "1")
+        .env("GAZE_BRIDGE_STDERR_FIXTURE", &script)
+        .output()
+        .expect("run stderr helper");
+    let combined = format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(output.status.success(), "stderr helper failed: {combined}");
+    assert!(
+        !combined.contains(RAW_EMAIL),
+        "bridge process leaked raw stderr: {combined}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "invoked by child_stderr_is_not_inherited_by_bridge_process"]
+async fn rmcp_child_stderr_capture_helper() {
+    if std::env::var_os("GAZE_BRIDGE_STDERR_HELPER").is_none() {
+        return;
+    }
+    let script = std::env::var("GAZE_BRIDGE_STDERR_FIXTURE").expect("fixture path");
+    let spec = ServerSpec {
+        command: "python3".to_string(),
+        args: vec![script],
+        env: BTreeMap::new(),
+        cwd: None,
+    };
+    let client = RmcpChildClient::spawn(&spec).await.expect("client");
+    client
+        .list_tools(Duration::from_secs(5))
+        .await
+        .expect("tools");
+    client
+        .call_tool("send", json!({"to": RAW_EMAIL}), Duration::from_secs(5))
+        .await
+        .expect("call");
 }
 
 fn read_all_files(dir: &Path) -> Vec<u8> {

@@ -44,9 +44,15 @@ impl BridgeError {
             Self::Policy(message) | Self::Config(message) => {
                 DispatchError::ToolError(ToolError::InvalidArgs(message))
             }
-            Self::SessionStore(message) | Self::Downstream(message) | Self::Redaction(message) => {
-                DispatchError::ToolError(ToolError::BackendFailure(message))
-            }
+            Self::SessionStore(_) => DispatchError::ToolError(ToolError::BackendFailure(
+                "bridge session store failure".to_string(),
+            )),
+            Self::Downstream(_) => DispatchError::ToolError(ToolError::BackendFailure(
+                "downstream bridge failure".to_string(),
+            )),
+            Self::Redaction(_) => DispatchError::ToolError(ToolError::BackendFailure(
+                "bridge redaction failure".to_string(),
+            )),
             Self::ApprovalRequired => {
                 DispatchError::ToolError(ToolError::BackendFailure("approval required".to_string()))
             }

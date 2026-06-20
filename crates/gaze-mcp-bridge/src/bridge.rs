@@ -169,9 +169,7 @@ impl BridgeHost {
                 message,
                 data,
             )?,
-            Err(DownstreamError::Service(message)) => {
-                return Err(BridgeError::Downstream(message));
-            }
+            Err(DownstreamError::Service(_)) => process_downstream_service_error()?,
         };
 
         self.session_store
@@ -615,6 +613,19 @@ fn process_downstream_error(
             }
         })),
         result_paths,
+    })
+}
+
+fn process_downstream_service_error() -> BridgeResult<IngressResult> {
+    Ok(IngressResult {
+        response: ToolResponse::json(serde_json::json!({
+            "isError": true,
+            "error": {
+                "message": "downstream service error",
+                "data": null,
+            }
+        })),
+        result_paths: vec![ResultPath::root().child("error")?.child("message")?],
     })
 }
 
