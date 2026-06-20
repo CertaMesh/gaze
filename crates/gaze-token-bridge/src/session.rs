@@ -1,10 +1,9 @@
-//! FROZEN CONTRACT — the RedactionSession wrapper. Master-owned.
+//! The RedactionSession wrapper.
 //!
 //! A `RedactionSession` is the short-lived, conversation-local pseudonym namespace.
 //! It wraps a `gaze::Session` and is **bound to exactly one principal** at creation:
-//! a request from a different principal is denied before token resolution. This is the
-//! refined fix for the shared-session correlation threat — the projection stays
-//! `(tenant,domain)`-keyed, while session reuse across principals is rejected here.
+//! a request from a different principal is denied before token resolution. This blocks
+//! shared-session correlation while projection stays `(tenant,domain)`-keyed.
 
 use gaze::{PiiClass, Scope, Session};
 

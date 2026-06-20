@@ -1,4 +1,4 @@
-//! FROZEN CONTRACT — shared data model. Master-owned.
+//! Shared data model.
 //!
 //! Three visibility tiers, do not blur them:
 //! - **Agent-visible** ([`AgentSearchHit`], [`BridgeSearchResponse`]): safe for the LLM.
@@ -64,7 +64,7 @@ pub struct BridgeRequest {
 }
 
 /// A raw value reduced to its canonical, class-tagged form prior to projection.
-/// Canonicalization is frozen here so ingest (Track B) and query (Track A) agree.
+/// Canonicalization is frozen here so ingest and query agree.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CanonicalEntity {
     pub class: PiiClass,
@@ -199,7 +199,7 @@ pub struct AdapterFilterClause {
 }
 
 /// A search request after runtime validation + filter projection. Produced by the
-/// bridge runtime (Track C); consumed by the adapter (Track B). The adapter trusts
+/// bridge runtime; consumed by the adapter. The adapter trusts
 /// that entity_ref/nonce/expiry checks live in the runtime, but still enforces the
 /// entity_ref/domain/expiry/nonce guards defensively.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -267,7 +267,7 @@ impl BridgeSearchOutcome {
 }
 
 /// Authorization decision: an issued handle (+ whether elevated audit applies), or a deny.
-// Transient decision value matched immediately by every track; boxing the handle would
+// Transient decision value matched immediately by callers; boxing the handle would
 // add deref friction at each match site for negligible benefit. Allow the size asymmetry.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -281,8 +281,8 @@ pub enum BridgeDecision {
     },
 }
 
-/// Authorization grant emitted by Track A policy evaluation. Track C turns this into
-/// a short-lived capability; Track A does not mint handles.
+/// Authorization grant emitted by policy evaluation. The bridge turns this into
+/// a short-lived capability; policy evaluation does not mint handles.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthGrant {
     pub entity_ref: IndexedEntityRef,
@@ -294,7 +294,7 @@ pub struct AuthGrant {
     pub raw_sha256: String,
 }
 
-/// Policy outcome: either enough owner-side authorization data for Track C to issue
+/// Policy outcome: either enough owner-side authorization data for the bridge to issue
 /// a capability, or a typed fail-closed deny.
 // Transient decision value matched immediately by bridge runtime; keep it direct to
 // mirror BridgeDecision and avoid allocation in the hot path.

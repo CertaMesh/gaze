@@ -1,16 +1,6 @@
-//! Track C (gated) — `TokenBridge` runtime: orchestrate resolve → canonicalize →
-//! project (A) → policy (A) → mint capability (C) → adapter (B) → translate (C) → audit (C).
+//! `TokenBridge` runtime: orchestrate resolve → canonicalize → project → policy →
+//! mint capability → adapter → translate → audit.
 //! Also the chokepoint integration (ToolResources sealed handle, `search_documents` tool).
-//! Owner: sub-orchestrator C. Reference: spike `TokenBridge`.
-//!
-//! # Ownership note
-//! [`crate::policy::RegistryPolicyGate`] borrows its registry, while [`TokenBridge::demo`]
-//! must return an owned value. A struct that owns the registry *and* a gate borrowing it
-//! would be self-referential, so the bridge owns the registry and constructs a fresh gate
-//! per authorization. The per-principal rate-limit buckets, however, are owned by the bridge
-//! (the `TokenBridge::rate_limit` field) and injected by `&mut` into each per-call gate, so
-//! they persist and accumulate across calls (blocker #1564). The immutable borrow of `registry`
-//! and the mutable borrow of `rate_limit` are disjoint fields, so both are legal at once.
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -40,7 +30,7 @@ use crate::traits::{
 use crate::translate::SessionResponseTranslator;
 use crate::util::sha256_hex;
 
-// Track C chokepoint integration — gated, OFF by default. Implements
+// Optional chokepoint integration. Implements
 // `gaze_mcp_core::Tool` for the owner-side `SearchDocumentsTool` without touching
 // gaze-mcp-core's sealed surface. See `chokepoint` module docs.
 #[cfg(feature = "chokepoint")]
@@ -53,8 +43,8 @@ const DEMO_POLICY_JSON: &str = include_str!("../fixtures/policy.json");
 const CUSTOMER_DOMAIN: &str = "tenant_demo/customer_docs/v1";
 const LEGAL_DOMAIN: &str = "tenant_demo/legal_docs/v1";
 
-/// Owner-side bridge runtime. Composes the registry-backed policy gate (A), the corpus
-/// search adapter (B), the capability runtime (C), and an append-only audit sink (C).
+/// Owner-side bridge runtime. Composes the registry-backed policy gate, corpus
+/// search adapter, capability runtime, and append-only audit sink.
 #[derive(Debug)]
 pub struct TokenBridge<S = InMemoryCorpusIndexStore> {
     registry: IndexDomainRegistry,
@@ -68,7 +58,7 @@ pub struct TokenBridge<S = InMemoryCorpusIndexStore> {
     /// projected owner-side before the adapter sees them).
     last_adapter_filters: Vec<AdapterFilterClause>,
     /// Persistent per-principal rate-limit buckets, injected into each per-call policy gate
-    /// so the corpus-enumeration cap accumulates across calls (blocker #1564).
+    /// so the corpus-enumeration cap accumulates across calls.
     rate_limit: RateLimitState,
     /// Required Pass-3 scan over every translated, agent-visible snippet.
     output_safety_net: Option<OutputSafetyNet>,
@@ -91,7 +81,7 @@ impl std::fmt::Debug for OutputSafetyNet {
 
 impl TokenBridge<InMemoryCorpusIndexStore> {
     /// Build the bundled demo bridge: load the demo policy, ingest the synthetic corpus
-    /// into both domains via the Track B redact-before-index ingestor, and compose.
+    /// into both domains via the redact-before-index ingestor, and compose.
     pub fn demo() -> Result<Self, BridgeError> {
         Self::from_policy_json(DEMO_POLICY_JSON)
     }
@@ -180,7 +170,7 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
         // Scope the gate's borrows of `self.registry` / `self.rate_limit` to this block so
         // the subsequent mutable borrows of `self.capability` / `self.audit` are legal. The
         // gate reads+updates the bridge-owned rate-limit buckets, so the cap persists across
-        // calls (blocker #1564); `registry` and `rate_limit` are disjoint fields.
+        // calls; `registry` and `rate_limit` are disjoint fields.
         let outcome = {
             let mut gate = RegistryPolicyGate::new(&self.registry, &mut self.rate_limit);
             gate.evaluate(session, request)
@@ -367,7 +357,7 @@ impl<S: CorpusIndexStore> TokenBridge<S> {
     }
 }
 
-/// A structured synthetic record. Mirrors the spike fixture set; reused by the PR3 example.
+/// A structured synthetic record for the bundled demo corpus.
 #[derive(Debug, Clone)]
 pub struct SyntheticDoc {
     pub id: &'static str,
@@ -379,7 +369,7 @@ pub struct SyntheticDoc {
 
 impl SyntheticDoc {
     /// Render this record as raw corpus text for a domain. The text is fed through the
-    /// Track B redact-before-index ingestor, so the raw values below never enter the
+    /// redact-before-index ingestor, so the raw values below never enter the
     /// index in cleartext — only their projected aliases and owner-side raw fields do.
     fn raw_text(&self, domain_id: &str) -> String {
         if domain_id == CUSTOMER_DOMAIN {
@@ -396,7 +386,7 @@ impl SyntheticDoc {
     }
 }
 
-/// The bundled synthetic corpus (mirrors the spike). Reused by the PR3 example.
+/// The bundled synthetic corpus.
 pub fn synthetic_docs() -> Vec<SyntheticDoc> {
     vec![
         SyntheticDoc {
