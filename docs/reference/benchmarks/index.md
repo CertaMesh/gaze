@@ -96,7 +96,7 @@ Evidence paths:
 
 | Field | Value |
 | --- | --- |
-| Config | `benches/ner_models.toml` |
+| Config | `crates/gaze-recognizers/benches/ner_models.toml` |
 | Snapshot | `crates/gaze-recognizers/benches/ner_models_snapshot.json` |
 | Methodology doc | `docs/reference/benchmarks/v0.9-ner-model-leaderboard.md` |
 | Kiji fp32 bundle SHA256 | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
