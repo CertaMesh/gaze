@@ -1,6 +1,6 @@
 # Release Process
 
-`EmpireTwo/gaze` is a public repository. Two release channels are live for adopters; Homebrew remains repo-local pending a public tap.
+`CertaMesh/gaze` is a public repository. Two release channels are live for adopters; Homebrew remains repo-local pending a public tap.
 
 ## Public release channels (live)
 
@@ -12,7 +12,7 @@ Source: [`.github/workflows/release.yml`](../../../.github/workflows/release.yml
 - Builds and uploads platform binary artifacts plus a source tarball to the GitHub Releases page.
 - The GitHub Release body uses GitHub-generated release notes from the tag history.
 - `CHANGELOG.md` remains the curated human source for release highlights and is scrubbed before publication; committed `dist/release-notes/` files are intentionally not maintained.
-- Browse releases at <https://github.com/EmpireTwo/gaze/releases>.
+- Browse releases at <https://github.com/CertaMesh/gaze/releases>.
 
 ### crates.io
 
@@ -34,7 +34,7 @@ Decision for v0.4.6 S6 (#184), reaffirmed post repo-public flip: keep Homebrew r
 Current state:
 
 - The formula source lives in this repository at `dist/homebrew/gaze.rb`.
-- No public `EmpireTwo/tap` or `EmpireTwo/homebrew-tap` repository exists yet.
+- No public `CertaMesh/tap` or `CertaMesh/homebrew-tap` repository exists yet.
 - Repo-public status alone does not enable `brew install` — adopters still need a tap that serves the formula. Until that tap exists, `cargo install gaze-cli` (from crates.io) is the supported install path for the CLI.
 - `.github/workflows/release.yml` intentionally remains artifact-only for Homebrew: it builds and uploads GitHub release assets, but does not push formula updates to an external tap.
 - The release workflow uploads generated GitHub release notes and binary/checksum artifacts; it does not read a committed release-notes file.
@@ -45,10 +45,10 @@ Axis-5 rationale: documenting the repo-local formula is more ergonomic than adve
 Local smoke for maintainers:
 
 ```bash
-brew tap-new EmpireTwo/gaze-smoke
-cp dist/homebrew/gaze.rb "$(brew --repo EmpireTwo/gaze-smoke)/Formula/gaze.rb"
-brew info EmpireTwo/gaze-smoke/gaze
-brew untap EmpireTwo/gaze-smoke
+brew tap-new CertaMesh/gaze-smoke
+cp dist/homebrew/gaze.rb "$(brew --repo CertaMesh/gaze-smoke)/Formula/gaze.rb"
+brew info CertaMesh/gaze-smoke/gaze
+brew untap CertaMesh/gaze-smoke
 ```
 
 Future public tap work is org-level operations outside this repo PR. When a public tap exists, update this document, the README install section, and `.github/workflows/release.yml` together so the formula location, adopter instructions, and release automation agree.

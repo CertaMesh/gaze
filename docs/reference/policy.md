@@ -130,7 +130,7 @@ The recommended migration is:
   load failure.
 
 This entry exists because the Pulseflow Laravel demo
-(`EmpireTwo/business/dogfooding/pulseflow-demo-2026-05-13`) lost ~30 minutes
+(`CertaMesh/business/dogfooding/pulseflow-demo-2026-05-13`) lost ~30 minutes
 of debugging time to silent `[ner]` schema drift between 0.6.6 and 0.7.1.
 
 ## Bundled rulepack version drift

@@ -1,6 +1,6 @@
 # Gaze
 
-[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/EmpireTwo/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/EmpireTwo/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/EmpireTwo/gaze?style=social)](https://github.com/EmpireTwo/gaze/stargazers)
+[![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
 **Reversible PII pseudonymization for agentic LLM workflows.**
 
@@ -10,7 +10,7 @@ Your agent never sees a real email, phone number, or order ID. Your server keeps
 
 ## In production: AI support drafts that never see the customer
 
-[`EmpireTwo/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. The application does the data lookup. Gaze pseudonymizes the resulting context. The LLM only composes prose.
+[`CertaMesh/gaze-ghostwriter`](https://github.com/CertaMesh/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. The application does the data lookup. Gaze pseudonymizes the resulting context. The LLM only composes prose.
 
 ```text
 1. Customer email arrives via IMAP:
@@ -56,7 +56,7 @@ Each layer's role is what it is built for.
 
 ### Try the loop
 
-- Drop-in Laravel package: [`EmpireTwo/gaze-ghostwriter`](https://github.com/EmpireTwo/gaze-ghostwriter)
+- Drop-in Laravel package: [`CertaMesh/gaze-ghostwriter`](https://github.com/CertaMesh/gaze-ghostwriter)
 
 Agentic workflows (browser automation, tool execution) hook the same restore boundary at tool-call args, on the same manifest contract — the agent stays on tokens end-to-end.
 
@@ -114,12 +114,12 @@ Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHI
 ## Install
 
 ```sh
-git clone https://github.com/EmpireTwo/gaze.git
+git clone https://github.com/CertaMesh/gaze.git
 cd gaze
 cargo install --path crates/gaze-cli
 ```
 
-Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/EmpireTwo/gaze/releases). Other targets: `cargo build --release -p gaze-cli`.
+Pre-built binaries for Apple Silicon macOS and Linux x86_64 (glibc 2.39+) are attached to each [GitHub release](https://github.com/CertaMesh/gaze/releases). Other targets: `cargo build --release -p gaze-cli`.
 
 For the LLM API proxy:
 

@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-mcp-core.svg)](https://crates.io/crates/gaze-mcp-core)
 [![docs.rs](https://docs.rs/gaze-mcp-core/badge.svg)](https://docs.rs/gaze-mcp-core)
-[![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/CertaMesh/gaze#license)
 
 > **Adding `gaze-mcp-core` (v0.11.0) to your crate enables:** the transport-free
 > MCP chokepoint runtime — `Tool` trait, `PiiEnvelope::dispatch`,

@@ -1,6 +1,6 @@
 ---
 name: release
-description: "Use when orchestrating an EmpireTwo/gaze release end to end, especially when the user says cut release, ship vX.Y.Z, tag vX.Y.Z, publish vX.Y.Z, or release vX.Y.Z. Covers pre-flight gates, explicit tag authorization, GitHub and crates.io workflow expectations, post-tag verification, escalation rules, and the counter-pattern to avoid: do not just push a tag and hope."
+description: "Use when orchestrating an CertaMesh/gaze release end to end, especially when the user says cut release, ship vX.Y.Z, tag vX.Y.Z, publish vX.Y.Z, or release vX.Y.Z. Covers pre-flight gates, explicit tag authorization, GitHub and crates.io workflow expectations, post-tag verification, escalation rules, and the counter-pattern to avoid: do not just push a tag and hope."
 ---
 
 # Release Orchestration

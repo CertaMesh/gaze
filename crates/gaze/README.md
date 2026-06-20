@@ -2,13 +2,13 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii)
 [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii)
-[![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/EmpireTwo/gaze#license)
+[![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license)
 
 Reversible PII pseudonymization runtime for agentic workflows
 
-Part of the [Gaze](https://github.com/EmpireTwo/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
+Part of the [Gaze](https://github.com/CertaMesh/gaze) workspace — a reversible PII pseudonymization runtime for agentic LLM workflows.
 
-`gaze-pii` is the runtime crate for [Gaze](https://github.com/EmpireTwo/gaze). It owns the contracts that must stay stable for adopters: `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
+`gaze-pii` is the runtime crate for [Gaze](https://github.com/CertaMesh/gaze). It owns the contracts that must stay stable for adopters: `Pipeline`, `Session`, `Policy`, `RecognizerRegistry`, the rulepack schema, token shape, and the signed restore manifest.
 
 The crate is published as `gaze-pii`; the import path remains `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/tutorials/getting-started.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/tutorials/getting-started.md).
+For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/tutorials/getting-started.md`](https://github.com/CertaMesh/gaze/blob/main/docs/tutorials/getting-started.md).
 
 ## What this crate owns
 
@@ -75,18 +75,18 @@ The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 ## Guarantees
 
 - **Fail closed** on unknown rulepack validators or normalizers — typed errors at load, no silent degradation.
-- **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/EmpireTwo/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
+- **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/CertaMesh/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
 - **Reversible by design.** Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
 - **Deterministic detection** as the floor. NER and the OpenAI-filter SafetyNet are opt-in observers and cannot mutate the manifest.
 - **Auditable.** Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
 
-Full project north star + five-axis contract: [AGENTS.md](https://github.com/EmpireTwo/gaze/blob/main/AGENTS.md#project-north-star).
+Full project north star + five-axis contract: [AGENTS.md](https://github.com/CertaMesh/gaze/blob/main/AGENTS.md#project-north-star).
 
 Every observable surface this crate exposes — `Pipeline` per-pass behavior,
 the `ConflictTier` audit-string set, `RedactionEntry` columns,
 `Recognizer` / `Candidate` metadata, and the `SafetyNetResult` return — is
 cataloged with file-line pointers and stability guarantees in
-[`docs/reference/metrics.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/reference/metrics.md).
+[`docs/reference/metrics.md`](https://github.com/CertaMesh/gaze/blob/main/docs/reference/metrics.md).
 
 ## Features
 
@@ -97,4 +97,4 @@ cataloged with file-line pointers and stability guarantees in
 
 ## License
 
-Dual-licensed under either of [Apache-2.0](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/EmpireTwo/gaze/blob/main/LICENSE-MIT), at your option.
+Dual-licensed under either of [Apache-2.0](https://github.com/CertaMesh/gaze/blob/main/LICENSE-APACHE) or [MIT](https://github.com/CertaMesh/gaze/blob/main/LICENSE-MIT), at your option.
