@@ -70,7 +70,8 @@ jobs:
 
           # Topological order, dependency crates first. The core package is
           # published as gaze-pii while its library target remains `gaze`.
-          for crate in gaze-types gaze-audit gaze-recognizers gaze-pii gaze-assembly gaze-mcp-core gaze-mcp-rmcp gaze-mcp-bridge gaze-document gaze-proxy gaze-cli; do
+          # gaze-mcp-bridge: first crates.io publish is manual (no trusted publisher yet); re-add here after the trusted publisher is linked.
+          for crate in gaze-types gaze-audit gaze-recognizers gaze-pii gaze-assembly gaze-mcp-core gaze-mcp-rmcp gaze-document gaze-proxy gaze-cli; do
             echo "=== publishing $crate ==="
             attempt=1
             while true; do

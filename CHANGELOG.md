@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-06-20
+
+### Added
+
+- **`gaze-mcp-bridge`: optional policy-gated MCP bridge.** Gaze can now sit as
+  an MCP server toward the agent and an MCP client toward downstream MCP
+  servers, with restore-on-egress / redact-on-ingress handling, fail-closed
+  errors, and default-deny policy behavior.
+- **`gaze-token-bridge`: owner-side gated search over redacted corpora.** This
+  experimental crate is not published to crates.io. It keeps search
+  authorization and translation owner-side; output never-leak backstop
+  verification is still pending.
+- **`scan_folder` example for `gaze`.** The new bring-your-own-data redaction
+  demo shows how to scan a local folder through the core runtime.
+
+### Changed
+
+- **Documentation now follows a Diátaxis × feature information architecture.**
+  The docs were reorganized around task, reference, explanation, and tutorial
+  needs while staying anchored to product features.
+- **GDPR adopter guidance was substantially expanded.** The new material covers
+  per-party identifiability, Article 25, Chapter V transfers, enterprise
+  security expectations, and DPO-grade DPIA support.
+- **Top-level repository layout was decluttered.** Examples, benches, and assets
+  moved into crate-scoped docs, and the internal lint crate moved from `xtask/`
+  to `lint/`.
+- **Release notes are now sourced from `CHANGELOG.md` plus GitHub generated
+  notes.** The committed `dist/release-notes` artifact was removed.
+
 ## [0.10.1] - 2026-06-04
 
 ### Fixed
