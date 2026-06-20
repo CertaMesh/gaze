@@ -6,8 +6,8 @@
 
 use crate::error::{BridgeError, DenyReason};
 use crate::model::{
-    AgentSearchHit, AuditEvent, BridgeRequest, CanonicalEntity, IndexDomain, IndexSearchHit,
-    IndexedEntityRef, PolicyOutcome, SearchHandle, ValidatedSearchRequest,
+    AgentSearchHit, AuditEvent, AuthGrant, BridgeRequest, CanonicalEntity, IndexDomain,
+    IndexSearchHit, IndexedEntityRef, PolicyOutcome, SearchHandle, ValidatedSearchRequest,
 };
 use crate::session::RedactionSession;
 
@@ -61,4 +61,12 @@ pub trait ResponseTranslator {
 pub trait BridgeAuditSink {
     fn record(&mut self, event: AuditEvent);
     fn events(&self) -> &[AuditEvent];
+}
+
+/// Track C (R2, master-authorized) — mint a short-lived, entity-bound capability from a
+/// policy grant. The issuer copies trusted request context + the grant's owner-side
+/// authorization into a single-use [`SearchHandle`]; it never re-authorizes (the grant
+/// already encodes the owner-side decision) and never decides scope itself.
+pub trait CapabilityIssuer {
+    fn issue(&mut self, grant: &AuthGrant, request: &BridgeRequest) -> SearchHandle;
 }
