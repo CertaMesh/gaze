@@ -13,7 +13,7 @@ the project ships under. Both licence files live at the repo root:
 
 We do **not** require a Contributor Licence Agreement (CLA). Contributors
 retain their copyright; the project cannot be silently re-licensed by any
-later maintainer without contributor agreement. See [`docs/governance.md`](docs/governance.md)
+later maintainer without contributor agreement. See [`docs/explanation/governance.md`](docs/explanation/governance.md)
 for the full governance model and the structural commitments that keep the
 project a commons.
 

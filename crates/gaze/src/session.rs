@@ -275,7 +275,7 @@ struct PrefixCacheEntry {
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
-/// See: `docs/architecture/session-contract.md` for the full architecture contract.
+/// See: `docs/explanation/core/session-contract.md` for the full architecture contract.
 ///
 /// [`Pipeline::redact`]: crate::Pipeline::redact
 // intentionally not Debug: contains session signing key and token manifest
@@ -572,7 +572,7 @@ impl Session {
     /// [`Error::EmptyDocumentIntegrity`]. `page_count == 0` is allowed because text-only or
     /// degenerate bundles may have no pages while still binding file hashes. Callers must treat the
     /// returned [`SensitiveSnapshot`] as owner-only because it carries the full token-to-PII restore
-    /// map. Bundle layout details live in `docs/architecture/document-extension.md`.
+    /// map. Bundle layout details live in `docs/explanation/document/document-extension.md`.
     pub fn export_with_extension(&self, extension: DocumentExtension) -> Result<SensitiveSnapshot> {
         if extension.clean_md_sha256 == [0; 32]
             || extension.layout_json_sha256 == [0; 32]

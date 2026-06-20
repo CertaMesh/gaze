@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/getting-started.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/getting-started.md).
+For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/tutorials/getting-started.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/tutorials/getting-started.md).
 
 ## What this crate owns
 
@@ -75,7 +75,7 @@ The full re-export list lives in [`src/lib.rs`](src/lib.rs).
 ## Guarantees
 
 - **Fail closed** on unknown rulepack validators or normalizers — typed errors at load, no silent degradation.
-- **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/EmpireTwo/gaze/blob/main/docs/architecture/p0-908-ner-failclosed.md)).
+- **Fail closed** on recognizer backend failure at runtime — `Recognizer::detect` returns `Result<Vec<Candidate>, DetectError>`, so a backend error surfaces as `Error::RecognizerDetect` and aborts outbound redaction instead of emitting partially cleaned output ([P0 #908](https://github.com/EmpireTwo/gaze/blob/main/docs/explanation/detection/ner-failclosed.md)).
 - **Reversible by design.** Tokens are session-scoped and counted by class; restore goes through the signed snapshot, not string substitution.
 - **Deterministic detection** as the floor. NER and the OpenAI-filter SafetyNet are opt-in observers and cannot mutate the manifest.
 - **Auditable.** Every emitted token traces to a recognizer + rule. Conflict losers are logged with `decided_by: ConflictTier`.
@@ -86,7 +86,7 @@ Every observable surface this crate exposes — `Pipeline` per-pass behavior,
 the `ConflictTier` audit-string set, `RedactionEntry` columns,
 `Recognizer` / `Candidate` metadata, and the `SafetyNetResult` return — is
 cataloged with file-line pointers and stability guarantees in
-[`docs/metrics.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/metrics.md).
+[`docs/reference/metrics.md`](https://github.com/EmpireTwo/gaze/blob/main/docs/reference/metrics.md).
 
 ## Features
 

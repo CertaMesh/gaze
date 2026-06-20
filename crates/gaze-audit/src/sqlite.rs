@@ -46,7 +46,7 @@ pub enum AuditError {
 ///
 /// `gaze` core has no compile-time dependency on `gaze-audit`. Wire
 /// `SqliteLogger` in your application layer only. See the Dylint isolation gate
-/// in `docs/architecture/`.
+/// in `docs/explanation/`.
 ///
 /// # Example
 ///

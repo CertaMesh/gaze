@@ -42,7 +42,7 @@ pub const DEFAULT_POLICY_SCHEMA_VERSION: &str = "0.1.0";
 /// Production deployments **must** use a policy -- the no-policy builder path is for
 /// development smoke-testing only and has an unauditable detection posture.
 ///
-/// See `docs/policy.md` in the repository for the full TOML schema reference.
+/// See `docs/reference/policy.md` in the repository for the full TOML schema reference.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct Policy {
@@ -390,7 +390,7 @@ impl TryFrom<RawPolicy> for Policy {
 
         if !raw.detectors.is_empty() {
             return Err(PolicyError::LegacyDetectorUnsupported(
-                "https://github.com/EmpireTwo/gaze/blob/main/docs/policy.md#migrating-detector",
+                "https://github.com/EmpireTwo/gaze/blob/main/docs/reference/policy.md#migrating-detector",
             ));
         }
 

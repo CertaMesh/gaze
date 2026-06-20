@@ -67,7 +67,7 @@ for row in &rows {
 Every column emitted by `SqliteLogger`, the full closed-enum value sets for
 `decided_by` / `validator_fail_reason` / `fallback_triggered`, and the
 `AuditFilter` query dimensions are cataloged in
-[`docs/metrics.md`](../../docs/metrics.md#1-audit-row-fields-gaze-audit) — that
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#1-audit-row-fields-gaze-audit) — that
 doc is the SSOT for observable surfaces and includes stability guarantees
 and the version each column landed.
 
@@ -125,7 +125,7 @@ surfaces them as `--has-ambiguity`, `--ambiguity-reason <variant>` (kebab
 case, e.g. `no-anchor`), `--collision-family <id>`, and
 `--collision-variant <id>` on `gaze audit query` and `gaze audit export`.
 Full contract:
-[`docs/architecture/ambiguity-side-channel.md`](../../docs/architecture/ambiguity-side-channel.md).
+[`docs/explanation/detection/ambiguity-side-channel.md`](../../docs/explanation/detection/ambiguity-side-channel.md).
 
 ## Isolation gate
 

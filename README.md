@@ -77,10 +77,10 @@ Gaze is the fourth path: deterministic detection, signed restore manifest, every
 Each feature, what you get, where the proof lives.
 
 - **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) route through web endpoints with cookie auth and are out of scope for this proxy; a separate browser-MITM project will cover that surface when it is public. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
-- **OSS document ingestion.** `gaze document clean ./input.pdf --out ./safe-bundle/` OCRs PNG/JPG/PDF through Tesseract, runs the recognized text through the standard pipeline, and writes a `SafeBundle` — `clean.md` + `manifest.json` + `report.json`. Layout report v2 surfaces per-page OCR confidence, multi-column segmentation, table-cell preservation, and vector-PDF fallback when PDFs have selectable text. Plug in alternative OCR drivers via the `OcrBackend` trait. Adopter quickstart: [`docs/getting-started/document-workflow.md`](docs/getting-started/document-workflow.md). Full bundle contract: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
-- **Long-lived stdio server for repeated redaction.** `gaze daemon` keeps one pipeline and model load hot, then serves JSON-per-line requests with per-`session_id` manifest isolation. It avoids binary/model cold starts on every agent turn, exits gracefully on SIGTERM, and evicts sessions by LRU or idle timeout. Adopter quickstart: [`docs/getting-started/daemon-adapter.md`](docs/getting-started/daemon-adapter.md). Full contract: [`docs/architecture/daemon-mode.md`](docs/architecture/daemon-mode.md).
+- **OSS document ingestion.** `gaze document clean ./input.pdf --out ./safe-bundle/` OCRs PNG/JPG/PDF through Tesseract, runs the recognized text through the standard pipeline, and writes a `SafeBundle` — `clean.md` + `manifest.json` + `report.json`. Layout report v2 surfaces per-page OCR confidence, multi-column segmentation, table-cell preservation, and vector-PDF fallback when PDFs have selectable text. Plug in alternative OCR drivers via the `OcrBackend` trait. Adopter quickstart: [`docs/how-to/document/ingest-documents.md`](docs/how-to/document/ingest-documents.md). Full bundle contract: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
+- **Long-lived stdio server for repeated redaction.** `gaze daemon` keeps one pipeline and model load hot, then serves JSON-per-line requests with per-`session_id` manifest isolation. It avoids binary/model cold starts on every agent turn, exits gracefully on SIGTERM, and evicts sessions by LRU or idle timeout. Adopter quickstart: [`docs/how-to/daemon/run-daemon.md`](docs/how-to/daemon/run-daemon.md). Full contract: [`docs/explanation/daemon/daemon-mode.md`](docs/explanation/daemon/daemon-mode.md).
 - **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
-- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](docs/architecture/p0-908-ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
 - **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
 - **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
 - **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
@@ -199,7 +199,7 @@ printf '{"session_blob":"<base64>","text":"Re: <{session_hex}:Email_1>"}' \
 {"text": "Re: alice@example.invalid"}
 ```
 
-Schema and every rule kind / action live in [`docs/policy.md`](docs/policy.md).
+Schema and every rule kind / action live in [`docs/reference/policy.md`](docs/reference/policy.md).
 
 ### 2. Add NER
 
@@ -244,11 +244,11 @@ NER contributes a `Name_*` span via the model's `PER` label:
 }
 ```
 
-Schema details, threshold range, and `~/` expansion rules: [`docs/policy.md`](docs/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
+Schema details, threshold range, and `~/` expansion rules: [`docs/reference/policy.md`](docs/reference/policy.md#ner-optional). Pinned artifact contract and adopter label map: [`crates/gaze/testdata/ner/README.md`](crates/gaze/testdata/ner/README.md) plus [`assets/ner/labels.davlan-mbert.json`](assets/ner/labels.davlan-mbert.json).
 
 ### 3. Add a SafetyNet (Pass-3 observer)
 
-The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/architecture/safety-nets.md`](docs/architecture/safety-nets.md).
+The SafetyNet is an **observer-only post-clean check**. It reads the already-tokenized text plus the manifest of emitted spans and reports any suspect bytes the deterministic passes missed. It cannot mutate the clean text, cannot mutate the manifest, and cannot affect restore — full contract in [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
 
 Two backends ship. `openai-filter` wraps the upstream OpenAI Privacy Filter and is the heavier option when that infrastructure is already approved. `kiji-distilbert` is the lighter alternative: an Apache-2.0 ONNX DistilBERT bundle, ~8.8 MB, 26-class upstream PII taxonomy, faster cold start. Pick on deployment constraints; both are observer-only and both run under the **`resolve` mode default with a `redact` fallback** — the reversibility-preserving production posture (see below).
 
@@ -297,7 +297,7 @@ A clean run produces a `leak_report` block alongside the usual JSON; `suspect_co
 
 SafetyNet runs in **`resolve` mode by default** with a **`redact` fallback**. When the filter raises an `Uncovered` or `PartialBleed` suspect, Gaze first promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver so the span can be tokenized into the manifest — preserving reversibility. If `resolve` cannot honor a suspect (validator-veto, missing anchor, or a residual suspect after the one-shot pass), the composable `--safety-net-fallback {strict|tolerant|redact}` flag (default `redact`) decides what happens next: by default the suspect span is overwritten with a sentinel string, the redaction is recorded in the audit trail, and the rest of the clean text continues to stdout. **The reversibility-first default is the production contract**: every suspect either becomes a fully restorable manifest token or is stripped before reaching the LLM, and every action emits a typed audit row.
 
-Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mode strict` (any suspect exits `3`, stdout stays empty). Adopters who cannot afford the resolve pass can skip directly to strip-and-continue with `--safety-net-mode redact`. A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Mode catalog, fallback composition matrix, and exit-code map: [`docs/architecture/safety-net-modes.md`](docs/architecture/safety-net-modes.md) and [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
+Adopters who want the v0.7.x hard-fail posture can opt in with `--safety-net-mode strict` (any suspect exits `3`, stdout stays empty). Adopters who cannot afford the resolve pass can skip directly to strip-and-continue with `--safety-net-mode redact`. A `tolerant` mode exists for **local development only** — while debugging recognizer coverage or measuring SafetyNet recall, it downgrades suspects to a stderr warning instead of refusing the output. **Do not use `tolerant` in production traffic.** A tolerant-mode pipeline is one that has agreed to ship suspected leaks. Mode catalog, fallback composition matrix, and exit-code map: [`docs/explanation/safety-net/safety-net-modes.md`](docs/explanation/safety-net/safety-net-modes.md) and [`crates/gaze-cli/README.md`](crates/gaze-cli/README.md#safety-net).
 
 #### Kiji DistilBERT
 
@@ -324,7 +324,7 @@ printf '%s' 'Contact alice@example.invalid for details.' \
 
 The output shape is the same `leak_report` block shown above; `suspect_count = 0` remains the contract for "no leaks". The Kiji model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json`. Missing artifacts fail closed before subprocess spawn with `{"error":"SafetyNetArtifactMissing","exit":2,...}`.
 
-Full Kiji setup, backend switching, and failure-mode notes: [`docs/getting-started/kiji-safetynet-setup.md`](docs/getting-started/kiji-safetynet-setup.md).
+Full Kiji setup, backend switching, and failure-mode notes: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
 ## Pipeline shape
 
@@ -379,7 +379,7 @@ All bundled detectors ship in the unified `core` rulepack. Activation is encoded
 
 Validator names are a closed enum; unknown names fail at rulepack load with a typed `RulepackError`. The locale chain is strict and ordered: CLI > policy > rulepack default > system default.
 
-Tenant-specific PII — order IDs, song titles, artist names — needs a dictionary or custom regex recognizer. See [`docs/policy.md`](docs/policy.md).
+Tenant-specific PII — order IDs, song titles, artist names — needs a dictionary or custom regex recognizer. See [`docs/reference/policy.md`](docs/reference/policy.md).
 
 ## Audit and restore
 
@@ -401,8 +401,8 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 - Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries today. Build from source.
-- v0.9 NER model leaderboard: [`docs/research/v0.9-ner-model-leaderboard.md`](docs/research/v0.9-ner-model-leaderboard.md). Kiji DistilBERT (Apache-2.0) ships as default per the leaderboard's strategic read.
-- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in [`docs/research/v0.9-safety-net-benchmark.md`](docs/research/v0.9-safety-net-benchmark.md); observer-residual mode remains deferred.
+- v0.9 NER model leaderboard: [`docs/reference/benchmarks/v0.9-ner-model-leaderboard.md`](docs/reference/benchmarks/v0.9-ner-model-leaderboard.md). Kiji DistilBERT (Apache-2.0) ships as default per the leaderboard's strategic read.
+- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in [`docs/reference/benchmarks/v0.9-safety-net-benchmark.md`](docs/reference/benchmarks/v0.9-safety-net-benchmark.md); observer-residual mode remains deferred.
 - `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, and transparent MITM are out of scope here — those belong in a separate browser-MITM project, not the core proxy.
 
 ## Use from Rust
@@ -418,7 +418,7 @@ gaze-assembly = "0.10.1"
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
 
 - Minimal example and the API surface table: [`crates/gaze/README.md`](crates/gaze/README.md) (also rendered on [crates.io/crates/gaze-pii](https://crates.io/crates/gaze-pii)).
-- Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/getting-started.md`](docs/getting-started.md).
+- Full walk-through with structured documents, tenant-specific recognizers, and policy TOML: [`docs/tutorials/getting-started.md`](docs/tutorials/getting-started.md).
 
 ## Workspace and crates.io
 
@@ -441,7 +441,7 @@ Ten published crates. Pick the smallest surface that does the job.
 cargo add gaze-pii
 ```
 
-Crate boundaries and the audit-isolation Dylint gate: [`docs/architecture/crates.md`](docs/architecture/crates.md). Document codec extension: [`docs/architecture/document-extension.md`](docs/architecture/document-extension.md).
+Crate boundaries and the audit-isolation Dylint gate: [`docs/reference/crates.md`](docs/reference/crates.md). Document codec extension: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
 
 ## Publishing
 
@@ -452,7 +452,7 @@ The workspace publishes via the `publish-crates.yml` GitHub Actions workflow usi
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Repository gates (xtask + Dylint) enforce the contracts in [`docs/architecture/`](docs/architecture/). Run them locally before pushing:
+See [CONTRIBUTING.md](CONTRIBUTING.md). Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
 
 ```sh
 cargo fmt --all -- --check

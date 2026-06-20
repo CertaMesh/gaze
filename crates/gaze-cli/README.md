@@ -71,7 +71,7 @@ Audit logging is captured on `clean` via `--audit-db <path>`; the
 
 `gaze daemon` is a stdio server in the LSP / MCP tradition, not a Unix daemon
 in the strict sense. The subcommand verb is preserved for binary stability; see
-[`docs/architecture/daemon-mode.md`](../../docs/architecture/daemon-mode.md)
+[`docs/explanation/daemon/daemon-mode.md`](../../docs/explanation/daemon/daemon-mode.md)
 for the terminology note.
 
 `gaze daemon --policy policy.toml` keeps one pipeline alive and reads one JSON
@@ -100,9 +100,9 @@ SIGINT and SIGTERM finish the current line, flush stdout/audit writes, and exit.
 Daemon audit rows are stamped with `provenance_stage = "daemon"`.
 
 For end-to-end adapter examples, see
-[`docs/getting-started/daemon-adapter.md`](../../docs/getting-started/daemon-adapter.md).
+[`docs/how-to/daemon/run-daemon.md`](../../docs/how-to/daemon/run-daemon.md).
 For the full runtime contract, see
-[`docs/architecture/daemon-mode.md`](../../docs/architecture/daemon-mode.md).
+[`docs/explanation/daemon/daemon-mode.md`](../../docs/explanation/daemon/daemon-mode.md).
 
 ## MCP installation
 
@@ -217,8 +217,8 @@ Flags:
 | `--kiji-distilbert-locales <tag[,tag...]>` | Native locales for the Kiji DistilBERT registry entry. Empty keeps the backend default. |
 | `--safety-net-timeout-ms <ms>` | Subprocess deadline. Defaults to `5000`. |
 | `--safety-net-input-limit-bytes <bytes>` | Clean-text input cap forwarded to the safety net. Defaults to `1048576`. |
-| `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` overwrites the suspect span with a sentinel and records an audit row; `resolve` promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver. Defaults to `resolve`. Mode catalog and posture guide: [`docs/architecture/safety-net-modes.md`](../../docs/architecture/safety-net-modes.md). |
-| `--safety-net-fallback <strict\|tolerant\|redact>` | Cascade action when `--safety-net-mode` is `redact` or `resolve` and the primary action cannot be honored for a specific suspect (manifest overlap or grapheme-cluster break for `redact`; validator-veto, missing mandatory anchor, or residual suspect after the one-shot resolve pass for `resolve`). Ignored when `--safety-net-mode` is `strict` or `tolerant`. Defaults to `redact`. One-hop cascade only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Composition matrix and audit-row delta: [`docs/architecture/safety-net-modes.md`](../../docs/architecture/safety-net-modes.md#6-fallback-flag). |
+| `--safety-net-mode <strict\|tolerant\|redact\|resolve>` | Production action on `Uncovered`/`PartialBleed` suspects. `strict` exits `3`; `tolerant` emits warnings on stderr and continues (dev-only, fires a stderr warning on every invocation); `redact` overwrites the suspect span with a sentinel and records an audit row; `resolve` promotes the suspect into a synthetic custom-recognizer match and re-runs the resolver. Defaults to `resolve`. Mode catalog and posture guide: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md). |
+| `--safety-net-fallback <strict\|tolerant\|redact>` | Cascade action when `--safety-net-mode` is `redact` or `resolve` and the primary action cannot be honored for a specific suspect (manifest overlap or grapheme-cluster break for `redact`; validator-veto, missing mandatory anchor, or residual suspect after the one-shot resolve pass for `resolve`). Ignored when `--safety-net-mode` is `strict` or `tolerant`. Defaults to `redact`. One-hop cascade only. `tolerant` requires `GAZE_ALLOW_TOLERANT=1`. Composition matrix and audit-row delta: [`docs/explanation/safety-net/safety-net-modes.md`](../../docs/explanation/safety-net/safety-net-modes.md#6-fallback-flag). |
 | `--safety-net-resolve-threshold <float>` | Confidence threshold for `--safety-net-mode resolve`. Suspects below threshold are dropped before candidate construction. Defaults to `0.7`. `0.0` disables filtering; `1.0` disables resolve entirely. |
 
 When `--policy` is omitted, the CLI runs a stub email pipeline so the process
@@ -228,7 +228,7 @@ surface can be exercised. Production use should pass `--policy`.
 
 The optional `--safety-net=<kind>` flag activates the observer-only safety
 net documented in
-[docs/architecture/safety-nets.md](../../docs/architecture/safety-nets.md).
+[docs/explanation/safety-net/safety-nets.md](../../docs/explanation/safety-net/safety-nets.md).
 The safety net runs after the deterministic clean and reports suspected
 leaks against the manifest of emitted tokens. It cannot mutate the clean
 text and cannot affect restore.
@@ -295,7 +295,7 @@ typed `SafetyNetArtifactMissing` envelope and exit code `2` *before* the
 subprocess is spawned — Axis-1 reliability never silent-disables a
 requested backend.
 
-See also: [Kiji DistilBERT SafetyNet setup](../../docs/getting-started/kiji-safetynet-setup.md).
+See also: [Kiji DistilBERT SafetyNet setup](../../docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
 #### Synthetic example — strict mode
 
@@ -358,7 +358,7 @@ be empty. `ClassMismatch` suspects always warn but never fail strict mode,
 because the manifest still tokenized the bytes — only the class disagrees.
 The default mode in v0.8.x+ is `resolve` with a `redact` fallback (see the
 flag table above and the
-[mode catalog](../../docs/architecture/safety-net-modes.md)).
+[mode catalog](../../docs/explanation/safety-net/safety-net-modes.md)).
 
 #### Synthetic example — Kiji DistilBERT backend
 
@@ -410,7 +410,7 @@ Combine the safety net with `--audit-db <path>` to persist metadata-only
 suspect rows into the `safety_net_log` table. Query the rows back with
 `gaze audit safety-net query` (see below). The schema and the bytes-free
 invariants are documented in
-[`docs/architecture/safety-nets.md`](../../docs/architecture/safety-nets.md#safety_net_log-audit-table).
+[`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table).
 
 ## `restore`
 
@@ -500,7 +500,7 @@ Filters:
 
 The `safety_net_log` table stores metadata only — `raw_label` is the
 validated upstream label, **not** the upstream raw text. See
-[`docs/architecture/safety-nets.md`](../../docs/architecture/safety-nets.md#safety_net_log-audit-table)
+[`docs/explanation/safety-net/safety-nets.md`](../../docs/explanation/safety-net/safety-nets.md#safety_net_log-audit-table)
 for the full schema.
 
 ## Exit codes
@@ -531,7 +531,7 @@ pseudonym emitted by Gaze, not raw PII.
 
 Full exit-code catalog (including `5` document, `6` mcp, `7` proxy feature
 codes) and the stability guarantee for each variant:
-[`docs/metrics.md`](../../docs/metrics.md#8-cli-exit-codes-gaze-cli).
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#8-cli-exit-codes-gaze-cli).
 
 ## Policy path
 
@@ -539,4 +539,4 @@ codes) and the stability guarantee for each variant:
 bundled/path rulepacks, resolves locale precedence, builds a pipeline with
 `gaze-assembly`, then exports the session as `session_blob`.
 
-For policy schema details, see [docs/policy.md](../../docs/policy.md).
+For policy schema details, see [docs/reference/policy.md](../../docs/reference/policy.md).

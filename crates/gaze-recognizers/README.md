@@ -99,7 +99,7 @@ cue-anchored person-name detection. Bundled `core` uses it for
 Use it when a name appears near deterministic prompt or email structure, not
 as a replacement for NER over general prose. Known limits and adopter migration
 notes live in
-[`docs/policy.md#known-limits---ner-and-prompt-shape`](../../docs/policy.md#known-limits---ner-and-prompt-shape).
+[`docs/reference/policy.md#known-limits---ner-and-prompt-shape`](../../docs/reference/policy.md#known-limits---ner-and-prompt-shape).
 
 ## Dictionary backend
 
@@ -179,7 +179,7 @@ overlaps with `ConflictTier::CollisionPolicy`. Equal precedence between
 variants emits a family-level `PiiClass::Custom("family:<name>")` token plus
 `AmbiguityRecord::PrecedenceTie`. Reserved bundled family names cannot be
 claimed by adopter policy. Full contract:
-[`docs/architecture/collision-family.md`](../../docs/architecture/collision-family.md).
+[`docs/explanation/detection/collision-family.md`](../../docs/explanation/detection/collision-family.md).
 
 ### Mandatory-anchor resolution
 
@@ -213,7 +213,7 @@ manifest stores one restore mapping. The bundled
 `cargo run -p xtask -- locale-cue-bundle-coherence` gate fails if a bundled
 recognizer declares `mandatory_anchor` without a matching bundled cue block.
 Full contract:
-[`docs/architecture/anchor-resolution.md`](../../docs/architecture/anchor-resolution.md).
+[`docs/explanation/detection/anchor-resolution.md`](../../docs/explanation/detection/anchor-resolution.md).
 
 ## Adding recognizers here
 
@@ -243,7 +243,7 @@ The registry short-circuits on `Err` and the pipeline aborts outbound redaction
 (`gaze::pipeline::Error::RecognizerDetect`) rather than emitting partially
 cleaned output. Recognizers whose logic cannot fail simply return
 `Ok(candidates)`. Full contract:
-[`docs/architecture/p0-908-ner-failclosed.md`](../../docs/architecture/p0-908-ner-failclosed.md).
+[`docs/explanation/detection/ner-failclosed.md`](../../docs/explanation/detection/ner-failclosed.md).
 
 Add adopter-specific recognizers outside this crate when the behavior is tied
 to one tenant, one private schema, or one proprietary data source.
@@ -252,9 +252,9 @@ The per-recognizer metadata surface (`id`, `supported_class`, `token_family`,
 `validator_kind`, `locales`), the SafetyNet benchmark-snapshot fields
 (strict-span leak rate, observer-residual recall, composability quad), and
 the `Candidate`/`CollisionMembership` audit-row linkage are cataloged in
-[`docs/metrics.md`](../../docs/metrics.md#3-safetynet-metrics-gaze-recognizers)
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#3-safetynet-metrics-gaze-recognizers)
 (SafetyNet) and
-[`docs/metrics.md`](../../docs/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
+[`docs/reference/metrics.md`](../../docs/reference/metrics.md#4-recognizer-surface-gaze-recognizers--gaze)
 (recognizer surface).
 
 ## Test support

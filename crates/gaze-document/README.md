@@ -133,7 +133,7 @@ contract instead of caller discipline.
   low-confidence flag, column count, per-class PII counts, PDF metadata,
   and the source kind. Existing v1 reports still deserialize; new emission
   is always v2. Full field-by-field catalog with stability per field:
-  [`docs/metrics.md`](../../docs/metrics.md#6-safebundle--bundlereport-gaze-document).
+  [`docs/reference/metrics.md`](../../docs/reference/metrics.md#6-safebundle--bundlereport-gaze-document).
 
 ## OCR brittleness + normalization
 
