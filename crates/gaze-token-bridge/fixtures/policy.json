@@ -6,7 +6,7 @@
       "corpus_type": "customer_docs",
       "purpose": "support_lookup",
       "allowed_roles": ["support", "admin"],
-      "allowed_tools": ["support_search", "legal_search"],
+      "allowed_tools": ["support_search"],
       "allowed_actions": ["search_documents"],
       "allowed_entity_classes": ["name", "email", "custom:customer_id", "organization"],
       "snippets_allowed": true,

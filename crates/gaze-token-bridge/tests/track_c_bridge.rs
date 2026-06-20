@@ -9,6 +9,10 @@
 
 use gaze::PiiClass;
 use gaze_token_bridge::bridge::TokenBridge;
+use gaze_token_bridge::model::{IndexEntity, IndexSearchHit, IndexedEntityRef};
+use gaze_token_bridge::traits::ResponseTranslator;
+use gaze_token_bridge::translate::SessionResponseTranslator;
+use gaze_token_bridge::util::domain_alias;
 use gaze_token_bridge::{
     AuditDecision, BridgeDecision, BridgeRequest, BridgeSearchResponse, DenyReason, FilterClause,
     Principal, RedactionSession, RequestedScope, SearchHandle, SearchRequest,
@@ -349,6 +353,59 @@ fn returned_snippets_are_translated_to_current_session_tokens() {
     assert!(!json.contains("<Name_"));
     assert!(json.contains(&token));
     assert!(json.contains(":Name_1>"));
+}
+
+#[test]
+fn shared_fingerprint_prefix_entities_translate_to_distinct_session_tokens() {
+    let session = RedactionSession::ephemeral_for(&support_principal().id).unwrap();
+    let first_fingerprint = format!("abcd{}", "1".repeat(60));
+    let second_fingerprint = format!("abcd{}", "2".repeat(60));
+    let first_alias = domain_alias(&PiiClass::Email, &first_fingerprint);
+    let second_alias = domain_alias(&PiiClass::Email, &second_fingerprint);
+
+    assert_ne!(first_alias, second_alias);
+
+    let hit = IndexSearchHit {
+        doc_id: "shared-prefix-doc".to_string(),
+        snippet: format!("{first_alias} and {second_alias} require separate restore mappings."),
+        entities: vec![
+            IndexEntity {
+                class: PiiClass::Email,
+                raw_value: "alpha@example.invalid".to_string(),
+                index_ref: IndexedEntityRef {
+                    domain_id: CUSTOMER_DOMAIN.to_string(),
+                    key_id: "customer-v2".to_string(),
+                    entity_class: PiiClass::Email,
+                    fingerprint_hex: first_fingerprint,
+                },
+                domain_alias: first_alias,
+            },
+            IndexEntity {
+                class: PiiClass::Email,
+                raw_value: "bravo@example.invalid".to_string(),
+                index_ref: IndexedEntityRef {
+                    domain_id: CUSTOMER_DOMAIN.to_string(),
+                    key_id: "customer-v2".to_string(),
+                    entity_class: PiiClass::Email,
+                    fingerprint_hex: second_fingerprint,
+                },
+                domain_alias: second_alias,
+            },
+        ],
+    };
+
+    let translated = SessionResponseTranslator::translate(&session, vec![hit]).unwrap();
+    let snippet = &translated[0].snippet;
+    let first_token = session
+        .tokenize(&PiiClass::Email, "alpha@example.invalid")
+        .unwrap();
+    let second_token = session
+        .tokenize(&PiiClass::Email, "bravo@example.invalid")
+        .unwrap();
+
+    assert_ne!(first_token, second_token);
+    assert!(snippet.contains(&first_token));
+    assert!(snippet.contains(&second_token));
 }
 
 #[test]
