@@ -1,5 +1,6 @@
 /target
 /.gaze/
+/.gaze-index/
 /.superpowers/
 /.lean-ctx/
 /.bench-venv/
