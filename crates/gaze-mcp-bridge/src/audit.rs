@@ -142,7 +142,10 @@ impl BridgeAuditSink for FileBridgeAuditSink {
             .map_err(|err| BridgeError::Audit(format!("write audit failed: {err}")))?;
         file.flush()
             .await
-            .map_err(|err| BridgeError::Audit(format!("flush audit failed: {err}")))
+            .map_err(|err| BridgeError::Audit(format!("flush audit failed: {err}")))?;
+        file.sync_all()
+            .await
+            .map_err(|err| BridgeError::Audit(format!("sync audit failed: {err}")))
     }
 }
 
