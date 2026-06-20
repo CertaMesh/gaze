@@ -101,6 +101,11 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "safety-net-sanity"],
     },
     MatrixCommand {
+        label: "cargo run -p xtask -- tokenbridge-no-raw-index",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "tokenbridge-no-raw-index"],
+    },
+    MatrixCommand {
         label: "cargo run -p xtask -- symmetric-potemkin",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "symmetric-potemkin"],

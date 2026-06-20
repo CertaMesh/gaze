@@ -17,6 +17,7 @@ mod no_tenant_knowledge;
 mod readme_version_check;
 mod safety_net_sanity;
 mod scrub_public_text;
+mod tokenbridge_no_raw_index;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -40,6 +41,7 @@ enum Command {
     CoverageCorpus(coverage_corpus::Args),
     CiFeatureMatrix,
     SafetyNetSanity,
+    TokenbridgeNoRawIndex(tokenbridge_no_raw_index::Args),
     McpTierIsolation,
     ReadmeVersionCheck,
     ScrubPublicText(scrub_public_text::Args),
@@ -61,6 +63,7 @@ fn main() -> Result<()> {
         Command::CoverageCorpus(args) => coverage_corpus::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),
+        Command::TokenbridgeNoRawIndex(args) => tokenbridge_no_raw_index::run(args),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
         Command::ReadmeVersionCheck => readme_version_check::run(),
         Command::ScrubPublicText(args) => scrub_public_text::run(args),
