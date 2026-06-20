@@ -1,6 +1,12 @@
 # gaze-token-bridge
 
-> **Status:** work in progress (`publish = false`). API is pre-1.0 and may change.
+> **Status:** experimental and published as `gaze-token-bridge = "0.11.1"`.
+> API is pre-1.0 and may change.
+
+```toml
+[dependencies]
+gaze-token-bridge = "0.11.1"
+```
 
 The token bridge is the **owner-side authorization + translation layer** that lets an
 agent search long-lived, policy-scoped document corpora while keeping raw values on
