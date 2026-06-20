@@ -6,8 +6,8 @@
 
 use crate::error::{BridgeError, DenyReason};
 use crate::model::{
-    AgentSearchHit, AuditEvent, BridgeDecision, BridgeRequest, CanonicalEntity, IndexDomain,
-    IndexSearchHit, IndexedEntityRef, SearchHandle, ValidatedSearchRequest,
+    AgentSearchHit, AuditEvent, BridgeRequest, CanonicalEntity, IndexDomain, IndexSearchHit,
+    IndexedEntityRef, PolicyOutcome, SearchHandle, ValidatedSearchRequest,
 };
 use crate::session::RedactionSession;
 
@@ -25,7 +25,7 @@ pub trait DomainProjector {
 /// Track A — owner-side authorization. Default-deny; resolves an owner-bound purpose
 /// from policy config (ignoring any request-supplied purpose); emits a typed decision.
 pub trait PolicyGate {
-    fn evaluate(&mut self, session: &RedactionSession, request: &BridgeRequest) -> BridgeDecision;
+    fn evaluate(&mut self, session: &RedactionSession, request: &BridgeRequest) -> PolicyOutcome;
 }
 
 /// Track A — projection key material, addressed by `key_id`. Supports rotation by
