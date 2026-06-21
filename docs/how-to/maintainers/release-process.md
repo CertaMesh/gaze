@@ -20,9 +20,17 @@ Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publ
 
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
-- Publishes the trusted-publisher-linked workspace crates in topological order: `gaze-types` → `gaze-audit` → `gaze-recognizers` → `gaze-pii` → `gaze-assembly` → `gaze-mcp-core` → `gaze-mcp-rmcp` → `gaze-document` → `gaze-proxy` → `gaze-cli`. The core crate is published as `gaze-pii` while its library target remains `gaze`.
+- Derives the publish set and topological order from `cargo metadata` with `cargo run -p xtask -- publish-plan`. Every workspace member with `publish != false` is included automatically, including new crates. The core crate is published as `gaze-pii` while its library target remains `gaze`.
+- Runs a manifest pre-flight before any real publish: `cargo package --no-verify -p <crate>` for each crate in the derived plan. This catches unpublishable workspace dependency manifests before OIDC auth or partial publishing.
+- Checks crates.io for every planned crate before publishing. If any crate is absent, the workflow fails up front because OIDC trusted publishing cannot first-publish a new crate.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
-- New crates require a one-time manual `cargo publish` with a crates.io token, followed by trusted-publisher linking, before they join the OIDC publish loop.
+- New crates require a one-time manual seed publish with a crates.io token, followed by trusted-publisher linking, before a tag publish can proceed:
+
+```bash
+cargo publish -p <crate>
+```
+
+After the seed publish, add the crate's Trusted Publisher on crates.io for `CertaMesh/gaze` and `.github/workflows/publish-crates.yml`, then re-run the publish workflow. `workflow_dispatch` has a `check_new_crates` input for exceptional dry-run diagnostics, but tag releases keep the guard on.
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
 Cutting a release: tag the merge commit on `main` with `vX.Y.Z` and push the tag. Both workflows fire from the same tag push; no manual crates.io step is needed for crates already in the OIDC publish loop.
