@@ -1,7 +1,7 @@
 name: Feature / recognizer request
 description: Propose a new PII recognizer, locale rulepack entry, or other enhancement.
 title: "[feat]: "
-labels: ["C-enhancement", "needs-triage"]
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:

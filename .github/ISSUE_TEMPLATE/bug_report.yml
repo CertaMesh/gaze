@@ -1,7 +1,7 @@
 name: Bug report
 description: Report a defect in Gaze (a leak, a broken round-trip, a crash, or wrong behavior).
 title: "[bug]: "
-labels: ["C-bug", "needs-triage"]
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
@@ -13,7 +13,7 @@ body:
     attributes:
       label: Gaze version
       description: Output of `gaze --version`, or the crate version you depend on.
-      placeholder: "gaze-cli 0.11.1 / gaze-pii 0.11.0"
+      placeholder: "0.11.1"
     validations:
       required: true
   - type: dropdown

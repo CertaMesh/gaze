@@ -10,51 +10,21 @@ Run the gates locally before pushing — CI runs the same set and will fail othe
 
 Resolves #
 
-## Five-axes note (required if any axis is affected)
-
-<!--
-Gaze decisions are evaluated against five axes: Reliability (never leak), Reversibility,
-Agentic-first, Trust (auditable + deterministic), Adopter ergonomics. Correctness axes 1-4
-always beat performance. If this PR weakens any axis, say so here and justify the tradeoff.
--->
-
-- [ ] This change does not weaken any axis, **or** the tradeoff is justified above.
-
 ## Local gates — run before pushing (CONTRIBUTING.md → "PR-checks ritual")
 
-```sh
-cargo fmt --all
-cargo run -p xtask -- readme-version-check
-cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo test --workspace --all-features
-cargo run -p xtask -- symmetric-potemkin
-cargo run -p xtask -- class-map-override-safety
-cargo run -p xtask -- recognizer-composition-validator
-cargo run -p xtask -- no-tenant-knowledge
-cargo run -p xtask -- bundle-tokenization-drift
-cargo run -p xtask -- fixture-citation-lint
-cargo run -p xtask -- ci-feature-matrix
-cargo run -p xtask -- cargo-metadata-audit-isolation
-```
+CI runs the same set and will fail otherwise.
 
 - [ ] `cargo fmt --all` — formatted
-- [ ] `cargo run -p xtask -- readme-version-check` — crate README version pins match `Cargo.toml`
 - [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings` — no warnings
 - [ ] `cargo test --workspace --all-features` — green
-- [ ] Behavioral `xtask` gates above — all pass
-- [ ] (If touching audit-sink boundaries) ran `dylint` manually: `gh workflow run dylint.yml`
+- [ ] `cargo run -p xtask -- ci-feature-matrix` — every feature combination builds + tests
+- [ ] `xtask` behavioral gates pass — they enforce gaze's correctness invariants (audit-sink isolation, no-tenant-knowledge, bundle-tokenization drift, symmetric-potemkin, recognizer-composition, fixture-citation, readme-version); CONTRIBUTING.md lists each and what it guards.
+- [ ] (If touching audit-sink boundaries) ran `dylint`: `gh workflow run dylint.yml`
 
 ## Fixtures & PII hygiene
 
-- [ ] No real PII anywhere (code, tests, fixtures, docs). Synthetic only (`alice@example.invalid`, `<Email_1>`).
-- [ ] Phone numbers use reserved synthetic ranges (NANPA `555-01xx`, Ofcom `7700-900xxx`, DE `1555 …`) — CONTRIBUTING.md#phone-number-fixtures.
-- [ ] Any production PII-shaped literal carries a `// fixture-cited(path::test)` marker pointing at a real, listed test.
-- [ ] Test/bench class names are neutral (`class_alpha`), not tenant-specific (`order_id`, `Song_42`).
-
-## Docs & changelog
-
-- [ ] Public-facing behavior change is documented (relevant `docs/` page and/or crate README).
-- [ ] `CHANGELOG.md` updated under `[Unreleased]` if user-visible.
+- [ ] No real PII anywhere (code, tests, fixtures, docs) — synthetic only (`alice@example.invalid`, `<Email_1>`).
+- [ ] Any PII-shaped literal is covered by a cited test (`fixture-citation-lint` enforces this).
 
 ## DCO
 

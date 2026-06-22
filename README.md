@@ -421,10 +421,8 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 The CLI is a process boundary around the Rust runtime; you can link the runtime directly:
 
-```toml
-[dependencies]
-gaze-pii = "0.11.0"
-gaze-assembly = "0.11.0"
+```sh
+cargo add gaze-pii gaze-assembly
 ```
 
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.

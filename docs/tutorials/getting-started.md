@@ -15,10 +15,8 @@ go deeper, each step links to the reference page or the design contract behind i
 
 ## 1. Add dependencies
 
-```toml
-[dependencies]
-gaze-pii = "0.11"
-gaze-assembly = "0.11"
+```sh
+cargo add gaze-pii gaze-assembly
 ```
 
 The crate is published as `gaze-pii`. Import path remains `use gaze::...`.
