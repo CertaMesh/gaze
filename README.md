@@ -2,11 +2,15 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Reversible PII pseudonymization for agentic LLM workflows.**
+**Deterministic, reversible PII pseudonymization for agentic LLM workflows — zero PII to the model, restorable replies, every token auditable.**
+
+*Pre-1.0, API stabilizing. Reversibility is guaranteed across minor versions — manifests written by an older minor restore on a newer minor (see [`UPGRADE.md`](UPGRADE.md)).*
 
 Gaze is open-source privacy infrastructure for organisations that must meet GDPR or the EU AI Act while still using third-party LLMs. The detection layer and rulepacks are dual-licensed Apache-2.0 OR MIT — every PII recognizer that ships here is a contribution to a public commons that any privacy-sensitive project can audit, adopt, or extend.
 
 Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
+
+**Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
 
 ## In production: AI support drafts that never see the customer
 
@@ -76,15 +80,15 @@ Gaze is the fourth path: deterministic detection, signed restore manifest, every
 
 Each feature, what you get, where the proof lives.
 
+- **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
+- **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
+- **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
+- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
+- **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
+- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
 - **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) route through web endpoints with cookie auth and are out of scope for this proxy; a separate browser-MITM project will cover that surface when it is public. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
 - **OSS document ingestion.** `gaze document clean ./input.pdf --out ./safe-bundle/` OCRs PNG/JPG/PDF through Tesseract, runs the recognized text through the standard pipeline, and writes a `SafeBundle` — `clean.md` + `manifest.json` + `report.json`. Layout report v2 surfaces per-page OCR confidence, multi-column segmentation, table-cell preservation, and vector-PDF fallback when PDFs have selectable text. Plug in alternative OCR drivers via the `OcrBackend` trait. Adopter quickstart: [`docs/how-to/document/ingest-documents.md`](docs/how-to/document/ingest-documents.md). Full bundle contract: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
 - **Long-lived stdio server for repeated redaction.** `gaze daemon` keeps one pipeline and model load hot, then serves JSON-per-line requests with per-`session_id` manifest isolation. It avoids binary/model cold starts on every agent turn, exits gracefully on SIGTERM, and evicts sessions by LRU or idle timeout. Adopter quickstart: [`docs/how-to/daemon/run-daemon.md`](docs/how-to/daemon/run-daemon.md). Full contract: [`docs/explanation/daemon/daemon-mode.md`](docs/explanation/daemon/daemon-mode.md).
-- **Reversible by contract.** Tokens are session-scoped, counted per class (`Email_1`, `Email_2`), and only resolvable through a signed `SensitiveSnapshot`. There is no string-map fallback. Manifests written by an older minor restore on a newer minor — see the reversibility statement at the bottom of [`UPGRADE.md`](UPGRADE.md).
-- **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
-- **Every token is auditable.** Each emission carries a `recognizer_id` plus `recognizer_version_id` (suffixed `_vN`) into the optional SQLite audit log. Pre-v0.8 rows surface as `legacy_unversioned`. The export column set never includes raw PII payloads.
-- **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
-- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
-- **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
 
 ## How it fits your stack
 
@@ -112,6 +116,14 @@ Three execution layers, one core invariant: PII crosses the agent boundary only 
 Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 ## Install
+
+Install the CLI from crates.io:
+
+```sh
+cargo install gaze-cli
+```
+
+Or build from source (latest `main`, or to enable extra features):
 
 ```sh
 git clone https://github.com/CertaMesh/gaze.git
@@ -409,10 +421,8 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 
 The CLI is a process boundary around the Rust runtime; you can link the runtime directly:
 
-```toml
-[dependencies]
-gaze-pii = "0.10.1"
-gaze-assembly = "0.10.1"
+```sh
+cargo add gaze-pii gaze-assembly
 ```
 
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
@@ -453,7 +463,11 @@ The workspace publishes via the `publish-crates.yml` GitHub Actions workflow usi
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
+See [CONTRIBUTING.md](CONTRIBUTING.md). **New here?** Browse the [good first issues](https://github.com/CertaMesh/gaze/labels/good%20first%20issue) — locale rulepack entries and new validator-backed recognizers are natural starting points.
+
+Apache-2.0 OR MIT, **no CLA** (DCO sign-off only, `git commit -s`); the project is run as a commons — open detection forever, no bait-and-switch, commercial features in separate repos. See [`docs/explanation/governance.md`](docs/explanation/governance.md).
+
+Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
 
 ```sh
 cargo fmt --all -- --check

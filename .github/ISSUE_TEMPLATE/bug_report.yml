@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a defect in Gaze (a leak, a broken round-trip, a crash, or wrong behavior).
+title: "[bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **A PII leak — any real PII reaching an LLM outside the manifest contract — is a critical defect**; if that's what you're reporting, please also follow [`SECURITY.md`](https://github.com/CertaMesh/gaze/blob/main/SECURITY.md) before posting public details.
+        Use synthetic data in this report — never paste real PII (use `alice@example.invalid`, `Dr. Schmidt`, `<Email_1>`).
+  - type: input
+    id: version
+    attributes:
+      label: Gaze version
+      description: Output of `gaze --version`, or the crate version you depend on.
+      placeholder: "0.11.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - CLI (gaze clean / restore / audit)
+        - Library (gaze-pii)
+        - MCP chokepoint (gaze-mcp-*)
+        - Proxy (gaze proxy)
+        - Document ingestion (gaze-document)
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you observe, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Minimal steps, policy TOML, and commands. Use synthetic PII only.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS + arch (e.g. macOS Apple Silicon, Linux glibc 2.39+), Rust toolchain version.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: This report contains no real PII (synthetic fixtures only).
+          required: true
+        - label: I searched existing issues and Discussions for a duplicate.
+          required: true
+        - label: If this is a PII leak, I have read SECURITY.md and am not disclosing exploit detail publicly.
+          required: false
