@@ -1061,6 +1061,104 @@ fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
 }
 
 #[test]
+fn phase2_short_iso_iban_with_anchor_tokenizes_and_round_trips() {
+    let rulepack = core_extended();
+    let pipeline = pipeline_from_rulepack(&rulepack);
+
+    for (input, expected, canonical, locale) in [
+        (
+            "Bank IBAN: NO93 8601 1117 947",
+            "NO93 8601 1117 947",
+            "NO9386011117947",
+            LocaleTag::EnUs,
+        ),
+        (
+            "Bank IBAN: NO9386011117947",
+            "NO9386011117947",
+            "NO9386011117947",
+            LocaleTag::EnUs,
+        ),
+        (
+            "Bank IBAN: AT48 3200 0000 1234 5864",
+            "AT48 3200 0000 1234 5864",
+            "AT483200000012345864",
+            LocaleTag::DeDe,
+        ),
+        (
+            "Bank IBAN: MT84 MALT 0110 0001 2345 MTLC AST0 01S",
+            "MT84 MALT 0110 0001 2345 MTLC AST0 01S",
+            "MT84MALT011000012345MTLCAST001S",
+            LocaleTag::EnUs,
+        ),
+        (
+            "Bank IBAN: LC14 BOSL 1234 5678 9012 3456 7890 1234",
+            "LC14 BOSL 1234 5678 9012 3456 7890 1234",
+            "LC14BOSL123456789012345678901234",
+            LocaleTag::EnUs,
+        ),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "iban.structural", input, locale.clone()),
+            vec![expected.to_string()],
+            "{input}"
+        );
+        assert_eq!(
+            detect_recognizer_canonical_forms(&rulepack, "iban.structural", input, locale.clone()),
+            vec![Some(canonical.to_string())],
+            "{input}"
+        );
+
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+        assert_custom_token(&clean, "iban");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn phase2_anchored_iban_overlapping_card_tail_keeps_single_iban_span() {
+    let rulepack = core_extended();
+    let input = "Bank IBAN: AT70 4111 1111 1111 1111";
+
+    assert_eq!(
+        detect_recognizer(&rulepack, "iban.structural", input, LocaleTag::DeDe),
+        vec!["AT70 4111 1111 1111 1111".to_string()]
+    );
+    assert_eq!(
+        detect_recognizer(&rulepack, "card.structural", input, LocaleTag::DeDe),
+        vec!["4111 1111 1111 1111".to_string()]
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+
+    assert_custom_token(&clean, "iban");
+    assert!(
+        !clean.contains(":Custom:credit_card_"),
+        "contained card tail must not double-tokenize inside anchored IBAN: {clean}"
+    );
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 1);
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn phase2_mod97_passing_wrong_length_iban_shape_is_vetoed() {
+    let rulepack = core_extended();
+    let input = "Bank IBAN: NO37 8601 1117 9470";
+
+    assert!(
+        detect_recognizer(&rulepack, "iban.structural", input, LocaleTag::EnUs).is_empty(),
+        "iban.structural must reject MOD-97-passing wrong-length IBAN shapes"
+    );
+
+    let pipeline = pipeline_from_rulepack(&rulepack);
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+    assert_eq!(clean, input);
+}
+
+#[test]
 fn phase2_mod97_failing_iban_shape_can_still_tokenize_phone_tail() {
     let rulepack = core_extended();
     let input = "My IBAN DE12 3456 7890 01555 0112233";

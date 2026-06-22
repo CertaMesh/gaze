@@ -765,21 +765,35 @@ fn luhn_check(input: &str) -> bool {
 
 fn iban_mod97_check(input: &str) -> bool {
     let canonical = iban_canonicalize(input);
-    if !(15..=34).contains(&canonical.len()) {
+    let bytes = canonical.as_bytes();
+    if bytes.len() < 4 {
         return false;
     }
-    if !canonical.chars().all(|ch| ch.is_ascii_alphanumeric()) {
+    if !bytes[0].is_ascii_uppercase()
+        || !bytes[1].is_ascii_uppercase()
+        || !bytes[2].is_ascii_digit()
+        || !bytes[3].is_ascii_digit()
+    {
+        return false;
+    }
+    let Some(expected_len) = iban_country_length(&bytes[..2]) else {
+        return false;
+    };
+    if bytes.len() != expected_len {
+        return false;
+    }
+    if !bytes.iter().all(u8::is_ascii_alphanumeric) {
         return false;
     }
 
     let mut remainder = 0u32;
-    for ch in canonical[4..].chars().chain(canonical[..4].chars()) {
-        match ch {
-            '0'..='9' => {
-                remainder = (remainder * 10 + ch.to_digit(10).expect("digit")) % 97;
+    for byte in bytes[4..].iter().chain(bytes[..4].iter()).copied() {
+        match byte {
+            b'0'..=b'9' => {
+                remainder = (remainder * 10 + u32::from(byte - b'0')) % 97;
             }
-            'A'..='Z' => {
-                let value = u32::from(ch) - u32::from('A') + 10;
+            b'A'..=b'Z' => {
+                let value = u32::from(byte - b'A') + 10;
                 remainder = (remainder * 10 + value / 10) % 97;
                 remainder = (remainder * 10 + value % 10) % 97;
             }
@@ -787,6 +801,103 @@ fn iban_mod97_check(input: &str) -> bool {
         }
     }
     remainder == 1
+}
+
+fn iban_country_length(country: &[u8]) -> Option<usize> {
+    // ISO 13616 IBAN Registry country lengths. MOD-97 alone has a false-accept
+    // rate near 1/97, so exact country length gates candidates before checksum.
+    match country {
+        b"AD" => Some(24),
+        b"AE" => Some(23),
+        b"AL" => Some(28),
+        b"AT" => Some(20),
+        b"AZ" => Some(28),
+        b"BA" => Some(20),
+        b"BE" => Some(16),
+        b"BG" => Some(22),
+        b"BH" => Some(22),
+        b"BI" => Some(27),
+        b"BR" => Some(29),
+        b"BY" => Some(28),
+        b"CH" => Some(21),
+        b"CR" => Some(22),
+        b"CY" => Some(28),
+        b"CZ" => Some(24),
+        b"DE" => Some(22),
+        b"DJ" => Some(27),
+        b"DK" => Some(18),
+        b"DO" => Some(28),
+        b"EE" => Some(20),
+        b"EG" => Some(29),
+        b"ES" => Some(24),
+        b"FI" => Some(18),
+        b"FK" => Some(18),
+        b"FO" => Some(18),
+        b"FR" => Some(27),
+        b"GB" => Some(22),
+        b"GE" => Some(22),
+        b"GI" => Some(23),
+        b"GL" => Some(18),
+        b"GR" => Some(27),
+        b"GT" => Some(28),
+        b"HN" => Some(28),
+        b"HR" => Some(21),
+        b"HU" => Some(28),
+        b"IE" => Some(22),
+        b"IL" => Some(23),
+        b"IQ" => Some(23),
+        b"IS" => Some(26),
+        b"IT" => Some(27),
+        b"JO" => Some(30),
+        b"KW" => Some(30),
+        b"KZ" => Some(20),
+        b"LB" => Some(28),
+        b"LC" => Some(32),
+        b"LI" => Some(21),
+        b"LT" => Some(20),
+        b"LU" => Some(20),
+        b"LV" => Some(21),
+        b"LY" => Some(25),
+        b"MC" => Some(27),
+        b"MD" => Some(24),
+        b"ME" => Some(22),
+        b"MK" => Some(19),
+        b"MN" => Some(20),
+        b"MR" => Some(27),
+        b"MT" => Some(31),
+        b"MU" => Some(30),
+        b"NI" => Some(28),
+        b"NL" => Some(18),
+        b"NO" => Some(15),
+        b"OM" => Some(23),
+        b"PK" => Some(24),
+        b"PL" => Some(28),
+        b"PS" => Some(29),
+        b"PT" => Some(25),
+        b"QA" => Some(29),
+        b"RO" => Some(24),
+        b"RS" => Some(22),
+        b"RU" => Some(33),
+        b"SA" => Some(24),
+        b"SC" => Some(31),
+        b"SD" => Some(18),
+        b"SE" => Some(24),
+        b"SI" => Some(19),
+        b"SK" => Some(24),
+        b"SM" => Some(27),
+        b"SO" => Some(23),
+        b"ST" => Some(25),
+        b"SV" => Some(28),
+        b"TL" => Some(23),
+        b"TN" => Some(24),
+        b"TR" => Some(26),
+        b"UA" => Some(29),
+        b"VA" => Some(22),
+        b"VG" => Some(24),
+        b"XK" => Some(20),
+        b"YE" => Some(30),
+        _ => None,
+    }
 }
 
 fn iban_canonicalize(input: &str) -> String {
