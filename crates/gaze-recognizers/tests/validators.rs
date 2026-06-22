@@ -88,15 +88,32 @@ fn luhn_algorithm_accepts_public_test_numbers_and_rejects_mutants() {
 #[test]
 fn iban_mod97_accepts_spec_examples_and_rejects_check_digit_mutants() {
     for input in [
+        "NO93 8601 1117 947",
+        "NO9386011117947",
         "BE71 0961 2345 6769",
         "DE89 3704 0044 0532 0130 00",
         "FR14 2004 1010 0505 0001 3M02 606",
         "GB82 WEST 1234 5698 7654 32",
+        "MT84 MALT 0110 0001 2345 MTLC AST0 01S",
+        "LC14 BOSL 1234 5678 9012 3456 7890 1234",
     ] {
         assert!(ValidatorKind::IbanMod97.validates(input), "{input}");
     }
 
     for input in ["GB99WEST12345698765432", "DE99370400440532013000"] {
+        assert!(!ValidatorKind::IbanMod97.validates(input), "{input}");
+    }
+}
+
+#[test]
+fn iban_mod97_rejects_mod97_passing_wrong_country_lengths() {
+    for input in [
+        "NO37 8601 1117 9470",
+        "DE81 3704 0044 0532 0130 000",
+        "GB76 WEST 1234 5698 7654 320",
+        "BE30 0961 2345 6769 0",
+        "LC22 BOSL 1234 5678 9012 3456 7890 1234 0",
+    ] {
         assert!(!ValidatorKind::IbanMod97.validates(input), "{input}");
     }
 }
