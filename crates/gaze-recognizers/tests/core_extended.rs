@@ -1074,8 +1074,8 @@ fn eu_vat_ids_tokenize_and_restore_with_locale_cues() {
     let pipeline = pipeline_from_rulepack(&rulepack);
 
     for (input, raw, locale) in [
-        // Source: generated ISO 7064 MOD 11,10 checksum-valid synthetic DE VAT fixture.
-        ("USt-IdNr: DE000000003", "DE000000003", LocaleTag::DeDe),
+        // Source: reported leak fixture; DE VAT detection is format + locale cue.
+        ("USt-IdNr: DE294581776", "DE294581776", LocaleTag::DeDe),
         // Source: synthetic ES VAT-format fixture; checksum intentionally not enforced.
         (
             "NIF-IVA: ESB12345678",
@@ -1099,11 +1099,11 @@ fn eu_vat_ids_tokenize_and_restore_with_locale_cues() {
 fn de_vat_iban_and_steuer_id_keep_distinct_spans_and_classes() {
     let rulepack = core_extended();
 
-    // Source: generated ISO 7064 MOD 11,10 checksum-valid synthetic DE VAT fixture.
-    let vat_input = "USt-IdNr: DE000000003";
+    // Source: reported leak fixture; DE VAT detection is format + locale cue.
+    let vat_input = "USt-IdNr: DE294581776";
     assert_eq!(
         detect_recognizer(&rulepack, "vat.de", vat_input, LocaleTag::DeDe),
-        vec!["DE000000003".to_string()]
+        vec!["DE294581776".to_string()]
     );
     assert!(
         detect_recognizer(&rulepack, "iban.structural", vat_input, LocaleTag::DeDe).is_empty(),
@@ -1139,11 +1139,11 @@ fn de_vat_iban_and_steuer_id_keep_distinct_spans_and_classes() {
         entries: Arc::clone(&entries),
     });
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let input = "USt-IdNr: DE000000003 IBAN: DE89 3704 0044 0532 0130 00 Steuer-ID 48 954 371 207";
+    let input = "USt-IdNr: DE294581776 IBAN: DE89 3704 0044 0532 0130 00 Steuer-ID 48 954 371 207";
     let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
 
     for raw in [
-        "DE000000003",
+        "DE294581776",
         "DE89 3704 0044 0532 0130 00",
         "48 954 371 207",
     ] {

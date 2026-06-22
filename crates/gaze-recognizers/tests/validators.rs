@@ -455,34 +455,6 @@ fn de_steuer_id_mod1110_accepts_generated_values_and_rejects_mutants() {
 }
 
 #[test]
-fn de_vat_mod1110_accepts_generated_values_and_rejects_mutants() {
-    for value in ["DE000000003", "DE000000011", "DE000000020"] {
-        assert!(ValidatorKind::DeVatMod1110.validates(value), "{value}");
-    }
-    assert!(!ValidatorKind::DeVatMod1110.validates("DE294581776"));
-    assert!(!ValidatorKind::DeVatMod1110.validates("123456788"));
-
-    let kind = ValidatorKind::parse("de_vat_mod1110").expect("parse de_vat_mod1110");
-    assert_eq!(kind, ValidatorKind::DeVatMod1110);
-
-    let values = (0..10).map(gen_de_vat).collect::<Vec<_>>();
-    for value in &values {
-        assert!(ValidatorKind::DeVatMod1110.validates(value), "{value}");
-        assert!(gaze_recognizers::validators::mod11::validate_de_vat_id(
-            value
-        ));
-        assert!(!ValidatorKind::DeVatMod1110.validates(&flip_last_digit(value)));
-    }
-
-    assert_validator_pipeline_round_trip(
-        r"\bDE\d{9}\b",
-        ValidatorKind::DeVatMod1110,
-        "USt-IdNr DE000000003",
-        "vat_id",
-    );
-}
-
-#[test]
 fn bsn_mod11_accepts_generated_values_and_rejects_mutants() {
     assert!(ValidatorKind::BsnMod11.validates("123456782"));
 
@@ -638,26 +610,6 @@ fn gen_steuer_id(seed: u64) -> String {
 }
 
 fn steuer_id_check_digit(digits: &[u8]) -> u8 {
-    let mut product = 10u8;
-    for digit in digits {
-        let mut sum = (*digit + product) % 10;
-        if sum == 0 {
-            sum = 10;
-        }
-        product = (2 * sum) % 11;
-    }
-    (11 - product) % 10
-}
-
-fn gen_de_vat(seed: u64) -> String {
-    let digits = first_digits::<8>(seed + 12_345_678);
-    let mut value = String::from("DE");
-    value.push_str(&digits_to_string(&digits));
-    value.push(char::from(b'0' + de_vat_check_digit(&digits)));
-    value
-}
-
-fn de_vat_check_digit(digits: &[u8]) -> u8 {
     let mut product = 10u8;
     for digit in digits {
         let mut sum = (*digit + product) % 10;

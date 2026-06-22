@@ -75,16 +75,6 @@ fn iban_mod97_validator_reports_pass_and_fail() {
 }
 
 #[test]
-fn de_vat_mod1110_validator_reports_pass_and_fail() {
-    assert_pass(ValidatorKind::DeVatMod1110, "DE000000003");
-    assert_fail(
-        ValidatorKind::DeVatMod1110,
-        "DE000000004",
-        ValidatorFailReason::DeVatMod1110Failed,
-    );
-}
-
-#[test]
 fn ipv4_parse_validator_reports_pass_and_fail() {
     assert_pass(ValidatorKind::Ipv4Parse, "192.0.2.1");
     assert_fail(

@@ -496,13 +496,10 @@ locales = ["de-DE", "de-AT", "de-CH"]
 
 [recognizers.match]
 kind = "regex"
-# DE USt-IdNr is checksum-validated. Keep the recognizer cue-anchored so the
-# short `DE` + 9 digit shape cannot compete with unrelated identifiers.
+# Keep DE USt-IdNr cue-anchored so the short `DE` + 9 digit shape cannot
+# compete with unrelated identifiers, but do not checksum-gate reported leaks.
 pattern = '''(?i)\b(?:ust[\s.-]*(?:idnr\.?|id)|umsatzsteuer[\s-]*id|mwst[\s-]*nr\.?)\s*[:#-]?\s*(DE\d{9})\b'''
 capture_groups = [1]
-
-[recognizers.validator]
-kind = "de_vat_mod1110"
 
 [recognizers.scoring]
 base = 0.88

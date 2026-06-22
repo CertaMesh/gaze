@@ -477,8 +477,6 @@ pub enum ValidatorFailReason {
     FrNirMod97Failed,
     /// German Steuer-ID MOD 11,10 checksum validation failed.
     DeSteuerIdMod1110Failed,
-    /// German VAT ID MOD 11,10 checksum validation failed.
-    DeVatMod1110Failed,
     /// Dutch BSN MOD-11 checksum validation failed.
     BsnMod11Failed,
     /// Brazilian CPF MOD-11 checksum validation failed.
@@ -542,8 +540,6 @@ pub enum ValidatorKind {
     FrNirMod97,
     /// German Steuer-ID MOD 11,10 checksum validator.
     DeSteuerIdMod1110,
-    /// German VAT ID MOD 11,10 checksum validator.
-    DeVatMod1110,
     /// Dutch BSN MOD-11 checksum validator.
     BsnMod11,
     /// Brazilian CPF MOD-11 checksum validator.
@@ -584,7 +580,6 @@ impl ValidatorKind {
             "aadhaar_verhoeff" => Ok(Self::AadhaarVerhoeff),
             "fr_nir_mod97" => Ok(Self::FrNirMod97),
             "de_steuer_id_mod1110" => Ok(Self::DeSteuerIdMod1110),
-            "de_vat_mod1110" => Ok(Self::DeVatMod1110),
             "bsn_mod11" => Ok(Self::BsnMod11),
             "cpf_mod11" => Ok(Self::CpfMod11),
             "cnpj_mod11" => Ok(Self::CnpjMod11),
@@ -601,7 +596,6 @@ impl ValidatorKind {
             Self::AadhaarVerhoeff => aadhaar_verhoeff_check(input),
             Self::FrNirMod97 => fr_nir_mod97_check(input),
             Self::DeSteuerIdMod1110 => de_steuer_id_mod1110_check(input),
-            Self::DeVatMod1110 => de_vat_mod1110_check(input),
             Self::BsnMod11 => bsn_mod11_check(input),
             Self::CpfMod11 => cpf_mod11_check(input),
             Self::CnpjMod11 => cnpj_mod11_check(input),
@@ -644,7 +638,6 @@ impl ValidatorKind {
             Self::DeSteuerIdMod1110 => {
                 canonical_ascii_digits::<11>(input).filter(|_| de_steuer_id_mod1110_check(input))
             }
-            Self::DeVatMod1110 => de_vat_canonical(input).filter(|_| de_vat_mod1110_check(input)),
             Self::BsnMod11 => canonical_ascii_digits::<9>(input).filter(|_| bsn_mod11_check(input)),
             Self::CpfMod11 => {
                 canonical_ascii_digits::<11>(input).filter(|_| cpf_mod11_check(input))
@@ -674,7 +667,6 @@ impl ValidatorKind {
             Self::AadhaarVerhoeff => ValidatorFailReason::AadhaarVerhoeffFailed,
             Self::FrNirMod97 => ValidatorFailReason::FrNirMod97Failed,
             Self::DeSteuerIdMod1110 => ValidatorFailReason::DeSteuerIdMod1110Failed,
-            Self::DeVatMod1110 => ValidatorFailReason::DeVatMod1110Failed,
             Self::BsnMod11 => ValidatorFailReason::BsnMod11Failed,
             Self::CpfMod11 => ValidatorFailReason::CpfMod11Failed,
             Self::CnpjMod11 => ValidatorFailReason::CnpjMod11Failed,
@@ -1077,43 +1069,6 @@ fn steuer_id_first_ten_digits_valid(digits: &[u8; 11]) -> bool {
     let missing_digits = counts.iter().filter(|count| **count == 0).count();
     let repeated_count_valid = counts.iter().any(|count| matches!(*count, 2 | 3));
     repeated_digits == 1 && repeated_count_valid && matches!(missing_digits, 1 | 2)
-}
-
-fn de_vat_mod1110_check(input: &str) -> bool {
-    let Some(digits) = de_vat_digits(input) else {
-        return false;
-    };
-    let mut product = 10u8;
-    for digit in &digits[..8] {
-        let mut sum = (*digit + product) % 10;
-        if sum == 0 {
-            sum = 10;
-        }
-        product = (2 * sum) % 11;
-    }
-    let check = (11 - product) % 10;
-    check == digits[8]
-}
-
-fn de_vat_canonical(input: &str) -> Option<String> {
-    let digits = de_vat_digits(input)?;
-    let mut canonical = String::with_capacity(11);
-    canonical.push_str("DE");
-    for digit in digits {
-        canonical.push(char::from(b'0' + digit));
-    }
-    Some(canonical)
-}
-
-fn de_vat_digits(input: &str) -> Option<[u8; 9]> {
-    let bytes = input.as_bytes();
-    if bytes.len() < 11
-        || !bytes[0].eq_ignore_ascii_case(&b'D')
-        || !bytes[1].eq_ignore_ascii_case(&b'E')
-    {
-        return None;
-    }
-    collect_ascii_digits::<9>(&input[2..])
 }
 
 fn bsn_mod11_check(input: &str) -> bool {
