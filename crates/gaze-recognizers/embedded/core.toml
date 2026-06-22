@@ -487,6 +487,48 @@ priority = 86
 [recognizers.token]
 
 [[recognizers]]
+id = "vat.de"
+safety_tier = "locale_gated"
+class = "custom:vat_id"
+cooperates_with = ["vat.es"]
+enabled = true
+locales = ["de-DE", "de-AT", "de-CH"]
+
+[recognizers.match]
+kind = "regex"
+# Keep DE USt-IdNr cue-anchored so the short `DE` + 9 digit shape cannot
+# compete with unrelated identifiers, but do not checksum-gate reported leaks.
+pattern = '''(?i)\b(?:ust[\s.-]*(?:idnr\.?|id)|umsatzsteuer[\s-]*id|mwst[\s-]*nr\.?)\s*[:#-]?\s*(DE\d{9})\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[[recognizers]]
+id = "vat.es"
+safety_tier = "locale_gated"
+class = "custom:vat_id"
+cooperates_with = ["vat.de"]
+enabled = true
+locales = ["es-ES"]
+
+[recognizers.match]
+kind = "regex"
+# ES VAT/CIF/NIF checks vary by entity type. Until that checksum is implemented
+# end-to-end, keep ES format-gated instead of risking false checksum rejects.
+pattern = '''(?i)\b(?:nif[\s-]*iva|cif|nif|iva|vat(?:[\s-]*id)?)\s*[:#-]?\s*(ES[A-Z0-9]\d{7}[A-Z0-9])\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.84
+priority = 84
+
+[recognizers.token]
+
+[[recognizers]]
 id = "bsn.nl"
 safety_tier = "safe_default"
 class = "custom:bsn"

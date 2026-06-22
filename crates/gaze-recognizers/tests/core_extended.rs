@@ -160,6 +160,14 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
             PiiClass::Custom("pan".to_string()),
             Action::Tokenize,
         ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("steuer_id".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("vat_id".to_string()),
+            Action::Tokenize,
+        ))
         .rule(DefaultRule::new(Action::Preserve));
 
     for spec in &rulepack.recognizers {
@@ -1058,6 +1066,110 @@ fn phase2_formatted_iban_with_spaces_tokenizes_and_round_trips() {
         "phone recognizer must not fire inside formatted DE IBAN: {clean}"
     );
     assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn eu_vat_ids_tokenize_and_restore_with_locale_cues() {
+    let rulepack = core_extended();
+    let pipeline = pipeline_from_rulepack(&rulepack);
+
+    for (input, raw, locale) in [
+        // Source: reported leak fixture; DE VAT detection is format + locale cue.
+        ("USt-IdNr: DE294581776", "DE294581776", LocaleTag::DeDe),
+        // Source: synthetic ES VAT-format fixture; checksum intentionally not enforced.
+        (
+            "NIF-IVA: ESB12345678",
+            "ESB12345678",
+            LocaleTag::Other("es-ES".to_string()),
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+
+        assert!(
+            !clean.contains(raw),
+            "expected VAT tokenization, got det=0/raw leak for {raw}: {clean}"
+        );
+        assert_eq!(clean.matches(":Custom:vat_id_").count(), 1, "{clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn de_vat_iban_and_steuer_id_keep_distinct_spans_and_classes() {
+    let rulepack = core_extended();
+
+    // Source: reported leak fixture; DE VAT detection is format + locale cue.
+    let vat_input = "USt-IdNr: DE294581776";
+    assert_eq!(
+        detect_recognizer(&rulepack, "vat.de", vat_input, LocaleTag::DeDe),
+        vec!["DE294581776".to_string()]
+    );
+    assert!(
+        detect_recognizer(&rulepack, "iban.structural", vat_input, LocaleTag::DeDe).is_empty(),
+        "11-char VAT shape must not be accepted as an IBAN"
+    );
+    assert!(
+        detect_recognizer(&rulepack, "steuer_id.de", vat_input, LocaleTag::DeDe).is_empty(),
+        "prefixed VAT must not be accepted as a personal Steuer-ID"
+    );
+
+    let iban_input = "IBAN: DE89 3704 0044 0532 0130 00";
+    assert_eq!(
+        detect_recognizer(&rulepack, "iban.structural", iban_input, LocaleTag::DeDe),
+        vec!["DE89 3704 0044 0532 0130 00".to_string()]
+    );
+    assert!(
+        detect_recognizer(&rulepack, "vat.de", iban_input, LocaleTag::DeDe).is_empty(),
+        "22-char IBAN must not be accepted as a VAT ID"
+    );
+
+    let steuer_id_input = "Steuer-ID 48 954 371 207";
+    assert_eq!(
+        detect_recognizer(&rulepack, "steuer_id.de", steuer_id_input, LocaleTag::DeDe),
+        vec!["48 954 371 207".to_string()]
+    );
+    assert!(
+        detect_recognizer(&rulepack, "vat.de", steuer_id_input, LocaleTag::DeDe).is_empty(),
+        "personal Steuer-ID must not be accepted as a VAT ID"
+    );
+
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "USt-IdNr: DE294581776 IBAN: DE89 3704 0044 0532 0130 00 Steuer-ID 48 954 371 207";
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+
+    for raw in [
+        "DE294581776",
+        "DE89 3704 0044 0532 0130 00",
+        "48 954 371 207",
+    ] {
+        assert!(!clean.contains(raw), "{raw} leaked in {clean}");
+    }
+    assert_custom_token(&clean, "vat_id");
+    assert_custom_token(&clean, "iban");
+    assert_custom_token(&clean, "steuer_id");
+    assert_eq!(gaze::token_shape::pattern().find_iter(&clean).count(), 3);
+    assert_eq!(restore_tokens(&session, &clean), input);
+
+    let entries = entries.lock().unwrap();
+    for (recognizer_id, class) in [
+        ("vat.de", "vat_id"),
+        ("iban.structural", "iban"),
+        ("steuer_id.de", "steuer_id"),
+    ] {
+        assert!(
+            entries.iter().any(|entry| {
+                !entry.conflict_loser
+                    && entry.recognizer_id.as_deref() == Some(recognizer_id)
+                    && matches!(&entry.class, PiiClass::Custom(name) if name == class)
+            }),
+            "missing winner {recognizer_id}/{class}: {entries:?}"
+        );
+    }
 }
 
 #[test]
