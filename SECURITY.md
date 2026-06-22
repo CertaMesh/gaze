@@ -7,7 +7,7 @@ PII leak, a recognizer bypass, a manifest-restore divergence, or a
 chokepoint escape — please report it privately. **Do not open a public
 GitHub issue.**
 
-Email: **security@empiretwo.dev**
+Email: **security@certamesh.com**
 PGP: optional; request a key via the same address.
 
 We will acknowledge receipt within 72 hours and aim to provide a triage
