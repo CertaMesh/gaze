@@ -1,0 +1,74 @@
+name: Feature / recognizer request
+description: Propose a new PII recognizer, locale rulepack entry, or other enhancement.
+title: "[feat]: "
+labels: ["C-enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Gaze prefers **deterministic, rule-based detection** with a traceable recognizer per token (neural is an addon, not the floor — see [`AGENTS.md`](https://github.com/CertaMesh/gaze/blob/main/AGENTS.md)). The most landable recognizer requests come with a **checksum or strict format** that keeps false positives low.
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of request
+      options:
+        - New recognizer (national ID, account number, etc.)
+        - Locale rulepack entry / cue terms
+        - CLI / library ergonomics
+        - Docs improvement
+        - Other enhancement
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What PII shape or workflow isn't covered today? Who needs it?
+    validations:
+      required: true
+  - type: textarea
+    id: spec
+    attributes:
+      label: Format & validation spec
+      description: |
+        For a recognizer: exact format (length, separators), and the **checksum/validation algorithm** if any (e.g. mod-11, mod-23, Luhn). Link a public reference.
+        For a locale entry: the cue terms + a one-line justification each.
+      placeholder: "e.g. Spanish DNI: 8 digits + check letter = \"TRWAGMYFPDXBNJZSQVHLCKE\"[n mod 23]"
+    validations:
+      required: true
+  - type: textarea
+    id: fixtures
+    attributes:
+      label: Synthetic examples
+      description: A few **synthetic** valid examples (constructed to satisfy the checksum) and invalid ones. Never real PII / real people's IDs.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: locale
+    attributes:
+      label: Locale (if applicable)
+      description: Existing packs are br, de, en, fr, in, nl, uk.
+      options:
+        - "not locale-specific"
+        - br
+        - de
+        - en
+        - fr
+        - in
+        - nl
+        - uk
+        - "new locale"
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: All examples above are synthetic — no real PII.
+          required: true
+        - label: I checked this isn't already covered by the bundled `core` rulepack or an existing locale pack.
+          required: true
+        - label: (Recognizers) I included or linked the validation/checksum spec so it can be implemented deterministically.
+          required: false

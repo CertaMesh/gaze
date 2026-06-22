@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & ideas (GitHub Discussions)
+    url: https://github.com/CertaMesh/gaze/discussions
+    about: |
+      Usage questions, "is Gaze a fit for X?", design discussion, and show-and-tell.
+      Discussions are searchable and citable in a security/procurement review — please ask here rather than opening an issue.
+  - name: Security / PII-leak disclosure
+    url: https://github.com/CertaMesh/gaze/blob/main/SECURITY.md
+    about: |
+      A PII leak is a critical defect. Report security issues privately per SECURITY.md — do not open a public issue with exploit detail.
+  - name: New contributor? Start here
+    url: https://github.com/CertaMesh/gaze/blob/main/CONTRIBUTING.md
+    about: Setup, workspace shape, the PR-checks ritual, DCO sign-off, and good-first-issues.

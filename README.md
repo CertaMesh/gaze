@@ -2,11 +2,15 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Reversible PII pseudonymization for agentic LLM workflows.**
+**Deterministic, reversible PII pseudonymization for agentic LLM workflows — zero PII to the model, restorable replies, every token auditable.**
+
+*Pre-1.0, API stabilizing. Reversibility is guaranteed across minor versions — manifests written by an older minor restore on a newer minor (see [`UPGRADE.md`](UPGRADE.md)).*
 
 Gaze is open-source privacy infrastructure for organisations that must meet GDPR or the EU AI Act while still using third-party LLMs. The detection layer and rulepacks are dual-licensed Apache-2.0 OR MIT — every PII recognizer that ships here is a contribution to a public commons that any privacy-sensitive project can audit, adopt, or extend.
 
 Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
+
+**Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
 
 ## In production: AI support drafts that never see the customer
 
@@ -411,8 +415,8 @@ The CLI is a process boundary around the Rust runtime; you can link the runtime 
 
 ```toml
 [dependencies]
-gaze-pii = "0.10.1"
-gaze-assembly = "0.10.1"
+gaze-pii = "0.11.0"
+gaze-assembly = "0.11.0"
 ```
 
 The crate is published as `gaze-pii` because the bare `gaze` name is in transfer on crates.io; the import path stays `use gaze::...` because `[lib].name = "gaze"` is preserved.
@@ -453,7 +457,11 @@ The workspace publishes via the `publish-crates.yml` GitHub Actions workflow usi
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
+See [CONTRIBUTING.md](CONTRIBUTING.md). **New here?** Browse the [good first issues](https://github.com/CertaMesh/gaze/labels/good%20first%20issue) — locale rulepack entries and new validator-backed recognizers are natural starting points.
+
+Apache-2.0 OR MIT, **no CLA** (DCO sign-off only, `git commit -s`); the project is run as a commons — open detection forever, no bait-and-switch, commercial features in separate repos. See [`docs/explanation/governance.md`](docs/explanation/governance.md).
+
+Repository gates (xtask + Dylint) enforce the contracts in [`docs/explanation/`](docs/explanation/). Run them locally before pushing:
 
 ```sh
 cargo fmt --all -- --check
