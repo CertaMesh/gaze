@@ -178,6 +178,9 @@ async fn proxy_inner(
     let mut response = Response::builder().status(status);
     for (name, value) in upstream_headers {
         if let Some(name) = name {
+            if name == axum::http::header::CONTENT_LENGTH {
+                continue;
+            }
             response = response.header(name, value);
         }
     }
