@@ -117,6 +117,14 @@ Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHI
 
 ## Install
 
+Install the CLI from crates.io:
+
+```sh
+cargo install gaze-cli
+```
+
+Or build from source (latest `main`, or to enable extra features):
+
 ```sh
 git clone https://github.com/CertaMesh/gaze.git
 cd gaze
