@@ -140,8 +140,23 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
 
 const REQUIRED_PACKAGE_TARGET: &str = "gaze-recognizers";
 const REQUIRED_NO_DEFAULT_FEATURES: &str = "--no-default-features";
+const REQUIRED_NO_PHONE_PARSER_TEST_TARGET: &str = "no_phone_parser_fail_closed";
+const REQUIRED_NO_PHONE_PARSER_TEST_COUNT: &str = "running 2 tests";
 const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
 const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
+const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
+    label:
+        "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
+    program: "cargo",
+    args: &[
+        "test",
+        "-p",
+        REQUIRED_PACKAGE_TARGET,
+        REQUIRED_NO_DEFAULT_FEATURES,
+        "--test",
+        REQUIRED_NO_PHONE_PARSER_TEST_TARGET,
+    ],
+};
 
 #[derive(Debug, Clone, Copy)]
 struct MatrixCommand {
@@ -152,6 +167,11 @@ struct MatrixCommand {
 
 pub fn run() -> Result<()> {
     ensure_matrix_contract()?;
+
+    run_command_requiring_output(
+        NO_PHONE_PARSER_FAIL_CLOSED_GUARD,
+        REQUIRED_NO_PHONE_PARSER_TEST_COUNT,
+    )?;
 
     println!(
         "ci_feature_matrix: running {} feature-matrix commands",
@@ -202,6 +222,42 @@ fn ensure_matrix_contract() -> Result<()> {
 
 fn run_command(command: MatrixCommand) -> Result<()> {
     println!("ci_feature_matrix: running {}", command.label);
+    let mut cmd = configured_command(command)?;
+
+    let status = cmd
+        .status()
+        .with_context(|| format!("failed to run {}", command.label))?;
+    if !status.success() {
+        bail!("ci_feature_matrix: command failed: {}", command.label);
+    }
+    Ok(())
+}
+
+fn run_command_requiring_output(command: MatrixCommand, required_output: &str) -> Result<()> {
+    println!("ci_feature_matrix: running {}", command.label);
+    let mut cmd = configured_command(command)?;
+
+    let output = cmd
+        .output()
+        .with_context(|| format!("failed to run {}", command.label))?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    print!("{stdout}");
+    eprint!("{stderr}");
+    if !output.status.success() {
+        bail!("ci_feature_matrix: command failed: {}", command.label);
+    }
+    if !stdout.contains(required_output) && !stderr.contains(required_output) {
+        bail!(
+            "ci_feature_matrix: command {} must report `{}`",
+            command.label,
+            required_output
+        );
+    }
+    Ok(())
+}
+
+fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
     let mut cmd = ProcessCommand::new(command.program);
     cmd.args(command.args);
     cmd.env_clear();
@@ -236,11 +292,5 @@ fn run_command(command: MatrixCommand) -> Result<()> {
         );
     }
 
-    let status = cmd
-        .status()
-        .with_context(|| format!("failed to run {}", command.label))?;
-    if !status.success() {
-        bail!("ci_feature_matrix: command failed: {}", command.label);
-    }
-    Ok(())
+    Ok(cmd)
 }

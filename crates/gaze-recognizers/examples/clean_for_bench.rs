@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use gaze::{
-    CleanDocument, LeakKind, LocaleTag, Pipeline, RawDocument, SafetyNetFallback, SafetyNetMode,
-    SafetyNetPolicy, Scope, Session,
+    Action, ClassRule, CleanDocument, DefaultRule, LeakKind, LocaleTag, PiiClass, Pipeline,
+    RawDocument, RawMatch, RecognizerSpec, Rulepack, RulepackSource, SafetyNetFallback,
+    SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
-use gaze_assembly::CorePipelineConfig;
+use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -192,13 +193,9 @@ fn floor_config(config: BenchConfig) -> BenchConfig {
 
 fn build_pipeline(
     config: BenchConfig,
-    locale_chain: &[LocaleTag],
+    _locale_chain: &[LocaleTag],
 ) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    let mut builder = CorePipelineConfig::new().with_locale(locale_chain);
-    if config != BenchConfig::RuleFloorCore {
-        builder = builder.with_bundled_rulepack("core-extended");
-    }
-    let mut pipeline = builder.build()?.into_pipeline();
+    let mut pipeline = rule_floor_pipeline(config)?;
     match config {
         BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended => {}
         BenchConfig::Pass3Kiji => {
@@ -212,6 +209,146 @@ fn build_pipeline(
         }
     }
     Ok(pipeline)
+}
+
+fn rule_floor_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::error::Error>> {
+    let bundle = if config == BenchConfig::RuleFloorCore {
+        "core"
+    } else {
+        "core-extended"
+    };
+    let rulepack = Rulepack::load(RulepackSource::Embedded(
+        embedded(bundle).ok_or("missing embedded rulepack")?,
+    ))?;
+    let mut builder = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Tokenize))
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+        .rule(ClassRule::new(
+            PiiClass::Custom("phone".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("ip_address".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("eth_address".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("postal_code".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("credit_card".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("ssn".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("nino".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("pan".to_string()),
+            Action::Tokenize,
+        ));
+
+    for spec in rulepack
+        .recognizers
+        .iter()
+        .filter(|recognizer| recognizer.enabled)
+    {
+        if let Some(collision) = spec.collision.clone() {
+            builder = builder.register_collision(spec.id.clone(), collision);
+        }
+        if matches!(spec.matcher, RawMatch::Regex { .. }) {
+            builder = builder.recognizer(regex_from_spec(&rulepack, spec)?);
+        }
+    }
+
+    Ok(builder.build()?)
+}
+
+fn regex_from_spec(
+    rulepack: &Rulepack,
+    spec: &RecognizerSpec,
+) -> Result<RegexDetector, Box<dyn std::error::Error>> {
+    let RawMatch::Regex {
+        pattern,
+        pattern_template,
+        capture_groups,
+    } = &spec.matcher
+    else {
+        unreachable!("caller filters non-regex recognizers");
+    };
+    let pattern = match (pattern.as_deref(), pattern_template.as_deref()) {
+        (Some(pattern), None) => pattern.to_string(),
+        (None, Some(template)) => lower_pattern_template(rulepack, template)?,
+        _ => return Err(format!("invalid regex recognizer pattern shape for {}", spec.id).into()),
+    };
+    let exclusions = spec
+        .context
+        .as_ref()
+        .map(|context| context.exclusions.clone())
+        .unwrap_or_default();
+    let validator_kind = spec
+        .validator
+        .as_ref()
+        .map(|validator| ValidatorKind::parse(&validator.kind))
+        .transpose()?;
+    let normalizer_kind = spec
+        .normalizer
+        .as_ref()
+        .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
+        .transpose()?;
+
+    Ok(RegexDetector::with_rulepack_fields(
+        &pattern,
+        spec.class.clone(),
+        &spec.id,
+        spec.locales.clone(),
+        spec.scoring.base,
+        spec.scoring.priority,
+        spec.token.family.as_deref().unwrap_or("counter"),
+        capture_groups.clone(),
+        exclusions,
+        validator_kind,
+        normalizer_kind,
+    )?)
+}
+
+fn lower_pattern_template(
+    rulepack: &Rulepack,
+    template: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    let Some(locale) = &rulepack.locale else {
+        return Err("pattern template requires locale buckets".into());
+    };
+    let mut pattern = template.to_string();
+    for (bucket, values) in &locale.buckets {
+        let marker = format!("{{locale.{bucket}}}");
+        if pattern.contains(&marker) {
+            let alternation = values
+                .names
+                .iter()
+                .map(|value| regex::escape(value))
+                .collect::<Vec<_>>()
+                .join("|");
+            pattern = pattern.replace(&marker, &alternation);
+        }
+    }
+    if pattern.contains("{locale.") {
+        return Err(format!("unresolved locale pattern template: {pattern}").into());
+    }
+    Ok(pattern)
 }
 
 #[cfg(feature = "safety-net-kiji")]
@@ -246,7 +383,6 @@ fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::er
     use gaze_recognizers::safety_net::openai_filter::{
         OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
     };
-    use gaze_recognizers::LocaleAwareModelRegistry;
 
     let kiji_command = std::env::var_os("GAZE_KIJI_DISTILBERT_COMMAND")
         .ok_or("GAZE_KIJI_DISTILBERT_COMMAND is not set")?;
@@ -256,33 +392,32 @@ fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::er
         std::env::var_os("GAZE_OPENAI_FILTER_OPF").ok_or("GAZE_OPENAI_FILTER_OPF is not set")?;
     let opf_checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
 
-    let mut registry = LocaleAwareModelRegistry::new();
-    registry.register(
-        OpenAiFilterSafetyNet::new(
-            SubprocessOpenAiFilterConfig::new(opf_command)
-                .with_checkpoint_path(opf_checkpoint)
-                .with_timeout(Duration::from_secs(30))
-                .with_args([
-                    "--format",
-                    "json",
-                    "--output-mode",
-                    "typed",
-                    "--no-print-color-coded-text",
-                    "--device",
-                    "cpu",
-                ]),
+    Ok(pipeline
+        .with_safety_net(
+            OpenAiFilterSafetyNet::new(
+                SubprocessOpenAiFilterConfig::new(opf_command)
+                    .with_checkpoint_path(opf_checkpoint)
+                    .with_timeout(std::time::Duration::from_secs(30))
+                    .with_args([
+                        "--format",
+                        "json",
+                        "--output-mode",
+                        "typed",
+                        "--no-print-color-coded-text",
+                        "--device",
+                        "cpu",
+                    ]),
+            )
+            .with_locales(vec![LocaleTag::Global, LocaleTag::EnUs]),
         )
-        .with_locales(vec![LocaleTag::Global, LocaleTag::EnUs]),
-    );
-    registry.register(
-        KijiDistilbertSafetyNet::new(
-            SubprocessKijiConfig::new(kiji_command)
-                .with_model_dir(kiji_model_dir)
-                .with_timeout(Duration::from_secs(30)),
-        )
-        .with_locales(vec![LocaleTag::DeDe]),
-    );
-    Ok(pipeline.with_safety_net_registry(registry))
+        .with_safety_net(
+            KijiDistilbertSafetyNet::new(
+                SubprocessKijiConfig::new(kiji_command)
+                    .with_model_dir(kiji_model_dir)
+                    .with_timeout(std::time::Duration::from_secs(30)),
+            )
+            .with_locales(vec![LocaleTag::DeDe]),
+        ))
 }
 
 #[cfg(not(all(feature = "safety-net-kiji", feature = "safety-net-openai")))]
