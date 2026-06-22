@@ -2,12 +2,14 @@
 
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, Pipeline, RawDocument, RawMatch, RecognizerSpec,
-    Rulepack, RulepackError, RulepackSource, Scope, Session,
+    RedactionEntry, RedactionLogError, RedactionLogger, Rulepack, RulepackError, RulepackSource,
+    Scope, Session,
 };
 use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
 use gaze_types::{
     DetectContext, DictionaryBundle, LocaleTag, PiiClass, Recognizer, ValidatorOutcome,
 };
+use std::sync::{Arc, Mutex};
 
 fn core_extended() -> Rulepack {
     let mut rulepack = Rulepack::load(RulepackSource::Embedded(
@@ -291,6 +293,18 @@ fn assert_custom_token(clean: &str, class: &str) {
     );
 }
 
+#[derive(Clone)]
+struct CapturingLogger {
+    entries: Arc<Mutex<Vec<RedactionEntry>>>,
+}
+
+impl RedactionLogger for CapturingLogger {
+    fn log(&self, entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        self.entries.lock().unwrap().push(entry.clone());
+        Ok(())
+    }
+}
+
 #[test]
 fn full_pipeline_rejects_identifier_attached_e164_phone_candidates() {
     let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
@@ -336,6 +350,181 @@ fn full_pipeline_rejects_identifier_attached_e164_phone_candidates() {
         );
         assert_eq!(restore_tokens(&session, &clean), input);
     }
+}
+
+#[test]
+fn spaced_international_e164_phones_tokenize_and_round_trip() {
+    let rulepack = core_extended();
+    let pipeline = pipeline_from_rulepack(&rulepack);
+
+    for (input, locale, raw) in [
+        // Source: libphonenumber GB mobile example shape; parser-valid synthetic fixture.
+        (
+            "UK phone +44 7400 123456",
+            LocaleTag::EnGb,
+            "+44 7400 123456",
+        ),
+        // Source: synthetic parser-valid international mobile fixture from dogfooding.
+        (
+            "FR phone +33 6 12 34 56 78",
+            LocaleTag::Other("fr-FR".to_string()),
+            "+33 6 12 34 56 78",
+        ),
+        // Source: synthetic parser-valid international mobile fixture from dogfooding.
+        (
+            "ES phone +34 612 345 678",
+            LocaleTag::Other("es-ES".to_string()),
+            "+34 612 345 678",
+        ),
+    ] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+
+        assert!(
+            !clean.contains(raw),
+            "spaced E.164 phone leaked raw bytes {raw} in {clean}"
+        );
+        assert_eq!(clean.matches(":Custom:phone_").count(), 1, "{clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn spaced_e164_phone_recognizer_accepts_international_spacing_and_vetoes_false_positives() {
+    let rulepack = core_extended();
+
+    for (input, locale, expected) in [
+        // Source: libphonenumber GB mobile example shape; parser-valid synthetic fixture.
+        (
+            "UK phone +44 7400 123456",
+            LocaleTag::EnGb,
+            "+44 7400 123456",
+        ),
+        // Source: synthetic parser-valid international mobile fixture from dogfooding.
+        (
+            "FR phone +33 6 12 34 56 78",
+            LocaleTag::Other("fr-FR".to_string()),
+            "+33 6 12 34 56 78",
+        ),
+        // Source: synthetic parser-valid international mobile fixture from dogfooding.
+        (
+            "ES phone +34 612 345 678",
+            LocaleTag::Other("es-ES".to_string()),
+            "+34 612 345 678",
+        ),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, "phone.e164.spaced", input, locale),
+            vec![expected.to_string()],
+            "{input}"
+        );
+    }
+
+    for input in [
+        "Noise +12 34",
+        "Noise +1234567",
+        "Noise +99999999",
+        // Source: NANPA 555-LINE Number Reservation; handled by phone.national.us.
+        "US fixture +1 555 0100",
+        // Source: synthetic-non-reachable; handled by phone.national.de.
+        "DE fixture +49 1555 0112233",
+        "Customer_+447400123456",
+    ] {
+        assert!(
+            detect_recognizer(&rulepack, "phone.e164.spaced", input, LocaleTag::EnGb).is_empty(),
+            "phone.e164.spaced must not fire for {input}"
+        );
+    }
+}
+
+#[test]
+fn existing_regional_and_contiguous_phone_fixtures_still_round_trip() {
+    let rulepack = core_extended();
+    let pipeline = pipeline_from_rulepack(&rulepack);
+
+    for (input, locale, recognizer_id, expected) in [
+        // Source: synthetic-non-reachable; documented DE fixture shape.
+        (
+            "DE phone +49 1555 0112233",
+            LocaleTag::DeDe,
+            "phone.national.de",
+            "+49 1555 0112233",
+        ),
+        // Source: NANPA 555-LINE Number Reservation.
+        // https://nationalnanpa.com/number_resource_info/555_numbers.html
+        (
+            "US phone +1 555 0100",
+            LocaleTag::EnUs,
+            "phone.national.us",
+            "+1 555 0100",
+        ),
+        // Source: parser-valid contiguous E.164 fixture from existing tests.
+        (
+            "US phone +12025550100",
+            LocaleTag::EnUs,
+            "phone.structural",
+            "+12025550100",
+        ),
+    ] {
+        assert_eq!(
+            detect_recognizer(&rulepack, recognizer_id, input, locale.clone()),
+            vec![expected.to_string()],
+            "{input}"
+        );
+
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = clean_text(&pipeline, &session, input, locale);
+        assert!(!clean.contains(expected), "{expected} leaked in {clean}");
+        assert_eq!(clean.matches(":Custom:phone_").count(), 1, "{clean}");
+        assert_eq!(restore_tokens(&session, &clean), input);
+    }
+}
+
+#[test]
+fn overlapping_phone_recognizers_pick_single_winners_without_span_loss() {
+    let rulepack = core_extended();
+    let entries = Arc::new(Mutex::new(Vec::new()));
+    let pipeline = pipeline_from_rulepack(&rulepack).with_redaction_logger(CapturingLogger {
+        entries: Arc::clone(&entries),
+    });
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    // Source: synthetic-non-reachable per CONTRIBUTING.md phone fixture guidance:
+    // DE uses documented parser-valid placeholder mobile; UK uses
+    // libphonenumber example mobile shapes.
+    let input = "DE +49 1555 0112233 UK +44 7400 123456 INTL +447400123456";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::DeDe);
+
+    for raw in ["+49 1555 0112233", "+44 7400 123456", "+447400123456"] {
+        assert!(!clean.contains(raw), "{raw} leaked in {clean}");
+    }
+    assert_eq!(clean.matches(":Custom:phone_").count(), 3, "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+
+    let entries = entries.lock().unwrap();
+    let winner_ids = entries
+        .iter()
+        .filter(|entry| !entry.conflict_loser)
+        .filter(|entry| matches!(&entry.class, PiiClass::Custom(name) if name == "phone"))
+        .filter_map(|entry| entry.recognizer_id.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        winner_ids,
+        vec![
+            "phone.national.de",
+            "phone.e164.spaced",
+            "phone.structural+phone.e164.spaced"
+        ],
+        "{entries:?}"
+    );
+    assert!(
+        entries.iter().any(|entry| {
+            entry.conflict_loser
+                && matches!(&entry.class, PiiClass::Custom(name) if name == "phone")
+                && entry.recognizer_id.as_deref() == Some("phone.e164.spaced")
+        }),
+        "expected phone.e164.spaced to lose at least one same-class overlap: {entries:?}"
+    );
 }
 
 #[test]
@@ -1199,6 +1388,11 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         .iter()
         .find(|recognizer| recognizer.id == "phone.structural")
         .unwrap();
+    let phone_spaced = rulepack
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "phone.e164.spaced")
+        .unwrap();
     let phone_de = rulepack
         .recognizers
         .iter()
@@ -1211,15 +1405,23 @@ fn same_class_cooperation_is_data_and_unilateral_failure_behavior() {
         .unwrap();
     assert_eq!(
         phone_structural.cooperates_with,
-        vec!["phone.national.de", "phone.national.us"]
+        vec![
+            "phone.e164.spaced",
+            "phone.national.de",
+            "phone.national.us"
+        ]
+    );
+    assert_eq!(
+        phone_spaced.cooperates_with,
+        vec!["phone.structural", "phone.national.de", "phone.national.us"]
     );
     assert_eq!(
         phone_de.cooperates_with,
-        vec!["phone.structural", "phone.national.us"]
+        vec!["phone.structural", "phone.e164.spaced", "phone.national.us"]
     );
     assert_eq!(
         phone_us.cooperates_with,
-        vec!["phone.structural", "phone.national.de"]
+        vec!["phone.structural", "phone.e164.spaced", "phone.national.de"]
     );
 
     let one_side_removed = raw.replace("cooperates_with = [\"ip.v4\"]\n", "");

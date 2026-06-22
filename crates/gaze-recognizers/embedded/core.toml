@@ -157,7 +157,7 @@ family = "name.counter"
 id = "phone.structural"
 safety_tier = "safe_default"
 class = "custom:phone"
-cooperates_with = ["phone.national.de", "phone.national.us"]
+cooperates_with = ["phone.e164.spaced", "phone.national.de", "phone.national.us"]
 enabled = true
 locales = ["global"]
 
@@ -184,10 +184,40 @@ variant = "phone"
 precedence = 10
 
 [[recognizers]]
+id = "phone.e164.spaced"
+safety_tier = "safe_default"
+class = "custom:phone"
+cooperates_with = ["phone.structural", "phone.national.de", "phone.national.us"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+# Broad spaced international candidate scanner for country codes that do not
+# already have regional validators. +1 and spaced +49 remain with the US/DE
+# national recognizers because their safe fixtures are region-validator backed.
+pattern = '''(?:^|[^[:alnum:]_+])(\+(?:[235-9]\d{0,2}|4(?:[0-8]\d?|9\d))[\s.\-/]?(?:\d[\s.\-/]?){6,14}\d)\b'''
+capture_groups = [1]
+
+[recognizers.validator]
+kind = "e164_phone"
+
+[recognizers.scoring]
+base = 0.70
+priority = 79
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "phone-or-imei"
+variant = "phone"
+precedence = 10
+
+[[recognizers]]
 id = "phone.national.de"
 safety_tier = "locale_gated"
 class = "custom:phone"
-cooperates_with = ["phone.structural", "phone.national.us"]
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.us"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH"]
 
@@ -221,7 +251,7 @@ precedence = 10
 id = "phone.national.us"
 safety_tier = "locale_gated"
 class = "custom:phone"
-cooperates_with = ["phone.structural", "phone.national.de"]
+cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.de"]
 enabled = true
 locales = ["en-US"]
 

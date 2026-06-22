@@ -1,62 +1,43 @@
 #![cfg(not(feature = "phone-parser"))]
 
-use gaze::RulepackSource;
-use gaze_recognizers::ValidatorKind;
+use gaze_recognizers::{embedded, ValidatorKind};
 use gaze_types::ValidatorKindParseError;
 
 #[test]
-fn phone_validators_fail_closed_at_rulepack_load_without_phone_parser() {
+fn phone_validators_fail_closed_without_phone_parser() {
     for validator in [
         "e164_phone",
         "e164_phone_national_de",
         "e164_phone_national_us",
     ] {
-        let tempdir = tempfile::tempdir().expect("tempdir");
-        let path = tempdir.path().join("rulepack.toml");
-        std::fs::write(&path, rulepack(validator)).expect("write minimal rulepack");
-
-        let rulepack = gaze::Rulepack::load(RulepackSource::Path(path)).expect("rulepack parses");
-        let kind = &rulepack.recognizers[0]
-            .validator
-            .as_ref()
-            .expect("validator")
-            .kind;
-        let err = ValidatorKind::parse(kind)
-            .expect_err("phone validator must fail closed without phone-parser feature");
-
-        assert!(
-            matches!(err, ValidatorKindParseError::UnsupportedValidator { ref kind } if kind == validator),
-            "expected UnsupportedValidator for {validator}, got {err:?}"
-        );
+        assert_unsupported_phone_validator(validator);
     }
 }
 
-fn rulepack(validator: &str) -> String {
-    format!(
-        r#"
-schema_version = "0.1.0"
-rulepack_id = "no-phone-parser-fail-closed-{validator}"
-rulepack_version = "0.4.6"
-default_locales = ["global"]
+#[test]
+fn embedded_spaced_e164_phone_recognizer_fails_closed_without_phone_parser() {
+    let raw = embedded("core-extended").expect("core-extended embedded rulepack");
+    let recognizer = recognizer_block(&raw, "phone.e164.spaced");
+    assert!(
+        recognizer.contains("kind = \"e164_phone\""),
+        "phone.e164.spaced must stay gated by e164_phone: {recognizer}"
+    );
+    assert_unsupported_phone_validator("e164_phone");
+}
 
-[[recognizers]]
-id = "phone.{validator}"
-class = "custom:phone"
-enabled = true
-locales = ["global"]
+fn assert_unsupported_phone_validator(validator: &str) {
+    let err = ValidatorKind::parse(validator)
+        .expect_err("phone validator must fail closed without phone-parser feature");
 
-[recognizers.match]
-kind = "regex"
-pattern = '''\+\d{{6,15}}\b'''
+    assert!(
+        matches!(err, ValidatorKindParseError::UnsupportedValidator { ref kind } if kind == validator),
+        "expected UnsupportedValidator for {validator}, got {err:?}"
+    );
+}
 
-[recognizers.validator]
-kind = "{validator}"
-
-[recognizers.scoring]
-base = 0.70
-priority = 80
-
-[recognizers.token]
-"#
-    )
+fn recognizer_block<'a>(rulepack: &'a str, id: &str) -> &'a str {
+    rulepack
+        .split("[[recognizers]]")
+        .find(|block| block.contains(&format!("id = \"{id}\"")))
+        .unwrap_or_else(|| panic!("missing recognizer {id}"))
 }
