@@ -5,6 +5,11 @@ pub fn validate_de_steuer_id(digits: &str) -> bool {
     ValidatorKind::DeSteuerIdMod1110.validates(digits)
 }
 
+/// Validates a German VAT ID with ISO 7064 MOD 11,10.
+pub fn validate_de_vat_id(value: &str) -> bool {
+    ValidatorKind::DeVatMod1110.validates(value)
+}
+
 /// Validates a Dutch BSN with the 11-test.
 pub fn validate_bsn(digits: &str) -> bool {
     ValidatorKind::BsnMod11.validates(digits)

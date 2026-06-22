@@ -1294,6 +1294,7 @@ window_chars = 48
                 PiiClass::custom("aadhaar"),
                 PiiClass::custom("nir"),
                 PiiClass::custom("steuer_id"),
+                PiiClass::custom("vat_id"),
                 PiiClass::custom("bsn"),
                 PiiClass::custom("cpf"),
                 PiiClass::custom("cnpj"),

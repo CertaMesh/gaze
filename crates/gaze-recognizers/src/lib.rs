@@ -66,7 +66,7 @@ mod tests {
         let core = embedded("core").expect("core rulepack");
         let rulepack = Rulepack::load(RulepackSource::Embedded(core)).expect("valid core");
 
-        assert_eq!(rulepack.recognizers.len(), 27);
+        assert_eq!(rulepack.recognizers.len(), 29);
         assert_eq!(rulepack.recognizers[0].id, "email.global");
         assert_eq!(rulepack.recognizers[1].id, "email.header.name");
         assert_eq!(rulepack.recognizers[2].id, "email.header.name.paren");
@@ -101,7 +101,7 @@ mod tests {
         let rulepack =
             Rulepack::load(RulepackSource::Embedded(core_extended)).expect("valid core-extended");
 
-        assert_eq!(rulepack.recognizers.len(), 27);
+        assert_eq!(rulepack.recognizers.len(), 29);
         assert!(rulepack
             .recognizers
             .iter()
@@ -110,5 +110,13 @@ mod tests {
             .recognizers
             .iter()
             .any(|recognizer| recognizer.id == "phone.e164.spaced"));
+        assert!(rulepack
+            .recognizers
+            .iter()
+            .any(|recognizer| recognizer.id == "vat.de"));
+        assert!(rulepack
+            .recognizers
+            .iter()
+            .any(|recognizer| recognizer.id == "vat.es"));
     }
 }
