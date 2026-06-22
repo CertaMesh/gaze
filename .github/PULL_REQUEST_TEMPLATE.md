@@ -17,8 +17,7 @@ CI runs the same set and will fail otherwise.
 - [ ] `cargo fmt --all` — formatted
 - [ ] `cargo clippy --workspace --all-targets --all-features -- -D warnings` — no warnings
 - [ ] `cargo test --workspace --all-features` — green
-- [ ] `cargo run -p xtask -- ci-feature-matrix` — every feature combination builds + tests
-- [ ] `xtask` behavioral gates pass — they enforce gaze's correctness invariants (audit-sink isolation, no-tenant-knowledge, bundle-tokenization drift, symmetric-potemkin, recognizer-composition, fixture-citation, readme-version); CONTRIBUTING.md lists each and what it guards.
+- [ ] `xtask` gates pass — run each `cargo run -p xtask -- <gate>` listed in CONTRIBUTING.md's "PR-checks ritual" (the feature-matrix + correctness-invariant gates: audit-sink isolation, no-tenant-knowledge, bundle-drift, symmetric-potemkin, …). CONTRIBUTING explains what each guards.
 - [ ] (If touching audit-sink boundaries) ran `dylint`: `gh workflow run dylint.yml`
 
 ## Fixtures & PII hygiene
