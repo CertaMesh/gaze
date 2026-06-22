@@ -169,6 +169,24 @@ fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
     builder.build().expect("pipeline")
 }
 
+fn email_global_spec() -> RecognizerSpec {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    core.recognizers
+        .into_iter()
+        .find(|recognizer| recognizer.id == "email.global")
+        .expect("email.global")
+}
+
+fn email_global_pipeline() -> Pipeline {
+    let email_spec = email_global_spec();
+    Pipeline::builder()
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .recognizer(regex_from_spec(&email_spec))
+        .build()
+        .expect("pipeline")
+}
+
 fn clean_text(pipeline: &Pipeline, session: &Session, input: &str, locale: LocaleTag) -> String {
     let clean = pipeline
         .pseudonymize_with_context(
@@ -189,6 +207,80 @@ fn restore_tokens(session: &Session, clean: &str) -> String {
             session.restore_strict(&captures[0]).expect("known token")
         })
         .to_string()
+}
+
+#[test]
+fn email_global_structural_tlds_tokenize_and_restore() {
+    let email_spec = email_global_spec();
+    assert_eq!(
+        email_spec
+            .validator
+            .as_ref()
+            .map(|validator| validator.kind.as_str()),
+        Some("email_rfc")
+    );
+    assert!(matches!(
+        ValidatorKind::EmailRfc.validate("missingdot@example"),
+        ValidatorOutcome::Fail { .. }
+    ));
+    let pipeline = email_global_pipeline();
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "Contacts ada@datapuente.es legal@medfleet.health k@kettenmacher.at b@bancodelnorte.mx user@northwave-labs.io ops@mail.corp.example.es";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+
+    for raw in [
+        "ada@datapuente.es",
+        "legal@medfleet.health",
+        "k@kettenmacher.at",
+        "b@bancodelnorte.mx",
+        "user@northwave-labs.io",
+        "ops@mail.corp.example.es",
+    ] {
+        assert!(!clean.contains(raw), "{raw} leaked in {clean}");
+    }
+    assert_eq!(clean.matches(":Email_").count(), 6, "{clean}");
+    assert_eq!(restore_tokens(&session, &clean), input);
+}
+
+#[test]
+fn email_global_overlapping_host_rival_keeps_email_span_intact() {
+    let email_spec = email_global_spec();
+    let host_rival = RegexDetector::with_rulepack_fields(
+        r"(?i)\b(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{2,}\b",
+        PiiClass::Custom("host".to_string()),
+        "test.host.rival",
+        vec![LocaleTag::Global],
+        0.99,
+        120,
+        "counter",
+        None,
+        Vec::new(),
+        None,
+        None,
+    )
+    .expect("host rival");
+    let pipeline = Pipeline::builder()
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(ClassRule::new(
+            PiiClass::Custom("host".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .recognizer(regex_from_spec(&email_spec))
+        .recognizer(host_rival)
+        .build()
+        .expect("pipeline");
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let input = "visit acme.es or mail ada@acme.es";
+
+    let clean = clean_text(&pipeline, &session, input, LocaleTag::EnUs);
+
+    assert!(!clean.contains("ada@acme.es"), "{clean}");
+    assert!(!clean.contains("ada@"), "{clean}");
+    assert!(clean.contains(":Email_1>"), "{clean}");
+    assert_custom_token(&clean, "host");
+    assert_eq!(restore_tokens(&session, &clean), input);
 }
 
 fn assert_custom_token(clean: &str, class: &str) {
