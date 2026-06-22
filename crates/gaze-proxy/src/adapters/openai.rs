@@ -42,6 +42,8 @@ impl ProviderAdapter for OpenAiAdapter {
             for (key, value) in root {
                 match key.as_str() {
                     "system" => push_string(&mut surfaces, "system", value),
+                    "prompt" => push_text_blocks(&mut surfaces, "prompt", value),
+                    "instructions" => push_string(&mut surfaces, "instructions", value),
                     "messages" => {
                         if let Value::Array(messages) = value {
                             for (index, message) in messages.iter_mut().enumerate() {
@@ -80,6 +82,11 @@ impl ProviderAdapter for OpenAiAdapter {
                                             "delta" => collect_message_surfaces(
                                                 &mut surfaces,
                                                 format!("choices[{index}].delta"),
+                                                choice_value,
+                                            ),
+                                            "text" => push_string(
+                                                &mut surfaces,
+                                                format!("choices[{index}].text"),
                                                 choice_value,
                                             ),
                                             _ => {}
