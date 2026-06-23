@@ -21,7 +21,7 @@ raw input or backtraces into caller logs.
 Install from crates.io:
 
 ```console
-$ cargo install gaze-cli --version 0.11.1
+$ cargo install gaze-cli --version 0.11.2
 ```
 
 Build from the workspace root:
@@ -110,7 +110,7 @@ The `mcp` feature embeds the rmcp stdio server into the `gaze` binary and
 registers `gaze-document` tools:
 
 ```console
-$ cargo install gaze-cli --version 0.11.1 --features mcp
+$ cargo install gaze-cli --version 0.11.2 --features mcp
 $ gaze mcp install --client=claude-code
 $ gaze mcp doctor
 ```

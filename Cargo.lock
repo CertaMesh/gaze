@@ -1418,7 +1418,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-cli"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "assert_cmd",
  "async-trait",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-pii"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1569,7 +1569,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-proxy"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "async-trait",
  "axum",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "aho-corasick",
  "candle-core",
@@ -1630,7 +1630,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-token-bridge"
-version = "0.11.1"
+version = "0.11.2"
 dependencies = [
  "async-trait",
  "chacha20poly1305",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-types"
-version = "0.11.0"
+version = "0.11.2"
 dependencies = [
  "phonenumber",
  "serde",
