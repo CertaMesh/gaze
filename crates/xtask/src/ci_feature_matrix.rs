@@ -106,6 +106,33 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "tokenbridge-no-raw-index"],
     },
     MatrixCommand {
+        label: "cargo build -p gaze-token-bridge --features os-keychain",
+        program: "cargo",
+        args: &[
+            "build",
+            "-p",
+            "gaze-token-bridge",
+            "--features",
+            "os-keychain",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo test -p gaze-token-bridge --features os-keychain",
+        program: "cargo",
+        args: &[
+            "test",
+            "-p",
+            "gaze-token-bridge",
+            "--features",
+            "os-keychain",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- tokenbridge-encrypted-index",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "tokenbridge-encrypted-index"],
+    },
+    MatrixCommand {
         label: "cargo run -p xtask -- symmetric-potemkin",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "symmetric-potemkin"],
@@ -144,6 +171,7 @@ const REQUIRED_NO_PHONE_PARSER_TEST_TARGET: &str = "no_phone_parser_fail_closed"
 const REQUIRED_NO_PHONE_PARSER_TEST_COUNT: &str = "running 2 tests";
 const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
 const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
+const REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK: &str = "tokenbridge-encrypted-index";
 const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
     label:
         "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
@@ -214,6 +242,17 @@ fn ensure_matrix_contract() -> Result<()> {
         bail!(
             "ci_feature_matrix: feature matrix must run xtask {}",
             REQUIRED_README_VERSION_CHECK_TASK
+        );
+    }
+
+    if !FEATURE_MATRIX.iter().any(|command| {
+        command
+            .args
+            .contains(&REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK)
+    }) {
+        bail!(
+            "ci_feature_matrix: feature matrix must run xtask {}",
+            REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK
         );
     }
 
