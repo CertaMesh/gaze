@@ -6,7 +6,11 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline};
+use clap::ValueEnum;
+use gaze::{
+    Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline,
+    SafetyNetFallback,
+};
 use gaze_recognizers::{LocaleAwareModelRegistry, RegexDetector};
 use gaze_token_bridge::adapter::CorpusIndexStore;
 use gaze_token_bridge::bridge::TokenBridge;
@@ -30,6 +34,7 @@ pub(crate) struct IngestArgs {
     pub(crate) dir: PathBuf,
     pub(crate) domain: String,
     pub(crate) index_path: Option<PathBuf>,
+    pub(crate) on_residual: OnResidual,
 }
 
 pub(crate) struct SearchArgs {
@@ -37,6 +42,21 @@ pub(crate) struct SearchArgs {
     pub(crate) domain: String,
     pub(crate) class: Option<PiiClass>,
     pub(crate) index_path: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub(crate) enum OnResidual {
+    Redact,
+    Strict,
+}
+
+impl OnResidual {
+    fn fallback(self) -> SafetyNetFallback {
+        match self {
+            Self::Redact => SafetyNetFallback::Redact,
+            Self::Strict => SafetyNetFallback::Strict,
+        }
+    }
 }
 
 pub(crate) fn parse_index_class(value: &str) -> Result<PiiClass, String> {
@@ -69,7 +89,8 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let projector = HmacDomainProjector::new(&registry);
-    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector).with_safety_net_resolution();
+    let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector)
+        .with_safety_net_resolution_fallback(args.on_residual.fallback());
 
     store.clear_domain(&args.domain);
     let mut ingested_files = 0_usize;
@@ -199,7 +220,9 @@ fn classes_for_docs(docs: &[SourceDoc]) -> Vec<PiiClass> {
 
 fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
     let mut builder = Pipeline::builder()
-        .detector(RegexDetector::emails().map_err(|_| index_failed())?)
+        .detector(RegexDetector::emails().map_err(|err| {
+            CliError::PolicyConfigDetail(format!("index email detector failed: {err}"))
+        })?)
         .detector(FieldEntityDetector);
     builder = builder.register_safety_net_registry(index_kiji_registry()?);
 
@@ -213,14 +236,16 @@ fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
     builder
         .rule(DefaultRule::new(Action::Preserve))
         .build()
-        .map_err(|_| index_failed())
+        .map_err(|err| CliError::PolicyConfigDetail(format!("index pipeline build failed: {err}")))
 }
 
 fn build_index_output_safety_net_pipeline() -> Result<Pipeline, CliError> {
     Pipeline::builder()
         .register_safety_net_registry(index_kiji_registry()?)
         .build()
-        .map_err(|_| index_failed())
+        .map_err(|err| {
+            CliError::PolicyConfigDetail(format!("index output safety-net build failed: {err}"))
+        })
 }
 
 fn index_kiji_registry() -> Result<LocaleAwareModelRegistry, CliError> {
@@ -279,14 +304,15 @@ fn local_principal(domain: &gaze_token_bridge::model::IndexDomain) -> Principal 
 
 fn map_bridge_error(err: BridgeError) -> CliError {
     match err {
+        BridgeError::Policy(message) => CliError::PolicyConfigDetail(message),
         BridgeError::Session(message)
             if message.contains("safety net") || message.contains("SafetyNet") =>
         {
-            CliError::SafetyNetFailure {
-                variant: "IndexSafetyNet",
-            }
+            CliError::SafetyNetConfigDetail(format!("index safety net failed closed: {message}"))
         }
-        _ => index_failed(),
+        BridgeError::Session(message) => {
+            CliError::PolicyConfigDetail(format!("index session failed closed: {message}"))
+        }
     }
 }
 
