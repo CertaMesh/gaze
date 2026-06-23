@@ -23,13 +23,13 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 gaze-audit = { path = "crates/gaze-audit", version = "0.11.0" }
-gaze = { path = "crates/gaze", version = "0.11.0", package = "gaze-pii" }
+gaze = { path = "crates/gaze", version = "0.11.2", package = "gaze-pii" }
 gaze-assembly = { path = "crates/gaze-assembly", version = "0.11.0" }
 gaze-mcp-bridge = { path = "crates/gaze-mcp-bridge", version = "0.11.0" }
 gaze-mcp-core = { path = "crates/gaze-mcp-core", version = "0.11.0" }
 gaze-mcp-rmcp = { path = "crates/gaze-mcp-rmcp", version = "0.11.0" }
-gaze-proxy = { path = "crates/gaze-proxy", version = "0.11.0" }
-gaze-types = { path = "crates/gaze-types", version = "0.11.0" }
+gaze-proxy = { path = "crates/gaze-proxy", version = "0.11.2" }
+gaze-types = { path = "crates/gaze-types", version = "0.11.2" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1" }
 serde_json = "1"

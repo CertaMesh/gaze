@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-06-23
+
+### Added
+
+- **`gaze setup` provides the one-command onboarding path.** The CLI now installs
+  and SHA-verifies the pinned NER model, writes a working policy, and runs a
+  doctor check so OPF model setup is verified or fails closed.
+- **Recognizer coverage expanded for outbound DLP workflows.** EU VAT IDs,
+  ISO-length-gated IBANs, and spaced international E.164 phone numbers are now
+  detected by default recognizers.
+
+### Changed
+
+- **Owner-side TokenBridge indexes are encrypted at rest.** Index files now use
+  ChaCha20-Poly1305 bound to a per-index id, with `GAZE_INDEX_KEY` and optional
+  `os-keychain` support, closing the plaintext PII and projection-key material
+  exposure from `0.11.1`.
+- **`gaze index ingest` defaults residual safety-net hits to redact.** The new
+  `--on-residual redact|strict` mode keeps real-document ingestion usable while
+  preserving the never-leak contract; operators can still opt into strict
+  fail-closed behavior.
+- **The README now leads with the one-command quickstart and the correct product
+  framing:** deterministic reversible PII pseudonymization and outbound DLP, not
+  guardrails, prompt-injection defense, or content-safety filtering.
+
+### Fixed
+
+- **`gaze index` now surfaces real error detail.** Failures that previously
+  collapsed into an opaque `PolicyConfig` error now preserve the actionable
+  underlying error.
+- **Detection NER now loads the Kiji bundle.** The loader accepts optional
+  `config.json` metadata and conditionally supplies `token_type_ids`, matching
+  the shipped Kiji model bundle.
+- **Proxy and structural recognizer hardening.** OpenAI proxy PII surfaces were
+  tightened, email structural TLD matching was corrected, and the new phone and
+  IBAN recognizers avoid the known false-negative shapes fixed in this release.
+
 ## [0.11.1] - 2026-06-20
 
 ### Added

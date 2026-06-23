@@ -1,6 +1,6 @@
 [package]
 name = "gaze-token-bridge"
-version = "0.11.1"
+version = "0.11.2"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -16,7 +16,7 @@ categories = ["text-processing"]
 # parallel track permitted to touch Cargo.toml). A new dependency that is not a
 # pure addition, or any edit by Track A, is a master decision (raise NEED DIRECTION).
 [dependencies]
-gaze = { path = "../gaze", package = "gaze-pii", version = "0.11.0" }
+gaze = { path = "../gaze", package = "gaze-pii", version = "0.11.2" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 chacha20poly1305 = { version = "0.10", features = ["std"] }
