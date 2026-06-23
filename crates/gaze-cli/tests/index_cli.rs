@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use assert_cmd::Command;
 
 const DOMAIN: &str = "local_owner/support_notes/v1";
+const INDEX_KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
 
 #[test]
 fn index_ingest_then_search_returns_tokenized_hits_without_raw_values() {
@@ -49,6 +50,14 @@ Second support note for search isolation.
         ingest.status.success(),
         "ingest failed: stderr={}",
         String::from_utf8_lossy(&ingest.stderr)
+    );
+    let index_bytes = fs::read(index.join("index.json")).expect("read encrypted index");
+    assert!(index_bytes.starts_with(b"GAZEIDX1"));
+    assert!(
+        !index_bytes
+            .windows(b"alice@example.invalid".len())
+            .any(|window| window == b"alice@example.invalid"),
+        "encrypted index contains raw fixture email"
     );
 
     let search = gaze_index_command(&fake_kiji)
@@ -152,6 +161,7 @@ fn index_ingest_fails_closed_without_kiji_model_or_command() {
 
     let ingest = Command::cargo_bin("gaze")
         .expect("gaze bin")
+        .env("GAZE_INDEX_KEY", INDEX_KEY)
         .env_remove("GAZE_KIJI_DISTILBERT_COMMAND")
         .env_remove("GAZE_KIJI_DISTILBERT_MODEL_DIR")
         .args(["index", "ingest"])
@@ -173,10 +183,44 @@ fn index_ingest_fails_closed_without_kiji_model_or_command() {
     );
 }
 
+#[test]
+fn index_ingest_surfaces_safety_net_failure_detail() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let fake_kiji = write_failing_fake_kiji(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(corpus.join("alpha.md"), "Email: alice@example.invalid\n").expect("write alpha");
+
+    let ingest = gaze_index_command(&fake_kiji)
+        .args(["index", "ingest"])
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+
+    assert!(
+        !ingest.status.success(),
+        "ingest unexpectedly succeeded with failing Kiji backend"
+    );
+    let stderr = String::from_utf8_lossy(&ingest.stderr);
+    assert!(stderr.contains("SafetyNetConfig"), "stderr={stderr}");
+    assert!(
+        stderr.contains("exit status: 13"),
+        "stderr omitted backend detail: {stderr}"
+    );
+    assert!(
+        !stderr.contains("alice@example.invalid"),
+        "stderr leaked raw fixture value: {stderr}"
+    );
+}
+
 fn gaze_index_command(fake_kiji: &Path) -> Command {
     let mut command = Command::cargo_bin("gaze").expect("gaze bin");
     command
         .env("GAZE_KIJI_DISTILBERT_COMMAND", fake_kiji)
+        .env("GAZE_INDEX_KEY", INDEX_KEY)
         .env_remove("GAZE_KIJI_DISTILBERT_MODEL_DIR");
     command
 }
@@ -219,5 +263,25 @@ print(json.dumps(spans))
         .permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script, permissions).expect("chmod fake kiji");
+    script
+}
+
+fn write_failing_fake_kiji(temp: &tempfile::TempDir) -> PathBuf {
+    let script = temp.path().join("failing-fake-kiji.py");
+    fs::write(
+        &script,
+        r#"#!/usr/bin/env python3
+import sys
+
+sys.stderr.write("fixture boot failure\n")
+sys.exit(13)
+"#,
+    )
+    .expect("write failing fake kiji");
+    let mut permissions = fs::metadata(&script)
+        .expect("failing fake kiji metadata")
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script, permissions).expect("chmod failing fake kiji");
     script
 }

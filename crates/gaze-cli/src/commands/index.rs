@@ -3,10 +3,14 @@
 //! Available only when the binary is built with `--features index`.
 
 use std::collections::BTreeSet;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gaze::{Action, ClassRule, DefaultRule, Detection, Detector, LocaleTag, PiiClass, Pipeline};
+use gaze::{
+    Action, ClassRule, DefaultRule, Detection, Detector, Error as GazeError, LocaleTag, PiiClass,
+    Pipeline,
+};
 use gaze_recognizers::{LocaleAwareModelRegistry, RegexDetector};
 use gaze_token_bridge::adapter::CorpusIndexStore;
 use gaze_token_bridge::bridge::TokenBridge;
@@ -67,7 +71,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
     let domain = registry
         .domain(&args.domain)
         .cloned()
-        .ok_or_else(index_failed)?;
+        .ok_or_else(|| index_policy_detail("index domain lookup", "domain is not registered"))?;
     let projector = HmacDomainProjector::new(&registry);
     let ingestor = CorpusIngestor::new(&pipeline, &domain, &projector).with_safety_net_resolution();
 
@@ -97,7 +101,7 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
     let domain = store
         .domain(&args.domain)
         .cloned()
-        .ok_or_else(index_failed)?;
+        .ok_or_else(|| index_policy_detail("index domain lookup", "domain is not registered"))?;
     let policy_json = store.policy_json().map_err(map_bridge_error)?;
     let output_safety_net = build_index_output_safety_net_pipeline()?;
     let mut bridge = TokenBridge::from_policy_json_and_store(&policy_json, store)
@@ -199,7 +203,10 @@ fn classes_for_docs(docs: &[SourceDoc]) -> Vec<PiiClass> {
 
 fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
     let mut builder = Pipeline::builder()
-        .detector(RegexDetector::emails().map_err(|_| index_failed())?)
+        .detector(
+            RegexDetector::emails()
+                .map_err(|err| index_policy_detail("index email detector build", err))?,
+        )
         .detector(FieldEntityDetector);
     builder = builder.register_safety_net_registry(index_kiji_registry()?);
 
@@ -213,14 +220,14 @@ fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
     builder
         .rule(DefaultRule::new(Action::Preserve))
         .build()
-        .map_err(|_| index_failed())
+        .map_err(|err| map_pipeline_error("index pipeline build", err))
 }
 
 fn build_index_output_safety_net_pipeline() -> Result<Pipeline, CliError> {
     Pipeline::builder()
         .register_safety_net_registry(index_kiji_registry()?)
         .build()
-        .map_err(|_| index_failed())
+        .map_err(|err| map_pipeline_error("index output safety-net pipeline build", err))
 }
 
 fn index_kiji_registry() -> Result<LocaleAwareModelRegistry, CliError> {
@@ -279,14 +286,11 @@ fn local_principal(domain: &gaze_token_bridge::model::IndexDomain) -> Principal 
 
 fn map_bridge_error(err: BridgeError) -> CliError {
     match err {
-        BridgeError::Session(message)
-            if message.contains("safety net") || message.contains("SafetyNet") =>
-        {
-            CliError::SafetyNetFailure {
-                variant: "IndexSafetyNet",
-            }
+        BridgeError::Policy(message) => index_policy_detail("index policy", message),
+        BridgeError::Session(message) if is_safety_net_message(&message) => {
+            index_safety_net_detail("index safety net", message)
         }
-        _ => index_failed(),
+        BridgeError::Session(message) => index_policy_detail("index session", message),
     }
 }
 
@@ -294,8 +298,25 @@ fn index_denied(reason: DenyReason) -> CliError {
     CliError::PolicyConfigDetail(format!("index search failed closed: {reason:?}"))
 }
 
-fn index_failed() -> CliError {
-    CliError::PolicyConfigDetail("index operation failed closed".to_string())
+fn map_pipeline_error(context: &'static str, err: GazeError) -> CliError {
+    let message = err.to_string();
+    if is_safety_net_message(&message) {
+        index_safety_net_detail(context, message)
+    } else {
+        index_policy_detail(context, message)
+    }
+}
+
+fn is_safety_net_message(message: &str) -> bool {
+    message.contains("safety net") || message.contains("SafetyNet")
+}
+
+fn index_policy_detail(context: &'static str, detail: impl fmt::Display) -> CliError {
+    CliError::PolicyConfigDetail(format!("{context} failed closed: {detail}"))
+}
+
+fn index_safety_net_detail(context: &'static str, detail: impl fmt::Display) -> CliError {
+    CliError::SafetyNetConfigDetail(format!("{context} failed closed: {detail}"))
 }
 
 struct SourceDoc {

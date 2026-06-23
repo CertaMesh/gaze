@@ -19,6 +19,7 @@ categories = ["text-processing"]
 gaze = { path = "../gaze", package = "gaze-pii", version = "0.11.0" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+chacha20poly1305 = { version = "0.10", features = ["std"] }
 hmac = "0.12"
 sha2 = "0.10"
 rand = "0.8"

@@ -9,6 +9,8 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce};
 use gaze::PiiClass;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -22,6 +24,7 @@ use crate::util::hex;
 
 pub const DEFAULT_INDEX_DIR: &str = ".gaze-index";
 pub const INDEX_FILE_NAME: &str = "index.json";
+pub const INDEX_KEY_ENV: &str = "GAZE_INDEX_KEY";
 pub const DEFAULT_DOMAIN_ID: &str = "local_owner/docs/v1";
 pub const LOCAL_PRINCIPAL_ID: &str = "local_owner";
 pub const LOCAL_ROLE: &str = "owner";
@@ -33,6 +36,9 @@ pub const LOCAL_PURPOSE: &str = "owner_lookup";
 
 const SCHEMA_VERSION: u32 = 1;
 const DEFAULT_MAX_RESULTS: usize = 20;
+const INDEX_MAGIC: &[u8] = b"GAZEIDX1";
+const INDEX_NONCE_LEN: usize = 12;
+const INDEX_AAD: &[u8] = b"gaze-token-bridge:index:v1";
 
 /// File-backed owner-side corpus index store.
 #[derive(Debug, Clone)]
@@ -46,13 +52,14 @@ impl FileCorpusIndexStore {
     pub fn load(dir: impl AsRef<Path>) -> Result<Self, BridgeError> {
         let dir = dir.as_ref().to_path_buf();
         let index_path = dir.join(INDEX_FILE_NAME);
-        let contents = fs::read_to_string(&index_path).map_err(|err| {
+        let encrypted = fs::read(&index_path).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to read owner-side index {}: {err}",
                 index_path.display()
             ))
         })?;
-        let file: PersistentIndexFile = serde_json::from_str(&contents).map_err(|err| {
+        let contents = decrypt_index_file(&encrypted)?;
+        let file: PersistentIndexFile = serde_json::from_slice(&contents).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to parse owner-side index {}: {err}",
                 index_path.display()
@@ -101,7 +108,8 @@ impl FileCorpusIndexStore {
         let tmp_path = self.dir.join(format!("{INDEX_FILE_NAME}.tmp"));
         let contents = serde_json::to_vec_pretty(&self.file)
             .map_err(|err| BridgeError::Policy(format!("failed to encode index: {err}")))?;
-        fs::write(&tmp_path, contents).map_err(|err| {
+        let encrypted = encrypt_index_file(&contents)?;
+        fs::write(&tmp_path, encrypted).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to write owner-side index {}: {err}",
                 tmp_path.display()
@@ -515,6 +523,110 @@ fn generated_projection_key() -> String {
     hex(&bytes)
 }
 
+fn encrypt_index_file(plaintext: &[u8]) -> Result<Vec<u8>, BridgeError> {
+    let key = index_key_from_env()?;
+    encrypt_index_bytes(&key, plaintext)
+}
+
+fn decrypt_index_file(bytes: &[u8]) -> Result<Vec<u8>, BridgeError> {
+    let key = index_key_from_env()?;
+    decrypt_index_bytes(&key, bytes)
+}
+
+fn encrypt_index_bytes(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, BridgeError> {
+    let cipher = ChaCha20Poly1305::new(key.into());
+    let mut nonce_bytes = [0_u8; INDEX_NONCE_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let ciphertext = cipher
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad: INDEX_AAD,
+            },
+        )
+        .map_err(|err| BridgeError::Policy(format!("failed to encrypt owner-side index: {err}")))?;
+
+    let mut out = Vec::with_capacity(INDEX_MAGIC.len() + INDEX_NONCE_LEN + ciphertext.len());
+    out.extend_from_slice(INDEX_MAGIC);
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
+    Ok(out)
+}
+
+fn decrypt_index_bytes(key: &[u8; 32], bytes: &[u8]) -> Result<Vec<u8>, BridgeError> {
+    if bytes.len() < INDEX_MAGIC.len() + INDEX_NONCE_LEN
+        || &bytes[..INDEX_MAGIC.len()] != INDEX_MAGIC
+    {
+        return Err(BridgeError::Policy(
+            "owner-side index has invalid encrypted header; re-ingest with GAZE_INDEX_KEY"
+                .to_string(),
+        ));
+    }
+
+    let nonce_start = INDEX_MAGIC.len();
+    let nonce_end = nonce_start + INDEX_NONCE_LEN;
+    let nonce = Nonce::from_slice(&bytes[nonce_start..nonce_end]);
+    let cipher = ChaCha20Poly1305::new(key.into());
+    cipher
+        .decrypt(
+            nonce,
+            Payload {
+                msg: &bytes[nonce_end..],
+                aad: INDEX_AAD,
+            },
+        )
+        .map_err(|err| BridgeError::Policy(format!("failed to decrypt owner-side index: {err}")))
+}
+
+fn index_key_from_env() -> Result<[u8; 32], BridgeError> {
+    let raw = std::env::var(INDEX_KEY_ENV).map_err(|_| {
+        BridgeError::Policy(format!(
+            "{INDEX_KEY_ENV} is required for encrypted owner-side index"
+        ))
+    })?;
+    parse_index_key(&raw)
+}
+
+fn parse_index_key(raw: &str) -> Result<[u8; 32], BridgeError> {
+    let trimmed = raw.trim();
+    if trimmed.len() == 64 && trimmed.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return decode_hex_key(trimmed);
+    }
+    if trimmed.len() == 32 {
+        let mut key = [0_u8; 32];
+        key.copy_from_slice(trimmed.as_bytes());
+        return Ok(key);
+    }
+    Err(BridgeError::Policy(format!(
+        "{INDEX_KEY_ENV} must be 32 bytes, provided as 64 hex chars or 32 ASCII chars"
+    )))
+}
+
+fn decode_hex_key(input: &str) -> Result<[u8; 32], BridgeError> {
+    let mut key = [0_u8; 32];
+    for (index, chunk) in input.as_bytes().chunks_exact(2).enumerate() {
+        let high = hex_nibble(chunk[0]).ok_or_else(invalid_index_key)?;
+        let low = hex_nibble(chunk[1]).ok_or_else(invalid_index_key)?;
+        key[index] = (high << 4) | low;
+    }
+    Ok(key)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn invalid_index_key() -> BridgeError {
+    BridgeError::Policy(format!("{INDEX_KEY_ENV} contains invalid hex"))
+}
+
 #[cfg(unix)]
 fn restrict_dir_permissions(path: &Path) -> Result<(), BridgeError> {
     use std::os::unix::fs::PermissionsExt;
@@ -547,4 +659,37 @@ fn restrict_file_permissions(path: &Path) -> Result<(), BridgeError> {
 #[cfg(not(unix))]
 fn restrict_file_permissions(_path: &Path) -> Result<(), BridgeError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encrypted_index_envelope_round_trips_with_magic() {
+        let key = [0x11; 32];
+        let plaintext = br#"{"schema_version":1}"#;
+        let encrypted = encrypt_index_bytes(&key, plaintext).expect("encrypt");
+
+        assert!(encrypted.starts_with(INDEX_MAGIC));
+        assert_ne!(&encrypted[INDEX_MAGIC.len()..], plaintext);
+        let decrypted = decrypt_index_bytes(&key, &encrypted).expect("decrypt");
+        assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn parse_index_key_accepts_openssl_hex() {
+        let key = parse_index_key(&"22".repeat(32)).expect("parse key");
+        assert_eq!(key, [0x22; 32]);
+    }
+
+    #[test]
+    fn decrypt_index_rejects_plain_json() {
+        let key = [0x33; 32];
+        let error = decrypt_index_bytes(&key, br#"{"schema_version":1}"#).expect_err("decrypt");
+
+        assert!(
+            matches!(error, BridgeError::Policy(message) if message.contains("encrypted header"))
+        );
+    }
 }

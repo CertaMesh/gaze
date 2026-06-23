@@ -165,6 +165,7 @@ The `index` feature adds a local owner-side search index for `.txt` and `.md`
 corpora:
 
 ```console
+$ export GAZE_INDEX_KEY=$(openssl rand -hex 32)
 $ cargo run -p gaze-cli --features index -- index ingest ./notes
 $ cargo run -p gaze-cli --features index -- index search "alice@example.invalid" --class email
 ```
@@ -172,8 +173,10 @@ $ cargo run -p gaze-cli --features index -- index search "alice@example.invalid"
 By default the index is written under `./.gaze-index/`, or the directory from
 `GAZE_INDEX_PATH`; `--index-path <dir>` overrides both. This store is sensitive
 owner-side material: it contains raw values needed for session-token translation,
-plus generated projection key material. It is gitignored. Encrypt-at-rest support
-is a follow-up; do not place `.gaze-index/` in shared or model-visible storage.
+plus generated projection key material. `GAZE_INDEX_KEY` must contain 32 bytes
+as 64 hex chars or 32 ASCII chars; the on-disk `index.json` is encrypted and
+starts with `GAZEIDX1`. Keep `.gaze-index/` gitignored and out of shared or
+model-visible storage.
 
 Search output is the bridge's agent-facing response: snippets contain only
 current-session tokens, never raw PII or index-domain aliases. The v1 ingest path
