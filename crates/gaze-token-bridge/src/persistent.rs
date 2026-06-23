@@ -43,6 +43,8 @@ const DEFAULT_MAX_RESULTS: usize = 20;
 const INDEX_MAGIC: &[u8] = b"GAZEIDX1";
 const INDEX_FORMAT_VERSION: u8 = 1;
 const NONCE_LEN: usize = 12;
+const AEAD_TAG_LEN: usize = 16;
+const INDEX_ID_LEN: usize = 16;
 const KEY_SOURCE_ENV: u8 = 1;
 const KEY_SOURCE_KEYCHAIN: u8 = 2;
 const KEY_ID_LEN_BYTES: usize = 2;
@@ -59,6 +61,7 @@ static KEYCHAIN_DISABLED_FOR_TESTS: std::sync::atomic::AtomicBool =
 pub struct FileCorpusIndexStore {
     dir: PathBuf,
     file: PersistentIndexFile,
+    index_id: [u8; INDEX_ID_LEN],
 }
 
 impl FileCorpusIndexStore {
@@ -73,9 +76,9 @@ impl FileCorpusIndexStore {
             ))
         })?;
         let envelope = parse_index_envelope(&contents)?;
-        let identity = index_identity(&dir)?;
         let key = resolve_index_key_for_load(&dir, &envelope)?;
-        let plaintext = decrypt_index_file(&key.material, &identity, &envelope)?;
+        let index_id = parsed_index_id(&envelope)?;
+        let plaintext = decrypt_index_file(&key.material, envelope.index_id, &envelope)?;
         let file: PersistentIndexFile = serde_json::from_slice(&plaintext).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to parse owner-side index {}: {err}",
@@ -88,7 +91,11 @@ impl FileCorpusIndexStore {
                 file.schema_version, SCHEMA_VERSION
             )));
         }
-        Ok(Self { dir, file })
+        Ok(Self {
+            dir,
+            file,
+            index_id,
+        })
     }
 
     /// Load an existing index, or create a new one with `domain_id` registered.
@@ -105,6 +112,7 @@ impl FileCorpusIndexStore {
             Self {
                 dir,
                 file: PersistentIndexFile::default(),
+                index_id: random_index_id(),
             }
         };
         store.ensure_domain(domain_id, classes)?;
@@ -122,14 +130,13 @@ impl FileCorpusIndexStore {
         restrict_dir_permissions(&self.dir)?;
 
         let key = resolve_index_key_for_save(&self.dir)?;
-        let identity = index_identity(&self.dir)?;
         let index_path = self.index_file_path();
         let tmp_path = self.dir.join(format!("{INDEX_FILE_NAME}.tmp"));
         let plaintext = Zeroizing::new(
             serde_json::to_vec_pretty(&self.file)
                 .map_err(|err| BridgeError::Policy(format!("failed to encode index: {err}")))?,
         );
-        let contents = encrypt_index_file(&key, &identity, plaintext.as_slice())?;
+        let contents = encrypt_index_file(&key, &self.index_id, plaintext.as_slice())?;
         let mut file = fs::File::create(&tmp_path).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to create owner-side index {}: {err}",
@@ -593,6 +600,7 @@ struct IndexKey {
 struct ParsedIndexEnvelope<'a> {
     source: IndexKeySource,
     key_id: &'a [u8],
+    index_id: &'a [u8],
     header: &'a [u8],
     nonce: &'a [u8],
     ciphertext: &'a [u8],
@@ -785,9 +793,24 @@ fn parse_index_envelope(bytes: &[u8]) -> Result<ParsedIndexEnvelope<'_>, BridgeE
     let source = IndexKeySource::from_tag(bytes[INDEX_MAGIC.len() + 1])?;
     let key_len_start = INDEX_MAGIC.len() + 2;
     let key_id_len = u16::from_be_bytes([bytes[key_len_start], bytes[key_len_start + 1]]) as usize;
-    let header_end = min_header_len + key_id_len;
-    let nonce_end = header_end + NONCE_LEN;
-    if bytes.len() < nonce_end {
+    let key_id_end = min_header_len
+        .checked_add(key_id_len)
+        .ok_or_else(|| index_crypto_error("owner-side index encrypted header is too large"))?;
+    let header_end = key_id_end
+        .checked_add(INDEX_ID_LEN)
+        .ok_or_else(|| index_crypto_error("owner-side index encrypted header is too large"))?;
+    if bytes.len() < header_end {
+        return Err(index_crypto_error(
+            "owner-side index has truncated encrypted header",
+        ));
+    }
+    let nonce_end = header_end
+        .checked_add(NONCE_LEN)
+        .ok_or_else(|| index_crypto_error("owner-side index encrypted body is too large"))?;
+    let min_body_end = nonce_end
+        .checked_add(AEAD_TAG_LEN)
+        .ok_or_else(|| index_crypto_error("owner-side index encrypted body is too large"))?;
+    if bytes.len() < min_body_end {
         return Err(index_crypto_error(
             "owner-side index has truncated encrypted body",
         ));
@@ -795,7 +818,8 @@ fn parse_index_envelope(bytes: &[u8]) -> Result<ParsedIndexEnvelope<'_>, BridgeE
 
     Ok(ParsedIndexEnvelope {
         source,
-        key_id: &bytes[min_header_len..header_end],
+        key_id: &bytes[min_header_len..key_id_end],
+        index_id: &bytes[key_id_end..header_end],
         header: &bytes[..header_end],
         nonce: &bytes[header_end..nonce_end],
         ciphertext: &bytes[nonce_end..],
@@ -804,10 +828,11 @@ fn parse_index_envelope(bytes: &[u8]) -> Result<ParsedIndexEnvelope<'_>, BridgeE
 
 fn encrypt_index_file(
     key: &IndexKey,
-    identity: &str,
+    index_id: &[u8; INDEX_ID_LEN],
     plaintext: &[u8],
 ) -> Result<Vec<u8>, BridgeError> {
-    let mut header = Vec::with_capacity(INDEX_MAGIC.len() + 1 + 1 + KEY_ID_LEN_BYTES);
+    let mut header =
+        Vec::with_capacity(INDEX_MAGIC.len() + 1 + 1 + KEY_ID_LEN_BYTES + INDEX_ID_LEN);
     header.extend_from_slice(INDEX_MAGIC);
     header.push(INDEX_FORMAT_VERSION);
     header.push(key.source.tag());
@@ -818,12 +843,13 @@ fn encrypt_index_file(
         .map_err(|_| index_crypto_error("owner-side index key id is too long"))?;
     header.extend_from_slice(&key_id_len.to_be_bytes());
     header.extend_from_slice(&key.key_id);
+    header.extend_from_slice(index_id);
 
     let cipher = ChaCha20Poly1305::new((&*key.material).into());
     let mut nonce_bytes = [0_u8; NONCE_LEN];
     rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
     let nonce = Nonce::from_slice(&nonce_bytes);
-    let aad = index_aad(identity, &header);
+    let aad = index_aad(index_id, &header);
     let ciphertext = cipher
         .encrypt(
             nonce,
@@ -843,12 +869,12 @@ fn encrypt_index_file(
 
 fn decrypt_index_file(
     key: &Zeroizing<[u8; 32]>,
-    identity: &str,
+    index_id: &[u8],
     envelope: &ParsedIndexEnvelope<'_>,
 ) -> Result<Zeroizing<Vec<u8>>, BridgeError> {
     let cipher = ChaCha20Poly1305::new((&**key).into());
     let nonce = Nonce::from_slice(envelope.nonce);
-    let aad = index_aad(identity, envelope.header);
+    let aad = index_aad(index_id, envelope.header);
     let plaintext = cipher
         .decrypt(
             nonce,
@@ -861,22 +887,31 @@ fn decrypt_index_file(
     Ok(Zeroizing::new(plaintext))
 }
 
-fn index_aad(identity: &str, header: &[u8]) -> Vec<u8> {
+fn index_aad(index_id: &[u8], header: &[u8]) -> Vec<u8> {
     let mut aad = Vec::with_capacity(
-        INDEX_AAD_CONTEXT.len() + DEFAULT_DOMAIN_ID.len() + identity.len() + header.len() + 3,
+        INDEX_AAD_CONTEXT.len() + DEFAULT_DOMAIN_ID.len() + index_id.len() + header.len() + 3,
     );
     aad.extend_from_slice(INDEX_AAD_CONTEXT);
     aad.push(0);
     aad.extend_from_slice(DEFAULT_DOMAIN_ID.as_bytes());
     aad.push(0);
-    aad.extend_from_slice(identity.as_bytes());
+    aad.extend_from_slice(index_id);
     aad.push(0);
     aad.extend_from_slice(header);
     aad
 }
 
-fn index_identity(dir: &Path) -> Result<String, BridgeError> {
-    Ok(format!("dir-sha256:{}", canonical_index_dir_sha256(dir)?))
+fn random_index_id() -> [u8; INDEX_ID_LEN] {
+    let mut index_id = [0_u8; INDEX_ID_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut index_id);
+    index_id
+}
+
+fn parsed_index_id(envelope: &ParsedIndexEnvelope<'_>) -> Result<[u8; INDEX_ID_LEN], BridgeError> {
+    envelope
+        .index_id
+        .try_into()
+        .map_err(|_| index_crypto_error("owner-side index id has invalid length"))
 }
 
 fn keychain_account_for_dir(dir: &Path) -> Result<String, BridgeError> {
@@ -1020,6 +1055,94 @@ mod tests {
     }
 
     #[test]
+    fn env_keyed_index_loads_after_directory_move_and_index_id_tamper_fails() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let source_dir = TestDir::new("portable-source");
+        let moved_dir = TestDir::new("portable-moved");
+        fs::remove_dir_all(moved_dir.path()).expect("remove placeholder moved dir");
+
+        let (store, _) = fixture_store(source_dir.path());
+        let expected = store.file.clone();
+        store.save().expect("save sealed index");
+        fs::rename(source_dir.path(), moved_dir.path()).expect("move sealed index dir");
+
+        let loaded = FileCorpusIndexStore::load(moved_dir.path())
+            .expect("env-keyed index must load after directory move");
+        assert_eq!(loaded.file, expected);
+
+        let index_path = moved_dir.path().join(INDEX_FILE_NAME);
+        let mut bytes = fs::read(&index_path).expect("read moved sealed index");
+        let index_id_offset = {
+            let envelope = parse_index_envelope(&bytes).expect("parse sealed envelope");
+            assert_eq!(envelope.source, IndexKeySource::Env);
+            assert_eq!(envelope.index_id.len(), INDEX_ID_LEN);
+            envelope.header.len() - INDEX_ID_LEN
+        };
+        bytes[index_id_offset] ^= 0x80;
+        fs::write(&index_path, bytes).expect("write index-id tamper");
+        let err = FileCorpusIndexStore::load(moved_dir.path())
+            .expect_err("tampered index id must fail closed");
+        assert!(format!("{err:?}").contains("failed closed"));
+    }
+
+    #[test]
+    fn magic_prefixed_truncated_index_fails_closed_for_header_and_body() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("truncated-magic");
+        let index_path = dir.path().join(INDEX_FILE_NAME);
+
+        fs::write(&index_path, INDEX_MAGIC).expect("write truncated header");
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("magic-prefixed truncated header must fail closed");
+        let text = format!("{err:?}");
+        assert!(text.contains("truncated encrypted header"));
+        assert!(text.contains("failed closed"));
+
+        let index_id = [0xAB; INDEX_ID_LEN];
+        let short_body = vec![0_u8; NONCE_LEN + AEAD_TAG_LEN - 1];
+        fs::write(
+            &index_path,
+            test_envelope_bytes(KEY_SOURCE_ENV, &[], &index_id, &short_body),
+        )
+        .expect("write truncated body");
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("magic-prefixed truncated body must fail closed");
+        let text = format!("{err:?}");
+        assert!(text.contains("truncated encrypted body"));
+        assert!(text.contains("failed closed"));
+    }
+
+    #[test]
+    fn keychain_identity_mismatch_fails_closed_without_live_keychain() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::remove();
+        let _keychain = KeychainDisabledGuard::new();
+        let dir = TestDir::new("keychain-identity-mismatch");
+        let index_path = dir.path().join(INDEX_FILE_NAME);
+        let index_id = [0xCD; INDEX_ID_LEN];
+        let sealed_body = vec![0_u8; NONCE_LEN + AEAD_TAG_LEN];
+
+        fs::write(
+            &index_path,
+            test_envelope_bytes(
+                KEY_SOURCE_KEYCHAIN,
+                b"owner-index-v1:not-this-index-dir",
+                &index_id,
+                &sealed_body,
+            ),
+        )
+        .expect("write keychain-source envelope");
+
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("keychain identity mismatch must fail before live keychain");
+        let text = format!("{err:?}");
+        assert!(text.contains("keychain identity mismatch"));
+        assert!(text.contains("failed closed"));
+    }
+
+    #[test]
     fn missing_or_empty_key_source_fails_closed_for_save_and_load() {
         let _lock = ENV_LOCK.lock().expect("env lock");
         let _keychain = KeychainDisabledGuard::new();
@@ -1127,6 +1250,26 @@ mod tests {
             !bytes.windows(needle.len()).any(|window| window == needle),
             "sealed index leaked {label}"
         );
+    }
+
+    fn test_envelope_bytes(
+        source: u8,
+        key_id: &[u8],
+        index_id: &[u8; INDEX_ID_LEN],
+        body: &[u8],
+    ) -> Vec<u8> {
+        let key_id_len: u16 = key_id.len().try_into().expect("test key id length");
+        let mut bytes = Vec::with_capacity(
+            INDEX_MAGIC.len() + 1 + 1 + KEY_ID_LEN_BYTES + key_id.len() + INDEX_ID_LEN + body.len(),
+        );
+        bytes.extend_from_slice(INDEX_MAGIC);
+        bytes.push(INDEX_FORMAT_VERSION);
+        bytes.push(source);
+        bytes.extend_from_slice(&key_id_len.to_be_bytes());
+        bytes.extend_from_slice(key_id);
+        bytes.extend_from_slice(index_id);
+        bytes.extend_from_slice(body);
+        bytes
     }
 
     struct IndexKeyEnvGuard;
