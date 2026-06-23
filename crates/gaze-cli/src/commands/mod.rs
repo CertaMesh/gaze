@@ -309,6 +309,9 @@ enum IndexCmd {
         /// Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`.
         #[arg(long)]
         index_path: Option<PathBuf>,
+        /// Safety-net fallback for residual suspects after resolver pass.
+        #[arg(long, value_enum, default_value_t = index::OnResidual::Redact)]
+        on_residual: index::OnResidual,
     },
     /// Search the local owner-side index by one entity.
     Search {
@@ -934,10 +937,12 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 dir,
                 domain,
                 index_path,
+                on_residual,
             } => index::ingest(index::IngestArgs {
                 dir,
                 domain,
                 index_path,
+                on_residual,
             }),
             IndexCmd::Search {
                 entity,

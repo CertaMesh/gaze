@@ -58,9 +58,12 @@ impl<'a> CorpusIngestor<'a> {
         }
     }
 
-    pub fn with_safety_net_resolution(mut self) -> Self {
-        self.safety_net_policy =
-            SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Strict);
+    pub fn with_safety_net_resolution(self) -> Self {
+        self.with_safety_net_resolution_fallback(SafetyNetFallback::Redact)
+    }
+
+    pub fn with_safety_net_resolution_fallback(mut self, fallback: SafetyNetFallback) -> Self {
+        self.safety_net_policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, fallback);
         self.reject_safety_net_suspects = false;
         self
     }
