@@ -12,6 +12,24 @@ Your agent never sees a real email, phone number, or order ID. Your server keeps
 
 **Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
 
+## Quickstart
+
+Three commands from zero to redacting real PII:
+
+```sh
+cargo install gaze-cli                                       # `gaze setup` ships in the default build
+gaze setup                                                   # installs + SHA-verifies the NER model, writes ./gaze.toml, runs a doctor check
+echo "Contact Markus Gottschaue at markus@acme.com" | gaze clean --policy gaze.toml
+```
+
+```text
+{"clean_text":"Contact <Name_1> at <Email_1>", "entries":[{"class":"Name",...},{"class":"Email",...}], ...}
+```
+
+`gaze setup` fetches the pinned, SHA-verified NER model into your data dir, generates a working policy wired to it, and confirms detection runs — no manual model fetch or flag-wrangling. The model never sees `Markus Gottschaue` or `markus@acme.com`; rehydrate the reply with `gaze restore` on the same per-session manifest.
+
+Want explicit control over rulepacks, locales, and the observer-only SafetyNet? See [Manual setup](#manual-setup).
+
 ## In production: AI support drafts that never see the customer
 
 [`CertaMesh/gaze-ghostwriter`](https://github.com/CertaMesh/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. The application does the data lookup. Gaze pseudonymizes the resulting context. The LLM only composes prose.
@@ -154,9 +172,9 @@ The MCP server exposes `gaze_read_file` and `gaze_read_text`, returning tokenize
 
 For library use, see [Use from Rust](#use-from-rust) below.
 
-## Quickstart
+## Manual setup
 
-A guided path from zero PII configuration to a working clean run, with optional NER and the observer-only SafetyNet layered on top. Each step is copy-paste-able against the current `gaze` CLI.
+Prefer to wire the policy by hand instead of `gaze setup`? This guided path goes from zero PII configuration to a working clean run, with optional NER and the observer-only SafetyNet layered on top. Each step is copy-paste-able against the current `gaze` CLI. (For the one-command path, see [Quickstart](#quickstart) above.)
 
 ### 1. First redact
 
