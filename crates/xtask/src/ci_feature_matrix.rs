@@ -106,6 +106,28 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "tokenbridge-no-raw-index"],
     },
     MatrixCommand {
+        label: "cargo build -p gaze-token-bridge --features os-keychain",
+        program: "cargo",
+        args: &[
+            "build",
+            "-p",
+            "gaze-token-bridge",
+            "--features",
+            "os-keychain",
+        ],
+    },
+    MatrixCommand {
+        label: "cargo test -p gaze-token-bridge --features os-keychain",
+        program: "cargo",
+        args: &[
+            "test",
+            "-p",
+            "gaze-token-bridge",
+            "--features",
+            "os-keychain",
+        ],
+    },
+    MatrixCommand {
         label: "cargo run -p xtask -- tokenbridge-encrypted-index",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "tokenbridge-encrypted-index"],

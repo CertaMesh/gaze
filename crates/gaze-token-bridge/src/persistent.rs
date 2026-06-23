@@ -23,7 +23,7 @@ use crate::error::BridgeError;
 use crate::model::{
     DomainId, IndexDomain, IndexEntity, IndexSearchHit, IndexedEntityRef, PolicyRule,
 };
-use crate::util::{hex, sha256_hex};
+use crate::util::hex;
 
 pub const DEFAULT_INDEX_DIR: &str = ".gaze-index";
 pub const INDEX_FILE_NAME: &str = "index.json";
@@ -49,10 +49,11 @@ const KEY_SOURCE_ENV: u8 = 1;
 const KEY_SOURCE_KEYCHAIN: u8 = 2;
 const KEY_ID_LEN_BYTES: usize = 2;
 const INDEX_KEY_ENV: &str = "GAZE_INDEX_KEY";
+#[cfg(feature = "os-keychain")]
 const KEYCHAIN_SERVICE: &str = "dev.empiretwo.gaze.index";
 const INDEX_AAD_CONTEXT: &[u8] = b"gaze-token-bridge-owner-index-v1";
 
-#[cfg(test)]
+#[cfg(all(test, feature = "os-keychain"))]
 static KEYCHAIN_DISABLED_FOR_TESTS: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
@@ -615,17 +616,28 @@ fn resolve_index_key_for_save(dir: &Path) -> Result<IndexKey, BridgeError> {
         });
     }
 
-    let account = keychain_account_for_dir(dir)?;
-    let material = match keychain_index_key(&account)? {
-        Some(material) => material,
-        None => generate_and_store_keychain_index_key(&account)?,
-    };
+    #[cfg(feature = "os-keychain")]
+    {
+        let account = keychain_account_for_dir(dir)?;
+        let material = match keychain_index_key(&account)? {
+            Some(material) => material,
+            None => generate_and_store_keychain_index_key(&account)?,
+        };
 
-    Ok(IndexKey {
-        source: IndexKeySource::Keychain,
-        key_id: account.into_bytes(),
-        material,
-    })
+        Ok(IndexKey {
+            source: IndexKeySource::Keychain,
+            key_id: account.into_bytes(),
+            material,
+        })
+    }
+
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        let _ = dir;
+        Err(index_crypto_error(
+            "no owner-side index key source available; set GAZE_INDEX_KEY, or build with --features os-keychain",
+        ))
+    }
 }
 
 fn resolve_index_key_for_load(
@@ -646,23 +658,35 @@ fn resolve_index_key_for_load(
         ));
     }
 
-    let key_id = std::str::from_utf8(envelope.key_id)
-        .map_err(|_| index_crypto_error("owner-side index key id is not utf-8"))?;
-    let expected_key_id = keychain_account_for_dir(dir)?;
-    if key_id != expected_key_id {
-        return Err(index_crypto_error(
-            "owner-side index keychain identity mismatch",
-        ));
+    #[cfg(feature = "os-keychain")]
+    {
+        let key_id = std::str::from_utf8(envelope.key_id)
+            .map_err(|_| index_crypto_error("owner-side index key id is not utf-8"))?;
+        let expected_key_id = keychain_account_for_dir(dir)?;
+        if key_id != expected_key_id {
+            return Err(index_crypto_error(
+                "owner-side index keychain identity mismatch",
+            ));
+        }
+
+        let material = keychain_index_key(key_id)?
+            .ok_or_else(|| index_crypto_error("owner-side index key missing from OS keychain"))?;
+
+        Ok(IndexKey {
+            source: IndexKeySource::Keychain,
+            key_id: envelope.key_id.to_vec(),
+            material,
+        })
     }
 
-    let material = keychain_index_key(key_id)?
-        .ok_or_else(|| index_crypto_error("owner-side index key missing from OS keychain"))?;
-
-    Ok(IndexKey {
-        source: IndexKeySource::Keychain,
-        key_id: envelope.key_id.to_vec(),
-        material,
-    })
+    #[cfg(not(feature = "os-keychain"))]
+    {
+        let _ = dir;
+        let _ = envelope.key_id;
+        Err(index_crypto_error(
+            "owner-side index was sealed with OS keychain, but this build lacks os-keychain; set GAZE_INDEX_KEY, or build with --features os-keychain",
+        ))
+    }
 }
 
 fn env_index_key() -> Result<Option<Zeroizing<[u8; 32]>>, BridgeError> {
@@ -714,6 +738,7 @@ fn hex_nibble(byte: u8) -> Option<u8> {
     }
 }
 
+#[cfg(feature = "os-keychain")]
 fn keychain_index_key(account: &str) -> Result<Option<Zeroizing<[u8; 32]>>, BridgeError> {
     if keychain_disabled_for_tests() {
         return Ok(None);
@@ -734,6 +759,7 @@ fn keychain_index_key(account: &str) -> Result<Option<Zeroizing<[u8; 32]>>, Brid
     }
 }
 
+#[cfg(feature = "os-keychain")]
 fn generate_and_store_keychain_index_key(
     account: &str,
 ) -> Result<Zeroizing<[u8; 32]>, BridgeError> {
@@ -758,12 +784,12 @@ fn generate_and_store_keychain_index_key(
     Ok(key)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "os-keychain"))]
 fn keychain_disabled_for_tests() -> bool {
     KEYCHAIN_DISABLED_FOR_TESTS.load(std::sync::atomic::Ordering::SeqCst)
 }
 
-#[cfg(not(test))]
+#[cfg(all(not(test), feature = "os-keychain"))]
 fn keychain_disabled_for_tests() -> bool {
     false
 }
@@ -914,6 +940,7 @@ fn parsed_index_id(envelope: &ParsedIndexEnvelope<'_>) -> Result<[u8; INDEX_ID_L
         .map_err(|_| index_crypto_error("owner-side index id has invalid length"))
 }
 
+#[cfg(feature = "os-keychain")]
 fn keychain_account_for_dir(dir: &Path) -> Result<String, BridgeError> {
     Ok(format!(
         "owner-index-v1:{}",
@@ -921,6 +948,7 @@ fn keychain_account_for_dir(dir: &Path) -> Result<String, BridgeError> {
     ))
 }
 
+#[cfg(feature = "os-keychain")]
 fn canonical_index_dir_sha256(dir: &Path) -> Result<String, BridgeError> {
     let canonical = dir.canonicalize().map_err(|err| {
         BridgeError::Policy(format!(
@@ -928,7 +956,9 @@ fn canonical_index_dir_sha256(dir: &Path) -> Result<String, BridgeError> {
             dir.display()
         ))
     })?;
-    Ok(sha256_hex(canonical.to_string_lossy().as_ref()))
+    Ok(crate::util::sha256_hex(
+        canonical.to_string_lossy().as_ref(),
+    ))
 }
 
 fn index_crypto_error(message: impl Into<String>) -> BridgeError {
@@ -978,7 +1008,7 @@ mod tests {
 
     use super::*;
     use crate::model::{IndexEntity, IndexedEntityRef};
-    use crate::util::domain_alias;
+    use crate::util::{domain_alias, sha256_hex};
 
     const RAW_EMAIL: &str = "alice@example.invalid";
     const RAW_NAME: &str = "Dr. Schmidt";
@@ -1115,6 +1145,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "os-keychain")]
     fn keychain_identity_mismatch_fails_closed_without_live_keychain() {
         let _lock = ENV_LOCK.lock().expect("env lock");
         let _env = IndexKeyEnvGuard::remove();
@@ -1296,6 +1327,7 @@ mod tests {
 
     impl KeychainDisabledGuard {
         fn new() -> Self {
+            #[cfg(feature = "os-keychain")]
             KEYCHAIN_DISABLED_FOR_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
             Self
         }
@@ -1303,6 +1335,7 @@ mod tests {
 
     impl Drop for KeychainDisabledGuard {
         fn drop(&mut self) {
+            #[cfg(feature = "os-keychain")]
             KEYCHAIN_DISABLED_FOR_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
         }
     }

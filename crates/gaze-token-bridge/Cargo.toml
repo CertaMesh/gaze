@@ -21,7 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 chacha20poly1305 = { version = "0.10", features = ["std"] }
 hmac = "0.12"
-keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "linux-native"], optional = true }
 sha2 = "0.10"
 rand = "0.8"
 zeroize = "1"
@@ -36,3 +36,4 @@ async-trait = { version = "0.1", optional = true }
 # bridge runtime never compile the MCP surface (north-star axis 5 — ergonomics)
 # and the default graph stays unchanged.
 chokepoint = ["dep:gaze-mcp-core", "dep:async-trait"]
+os-keychain = ["dep:keyring"]

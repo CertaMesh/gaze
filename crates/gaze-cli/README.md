@@ -173,10 +173,11 @@ By default the index is written under `./.gaze-index/`, or the directory from
 `GAZE_INDEX_PATH`; `--index-path <dir>` overrides both. This store is sensitive
 owner-side material: it contains raw values needed for session-token translation,
 plus generated projection key material. The index file is encrypted at rest with
-ChaCha20-Poly1305. Key resolution is fail-closed: `GAZE_INDEX_KEY` must contain a
-32-byte key as 64 hex characters for headless/agent runs; otherwise the CLI uses
-the OS keychain for the local index path and generates that key on first save. If
-neither source is available, `gaze index` refuses to read or write the index, and
+ChaCha20-Poly1305. Default key resolution is fail-closed and headless-friendly:
+`GAZE_INDEX_KEY` must contain a 32-byte key as 64 hex characters. Building with
+`--features os-keychain` adds OS keychain fallback for desktop use: macOS
+Keychain, Windows Credential Manager, or Linux kernel keyutils (no dbus). If no
+key source is available, `gaze index` refuses to read or write the index, and
 legacy plaintext `index.json` files are not loaded.
 
 Search output is the bridge's agent-facing response: snippets contain only
