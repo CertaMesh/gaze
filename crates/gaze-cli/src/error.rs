@@ -20,6 +20,7 @@ pub(crate) enum CliError {
     SafetyNetFailure {
         variant: &'static str,
     },
+    SetupDetail(String),
     /// Pinned-artifact contract violation: a safety-net backend was requested
     /// but its required artifact (e.g. `SHA256SUMS`) is missing on disk. Exit
     /// code 2 (config-level error). Axis-1 fail-closed: never silent-disable.
@@ -59,6 +60,7 @@ impl CliError {
             | Self::PolicyConfigDetail(_)
             | Self::PolicySchemaUnsupported { .. }
             | Self::AuditPurgeIso8601 { .. }
+            | Self::SetupDetail(_)
             | Self::SafetyNetArtifactMissing { .. } => 2,
             Self::SafetyNetConfigDetail(_) | Self::SafetyNetFailure { .. } => 3,
             Self::UnknownToken { .. }
@@ -87,6 +89,7 @@ impl CliError {
             Self::PolicySchemaUnsupported { .. } => "PolicySchemaUnsupported",
             Self::SafetyNetConfigDetail(_) => "SafetyNetConfig",
             Self::SafetyNetFailure { .. } => "SafetyNet",
+            Self::SetupDetail(_) => "Setup",
             Self::SafetyNetArtifactMissing { .. } => "SafetyNetArtifactMissing",
             Self::AuditPurgeIso8601 { .. } => "AuditPurgeIso8601",
             Self::UnknownToken { .. } => "UnknownToken",
@@ -122,6 +125,16 @@ impl CliError {
                 )
             }
             Self::PolicyConfigDetail(detail) | Self::SafetyNetConfigDetail(detail) => {
+                let detail = serde_json::to_string(detail)
+                    .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
+                eprintln!(
+                    r#"{{"error":"{}","exit":{},"detail":{}}}"#,
+                    self.variant_name(),
+                    self.exit_code(),
+                    detail
+                )
+            }
+            Self::SetupDetail(detail) => {
                 let detail = serde_json::to_string(detail)
                     .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
                 eprintln!(

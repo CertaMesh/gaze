@@ -10,6 +10,8 @@ mod mcp;
 #[cfg(feature = "proxy")]
 mod proxy;
 mod restore;
+#[cfg(feature = "setup")]
+mod setup;
 
 use std::path::PathBuf;
 
@@ -237,6 +239,27 @@ enum Cmd {
     Audit {
         #[command(subcommand)]
         command: AuditCmd,
+    },
+    /// Install the pinned local model, write a working policy, and run a doctor check.
+    ///
+    /// Requires the binary to be built with `--features setup`.
+    #[cfg(feature = "setup")]
+    Setup {
+        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available.
+        #[arg(long, value_enum)]
+        safety_net: Option<setup::SetupSafetyNet>,
+        /// Policy TOML output path. Defaults to ./gaze.toml.
+        #[arg(long)]
+        policy_out: Option<PathBuf>,
+        /// Model install directory. Defaults to $XDG_DATA_HOME/gaze/models/kiji-distilbert.
+        #[arg(long)]
+        model_dir: Option<PathBuf>,
+        /// Use defaults without prompts.
+        #[arg(long)]
+        non_interactive: bool,
+        /// Overwrite an existing policy file.
+        #[arg(long)]
+        force: bool,
     },
     /// Ingest a document (PNG/JPG/PDF) into a split SafeBundle.
     ///
@@ -917,6 +940,20 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 }),
             },
         },
+        #[cfg(feature = "setup")]
+        Cmd::Setup {
+            safety_net,
+            policy_out,
+            model_dir,
+            non_interactive,
+            force,
+        } => setup::run(setup::Args {
+            safety_net,
+            policy_out,
+            model_dir,
+            non_interactive,
+            force,
+        }),
         #[cfg(feature = "document")]
         Cmd::Document { command } => match command {
             DocumentCmd::Clean {
