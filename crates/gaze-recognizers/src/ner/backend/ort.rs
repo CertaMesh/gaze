@@ -17,6 +17,7 @@ pub(crate) struct OrtBackend {
     labels: LabelMap,
     id2label: Vec<String>,
     source: String,
+    has_token_type_ids: bool,
 }
 
 impl OrtBackend {
@@ -31,12 +32,17 @@ impl OrtBackend {
             .map_err(|err| NerLoadError::Runtime(err.to_string()))?
             .commit_from_file(model_dir.join(MODEL_FILE))
             .map_err(|err| NerLoadError::Runtime(err.to_string()))?;
+        let has_token_type_ids = session
+            .inputs()
+            .iter()
+            .any(|input| input.name() == "token_type_ids");
         Ok(Self {
             tokenizer,
             session: Mutex::new(session),
             labels,
             id2label,
             source: format!("ner/{}", NerBackendKind::Ort.as_str()),
+            has_token_type_ids,
         })
     }
 }
@@ -64,21 +70,26 @@ impl NerBackend for OrtBackend {
         let seq_len = ids.len();
         let input_ids: Vec<i64> = ids.iter().map(|&v| v as i64).collect();
         let attn_mask: Vec<i64> = attention.iter().map(|&v| v as i64).collect();
-        let token_type: Vec<i64> = vec![0i64; seq_len];
-
         let shape = [1usize, seq_len];
         let input_ids_tensor = ort::value::Tensor::from_array((shape, input_ids))
             .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
         let attn_tensor = ort::value::Tensor::from_array((shape, attn_mask))
             .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
-        let type_tensor = ort::value::Tensor::from_array((shape, token_type))
-            .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
-
-        let inputs = ort::inputs![
-            "input_ids" => input_ids_tensor,
-            "attention_mask" => attn_tensor,
-            "token_type_ids" => type_tensor,
-        ];
+        let inputs = if self.has_token_type_ids {
+            let token_type: Vec<i64> = vec![0i64; seq_len];
+            let type_tensor = ort::value::Tensor::from_array((shape, token_type))
+                .map_err(|err| NerRuntimeError::InputTensor(err.to_string()))?;
+            ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attn_tensor,
+                "token_type_ids" => type_tensor,
+            ]
+        } else {
+            ort::inputs![
+                "input_ids" => input_ids_tensor,
+                "attention_mask" => attn_tensor,
+            ]
+        };
 
         let mut session = self
             .session

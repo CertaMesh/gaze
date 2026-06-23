@@ -217,6 +217,52 @@ mod tests {
     }
 
     #[test]
+    fn verify_artifacts_accepts_pinned_kiji_label_manifest_without_config() {
+        let dir = tempdir().unwrap();
+        let path = dir.path();
+        let model_bytes = b"fake-onnx";
+        let tokenizer_bytes = b"fake-tokenizer";
+        let labels = br#"{
+  "schema_version": 1,
+  "source": "onnx-community/distilbert-NER-ONNX",
+  "source_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
+  "labels": [
+    {"id": "person", "upstream": ["B-PER", "I-PER"]},
+    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
+    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
+    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
+  ]
+}
+"#;
+        write(&path.join(MODEL_FILE), model_bytes);
+        write(&path.join(TOKENIZER_FILE), tokenizer_bytes);
+        write(&path.join(LABELS_FILE), labels);
+        let sums = format!(
+            "{}  {}\n{}  {}\n{}  {}\n",
+            sha256_hex(labels),
+            LABELS_FILE,
+            sha256_hex(model_bytes),
+            MODEL_FILE,
+            sha256_hex(tokenizer_bytes),
+            TOKENIZER_FILE,
+        );
+        write(&path.join(CHECKSUMS_FILE), sums.as_bytes());
+
+        let verified = NerDetector::verify_artifacts(path).expect("verify kiji manifest");
+
+        assert_eq!(
+            verified.recognizer_model_id,
+            "onnx-community-distilbert-ner-onnx"
+        );
+        assert_eq!(
+            verified.recognizer_model_version,
+            "v3a19fe9404a4469d91aa3d551558a97f68872f67"
+        );
+        assert_eq!(verified.id2label[1], "B-PER");
+        assert!(verified.labels.get("B-ORG").is_some());
+    }
+
+    #[test]
     fn verify_artifacts_honors_explicit_backend_selection() {
         let dir = setup_dir_with_config(
             br#"{"backend":"gliner","id2label":{"0":"O","1":"B-PER","2":"I-PER"}}"#,
