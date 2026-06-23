@@ -245,7 +245,7 @@ enum Cmd {
     /// Requires the binary to be built with `--features setup`.
     #[cfg(feature = "setup")]
     Setup {
-        /// Safety-net setup path. OPF currently falls back to NER until a bundled model is pinned.
+        /// Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available.
         #[arg(long, value_enum)]
         safety_net: Option<setup::SetupSafetyNet>,
         /// Policy TOML output path. Defaults to ./gaze.toml.

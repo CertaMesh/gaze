@@ -21,6 +21,7 @@ use crate::pipeline::build::{
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
 const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
+const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
 const KIJI_LABELS_JSON: &str = r#"{
   "schema_version": 1,
   "source": "onnx-community/distilbert-NER-ONNX",
@@ -69,7 +70,8 @@ struct SetupSummary {
     policy_path: PathBuf,
     model_status: ModelInstallStatus,
     doctor_clean_text: String,
-    opf_notice: Option<&'static str>,
+    opf_notice: Option<String>,
+    opf_checkpoint: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -86,6 +88,24 @@ struct ArtifactManifest<'a> {
     bundle_sha256: &'a str,
     sha256sums: Cow<'a, str>,
     files: Vec<ArtifactFile<'a>>,
+}
+
+#[derive(Clone, Copy)]
+struct OpfBundlePin<'a> {
+    bundle_sha256: Option<&'a str>,
+    required_artifacts: &'a [&'a str],
+}
+
+#[derive(Clone, Copy)]
+struct OpfSetup<'a> {
+    pin: OpfBundlePin<'a>,
+    checkpoint_dir: Option<&'a Path>,
+}
+
+#[derive(Debug)]
+struct ResolvedSetupSafetyNet {
+    opf_notice: Option<String>,
+    opf_checkpoint: Option<PathBuf>,
 }
 
 fn kiji_manifest() -> ArtifactManifest<'static> {
@@ -118,14 +138,19 @@ fn run_with_manifest(
     args: Args,
     manifest: &ArtifactManifest<'_>,
 ) -> Result<SetupSummary, CliError> {
-    let (safety_net, opf_notice) = resolve_safety_net(args.safety_net, args.non_interactive)?;
+    run_with_manifest_and_opf(args, manifest, default_opf_setup())
+}
+
+fn run_with_manifest_and_opf(
+    args: Args,
+    manifest: &ArtifactManifest<'_>,
+    opf_setup: OpfSetup<'_>,
+) -> Result<SetupSummary, CliError> {
+    let resolved_safety_net = resolve_safety_net(args.safety_net, args.non_interactive, opf_setup)?;
     let model_dir = resolve_model_dir(args.model_dir)?;
     let policy_path = resolve_policy_path(args.policy_out, args.non_interactive)?;
 
-    let model_status = match safety_net {
-        SetupSafetyNet::Ner => ensure_model_dir(manifest, &model_dir)?,
-        SetupSafetyNet::Opf => unreachable!("OPF setup falls back to NER until a bundle is pinned"),
-    };
+    let model_status = ensure_model_dir(manifest, &model_dir)?;
 
     write_policy(&policy_path, &model_dir, args.force)?;
     let doctor_clean_text = doctor_check(&policy_path)?;
@@ -135,14 +160,16 @@ fn run_with_manifest(
         policy_path,
         model_status,
         doctor_clean_text,
-        opf_notice,
+        opf_notice: resolved_safety_net.opf_notice,
+        opf_checkpoint: resolved_safety_net.opf_checkpoint,
     })
 }
 
 fn resolve_safety_net(
     requested: Option<SetupSafetyNet>,
     non_interactive: bool,
-) -> Result<(SetupSafetyNet, Option<&'static str>), CliError> {
+    opf_setup: OpfSetup<'_>,
+) -> Result<ResolvedSetupSafetyNet, CliError> {
     let choice = match requested {
         Some(choice) => choice,
         None if non_interactive => SetupSafetyNet::Ner,
@@ -150,26 +177,118 @@ fn resolve_safety_net(
     };
 
     match choice {
-        SetupSafetyNet::Ner => Ok((SetupSafetyNet::Ner, None)),
-        SetupSafetyNet::Opf => {
-            let notice = if opf_bundle_is_pinned() {
-                "OPF safety-net setup is not wired yet; defaulting to NER."
-            } else {
-                "OPF safety-net: coming soon; defaulting to NER."
-            };
-            Ok((SetupSafetyNet::Ner, Some(notice)))
-        }
+        SetupSafetyNet::Ner => Ok(ResolvedSetupSafetyNet {
+            opf_notice: None,
+            opf_checkpoint: None,
+        }),
+        SetupSafetyNet::Opf => resolve_opf_safety_net(opf_setup),
     }
 }
 
 #[cfg(feature = "safety-net-openai")]
-fn opf_bundle_is_pinned() -> bool {
-    gaze_recognizers::safety_net::openai_filter::OPF_CHECKPOINT_BUNDLE_SHA256.is_some()
+fn opf_bundle_pin() -> OpfBundlePin<'static> {
+    use gaze_recognizers::safety_net::openai_filter::{
+        OPF_CHECKPOINT_BUNDLE_SHA256, REQUIRED_OPF_ARTIFACTS,
+    };
+
+    OpfBundlePin {
+        bundle_sha256: OPF_CHECKPOINT_BUNDLE_SHA256,
+        required_artifacts: REQUIRED_OPF_ARTIFACTS,
+    }
 }
 
 #[cfg(not(feature = "safety-net-openai"))]
-fn opf_bundle_is_pinned() -> bool {
-    false
+fn opf_bundle_pin() -> OpfBundlePin<'static> {
+    OpfBundlePin {
+        bundle_sha256: None,
+        required_artifacts: &[],
+    }
+}
+
+fn default_opf_setup() -> OpfSetup<'static> {
+    OpfSetup {
+        pin: opf_bundle_pin(),
+        checkpoint_dir: None,
+    }
+}
+
+fn resolve_opf_safety_net(opf_setup: OpfSetup<'_>) -> Result<ResolvedSetupSafetyNet, CliError> {
+    if opf_setup.pin.bundle_sha256.is_none() {
+        return Ok(ResolvedSetupSafetyNet {
+            opf_notice: Some(OPF_UNPINNED_NOTICE.to_string()),
+            opf_checkpoint: None,
+        });
+    }
+
+    let checkpoint_dir = match opf_setup.checkpoint_dir {
+        Some(path) => absolute_path(path)?,
+        None => default_opf_checkpoint_dir()?,
+    };
+
+    verify_opf_checkpoint_dir(opf_setup.pin, &checkpoint_dir).map_err(|err| {
+        setup_error(format!(
+            "OPF checkpoint is pinned but not installed or SHA-valid at `{}`: {err}. Run `opf download` then re-run `gaze setup --safety-net opf`.",
+            checkpoint_dir.display()
+        ))
+    })?;
+
+    Ok(ResolvedSetupSafetyNet {
+        opf_notice: None,
+        opf_checkpoint: Some(canonical_or_absolute(&checkpoint_dir)?),
+    })
+}
+
+fn default_opf_checkpoint_dir() -> Result<PathBuf, CliError> {
+    if let Some(checkpoint) = std::env::var_os("OPF_CHECKPOINT").filter(|value| !value.is_empty()) {
+        return absolute_path(&PathBuf::from(checkpoint));
+    }
+    let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
+        return Err(setup_error(
+            "cannot resolve OPF checkpoint dir: neither OPF_CHECKPOINT nor HOME is set; run `opf download` then re-run `gaze setup --safety-net opf`".to_string(),
+        ));
+    };
+    Ok(PathBuf::from(home).join(".opf").join("privacy_filter"))
+}
+
+fn verify_opf_checkpoint_dir(pin: OpfBundlePin<'_>, checkpoint_dir: &Path) -> Result<(), String> {
+    let expected_bundle_sha256 = pin
+        .bundle_sha256
+        .ok_or_else(|| "OPF checkpoint bundle SHA is not pinned".to_string())?;
+    if pin.required_artifacts.is_empty() {
+        return Err("OPF required artifact list is empty".to_string());
+    }
+    if !checkpoint_dir.is_dir() {
+        return Err(format!("`{}` is not a directory", checkpoint_dir.display()));
+    }
+    reject_symlink(checkpoint_dir)?;
+
+    let mut manifest = String::new();
+    for required in pin.required_artifacts {
+        if required.contains('/') || required.contains('\\') {
+            return Err("OPF required artifacts must be flat file names".to_string());
+        }
+        let artifact = checkpoint_dir.join(required);
+        reject_symlink(&artifact)?;
+        let bytes = fs::read(&artifact)
+            .map_err(|err| format!("cannot read `{}`: {err}", artifact.display()))?;
+        push_sha256sum_manifest_line(&mut manifest, required, &hex_sha256(&bytes));
+    }
+
+    let actual_bundle_sha256 = hex_sha256(manifest.as_bytes());
+    if actual_bundle_sha256 != expected_bundle_sha256 {
+        return Err(format!(
+            "checkpoint bundle SHA mismatch: expected {} got {}",
+            expected_bundle_sha256, actual_bundle_sha256
+        ));
+    }
+    Ok(())
+}
+
+fn push_sha256sum_manifest_line(manifest: &mut String, artifact: &str, sha256: &str) {
+    manifest.push_str(sha256);
+    manifest.push_str("  ");
+    manifest.push_str(artifact);
+    manifest.push('\n');
 }
 
 fn prompt_safety_net() -> Result<SetupSafetyNet, CliError> {
@@ -633,8 +752,11 @@ fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
 }
 
 fn print_summary(summary: &SetupSummary) {
-    if let Some(notice) = summary.opf_notice {
+    if let Some(notice) = &summary.opf_notice {
         println!("{notice}");
+    }
+    if let Some(opf_checkpoint) = &summary.opf_checkpoint {
+        println!("OPF checkpoint verified {}", opf_checkpoint.display());
     }
     match summary.model_status {
         ModelInstallStatus::AlreadyPresent => {
@@ -657,6 +779,13 @@ fn print_summary(summary: &SetupSummary) {
         "For gaze index: export GAZE_KIJI_DISTILBERT_MODEL_DIR={}",
         shell_quote_path(&summary.model_dir)
     );
+    if let Some(opf_checkpoint) = &summary.opf_checkpoint {
+        println!(
+            "For OPF safety net: gaze clean --policy {} --safety-net openai-filter --opf-command $(command -v opf) --opf-checkpoint {}",
+            shell_quote_path(&summary.policy_path),
+            shell_quote_path(opf_checkpoint)
+        );
+    }
     println!("For gaze index: set GAZE_INDEX_KEY before ingest/search.");
 }
 
@@ -846,14 +975,15 @@ mod tests {
     }
 
     #[test]
-    fn opf_request_defaults_to_ner_until_bundle_exists() {
+    fn opf_request_defaults_to_ner_when_bundle_is_not_pinned() {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
+        let checkpoint_dir = dir.path().join("missing-opf");
         let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
         write_manifest_dir(&manifest, &model_dir);
 
-        let summary = run_with_manifest(
+        let summary = run_with_manifest_and_opf(
             Args {
                 safety_net: Some(SetupSafetyNet::Opf),
                 policy_out: Some(policy_out),
@@ -862,14 +992,148 @@ mod tests {
                 force: false,
             },
             &manifest,
+            OpfSetup {
+                pin: OpfBundlePin {
+                    bundle_sha256: None,
+                    required_artifacts: &[],
+                },
+                checkpoint_dir: Some(&checkpoint_dir),
+            },
         )
         .unwrap();
 
+        assert_eq!(summary.opf_notice.as_deref(), Some(OPF_UNPINNED_NOTICE));
+        assert_eq!(summary.opf_checkpoint, None);
+        assert_eq!(summary.model_status, ModelInstallStatus::AlreadyPresent);
+    }
+
+    #[test]
+    fn opf_request_with_pinned_bundle_requires_downloaded_checkpoint() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        let checkpoint_dir = dir.path().join("missing-opf");
+        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
+        write_manifest_dir(&manifest, &model_dir);
+
+        let err = run_with_manifest_and_opf(
+            Args {
+                safety_net: Some(SetupSafetyNet::Opf),
+                policy_out: Some(policy_out.clone()),
+                model_dir: Some(model_dir),
+                non_interactive: true,
+                force: false,
+            },
+            &manifest,
+            OpfSetup {
+                pin: OpfBundlePin {
+                    bundle_sha256: Some(
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    ),
+                    required_artifacts: &["config.json"],
+                },
+                checkpoint_dir: Some(&checkpoint_dir),
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("Run `opf download`") && detail.contains("not installed or SHA-valid"))
+        );
+        assert!(!policy_out.exists());
+    }
+
+    #[test]
+    fn opf_request_with_sha_mismatched_checkpoint_fails_closed() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        let checkpoint_dir = dir.path().join("privacy_filter");
+        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
+        write_manifest_dir(&manifest, &model_dir);
+        fs::create_dir_all(&checkpoint_dir).unwrap();
+        fs::write(checkpoint_dir.join("config.json"), b"corrupt").unwrap();
+
+        let err = run_with_manifest_and_opf(
+            Args {
+                safety_net: Some(SetupSafetyNet::Opf),
+                policy_out: Some(policy_out.clone()),
+                model_dir: Some(model_dir),
+                non_interactive: true,
+                force: false,
+            },
+            &manifest,
+            OpfSetup {
+                pin: OpfBundlePin {
+                    bundle_sha256: Some(
+                        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    ),
+                    required_artifacts: &["config.json"],
+                },
+                checkpoint_dir: Some(&checkpoint_dir),
+            },
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("checkpoint bundle SHA mismatch") && detail.contains("Run `opf download`"))
+        );
+        assert!(!policy_out.exists());
+    }
+
+    #[test]
+    fn opf_request_with_pinned_checkpoint_records_runtime_wiring() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        let checkpoint_dir = dir.path().join("privacy_filter");
+        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
+        write_manifest_dir(&manifest, &model_dir);
+        fs::create_dir_all(&checkpoint_dir).unwrap();
+        fs::write(checkpoint_dir.join("config.json"), b"{}").unwrap();
+        fs::write(
+            checkpoint_dir.join("model.safetensors"),
+            b"synthetic-weights",
+        )
+        .unwrap();
+
+        let mut opf_manifest = String::new();
+        push_sha256sum_manifest_line(&mut opf_manifest, "config.json", &hex_sha256(b"{}"));
+        push_sha256sum_manifest_line(
+            &mut opf_manifest,
+            "model.safetensors",
+            &hex_sha256(b"synthetic-weights"),
+        );
+        let bundle_sha = hex_sha256(opf_manifest.as_bytes());
+
+        let summary = run_with_manifest_and_opf(
+            Args {
+                safety_net: Some(SetupSafetyNet::Opf),
+                policy_out: Some(policy_out.clone()),
+                model_dir: Some(model_dir),
+                non_interactive: true,
+                force: false,
+            },
+            &manifest,
+            OpfSetup {
+                pin: OpfBundlePin {
+                    bundle_sha256: Some(Box::leak(bundle_sha.into_boxed_str())),
+                    required_artifacts: &["config.json", "model.safetensors"],
+                },
+                checkpoint_dir: Some(&checkpoint_dir),
+            },
+        )
+        .unwrap();
+
+        let checkpoint_dir = checkpoint_dir.canonicalize().unwrap();
+        assert_eq!(summary.opf_notice, None);
         assert_eq!(
-            summary.opf_notice,
-            Some("OPF safety-net: coming soon; defaulting to NER.")
+            summary.opf_checkpoint.as_deref(),
+            Some(checkpoint_dir.as_path())
         );
         assert_eq!(summary.model_status, ModelInstallStatus::AlreadyPresent);
+        let policy = fs::read_to_string(policy_out).unwrap();
+        assert!(policy.contains("[ner]"));
     }
 
     #[test]
