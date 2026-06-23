@@ -20,6 +20,7 @@ $ cargo run -p xtask -- readme-version-check
 $ cargo run -p xtask -- dylint-gate
 $ cargo run -p xtask -- safety-net-sanity
 $ cargo run -p xtask -- tokenbridge-no-raw-index
+$ cargo run -p xtask -- tokenbridge-encrypted-index
 ```
 
 The gate list lives in [`crates/xtask/src/main.rs`](../../../crates/xtask/src/main.rs).
@@ -44,6 +45,7 @@ The canonical active-gate roster is the "Active xtask gates" line in
 | `DylintGate` | `cargo run -p xtask -- dylint-gate` | Added in v0.5 Phase D. Verifies the `lint/dylint/ui` fixture corpus has exactly 18 enabled fixtures, rejects `*_disabled.rs`, and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. The lint is `GAZE_MODULE_ISOLATION`, the canonical rustc-resolver-based gate for audit-sink protected-path isolation. |
 | `SafetyNetSanity` | `cargo run -p xtask -- safety-net-sanity` | Added in v0.6.0 alongside the Pass-3 SafetyNet runtime (todo #65). Behavioral gate over the OpenAI-filter SafetyNet path: lists and runs the `mock_safety_net`, `openai_filter_subprocess`, and `context_sensitivity_v0_6` recognizer-suite tests. Cargo invocations are batched per Phase 7.3 of #65. |
 | `TokenbridgeNoRawIndex` | `cargo run -p xtask -- tokenbridge-no-raw-index` | Added for Index/Search Track B3. Builds a real `gaze::Pipeline`, runs TokenBridge `CorpusIngestor` over synthetic fixture PII, inserts through `InMemoryCorpusIndexStore`, searches through `InMemorySearchAdapter`, and fails if stored snippets or searchable output paths retain raw PII or current-session gaze tokens. |
+| `TokenbridgeEncryptedIndex` | `cargo run -p xtask -- tokenbridge-encrypted-index` | Runs the TokenBridge persistent-index behavioral test that saves a synthetic owner-side index, asserts the file is AEAD-sealed, and fails if raw PII or projection key material appears on disk. |
 
 ## dylint_gate
 
@@ -122,6 +124,20 @@ $ cargo run -p xtask -- tokenbridge-no-raw-index --inject-adversarial-raw-snippe
 The gate must exit non-zero and name the synthetic fixture value plus the
 stored/search output surface that leaked it. The positive path still runs the
 real TokenBridge ingest, index-store, and search-adapter flow.
+
+## tokenbridge-encrypted-index self-test
+
+Run the gate:
+
+```console
+$ cargo run -p xtask -- tokenbridge-encrypted-index
+```
+
+The gate lists and runs
+`persistent::tests::saved_index_file_is_aead_sealed_and_omits_plaintext`.
+That test writes a real persistent owner-side index with `GAZE_INDEX_KEY`, then
+reads the raw `index.json` bytes and fails if the file lacks the AEAD magic or
+contains the synthetic raw values or generated projection key material.
 
 ## fixture_citation_lint self-test + limitation
 

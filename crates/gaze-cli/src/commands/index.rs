@@ -86,7 +86,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
     println!("entities: {}", store.entity_count_for_domain(&args.domain));
     println!("domain: {}", args.domain);
     println!("index: {}", store.index_file_path().display());
-    println!("owner-side index is sensitive; raw values live only in this local store");
+    println!("owner-side index is sensitive; raw values live only in this encrypted local store");
 
     Ok(())
 }

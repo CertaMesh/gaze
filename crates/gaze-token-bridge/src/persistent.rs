@@ -1,24 +1,29 @@
 //! Owner-side persistent corpus index.
 //!
 //! This module deliberately uses private serde structs instead of deriving
-//! serialization for [`crate::model::IndexSearchHit`]. Raw values are persisted
-//! only inside the owner-side index file; the frozen agent-visible contract stays
+//! serialization for [`crate::model::IndexSearchHit`]. Raw values are sealed
+//! inside the owner-side index file; the frozen agent-visible contract stays
 //! non-serializable for owner hits.
 
 use std::collections::HashSet;
+use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use chacha20poly1305::aead::{Aead, Payload};
+use chacha20poly1305::{ChaCha20Poly1305, KeyInit, Nonce};
 use gaze::PiiClass;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::adapter::CorpusIndexStore;
 use crate::error::BridgeError;
 use crate::model::{
     DomainId, IndexDomain, IndexEntity, IndexSearchHit, IndexedEntityRef, PolicyRule,
 };
-use crate::util::hex;
+use crate::util::{hex, sha256_hex};
 
 pub const DEFAULT_INDEX_DIR: &str = ".gaze-index";
 pub const INDEX_FILE_NAME: &str = "index.json";
@@ -33,6 +38,21 @@ pub const LOCAL_PURPOSE: &str = "owner_lookup";
 
 const SCHEMA_VERSION: u32 = 1;
 const DEFAULT_MAX_RESULTS: usize = 20;
+// follow-up: extract shared gaze-crypto seal/open with gaze-mcp-bridge session storage.
+// follow-up: add explicit owner-side index key rotation without plaintext migration fallback.
+const INDEX_MAGIC: &[u8] = b"GAZEIDX1";
+const INDEX_FORMAT_VERSION: u8 = 1;
+const NONCE_LEN: usize = 12;
+const KEY_SOURCE_ENV: u8 = 1;
+const KEY_SOURCE_KEYCHAIN: u8 = 2;
+const KEY_ID_LEN_BYTES: usize = 2;
+const INDEX_KEY_ENV: &str = "GAZE_INDEX_KEY";
+const KEYCHAIN_SERVICE: &str = "dev.empiretwo.gaze.index";
+const INDEX_AAD_CONTEXT: &[u8] = b"gaze-token-bridge-owner-index-v1";
+
+#[cfg(test)]
+static KEYCHAIN_DISABLED_FOR_TESTS: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// File-backed owner-side corpus index store.
 #[derive(Debug, Clone)]
@@ -46,13 +66,17 @@ impl FileCorpusIndexStore {
     pub fn load(dir: impl AsRef<Path>) -> Result<Self, BridgeError> {
         let dir = dir.as_ref().to_path_buf();
         let index_path = dir.join(INDEX_FILE_NAME);
-        let contents = fs::read_to_string(&index_path).map_err(|err| {
+        let contents = fs::read(&index_path).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to read owner-side index {}: {err}",
                 index_path.display()
             ))
         })?;
-        let file: PersistentIndexFile = serde_json::from_str(&contents).map_err(|err| {
+        let envelope = parse_index_envelope(&contents)?;
+        let identity = index_identity(&dir)?;
+        let key = resolve_index_key_for_load(&dir, &envelope)?;
+        let plaintext = decrypt_index_file(&key.material, &identity, &envelope)?;
+        let file: PersistentIndexFile = serde_json::from_slice(&plaintext).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to parse owner-side index {}: {err}",
                 index_path.display()
@@ -97,17 +121,35 @@ impl FileCorpusIndexStore {
         })?;
         restrict_dir_permissions(&self.dir)?;
 
+        let key = resolve_index_key_for_save(&self.dir)?;
+        let identity = index_identity(&self.dir)?;
         let index_path = self.index_file_path();
         let tmp_path = self.dir.join(format!("{INDEX_FILE_NAME}.tmp"));
-        let contents = serde_json::to_vec_pretty(&self.file)
-            .map_err(|err| BridgeError::Policy(format!("failed to encode index: {err}")))?;
-        fs::write(&tmp_path, contents).map_err(|err| {
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec_pretty(&self.file)
+                .map_err(|err| BridgeError::Policy(format!("failed to encode index: {err}")))?,
+        );
+        let contents = encrypt_index_file(&key, &identity, plaintext.as_slice())?;
+        let mut file = fs::File::create(&tmp_path).map_err(|err| {
+            BridgeError::Policy(format!(
+                "failed to create owner-side index {}: {err}",
+                tmp_path.display()
+            ))
+        })?;
+        restrict_file_permissions(&tmp_path)?;
+        file.write_all(&contents).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to write owner-side index {}: {err}",
                 tmp_path.display()
             ))
         })?;
-        restrict_file_permissions(&tmp_path)?;
+        file.sync_all().map_err(|err| {
+            BridgeError::Policy(format!(
+                "failed to sync owner-side index {}: {err}",
+                tmp_path.display()
+            ))
+        })?;
+        drop(file);
         fs::rename(&tmp_path, &index_path).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to replace owner-side index {}: {err}",
@@ -239,7 +281,7 @@ impl CorpusIndexStore for FileCorpusIndexStore {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct PersistentIndexFile {
     schema_version: u32,
     domains: Vec<IndexDomain>,
@@ -260,20 +302,20 @@ impl Default for PersistentIndexFile {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredProjectionKey {
     key_id: String,
     material: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredIndexEntry {
     domain_id: DomainId,
     fingerprint_hex: String,
     hit: StoredHit,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredHit {
     doc_id: String,
     snippet: String,
@@ -304,7 +346,7 @@ impl From<&IndexSearchHit> for StoredHit {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct StoredEntity {
     class: PiiClass,
     raw_value: String,
@@ -512,7 +554,353 @@ fn projection_key_id(domain_id: &str, keys: &[StoredProjectionKey]) -> String {
 fn generated_projection_key() -> String {
     let mut bytes = [0_u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
-    hex(&bytes)
+    let material = hex(&bytes);
+    bytes.zeroize();
+    material
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IndexKeySource {
+    Env,
+    Keychain,
+}
+
+impl IndexKeySource {
+    fn tag(self) -> u8 {
+        match self {
+            Self::Env => KEY_SOURCE_ENV,
+            Self::Keychain => KEY_SOURCE_KEYCHAIN,
+        }
+    }
+
+    fn from_tag(tag: u8) -> Result<Self, BridgeError> {
+        match tag {
+            KEY_SOURCE_ENV => Ok(Self::Env),
+            KEY_SOURCE_KEYCHAIN => Ok(Self::Keychain),
+            _ => Err(index_crypto_error(
+                "owner-side index has invalid encrypted key source",
+            )),
+        }
+    }
+}
+
+struct IndexKey {
+    source: IndexKeySource,
+    key_id: Vec<u8>,
+    material: Zeroizing<[u8; 32]>,
+}
+
+struct ParsedIndexEnvelope<'a> {
+    source: IndexKeySource,
+    key_id: &'a [u8],
+    header: &'a [u8],
+    nonce: &'a [u8],
+    ciphertext: &'a [u8],
+}
+
+fn resolve_index_key_for_save(dir: &Path) -> Result<IndexKey, BridgeError> {
+    if let Some(material) = env_index_key()? {
+        return Ok(IndexKey {
+            source: IndexKeySource::Env,
+            key_id: Vec::new(),
+            material,
+        });
+    }
+
+    let account = keychain_account_for_dir(dir)?;
+    let material = match keychain_index_key(&account)? {
+        Some(material) => material,
+        None => generate_and_store_keychain_index_key(&account)?,
+    };
+
+    Ok(IndexKey {
+        source: IndexKeySource::Keychain,
+        key_id: account.into_bytes(),
+        material,
+    })
+}
+
+fn resolve_index_key_for_load(
+    dir: &Path,
+    envelope: &ParsedIndexEnvelope<'_>,
+) -> Result<IndexKey, BridgeError> {
+    if let Some(material) = env_index_key()? {
+        return Ok(IndexKey {
+            source: IndexKeySource::Env,
+            key_id: Vec::new(),
+            material,
+        });
+    }
+
+    if envelope.source == IndexKeySource::Env {
+        return Err(index_crypto_error(
+            "owner-side index was sealed with GAZE_INDEX_KEY, but GAZE_INDEX_KEY is missing",
+        ));
+    }
+
+    let key_id = std::str::from_utf8(envelope.key_id)
+        .map_err(|_| index_crypto_error("owner-side index key id is not utf-8"))?;
+    let expected_key_id = keychain_account_for_dir(dir)?;
+    if key_id != expected_key_id {
+        return Err(index_crypto_error(
+            "owner-side index keychain identity mismatch",
+        ));
+    }
+
+    let material = keychain_index_key(key_id)?
+        .ok_or_else(|| index_crypto_error("owner-side index key missing from OS keychain"))?;
+
+    Ok(IndexKey {
+        source: IndexKeySource::Keychain,
+        key_id: envelope.key_id.to_vec(),
+        material,
+    })
+}
+
+fn env_index_key() -> Result<Option<Zeroizing<[u8; 32]>>, BridgeError> {
+    let mut raw = match env::var(INDEX_KEY_ENV) {
+        Ok(raw) => raw,
+        Err(env::VarError::NotPresent) => return Ok(None),
+        Err(env::VarError::NotUnicode(_)) => {
+            return Err(index_crypto_error(
+                "GAZE_INDEX_KEY must be valid utf-8 hex for a 32-byte key",
+            ));
+        }
+    };
+
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        raw.zeroize();
+        return Err(index_crypto_error(
+            "GAZE_INDEX_KEY is empty; refusing plaintext owner-side index I/O",
+        ));
+    }
+
+    let parsed = parse_hex_key(trimmed);
+    raw.zeroize();
+    parsed.map(|key| Some(Zeroizing::new(key)))
+}
+
+fn parse_hex_key(raw: &str) -> Result<[u8; 32], BridgeError> {
+    if raw.len() != 64 || !raw.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(index_crypto_error(
+            "GAZE_INDEX_KEY must be 64 hex characters for a 32-byte key",
+        ));
+    }
+
+    let mut out = [0_u8; 32];
+    for (index, chunk) in raw.as_bytes().chunks_exact(2).enumerate() {
+        let high = hex_nibble(chunk[0]).expect("checked hex high nibble");
+        let low = hex_nibble(chunk[1]).expect("checked hex low nibble");
+        out[index] = (high << 4) | low;
+    }
+    Ok(out)
+}
+
+fn hex_nibble(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn keychain_index_key(account: &str) -> Result<Option<Zeroizing<[u8; 32]>>, BridgeError> {
+    if keychain_disabled_for_tests() {
+        return Ok(None);
+    }
+
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
+        .map_err(|err| index_crypto_error(format!("OS keychain unavailable: {err}")))?;
+    match entry.get_password() {
+        Ok(mut secret) => {
+            let parsed = parse_hex_key(secret.trim());
+            secret.zeroize();
+            parsed.map(|key| Some(Zeroizing::new(key)))
+        }
+        Err(keyring::Error::NoEntry) => Ok(None),
+        Err(err) => Err(index_crypto_error(format!(
+            "failed to read owner-side index key from OS keychain: {err}"
+        ))),
+    }
+}
+
+fn generate_and_store_keychain_index_key(
+    account: &str,
+) -> Result<Zeroizing<[u8; 32]>, BridgeError> {
+    if keychain_disabled_for_tests() {
+        return Err(index_crypto_error(
+            "no owner-side index key source available; set GAZE_INDEX_KEY or enable OS keychain",
+        ));
+    }
+
+    let entry = keyring::Entry::new(KEYCHAIN_SERVICE, account)
+        .map_err(|err| index_crypto_error(format!("OS keychain unavailable: {err}")))?;
+    let mut key = Zeroizing::new([0_u8; 32]);
+    rand::rngs::OsRng.fill_bytes(&mut key[..]);
+    let mut secret = hex(&key[..]);
+    let stored = entry.set_password(&secret);
+    secret.zeroize();
+    stored.map_err(|err| {
+        index_crypto_error(format!(
+            "failed to store owner-side index key in OS keychain: {err}"
+        ))
+    })?;
+    Ok(key)
+}
+
+#[cfg(test)]
+fn keychain_disabled_for_tests() -> bool {
+    KEYCHAIN_DISABLED_FOR_TESTS.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+#[cfg(not(test))]
+fn keychain_disabled_for_tests() -> bool {
+    false
+}
+
+fn parse_index_envelope(bytes: &[u8]) -> Result<ParsedIndexEnvelope<'_>, BridgeError> {
+    if bytes.len() < INDEX_MAGIC.len() || &bytes[..INDEX_MAGIC.len()] != INDEX_MAGIC {
+        return Err(BridgeError::Policy(
+            "unsupported plaintext owner-side index; rebuild with `gaze index ingest ...`"
+                .to_string(),
+        ));
+    }
+
+    let min_header_len = INDEX_MAGIC.len() + 1 + 1 + KEY_ID_LEN_BYTES;
+    if bytes.len() < min_header_len {
+        return Err(index_crypto_error(
+            "owner-side index has truncated encrypted header",
+        ));
+    }
+
+    let version = bytes[INDEX_MAGIC.len()];
+    if version != INDEX_FORMAT_VERSION {
+        return Err(index_crypto_error(
+            "owner-side index has unsupported encrypted format version",
+        ));
+    }
+
+    let source = IndexKeySource::from_tag(bytes[INDEX_MAGIC.len() + 1])?;
+    let key_len_start = INDEX_MAGIC.len() + 2;
+    let key_id_len = u16::from_be_bytes([bytes[key_len_start], bytes[key_len_start + 1]]) as usize;
+    let header_end = min_header_len + key_id_len;
+    let nonce_end = header_end + NONCE_LEN;
+    if bytes.len() < nonce_end {
+        return Err(index_crypto_error(
+            "owner-side index has truncated encrypted body",
+        ));
+    }
+
+    Ok(ParsedIndexEnvelope {
+        source,
+        key_id: &bytes[min_header_len..header_end],
+        header: &bytes[..header_end],
+        nonce: &bytes[header_end..nonce_end],
+        ciphertext: &bytes[nonce_end..],
+    })
+}
+
+fn encrypt_index_file(
+    key: &IndexKey,
+    identity: &str,
+    plaintext: &[u8],
+) -> Result<Vec<u8>, BridgeError> {
+    let mut header = Vec::with_capacity(INDEX_MAGIC.len() + 1 + 1 + KEY_ID_LEN_BYTES);
+    header.extend_from_slice(INDEX_MAGIC);
+    header.push(INDEX_FORMAT_VERSION);
+    header.push(key.source.tag());
+    let key_id_len: u16 = key
+        .key_id
+        .len()
+        .try_into()
+        .map_err(|_| index_crypto_error("owner-side index key id is too long"))?;
+    header.extend_from_slice(&key_id_len.to_be_bytes());
+    header.extend_from_slice(&key.key_id);
+
+    let cipher = ChaCha20Poly1305::new((&*key.material).into());
+    let mut nonce_bytes = [0_u8; NONCE_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_bytes);
+    let nonce = Nonce::from_slice(&nonce_bytes);
+    let aad = index_aad(identity, &header);
+    let ciphertext = cipher
+        .encrypt(
+            nonce,
+            Payload {
+                msg: plaintext,
+                aad: &aad,
+            },
+        )
+        .map_err(|err| index_crypto_error(format!("owner-side index encrypt failed: {err}")))?;
+
+    let mut out = Vec::with_capacity(header.len() + NONCE_LEN + ciphertext.len());
+    out.extend_from_slice(&header);
+    out.extend_from_slice(&nonce_bytes);
+    out.extend_from_slice(&ciphertext);
+    Ok(out)
+}
+
+fn decrypt_index_file(
+    key: &Zeroizing<[u8; 32]>,
+    identity: &str,
+    envelope: &ParsedIndexEnvelope<'_>,
+) -> Result<Zeroizing<Vec<u8>>, BridgeError> {
+    let cipher = ChaCha20Poly1305::new((&**key).into());
+    let nonce = Nonce::from_slice(envelope.nonce);
+    let aad = index_aad(identity, envelope.header);
+    let plaintext = cipher
+        .decrypt(
+            nonce,
+            Payload {
+                msg: envelope.ciphertext,
+                aad: &aad,
+            },
+        )
+        .map_err(|err| index_crypto_error(format!("owner-side index decrypt failed: {err}")))?;
+    Ok(Zeroizing::new(plaintext))
+}
+
+fn index_aad(identity: &str, header: &[u8]) -> Vec<u8> {
+    let mut aad = Vec::with_capacity(
+        INDEX_AAD_CONTEXT.len() + DEFAULT_DOMAIN_ID.len() + identity.len() + header.len() + 3,
+    );
+    aad.extend_from_slice(INDEX_AAD_CONTEXT);
+    aad.push(0);
+    aad.extend_from_slice(DEFAULT_DOMAIN_ID.as_bytes());
+    aad.push(0);
+    aad.extend_from_slice(identity.as_bytes());
+    aad.push(0);
+    aad.extend_from_slice(header);
+    aad
+}
+
+fn index_identity(dir: &Path) -> Result<String, BridgeError> {
+    Ok(format!("dir-sha256:{}", canonical_index_dir_sha256(dir)?))
+}
+
+fn keychain_account_for_dir(dir: &Path) -> Result<String, BridgeError> {
+    Ok(format!(
+        "owner-index-v1:{}",
+        canonical_index_dir_sha256(dir)?
+    ))
+}
+
+fn canonical_index_dir_sha256(dir: &Path) -> Result<String, BridgeError> {
+    let canonical = dir.canonicalize().map_err(|err| {
+        BridgeError::Policy(format!(
+            "failed to resolve owner-side index dir {}: {err}",
+            dir.display()
+        ))
+    })?;
+    Ok(sha256_hex(canonical.to_string_lossy().as_ref()))
+}
+
+fn index_crypto_error(message: impl Into<String>) -> BridgeError {
+    BridgeError::Policy(format!(
+        "owner-side encrypted index failed closed: {}",
+        message.into()
+    ))
 }
 
 #[cfg(unix)]
@@ -547,4 +935,257 @@ fn restrict_file_permissions(path: &Path) -> Result<(), BridgeError> {
 #[cfg(not(unix))]
 fn restrict_file_permissions(_path: &Path) -> Result<(), BridgeError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+    use crate::model::{IndexEntity, IndexedEntityRef};
+    use crate::util::domain_alias;
+
+    const RAW_EMAIL: &str = "alice@example.invalid";
+    const RAW_NAME: &str = "Dr. Schmidt";
+    const TEST_KEY_1: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const TEST_KEY_2: &str = "2222222222222222222222222222222222222222222222222222222222222222";
+
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn saved_index_file_is_aead_sealed_and_omits_plaintext() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("round-trip");
+        let (store, projection_material) = fixture_store(dir.path());
+        let expected = store.file.clone();
+
+        store.save().expect("save sealed index");
+
+        let bytes = fs::read(store.index_file_path()).expect("read sealed index");
+        assert!(bytes.starts_with(INDEX_MAGIC));
+        assert_bytes_do_not_contain(&bytes, RAW_EMAIL.as_bytes(), "raw email");
+        assert_bytes_do_not_contain(&bytes, RAW_NAME.as_bytes(), "raw name");
+        assert_bytes_do_not_contain(
+            &bytes,
+            projection_material.as_bytes(),
+            "projection key material",
+        );
+
+        let loaded = FileCorpusIndexStore::load(dir.path()).expect("load sealed index");
+        assert_eq!(loaded.file, expected);
+    }
+
+    #[test]
+    fn wrong_key_fails_closed_without_plaintext_in_error() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("wrong-key");
+        let (store, projection_material) = fixture_store(dir.path());
+        store.save().expect("save sealed index");
+
+        std::env::set_var(INDEX_KEY_ENV, TEST_KEY_2);
+        let err = FileCorpusIndexStore::load(dir.path()).expect_err("wrong key must fail");
+        let text = format!("{err:?}");
+        assert!(!text.contains(RAW_EMAIL));
+        assert!(!text.contains(RAW_NAME));
+        assert!(!text.contains(&projection_material));
+        assert!(text.contains("failed closed"));
+    }
+
+    #[test]
+    fn tampered_header_or_ciphertext_fails_closed() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("tamper");
+        let (store, _) = fixture_store(dir.path());
+        store.save().expect("save sealed index");
+        let path = store.index_file_path();
+        let original = fs::read(&path).expect("read sealed index");
+
+        let mut header_tampered = original.clone();
+        header_tampered[INDEX_MAGIC.len() + 1] = KEY_SOURCE_KEYCHAIN;
+        fs::write(&path, header_tampered).expect("write header tamper");
+        let err = FileCorpusIndexStore::load(dir.path()).expect_err("header tamper must fail");
+        assert!(format!("{err:?}").contains("failed closed"));
+
+        let mut ciphertext_tampered = original;
+        let last = ciphertext_tampered
+            .last_mut()
+            .expect("sealed index has ciphertext");
+        *last ^= 0x01;
+        fs::write(&path, ciphertext_tampered).expect("write ciphertext tamper");
+        let err = FileCorpusIndexStore::load(dir.path()).expect_err("ciphertext tamper must fail");
+        assert!(format!("{err:?}").contains("failed closed"));
+    }
+
+    #[test]
+    fn missing_or_empty_key_source_fails_closed_for_save_and_load() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _keychain = KeychainDisabledGuard::new();
+
+        let missing_save_dir = TestDir::new("missing-key-save");
+        let _env = IndexKeyEnvGuard::remove();
+        let (missing_store, _) = fixture_store(missing_save_dir.path());
+        let err = missing_store
+            .save()
+            .expect_err("save without key source must fail");
+        assert!(format!("{err:?}").contains("failed closed"));
+        assert!(!missing_store.index_file_path().exists());
+
+        let empty_save_dir = TestDir::new("empty-key-save");
+        std::env::set_var(INDEX_KEY_ENV, "");
+        let (empty_store, _) = fixture_store(empty_save_dir.path());
+        let err = empty_store
+            .save()
+            .expect_err("save with empty key source must fail");
+        assert!(format!("{err:?}").contains("failed closed"));
+        assert!(!empty_store.index_file_path().exists());
+
+        std::env::set_var(INDEX_KEY_ENV, TEST_KEY_1);
+        let load_dir = TestDir::new("missing-key-load");
+        let (sealed_store, _) = fixture_store(load_dir.path());
+        sealed_store.save().expect("save sealed fixture");
+
+        std::env::remove_var(INDEX_KEY_ENV);
+        let err = FileCorpusIndexStore::load(load_dir.path())
+            .expect_err("load without required env key must fail");
+        assert!(format!("{err:?}").contains("failed closed"));
+    }
+
+    #[test]
+    fn legacy_plaintext_index_is_refused_before_json_parse() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("legacy-plaintext");
+        let index_path = dir.path().join(INDEX_FILE_NAME);
+        fs::write(
+            &index_path,
+            format!(r#"{{"schema_version":1,"entries":[{{"raw_value":"{RAW_EMAIL}"}}]}}"#),
+        )
+        .expect("write legacy plaintext index");
+
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("legacy plaintext index must fail closed");
+        let text = format!("{err:?}");
+        assert!(text.contains("unsupported plaintext owner-side index"));
+        assert!(!text.contains(RAW_EMAIL));
+    }
+
+    fn fixture_store(dir: &Path) -> (FileCorpusIndexStore, String) {
+        let mut store =
+            FileCorpusIndexStore::load_or_create(dir, DEFAULT_DOMAIN_ID, &[PiiClass::Email])
+                .expect("create fixture store");
+        let projection_key = store
+            .file
+            .projection_keys
+            .first()
+            .expect("projection key")
+            .clone();
+        let fingerprint_hex = sha256_hex(&format!("email:{RAW_EMAIL}"));
+        let email_entity = IndexEntity {
+            class: PiiClass::Email,
+            raw_value: RAW_EMAIL.to_string(),
+            index_ref: IndexedEntityRef {
+                domain_id: DEFAULT_DOMAIN_ID.to_string(),
+                key_id: projection_key.key_id.clone(),
+                entity_class: PiiClass::Email,
+                fingerprint_hex: fingerprint_hex.clone(),
+            },
+            domain_alias: domain_alias(&PiiClass::Email, &fingerprint_hex),
+        };
+        let name_fingerprint_hex = sha256_hex(&format!("name:{RAW_NAME}"));
+        let name_entity = IndexEntity {
+            class: PiiClass::Name,
+            raw_value: RAW_NAME.to_string(),
+            index_ref: IndexedEntityRef {
+                domain_id: DEFAULT_DOMAIN_ID.to_string(),
+                key_id: projection_key.key_id.clone(),
+                entity_class: PiiClass::Name,
+                fingerprint_hex: name_fingerprint_hex.clone(),
+            },
+            domain_alias: domain_alias(&PiiClass::Name, &name_fingerprint_hex),
+        };
+
+        store.insert_hit(
+            DEFAULT_DOMAIN_ID.to_string(),
+            IndexSearchHit {
+                doc_id: "doc:synthetic-index-fixture".to_string(),
+                snippet: format!(
+                    "Contact {} via {}",
+                    name_entity.domain_alias, email_entity.domain_alias
+                ),
+                entities: vec![email_entity, name_entity],
+            },
+        );
+
+        (store, projection_key.material)
+    }
+
+    fn assert_bytes_do_not_contain(bytes: &[u8], needle: &[u8], label: &str) {
+        assert!(
+            !bytes.windows(needle.len()).any(|window| window == needle),
+            "sealed index leaked {label}"
+        );
+    }
+
+    struct IndexKeyEnvGuard;
+
+    impl IndexKeyEnvGuard {
+        fn set(value: &str) -> Self {
+            std::env::set_var(INDEX_KEY_ENV, value);
+            Self
+        }
+
+        fn remove() -> Self {
+            std::env::remove_var(INDEX_KEY_ENV);
+            Self
+        }
+    }
+
+    impl Drop for IndexKeyEnvGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(INDEX_KEY_ENV);
+        }
+    }
+
+    struct KeychainDisabledGuard;
+
+    impl KeychainDisabledGuard {
+        fn new() -> Self {
+            KEYCHAIN_DISABLED_FOR_TESTS.store(true, std::sync::atomic::Ordering::SeqCst);
+            Self
+        }
+    }
+
+    impl Drop for KeychainDisabledGuard {
+        fn drop(&mut self) {
+            KEYCHAIN_DISABLED_FOR_TESTS.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    struct TestDir {
+        path: PathBuf,
+    }
+
+    impl TestDir {
+        fn new(label: &str) -> Self {
+            let mut random = [0_u8; 8];
+            rand::rngs::OsRng.fill_bytes(&mut random);
+            let path =
+                std::env::temp_dir().join(format!("gaze-token-bridge-{label}-{}", hex(&random)));
+            fs::create_dir_all(&path).expect("create temp test dir");
+            Self { path }
+        }
+
+        fn path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 }

@@ -18,6 +18,7 @@ mod publish_plan;
 mod readme_version_check;
 mod safety_net_sanity;
 mod scrub_public_text;
+mod tokenbridge_encrypted_index;
 mod tokenbridge_no_raw_index;
 
 #[derive(Debug, Parser)]
@@ -42,6 +43,7 @@ enum Command {
     CoverageCorpus(coverage_corpus::Args),
     CiFeatureMatrix,
     SafetyNetSanity,
+    TokenbridgeEncryptedIndex,
     TokenbridgeNoRawIndex(tokenbridge_no_raw_index::Args),
     McpTierIsolation,
     PublishPlan,
@@ -65,6 +67,7 @@ fn main() -> Result<()> {
         Command::CoverageCorpus(args) => coverage_corpus::run(args),
         Command::CiFeatureMatrix => ci_feature_matrix::run(),
         Command::SafetyNetSanity => safety_net_sanity::run(),
+        Command::TokenbridgeEncryptedIndex => tokenbridge_encrypted_index::run(),
         Command::TokenbridgeNoRawIndex(args) => tokenbridge_no_raw_index::run(args),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
         Command::PublishPlan => publish_plan::run(),

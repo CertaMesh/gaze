@@ -25,6 +25,7 @@ $ cargo run -p xtask -- readme-version-check
 $ cargo run -p xtask -- dylint-gate
 $ cargo run -p xtask -- safety-net-sanity
 $ cargo run -p xtask -- tokenbridge-no-raw-index
+$ cargo run -p xtask -- tokenbridge-encrypted-index
 ```
 
 Clap converts enum variants to kebab-case command names.
@@ -52,6 +53,7 @@ that list.
 | `DylintGate` | `dylint-gate` | Canonical audit-sink protected-path isolation gate. Verifies the Dylint UI fixture corpus and runs `cargo dylint --workspace --all` when `cargo-dylint` is installed. |
 | `SafetyNetSanity` | `safety-net-sanity` | Runs mock-driven safety-net behavioral suites across core, recognizers, CLI, and audit. Nightly/live OPF corpus hardening is deferred to v0.6.2+ follow-up todo #328. |
 | `TokenbridgeNoRawIndex` | `tokenbridge-no-raw-index` | Runs a real TokenBridge corpus ingest and search over synthetic fixture PII, then fails if raw values or current-session gaze tokens appear in stored snippets or searchable output paths. |
+| `TokenbridgeEncryptedIndex` | `tokenbridge-encrypted-index` | Runs the TokenBridge persistent-index behavioral test that saves a synthetic owner-side index, asserts the file is AEAD-sealed, and fails if raw PII or projection key material appears on disk. |
 
 The implementation lives in [`src/main.rs`](src/main.rs). The broader gate
 catalog and gate-authoring rules are in
