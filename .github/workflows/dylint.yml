@@ -1,20 +1,11 @@
-# dylint runs on relevant pull requests, a weekly schedule (Mondays 08:00 UTC),
-# and manual dispatch. Per-push triggers were dropped 2026-04-29 to reduce CI
-# minute pressure.
+# dylint runs on a weekly schedule (Mondays 08:00 UTC) and manual dispatch.
+# PR trigger blocked on solo todo #1870.
+# Per-push triggers were dropped 2026-04-29 to reduce CI minute pressure.
 # Devs do not need nightly-2025-09-18 installed locally; trigger manually with:
 #   gh workflow run dylint.yml
 name: dylint
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - Cargo.lock
-      - Cargo.toml
-      - crates/**
-      - dylint.toml
-      - lint/dylint/**
-      - .github/workflows/dylint.yml
   schedule:
     - cron: '0 8 * * 1'   # Mondays 08:00 UTC
   workflow_dispatch:

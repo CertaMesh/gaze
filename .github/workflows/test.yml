@@ -59,7 +59,9 @@ jobs:
       - name: cargo check workspace (MSRV)
         env:
           RUSTUP_TOOLCHAIN: 1.89.0
-        run: cargo check --workspace --all-features --all-targets --locked
+        # Opt-in runtime-tract needs rust >= 1.91 (tract 0.23.0-dev rust-version),
+        # tracked in solo todo #1934; all-features MSRV intentionally not gated.
+        run: cargo check --workspace --all-targets --locked
 
   test:
     runs-on: ubuntu-latest
