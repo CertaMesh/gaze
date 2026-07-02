@@ -4,6 +4,11 @@ ignore = [
     "RUSTSEC-2023-0089",
     # RUSTSEC-2024-0436 (paste): unmaintained transitive dependency via tokenizers/macro_rules_attribute; no safe upgrade is available; revisit after tokenizers drops paste or by 2026-07-29.
     "RUSTSEC-2024-0436",
+    # RUSTSEC-2026-0194/RUSTSEC-2026-0195 (quick-xml): build-dependency via phonenumber; phonenumber constrains quick-xml to <=0.38 so the safe >=0.41 upgrade is not resolvable. The path parses bundled libphonenumber metadata at build time, not runtime user XML. Revisit after phonenumber supports quick-xml >=0.41 or by 2026-10-02.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+    # RUSTSEC-2026-0192 (ttf-parser): dev-only document fixture/rendering path through imageproc -> ab_glyph; no safe upgrade is available. Revisit after imageproc/ab_glyph moves to a maintained font parser or by 2026-10-02.
+    "RUSTSEC-2026-0192",
 ]
 
 [licenses]
@@ -18,6 +23,14 @@ allow = [
     "MIT",
     "Unicode-3.0",
     "Zlib",
+]
+
+# MPL-2.0 is allowed only for `option-ext`, a tiny transitive helper pulled in by
+# dirs-sys -> dirs -> gaze-proxy for platform data/config path resolution. Keep
+# this bounded to the exact crate and revisit after replacing `dirs`, after
+# dirs-sys drops option-ext, or by 2026-12-10.
+exceptions = [
+    { allow = ["MPL-2.0"], crate = "option-ext" },
 ]
 
 private = { ignore = true }

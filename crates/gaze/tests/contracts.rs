@@ -73,6 +73,36 @@ fn restore_strict_text_still_rejects_ascii_shaped_unknown_token() {
 }
 
 #[test]
+fn restore_regex_cache_invalidates_when_session_gains_tokens() {
+    let pipeline = Pipeline::builder().build().expect("pipeline");
+    let empty = Session::new(Scope::Ephemeral).expect("empty session");
+    let (restored, _) = pipeline
+        .restore_with_telemetry(&empty, "nothing to restore")
+        .expect("empty restore");
+    assert_eq!(restored.text, "nothing to restore");
+
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let first = session
+        .tokenize(&PiiClass::Name, "Dr. Schmidt")
+        .expect("first token");
+    let (restored, _) = pipeline
+        .restore_with_telemetry(&session, &format!("owner {first}"))
+        .expect("restore first token");
+    assert_eq!(restored.text, "owner Dr. Schmidt");
+
+    let second = session
+        .tokenize(
+            &PiiClass::Custom("tenant-note".to_string()),
+            "Grüße aus Büro A",
+        )
+        .expect("second token");
+    let (restored, _) = pipeline
+        .restore_with_telemetry(&session, &format!("{first} / {second}"))
+        .expect("restore appended token");
+    assert_eq!(restored.text, "Dr. Schmidt / Grüße aus Büro A");
+}
+
+#[test]
 fn same_session_reuses_token_for_same_raw_value() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let pipeline = Pipeline::builder()

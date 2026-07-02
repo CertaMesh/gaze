@@ -35,7 +35,7 @@ const KIJI_LABELS_JSON: &str = r#"{
 }
 "#;
 const DOCTOR_INPUT: &str =
-    "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd.";
+    "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd."; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes)
 
 #[derive(Debug)]
 pub(crate) struct Args {
@@ -772,7 +772,7 @@ fn print_summary(summary: &SetupSummary) {
     println!("Model: {}", summary.model_dir.display());
     println!("Policy: {}", summary.policy_path.display());
     println!(
-        "Try: printf 'From: Alice Example <alice@example.invalid>\\nContact Alice Example about Example Ltd.\\n' | gaze clean --policy {}",
+        "Try: printf 'From: Alice Example <alice@example.invalid>\\nContact Alice Example about Example Ltd.\\n' | gaze clean --policy {}", // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes)
         shell_quote_path(&summary.policy_path)
     );
     println!(
