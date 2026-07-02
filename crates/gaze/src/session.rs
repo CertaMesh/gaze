@@ -1236,7 +1236,7 @@ fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
     if let Some(rest) = raw.strip_prefix("email") {
         let (ordinal, tail) = rest.split_once('.')?;
         if tail.ends_with("@gaze-fake.invalid") || tail.ends_with("@example.test") {
-            return Some((PiiClass::Email, ordinal.parse().ok()?));
+            return Some((PiiClass::Email, parse_ascii_ordinal(ordinal)?));
         }
     }
 
@@ -1248,17 +1248,30 @@ fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
 
     if let Some(rest) = body.strip_prefix("Custom:") {
         let (name, ordinal) = rest.rsplit_once('_')?;
-        return Some((PiiClass::Custom(name.to_string()), ordinal.parse().ok()?));
+        return Some((
+            PiiClass::Custom(name.to_string()),
+            parse_ascii_ordinal(ordinal)?,
+        ));
     }
     if let Some(rest) = body.strip_prefix("custom:") {
         let (name, ordinal) = rest.rsplit_once('_')?;
-        return Some((PiiClass::Custom(name.to_string()), ordinal.parse().ok()?));
+        return Some((
+            PiiClass::Custom(name.to_string()),
+            parse_ascii_ordinal(ordinal)?,
+        ));
     }
 
     let (class, ordinal) = body.rsplit_once('_')?;
-    let ordinal = ordinal.parse().ok()?;
+    let ordinal = parse_ascii_ordinal(ordinal)?;
     let class = PiiClass::from_canonical_str(class).unwrap_or_else(|| PiiClass::custom(class));
     Some((class, ordinal))
+}
+
+fn parse_ascii_ordinal(raw: &str) -> Option<u32> {
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
 }
 
 fn malformed_restore_token_pattern() -> &'static Regex {
@@ -1343,14 +1356,21 @@ fn parse_token_index(token: &str) -> Option<usize> {
         .strip_prefix("email")
         .and_then(|rest| rest.split_once('.').map(|(index, _)| index))
     {
-        return local.parse().ok();
+        return parse_ascii_index(local);
     }
     let suffix = token
         .rsplit_once('_')?
         .1
         .strip_suffix('>')
         .unwrap_or(token.rsplit_once('_')?.1);
-    suffix.parse().ok()
+    parse_ascii_index(suffix)
+}
+
+fn parse_ascii_index(raw: &str) -> Option<usize> {
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    raw.parse().ok()
 }
 
 fn snapshot_signing_preimage(
