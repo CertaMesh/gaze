@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e734b0c613752bd7bb74ac926aaf7bb5bf54bb4caf7e7d80259f0a2422eaae9b # shrinks to case = DocumentCase { text: "a@example.invalid", detected_pii: ["a@example.invalid"] }
