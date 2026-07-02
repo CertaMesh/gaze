@@ -38,9 +38,8 @@ cargo test --workspace --all-features
 cargo run -p xtask -- ci-feature-matrix
 ```
 
-PR-triggered CI (`.github/workflows/docs.yml`) catches doc-test and rustdoc
-warnings on every PR. Workspace test gates and xtask gates are not yet in
-remote CI — add when CI capacity allows.
+PR-triggered CI catches doc-test and rustdoc warnings, workspace tests, MSRV
+checks, cargo-deny, and the active xtask gate roster on every relevant PR.
 
 ## v0.9 architecture primer
 

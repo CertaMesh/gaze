@@ -48,9 +48,10 @@ Clone the repo and run the toolchain check:
 cargo build --workspace --all-features
 ```
 
-PR-triggered CI (`.github/workflows/docs.yml`) runs `cargo doc -D warnings`
-and `cargo test --doc` on every PR. Workspace tests and xtask gates run
-locally — see the "PR-checks ritual" section below.
+PR-triggered CI runs `cargo doc -D warnings`, `cargo test --doc`, workspace
+tests, MSRV checks, cargo-deny, and the active xtask gate roster on every
+relevant PR. Keep running the local "PR-checks ritual" below before opening or
+pushing to a PR.
 
 ## Workspace shape
 
@@ -121,13 +122,10 @@ for DE and US that follow the same synthetic-only fixture posture.
 
 ## Local gate matrix
 
-Gaze does not ship a tracked pre-push hook — gates run manually. The "PR-checks
-ritual" below lists the full set. The xtask gates were formerly cloud CI gate
-commands moved local: `bundle-tokenization-drift`,
-`bundle-tokenization-drift --verify-ack`, `cargo-metadata-audit-isolation`,
-`class-map-override-safety`, `fixture-citation-lint`, `ci-feature-matrix`,
-`no-tenant-knowledge`, `symmetric-potemkin`, and
-`recognizer-composition-validator`.
+Gaze does not ship a tracked pre-push hook — gates still run manually before
+opening or pushing to a PR. The "PR-checks ritual" below lists the local set.
+Relevant PRs also run the workspace, MSRV, cargo-deny, and active xtask gates in
+GitHub Actions.
 
 `dylint` requires the pinned `nightly-2025-09-18` toolchain and cargo-dylint
 setup. It runs weekly on Monday at 08:00 UTC via the scheduled workflow and
@@ -146,14 +144,19 @@ behavioral xtask gates:
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
+cargo deny check
 cargo run -p xtask -- symmetric-potemkin
 cargo run -p xtask -- class-map-override-safety
 cargo run -p xtask -- recognizer-composition-validator
 cargo run -p xtask -- no-tenant-knowledge
 cargo run -p xtask -- bundle-tokenization-drift
+cargo run -p xtask -- family-policy-table-coherence
+cargo run -p xtask -- locale-cue-bundle-coherence
 cargo run -p xtask -- fixture-citation-lint
-cargo run -p xtask -- ci-feature-matrix
 cargo run -p xtask -- cargo-metadata-audit-isolation
+cargo run -p xtask -- readme-version-check
+cargo run -p xtask -- safety-net-sanity
+cargo run -p xtask -- ci-feature-matrix
 ```
 
 The `--all-features` flag on `cargo test` exercises every current workspace
