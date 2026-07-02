@@ -2864,7 +2864,7 @@ mod tests {
             .strip_prefix("Assigned to ")
             .expect("token prefix")
             .to_string();
-        assert!(regex::Regex::new(r"^<[0-9a-f]{8}:Name_\d+>$")
+        assert!(regex::Regex::new(r"^<[0-9a-f]{8}:Name_[0-9]+>$")
             .unwrap()
             .is_match(&token));
 

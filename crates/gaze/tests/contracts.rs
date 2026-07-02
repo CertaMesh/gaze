@@ -6,9 +6,9 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, ExecPolicy, PiiClass, Pipeline,
-    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Sandbox, SandboxError,
-    SandboxPlan, Scope, Session, UntrustedExecRequest, ValidatedExecRequest, Value,
+    Action, ClassRule, CleanDocument, ColumnRule, DefaultRule, Error, ExecPolicy, PiiClass,
+    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Sandbox,
+    SandboxError, SandboxPlan, Scope, Session, UntrustedExecRequest, ValidatedExecRequest, Value,
 };
 use gaze_audit::SqliteLogger;
 use gaze_recognizers::NormalizerKind;
@@ -34,6 +34,42 @@ fn restore_is_lax_but_restore_strict_fails_closed() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     assert_eq!(session.restore("missing-token"), None);
     assert!(session.restore_strict("missing-token").is_err());
+}
+
+#[test]
+fn restore_text_ignores_unicode_digits_in_innocent_token_like_text() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+
+    for text in ["a_\u{11DA0}%", "a_\u{0966}%", "a_\u{0660}%", "a_\u{FF10}%"] {
+        assert_eq!(
+            session
+                .restore_strict_text(text)
+                .expect("strict restore should pass through innocent text"),
+            text
+        );
+        assert_eq!(restore_lax_text(&session, text), text);
+    }
+}
+
+#[test]
+fn restore_strict_text_still_rejects_ascii_shaped_unknown_token() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let err = session
+        .restore_strict_text("Email_999")
+        .expect_err("strict restore must reject absent ASCII token shapes");
+
+    match err {
+        Error::UnknownToken {
+            class,
+            ordinal,
+            raw,
+        } => {
+            assert_eq!(class, PiiClass::Email);
+            assert_eq!(ordinal, 999);
+            assert_eq!(raw, "Email_999");
+        }
+        other => panic!("expected UnknownToken, got {other:?}"),
+    }
 }
 
 #[test]
@@ -143,6 +179,22 @@ fn redact_text(pipeline: &Pipeline, session: &Session, text: &str) -> String {
         panic!("expected text document");
     };
     text
+}
+
+fn restore_lax_text(session: &Session, text: &str) -> String {
+    let mut restored = String::with_capacity(text.len());
+    let mut cursor = 0usize;
+    for matched in gaze::token_shape::pattern().find_iter(text) {
+        restored.push_str(&text[cursor..matched.start()]);
+        restored.push_str(
+            &session
+                .restore(matched.as_str())
+                .unwrap_or_else(|| matched.as_str().to_string()),
+        );
+        cursor = matched.end();
+    }
+    restored.push_str(&text[cursor..]);
+    restored
 }
 
 #[test]

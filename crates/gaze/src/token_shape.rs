@@ -113,7 +113,7 @@ fn build_pattern() -> String {
         .join("|");
 
     format!(
-        r"<[0-9a-f]{{8}}:(?:{builtin_alt})_\d+>|<[0-9a-f]{{8}}:Custom:[a-z0-9_]*_\d+>|\bemail\d+\.[0-9a-f]{{8}}@gaze-fake\.invalid\b|\b[0-9a-f]{{8}}:(?:{builtin_lower_alt})_\d+\b|\b[0-9a-f]{{8}}:custom:[a-z0-9_]*_\d+\b|<(?:{builtin_alt})_\d+>|<Custom:[a-z0-9_]*_\d+>|\b(?:{builtin_lower_alt})_\d+\b|\bcustom:[a-z0-9_]*_\d+\b|\bemail\d+@example\.test\b|\bemail\d+@gaze-fake\.invalid\b|<[A-Z][a-zA-Z0-9]+_\d+>|<[a-z][a-zA-Z0-9_]*_\d+>|\b[A-Z][a-zA-Z0-9]+_\d+\b|\b[a-z][a-zA-Z0-9_]*_\d+\b",
+        r"<[0-9a-f]{{8}}:(?:{builtin_alt})_[0-9]+>|<[0-9a-f]{{8}}:Custom:[a-z0-9_]*_[0-9]+>|\bemail[0-9]+\.[0-9a-f]{{8}}@gaze-fake\.invalid\b|\b[0-9a-f]{{8}}:(?:{builtin_lower_alt})_[0-9]+\b|\b[0-9a-f]{{8}}:custom:[a-z0-9_]*_[0-9]+\b|<(?:{builtin_alt})_[0-9]+>|<Custom:[a-z0-9_]*_[0-9]+>|\b(?:{builtin_lower_alt})_[0-9]+\b|\bcustom:[a-z0-9_]*_[0-9]+\b|\bemail[0-9]+@example\.test\b|\bemail[0-9]+@gaze-fake\.invalid\b|<[A-Z][a-zA-Z0-9]+_[0-9]+>|<[a-z][a-zA-Z0-9_]*_[0-9]+>|\b[A-Z][a-zA-Z0-9]+_[0-9]+\b|\b[a-z][a-zA-Z0-9_]*_[0-9]+\b",
         builtin_alt = builtin_alt,
         builtin_lower_alt = builtin_lower_alt,
     )
@@ -294,6 +294,25 @@ mod tests {
         assert!(!contains_token("See <Email_1bar>."));
         assert!(!contains_token("literal email@example.invalid address"));
         assert!(!contains_token("<Custom:-_1>"));
+    }
+
+    #[test]
+    fn unicode_digits_do_not_match_token_ordinals() {
+        for digit in ["\u{11DA0}", "\u{0966}", "\u{0660}", "\u{FF10}"] {
+            for shape in [
+                format!("a_{digit}"),
+                format!("Email_{digit}"),
+                format!("<Email_{digit}>"),
+                format!("<deadbeef:Email_{digit}>"),
+                format!("email{digit}@example.test"),
+                format!("email{digit}.deadbeef@gaze-fake.invalid"),
+            ] {
+                assert!(
+                    !contains_token(&shape),
+                    "Unicode digit must not match token ordinal: {shape:?}"
+                );
+            }
+        }
     }
 
     #[test]
