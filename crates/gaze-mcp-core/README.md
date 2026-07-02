@@ -4,7 +4,7 @@
 [![docs.rs](https://docs.rs/gaze-mcp-core/badge.svg)](https://docs.rs/gaze-mcp-core)
 [![License](https://img.shields.io/crates/l/gaze-mcp-core.svg)](https://github.com/CertaMesh/gaze#license)
 
-> **Adding `gaze-mcp-core` (v0.11.0) to your crate enables:** the transport-free
+> **Adding `gaze-mcp-core` (v0.11.3) to your crate enables:** the transport-free
 > MCP chokepoint runtime — `Tool` trait, `PiiEnvelope::dispatch`,
 > `ToolRegistry`, `ManifestStore` / `AuthHook` / `SessionIdPolicy` plug-in
 > points, and the optional `core-tools` agent-tier tool set.

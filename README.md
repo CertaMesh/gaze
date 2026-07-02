@@ -17,7 +17,7 @@ Your agent never sees a real email, phone number, or order ID. Your server keeps
 Three commands from zero to redacting real PII:
 
 ```sh
-cargo install gaze-cli                                       # `gaze setup` ships in the default build
+cargo install gaze-cli --version 0.11.3                     # `gaze setup` ships in the default build
 gaze setup                                                   # installs + SHA-verifies the NER model, writes ./gaze.toml, runs a doctor check
 echo "Contact Markus Gottschaue at markus@acme.com" | gaze clean --policy gaze.toml
 ```
@@ -138,7 +138,7 @@ Architecture overview with eight Key Design Decisions: [`ARCHITECTURE.md`](ARCHI
 Install the CLI from crates.io:
 
 ```sh
-cargo install gaze-cli
+cargo install gaze-cli --version 0.11.3
 ```
 
 Or build from source (latest `main`, or to enable extra features):

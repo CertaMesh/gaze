@@ -557,8 +557,8 @@ mod tests {
                 PiiClass::Email,
             ),
             (
-                "Home /Users/alice/project",
-                "/Users/alice/project",
+                "Home /workspace/example/project",
+                "/workspace/example/project",
                 PiiClass::Name,
             ),
             ("Org Workspace", "Workspace", PiiClass::Organization),

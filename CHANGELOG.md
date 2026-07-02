@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-07-02
+
+v0.11.2 crates were never published to crates.io; v0.11.3 supersedes it for
+crates.io users.
+
+### Added
+
+- **Restore and manifest property suites now cover round-trip and invariant
+  behavior** (#354), raising confidence that reversible pseudonymization stays
+  stable across generated inputs.
+- **Remote CI now runs the release-critical gates** (#356): MSRV,
+  `cargo-deny`, and the `xtask` gate suite.
+- **Restore token regexes now use a session cache** (#356), reducing repeated
+  parsing work without changing strict-restore behavior.
+
+### Changed
+
+- **The unused daemonization dependency was removed** (#352), narrowing the
+  dependency graph shipped to adopters.
+
+### Fixed
+
+- **Email boundary leak fixes, SafetyNet fail-closed behavior, and locale
+  fallback fixes were ported to main** (#353), restoring axis-1 protections that
+  were absent from v0.10.0 through v0.11.2.
+- **Strict restore no longer treats Unicode-digit token ordinals as valid**
+  (#355), avoiding a false-positive restore path for non-ASCII token numbers.
+- **The crates.io publish workflow now packages the workspace as a unit before
+  publishing.** Per-crate pre-flight packaging resolved unpublished internal
+  dependencies against the registry and caused the v0.11.2 multi-crate publish
+  failure.
+
+### Security
+
+- **The pdfium CI download is pinned and SHA-256 verified** (#352), replacing an
+  unverified network fetch in the document test setup.
+
 ## [0.11.2] - 2026-06-23
 
 ### Added

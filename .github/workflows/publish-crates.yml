@@ -75,11 +75,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          while IFS= read -r crate; do
-            [ -n "$crate" ] || continue
-            echo "=== packaging $crate ==="
-            cargo package --no-verify -p "$crate"
-          done < publish-plan.txt
+          # Pre-flight package manifests before publishing.
+          # Per-crate packaging fails multi-crate releases like v0.11.2 by resolving unpublished dependents against the crates.io index.
+          cargo package --no-verify --workspace --exclude xtask
 
       - name: Check crates.io first-publish preconditions
         if: ${{ github.event_name != 'workflow_dispatch' || inputs.check_new_crates }}
