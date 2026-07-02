@@ -41,8 +41,10 @@ pub fn map_openai_label(label: &str) -> Result<OpenAiPrivateLabel, SafetyNetErro
 }
 
 /// Maps an official OPF label into the closed safety-net PII vocabulary.
-pub fn openai_label_to_safety_net_class(label: OpenAiPrivateLabel) -> SafetyNetPiiClass {
-    match label {
+pub fn openai_label_to_safety_net_class(
+    label: OpenAiPrivateLabel,
+) -> Result<SafetyNetPiiClass, SafetyNetError> {
+    Ok(match label {
         OpenAiPrivateLabel::PrivatePerson => SafetyNetPiiClass::Name,
         OpenAiPrivateLabel::PrivateAddress => SafetyNetPiiClass::Location,
         OpenAiPrivateLabel::PrivateEmail => SafetyNetPiiClass::Email,
@@ -51,8 +53,12 @@ pub fn openai_label_to_safety_net_class(label: OpenAiPrivateLabel) -> SafetyNetP
         OpenAiPrivateLabel::PrivateDate => SafetyNetPiiClass::Date,
         OpenAiPrivateLabel::AccountNumber => SafetyNetPiiClass::AccountNumber,
         OpenAiPrivateLabel::Secret => SafetyNetPiiClass::Secret,
-        _ => panic!("unknown OpenAI private label - update class_map.rs"),
-    }
+        _ => {
+            return Err(SafetyNetError::InvalidOutput {
+                message: "opf returned unsupported label".to_string(),
+            })
+        }
+    })
 }
 
 fn invalid_label() -> SafetyNetError {
@@ -84,7 +90,9 @@ mod tests {
             let private_label = map_openai_label(label).expect("official label");
             assert_eq!(private_label.as_str(), label);
             assert_eq!(
-                openai_label_to_safety_net_class(private_label).to_pii_class(),
+                openai_label_to_safety_net_class(private_label)
+                    .expect("official label maps to safety-net class")
+                    .to_pii_class(),
                 expected
             );
         }
@@ -92,11 +100,18 @@ mod tests {
 
     #[test]
     fn unknown_and_invalid_labels_fail_closed() {
-        assert!(map_openai_label("organization").is_err());
-        assert!(map_openai_label("private-email").is_err());
-        assert!(map_openai_label("PRIVATE_EMAIL").is_err());
-        assert!(map_openai_label("private_email_123").is_err());
-        assert!(map_openai_label("").is_err());
-        assert!(map_openai_label("abcdefghijklmnopqrstuvwxyzabcdefg").is_err());
+        for label in [
+            "organization",
+            "private-email",
+            "PRIVATE_EMAIL",
+            "private_email_123",
+            "",
+            "abcdefghijklmnopqrstuvwxyzabcdefg",
+        ] {
+            assert!(matches!(
+                map_openai_label(label),
+                Err(SafetyNetError::InvalidOutput { .. })
+            ));
+        }
     }
 }

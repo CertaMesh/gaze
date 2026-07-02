@@ -67,6 +67,12 @@ pub enum Error {
     RedactionLog(#[from] RedactionLogError),
     #[error("safety net fallback failed closed: {0:?}")]
     SafetyNetFallback(FallbackReason),
+    #[error("safety net span invalid: start={start}, end={end}, text_len={text_len}")]
+    SafetyNetSpanInvalid {
+        start: usize,
+        end: usize,
+        text_len: usize,
+    },
     #[error("capitals heuristic gate is unsupported for locale {locale}")]
     UnsupportedCapitalHeuristicLocale { locale: String },
     #[error("unsupported raw document variant")]
@@ -962,9 +968,20 @@ impl Pipeline {
         log_entries: bool,
     ) -> Result<()> {
         for suspect in redaction_suspects(report).into_iter().rev() {
-            let span = suspect_action_span(suspect);
-            if !is_char_boundary_range(&clean.text, &span) {
-                continue;
+            let span =
+                round_span_outward_to_char_boundaries(&clean.text, suspect_action_span(suspect))?;
+            let span = expand_span_to_overlapping_manifest_entries(clean, span);
+            for existing in clean
+                .manifest
+                .iter()
+                .filter(|existing| ranges_overlap(&existing.clean_span, &span))
+            {
+                tracing::warn!(
+                    class = ?existing.class,
+                    clean_span_start = existing.clean_span.start,
+                    clean_span_end = existing.clean_span.end,
+                    "safety net redaction dropping overlapping manifest entry"
+                );
             }
             if log_entries {
                 self.log_safety_net_entry(
@@ -1313,6 +1330,61 @@ fn is_char_boundary_range(text: &str, span: &Range<usize>) -> bool {
         && span.end <= text.len()
         && text.is_char_boundary(span.start)
         && text.is_char_boundary(span.end)
+}
+
+fn round_span_outward_to_char_boundaries(text: &str, span: Range<usize>) -> Result<Range<usize>> {
+    if span.start > span.end || span.end > text.len() {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: text.len(),
+        });
+    }
+
+    let mut start = span.start;
+    while start > 0 && !text.is_char_boundary(start) {
+        start -= 1;
+    }
+
+    let mut end = span.end;
+    while end < text.len() && !text.is_char_boundary(end) {
+        end += 1;
+    }
+
+    if !is_char_boundary_range(text, &(start..end)) {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: text.len(),
+        });
+    }
+
+    Ok(start..end)
+}
+
+fn expand_span_to_overlapping_manifest_entries(
+    clean: &CleanText,
+    span: Range<usize>,
+) -> Range<usize> {
+    let mut expanded = span;
+    loop {
+        let mut changed = false;
+        for existing in &clean.manifest {
+            if ranges_overlap(&existing.clean_span, &expanded) {
+                let start = expanded.start.min(existing.clean_span.start);
+                let end = expanded.end.max(existing.clean_span.end);
+                changed |= start != expanded.start || end != expanded.end;
+                expanded = start..end;
+            }
+        }
+        if !changed {
+            return expanded;
+        }
+    }
+}
+
+fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
 }
 
 fn validate_capitals_gate_locales(locale_chain: &[crate::LocaleTag]) -> Result<()> {

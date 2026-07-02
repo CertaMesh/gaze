@@ -37,6 +37,13 @@ struct MockNet {
     seen: Arc<Mutex<Vec<SeenCheck>>>,
 }
 
+#[derive(Clone)]
+struct InvalidSpanNet {
+    locales: Vec<gaze::LocaleTag>,
+    span: Range<usize>,
+    class: PiiClass,
+}
+
 #[derive(Debug, Clone)]
 struct SeenCheck {
     clean_text: String,
@@ -142,6 +149,9 @@ impl SafetyNet for MockNet {
         let Some(span) = self.span.clone() else {
             return Ok(Vec::new());
         };
+        if span.start > span.end || span.end > clean_text.len() {
+            return Ok(Vec::new());
+        }
         let Some(kind) = context.manifest.diff_against(&span, &self.class) else {
             return Ok(Vec::new());
         };
@@ -153,6 +163,32 @@ impl SafetyNet for MockNet {
             Some(0.99),
             kind,
             self.raw_label,
+            context.field_path.map(str::to_string),
+        )])
+    }
+}
+
+impl SafetyNet for InvalidSpanNet {
+    fn id(&self) -> &str {
+        "invalid-span"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &self.locales
+    }
+
+    fn check(
+        &self,
+        _clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        Ok(vec![LeakSuspect::new(
+            self.span.clone(),
+            self.class.clone(),
+            self.id(),
+            Some(0.99),
+            LeakKind::Uncovered,
+            "private_email",
             context.field_path.map(str::to_string),
         )])
     }
@@ -265,6 +301,138 @@ fn safety_net_redact_mode_strips_suspect_without_manifest_entry() {
         .expect("redact");
 
     assert_eq!(text(clean), "Reach ");
+    assert!(manifest.is_empty());
+    assert_eq!(report.stats.uncovered_count, 1);
+}
+
+#[test]
+fn safety_net_redact_mode_rounds_misaligned_multibyte_suspect_outward() {
+    let raw = "Grüße von Dr. Schmidt".to_string();
+    let multibyte = raw.find('ü').expect("multibyte char");
+    let net = MockNet::new(Some(multibyte + 1..multibyte + "ü".len()), PiiClass::Name);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Redact,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .expect("misaligned redact rounds outward");
+    let clean_text = text(clean);
+
+    assert_eq!(clean_text, "Grße von Dr. Schmidt");
+    assert!(!clean_text.contains("Grüße"));
+    assert!(manifest.is_empty());
+    assert_eq!(report.stats.uncovered_count, 1);
+}
+
+#[test]
+fn safety_net_redact_mode_expands_overlap_to_entire_emitted_token() {
+    let session = session();
+    let raw = RawDocument::Text("alice@example.invalid ok".to_string());
+    let baseline = text(
+        tokenizing_pipeline()
+            .redact(&session, raw.clone())
+            .expect("baseline"),
+    );
+    let token_len = baseline.find(" ok").expect("token suffix");
+    let net = MockNet::new(Some(2..token_len - 2), PiiClass::Name);
+
+    let (clean, manifest, report) = tokenizing_pipeline_with_net(net)
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            raw,
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Redact,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .expect("overlap redact expands to emitted token");
+    let clean_text = text(clean);
+
+    assert_eq!(clean_text, " ok");
+    assert!(!clean_text.contains('<'));
+    assert!(!clean_text.contains("Email"));
+    assert!(manifest.is_empty());
+    assert_eq!(
+        session.restore_strict_text(&clean_text).expect("restore"),
+        " ok"
+    );
+    assert_eq!(report.stats.class_mismatch_count, 1);
+}
+
+#[test]
+fn safety_net_redact_mode_out_of_range_suspect_fails_closed_without_raw_text() {
+    let raw = "Reach alice@example.invalid".to_string();
+    let net = InvalidSpanNet {
+        locales: vec![gaze::LocaleTag::Global],
+        span: 6..raw.len() + 1,
+        class: PiiClass::Email,
+    };
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(net)
+        .build()
+        .expect("pipeline");
+    let session = session();
+
+    let err = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw.clone()),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Redact,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .expect_err("out-of-range safety net span fails closed");
+
+    assert!(matches!(
+        err,
+        gaze::Error::SafetyNetSpanInvalid {
+            start: 6,
+            end: _,
+            text_len: _
+        }
+    ));
+    assert!(!err.to_string().contains("alice@example.invalid"));
+    assert!(session.tokens().is_empty());
+}
+
+#[test]
+fn safety_net_redact_mode_keeps_aligned_span_redaction_behavior() {
+    let raw = "Hello Dr. Schmidt".to_string();
+    let suspect = "Dr. Schmidt";
+    let start = raw.find(suspect).expect("suspect");
+    let net = MockNet::new(Some(start..start + suspect.len()), PiiClass::Name);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report) = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &session,
+            RawDocument::Text(raw),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Redact,
+                gaze::SafetyNetFallback::Strict,
+            ),
+        )
+        .expect("aligned redact");
+
+    assert_eq!(text(clean), "Hello ");
     assert!(manifest.is_empty());
     assert_eq!(report.stats.uncovered_count, 1);
 }

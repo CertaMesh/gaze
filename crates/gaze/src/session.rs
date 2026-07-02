@@ -968,6 +968,9 @@ fn structural_findings(text: &str) -> Vec<StructuralFinding> {
 
 fn collect_email_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in email_pattern().find_iter(text) {
+        if !restore_email_boundary_accepts(text, &matched.range()) {
+            continue;
+        }
         let raw = matched.as_str();
         if !is_basic_restore_email(raw) {
             continue;
@@ -1040,7 +1043,7 @@ fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
 fn email_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
-        Regex::new(r"(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b")
+        Regex::new(r"(?i)[a-z0-9_][a-z0-9._%+\-]*@[a-z0-9.\-]+\.[a-z]{2,}")
             .expect("email restore DLP regex compiles")
     })
 }
@@ -1087,6 +1090,23 @@ fn is_basic_restore_email(input: &str) -> bool {
         return false;
     };
     !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
+}
+
+fn restore_email_boundary_accepts(input: &str, span: &std::ops::Range<usize>) -> bool {
+    let previous_ok = input[..span.start]
+        .chars()
+        .next_back()
+        .is_none_or(|ch| !is_ascii_email_continuation(ch));
+    let next_ok = input[span.end..]
+        .chars()
+        .next()
+        .is_none_or(|ch| !is_ascii_email_continuation(ch));
+
+    previous_ok && next_ok
+}
+
+fn is_ascii_email_continuation(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_'
 }
 
 fn ascii_digits(input: &str) -> String {
@@ -1971,6 +1991,49 @@ mod tests {
         assert_ne!(events[0].raw_sha256, "alice@example.invalid");
         assert_eq!(events[1].kind, RestoreEventKind::FreshPiiDetected);
         assert_eq!(events[1].class, PiiClass::Email);
+    }
+
+    #[test]
+    fn restore_dlp_email_boundary_accepts_non_ascii_and_punctuation_delimiters() {
+        for (input, location) in [
+            ("a@example.invalidø", 0..17),
+            ("a@example.invalid. Thanks", 0..17),
+            ("a@example.invalid-", 0..17),
+            ("a@example.invalid+", 0..17),
+            ("a@example.invalid%", 0..17),
+            (".a@example.invalid", 1..18),
+        ] {
+            let findings = structural_findings(input);
+            let finding = findings
+                .iter()
+                .find(|finding| finding.class == PiiClass::Email)
+                .unwrap_or_else(|| panic!("missing email finding for {input}"));
+
+            assert_eq!(finding.raw, "a@example.invalid", "{input}");
+            assert_eq!(finding.location, location, "{input}");
+        }
+
+        let adjacent = structural_findings("a@example.invalid,b@example.invalid")
+            .into_iter()
+            .filter(|finding| finding.class == PiiClass::Email)
+            .map(|finding| (finding.raw, finding.location))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            adjacent,
+            vec![
+                ("a@example.invalid".to_string(), 0..17),
+                ("b@example.invalid".to_string(), 18..35)
+            ]
+        );
+
+        for input in ["a@example.invalid1", "a@example.invalid_"] {
+            assert!(
+                structural_findings(input)
+                    .iter()
+                    .all(|finding| finding.class != PiiClass::Email),
+                "{input}"
+            );
+        }
     }
 
     #[test]
