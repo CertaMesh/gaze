@@ -1,11 +1,11 @@
 # gaze-token-bridge
 
-> **Status:** experimental and published as `gaze-token-bridge = "0.11.2"`.
+> **Status:** experimental and published as `gaze-token-bridge = "0.11.3"`.
 > API is pre-1.0 and may change.
 
 ```toml
 [dependencies]
-gaze-token-bridge = "0.11.2"
+gaze-token-bridge = "0.11.3"
 ```
 
 The token bridge is the **owner-side authorization + translation layer** that lets an
