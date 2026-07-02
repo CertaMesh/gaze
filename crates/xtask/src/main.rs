@@ -1,3 +1,4 @@
+use std::collections::{hash_map::Entry, HashMap};
 use std::process::Command as ProcessCommand;
 
 use anyhow::{bail, Context, Result};
@@ -180,9 +181,7 @@ fn run_symmetric_potemkin_gate() -> Result<()> {
         "symmetric_potemkin_gate: checking {} behavioral tests",
         SYMMETRIC_POTEMKIN_TESTS.len()
     );
-    for test in SYMMETRIC_POTEMKIN_TESTS {
-        ensure_test_exists(*test)?;
-    }
+    ensure_tests_exist(SYMMETRIC_POTEMKIN_TESTS)?;
     for test in SYMMETRIC_POTEMKIN_TESTS {
         run_behavioral_test("symmetric_potemkin_gate", *test)?;
     }
@@ -199,9 +198,7 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
         "recognizer_composition_validator: checking {} behavioral tests",
         RECOGNIZER_COMPOSITION_VALIDATOR_TESTS.len()
     );
-    for test in RECOGNIZER_COMPOSITION_VALIDATOR_TESTS {
-        ensure_test_exists(*test)?;
-    }
+    ensure_tests_exist(RECOGNIZER_COMPOSITION_VALIDATOR_TESTS)?;
     for test in RECOGNIZER_COMPOSITION_VALIDATOR_TESTS {
         run_behavioral_test("recognizer_composition_validator", *test)?;
     }
@@ -209,7 +206,29 @@ fn run_recognizer_composition_validator_gate() -> Result<()> {
     Ok(())
 }
 
+fn ensure_tests_exist(tests: &[BehavioralTest]) -> Result<()> {
+    let mut listed = HashMap::<(&'static str, Option<&'static str>), String>::new();
+
+    for test in tests {
+        let key = (test.package, test.test_target);
+        let stdout = match listed.entry(key) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => entry.insert(list_tests(*test)?),
+        };
+        let expected_line = format!("{}: test", test.name);
+        if !stdout.lines().any(|line| line == expected_line) {
+            bail!("missing behavioral test: {}", describe(*test));
+        }
+    }
+
+    Ok(())
+}
+
 fn ensure_test_exists(test: BehavioralTest) -> Result<()> {
+    ensure_tests_exist(&[test])
+}
+
+fn list_tests(test: BehavioralTest) -> Result<String> {
     let output = cargo_test_command(test, None)
         .arg("--")
         .arg("--list")
@@ -222,12 +241,8 @@ fn ensure_test_exists(test: BehavioralTest) -> Result<()> {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let expected_line = format!("{}: test", test.name);
-    if !stdout.lines().any(|line| line == expected_line) {
-        bail!("missing behavioral test: {}", describe(test));
-    }
-    Ok(())
+    String::from_utf8(output.stdout)
+        .with_context(|| format!("failed to decode test list for {}", describe(test)))
 }
 
 fn run_behavioral_test(gate: &str, test: BehavioralTest) -> Result<()> {
