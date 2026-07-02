@@ -159,9 +159,9 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["test", "--workspace", "--all-features"],
     },
     MatrixCommand {
-        label: "cargo test --workspace --all-targets",
+        label: "cargo test --workspace --lib --bins --tests",
         program: "cargo",
-        args: &["test", "--workspace", "--all-targets"],
+        args: &["test", "--workspace", "--lib", "--bins", "--tests"],
     },
 ];
 

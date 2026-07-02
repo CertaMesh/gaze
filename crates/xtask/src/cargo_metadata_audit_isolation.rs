@@ -48,6 +48,10 @@ const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[
         workspace_member: "gaze-proxy",
         reason: "HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps",
     },
+    WorkspaceMemberExemption {
+        workspace_member: "gaze-cli",
+        reason: "CLI setup/model download path; ureq is not a safety-net pipeline dep",
+    },
 ];
 
 // No current workspace feature is allowed to disappear silently. Keep this
