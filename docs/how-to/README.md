@@ -3,7 +3,7 @@
 Task-oriented recipes. Each guide assumes you already know what you want to achieve and
 walks you to that goal. If Gaze is new to you, start with the
 [Getting Started tutorial](../tutorials/getting-started.md) first. For exact behavior and
-schemas, see the [reference](../reference/index.md).
+schemas, see the [reference](../reference/README.md).
 
 ## Proxy
 

@@ -13,10 +13,10 @@ working redact → send → restore loop in about ten minutes.
 These docs follow the [Diátaxis](https://diataxis.fr/) model. Each page serves one job;
 pick the column that matches *why* you're here:
 
-- **[Tutorials](tutorials/index.md)** — learning-oriented. Begin here if Gaze is new to you.
-- **[How-to guides](how-to/index.md)** — task-oriented recipes for a specific goal you already have.
-- **[Reference](reference/index.md)** — dry, complete descriptions: the CLI, policy schema, crates, metrics, audit columns, benchmarks.
-- **[Explanation](explanation/index.md)** — the design contracts: *why* the never-leak and restore guarantees hold.
+- **[Tutorials](tutorials/README.md)** — learning-oriented. Begin here if Gaze is new to you.
+- **[How-to guides](how-to/README.md)** — task-oriented recipes for a specific goal you already have.
+- **[Reference](reference/README.md)** — dry, complete descriptions: the CLI, policy schema, crates, metrics, audit columns, benchmarks.
+- **[Explanation](explanation/README.md)** — the design contracts: *why* the never-leak and restore guarantees hold.
 
 ## By feature
 
@@ -28,8 +28,8 @@ everything in full.
 |---|---|---|---|---|
 | Core redaction & restore | [Getting Started](tutorials/getting-started.md) | — | [CLI](reference/cli.md) · [Metrics](reference/metrics.md) | [Restore boundary](explanation/core/restore-boundary.md) · [Session contract](explanation/core/session-contract.md) |
 | CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) | — | [CLI reference](reference/cli.md) | — |
-| Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/index.md#detection--conflict-resolution) |
-| Safety nets / NER / Kiji | — | [Set up the Kiji safety net](how-to/safety-net/set-up-kiji-safetynet.md) | [Benchmarks](reference/benchmarks/index.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
+| Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
+| Safety nets / NER / Kiji | — | [Set up the Kiji safety net](how-to/safety-net/set-up-kiji-safetynet.md) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
 | Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) |
 | MCP adapter & runtime | — | [Set up the MCP adapter](how-to/mcp/set-up-mcp-adapter.md) | — | [MCP runtime](explanation/mcp/mcp-runtime.md) |
 | MCP bridge | — | [Set up the MCP bridge](how-to/mcp/set-up-mcp-bridge.md) | — | [MCP bridge](explanation/mcp/mcp-bridge.md) |

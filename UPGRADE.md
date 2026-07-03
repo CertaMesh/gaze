@@ -344,7 +344,7 @@ daemon` keeps multi-session state behind a JSONL stdio process boundary,
 pipeline skip-gating/capitals/prefix-cache/length-bucketing optimizations are
 available behind explicit opt-in flags, and `tract`/`candle` feature gates give
 static-binary deployments alternatives to the default `ort` runtime. Public
-benchmark claims are documented in [`docs/reference/benchmarks/index.md`](docs/reference/benchmarks/index.md):
+benchmark claims are documented in [`docs/reference/benchmarks/README.md`](docs/reference/benchmarks/README.md):
 Kiji int8 ORT warm p50 is 1.849ms in the committed model leaderboard snapshot,
 and the safety-net matrix records a 0.000 F1 delta versus fp32 Kiji.
 
