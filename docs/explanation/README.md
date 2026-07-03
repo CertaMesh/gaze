@@ -3,8 +3,8 @@
 Understanding-oriented. These pages explain *why* Gaze works the way it does — the contracts
 behind the never-leak and reversibility guarantees, the conflict-resolution model, and the
 runtime designs. They are for when you want the reasoning, not a recipe. For step-by-step
-tasks see the [how-to guides](../how-to/index.md); for exact surfaces see the
-[reference](../reference/index.md). The repo-root [ARCHITECTURE](../../ARCHITECTURE.md) gives
+tasks see the [how-to guides](../how-to/README.md); for exact surfaces see the
+[reference](../reference/README.md). The repo-root [ARCHITECTURE](../../ARCHITECTURE.md) gives
 the crate-level overview these deep-dives sit under.
 
 ## Core

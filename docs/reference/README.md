@@ -3,7 +3,7 @@
 Information-oriented and complete. Reference pages describe *what is* — exact commands,
 schema fields, crate boundaries, metric surfaces, and benchmark evidence — without tutorial
 narrative. Use them to look things up once you know what you're doing. For the reasoning
-behind a contract, follow through to [explanation](../explanation/index.md).
+behind a contract, follow through to [explanation](../explanation/README.md).
 
 ## Surfaces
 
@@ -24,7 +24,7 @@ behind a contract, follow through to [explanation](../explanation/index.md).
 The reproducibility index and the committed benchmark evidence. Public claims must trace
 back here.
 
-- **[Benchmark methodology](benchmarks/index.md)** — hardware spec template, corpus pins,
+- **[Benchmark methodology](benchmarks/README.md)** — hardware spec template, corpus pins,
   runnable commands, and the measured claims each surface supports.
 - **[Safety-net benchmark](benchmarks/safety-net-benchmark.md)**
 - **[v0.8 Kiji benchmark](benchmarks/v0.8-kiji-benchmark.md)** · **[v0.8 Kiji class gap](benchmarks/v0.8-kiji-class-gap.md)**
