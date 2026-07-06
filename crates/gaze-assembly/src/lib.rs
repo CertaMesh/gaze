@@ -34,7 +34,8 @@
 use std::collections::BTreeSet;
 
 use gaze::{
-    ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, Pipeline, RuleSpec, Rulepack,
+    Action, ClassRule, ColumnRule, Context, DefaultRule, LocaleChain, PiiClass, Pipeline, RuleSpec,
+    Rulepack,
 };
 
 mod class_map;
@@ -151,6 +152,102 @@ pub fn build_pipeline(
     builder = ner::register_ner(builder, policy, ner_threshold)?;
 
     Ok(builder.build()?)
+}
+
+/// Collision-family fallback classes that loaded recognizers can emit but the
+/// policy would silently preserve — a never-leak fail-open.
+///
+/// When a collision-family recognizer (for example the `payment-card-or-iban`
+/// IBAN recognizer) cannot resolve its mandatory anchor or hits a precedence
+/// tie, it emits one family-level token with class
+/// `custom:family:<family>` instead of the narrow variant class
+/// (`custom:iban`). A policy keyed on the variant class with a non-protective
+/// default (`preserve`, or no default rule at all) then matches no rule for the
+/// family class and leaves the detected span **unredacted** — a silent PII
+/// leak (north-star axis 1).
+///
+/// This returns the `custom:family:<family>` class strings that are:
+/// 1. declared by an enabled, mandatory-anchor recognizer whose locales
+///    intersect `active_locales` (rulepack recognizers or policy custom
+///    recognizers), and
+/// 2. not covered by an explicit `[[rule]] kind = "class"` rule declared
+///    *before* the first `default` rule (rules after an unconditional
+///    `default` are unreachable at runtime), and
+/// 3. left to a non-protective default action.
+///
+/// Scope is limited to families with a `mandatory_anchor` member because those
+/// emit the family fallback class *systematically* whenever the anchor cue pack
+/// is not loaded — the reported failure mode. Families that only fall back on a
+/// rare precedence tie are excluded to keep the warning low-noise.
+///
+/// The result is empty when the default action tokenizes/redacts (no leak is
+/// possible) or when every such family already has an explicit rule. Callers
+/// should surface each entry as a policy warning so adopters can add a covering
+/// rule. See `docs/explanation/detection/anchor-resolution.md`.
+pub fn uncovered_collision_family_classes(
+    policy: &gaze::Policy,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> Vec<String> {
+    // `action_for` in the pipeline takes the first matching rule and a
+    // `Default` rule matches unconditionally, so the first `Default` rule is
+    // the effective default AND everything declared after it is dead code;
+    // absence of one falls through to `Action::Preserve`.
+    let default_index = policy
+        .rules
+        .iter()
+        .position(|rule| matches!(rule, RuleSpec::Default { .. }));
+    let default_action = default_index.map(|index| match &policy.rules[index] {
+        RuleSpec::Default { action } => *action,
+        _ => unreachable!("position() matched a Default rule"),
+    });
+    let default_is_protective = matches!(
+        default_action,
+        Some(Action::Tokenize | Action::Redact | Action::FormatPreserve | Action::Generalize)
+    );
+    if default_is_protective {
+        return Vec::new();
+    }
+
+    // A covering class rule only reaches the runtime matcher when it appears
+    // BEFORE the first `Default` rule — a rule pasted after it is silently
+    // shadowed, which is precisely the leak this function exists to flag.
+    let live_rules = &policy.rules[..default_index.unwrap_or(policy.rules.len())];
+    mandatory_anchor_families(policy, rulepacks, active_locales)
+        .into_iter()
+        .filter(|family| {
+            let family_class = PiiClass::Custom(format!("family:{family}"));
+            !live_rules
+                .iter()
+                .any(|rule| matches!(rule, RuleSpec::Class { class, .. } if *class == family_class))
+        })
+        .map(|family| format!("custom:family:{family}"))
+        .collect()
+}
+
+/// Family names declared by an enabled, mandatory-anchor recognizer active under
+/// `active_locales` — the recognizers that emit a `custom:family:<family>`
+/// fallback token when their anchor cue is unavailable.
+fn mandatory_anchor_families(
+    policy: &gaze::Policy,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+) -> BTreeSet<String> {
+    let rulepack_families = rulepacks
+        .iter()
+        .flat_map(|rulepack| &rulepack.recognizers)
+        .filter(|recognizer| recognizer.enabled && active_locales.intersects(&recognizer.locales))
+        .filter_map(|recognizer| recognizer.collision.as_ref());
+    let policy_families = policy
+        .detectors
+        .iter()
+        .filter_map(|detector| detector.collision.as_ref());
+
+    rulepack_families
+        .chain(policy_families)
+        .filter(|collision| collision.mandatory_anchor.is_some())
+        .map(|collision| collision.family.clone())
+        .collect()
 }
 
 #[cfg(test)]

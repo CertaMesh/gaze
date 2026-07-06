@@ -29,7 +29,8 @@ use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
     build_context_pipeline, build_pipeline_from_policy, build_stub_pipeline,
     dictionary_terms_from_rulepacks, load_rulepacks, map_pipeline_error, map_policy_error,
-    merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold, ArcLogger,
+    merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold,
+    warn_uncovered_collision_families, ArcLogger,
 };
 
 const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
@@ -265,6 +266,12 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
         leak_report: LeakReportResponse::from(&leak_report),
     };
     let json = serde_json::to_string(&response).map_err(|_| CliError::Pipeline)?;
+    // Surface fail-open policy coverage gaps only once the clean succeeded — on
+    // an error path there is no output to leak, and the warning must not corrupt
+    // the single-line JSON error envelope on stderr (issue #360).
+    if let Some(policy) = effective_policy {
+        warn_uncovered_collision_families(policy, &loaded_rulepacks, &locale_chain);
+    }
     println!("{json}");
     Ok(())
 }

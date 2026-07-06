@@ -4178,3 +4178,169 @@ fn t_safety_net_registry_rejects_legacy_backend_selector() {
         serde_json::from_str(&stderr_line).expect("stderr is line-delimited JSON envelope");
     assert_eq!(value["error"], "SafetyNetConfig");
 }
+
+/// Reproduces issue #360: a `preserve`-default policy that tokenizes
+/// `custom:iban` leaks IBANs emitted under the collision-family fallback class.
+/// `gaze clean` must warn (naming the exact rule to add) rather than fail silently.
+fn write_iban_preserve_default_policy() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["en-US", "global"]
+
+[policy.rulepacks]
+bundled = ["core"]
+paths = []
+
+[[rule]]
+kind = "class"
+class = "custom:iban"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    (dir, path)
+}
+
+#[test]
+fn clean_warns_when_collision_family_class_would_leak() {
+    let (_dir, policy) = write_iban_preserve_default_policy();
+    // Synthetic mod-97-valid IBAN.
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", policy.display())],
+        "IBAN DE89370400440532013000",
+    );
+
+    assert!(out.status.success(), "clean should still succeed (exit 0)");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("warning:") && stderr.contains("custom:family:payment-card-or-iban"),
+        "expected a fail-open coverage warning naming the family class, got: {stderr}"
+    );
+    // The warning surfaces a real leak: the IBAN is preserved under the family class.
+    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    assert!(
+        stdout["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains("DE89370400440532013000"),
+        "IBAN leaks under the preserve default the warning is flagging"
+    );
+}
+
+#[test]
+fn clean_stays_silent_when_family_class_is_covered() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["en-US", "global"]
+
+[policy.rulepacks]
+bundled = ["core"]
+paths = []
+
+[[rule]]
+kind = "class"
+class = "custom:family:payment-card-or-iban"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "IBAN DE89370400440532013000",
+    );
+
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !stderr.contains("custom:family:payment-card-or-iban"),
+        "an explicit family rule must silence the warning, got: {stderr}"
+    );
+    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    assert!(
+        !stdout["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains("DE89370400440532013000"),
+        "covered family class must tokenize the IBAN, not leak it"
+    );
+}
+
+#[test]
+fn clean_still_warns_when_family_rule_is_shadowed_by_default() {
+    // The covering rule pasted AFTER the default rule (the natural end-of-file
+    // edit) is unreachable at runtime — rules are first-match-wins and a
+    // default rule matches unconditionally. The IBAN keeps leaking, so the
+    // warning must keep firing.
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[locale]
+active = ["en-US", "global"]
+
+[policy.rulepacks]
+bundled = ["core"]
+paths = []
+
+[[rule]]
+kind = "default"
+action = "preserve"
+
+[[rule]]
+kind = "class"
+class = "custom:family:payment-card-or-iban"
+action = "tokenize"
+"#,
+    )
+    .unwrap();
+
+    let out = clean_raw_with_args(
+        &[&format!("--policy={}", path.display())],
+        "IBAN DE89370400440532013000",
+    );
+
+    assert!(out.status.success());
+    let stdout: Value = serde_json::from_slice(&out.stdout).expect("stdout is JSON");
+    assert!(
+        stdout["clean_text"]
+            .as_str()
+            .unwrap()
+            .contains("DE89370400440532013000"),
+        "shadowed family rule is dead code: the IBAN leaks under the default"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("warning:") && stderr.contains("custom:family:payment-card-or-iban"),
+        "warning must keep firing while the leak is live, got: {stderr}"
+    );
+}
