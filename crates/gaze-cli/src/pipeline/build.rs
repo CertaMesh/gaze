@@ -81,7 +81,8 @@ pub(crate) fn warn_uncovered_collision_families(
         eprintln!(
             "warning: detection class '{family_class}' has no matching policy rule and the \
              default action preserves it; ambiguous spans will be left unredacted (potential \
-             leak). Add: [[rule]] kind = \"class\" class = \"{family_class}\" action = \"tokenize\""
+             leak). Add BEFORE your default rule: [[rule]] kind = \"class\" class = \
+             \"{family_class}\" action = \"tokenize\""
         );
     }
 }

@@ -815,6 +815,11 @@ class = "custom:family:payment-card-or-iban"
 action = "tokenize"
 ```
 
+> **Place this rule *before* your `default` rule.** Rules are first-match-wins
+> and a `default` rule matches unconditionally, so any rule declared after it
+> is unreachable — a covering rule pasted at the end of the file silences
+> nothing and the leak continues.
+
 Since v0.11.x, `gaze clean` prints a `warning:` to stderr at load time for every
 collision-family class an active recognizer can emit that your policy leaves to a
 non-protective default, naming the exact rule to add. Rust adopters get the same

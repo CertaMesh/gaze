@@ -170,7 +170,9 @@ pub fn build_pipeline(
 /// 1. declared by an enabled, mandatory-anchor recognizer whose locales
 ///    intersect `active_locales` (rulepack recognizers or policy custom
 ///    recognizers), and
-/// 2. not covered by an explicit `[[rule]] kind = "class"` rule, and
+/// 2. not covered by an explicit `[[rule]] kind = "class"` rule declared
+///    *before* the first `default` rule (rules after an unconditional
+///    `default` are unreachable at runtime), and
 /// 3. left to a non-protective default action.
 ///
 /// Scope is limited to families with a `mandatory_anchor` member because those
@@ -187,12 +189,17 @@ pub fn uncovered_collision_family_classes(
     rulepacks: &[Rulepack],
     active_locales: &LocaleChain,
 ) -> Vec<String> {
-    // `action_for` in the pipeline takes the first matching rule, so the first
-    // `Default` rule is the effective default; absence of one falls through to
-    // `Action::Preserve`.
-    let default_action = policy.rules.iter().find_map(|rule| match rule {
-        RuleSpec::Default { action } => Some(*action),
-        _ => None,
+    // `action_for` in the pipeline takes the first matching rule and a
+    // `Default` rule matches unconditionally, so the first `Default` rule is
+    // the effective default AND everything declared after it is dead code;
+    // absence of one falls through to `Action::Preserve`.
+    let default_index = policy
+        .rules
+        .iter()
+        .position(|rule| matches!(rule, RuleSpec::Default { .. }));
+    let default_action = default_index.map(|index| match &policy.rules[index] {
+        RuleSpec::Default { action } => *action,
+        _ => unreachable!("position() matched a Default rule"),
     });
     let default_is_protective = matches!(
         default_action,
@@ -202,12 +209,15 @@ pub fn uncovered_collision_family_classes(
         return Vec::new();
     }
 
+    // A covering class rule only reaches the runtime matcher when it appears
+    // BEFORE the first `Default` rule — a rule pasted after it is silently
+    // shadowed, which is precisely the leak this function exists to flag.
+    let live_rules = &policy.rules[..default_index.unwrap_or(policy.rules.len())];
     mandatory_anchor_families(policy, rulepacks, active_locales)
         .into_iter()
         .filter(|family| {
             let family_class = PiiClass::Custom(format!("family:{family}"));
-            !policy
-                .rules
+            !live_rules
                 .iter()
                 .any(|rule| matches!(rule, RuleSpec::Class { class, .. } if *class == family_class))
         })

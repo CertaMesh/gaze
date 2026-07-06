@@ -1289,3 +1289,25 @@ fn uncovered_family_classes_respects_explicit_family_rule() {
         "an explicit family rule must satisfy coverage: {uncovered:?}"
     );
 }
+
+#[test]
+fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
+    let mut policy = iban_preserve_default_policy();
+    // Pasting the covering rule AFTER the default rule (the natural
+    // end-of-file edit) leaves it unreachable at runtime — `action_for` is
+    // first-match-wins and `Default` matches unconditionally. The checker
+    // must keep flagging the family or the warning goes silent on a live leak.
+    policy.rules.push(RuleSpec::Class {
+        class: PiiClass::Custom("family:payment-card-or-iban".to_string()),
+        action: Action::Tokenize,
+    });
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "a family rule shadowed by an earlier default rule is dead code and must stay flagged: {uncovered:?}"
+    );
+}
