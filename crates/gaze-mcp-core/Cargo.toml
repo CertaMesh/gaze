@@ -1,6 +1,6 @@
 [package]
 name = "gaze-mcp-core"
-version = "0.11.3"
+version = "0.12.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -16,10 +16,10 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-gaze = { path = "../gaze", version = "0.11.3", package = "gaze-pii" }
+gaze = { path = "../gaze", version = "0.12.0", package = "gaze-pii" }
 gaze-types = { workspace = true }
-gaze-assembly = { path = "../gaze-assembly", version = "0.11.3" }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.11.3" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.12.0" }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.12.0" }
 async-trait = "0.1"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

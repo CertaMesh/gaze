@@ -1,6 +1,6 @@
 [package]
 name = "gaze-cli"
-version = "0.11.3"
+version = "0.12.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -47,16 +47,16 @@ chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 async-trait = { version = "0.1", optional = true }
 directories-next = { version = "2", optional = true }
-gaze = { path = "../gaze", version = "0.11.3", package = "gaze-pii" }
-gaze-assembly = { path = "../gaze-assembly", version = "0.11.3" }
+gaze = { path = "../gaze", version = "0.12.0", package = "gaze-pii" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.12.0" }
 gaze-audit = { workspace = true }
-gaze-document = { path = "../gaze-document", version = "0.11.3", optional = true }
+gaze-document = { path = "../gaze-document", version = "0.12.0", optional = true }
 gaze-mcp-bridge = { workspace = true, optional = true }
-gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.11.3", optional = true }
-gaze-mcp-rmcp = { path = "../gaze-mcp-rmcp", version = "0.11.3", optional = true }
+gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.12.0", optional = true }
+gaze-mcp-rmcp = { path = "../gaze-mcp-rmcp", version = "0.12.0", optional = true }
 gaze-proxy = { workspace = true, optional = true }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.11.3" }
-gaze-token-bridge = { path = "../gaze-token-bridge", version = "0.11.3", optional = true }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.12.0" }
+gaze-token-bridge = { path = "../gaze-token-bridge", version = "0.12.0", optional = true }
 gaze-types = { workspace = true }
 pdfium-render = { version = "0.9", optional = true }
 regex = "1"
@@ -73,7 +73,7 @@ url = "2"
 assert_cmd = "2"
 base64 = "0.22"
 gaze-audit = { workspace = true }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.11.3", features = ["test-support"] }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.12.0", features = ["test-support"] }
 rusqlite = { workspace = true }
 serde_json = "1"
 tempfile = "3"
