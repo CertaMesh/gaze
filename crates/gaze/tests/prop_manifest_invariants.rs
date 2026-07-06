@@ -53,7 +53,7 @@ fn filler_segment() -> impl Strategy<Value = Segment> {
     proptest::string::string_regex(r"[\p{L}\p{N}\p{P}\p{Z}\p{M}\x{1F600}-\x{1F64F}]{0,40}")
         .expect("valid filler regex")
         .prop_filter(
-            "filler does not contain tracked PII or restore-token delimiters",
+            "filler contains no tracked PII, restore-token delimiters, or token-shaped literals",
             |text| {
                 !text.contains('@')
                     && !text.contains('<')
@@ -62,6 +62,11 @@ fn filler_segment() -> impl Strategy<Value = Segment> {
                     && !text.contains("+44-7700")
                     && !text.contains("+49 1555")
                     && !text.contains("Dr. Schmidt")
+                    // Random filler can spell a bracketless token shape (e.g. `j_6`),
+                    // which strict restore correctly rejects fail-closed as an
+                    // `UnknownToken`. Exclude anything the product's own token-shape
+                    // DLP net would trap so the round-trip invariant holds.
+                    && !gaze::token_shape::contains_token(text)
             },
         )
         .prop_map(Segment::Filler)
