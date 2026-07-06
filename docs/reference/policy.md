@@ -819,12 +819,52 @@ rewriting.
 Common idioms:
 
 - Use `\b` word boundaries to avoid matching inside identifiers
-  (`\bORD-\d{6}\b`, not `ORD-\d{6}`).
+  (`\bORD-\d{6}\b`, not `ORD-\d{6}`) — but see the pitfall below when the
+  pattern edge is not a word character.
 - Use `(?i)` at the start of a pattern for case-insensitive matching. PCRE-style
   inline flags such as `pattern = "(?i)customer-\\d+"` work because they are
   supported by Rust `regex`.
 - TOML literal strings (`'...'`) avoid double-escaping backslashes —
   prefer them over basic strings (`"..."`) for regex patterns.
+
+#### Pitfall: `\b` next to non-word characters (currency symbols, punctuation)
+
+`\b` matches a *word boundary*: a transition between a word character
+(`[0-9A-Za-z_]` plus Unicode letters/digits) and a non-word character. When the
+character adjacent to `\b` inside your pattern is itself a **non-word**
+character — `€`, `$`, `£`, `%`, punctuation — the boundary can only exist if the
+*surrounding* text supplies a word character, which is usually the opposite of
+what you want:
+
+```toml
+# BROKEN: never matches "5000€" or "$3,500.00" in normal prose.
+pattern = '\b(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|£|EUR|USD|GBP))\b'
+```
+
+- `Order total 5000€ due today.` — no match: the trailing `\b` sits between `€`
+  (non-word) and a space (non-word) — no transition, no boundary.
+- `Posten: 5000€ 1000€ MwSt` — **mis-span**: the engine finds a sneaky
+  alternative parse (`€ 1000` via the symbol-prefix branch) and tokenizes the
+  wrong span, leaking `5000`.
+- `Betrag 1.500,00 EUR fällig.` — matches fine: `EUR` ends in a word character,
+  so `\b` works as expected.
+
+For a redaction policy this fails **open**: the amount silently stays in the
+clean text. This is standard Rust `regex` (and PCRE, and RE2) `\b` semantics —
+not a Gaze behavior — and it has been stable across every Gaze release
+(verified 0.5.x through 0.11.x, byte-identical outputs; see issue #361).
+Because Rust `regex` has no look-around, you cannot emulate a one-sided
+boundary with `(?<!...)`/`(?!...)`. Instead, apply `\b` only to the edges that
+end in a word character and let the symbol act as its own delimiter:
+
+```toml
+# WORKS: \b only guards the digit edges; €/$/£ delimit themselves.
+pattern = '(?:[$€£]\s?\d[\d.,]*\d|[$€£]\s?\d|\b\d[\d.,]*\d\s?(?:€|£|EUR|USD|GBP)|\b\d\s?(?:€|£|EUR|USD|GBP))'
+```
+
+The same applies to any custom class whose values start or end with a symbol
+(percentages, `#`-prefixed IDs, currency): put `\b` next to `\d`/`\w` edges
+only, never next to the symbol.
 
 The pattern is compiled at `Policy::load` time, so a malformed regex fails
 fast with `PolicyConfig` and never reaches `gaze clean`'s stdin read.
