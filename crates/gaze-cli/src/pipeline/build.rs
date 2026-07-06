@@ -66,6 +66,27 @@ pub(crate) fn build_pipeline_from_policy(
     })
 }
 
+/// Emit a stderr warning for each collision-family fallback class that the
+/// policy leaves to a non-protective default action (see
+/// [`gaze_assembly::uncovered_collision_family_classes`]). Surfaces the silent
+/// PII leak described in issue #360 at clean time.
+pub(crate) fn warn_uncovered_collision_families(
+    policy: &Policy,
+    rulepacks: &[Rulepack],
+    locale_chain: &LocaleChain,
+) {
+    for family_class in
+        gaze_assembly::uncovered_collision_family_classes(policy, rulepacks, locale_chain)
+    {
+        eprintln!(
+            "warning: detection class '{family_class}' has no matching policy rule and the \
+             default action preserves it; ambiguous spans will be left unredacted (potential \
+             leak). Add BEFORE your default rule: [[rule]] kind = \"class\" class = \
+             \"{family_class}\" action = \"tokenize\""
+        );
+    }
+}
+
 pub(crate) fn validate_ner_threshold(threshold: f32) -> std::result::Result<f32, PolicyError> {
     if (0.0..=1.0).contains(&threshold) {
         Ok(threshold)

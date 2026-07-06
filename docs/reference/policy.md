@@ -778,6 +778,55 @@ action = "preserve"
   omitted, unmatched detections fall through to `Preserve` automatically,
   but an explicit `default` makes the policy intent visible.
 
+#### Collision-family fallback classes (avoid a silent leak)
+
+Some bundled recognizers belong to a **collision family** — a set of structural
+recognizers whose shape overlaps (for example IBANs and payment-card numbers,
+both long digit runs). When such a recognizer cannot commit to its precise
+variant class — its mandatory anchor cue is absent, or two variants tie — Gaze
+**fails closed** and emits one family-level token whose class is
+`custom:family:<family>` instead of the narrow variant class. See
+[Mandatory Anchor Resolution](../explanation/detection/anchor-resolution.md).
+
+Concretely, the `iban.structural` recognizer declares
+`mandatory_anchor = "iban"`. The anchor cue words (`IBAN`, `Account`, …) ship in
+the `locale-en` / `locale-de` rulepacks, **not** in `core`. So:
+
+- With only `bundled = ["core"]` loaded, the anchor is never available and every
+  detected IBAN is emitted as `custom:family:payment-card-or-iban` — the narrow
+  `custom:iban` class is effectively unreachable.
+- Load `bundled = ["core", "locale-en"]` (or `locale-de`) **and** keep a cue word
+  such as `IBAN` near the value to get the precise `custom:iban` class.
+
+> **Setting `[locale].active` is not enough** — it only orders the locale
+> fallback chain. The anchor cues live in a rulepack, so the pack must appear in
+> `[policy.rulepacks].bundled`.
+
+This is fail-closed at *detection* but can be fail-**open** at *policy*: a policy
+that tokenizes `custom:iban` (or `custom:credit_card`) with a `preserve` default
+matches **no rule** for `custom:family:payment-card-or-iban`, so the span falls
+through to `preserve` and the IBAN **leaks**. To stay closed, add a rule for the
+family class (recommended even when you also load the locale pack):
+
+```toml
+[[rule]]
+kind = "class"
+class = "custom:family:payment-card-or-iban"
+action = "tokenize"
+```
+
+> **Place this rule *before* your `default` rule.** Rules are first-match-wins
+> and a `default` rule matches unconditionally, so any rule declared after it
+> is unreachable — a covering rule pasted at the end of the file silences
+> nothing and the leak continues.
+
+Since v0.11.x, `gaze clean` prints a `warning:` to stderr at load time for every
+collision-family class an active recognizer can emit that your policy leaves to a
+non-protective default, naming the exact rule to add. Rust adopters get the same
+list from `gaze_assembly::uncovered_collision_family_classes`. The bundled family
+names are listed under
+[Custom-recognizer collision metadata](#custom-recognizer-collision-metadata).
+
 ### `[ner]` (optional)
 
 ```toml

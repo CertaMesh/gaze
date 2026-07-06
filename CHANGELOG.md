@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`gaze clean` now warns when a collision-family fallback class would silently
+  leak** (#360). When an active recognizer can emit a `custom:family:<family>`
+  class (for example `custom:family:payment-card-or-iban` for an anchor-less
+  IBAN) and the policy leaves that class to a non-protective default, the CLI
+  prints a `warning:` to stderr naming the exact rule to add. Rust adopters get
+  the same list from the new `gaze_assembly::uncovered_collision_family_classes`.
+
+### Changed
+
+- **CI now runs `bundle-tokenization-drift --verify-ack`** (#360). Any change to
+  a committed bundle tokenization snapshot — including emitted class renames —
+  must carry a `// drift-ack:` comment and a CHANGELOG entry to merge. The v0.8
+  `custom:iban` → `custom:family:payment-card-or-iban` snapshot change merged
+  without either, which is how the rename reached adopters undocumented.
+
+### Fixed
+
+- **Documented the collision-family fallback class contract so `preserve`-default
+  policies stop leaking IBANs** (#360). A policy keyed on `custom:iban` with a
+  `preserve` default matched no rule for the anchor-less
+  `custom:family:payment-card-or-iban` class and silently preserved the IBAN.
+  The class names are now documented as pinnable contract in
+  [`docs/reference/policy.md`](docs/reference/policy.md), and setting a covering
+  `[[rule]]` (or loading `locale-en`/`locale-de` for the precise `custom:iban`
+  class) closes the leak. Restores axis-1 protection for the default `core`-only
+  configuration.
+
 ## [0.11.3] - 2026-07-02
 
 v0.11.2 crates were never published to crates.io; v0.11.3 supersedes it for

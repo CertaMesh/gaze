@@ -1216,3 +1216,98 @@ fn source_short_label_derivation_handles_builtin_and_adopter_shapes() {
         "team_handoff"
     );
 }
+
+// Regression coverage for issue #360: a policy that tokenizes `custom:iban` but
+// leaves the default at `preserve` silently leaks IBAN spans emitted under the
+// collision-family fallback class `custom:family:payment-card-or-iban`.
+
+fn iban_preserve_default_policy() -> gaze::Policy {
+    let mut policy = gaze::Policy::default();
+    policy.session = SessionPolicy::default();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("iban"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+    policy
+}
+
+#[test]
+fn uncovered_family_classes_flags_preserve_default_iban_leak() {
+    let policy = iban_preserve_default_policy();
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "preserve-default IBAN policy must flag the uncovered family class: {uncovered:?}"
+    );
+}
+
+#[test]
+fn uncovered_family_classes_empty_when_default_tokenizes() {
+    let mut policy = iban_preserve_default_policy();
+    // Flip the default to a protective action: no span can leak, so nothing is flagged.
+    policy.rules = vec![RuleSpec::Default {
+        action: Action::Tokenize,
+    }];
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.is_empty(),
+        "a tokenizing default action leaks nothing: {uncovered:?}"
+    );
+}
+
+#[test]
+fn uncovered_family_classes_respects_explicit_family_rule() {
+    let mut policy = iban_preserve_default_policy();
+    // Adding the family rule the warning recommends must clear it from the list.
+    policy.rules.insert(
+        0,
+        RuleSpec::Class {
+            class: PiiClass::Custom("family:payment-card-or-iban".to_string()),
+            action: Action::Tokenize,
+        },
+    );
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        !uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "an explicit family rule must satisfy coverage: {uncovered:?}"
+    );
+}
+
+#[test]
+fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
+    let mut policy = iban_preserve_default_policy();
+    // Pasting the covering rule AFTER the default rule (the natural
+    // end-of-file edit) leaves it unreachable at runtime — `action_for` is
+    // first-match-wins and `Default` matches unconditionally. The checker
+    // must keep flagging the family or the warning goes silent on a live leak.
+    policy.rules.push(RuleSpec::Class {
+        class: PiiClass::Custom("family:payment-card-or-iban".to_string()),
+        action: Action::Tokenize,
+    });
+    let rulepacks = [embedded_rulepack("core")];
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    let uncovered = uncovered_collision_family_classes(&policy, &rulepacks, &active_locales);
+
+    assert!(
+        uncovered.contains(&"custom:family:payment-card-or-iban".to_string()),
+        "a family rule shadowed by an earlier default rule is dead code and must stay flagged: {uncovered:?}"
+    );
+}
