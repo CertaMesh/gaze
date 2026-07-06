@@ -1,6 +1,6 @@
 # gaze-mcp-bridge
 
-`gaze-mcp-bridge = "0.11.3"` is the optional policy-gated MCP bridge for Gaze.
+`gaze-mcp-bridge = "0.12.0"` is the optional policy-gated MCP bridge for Gaze.
 
 The bridge is intentionally fail-closed: agents see only pseudonymous tokens,
 downstream MCP tools receive restored PII only for explicitly allowed argument

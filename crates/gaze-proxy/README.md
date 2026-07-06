@@ -12,13 +12,13 @@ PII-bearing fields before calling the supplied `gaze::Pipeline`.
 
 ```toml
 [dependencies]
-gaze-proxy = "0.11.3"
+gaze-proxy = "0.12.0"
 ```
 
 ## Quickstart
 
 ```bash
-cargo install gaze-cli --version 0.11.3
+cargo install gaze-cli --version 0.12.0
 gaze proxy start
 ```
 
