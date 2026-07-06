@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Policy-authoring docs now cover the `\b`-next-to-symbol regex pitfall**
+  (#361). `\b` adjacent to a non-word character (`€`, `$`, `£`, punctuation)
+  never forms a boundary against whitespace, so currency-style patterns like
+  `\b(...€|$...)\b` silently fail to match — a fail-open leak in redaction
+  policies. Investigated as a suspected 0.5.x → 0.11.x regression and ruled
+  out: outputs are byte-identical across versions (standard Rust `regex`
+  semantics, engine unchanged). `docs/reference/policy.md` documents the
+  failure modes and the explicit-boundary-group rewrite.
 - **`gaze clean` now warns when a collision-family fallback class would silently
   leak** (#360). When an active recognizer can emit a `custom:family:<family>`
   class (for example `custom:family:payment-card-or-iban` for an anchor-less
