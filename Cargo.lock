@@ -1423,6 +1423,7 @@ dependencies = [
  "gaze-mcp-bridge",
  "gaze-mcp-core",
  "gaze-mcp-rmcp",
+ "gaze-model-setup",
  "gaze-pii",
  "gaze-proxy",
  "gaze-recognizers",
@@ -1438,7 +1439,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
- "ureq",
  "url",
 ]
 

@@ -1,15 +1,12 @@
-use std::borrow::Cow;
 use std::fmt::Write as _;
 use std::fs;
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use clap::ValueEnum;
 use gaze::{CleanDocument, DictionaryBundle, LocaleChain, Policy, RawDocument, Session};
-use gaze_recognizers::safety_net::kiji_distilbert::{
-    KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_SHA256SUMS,
+use gaze_model_setup::{
+    install_kiji_bundle, InstallOptions, InstallOutcome, KijiDistilbertPrecision, SetupError,
 };
 use sha2::{Digest, Sha256};
 
@@ -20,20 +17,7 @@ use crate::pipeline::build::{
 };
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
-const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
 const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
-const KIJI_LABELS_JSON: &str = r#"{
-  "schema_version": 1,
-  "source": "onnx-community/distilbert-NER-ONNX",
-  "source_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
-  "labels": [
-    {"id": "person", "upstream": ["B-PER", "I-PER"]},
-    {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
-    {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
-    {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]}
-  ]
-}
-"#;
 const DOCTOR_INPUT: &str =
     "From: Alice Example <alice@example.invalid>\nContact Alice Example about Example Ltd."; // fixture-cited(crates/gaze-cli/src/commands/setup.rs:commands::setup::tests::non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes)
 
@@ -53,7 +37,7 @@ pub(crate) enum SetupSafetyNet {
 }
 
 pub(crate) fn run(args: Args) -> Result<(), CliError> {
-    let summary = run_with_manifest(args, &kiji_manifest())?;
+    let summary = run_with_opf_setup(args, default_opf_setup())?;
     print_summary(&summary);
     Ok(())
 }
@@ -74,22 +58,6 @@ struct SetupSummary {
     opf_checkpoint: Option<PathBuf>,
 }
 
-#[derive(Clone)]
-struct ArtifactFile<'a> {
-    source_path: Option<&'a str>,
-    file_name: &'a str,
-    inline_contents: Option<&'a str>,
-}
-
-#[derive(Clone)]
-struct ArtifactManifest<'a> {
-    hf_repo: &'a str,
-    hf_commit: &'a str,
-    bundle_sha256: &'a str,
-    sha256sums: Cow<'a, str>,
-    files: Vec<ArtifactFile<'a>>,
-}
-
 #[derive(Clone, Copy)]
 struct OpfBundlePin<'a> {
     bundle_sha256: Option<&'a str>,
@@ -108,49 +76,11 @@ struct ResolvedSetupSafetyNet {
     opf_checkpoint: Option<PathBuf>,
 }
 
-fn kiji_manifest() -> ArtifactManifest<'static> {
-    ArtifactManifest {
-        hf_repo: KIJI_DISTILBERT_HF_REPO,
-        hf_commit: KIJI_DISTILBERT_HF_COMMIT,
-        bundle_sha256: KIJI_DISTILBERT_BUNDLE_SHA256,
-        sha256sums: Cow::Borrowed(KIJI_DISTILBERT_SHA256SUMS),
-        files: vec![
-            ArtifactFile {
-                source_path: Some("onnx/model.onnx"),
-                file_name: "model.onnx",
-                inline_contents: None,
-            },
-            ArtifactFile {
-                source_path: Some("tokenizer.json"),
-                file_name: "tokenizer.json",
-                inline_contents: None,
-            },
-            ArtifactFile {
-                source_path: None,
-                file_name: "labels.json",
-                inline_contents: Some(KIJI_LABELS_JSON),
-            },
-        ],
-    }
-}
-
-fn run_with_manifest(
-    args: Args,
-    manifest: &ArtifactManifest<'_>,
-) -> Result<SetupSummary, CliError> {
-    run_with_manifest_and_opf(args, manifest, default_opf_setup())
-}
-
-fn run_with_manifest_and_opf(
-    args: Args,
-    manifest: &ArtifactManifest<'_>,
-    opf_setup: OpfSetup<'_>,
-) -> Result<SetupSummary, CliError> {
+fn run_with_opf_setup(args: Args, opf_setup: OpfSetup<'_>) -> Result<SetupSummary, CliError> {
     let resolved_safety_net = resolve_safety_net(args.safety_net, args.non_interactive, opf_setup)?;
-    let model_dir = resolve_model_dir(args.model_dir)?;
     let policy_path = resolve_policy_path(args.policy_out, args.non_interactive)?;
 
-    let model_status = ensure_model_dir(manifest, &model_dir)?;
+    let (model_dir, model_status) = install_kiji_model(args.model_dir)?;
 
     write_policy(&policy_path, &model_dir, args.force)?;
     let doctor_clean_text = doctor_check(&policy_path)?;
@@ -163,6 +93,28 @@ fn run_with_manifest_and_opf(
         opf_notice: resolved_safety_net.opf_notice,
         opf_checkpoint: resolved_safety_net.opf_checkpoint,
     })
+}
+
+fn install_kiji_model(
+    model_dir: Option<PathBuf>,
+) -> Result<(PathBuf, ModelInstallStatus), CliError> {
+    let outcome = install_kiji_bundle(&InstallOptions {
+        model_dir,
+        precision: KijiDistilbertPrecision::Fp32,
+    })
+    .map_err(map_model_setup_error)?;
+    Ok(match outcome {
+        InstallOutcome::AlreadyPresent { model_dir } => {
+            (model_dir, ModelInstallStatus::AlreadyPresent)
+        }
+        InstallOutcome::Installed { model_dir } => (model_dir, ModelInstallStatus::Downloaded),
+    })
+}
+
+fn map_model_setup_error(err: SetupError) -> CliError {
+    setup_error(format!(
+        "Kiji model setup failed: {err}. Remediation: re-run `gaze setup` to repair a current-user loose-permission bundle, or move/chown/chmod/remove the model directory and retry with `--model-dir`."
+    ))
 }
 
 fn resolve_safety_net(
@@ -305,13 +257,6 @@ fn prompt_safety_net() -> Result<SetupSafetyNet, CliError> {
     }
 }
 
-fn resolve_model_dir(model_dir: Option<PathBuf>) -> Result<PathBuf, CliError> {
-    match model_dir {
-        Some(path) => absolute_path(&path),
-        None => default_model_dir(),
-    }
-}
-
 fn resolve_policy_path(
     policy_out: Option<PathBuf>,
     non_interactive: bool,
@@ -343,27 +288,6 @@ fn prompt_line(prompt: &str) -> Result<String, CliError> {
     Ok(line)
 }
 
-fn default_model_dir() -> Result<PathBuf, CliError> {
-    if let Some(xdg_data_home) = std::env::var_os("XDG_DATA_HOME").filter(|value| !value.is_empty())
-    {
-        return Ok(PathBuf::from(xdg_data_home)
-            .join("gaze")
-            .join("models")
-            .join(DEFAULT_MODEL_DIR_NAME));
-    }
-    let Some(home) = std::env::var_os("HOME").filter(|value| !value.is_empty()) else {
-        return Err(setup_error(
-            "cannot resolve model dir: neither XDG_DATA_HOME nor HOME is set".to_string(),
-        ));
-    };
-    Ok(PathBuf::from(home)
-        .join(".local")
-        .join("share")
-        .join("gaze")
-        .join("models")
-        .join(DEFAULT_MODEL_DIR_NAME))
-}
-
 fn absolute_path(path: &Path) -> Result<PathBuf, CliError> {
     if path.is_absolute() {
         Ok(path.to_path_buf())
@@ -374,267 +298,12 @@ fn absolute_path(path: &Path) -> Result<PathBuf, CliError> {
     }
 }
 
-fn ensure_model_dir(
-    manifest: &ArtifactManifest<'_>,
-    model_dir: &Path,
-) -> Result<ModelInstallStatus, CliError> {
-    if model_dir.exists() {
-        if verify_model_dir(manifest, model_dir).is_ok() {
-            secure_model_permissions(manifest, model_dir)?;
-            return Ok(ModelInstallStatus::AlreadyPresent);
-        }
-        if !is_empty_dir(model_dir)? {
-            return Err(setup_error(format!(
-                "existing model dir `{}` is not SHA-valid; remove it or choose --model-dir",
-                model_dir.display()
-            )));
-        }
-    }
-
-    download_model_dir(manifest, model_dir)?;
-    verify_model_dir(manifest, model_dir).map_err(setup_error)?;
-    secure_model_permissions(manifest, model_dir)?;
-    Ok(ModelInstallStatus::Downloaded)
-}
-
-fn is_empty_dir(path: &Path) -> Result<bool, CliError> {
-    if !path.is_dir() {
-        return Ok(false);
-    }
-    let mut entries = fs::read_dir(path)
-        .map_err(|err| setup_error(format!("cannot read `{}`: {err}", path.display())))?;
-    Ok(entries.next().is_none())
-}
-
-fn download_model_dir(manifest: &ArtifactManifest<'_>, model_dir: &Path) -> Result<(), CliError> {
-    let parent = model_dir.parent().ok_or_else(|| {
-        setup_error(format!(
-            "model dir `{}` has no parent directory",
-            model_dir.display()
-        ))
-    })?;
-    fs::create_dir_all(parent).map_err(|err| {
-        setup_error(format!(
-            "cannot create model parent `{}`: {err}",
-            parent.display()
-        ))
-    })?;
-
-    let tmp_dir = parent.join(format!(
-        ".{}.download-{}",
-        model_dir
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or(DEFAULT_MODEL_DIR_NAME),
-        unique_suffix()
-    ));
-    fs::create_dir(&tmp_dir).map_err(|err| {
-        setup_error(format!(
-            "cannot create temporary model dir `{}`: {err}",
-            tmp_dir.display()
-        ))
-    })?;
-    set_dir_private(&tmp_dir)?;
-
-    let result = (|| {
-        for file in &manifest.files {
-            let destination = tmp_dir.join(file.file_name);
-            if let Some(contents) = file.inline_contents {
-                fs::write(&destination, contents.as_bytes()).map_err(|err| {
-                    setup_error(format!("cannot write `{}`: {err}", destination.display()))
-                })?;
-                set_file_private(&destination)?;
-                continue;
-            }
-
-            let source_path = file.source_path.ok_or_else(|| {
-                setup_error(format!("artifact `{}` has no source path", file.file_name))
-            })?;
-            let url = format!(
-                "https://huggingface.co/{}/resolve/{}/{}",
-                manifest.hf_repo, manifest.hf_commit, source_path
-            );
-            download_url_to_file(&url, &destination)?;
-            set_file_private(&destination)?;
-        }
-
-        let sums_path = tmp_dir.join("SHA256SUMS");
-        fs::write(&sums_path, manifest.sha256sums.as_bytes())
-            .map_err(|err| setup_error(format!("cannot write `{}`: {err}", sums_path.display())))?;
-        set_file_private(&sums_path)?;
-        verify_model_dir(manifest, &tmp_dir).map_err(setup_error)
-    })();
-
-    if let Err(err) = result {
-        let _ = fs::remove_dir_all(&tmp_dir);
-        return Err(err);
-    }
-
-    if model_dir.exists() {
-        if is_empty_dir(model_dir)? {
-            fs::remove_dir(model_dir).map_err(|err| {
-                setup_error(format!(
-                    "cannot replace empty model dir `{}`: {err}",
-                    model_dir.display()
-                ))
-            })?;
-        } else {
-            let _ = fs::remove_dir_all(&tmp_dir);
-            return Err(setup_error(format!(
-                "model dir `{}` became non-empty during setup",
-                model_dir.display()
-            )));
-        }
-    }
-    fs::rename(&tmp_dir, model_dir).map_err(|err| {
-        let _ = fs::remove_dir_all(&tmp_dir);
-        setup_error(format!(
-            "cannot install model dir `{}`: {err}",
-            model_dir.display()
-        ))
-    })
-}
-
-fn download_url_to_file(url: &str, destination: &Path) -> Result<(), CliError> {
-    let mut last_error = String::new();
-    for _ in 0..3 {
-        match try_download_url_to_file(url, destination) {
-            Ok(()) => return Ok(()),
-            Err(err) => last_error = err,
-        }
-    }
-    Err(setup_error(format!(
-        "failed to download `{url}` after 3 attempts: {last_error}"
-    )))
-}
-
-fn try_download_url_to_file(url: &str, destination: &Path) -> Result<(), String> {
-    let response = ureq::get(url).call().map_err(|err| err.to_string())?;
-    let mut reader = response
-        .into_body()
-        .into_with_config()
-        .limit(u64::MAX)
-        .reader();
-    let tmp = destination.with_extension("download");
-    let mut file = fs::File::create(&tmp).map_err(|err| err.to_string())?;
-    io::copy(&mut reader, &mut file).map_err(|err| err.to_string())?;
-    file.flush().map_err(|err| err.to_string())?;
-    fs::rename(&tmp, destination).map_err(|err| err.to_string())
-}
-
-fn verify_model_dir(manifest: &ArtifactManifest<'_>, model_dir: &Path) -> Result<(), String> {
-    if !model_dir.is_dir() {
-        return Err(format!("`{}` is not a directory", model_dir.display()));
-    }
-    reject_symlink(model_dir)?;
-
-    let sums_path = model_dir.join("SHA256SUMS");
-    reject_symlink(&sums_path)?;
-    let sums = fs::read(&sums_path)
-        .map_err(|err| format!("cannot read `{}`: {err}", sums_path.display()))?;
-    let actual_bundle_sha = hex_sha256(&sums);
-    if actual_bundle_sha != manifest.bundle_sha256 {
-        return Err(format!(
-            "SHA256SUMS integrity mismatch: expected {} got {}",
-            manifest.bundle_sha256, actual_bundle_sha
-        ));
-    }
-
-    let entries = parse_sha256sums(&sums)?;
-    for file in &manifest.files {
-        if !entries
-            .iter()
-            .any(|(name, _)| name.as_str() == file.file_name)
-        {
-            return Err(format!("SHA256SUMS missing entry for {}", file.file_name));
-        }
-    }
-
-    for (file_name, expected_sha) in entries {
-        let path = model_dir.join(&file_name);
-        reject_symlink(&path)?;
-        let bytes =
-            fs::read(&path).map_err(|err| format!("cannot read `{}`: {err}", path.display()))?;
-        let actual_sha = hex_sha256(&bytes);
-        if actual_sha != expected_sha {
-            return Err(format!(
-                "artifact `{}` SHA mismatch: expected {} got {}",
-                file_name, expected_sha, actual_sha
-            ));
-        }
-    }
-    Ok(())
-}
-
 fn reject_symlink(path: &Path) -> Result<(), String> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|err| format!("cannot inspect `{}`: {err}", path.display()))?;
     if metadata.file_type().is_symlink() {
         return Err(format!("`{}` must not be a symlink", path.display()));
     }
-    Ok(())
-}
-
-fn parse_sha256sums(bytes: &[u8]) -> Result<Vec<(String, String)>, String> {
-    let text = std::str::from_utf8(bytes).map_err(|_| "SHA256SUMS is not UTF-8".to_string())?;
-    let mut entries = Vec::new();
-    for (index, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        let mut fields = trimmed.split_whitespace();
-        let sha = fields.next().unwrap_or_default();
-        let name = fields.next().unwrap_or_default();
-        if fields.next().is_some()
-            || sha.len() != 64
-            || !sha.bytes().all(|byte| byte.is_ascii_hexdigit())
-            || name.is_empty()
-            || name.contains('/')
-            || name.contains('\\')
-        {
-            return Err(format!("malformed SHA256SUMS line {}", index + 1));
-        }
-        entries.push((name.to_string(), sha.to_ascii_lowercase()));
-    }
-    Ok(entries)
-}
-
-fn secure_model_permissions(
-    manifest: &ArtifactManifest<'_>,
-    model_dir: &Path,
-) -> Result<(), CliError> {
-    set_dir_private(model_dir)?;
-    set_file_private(&model_dir.join("SHA256SUMS"))?;
-    for file in &manifest.files {
-        set_file_private(&model_dir.join(file.file_name))?;
-    }
-    Ok(())
-}
-
-#[cfg(unix)]
-fn set_dir_private(path: &Path) -> Result<(), CliError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o700))
-        .map_err(|err| setup_error(format!("cannot chmod 0700 `{}`: {err}", path.display())))
-}
-
-#[cfg(not(unix))]
-fn set_dir_private(_path: &Path) -> Result<(), CliError> {
-    Ok(())
-}
-
-#[cfg(unix)]
-fn set_file_private(path: &Path) -> Result<(), CliError> {
-    use std::os::unix::fs::PermissionsExt;
-
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .map_err(|err| setup_error(format!("cannot chmod 0600 `{}`: {err}", path.display())))
-}
-
-#[cfg(not(unix))]
-fn set_file_private(_path: &Path) -> Result<(), CliError> {
     Ok(())
 }
 
@@ -829,14 +498,6 @@ fn hex_sha256(bytes: &[u8]) -> String {
     out
 }
 
-fn unique_suffix() -> String {
-    let millis = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or_default();
-    format!("{}-{millis}", std::process::id())
-}
-
 fn setup_error(detail: String) -> CliError {
     CliError::SetupDetail(detail)
 }
@@ -846,82 +507,101 @@ mod tests {
     use super::*;
     use tempfile::tempdir;
 
-    fn synthetic_manifest<'a>(
-        model_bytes: &'a str,
-        tokenizer_bytes: &'a str,
-        labels_bytes: &'a str,
-    ) -> ArtifactManifest<'a> {
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    fn write_synthetic_kiji_dir(model_dir: &Path) {
+        let model_bytes = b"synthetic model bytes";
+        let tokenizer_bytes = b"synthetic tokenizer bytes";
+        let labels_bytes = b"{}";
         let sums = format!(
             "{}  labels.json\n{}  model.onnx\n{}  tokenizer.json\n",
-            hex_sha256(labels_bytes.as_bytes()),
-            hex_sha256(model_bytes.as_bytes()),
-            hex_sha256(tokenizer_bytes.as_bytes()),
+            hex_sha256(labels_bytes),
+            hex_sha256(model_bytes),
+            hex_sha256(tokenizer_bytes),
         );
-        let bundle_sha = hex_sha256(sums.as_bytes());
-        ArtifactManifest {
-            hf_repo: "example.invalid/gaze-test",
-            hf_commit: "0000000000000000000000000000000000000000",
-            bundle_sha256: Box::leak(bundle_sha.into_boxed_str()),
-            sha256sums: Cow::Owned(sums),
-            files: vec![
-                ArtifactFile {
-                    source_path: Some("model.onnx"),
-                    file_name: "model.onnx",
-                    inline_contents: Some(model_bytes),
-                },
-                ArtifactFile {
-                    source_path: Some("tokenizer.json"),
-                    file_name: "tokenizer.json",
-                    inline_contents: Some(tokenizer_bytes),
-                },
-                ArtifactFile {
-                    source_path: None,
-                    file_name: "labels.json",
-                    inline_contents: Some(labels_bytes),
-                },
-            ],
-        }
-    }
-
-    fn write_manifest_dir(manifest: &ArtifactManifest<'_>, model_dir: &Path) {
         fs::create_dir_all(model_dir).unwrap();
-        for file in &manifest.files {
-            fs::write(
-                model_dir.join(file.file_name),
-                file.inline_contents.unwrap().as_bytes(),
-            )
-            .unwrap();
-        }
-        fs::write(model_dir.join("SHA256SUMS"), manifest.sha256sums.as_bytes()).unwrap();
+        fs::write(model_dir.join("labels.json"), labels_bytes).unwrap();
+        fs::write(model_dir.join("model.onnx"), model_bytes).unwrap();
+        fs::write(model_dir.join("tokenizer.json"), tokenizer_bytes).unwrap();
+        fs::write(model_dir.join("SHA256SUMS"), sums.as_bytes()).unwrap();
     }
 
     #[test]
-    fn non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes() {
+    fn existing_synthetic_model_fails_closed_before_policy_write() {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
-        let policy_out = dir.path().join("gaze.toml");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_kiji_dir(&model_dir);
 
-        let summary = run_with_manifest(
+        let err = run_with_opf_setup(
             Args {
-                safety_net: None,
+                safety_net: Some(SetupSafetyNet::Ner),
+                policy_out: Some(policy_out.clone()),
+                model_dir: Some(model_dir),
+                non_interactive: true,
+                force: false,
+            },
+            default_opf_setup(),
+        )
+        .unwrap_err();
+
+        assert!(
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("Kiji model setup failed")
+                && detail.contains("non-empty but invalid")
+                && detail.contains("Remediation"))
+        );
+        assert!(!policy_out.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn loose_existing_synthetic_model_is_repaired_then_rejected() {
+        let dir = tempdir().unwrap();
+        let model_dir = dir.path().join("__gaze_test_fixed_ner");
+        let policy_out = dir.path().join("policy.toml");
+        write_synthetic_kiji_dir(&model_dir);
+        fs::set_permissions(&model_dir, fs::Permissions::from_mode(0o755)).unwrap();
+        for file_name in ["labels.json", "model.onnx", "tokenizer.json", "SHA256SUMS"] {
+            fs::set_permissions(model_dir.join(file_name), fs::Permissions::from_mode(0o644))
+                .unwrap();
+        }
+
+        let err = run_with_opf_setup(
+            Args {
+                safety_net: Some(SetupSafetyNet::Ner),
                 policy_out: Some(policy_out.clone()),
                 model_dir: Some(model_dir.clone()),
                 non_interactive: true,
                 force: false,
             },
-            &manifest,
+            default_opf_setup(),
         )
-        .unwrap();
+        .unwrap_err();
 
-        assert_eq!(summary.model_status, ModelInstallStatus::AlreadyPresent);
-        assert_eq!(summary.policy_path, policy_out);
-        let policy = fs::read_to_string(&summary.policy_path).unwrap();
-        assert!(policy.contains("[ner]"));
-        assert!(policy.contains(&toml_basic_string(&model_dir.to_string_lossy())));
-        assert!(summary.doctor_clean_text.contains(":Name_"));
-        assert!(summary.doctor_clean_text.contains(":Email_"));
+        assert!(
+            matches!(err, CliError::SetupDetail(detail) if detail.contains("Kiji model setup failed")
+                && detail.contains("non-empty but invalid"))
+        );
+        assert_eq!(
+            fs::symlink_metadata(&model_dir)
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o700
+        );
+        for file_name in ["labels.json", "model.onnx", "tokenizer.json", "SHA256SUMS"] {
+            assert_eq!(
+                fs::symlink_metadata(model_dir.join(file_name))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
+        }
+        assert!(!policy_out.exists());
     }
 
     #[test]
@@ -929,20 +609,12 @@ mod tests {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
+        write_synthetic_kiji_dir(&model_dir);
+        write_policy(&policy_out, &model_dir, false).unwrap();
 
-        run_with_manifest(
-            Args {
-                safety_net: Some(SetupSafetyNet::Ner),
-                policy_out: Some(policy_out.clone()),
-                model_dir: Some(model_dir),
-                non_interactive: true,
-                force: false,
-            },
-            &manifest,
-        )
-        .unwrap();
+        let policy = fs::read_to_string(&policy_out).unwrap();
+        assert!(policy.contains("[ner]"));
+        assert!(policy.contains(&toml_basic_string(&model_dir.to_string_lossy())));
 
         let clean_text = doctor_check(&policy_out).unwrap();
         assert!(clean_text.contains(":Name_"), "{clean_text}");
@@ -950,48 +622,13 @@ mod tests {
     }
 
     #[test]
-    fn sha_mismatch_existing_model_fails_closed() {
-        let dir = tempdir().unwrap();
-        let model_dir = dir.path().join("__gaze_test_fixed_ner");
-        let policy_out = dir.path().join("policy.toml");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
-        fs::write(model_dir.join("model.onnx"), b"corrupt").unwrap();
-
-        let err = run_with_manifest(
-            Args {
-                safety_net: Some(SetupSafetyNet::Ner),
-                policy_out: Some(policy_out.clone()),
-                model_dir: Some(model_dir),
-                non_interactive: true,
-                force: false,
-            },
-            &manifest,
-        )
-        .unwrap_err();
-
-        assert!(matches!(err, CliError::SetupDetail(detail) if detail.contains("not SHA-valid")));
-        assert!(!policy_out.exists());
-    }
-
-    #[test]
     fn opf_request_defaults_to_ner_when_bundle_is_not_pinned() {
         let dir = tempdir().unwrap();
-        let model_dir = dir.path().join("__gaze_test_fixed_ner");
-        let policy_out = dir.path().join("policy.toml");
         let checkpoint_dir = dir.path().join("missing-opf");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
 
-        let summary = run_with_manifest_and_opf(
-            Args {
-                safety_net: Some(SetupSafetyNet::Opf),
-                policy_out: Some(policy_out),
-                model_dir: Some(model_dir),
-                non_interactive: true,
-                force: false,
-            },
-            &manifest,
+        let resolved = resolve_safety_net(
+            Some(SetupSafetyNet::Opf),
+            true,
             OpfSetup {
                 pin: OpfBundlePin {
                     bundle_sha256: None,
@@ -1002,9 +639,8 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(summary.opf_notice.as_deref(), Some(OPF_UNPINNED_NOTICE));
-        assert_eq!(summary.opf_checkpoint, None);
-        assert_eq!(summary.model_status, ModelInstallStatus::AlreadyPresent);
+        assert_eq!(resolved.opf_notice.as_deref(), Some(OPF_UNPINNED_NOTICE));
+        assert_eq!(resolved.opf_checkpoint, None);
     }
 
     #[test]
@@ -1013,10 +649,8 @@ mod tests {
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         let checkpoint_dir = dir.path().join("missing-opf");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
 
-        let err = run_with_manifest_and_opf(
+        let err = run_with_opf_setup(
             Args {
                 safety_net: Some(SetupSafetyNet::Opf),
                 policy_out: Some(policy_out.clone()),
@@ -1024,7 +658,6 @@ mod tests {
                 non_interactive: true,
                 force: false,
             },
-            &manifest,
             OpfSetup {
                 pin: OpfBundlePin {
                     bundle_sha256: Some(
@@ -1049,12 +682,10 @@ mod tests {
         let model_dir = dir.path().join("__gaze_test_fixed_ner");
         let policy_out = dir.path().join("policy.toml");
         let checkpoint_dir = dir.path().join("privacy_filter");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
         fs::create_dir_all(&checkpoint_dir).unwrap();
         fs::write(checkpoint_dir.join("config.json"), b"corrupt").unwrap();
 
-        let err = run_with_manifest_and_opf(
+        let err = run_with_opf_setup(
             Args {
                 safety_net: Some(SetupSafetyNet::Opf),
                 policy_out: Some(policy_out.clone()),
@@ -1062,7 +693,6 @@ mod tests {
                 non_interactive: true,
                 force: false,
             },
-            &manifest,
             OpfSetup {
                 pin: OpfBundlePin {
                     bundle_sha256: Some(
@@ -1084,11 +714,7 @@ mod tests {
     #[test]
     fn opf_request_with_pinned_checkpoint_records_runtime_wiring() {
         let dir = tempdir().unwrap();
-        let model_dir = dir.path().join("__gaze_test_fixed_ner");
-        let policy_out = dir.path().join("policy.toml");
         let checkpoint_dir = dir.path().join("privacy_filter");
-        let manifest = synthetic_manifest("fake-model", "fake-tokenizer", "{}");
-        write_manifest_dir(&manifest, &model_dir);
         fs::create_dir_all(&checkpoint_dir).unwrap();
         fs::write(checkpoint_dir.join("config.json"), b"{}").unwrap();
         fs::write(
@@ -1106,15 +732,9 @@ mod tests {
         );
         let bundle_sha = hex_sha256(opf_manifest.as_bytes());
 
-        let summary = run_with_manifest_and_opf(
-            Args {
-                safety_net: Some(SetupSafetyNet::Opf),
-                policy_out: Some(policy_out.clone()),
-                model_dir: Some(model_dir),
-                non_interactive: true,
-                force: false,
-            },
-            &manifest,
+        let resolved = resolve_safety_net(
+            Some(SetupSafetyNet::Opf),
+            true,
             OpfSetup {
                 pin: OpfBundlePin {
                     bundle_sha256: Some(Box::leak(bundle_sha.into_boxed_str())),
@@ -1126,22 +746,48 @@ mod tests {
         .unwrap();
 
         let checkpoint_dir = checkpoint_dir.canonicalize().unwrap();
-        assert_eq!(summary.opf_notice, None);
+        assert_eq!(resolved.opf_notice, None);
         assert_eq!(
-            summary.opf_checkpoint.as_deref(),
+            resolved.opf_checkpoint.as_deref(),
             Some(checkpoint_dir.as_path())
         );
-        assert_eq!(summary.model_status, ModelInstallStatus::AlreadyPresent);
-        let policy = fs::read_to_string(policy_out).unwrap();
-        assert!(policy.contains("[ner]"));
     }
 
     #[test]
-    #[ignore = "hits Hugging Face; run manually when validating the real network fetch path"]
-    fn downloads_pinned_kiji_bundle_from_hugging_face() {
+    #[ignore = "hits Hugging Face; validates CLI setup with the real pinned Kiji bundle"]
+    fn non_interactive_existing_model_skips_download_writes_policy_and_doctor_passes() {
         let dir = tempdir().unwrap();
         let model_dir = dir.path().join("kiji-distilbert");
-        ensure_model_dir(&kiji_manifest(), &model_dir).unwrap();
-        verify_model_dir(&kiji_manifest(), &model_dir).unwrap();
+        let first_policy = dir.path().join("first.toml");
+        let second_policy = dir.path().join("second.toml");
+
+        let first = run_with_opf_setup(
+            Args {
+                safety_net: Some(SetupSafetyNet::Ner),
+                policy_out: Some(first_policy),
+                model_dir: Some(model_dir.clone()),
+                non_interactive: true,
+                force: false,
+            },
+            default_opf_setup(),
+        )
+        .unwrap();
+        let second = run_with_opf_setup(
+            Args {
+                safety_net: Some(SetupSafetyNet::Ner),
+                policy_out: Some(second_policy),
+                model_dir: Some(model_dir.clone()),
+                non_interactive: true,
+                force: false,
+            },
+            default_opf_setup(),
+        )
+        .unwrap();
+
+        assert_eq!(first.model_status, ModelInstallStatus::Downloaded);
+        assert_eq!(second.model_status, ModelInstallStatus::AlreadyPresent);
+        assert_eq!(second.model_dir, model_dir);
+        assert!(second.doctor_clean_text.contains(":Name_"));
+        assert!(second.doctor_clean_text.contains(":Email_"));
     }
 }
