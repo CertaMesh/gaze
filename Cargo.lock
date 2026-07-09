@@ -1529,6 +1529,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gaze-model-setup"
+version = "0.12.0"
+dependencies = [
+ "gaze-recognizers",
+ "libc",
+ "tempfile",
+ "thiserror 1.0.69",
+ "ureq",
+]
+
+[[package]]
 name = "gaze-pii"
 version = "0.12.0"
 dependencies = [
@@ -1593,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.12.0"
+version = "0.12.1"
 dependencies = [
  "aho-corasick",
  "candle-core",

@@ -3,6 +3,7 @@ members = [
     "crates/gaze",
     "crates/gaze-assembly",
     "crates/gaze-audit",
+    "crates/gaze-model-setup",
     "crates/gaze-recognizers",
     "crates/gaze-types",
     "crates/gaze-cli",
@@ -28,6 +29,7 @@ gaze-assembly = { path = "crates/gaze-assembly", version = "0.12.0" }
 gaze-mcp-bridge = { path = "crates/gaze-mcp-bridge", version = "0.12.0" }
 gaze-mcp-core = { path = "crates/gaze-mcp-core", version = "0.12.0" }
 gaze-mcp-rmcp = { path = "crates/gaze-mcp-rmcp", version = "0.12.0" }
+gaze-recognizers = { path = "crates/gaze-recognizers", version = "0.12.1" }
 gaze-proxy = { path = "crates/gaze-proxy", version = "0.12.0" }
 gaze-types = { path = "crates/gaze-types", version = "0.12.0" }
 rusqlite = { version = "0.32", features = ["bundled"] }

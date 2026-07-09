@@ -18,7 +18,7 @@ tokenizer dependencies.
 ```toml
 [dependencies]
 gaze-pii = "0.12.0"
-gaze-recognizers = "0.12.0"
+gaze-recognizers = "0.12.1"
 ```
 
 Library users that need parser-backed E.164 phone validation must opt in to the
@@ -26,7 +26,7 @@ Library users that need parser-backed E.164 phone validation must opt in to the
 
 ```toml
 [dependencies]
-gaze-recognizers = { version = "0.12.0", features = ["phone-parser"] }
+gaze-recognizers = { version = "0.12.1", features = ["phone-parser"] }
 ```
 
 `gaze-cli` enables `phone-parser` by default. Without the feature, the
