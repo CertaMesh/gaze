@@ -59,7 +59,7 @@ const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[
     WorkspaceMemberExemption {
         workspace_member: "gaze-model-setup",
         packages: &["ureq"],
-        reason: "model setup/download library; ureq is not a safety-net pipeline dep",
+        reason: "exact direct model setup/download edge; ureq is not a safety-net pipeline dep",
     },
 ];
 
@@ -293,7 +293,9 @@ fn check_safety_net_prohibited_packages(
                 );
                 continue;
             }
-            if let Some(exemption) = matching_member_exemption(workspace_name, package) {
+            if let Some(exemption) =
+                matching_member_exemption(workspace_name, package, &path, metadata)
+            {
                 println!(
                     "cargo_metadata_audit_isolation: {label}: allowed {} for {workspace_name}: {} ({})",
                     package,
@@ -330,10 +332,36 @@ fn matching_legacy_ner_exemption<'a>(
 fn matching_member_exemption(
     workspace_name: &str,
     package: &str,
+    path: &[String],
+    metadata: &Metadata,
 ) -> Option<&'static WorkspaceMemberExemption> {
     SAFETY_NET_MEMBER_EXEMPTIONS.iter().find(|exemption| {
-        exemption.workspace_member == workspace_name && exemption.packages.contains(&package)
+        exemption.workspace_member == workspace_name
+            && exemption.packages.contains(&package)
+            && member_exemption_path_matches(exemption, package, path, metadata)
     })
+}
+
+fn member_exemption_path_matches(
+    exemption: &WorkspaceMemberExemption,
+    package: &str,
+    path: &[String],
+    metadata: &Metadata,
+) -> bool {
+    if exemption.workspace_member == "gaze-model-setup" && package == "ureq" {
+        return package_path_is_exact(path, metadata, &["gaze-model-setup", "ureq"]);
+    }
+    true
+}
+
+fn package_path_is_exact(path: &[String], metadata: &Metadata, expected: &[&str]) -> bool {
+    if path.len() != expected.len() {
+        return false;
+    }
+    let names = package_names(metadata);
+    path.iter()
+        .zip(expected)
+        .all(|(id, expected)| names.get(id).is_some_and(|name| name == expected))
 }
 
 fn cargo_metadata(args: &[&str]) -> Result<Metadata> {
@@ -549,6 +577,26 @@ mod tests {
 
         check_graph(graph.label, &metadata, &workspace_members, graph.policy)
             .expect("gaze-model-setup is an install-time downloader, not a safety-net component");
+    }
+
+    #[test]
+    fn safety_net_member_exemption_rejects_transitive_model_setup_ureq() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(
+            &["gaze-model-setup"],
+            &[("gaze-model-setup", &["helper"]), ("helper", &["ureq"])],
+        );
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        let err = check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect_err("gaze-model-setup ureq exemption must be the exact direct edge");
+
+        let message = err.to_string();
+        assert!(message.contains("ureq"), "{message}");
+        assert!(
+            message.contains("gaze-model-setup -> helper -> ureq"),
+            "{message}"
+        );
     }
 
     #[test]

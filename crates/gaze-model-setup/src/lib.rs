@@ -10,6 +10,7 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
 pub use gaze_recognizers::safety_net::kiji_distilbert::{KijiDistilbertPrecision, SafetyNetError};
 
 const DEFAULT_MODEL_DIR_NAME: &str = "kiji-distilbert";
+const MODEL_DOWNLOAD_MAX_REDIRECTS: u32 = 5;
 const KIJI_LABELS_JSON: &str = r#"{
   "schema_version": 1,
   "source": "onnx-community/distilbert-NER-ONNX",
@@ -62,7 +63,10 @@ pub struct UreqFetcher;
 
 impl ArtifactFetcher for UreqFetcher {
     fn fetch_to(&self, url: &str, dest_tmp: &Path) -> Result<(), String> {
-        let response = ureq::get(url).call().map_err(|err| err.to_string())?;
+        let response = https_only_download_agent()
+            .get(url)
+            .call()
+            .map_err(|err| err.to_string())?;
         let mut reader = response
             .into_body()
             .into_with_config()
@@ -72,6 +76,14 @@ impl ArtifactFetcher for UreqFetcher {
         io::copy(&mut reader, &mut file).map_err(|err| err.to_string())?;
         file.flush().map_err(|err| err.to_string())
     }
+}
+
+fn https_only_download_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .https_only(true)
+        .max_redirects(MODEL_DOWNLOAD_MAX_REDIRECTS)
+        .build()
+        .into()
 }
 
 #[derive(Clone, Copy)]
@@ -572,6 +584,30 @@ mod tests {
 
         assert!(matches!(err, SetupError::Io { .. }));
         assert!(!model_dir.exists());
+    }
+
+    #[test]
+    fn ureq_fetcher_is_https_only_and_redirect_bounded() {
+        let agent = https_only_download_agent();
+
+        assert!(agent.config().https_only());
+        assert_eq!(agent.config().max_redirects(), MODEL_DOWNLOAD_MAX_REDIRECTS);
+    }
+
+    #[test]
+    fn ureq_fetcher_rejects_plain_http_before_writing_file() {
+        let root = tempfile::tempdir().unwrap();
+        let dest = root.path().join("artifact.download");
+
+        let err = UreqFetcher
+            .fetch_to("http://example.invalid/model.onnx", &dest)
+            .unwrap_err();
+
+        assert!(
+            err.to_ascii_lowercase().contains("https"),
+            "unexpected error: {err}"
+        );
+        assert!(!dest.exists());
     }
 
     #[cfg(unix)]
