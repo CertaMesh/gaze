@@ -38,19 +38,28 @@ const SAFETY_NET_LEGACY_NER_EXEMPTIONS: &[LegacyNerExemption] = &[LegacyNerExemp
 const SAFETY_NET_MEMBER_EXEMPTIONS: &[WorkspaceMemberExemption] = &[
     WorkspaceMemberExemption {
         workspace_member: "gaze-mcp-rmcp",
+        packages: &["tokio"],
         reason: "rmcp transport sink; tokio is a runtime dep for the MCP transport, not the safety-net pipeline",
     },
     WorkspaceMemberExemption {
         workspace_member: "gaze-mcp-bridge",
+        packages: &["tokio"],
         reason: "MCP bridge transport/client boundary; tokio is a downstream MCP runtime dep, not the safety-net pipeline",
     },
     WorkspaceMemberExemption {
         workspace_member: "gaze-proxy",
+        packages: &["reqwest", "hyper", "tokio"],
         reason: "HTTP provider proxy; reqwest/tokio/hyper are proxy transport deps, not safety-net pipeline deps",
     },
     WorkspaceMemberExemption {
         workspace_member: "gaze-cli",
+        packages: &["ureq"],
         reason: "CLI setup/model download path; ureq is not a safety-net pipeline dep",
+    },
+    WorkspaceMemberExemption {
+        workspace_member: "gaze-model-setup",
+        packages: &["ureq"],
+        reason: "model setup/download library; ureq is not a safety-net pipeline dep",
     },
 ];
 
@@ -140,6 +149,7 @@ struct LegacyNerExemption {
 #[derive(Debug, Clone, Copy)]
 struct WorkspaceMemberExemption {
     workspace_member: &'static str,
+    packages: &'static [&'static str],
     reason: &'static str,
 }
 
@@ -283,7 +293,7 @@ fn check_safety_net_prohibited_packages(
                 );
                 continue;
             }
-            if let Some(exemption) = matching_member_exemption(workspace_name) {
+            if let Some(exemption) = matching_member_exemption(workspace_name, package) {
                 println!(
                     "cargo_metadata_audit_isolation: {label}: allowed {} for {workspace_name}: {} ({})",
                     package,
@@ -317,10 +327,13 @@ fn matching_legacy_ner_exemption<'a>(
     })
 }
 
-fn matching_member_exemption(workspace_name: &str) -> Option<&'static WorkspaceMemberExemption> {
-    SAFETY_NET_MEMBER_EXEMPTIONS
-        .iter()
-        .find(|exemption| exemption.workspace_member == workspace_name)
+fn matching_member_exemption(
+    workspace_name: &str,
+    package: &str,
+) -> Option<&'static WorkspaceMemberExemption> {
+    SAFETY_NET_MEMBER_EXEMPTIONS.iter().find(|exemption| {
+        exemption.workspace_member == workspace_name && exemption.packages.contains(&package)
+    })
 }
 
 fn cargo_metadata(args: &[&str]) -> Result<Metadata> {
@@ -514,6 +527,28 @@ mod tests {
 
         check_graph(graph.label, &metadata, &workspace_members, graph.policy)
             .expect("gaze-mcp-rmcp is allowlisted as a transport sink, not a safety-net component");
+    }
+
+    #[test]
+    fn safety_net_member_exemption_is_package_scoped() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(&["gaze-mcp-rmcp"], &[("gaze-mcp-rmcp", &["reqwest"])]);
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        let err = check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect_err("listed workspace members must still fail on non-exempt packages");
+        assert!(err.to_string().contains("reqwest"));
+        assert!(err.to_string().contains("gaze-mcp-rmcp"));
+    }
+
+    #[test]
+    fn safety_net_member_exemption_allows_model_setup_downloader() {
+        let graph = graph_category("safety-net-base");
+        let metadata = fixture_metadata(&["gaze-model-setup"], &[("gaze-model-setup", &["ureq"])]);
+        let workspace_members = workspace_members_by_name(&metadata).unwrap();
+
+        check_graph(graph.label, &metadata, &workspace_members, graph.policy)
+            .expect("gaze-model-setup is an install-time downloader, not a safety-net component");
     }
 
     #[test]

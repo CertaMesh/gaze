@@ -1,0 +1,23 @@
+[package]
+name = "gaze-model-setup"
+version = "0.12.0"
+edition = "2021"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Install and verify pinned Gaze model bundles"
+readme = "README.md"
+keywords = ["pii", "gaze", "ner", "model"]
+categories = ["text-processing"]
+
+[dependencies]
+gaze-recognizers = { workspace = true, features = ["safety-net-kiji"] }
+thiserror = { workspace = true }
+ureq = "3.3.0"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
