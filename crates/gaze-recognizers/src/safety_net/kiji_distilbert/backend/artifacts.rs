@@ -63,6 +63,21 @@ pub(crate) fn verify_model_dir(
     verify_model_dir_for_precision(model_dir, KijiDistilbertPrecision::Fp32, expected_sha256)
 }
 
+/// Public fail-closed verification of an installed Kiji bundle. Selects the
+/// pinned expected `SHA256SUMS` digest by precision and delegates to the
+/// existing `verify_model_dir_for_precision` (symlink/owner/mode +
+/// checksum-file digest + every artifact hash). Callers do not supply digests.
+pub fn verify_kiji_bundle(
+    model_dir: &Path,
+    precision: KijiDistilbertPrecision,
+) -> Result<(), SafetyNetError> {
+    let expected = match precision {
+        KijiDistilbertPrecision::Fp32 => KIJI_DISTILBERT_BUNDLE_SHA256,
+        KijiDistilbertPrecision::Int8 => KIJI_DISTILBERT_INT8_BUNDLE_SHA256,
+    };
+    verify_model_dir_for_precision(Some(model_dir), precision, expected)
+}
+
 pub(crate) fn verify_model_dir_for_precision(
     model_dir: Option<&Path>,
     precision: KijiDistilbertPrecision,
@@ -226,7 +241,7 @@ fn verify_one_sensitive_path(path: &Path) -> Result<std::fs::Metadata, SafetyNet
         });
     }
 
-    let uid = current_uid();
+    let uid = current_euid();
     if metadata.uid() != uid {
         return Err(SafetyNetError::ModelUnavailable {
             reason: "kiji sensitive path owner mismatch".to_string(),
@@ -256,13 +271,10 @@ fn verify_one_sensitive_path(path: &Path) -> Result<std::fs::Metadata, SafetyNet
 }
 
 #[cfg(unix)]
-fn current_uid() -> u32 {
-    std::fs::metadata(".")
-        .map(|metadata| {
-            use std::os::unix::fs::MetadataExt;
-            metadata.uid()
-        })
-        .unwrap_or(0)
+fn current_euid() -> u32 {
+    // Verification must depend on who runs the process, not on the current
+    // directory's owner.
+    unsafe { libc::geteuid() }
 }
 
 #[cfg(windows)]
@@ -294,4 +306,212 @@ fn sanitize_path(path: &Path) -> String {
         .and_then(|name| name.to_str())
         .map(|name| format!("<missing:{name}>"))
         .unwrap_or_else(|| "<missing:model>".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[cfg(unix)]
+    struct CurrentDirGuard(std::path::PathBuf);
+
+    #[cfg(unix)]
+    impl CurrentDirGuard {
+        fn enter(path: &Path) -> Self {
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self(original)
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.0).unwrap();
+        }
+    }
+
+    #[cfg(unix)]
+    fn set_private_dir(path: &Path) {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn write_private_file(path: &Path, body: &[u8]) {
+        std::fs::write(path, body).unwrap();
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn write_synthetic_bundle(dir: &Path, labels: &[u8], model: &[u8], tokenizer: &[u8]) -> String {
+        set_private_dir(dir);
+        write_private_file(&dir.join("labels.json"), labels);
+        write_private_file(&dir.join("model.onnx"), model);
+        write_private_file(&dir.join("tokenizer.json"), tokenizer);
+        let sha256sums = format!(
+            "{}  labels.json\n{}  model.onnx\n{}  tokenizer.json\n",
+            hex_sha256(labels),
+            hex_sha256(model),
+            hex_sha256(tokenizer)
+        );
+        write_private_file(&dir.join("SHA256SUMS"), sha256sums.as_bytes());
+        hex_sha256(sha256sums.as_bytes())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verify_kiji_bundle_rejects_symlinked_artifact() {
+        let dir = tempfile::tempdir().unwrap();
+        set_private_dir(dir.path());
+        write_private_file(&dir.path().join("labels.json"), b"labels");
+        write_private_file(&dir.path().join("tokenizer.json"), b"tokenizer");
+        write_private_file(&dir.path().join("SHA256SUMS"), b"not the pinned manifest");
+        std::os::unix::fs::symlink("target", dir.path().join("model.onnx")).unwrap();
+
+        let error = verify_kiji_bundle(dir.path(), KijiDistilbertPrecision::Fp32).unwrap_err();
+
+        assert!(matches!(error, SafetyNetError::ModelUnavailable { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn verify_kiji_bundle_rejects_loose_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let error = verify_kiji_bundle(dir.path(), KijiDistilbertPrecision::Fp32).unwrap_err();
+
+        assert!(matches!(error, SafetyNetError::ModelUnavailable { .. }));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn owner_check_uses_process_euid_not_cwd_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        set_private_dir(dir.path());
+        let expected = unsafe { libc::geteuid() };
+
+        assert_eq!(current_euid(), expected);
+        {
+            let _guard = CurrentDirGuard::enter(dir.path());
+            assert_eq!(current_euid(), expected);
+        }
+        assert_eq!(current_euid(), expected);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn synthetic_manifest_digest_and_required_hashes_are_enforced() {
+        let dir = tempfile::tempdir().unwrap();
+        let expected_sha = write_synthetic_bundle(dir.path(), b"labels", b"model", b"tokenizer");
+
+        verify_model_dir_for_precision(
+            Some(dir.path()),
+            KijiDistilbertPrecision::Fp32,
+            &expected_sha,
+        )
+        .unwrap();
+
+        write_private_file(&dir.path().join("model.onnx"), b"tampered");
+        let error = verify_model_dir_for_precision(
+            Some(dir.path()),
+            KijiDistilbertPrecision::Fp32,
+            &expected_sha,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn synthetic_manifest_missing_required_entry_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        set_private_dir(dir.path());
+        write_private_file(&dir.path().join("labels.json"), b"labels");
+        write_private_file(&dir.path().join("model.onnx"), b"model");
+        write_private_file(&dir.path().join("tokenizer.json"), b"tokenizer");
+        let sha256sums = format!(
+            "{}  labels.json\n{}  model.onnx\n",
+            hex_sha256(b"labels"),
+            hex_sha256(b"model")
+        );
+        let expected_sha = hex_sha256(sha256sums.as_bytes());
+        write_private_file(&dir.path().join("SHA256SUMS"), sha256sums.as_bytes());
+
+        let error = verify_model_dir_for_precision(
+            Some(dir.path()),
+            KijiDistilbertPrecision::Fp32,
+            &expected_sha,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn synthetic_manifest_malformed_entry_fails_closed() {
+        let dir = tempfile::tempdir().unwrap();
+        set_private_dir(dir.path());
+        write_private_file(&dir.path().join("labels.json"), b"labels");
+        write_private_file(&dir.path().join("model.onnx"), b"model");
+        write_private_file(&dir.path().join("tokenizer.json"), b"tokenizer");
+        let sha256sums = format!(
+            "{}  labels.json extra\n{}  model.onnx\n{}  tokenizer.json\n",
+            hex_sha256(b"labels"),
+            hex_sha256(b"model"),
+            hex_sha256(b"tokenizer")
+        );
+        let expected_sha = hex_sha256(sha256sums.as_bytes());
+        write_private_file(&dir.path().join("SHA256SUMS"), sha256sums.as_bytes());
+
+        let error = verify_model_dir_for_precision(
+            Some(dir.path()),
+            KijiDistilbertPrecision::Fp32,
+            &expected_sha,
+        )
+        .unwrap_err();
+
+        assert!(matches!(
+            error,
+            SafetyNetError::ModelIntegrityMismatch { .. }
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires real pinned bundles and a cross-owner cwd fixture"]
+    #[serial_test::serial]
+    fn verify_kiji_bundle_is_cwd_independent() {
+        let model_dir = std::path::PathBuf::from(
+            std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+                .expect("set GAZE_KIJI_DISTILBERT_MODEL_DIR to a current-euid-owned bundle"),
+        );
+        let foreign_cwd = std::path::PathBuf::from(
+            std::env::var_os("GAZE_KIJI_FOREIGN_CWD")
+                .expect("set GAZE_KIJI_FOREIGN_CWD to a directory owned by a different uid"),
+        );
+        let foreign_model_dir = std::path::PathBuf::from(
+            std::env::var_os("GAZE_KIJI_FOREIGN_MODEL_DIR")
+                .expect("set GAZE_KIJI_FOREIGN_MODEL_DIR to a foreign-owned valid bundle"),
+        );
+
+        verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap();
+        assert!(verify_kiji_bundle(&foreign_model_dir, KijiDistilbertPrecision::Fp32).is_err());
+
+        let _guard = CurrentDirGuard::enter(&foreign_cwd);
+        verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap();
+        assert!(verify_kiji_bundle(&foreign_model_dir, KijiDistilbertPrecision::Fp32).is_err());
+    }
 }
