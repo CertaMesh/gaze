@@ -31,6 +31,7 @@ test-support = ["safety-net"]
 aho-corasick = "1"
 gaze-types = { workspace = true }
 hex = "0.4"
+libc = "0.2"
 ndarray = "0.16"
 ort = { version = "=2.0.0-rc.12", default-features = false, features = ["ndarray", "std", "download-binaries", "tls-rustls"] }
 candle-core = { version = "0.10.2", optional = true }

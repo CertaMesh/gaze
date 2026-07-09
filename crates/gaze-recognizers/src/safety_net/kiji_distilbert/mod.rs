@@ -13,7 +13,8 @@
 
 use std::sync::{Arc, OnceLock};
 
-use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext, SafetyNetError};
+pub use gaze_types::SafetyNetError;
+use gaze_types::{LeakSuspect, LocaleTag, SafetyNet, SafetyNetContext};
 
 use crate::{LocaleAwareModel, ModelError, ModelHints, ModelInput, ModelSpan};
 
@@ -21,8 +22,8 @@ pub mod backend;
 pub mod class_map;
 
 pub use backend::artifacts::{
-    KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT, KIJI_DISTILBERT_HF_REPO,
-    KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
+    verify_kiji_bundle, KIJI_DISTILBERT_BUNDLE_SHA256, KIJI_DISTILBERT_HF_COMMIT,
+    KIJI_DISTILBERT_HF_REPO, KIJI_DISTILBERT_INT8_BUNDLE_SHA256, KIJI_DISTILBERT_INT8_SHA256SUMS,
     KIJI_DISTILBERT_SHA256SUMS, REQUIRED_KIJI_ARTIFACTS, REQUIRED_KIJI_INT8_ARTIFACTS,
 };
 #[cfg(feature = "runtime-candle")]
