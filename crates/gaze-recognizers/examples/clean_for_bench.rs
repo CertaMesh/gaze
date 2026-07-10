@@ -1,17 +1,23 @@
+use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::time::Instant;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, EmittedTokenSpan, GazeLocalProtectionTraceItem,
-    LeakKind, LeakReportStats, LocaleTag, PiiClass, Pipeline, RawDocument, RawMatch,
-    RecognizerSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode,
-    SafetyNetPolicy, Scope, Session,
+    Action, CleanDocument, Context, EmittedTokenSpan, GazeLocalProtectionTraceItem, LeakKind,
+    LeakReportStats, LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RawDocument, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session,
 };
-use gaze_recognizers::{
-    embedded, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
-};
+use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
+
+const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
+    LocaleTag::EnUs,
+    LocaleTag::DeDe,
+    LocaleTag::DeAt,
+    LocaleTag::DeCh,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BenchConfig {
@@ -23,6 +29,63 @@ enum BenchConfig {
     Pass3Kiji,
     Pass3Opf,
     Pass3LocaleAware,
+}
+
+impl BenchConfig {
+    fn name(self) -> &'static str {
+        match self {
+            Self::RuleFloorCore => "rule-floor-core",
+            Self::RuleFloorExtended => "rule-floor-extended",
+            Self::Pass2Ner => "pass2-ner",
+            Self::FullStackKijiResolve => "full-stack-kiji-resolve",
+            Self::FullStackOpfResolve => "full-stack-opf-resolve",
+            Self::Pass3Kiji => "pass3-kiji",
+            Self::Pass3Opf => "pass3-opf",
+            Self::Pass3LocaleAware => "pass3-locale-aware",
+        }
+    }
+
+    fn uses_ner(self) -> bool {
+        matches!(
+            self,
+            Self::Pass2Ner | Self::FullStackKijiResolve | Self::FullStackOpfResolve
+        )
+    }
+
+    fn uses_extended_rule_floor(self) -> bool {
+        self != Self::RuleFloorCore
+    }
+}
+
+#[derive(Debug, Clone)]
+struct NerSettings {
+    model_dir: PathBuf,
+    locale: Option<String>,
+    threshold: f32,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum BenchmarkBuildError {
+    #[error("bundled recognizer rulepack '{id}' is unavailable")]
+    MissingBundledRulepack { id: String },
+    #[error("GAZE_NER_MODEL_DIR is required for this benchmark cell")]
+    MissingNerModelDir,
+    #[error("invalid GAZE_NER_THRESHOLD '{value}': {source}")]
+    InvalidNerThreshold {
+        value: String,
+        #[source]
+        source: std::num::ParseFloatError,
+    },
+    #[error("GAZE_NER_THRESHOLD must contain valid Unicode")]
+    NonUnicodeNerThreshold,
+    #[error(transparent)]
+    Assembly(#[from] gaze_assembly::BuildError),
+    #[error("failed to register safety net for benchmark cell '{cell}': {source}")]
+    SafetyNetRegistration {
+        cell: &'static str,
+        #[source]
+        source: Box<dyn std::error::Error>,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -434,191 +497,185 @@ fn floor_config(config: BenchConfig) -> BenchConfig {
     }
 }
 
-fn build_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    let mut pipeline = rule_floor_pipeline(config)?;
+fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> {
+    let ner = if config.uses_ner() {
+        Some(ner_settings_from_env()?)
+    } else {
+        None
+    };
+    let mut pipeline = assemble_rule_floor(config, ner)?;
     match config {
         BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
         BenchConfig::FullStackKijiResolve => {
-            pipeline = register_kiji_ort(pipeline)?;
+            pipeline = register_kiji_ort(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
         }
         BenchConfig::FullStackOpfResolve => {
-            pipeline = register_opf(pipeline)?;
+            pipeline = register_opf(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
         }
         BenchConfig::Pass3Kiji => {
-            pipeline = register_kiji(pipeline)?;
+            pipeline = register_kiji(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
         }
         BenchConfig::Pass3Opf => {
-            pipeline = register_opf(pipeline)?;
+            pipeline = register_opf(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
         }
         BenchConfig::Pass3LocaleAware => {
-            pipeline = register_locale_aware(pipeline)?;
+            pipeline = register_locale_aware(pipeline).map_err(|source| {
+                BenchmarkBuildError::SafetyNetRegistration {
+                    cell: config.name(),
+                    source,
+                }
+            })?;
         }
     }
     Ok(pipeline)
 }
 
-fn rule_floor_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    let bundle = if config == BenchConfig::RuleFloorCore {
-        "core"
-    } else {
-        "core-extended"
+fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
+    let model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
+        .map(PathBuf::from)
+        .ok_or(BenchmarkBuildError::MissingNerModelDir)?;
+    let threshold = match std::env::var("GAZE_NER_THRESHOLD") {
+        Ok(value) => value
+            .parse::<f32>()
+            .map_err(|source| BenchmarkBuildError::InvalidNerThreshold { value, source })?,
+        Err(std::env::VarError::NotPresent) => gaze::DEFAULT_NER_THRESHOLD,
+        Err(std::env::VarError::NotUnicode(_)) => {
+            return Err(BenchmarkBuildError::NonUnicodeNerThreshold)
+        }
     };
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded(bundle).ok_or("missing embedded rulepack")?,
-    ))?;
-    let mut builder = Pipeline::builder()
-        .rule(DefaultRule::new(Action::Tokenize))
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
-        .rule(ClassRule::new(
-            PiiClass::Custom("phone".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("ip_address".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("eth_address".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("postal_code".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("iban".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("credit_card".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("ssn".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("nino".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("pan".to_string()),
-            Action::Tokenize,
+    if !(0.0..=1.0).contains(&threshold) {
+        return Err(BenchmarkBuildError::Assembly(
+            gaze_assembly::BuildError::Policy(gaze::PolicyError::NerThresholdOutOfRange {
+                value: threshold,
+            }),
         ));
+    }
 
-    for spec in rulepack
+    Ok(NerSettings {
+        model_dir,
+        locale: std::env::var("GAZE_NER_LOCALE").ok(),
+        threshold,
+    })
+}
+
+fn assemble_rule_floor(
+    config: BenchConfig,
+    ner: Option<NerSettings>,
+) -> Result<Pipeline, BenchmarkBuildError> {
+    let bundle = if config.uses_extended_rule_floor() {
+        "core-extended"
+    } else {
+        "core"
+    };
+    let rulepack = load_bundled_rulepack(bundle)?;
+    let mut policy = benchmark_policy(&rulepack, config.uses_extended_rule_floor());
+    let ner_threshold = if config.uses_ner() {
+        let ner = ner.ok_or(BenchmarkBuildError::MissingNerModelDir)?;
+        let mut ner_policy = NerPolicy::default();
+        ner_policy.model_dir = Some(ner.model_dir);
+        ner_policy.locale = ner.locale;
+        ner_policy.threshold = ner.threshold;
+        policy.ner = Some(ner_policy);
+        Some(ner.threshold)
+    } else {
+        None
+    };
+    let active_locales = benchmark_locale_chain(&policy, &rulepack);
+
+    Ok(gaze_assembly::build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        ner_threshold,
+    )?)
+}
+
+fn load_bundled_rulepack(id: &str) -> Result<Rulepack, BenchmarkBuildError> {
+    let contents = embedded(id)
+        .ok_or_else(|| BenchmarkBuildError::MissingBundledRulepack { id: id.to_string() })?;
+    Rulepack::load(RulepackSource::Embedded(contents))
+        .map_err(gaze_assembly::BuildError::from)
+        .map_err(BenchmarkBuildError::from)
+}
+
+fn benchmark_policy(rulepack: &Rulepack, auto_activate_locale_gated: bool) -> gaze::Policy {
+    let mut seen = BTreeSet::<PiiClass>::new();
+    let mut rules = Vec::new();
+    for recognizer in rulepack
         .recognizers
         .iter()
         .filter(|recognizer| recognizer.enabled)
     {
-        if let Some(collision) = spec.collision.clone() {
-            builder = builder.register_collision(spec.id.clone(), collision);
+        if seen.insert(recognizer.class.clone()) {
+            rules.push(RuleSpec::Class {
+                class: recognizer.class.clone(),
+                action: Action::Tokenize,
+            });
         }
-        if matches!(spec.matcher, RawMatch::Regex { .. }) {
-            builder = builder.recognizer(regex_from_spec(&rulepack, spec)?);
+        if let Some(family_class) = recognizer.collision.as_ref().and_then(|collision| {
+            collision
+                .mandatory_anchor
+                .as_ref()
+                .map(|_| PiiClass::Custom(format!("family:{}", collision.family)))
+        }) {
+            if seen.insert(family_class.clone()) {
+                rules.push(RuleSpec::Class {
+                    class: family_class,
+                    action: Action::Tokenize,
+                });
+            }
         }
     }
+    rules.push(RuleSpec::Default {
+        action: Action::Tokenize,
+    });
 
-    if matches!(
-        config,
-        BenchConfig::Pass2Ner
-            | BenchConfig::FullStackKijiResolve
-            | BenchConfig::FullStackOpfResolve
-    ) {
-        let model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
-            .map(PathBuf::from)
-            .ok_or("GAZE_NER_MODEL_DIR is not set")?;
-        let threshold = std::env::var("GAZE_NER_THRESHOLD")
-            .ok()
-            .map(|value| value.parse::<f32>())
-            .transpose()?
-            .unwrap_or(0.3);
-        let recognizer = NerRecognizer::load_with_options(
-            &model_dir,
-            NerOptions {
-                locale: std::env::var("GAZE_NER_LOCALE").ok(),
-                threshold,
-            },
-        )?;
-        builder = builder.recognizer(recognizer);
-    }
-
-    Ok(builder.build()?)
+    let mut policy = gaze::Policy::default();
+    policy.rules = rules;
+    policy.rulepacks.bundled = vec!["core".to_string()];
+    policy.rulepacks.auto_activate_locale_gated = auto_activate_locale_gated;
+    policy
 }
 
-fn regex_from_spec(
-    rulepack: &Rulepack,
-    spec: &RecognizerSpec,
-) -> Result<RegexDetector, Box<dyn std::error::Error>> {
-    let RawMatch::Regex {
-        pattern,
-        pattern_template,
-        capture_groups,
-    } = &spec.matcher
-    else {
-        unreachable!("caller filters non-regex recognizers");
-    };
-    let pattern = match (pattern.as_deref(), pattern_template.as_deref()) {
-        (Some(pattern), None) => pattern.to_string(),
-        (None, Some(template)) => lower_pattern_template(rulepack, template)?,
-        _ => return Err(format!("invalid regex recognizer pattern shape for {}", spec.id).into()),
-    };
-    let exclusions = spec
-        .context
-        .as_ref()
-        .map(|context| context.exclusions.clone())
-        .unwrap_or_default();
-    let validator_kind = spec
-        .validator
-        .as_ref()
-        .map(|validator| ValidatorKind::parse(&validator.kind))
-        .transpose()?;
-    let normalizer_kind = spec
-        .normalizer
-        .as_ref()
-        .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
-        .transpose()?;
-
-    Ok(RegexDetector::with_rulepack_fields(
-        &pattern,
-        spec.class.clone(),
-        &spec.id,
-        spec.locales.clone(),
-        spec.scoring.base,
-        spec.scoring.priority,
-        spec.token.family.as_deref().unwrap_or("counter"),
-        capture_groups.clone(),
-        exclusions,
-        validator_kind,
-        normalizer_kind,
-    )?)
-}
-
-fn lower_pattern_template(
-    rulepack: &Rulepack,
-    template: &str,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let Some(locale) = &rulepack.locale else {
-        return Err("pattern template requires locale buckets".into());
-    };
-    let mut pattern = template.to_string();
-    for (bucket, values) in &locale.buckets {
-        let marker = format!("{{locale.{bucket}}}");
-        if pattern.contains(&marker) {
-            let alternation = values
-                .names
-                .iter()
-                .map(|value| regex::escape(value))
-                .collect::<Vec<_>>()
-                .join("|");
-            pattern = pattern.replace(&marker, &alternation);
+fn benchmark_locale_chain(policy: &gaze::Policy, rulepack: &Rulepack) -> LocaleChain {
+    let mut defaults = rulepack.default_locales.clone();
+    if policy.rulepacks.auto_activate_locale_gated {
+        for locale in BENCHMARK_ACTIVE_LOCALES {
+            if !defaults.iter().any(|existing| existing == locale) {
+                defaults.push(locale.clone());
+            }
         }
     }
-    if pattern.contains("{locale.") {
-        return Err(format!("unresolved locale pattern template: {pattern}").into());
+    LocaleChain::merge_cli_policy_rulepack_default(None, policy.locale.as_deref(), Some(&defaults))
+}
+
+fn empty_context() -> Context {
+    Context {
+        dictionaries: std::collections::HashMap::new(),
+        class_map: std::collections::HashMap::new(),
+        fields: serde_json::Map::new(),
     }
-    Ok(pattern)
 }
 
 #[cfg(feature = "safety-net-kiji")]
@@ -776,6 +833,22 @@ fn serialize_manifest(manifest: Vec<EmittedTokenSpan>) -> Vec<ManifestSpan> {
             clean_start: span.clean_span.start,
             clean_end: span.clean_span.end,
             class: span.class.to_canonical_str(),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+fn manifest_signature(
+    manifest: &[EmittedTokenSpan],
+) -> Vec<(std::ops::Range<usize>, std::ops::Range<usize>, String)> {
+    manifest
+        .iter()
+        .map(|span| {
+            (
+                span.raw_span.clone(),
+                span.clean_span.clone(),
+                span.class.to_canonical_str(),
+            )
         })
         .collect()
 }
@@ -1037,6 +1110,121 @@ mod tests {
             "dr.schmidt@example.invalid",
             &["dr.schmidt@example.invalid", "+49 1555 0112233"],
         );
+    }
+
+    #[test]
+    fn benchmark_rule_floor_matches_production_assembly_for_en_and_de() {
+        let fixtures = [
+            (
+                LocaleTag::EnUs,
+                "Contact alice@example.invalid or call +1 555 0100.",
+            ),
+            (
+                LocaleTag::DeDe,
+                "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233.",
+            ),
+        ];
+
+        for (locale, raw_text) in fixtures {
+            let benchmark = assemble_rule_floor(BenchConfig::RuleFloorExtended, None)
+                .expect("benchmark assembly should build");
+            let production = gaze_assembly::CorePipelineConfig::new()
+                .with_bundled_rulepack("core-extended")
+                .with_locale(BENCHMARK_ACTIVE_LOCALES)
+                .build()
+                .expect("production assembly should build")
+                .into_pipeline();
+            let session = Session::new(Scope::Ephemeral).expect("session should build");
+
+            let (benchmark_doc, benchmark_manifest, _) = benchmark
+                .clean_with_safety_net(
+                    &session,
+                    RawDocument::Text(raw_text.to_string()),
+                    std::slice::from_ref(&locale),
+                )
+                .expect("benchmark clean should succeed");
+            let (production_doc, production_manifest, _) = production
+                .clean_with_safety_net(
+                    &session,
+                    RawDocument::Text(raw_text.to_string()),
+                    std::slice::from_ref(&locale),
+                )
+                .expect("production clean should succeed");
+
+            let CleanDocument::Text(benchmark_text) = benchmark_doc else {
+                panic!("benchmark should return text");
+            };
+            let CleanDocument::Text(production_text) = production_doc else {
+                panic!("production should return text");
+            };
+            assert_eq!(benchmark_text, production_text);
+            assert_eq!(
+                manifest_signature(&benchmark_manifest),
+                manifest_signature(&production_manifest)
+            );
+            assert!(manifest_signature(&benchmark_manifest)
+                .iter()
+                .any(|(_, _, class)| class == "email"));
+            assert!(manifest_signature(&benchmark_manifest)
+                .iter()
+                .any(|(_, _, class)| class == "custom:phone"));
+
+            let (benchmark_restore, _) = benchmark
+                .restore_with_telemetry(&session, &benchmark_text)
+                .expect("benchmark restore should succeed");
+            let (production_restore, _) = production
+                .restore_with_telemetry(&session, &production_text)
+                .expect("production restore should succeed");
+            assert_eq!(benchmark_restore.text, raw_text);
+            assert_eq!(production_restore.text, raw_text);
+        }
+    }
+
+    #[test]
+    fn assembly_absence_errors_are_typed_and_fail_explicitly() {
+        let missing_model = match assemble_rule_floor(BenchConfig::Pass2Ner, None) {
+            Ok(_) => panic!("missing NER model configuration must fail"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            missing_model,
+            BenchmarkBuildError::MissingNerModelDir
+        ));
+
+        let empty_model_dir = tempfile::tempdir().expect("empty model dir should build");
+        let missing_artifacts = match assemble_rule_floor(
+            BenchConfig::Pass2Ner,
+            Some(NerSettings {
+                model_dir: empty_model_dir.path().to_path_buf(),
+                locale: None,
+                threshold: gaze::DEFAULT_NER_THRESHOLD,
+            }),
+        ) {
+            Ok(_) => panic!("missing NER artifacts must fail"),
+            Err(error) => error,
+        };
+        assert!(matches!(
+            missing_artifacts,
+            BenchmarkBuildError::Assembly(gaze_assembly::BuildError::Policy(
+                gaze::PolicyError::NerLoad(_)
+            ))
+        ));
+
+        let mut policy = gaze::Policy::default();
+        policy.rules = vec![gaze::RuleSpec::Default {
+            action: Action::Tokenize,
+        }];
+        let context = empty_context();
+        let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+        let missing_recognizers =
+            match gaze_assembly::build_pipeline(&policy, &context, &[], &locales, None) {
+                Ok(_) => panic!("missing recognizers must fail"),
+                Err(error) => error,
+            };
+        assert!(matches!(
+            missing_recognizers,
+            gaze_assembly::BuildError::NoRecognizers
+        ));
     }
 
     #[test]

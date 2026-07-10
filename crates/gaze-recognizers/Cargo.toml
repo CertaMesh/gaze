@@ -51,6 +51,7 @@ unicode-normalization = "0.1"
 [dev-dependencies]
 criterion = "0.5"
 gaze = { path = "../gaze", package = "gaze-pii", default-features = false }
+gaze-assembly = { path = "../gaze-assembly" }
 serial_test = "3"
 tempfile = "3"
 

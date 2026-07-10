@@ -5,11 +5,7 @@ use std::fs;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use gaze::{
-    Action, ClassRule, DefaultRule, EmittedTokenSpan, LocaleTag, PiiClass, Pipeline, RawDocument,
-    RawMatch, RecognizerSpec, Rulepack, RulepackSource, Scope, Session,
-};
-use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze::{EmittedTokenSpan, LocaleTag, PiiClass, Pipeline, RawDocument, Scope, Session};
 use serde::{Deserialize, Serialize};
 
 #[test]
@@ -75,135 +71,10 @@ fn coverage_loop_reports_labels_against_core_pipeline() -> Result<(), Box<dyn Er
 }
 
 fn core_pipeline() -> Result<Pipeline, Box<dyn Error>> {
-    let rulepack = Rulepack::load(RulepackSource::Embedded(
-        embedded("core-extended").expect("core-extended embedded rulepack"),
-    ))?;
-    let mut builder = Pipeline::builder()
-        .rule(DefaultRule::new(Action::Tokenize))
-        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
-        .rule(ClassRule::new(
-            PiiClass::Custom("phone".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("ip_address".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("eth_address".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("postal_code".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("iban".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("credit_card".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("ssn".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("nino".to_string()),
-            Action::Tokenize,
-        ))
-        .rule(ClassRule::new(
-            PiiClass::Custom("pan".to_string()),
-            Action::Tokenize,
-        ));
-
-    for spec in rulepack
-        .recognizers
-        .iter()
-        .filter(|recognizer| recognizer.enabled)
-    {
-        if let Some(collision) = spec.collision.clone() {
-            builder = builder.register_collision(spec.id.clone(), collision);
-        }
-        if matches!(spec.matcher, RawMatch::Regex { .. }) {
-            builder = builder.recognizer(regex_from_spec(&rulepack, spec)?);
-        }
-    }
-
-    Ok(builder.build()?)
-}
-
-fn regex_from_spec(
-    rulepack: &Rulepack,
-    spec: &RecognizerSpec,
-) -> Result<RegexDetector, Box<dyn Error>> {
-    let RawMatch::Regex {
-        pattern,
-        pattern_template,
-        capture_groups,
-    } = &spec.matcher
-    else {
-        unreachable!("caller filters non-regex recognizers");
-    };
-    let pattern = match (pattern.as_deref(), pattern_template.as_deref()) {
-        (Some(pattern), None) => pattern.to_string(),
-        (None, Some(template)) => lower_pattern_template(rulepack, template)?,
-        _ => return Err(format!("invalid regex recognizer pattern shape for {}", spec.id).into()),
-    };
-    let exclusions = spec
-        .context
-        .as_ref()
-        .map(|context| context.exclusions.clone())
-        .unwrap_or_default();
-    let validator_kind = spec
-        .validator
-        .as_ref()
-        .map(|validator| ValidatorKind::parse(&validator.kind))
-        .transpose()?;
-    let normalizer_kind = spec
-        .normalizer
-        .as_ref()
-        .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
-        .transpose()?;
-
-    Ok(RegexDetector::with_rulepack_fields(
-        &pattern,
-        spec.class.clone(),
-        &spec.id,
-        spec.locales.clone(),
-        spec.scoring.base,
-        spec.scoring.priority,
-        spec.token.family.as_deref().unwrap_or("counter"),
-        capture_groups.clone(),
-        exclusions,
-        validator_kind,
-        normalizer_kind,
-    )?)
-}
-
-fn lower_pattern_template(rulepack: &Rulepack, template: &str) -> Result<String, Box<dyn Error>> {
-    let Some(locale) = &rulepack.locale else {
-        return Err("pattern template requires locale buckets".into());
-    };
-    let mut pattern = template.to_string();
-    for (bucket, values) in &locale.buckets {
-        let marker = format!("{{locale.{bucket}}}");
-        if pattern.contains(&marker) {
-            let alternation = values
-                .names
-                .iter()
-                .map(|value| regex::escape(value))
-                .collect::<Vec<_>>()
-                .join("|");
-            pattern = pattern.replace(&marker, &alternation);
-        }
-    }
-    if pattern.contains("{locale.") {
-        return Err(format!("unresolved locale pattern template: {pattern}").into());
-    }
-    Ok(pattern)
+    Ok(gaze_assembly::CorePipelineConfig::new()
+        .with_bundled_rulepack("core-extended")
+        .build()?
+        .into_pipeline())
 }
 
 fn load_fixtures(corpus_dir: &Path) -> Result<Vec<Fixture>, Box<dyn Error>> {
