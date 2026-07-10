@@ -46,10 +46,12 @@ Gaze path: deterministic recognizers, Pass 2 NER, Kiji SafetyNet discovery,
 Resolve promotion, fallback, exact restore, manifest integrity, post-policy
 scan, precision, and warm latency.
 
-Runnable path:
+Canonical local paths:
 
 ```bash
-uv run --with pyarrow scripts/bench/dataiku_en_de_gaze_bench.py --no-download
+uv sync --project scripts/bench --locked
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py quick --no-download
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --no-download --compare-baseline target/bench-data/no-opf/baseline.json
 ```
 
 The first run may omit `--no-download`; the runner fetches and verifies the
@@ -62,13 +64,29 @@ Evidence paths:
 | Dataset and scoring contract | `docs/reference/benchmarks/dataiku-en-de-holdout.md` |
 | Current whole-pipeline baseline | `docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md` |
 | Warm OpenAI Privacy Filter sample | `docs/reference/benchmarks/v0.12-opf-daemon-sample.md` |
-| Benchmark runner | `scripts/bench/dataiku_en_de_gaze_bench.py` |
+| Canonical benchmark runner | `scripts/bench/run_no_opf_benchmark.py` |
+| Runner contract and outputs | `scripts/bench/README.md` |
 | Dataset revision | `DataikuNLP/kiji-pii-training-data@0275550f0b1f1b8f2dc9356fd31ac1c788b8228b` |
 | Test-file SHA256 | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
 
-The upstream test split is reserved from training. It has no negative-only
-documents, so it remains one layer of the release gate rather than a complete
-PII evaluation.
+The upstream test split is reserved from training. The canonical runner pairs
+its complete English/German selection with the complete committed A4 EN/DE
+negative corpus at
+`crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl`. Quick runs use the
+scorer's seeded stratified sampler; full runs use the complete combined corpus.
+
+The runner writes a schema-v3 scorecard, Markdown summary, per-language,
+per-label, and per-negative-category diagnostics, plus separate machine-readable
+regression and release-readiness verdicts under ignored
+`target/bench-data/no-opf/`. Regression uses zero-tolerance integer-count
+ratchets. Release readiness is an independent candidate-only verdict.
+Performance tolerance is separately configured and informational by default.
+
+Required model bundles are verified before any cell starts. Warmups, measured
+repetitions, discarded warmup samples, and external cold-start to the first
+validated response are Python-runner provenance; response latency consumes the
+producer's honest `clean_ms`. See `scripts/bench/README.md` for model locations,
+planning runtime, output details, and the guarded baseline-acceptance command.
 
 The optional OPF cell is intentionally not part of the default run. It requires
 a verified 2.6 GB checkpoint and a warmed local daemon, and it currently has a

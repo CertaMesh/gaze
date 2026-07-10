@@ -807,6 +807,8 @@ class ScorecardComparisonTests(unittest.TestCase):
     ) -> dict[str, object]:
         recall = 1.0 if leaked == 0 else 0.5
         ids = evaluated_ids or ["synthetic-comparison-1"]
+        documents = len(ids)
+        fully_covered = documents if leaked == 0 else documents - 1
         digest = hashlib.sha256(
             json.dumps(ids, ensure_ascii=False, separators=(",", ":")).encode(
                 "utf-8"
@@ -814,20 +816,45 @@ class ScorecardComparisonTests(unittest.TestCase):
         ).hexdigest()
         run = {
             "metrics": {
+                "documents": documents,
                 "zero_leak_document_rate": recall,
+                "documents_without_leaks": fully_covered,
+                "documents_with_false_positives": 0,
                 "utf8_bytes": {
+                    "pii": documents * 2,
                     "leaked": leaked,
+                    "false_positive": 0,
                     "recall": recall,
                     "precision": 1.0,
                 },
-                "entities": {"full_coverage_recall": recall},
+                "entities": {
+                    "gold": documents,
+                    "fully_covered": fully_covered,
+                    "full_coverage_recall": recall,
+                },
             },
             "pipeline_contract": {
+                "documents": documents,
+                "restore_exact_documents": documents,
                 "restore_exact_rate": 1.0,
+                "restore_success_decisions": documents,
+                "manifest_valid_documents": documents,
                 "manifest_valid_document_rate": 1.0,
+                "manifest_integrity_errors": {},
                 "strict_would_reject_documents": 0,
+                "post_policy_scanned_documents": documents,
+                "post_policy_suspects": 0,
+                "redact_actions": 0,
             },
-            "pipeline_availability": {"completion_rate": 1.0},
+            "pipeline_availability": {
+                "attempted_documents": documents,
+                "completed_documents": documents,
+                "failed_closed_documents": 0,
+                "errors": {},
+                "error_stages": {},
+                "completion_rate": 1.0,
+            },
+            "latency_ms": {"clean_ms": {"p95": 1.0}},
         }
         return {
             "schema_version": 3,
@@ -875,12 +902,12 @@ class ScorecardComparisonTests(unittest.TestCase):
         self.assertFalse(comparison["regression"]["passed"])
         self.assertFalse(comparison["release_readiness"]["passed"])
 
-    def test_mismatched_evaluated_population_provenance_fails_closed(self) -> None:
+    def test_mismatched_population_fails_regression_not_candidate_readiness(self) -> None:
         baseline = self.scorecard(leaked=0)
         candidate = self.scorecard(leaked=0, evaluated_ids=["synthetic-other-1"])
         comparison = benchmark.compare_scorecards(candidate, baseline)
         self.assertFalse(comparison["regression"]["passed"])
-        self.assertFalse(comparison["release_readiness"]["passed"])
+        self.assertTrue(comparison["release_readiness"]["passed"])
 
     def test_release_readiness_uses_the_production_candidate_cell(self) -> None:
         candidate = self.scorecard(leaked=0)
