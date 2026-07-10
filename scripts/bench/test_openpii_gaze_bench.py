@@ -313,6 +313,15 @@ class ResponseValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
             benchmark.validate_response(self.document(), response)
 
+        for field in ("pass1_ms", "pass2_ms", "pass3_ms"):
+            with self.subTest(field=field):
+                response = self.success_response()
+                response["timing"][field] = 1.0
+                with self.assertRaisesRegex(
+                    benchmark.ResponseValidationError, "unknown fields"
+                ):
+                    benchmark.validate_response(self.document(), response)
+
         response = self.success_response()
         response["timing"].pop("clean_ms")
         with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
