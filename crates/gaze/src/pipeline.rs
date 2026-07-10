@@ -1031,6 +1031,8 @@ impl Pipeline {
             if !is_char_boundary_range(&clean.text, &span) {
                 return Ok(Some(FallbackReason::ResidualSuspect));
             }
+            // Establish the original interval before tokenization mutates the session or any
+            // clean text, manifest, or diagnostic trace state.
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             let raw = clean.text[span.clone()].to_string();
             let replacement = session.tokenize_with_family("safety_net", &suspect.class, &raw)?;
@@ -2756,6 +2758,147 @@ mod tests {
         assert!(manifest.iter().any(|span| {
             span.raw_span == (name_start..text.len()) && span.class == PiiClass::Name
         }));
+    }
+
+    #[test]
+    fn production_safety_resolve_manifest_uses_original_coordinates_after_primary_shift() {
+        let text = "alice@example.invalid met Dr. Schmidt";
+        let name_start = text.find("Dr. Schmidt").expect("synthetic name");
+        let expected_name_span = name_start..text.len();
+        let pipeline = traced_email_pipeline(MarkerSafetyNet {
+            id: "name-safety.fixture",
+            marker: "Dr. Schmidt",
+            class: PiiClass::Name,
+        });
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+
+        let production_session = Session::new(Scope::Ephemeral).expect("session");
+        let (production_doc, production_manifest, _) = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &production_session,
+                RawDocument::Text(text.to_string()),
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                policy,
+            )
+            .expect("production clean");
+        let CleanDocument::Text(production_text) = production_doc else {
+            panic!("expected text output");
+        };
+
+        let primary = production_manifest
+            .iter()
+            .find(|span| span.class == PiiClass::Email)
+            .expect("primary email token");
+        assert_ne!(
+            primary.clean_span.end - primary.clean_span.start,
+            primary.raw_span.end - primary.raw_span.start,
+            "the fixture must exercise a byte-length-changing primary replacement"
+        );
+        let resolved = production_manifest
+            .iter()
+            .find(|span| span.class == PiiClass::Name)
+            .expect("safety-net resolved token");
+        assert_eq!(resolved.raw_span, expected_name_span);
+
+        for emitted in &production_manifest {
+            assert!(emitted.raw_span.start < emitted.raw_span.end);
+            assert!(emitted.raw_span.end <= text.len());
+            assert!(text.is_char_boundary(emitted.raw_span.start));
+            assert!(text.is_char_boundary(emitted.raw_span.end));
+            assert!(emitted.clean_span.start < emitted.clean_span.end);
+            assert!(emitted.clean_span.end <= production_text.len());
+            assert!(production_text.is_char_boundary(emitted.clean_span.start));
+            assert!(production_text.is_char_boundary(emitted.clean_span.end));
+            let token = &production_text[emitted.clean_span.clone()];
+            let restored = production_session
+                .restore(token)
+                .expect("manifest token should restore");
+            assert_eq!(restored, text[emitted.raw_span.clone()]);
+        }
+        assert_eq!(
+            pipeline
+                .restore_strict_text(&production_session, &production_text)
+                .expect("production output should restore exactly"),
+            text
+        );
+
+        let traced_session = Session::new(Scope::Ephemeral).expect("session");
+        let (_, traced_manifest, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &traced_session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                policy,
+            )
+            .expect("traced clean");
+        let production_coordinates = production_manifest
+            .iter()
+            .map(|span| (span.raw_span.clone(), span.class.clone()))
+            .collect::<Vec<_>>();
+        let traced_coordinates = traced_manifest
+            .iter()
+            .map(|span| (span.raw_span.clone(), span.class.clone()))
+            .collect::<Vec<_>>();
+        let trace_coordinates = trace
+            .iter()
+            .map(|item| (item.raw_start()..item.raw_end(), item.class().clone()))
+            .collect::<Vec<_>>();
+        assert_eq!(traced_coordinates, production_coordinates);
+        assert_eq!(trace_coordinates, production_coordinates);
+    }
+
+    #[test]
+    fn ambiguous_safety_resolve_mapping_fails_before_any_emission() {
+        let raw_text = "alice@example.invalid tail";
+        let existing_token = "<Email_1>";
+        let mut clean = CleanText {
+            text: format!("{existing_token} tail"),
+            manifest: vec![EmittedTokenSpan::new(
+                0..existing_token.len(),
+                0.."alice@example.invalid".len(),
+                PiiClass::Email,
+            )],
+        };
+        let report = LeakReport::from_parts(
+            vec![LeakSuspect::new(
+                1..2,
+                PiiClass::Name,
+                "ambiguous.fixture",
+                Some(1.0),
+                LeakKind::Uncovered,
+                PiiClass::Name.to_canonical_str(),
+                None,
+            )],
+            Vec::new(),
+        );
+        let before_text = clean.text.clone();
+        let before_manifest = clean.manifest.clone();
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut trace = ProtectionTraceCollector::new(raw_text);
+
+        let error = pipeline
+            .resolve_safety_net_suspects(
+                &session,
+                &mut clean,
+                &report,
+                DocumentKind::Text,
+                None,
+                Some(&mut trace),
+            )
+            .expect_err("an interval inside an existing token is ambiguous");
+
+        assert!(matches!(
+            error,
+            Error::SafetyNet(SafetyNetError::InvalidOutput { message })
+                if message == "clean-to-raw start mapping failed"
+        ));
+        assert_eq!(clean.text, before_text);
+        assert_eq!(clean.manifest, before_manifest);
+        assert!(trace.items.is_empty());
+        assert!(session.snapshot_entries().is_empty());
     }
 
     #[test]
