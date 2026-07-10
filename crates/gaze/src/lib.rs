@@ -41,8 +41,8 @@ pub use gaze_types::{
 };
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{
-    Error, Pipeline, PipelineBuilder, PipelineOptimizationConfig, Result, SafetyNetFallback,
-    SafetyNetMode, SafetyNetPolicy,
+    Error, GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder, PipelineOptimizationConfig,
+    Result, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
 };
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,
