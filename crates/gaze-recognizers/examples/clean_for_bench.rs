@@ -92,6 +92,7 @@ struct ManifestIntegrity {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Outcome {
     Success(Response),
     PipelineError {
@@ -805,4 +806,218 @@ fn manifest_integrity(
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule_floor_response(fixture_id: &str, locale: &str, text: &str) -> Response {
+        let config = BenchConfig::RuleFloorExtended;
+        let full = build_pipeline(config).expect("rule-floor-extended pipeline should build");
+        let floor = build_pipeline(floor_config(config)).expect("floor pipeline should build");
+        let request = Request {
+            fixture_id: fixture_id.to_string(),
+            locale_chain: vec![locale.to_string()],
+            text: text.to_string(),
+        };
+
+        match handle_request(config, &full, &floor, None, request)
+            .expect("synthetic request should be handled")
+        {
+            Outcome::Success(response) => response,
+            outcome => panic!("expected a success response, got {outcome:?}"),
+        }
+    }
+
+    fn assert_success_contract(response: &Response, fixture_id: &str, email: &str) {
+        assert_eq!(response.fixture_id, fixture_id);
+        assert!(
+            response
+                .manifest_spans
+                .iter()
+                .any(|span| span.class == "email"),
+            "the deterministic rule floor should tokenize the synthetic email"
+        );
+        assert!(!response.clean_text.contains(email));
+        assert!(response.restore.exact);
+        assert_eq!(response.safety_net_mode, "strict");
+
+        let integrity = &response.manifest_integrity;
+        assert!(integrity.spans >= 1);
+        assert_eq!(integrity.token_restore_failures, 0);
+        assert_eq!(integrity.raw_value_mismatches, 0);
+        assert_eq!(integrity.invalid_clean_bounds, 0);
+        assert_eq!(integrity.invalid_raw_bounds, 0);
+        assert_eq!(integrity.overlapping_clean_spans, 0);
+        assert_eq!(integrity.non_monotonic_raw_spans, 0);
+
+        let serialized = serde_json::to_value(response).expect("response should serialize");
+        let timing = serialized
+            .get("timing")
+            .and_then(serde_json::Value::as_object)
+            .expect("response should contain a timing object");
+        assert_eq!(timing.len(), 6);
+        for field in [
+            "total_ms",
+            "pass1_ms",
+            "pass2_ms",
+            "pass3_ms",
+            "restore_ms",
+            "post_policy_scan_ms",
+        ] {
+            assert!(timing.contains_key(field), "missing timing field {field}");
+        }
+    }
+
+    #[test]
+    fn en_rule_floor_success_response_contract() {
+        let email = "alice@example.invalid";
+        let response = rule_floor_response(
+            "en-1",
+            "en",
+            "Contact alice@example.invalid or call +1-555-0142.",
+        );
+
+        assert_success_contract(&response, "en-1", email);
+    }
+
+    #[test]
+    fn de_rule_floor_success_response_contract() {
+        let email = "dr.schmidt@example.invalid";
+        let response = rule_floor_response(
+            "de-1",
+            "de",
+            "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233.",
+        );
+
+        assert_success_contract(&response, "de-1", email);
+    }
+
+    #[test]
+    fn pipeline_error_codes_cover_each_mapping_arm() {
+        let cases = [
+            (
+                gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
+                    message: "synthetic invalid output".to_string(),
+                }),
+                "safety_net_invalid_output",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::Runtime {
+                    message: "synthetic runtime failure".to_string(),
+                }),
+                "safety_net_runtime",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::Unavailable {
+                    reason: "synthetic unavailable backend".to_string(),
+                }),
+                "safety_net_error",
+            ),
+            (gaze::Error::ExportForbidden, "pipeline_error"),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(pipeline_error_code(&error), expected);
+        }
+    }
+
+    #[test]
+    fn pipeline_error_response_has_exact_jsonl_shape() {
+        let response = PipelineErrorResponse {
+            fixture_id: "failure-1",
+            pipeline_error_stage: "clean",
+            pipeline_error_code: "safety_net_runtime",
+            timing: PipelineErrorTiming { total_ms: 12.5 },
+        };
+        let serialized = serde_json::to_string(&response).expect("error response should serialize");
+        assert_eq!(
+            serialized,
+            r#"{"fixture_id":"failure-1","pipeline_error_stage":"clean","pipeline_error_code":"safety_net_runtime","timing":{"total_ms":12.5}}"#
+        );
+
+        let value = serde_json::to_value(&response).expect("error response should serialize");
+        let object = value
+            .as_object()
+            .expect("error response should be a JSON object");
+        assert_eq!(object.len(), 4);
+        for field in [
+            "fixture_id",
+            "pipeline_error_stage",
+            "pipeline_error_code",
+            "timing",
+        ] {
+            assert!(object.contains_key(field), "missing error field {field}");
+        }
+        let timing = object["timing"]
+            .as_object()
+            .expect("error timing should be a JSON object");
+        assert_eq!(timing.len(), 1);
+        assert!(timing.contains_key("total_ms"));
+
+        let mut output = Vec::new();
+        write_pipeline_error(
+            &mut output,
+            "failure-1",
+            "clean",
+            "safety_net_runtime",
+            12.5,
+        )
+        .expect("error response should be written");
+        assert_eq!(output, format!("{serialized}\n").as_bytes());
+    }
+
+    #[cfg(feature = "safety-net-kiji")]
+    #[test]
+    #[ignore = "requires NER and Kiji model environment; records known baseline debt"]
+    fn kiji_response_contract_records_restore_and_manifest_debt() {
+        let config = BenchConfig::FullStackKijiResolve;
+        let full = build_pipeline(config).expect("full Kiji pipeline should build from model env");
+        let floor = build_pipeline(floor_config(config)).expect("floor pipeline should build");
+        let pre_safety =
+            build_pipeline(BenchConfig::Pass2Ner).expect("pre-safety NER pipeline should build");
+        let request = Request {
+            fixture_id: "de-kiji-debt-1".to_string(),
+            locale_chain: vec!["de".to_string()],
+            text: "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233."
+                .to_string(),
+        };
+        let response = match handle_request(config, &full, &floor, Some(&pre_safety), request)
+            .expect("Kiji request should be handled")
+        {
+            Outcome::Success(response) => response,
+            outcome => panic!("expected a Kiji response, got {outcome:?}"),
+        };
+
+        // Recorded baseline debt (~69.46% exact restore, ~36.85% valid manifest): false
+        // restore.exact and non-zero integrity violations are debt signals, not expected-good.
+        let value = serde_json::to_value(&response).expect("Kiji response should serialize");
+        assert!(value["restore"]["exact"].is_boolean());
+        for field in [
+            "invalid_clean_bounds",
+            "invalid_raw_bounds",
+            "overlapping_clean_spans",
+            "non_monotonic_raw_spans",
+            "token_restore_failures",
+            "raw_value_mismatches",
+        ] {
+            assert!(
+                value["manifest_integrity"][field].is_u64(),
+                "Kiji response should record integrity debt field {field}"
+            );
+        }
+
+        let integrity = &response.manifest_integrity;
+        let violation_count = integrity.invalid_clean_bounds
+            + integrity.invalid_raw_bounds
+            + integrity.overlapping_clean_spans
+            + integrity.non_monotonic_raw_spans
+            + integrity.token_restore_failures
+            + integrity.raw_value_mismatches;
+        eprintln!(
+            "Kiji baseline debt signals: restore_exact={}, manifest_violations={violation_count}",
+            response.restore.exact
+        );
+    }
 }
