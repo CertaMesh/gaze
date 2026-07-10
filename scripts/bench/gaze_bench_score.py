@@ -352,7 +352,7 @@ MANIFEST_INTEGRITY_FIELDS = frozenset(
     }
 )
 SUCCESS_TIMING_FIELDS = frozenset(
-    {"total_ms", "pass1_ms", "pass2_ms", "pass3_ms", "restore_ms", "post_policy_scan_ms"}
+    {"clean_ms", "restore_ms", "post_policy_scan_ms"}
 )
 SUCCESS_RESPONSE_FIELDS = frozenset(
     {
@@ -415,7 +415,7 @@ def _validate_manifest_integrity(value: object, context: str) -> None:
 def _validate_success_timing(value: object, context: str) -> None:
     timing = _expect_exact_keys(value, SUCCESS_TIMING_FIELDS, context)
     for field in SUCCESS_TIMING_FIELDS:
-        if field == "pass2_ms" and timing[field] is None:
+        if field == "post_policy_scan_ms" and timing[field] is None:
             continue
         _expect_number(timing[field], f"{context}.{field}")
 
@@ -1023,7 +1023,7 @@ def run_config(
     contract = ContractAccumulator()
     pipeline_errors: Counter[str] = Counter()
     pipeline_error_stages: Counter[str] = Counter()
-    timing: defaultdict[str, list[float]] = defaultdict(list)
+    success_timing: defaultdict[str, list[float]] = defaultdict(list)
     first_response_ms: float | None = None
 
     try:
@@ -1047,9 +1047,6 @@ def run_config(
             if "pipeline_error_code" in response:
                 pipeline_errors[str(response["pipeline_error_code"])] += 1
                 pipeline_error_stages[str(response["pipeline_error_stage"])] += 1
-                for key, value in response["timing"].items():
-                    if value is not None:
-                        timing[key].append(float(value))
                 continue
             predictions = final_trace_predictions(document, response)
             overall.add(document, predictions)
@@ -1069,7 +1066,7 @@ def run_config(
                 )
             for key, value in response["timing"].items():
                 if value is not None:
-                    timing[key].append(float(value))
+                    success_timing[key].append(float(value))
             if (index + 1) % 500 == 0:
                 print(
                     f"{config}: scored {index + 1}/{len(documents)} documents",
@@ -1083,6 +1080,13 @@ def run_config(
             raise RuntimeError(f"benchmark runner failed with status {return_code}")
 
     wall_seconds = time.perf_counter() - started
+    clean_ms = success_timing.get("clean_ms", [])
+    measured_clean_seconds = sum(clean_ms) / 1000.0
+    production_documents_per_second = (
+        len(clean_ms) / measured_clean_seconds
+        if clean_ms and measured_clean_seconds > 0.0
+        else None
+    )
     return {
         "config": config,
         "metrics": overall.result(),
@@ -1106,16 +1110,17 @@ def run_config(
             key: value.result() for key, value in sorted(per_label.items())
         },
         "latency_ms": {
-            key: timing_summary(value) for key, value in sorted(timing.items())
+            key: timing_summary(value)
+            for key, value in sorted(success_timing.items())
         },
         "warm_latency_ms": {
             key: timing_summary(value[1:])
-            for key, value in sorted(timing.items())
+            for key, value in sorted(success_timing.items())
             if len(value) > 1
         },
         "process": {
             "wall_seconds": wall_seconds,
-            "documents_per_second": len(documents) / wall_seconds,
+            "documents_per_second": production_documents_per_second,
             "start_to_first_response_ms": first_response_ms,
             "stderr_log": str(stderr_path.relative_to(repo_root)),
             "stderr_bytes": stderr_path.stat().st_size,
