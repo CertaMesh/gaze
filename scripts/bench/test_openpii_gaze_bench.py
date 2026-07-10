@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import sys
+import socket
+import tempfile
 import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import openpii_gaze_bench as benchmark
+import opf_daemon
 
 
 class OffsetTests(unittest.TestCase):
@@ -129,6 +132,26 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(result["manifest_valid_document_rate"], 0.0)
         self.assertEqual(result["strict_acceptance_rate"], 0.0)
         self.assertEqual(result["post_policy_zero_suspect_rate"], 1.0)
+
+
+class OpfDaemonTests(unittest.TestCase):
+    def test_receive_all_enforces_the_requested_limit(self) -> None:
+        sender, receiver = socket.socketpair()
+        with sender, receiver:
+            sender.sendall(b"abc")
+            sender.shutdown(socket.SHUT_WR)
+            with self.assertRaisesRegex(ValueError, "byte limit"):
+                opf_daemon.receive_all(receiver, 2)
+
+    def test_socket_parent_is_private(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            socket_path = Path(temporary) / "private" / "opf.sock"
+            opf_daemon.validate_socket_parent(socket_path)
+            self.assertEqual(socket_path.parent.stat().st_mode & 0o777, 0o700)
+
+    def test_socket_path_length_fails_before_creation(self) -> None:
+        with self.assertRaisesRegex(ValueError, "shorter than 100 bytes"):
+            opf_daemon.validate_socket_parent(Path("x" * 100))
 
 
 if __name__ == "__main__":

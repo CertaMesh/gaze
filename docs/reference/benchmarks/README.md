@@ -61,6 +61,7 @@ Evidence paths:
 | --- | --- |
 | Dataset and scoring contract | `docs/reference/benchmarks/dataiku-en-de-holdout.md` |
 | Current whole-pipeline baseline | `docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md` |
+| Warm OpenAI Privacy Filter sample | `docs/reference/benchmarks/v0.12-opf-daemon-sample.md` |
 | Benchmark runner | `scripts/bench/dataiku_en_de_gaze_bench.py` |
 | Dataset revision | `DataikuNLP/kiji-pii-training-data@0275550f0b1f1b8f2dc9356fd31ac1c788b8228b` |
 | Test-file SHA256 | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
@@ -68,6 +69,11 @@ Evidence paths:
 The upstream test split is reserved from training. It has no negative-only
 documents, so it remains one layer of the release gate rather than a complete
 PII evaluation.
+
+The optional OPF cell is intentionally not part of the default run. It requires
+a verified 2.6 GB checkpoint and a warmed local daemon, and it currently has a
+measured fail-closed invalid-output rate. Use the supplemental OPF report and
+explicit `full-stack-opf-resolve` config when evaluating that backend.
 
 ## Secondary Multilingual Synthetic Holdout
 

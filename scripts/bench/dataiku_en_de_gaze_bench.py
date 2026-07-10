@@ -34,6 +34,7 @@ CONFIG_CHOICES = (
     "rule-floor-extended",
     "pass2-ner",
     "full-stack-kiji-resolve",
+    "full-stack-opf-resolve",
 )
 
 COUNTRY_REGIONS = {
@@ -183,8 +184,13 @@ def build_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
         "--example",
         "clean_for_bench",
     ]
+    features = []
     if any("kiji" in config for config in configs):
-        command.extend(["--features", "safety-net-kiji"])
+        features.append("safety-net-kiji")
+    if any("opf" in config for config in configs):
+        features.append("safety-net-openai")
+    if features:
+        command.extend(["--features", ",".join(features)])
     subprocess.run(command, cwd=repo_root, check=True)
     binary = repo_root / "target/debug/examples/clean_for_bench"
     if not binary.is_file():
@@ -225,6 +231,34 @@ def parse_args() -> argparse.Namespace:
         ).expanduser(),
     )
     parser.add_argument("--threshold", type=float, default=0.3)
+    parser.add_argument("--max-documents", type=int)
+    parser.add_argument(
+        "--opf-command",
+        type=Path,
+        default=(
+            Path(os.environ["GAZE_OPENAI_FILTER_OPF"])
+            if os.environ.get("GAZE_OPENAI_FILTER_OPF")
+            else None
+        ),
+    )
+    parser.add_argument(
+        "--opf-checkpoint",
+        type=Path,
+        default=(
+            Path(os.environ["OPF_CHECKPOINT"])
+            if os.environ.get("OPF_CHECKPOINT")
+            else None
+        ),
+    )
+    parser.add_argument(
+        "--opf-daemon-socket",
+        type=Path,
+        default=(
+            Path(os.environ["GAZE_OPF_DAEMON_SOCKET"])
+            if os.environ.get("GAZE_OPF_DAEMON_SOCKET")
+            else None
+        ),
+    )
     parser.add_argument(
         "--config", action="append", choices=CONFIG_CHOICES, help="repeatable"
     )
@@ -243,6 +277,10 @@ def main() -> int:
     else:
         fetch_dataset(dataset_path)
     documents, dataset_report = load_documents(dataset_path)
+    if args.max_documents is not None:
+        if args.max_documents <= 0:
+            raise ValueError("--max-documents must be greater than zero")
+        documents = documents[: args.max_documents]
     configs = tuple(args.config) if args.config else score.DEFAULT_CONFIGS
     if not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")
@@ -250,6 +288,13 @@ def main() -> int:
         raise FileNotFoundError(
             f"Kiji model directory does not exist: {args.kiji_model_dir}"
         )
+    if any("opf" in config for config in configs):
+        if args.opf_command is None or not args.opf_command.is_file():
+            raise FileNotFoundError("OPF command does not exist; pass --opf-command")
+        if args.opf_checkpoint is None or not args.opf_checkpoint.is_dir():
+            raise FileNotFoundError(
+                "OPF checkpoint does not exist; pass --opf-checkpoint"
+            )
     binary = (
         repo_root / "target/debug/examples/clean_for_bench"
         if args.skip_build
@@ -267,6 +312,9 @@ def main() -> int:
                 documents,
                 args.model_dir,
                 args.kiji_model_dir,
+                args.opf_command,
+                args.opf_checkpoint,
+                args.opf_daemon_socket,
                 args.threshold,
                 output_path.parent,
             )
@@ -299,6 +347,7 @@ def main() -> int:
                 "latency",
             ],
             "hard_gates": {
+                "pipeline_completion_rate": 1.0,
                 "restore_exact_rate": 1.0,
                 "manifest_valid_document_rate": 1.0,
                 "safety_regressions_allowed": False,
@@ -308,6 +357,12 @@ def main() -> int:
             "configs": list(configs),
             "ner_model_dir": str(args.model_dir),
             "kiji_model_dir": str(args.kiji_model_dir),
+            "opf_command": str(args.opf_command) if args.opf_command else None,
+            "opf_checkpoint": str(args.opf_checkpoint) if args.opf_checkpoint else None,
+            "opf_daemon_socket": (
+                str(args.opf_daemon_socket) if args.opf_daemon_socket else None
+            ),
+            "max_documents": args.max_documents,
             "ner_threshold": args.threshold,
         },
         "runs": runs,

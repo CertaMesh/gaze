@@ -671,6 +671,9 @@ def run_config(
     documents: Sequence[Document],
     model_dir: Path,
     kiji_model_dir: Path,
+    opf_command: Path | None,
+    opf_checkpoint: Path | None,
+    opf_daemon_socket: Path | None,
     threshold: float,
     diagnostics_dir: Path,
 ) -> dict[str, object]:
@@ -678,6 +681,12 @@ def run_config(
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
     environment["GAZE_KIJI_DISTILBERT_MODEL_DIR"] = str(kiji_model_dir)
+    if opf_command is not None:
+        environment["GAZE_OPENAI_FILTER_OPF"] = str(opf_command)
+    if opf_checkpoint is not None:
+        environment["OPF_CHECKPOINT"] = str(opf_checkpoint)
+    if opf_daemon_socket is not None:
+        environment["GAZE_OPF_DAEMON_SOCKET"] = str(opf_daemon_socket)
     command = [str(binary), "--config", config]
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
     stderr_path = diagnostics_dir / f"{config}.stderr.log"
@@ -703,6 +712,8 @@ def run_config(
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
     contract = ContractAccumulator()
+    pipeline_errors: Counter[str] = Counter()
+    pipeline_error_stages: Counter[str] = Counter()
     timing: defaultdict[str, list[float]] = defaultdict(list)
     first_response_ms: float | None = None
 
@@ -729,6 +740,13 @@ def run_config(
                     f"runner response mismatch: expected {document.uid}, "
                     f"received {response['fixture_id']}"
                 )
+            if "pipeline_error_code" in response:
+                pipeline_errors[str(response["pipeline_error_code"])] += 1
+                pipeline_error_stages[str(response["pipeline_error_stage"])] += 1
+                for key, value in response["timing"].items():
+                    if value is not None:
+                        timing[key].append(float(value))
+                continue
             predictions = effective_predictions(document, response)
             overall.add(document, predictions)
             per_language[document.language].add(document, predictions)
@@ -767,6 +785,16 @@ def run_config(
         "direct_identifier_recall": direct.result(),
         "contextual_pii_recall": contextual.result(),
         "pipeline_contract": contract.result(),
+        "pipeline_availability": {
+            "attempted_documents": len(documents),
+            "completed_documents": len(documents) - sum(pipeline_errors.values()),
+            "completion_rate": safe_ratio(
+                len(documents) - sum(pipeline_errors.values()), len(documents)
+            ),
+            "failed_closed_documents": sum(pipeline_errors.values()),
+            "errors": dict(sorted(pipeline_errors.items())),
+            "error_stages": dict(sorted(pipeline_error_stages.items())),
+        },
         "per_language": {
             key: value.result() for key, value in sorted(per_language.items())
         },
@@ -850,6 +878,7 @@ def parse_args() -> argparse.Namespace:
             "rule-floor-extended",
             "pass2-ner",
             "full-stack-kiji-resolve",
+            "full-stack-opf-resolve",
             "pass3-kiji",
             "pass3-opf",
             "pass3-locale-aware",
@@ -862,6 +891,33 @@ def parse_args() -> argparse.Namespace:
         help="ISO language code; repeat to select multiple languages",
     )
     parser.add_argument("--max-documents", type=int)
+    parser.add_argument(
+        "--opf-command",
+        type=Path,
+        default=(
+            Path(os.environ["GAZE_OPENAI_FILTER_OPF"])
+            if os.environ.get("GAZE_OPENAI_FILTER_OPF")
+            else None
+        ),
+    )
+    parser.add_argument(
+        "--opf-checkpoint",
+        type=Path,
+        default=(
+            Path(os.environ["OPF_CHECKPOINT"])
+            if os.environ.get("OPF_CHECKPOINT")
+            else None
+        ),
+    )
+    parser.add_argument(
+        "--opf-daemon-socket",
+        type=Path,
+        default=(
+            Path(os.environ["GAZE_OPF_DAEMON_SOCKET"])
+            if os.environ.get("GAZE_OPF_DAEMON_SOCKET")
+            else None
+        ),
+    )
     parser.add_argument("--no-download", action="store_true")
     parser.add_argument("--fetch-only", action="store_true")
     parser.add_argument("--skip-build", action="store_true")
@@ -897,13 +953,22 @@ def main() -> int:
     )
     configs = tuple(args.config) if args.config else DEFAULT_CONFIGS
     if any(
-        config in {"pass2-ner", "full-stack-kiji-resolve"} for config in configs
+        config
+        in {"pass2-ner", "full-stack-kiji-resolve", "full-stack-opf-resolve"}
+        for config in configs
     ) and not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")
     if any("kiji" in config for config in configs) and not args.kiji_model_dir.is_dir():
         raise FileNotFoundError(
             f"Kiji model directory does not exist: {args.kiji_model_dir}"
         )
+    if any("opf" in config for config in configs):
+        if args.opf_command is None or not args.opf_command.is_file():
+            raise FileNotFoundError("OPF command does not exist; pass --opf-command")
+        if args.opf_checkpoint is None or not args.opf_checkpoint.is_dir():
+            raise FileNotFoundError(
+                "OPF checkpoint does not exist; pass --opf-checkpoint"
+            )
 
     binary = repo_root / "target/debug/examples/clean_for_bench"
     if not args.skip_build:
@@ -916,8 +981,13 @@ def main() -> int:
             "--example",
             "clean_for_bench",
         ]
+        features = []
         if any("kiji" in config for config in configs):
-            build_command.extend(["--features", "safety-net-kiji"])
+            features.append("safety-net-kiji")
+        if any("opf" in config for config in configs):
+            features.append("safety-net-openai")
+        if features:
+            build_command.extend(["--features", ",".join(features)])
         subprocess.run(
             build_command,
             cwd=repo_root,
@@ -937,6 +1007,9 @@ def main() -> int:
                 documents,
                 args.model_dir,
                 args.kiji_model_dir,
+                args.opf_command,
+                args.opf_checkpoint,
+                args.opf_daemon_socket,
                 args.threshold,
                 output_path.parent,
             )
@@ -970,6 +1043,7 @@ def main() -> int:
                 "Resolve coverage maps SafetyNet action spans from pre-safety clean text back to raw byte ranges.",
             ],
             "comparison_gates": {
+                "pipeline_completion_rate": "must equal 1.0",
                 "pii_byte_recall": "higher; no regression allowed",
                 "full_entity_coverage_recall": "higher; no regression allowed",
                 "zero_leak_document_rate": "higher; no regression allowed",
@@ -985,6 +1059,11 @@ def main() -> int:
             "max_documents": args.max_documents,
             "ner_model_dir": str(args.model_dir),
             "kiji_model_dir": str(args.kiji_model_dir),
+            "opf_command": str(args.opf_command) if args.opf_command else None,
+            "opf_checkpoint": str(args.opf_checkpoint) if args.opf_checkpoint else None,
+            "opf_daemon_socket": (
+                str(args.opf_daemon_socket) if args.opf_daemon_socket else None
+            ),
             "ner_threshold": args.threshold,
         },
         "runs": runs,

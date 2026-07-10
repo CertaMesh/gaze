@@ -57,8 +57,9 @@ The whole-pipeline scorecard is non-compensating:
 - reversibility: exact restored text must equal the original byte-for-byte;
 - trust: every manifest span must be ordered, in bounds, restorable, and map to
   the corresponding raw value;
-- availability: initial SafetyNet suspects show how often strict mode would
-  reject a document;
+- availability: pipeline completion and typed error counts are reported
+  separately; initial SafetyNet suspects show how often strict mode would
+  reject a completed document;
 - precision: false-positive bytes remain visible and cannot be traded away
   silently;
 - latency: warm median and p95 are compared only after the correctness gates
@@ -69,6 +70,11 @@ NER, and the complete Pass 2 + Kiji SafetyNet pipeline using the shipped
 `Resolve`/`Redact` policy. For the final cell, the scorer maps SafetyNet action
 spans from pre-safety clean text back to the raw document, verifies exact
 restore, validates the final manifest, and runs a post-policy SafetyNet scan.
+
+An optional `full-stack-opf-resolve` cell exercises OpenAI Privacy Filter
+through the same contract. It is excluded from the default because it requires
+a separately installed verified checkpoint and warmed daemon. See
+[`v0.12-opf-daemon-sample.md`](v0.12-opf-daemon-sample.md).
 
 Run the pinned benchmark:
 
@@ -96,4 +102,3 @@ negative set and an agentic-domain holdout. A finance-domain secondary candidate
 is
 [`gretelai/synthetic_pii_finance_multilingual`](https://huggingface.co/datasets/gretelai/synthetic_pii_finance_multilingual),
 whose English and German test files should be pinned and adapted before use.
-

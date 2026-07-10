@@ -5,7 +5,7 @@ use std::time::Instant;
 use gaze::{
     Action, ClassRule, CleanDocument, DefaultRule, EmittedTokenSpan, LeakKind, LeakReportStats,
     LocaleTag, PiiClass, Pipeline, RawDocument, RawMatch, RecognizerSpec, Rulepack, RulepackSource,
-    SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
 use gaze_recognizers::{
     embedded, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -18,6 +18,7 @@ enum BenchConfig {
     RuleFloorExtended,
     Pass2Ner,
     FullStackKijiResolve,
+    FullStackOpfResolve,
     Pass3Kiji,
     Pass3Opf,
     Pass3LocaleAware,
@@ -96,7 +97,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     let full = build_pipeline(config)?;
     let floor = build_pipeline(floor_config(config))?;
-    let pre_safety = if config == BenchConfig::FullStackKijiResolve {
+    let pre_safety = if matches!(
+        config,
+        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+    ) {
         Some(build_pipeline(BenchConfig::Pass2Ner)?)
     } else {
         None
@@ -116,14 +120,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let raw_text = request.text;
         let session = Session::new(Scope::Ephemeral)?;
         let full_start = Instant::now();
-        let (clean_doc, manifest, report) = full.clean_with_safety_net_policy_detect_context(
+        let clean_result = full.clean_with_safety_net_policy_detect_context(
             &session,
             RawDocument::Text(raw_text.clone()),
             &locale_chain,
             &Default::default(),
             safety_net_policy(config),
-        )?;
+        );
         let total_ms = full_start.elapsed().as_secs_f64() * 1000.0;
+        let (clean_doc, manifest, report) = match clean_result {
+            Ok(result) => result,
+            Err(error) => {
+                write_pipeline_error(
+                    &mut stdout,
+                    &request.fixture_id,
+                    "clean",
+                    pipeline_error_code(&error),
+                    total_ms,
+                )?;
+                continue;
+            }
+        };
 
         let CleanDocument::Text(clean_text) = clean_doc else {
             return Err("expected text clean document".into());
@@ -143,8 +160,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         };
 
         let post_policy_scan_start = Instant::now();
-        let post_policy_safety_net_stats = if config == BenchConfig::FullStackKijiResolve {
-            let post_policy = full.scan_safety_nets(&session, &clean_text, &locale_chain)?;
+        let post_policy_safety_net_stats = if matches!(
+            config,
+            BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+        ) {
+            let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
+                Ok(result) => result,
+                Err(error) => {
+                    write_pipeline_error(
+                        &mut stdout,
+                        &request.fixture_id,
+                        "post_policy_scan",
+                        pipeline_error_code(&error),
+                        total_ms,
+                    )?;
+                    continue;
+                }
+            };
             Some(SafetyNetStats::from(&post_policy.report.stats))
         } else {
             None
@@ -228,7 +260,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 timing: Timing {
                     total_ms,
                     pass1_ms,
-                    pass2_ms: if config == BenchConfig::FullStackKijiResolve {
+                    pass2_ms: if matches!(
+                        config,
+                        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+                    ) {
                         pre_safety_ms.map(|elapsed| (elapsed - pass1_ms).max(0.0))
                     } else {
                         (config == BenchConfig::Pass2Ner).then_some((total_ms - pass1_ms).max(0.0))
@@ -237,9 +272,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         BenchConfig::RuleFloorCore
                         | BenchConfig::RuleFloorExtended
                         | BenchConfig::Pass2Ner => 0.0,
-                        BenchConfig::FullStackKijiResolve => pre_safety_ms
-                            .map(|elapsed| (total_ms - elapsed).max(0.0))
-                            .unwrap_or(0.0),
+                        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve => {
+                            pre_safety_ms
+                                .map(|elapsed| (total_ms - elapsed).max(0.0))
+                                .unwrap_or(0.0)
+                        }
                         BenchConfig::Pass3Kiji
                         | BenchConfig::Pass3Opf
                         | BenchConfig::Pass3LocaleAware => (total_ms - pass1_ms).max(0.0),
@@ -273,6 +310,49 @@ struct Response {
     timing: Timing,
 }
 
+#[derive(Debug, Serialize)]
+struct PipelineErrorResponse<'a> {
+    fixture_id: &'a str,
+    pipeline_error_stage: &'a str,
+    pipeline_error_code: &'a str,
+    timing: PipelineErrorTiming,
+}
+
+#[derive(Debug, Serialize)]
+struct PipelineErrorTiming {
+    total_ms: f64,
+}
+
+fn write_pipeline_error(
+    stdout: &mut impl Write,
+    fixture_id: &str,
+    stage: &str,
+    code: &str,
+    total_ms: f64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    serde_json::to_writer(
+        &mut *stdout,
+        &PipelineErrorResponse {
+            fixture_id,
+            pipeline_error_stage: stage,
+            pipeline_error_code: code,
+            timing: PipelineErrorTiming { total_ms },
+        },
+    )?;
+    stdout.write_all(b"\n")?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn pipeline_error_code(error: &gaze::Error) -> &'static str {
+    match error {
+        gaze::Error::SafetyNet(SafetyNetError::InvalidOutput { .. }) => "safety_net_invalid_output",
+        gaze::Error::SafetyNet(SafetyNetError::Runtime { .. }) => "safety_net_runtime",
+        gaze::Error::SafetyNet(_) => "safety_net_error",
+        _ => "pipeline_error",
+    }
+}
+
 fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let mut config = BenchConfig::RuleFloorExtended;
@@ -284,6 +364,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
                 "full-stack-kiji-resolve" => BenchConfig::FullStackKijiResolve,
+                "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
                 "pass3-kiji" => BenchConfig::Pass3Kiji,
                 "pass3-opf" => BenchConfig::Pass3Opf,
                 "pass3-locale-aware" => BenchConfig::Pass3LocaleAware,
@@ -300,6 +381,7 @@ fn floor_config(config: BenchConfig) -> BenchConfig {
         BenchConfig::RuleFloorExtended
         | BenchConfig::Pass2Ner
         | BenchConfig::FullStackKijiResolve
+        | BenchConfig::FullStackOpfResolve
         | BenchConfig::Pass3Kiji
         | BenchConfig::Pass3Opf
         | BenchConfig::Pass3LocaleAware => BenchConfig::RuleFloorExtended,
@@ -312,6 +394,9 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::error::E
         BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
         BenchConfig::FullStackKijiResolve => {
             pipeline = register_kiji_ort(pipeline)?;
+        }
+        BenchConfig::FullStackOpfResolve => {
+            pipeline = register_opf(pipeline)?;
         }
         BenchConfig::Pass3Kiji => {
             pipeline = register_kiji(pipeline)?;
@@ -391,7 +476,9 @@ fn rule_floor_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::err
 
     if matches!(
         config,
-        BenchConfig::Pass2Ner | BenchConfig::FullStackKijiResolve
+        BenchConfig::Pass2Ner
+            | BenchConfig::FullStackKijiResolve
+            | BenchConfig::FullStackOpfResolve
     ) {
         let model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
             .map(PathBuf::from)
@@ -514,9 +601,27 @@ fn register_kiji(_pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Er
 
 #[cfg(feature = "safety-net-openai")]
 fn register_opf(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    use gaze_recognizers::safety_net::openai_filter::OpenAiFilterSafetyNet;
+    use gaze_recognizers::safety_net::openai_filter::{
+        OpenAiFilterSafetyNet, SubprocessOpenAiFilterConfig,
+    };
 
-    Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::from_env()?))
+    let command =
+        std::env::var_os("GAZE_OPENAI_FILTER_OPF").ok_or("GAZE_OPENAI_FILTER_OPF is not set")?;
+    let checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
+    let config = SubprocessOpenAiFilterConfig::new(command)
+        .with_checkpoint_path(checkpoint)
+        .with_timeout(std::time::Duration::from_secs(30))
+        .with_args([
+            "--format",
+            "json",
+            "--output-mode",
+            "typed",
+            "--no-print-color-coded-text",
+            "--device",
+            "cpu",
+        ])
+        .with_checkpoint_bundle_sha256_verification(true);
+    Ok(pipeline.with_safety_net(OpenAiFilterSafetyNet::new(config)))
 }
 
 #[cfg(not(feature = "safety-net-openai"))]
@@ -584,7 +689,10 @@ fn leak_kind_name(kind: &LeakKind) -> &'static str {
 }
 
 fn safety_net_policy(config: BenchConfig) -> SafetyNetPolicy {
-    if config == BenchConfig::FullStackKijiResolve {
+    if matches!(
+        config,
+        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+    ) {
         SafetyNetPolicy::default()
     } else {
         SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact)
