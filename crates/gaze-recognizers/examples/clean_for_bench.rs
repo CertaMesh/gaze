@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use gaze::{
-    Action, ClassRule, CleanDocument, DefaultRule, EmittedTokenSpan, LeakKind, LeakReportStats,
-    LocaleTag, PiiClass, Pipeline, RawDocument, RawMatch, RecognizerSpec, Rulepack, RulepackSource,
-    SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope, Session,
+    Action, ClassRule, CleanDocument, DefaultRule, EmittedTokenSpan, GazeLocalProtectionTraceItem,
+    LeakKind, LeakReportStats, LocaleTag, PiiClass, Pipeline, RawDocument, RawMatch,
+    RecognizerSpec, Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode,
+    SafetyNetPolicy, Scope, Session,
 };
 use gaze_recognizers::{
     embedded, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -38,6 +39,22 @@ struct ManifestSpan {
     clean_start: usize,
     clean_end: usize,
     class: String,
+}
+
+#[derive(Debug, Serialize)]
+struct FinalProtectionTraceItem {
+    raw_start: usize,
+    raw_end: usize,
+    class: String,
+    action: String,
+    provenance: FinalProtectionTraceProvenance,
+}
+
+#[derive(Debug, Serialize)]
+struct FinalProtectionTraceProvenance {
+    stage: String,
+    decision: String,
+    source_ids: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -159,15 +176,15 @@ fn handle_request(
     let raw_text = request.text;
     let session = Session::new(Scope::Ephemeral)?;
     let full_start = Instant::now();
-    let clean_result = full.clean_with_safety_net_policy_detect_context(
+    let clean_result = full.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
         &session,
-        RawDocument::Text(raw_text.clone()),
+        &raw_text,
         &locale_chain,
         &Default::default(),
         safety_net_policy(config),
     );
     let total_ms = full_start.elapsed().as_secs_f64() * 1000.0;
-    let (clean_doc, manifest, report) = match clean_result {
+    let (clean_doc, manifest, report, final_protection_trace) = match clean_result {
         Ok(result) => result,
         Err(error) => {
             return Ok(Outcome::PipelineError {
@@ -255,6 +272,7 @@ fn handle_request(
         };
 
     let manifest_spans = serialize_manifest(manifest);
+    let final_protection_trace = serialize_final_protection_trace(final_protection_trace);
     let initial_safety_net_stats = SafetyNetStats::from(&report.stats);
     let strict_would_reject = report.stats.uncovered_count + report.stats.partial_bleed_count > 0;
     let leak_suspects = report
@@ -316,6 +334,7 @@ fn handle_request(
             restore_ms,
             post_policy_scan_ms,
         },
+        final_protection_trace,
     }))
 }
 
@@ -334,6 +353,7 @@ struct Response {
     restore: RestoreResult,
     manifest_integrity: ManifestIntegrity,
     timing: Timing,
+    final_protection_trace: Vec<FinalProtectionTraceItem>,
 }
 
 #[derive(Debug, Serialize)]
@@ -760,6 +780,25 @@ fn serialize_manifest(manifest: Vec<EmittedTokenSpan>) -> Vec<ManifestSpan> {
         .collect()
 }
 
+fn serialize_final_protection_trace(
+    trace: Vec<GazeLocalProtectionTraceItem>,
+) -> Vec<FinalProtectionTraceItem> {
+    trace
+        .into_iter()
+        .map(|item| FinalProtectionTraceItem {
+            raw_start: item.raw_start(),
+            raw_end: item.raw_end(),
+            class: item.class().to_canonical_str(),
+            action: item.action().to_string(),
+            provenance: FinalProtectionTraceProvenance {
+                stage: item.stage().to_string(),
+                decision: item.decision().to_string(),
+                source_ids: item.source_ids().to_vec(),
+            },
+        })
+        .collect()
+}
+
 fn manifest_integrity(
     session: &Session,
     raw_text: &str,
@@ -830,7 +869,13 @@ mod tests {
         }
     }
 
-    fn assert_success_contract(response: &Response, fixture_id: &str, email: &str) {
+    fn assert_success_contract(
+        response: &Response,
+        fixture_id: &str,
+        raw_text: &str,
+        clean_protected_value: &str,
+        trace_forbidden_values: &[&str],
+    ) {
         assert_eq!(response.fixture_id, fixture_id);
         assert!(
             response
@@ -839,7 +884,7 @@ mod tests {
                 .any(|span| span.class == "email"),
             "the deterministic rule floor should tokenize the synthetic email"
         );
-        assert!(!response.clean_text.contains(email));
+        assert!(!response.clean_text.contains(clean_protected_value));
         assert!(response.restore.exact);
         assert_eq!(response.safety_net_mode, "strict");
 
@@ -868,30 +913,141 @@ mod tests {
         ] {
             assert!(timing.contains_key(field), "missing timing field {field}");
         }
+
+        let trace_value = serialized
+            .get("final_protection_trace")
+            .and_then(serde_json::Value::as_array)
+            .expect("success response should contain a protection trace array");
+        assert_eq!(trace_value.len(), response.final_protection_trace.len());
+        assert!(!response.final_protection_trace.is_empty());
+
+        let mut previous_raw_end = 0usize;
+        for (item, serialized_item) in response
+            .final_protection_trace
+            .iter()
+            .zip(trace_value.iter())
+        {
+            assert!(item.raw_start < item.raw_end);
+            assert!(item.raw_end <= raw_text.len());
+            assert!(raw_text.is_char_boundary(item.raw_start));
+            assert!(raw_text.is_char_boundary(item.raw_end));
+            assert!(item.raw_start >= previous_raw_end);
+            previous_raw_end = item.raw_end;
+            assert!(matches!(
+                (
+                    item.provenance.stage.as_str(),
+                    item.provenance.decision.as_str(),
+                    item.action.as_str(),
+                ),
+                ("primary_pipeline", "policy", "tokenize")
+                    | ("safety_net", "resolve", "tokenize")
+                    | ("safety_net", "redact", "redact")
+                    | ("safety_net", "fallback_redact", "redact")
+            ));
+            assert_eq!(item.provenance.stage, "primary_pipeline");
+            assert_eq!(item.provenance.decision, "policy");
+            assert_eq!(item.action, "tokenize");
+            assert!(!item.provenance.source_ids.is_empty());
+            assert!(item
+                .provenance
+                .source_ids
+                .iter()
+                .all(|source_id| !source_id.is_empty()));
+            assert!(item
+                .provenance
+                .source_ids
+                .windows(2)
+                .all(|pair| pair[0] < pair[1]));
+            assert_eq!(
+                response
+                    .manifest_spans
+                    .iter()
+                    .filter(|span| {
+                        span.raw_start == item.raw_start
+                            && span.raw_end == item.raw_end
+                            && span.class == item.class
+                    })
+                    .count(),
+                1
+            );
+
+            let object = serialized_item
+                .as_object()
+                .expect("trace item should be an object");
+            assert_eq!(object.len(), 5);
+            for field in ["raw_start", "raw_end", "class", "action", "provenance"] {
+                assert!(object.contains_key(field), "missing trace field {field}");
+            }
+            let provenance = object["provenance"]
+                .as_object()
+                .expect("trace provenance should be an object");
+            assert_eq!(provenance.len(), 3);
+            for field in ["stage", "decision", "source_ids"] {
+                assert!(
+                    provenance.contains_key(field),
+                    "missing provenance field {field}"
+                );
+            }
+        }
+        for span in &response.manifest_spans {
+            assert_eq!(
+                response
+                    .final_protection_trace
+                    .iter()
+                    .filter(|item| {
+                        item.action == "tokenize"
+                            && item.raw_start == span.raw_start
+                            && item.raw_end == span.raw_end
+                            && item.class == span.class
+                    })
+                    .count(),
+                1
+            );
+        }
+        let serialized_trace = serde_json::to_string(&response.final_protection_trace)
+            .expect("trace should serialize");
+        for protected_value in trace_forbidden_values {
+            assert!(!serialized_trace.contains(protected_value));
+        }
     }
 
     #[test]
     fn en_rule_floor_success_response_contract() {
-        let email = "alice@example.invalid";
-        let response = rule_floor_response(
-            "en-1",
-            "en",
-            "Contact alice@example.invalid or call +1-555-0142.",
-        );
+        let text = "Contact alice@example.invalid or call +1-555-0142.";
+        let response = rule_floor_response("en-1", "en", text);
 
-        assert_success_contract(&response, "en-1", email);
+        assert_success_contract(
+            &response,
+            "en-1",
+            text,
+            "alice@example.invalid",
+            &["alice@example.invalid", "+1-555-0142"],
+        );
     }
 
     #[test]
     fn de_rule_floor_success_response_contract() {
-        let email = "dr.schmidt@example.invalid";
-        let response = rule_floor_response(
-            "de-1",
-            "de",
-            "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233.",
-        );
+        let text = "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233.";
+        let response = rule_floor_response("de-1", "de", text);
 
-        assert_success_contract(&response, "de-1", email);
+        assert_success_contract(
+            &response,
+            "de-1",
+            text,
+            "dr.schmidt@example.invalid",
+            &["dr.schmidt@example.invalid", "+49 1555 0112233"],
+        );
+    }
+
+    #[test]
+    fn success_response_keeps_empty_protection_trace_field() {
+        let response = rule_floor_response("empty-1", "en", "nothing sensitive here.");
+        assert!(response.final_protection_trace.is_empty());
+        let serialized = serde_json::to_value(&response).expect("response should serialize");
+        assert_eq!(
+            serialized.get("final_protection_trace"),
+            Some(&serde_json::Value::Array(Vec::new()))
+        );
     }
 
     #[test]
@@ -950,6 +1106,7 @@ mod tests {
         ] {
             assert!(object.contains_key(field), "missing error field {field}");
         }
+        assert!(!object.contains_key("final_protection_trace"));
         let timing = object["timing"]
             .as_object()
             .expect("error timing should be a JSON object");
