@@ -12,10 +12,9 @@ import sys
 import tempfile
 import urllib.request
 from collections import Counter
-from datetime import datetime, timezone
 from pathlib import Path
 
-import openpii_gaze_bench as score
+import gaze_bench_score as score
 
 
 DATASET_REPO = "DataikuNLP/kiji-pii-training-data"
@@ -233,6 +232,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--threshold", type=float, default=0.3)
     parser.add_argument("--max-documents", type=int)
     parser.add_argument(
+        "--sampling-seed", type=int, default=score.DEFAULT_SAMPLE_SEED
+    )
+    parser.add_argument(
         "--opf-command",
         type=Path,
         default=(
@@ -276,11 +278,11 @@ def main() -> int:
         verify_dataset(dataset_path)
     else:
         fetch_dataset(dataset_path)
-    documents, dataset_report = load_documents(dataset_path)
-    if args.max_documents is not None:
-        if args.max_documents <= 0:
-            raise ValueError("--max-documents must be greater than zero")
-        documents = documents[: args.max_documents]
+    available_documents, dataset_report = load_documents(dataset_path)
+    sampling_seed = getattr(args, "sampling_seed", score.DEFAULT_SAMPLE_SEED)
+    documents, sampling_report = score.stratified_sample(
+        available_documents, args.max_documents, sampling_seed
+    )
     configs = tuple(args.config) if args.config else score.DEFAULT_CONFIGS
     if not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")
@@ -320,11 +322,9 @@ def main() -> int:
             )
         )
 
-    result = {
-        "schema_version": 2,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "gaze": score.git_metadata(repo_root),
-        "dataset": {
+    result = score.assemble_scorecard(
+        repo_root=repo_root,
+        dataset_metadata={
             "repository": DATASET_REPO,
             "revision": DATASET_REVISION,
             "file": DATASET_FILE,
@@ -333,27 +333,10 @@ def main() -> int:
             "synthetic_only": True,
             "reserved_from_training": True,
             "selection_policy": "English and German rows from the upstream test split",
-            **dataset_report,
         },
-        "scoring": {
-            "primary_unit": "UTF-8 bytes",
-            "primary_scope": "label-agnostic whole-pipeline PII pseudonymization",
-            "non_compensating_axes": [
-                "safety",
-                "reversibility",
-                "manifest_integrity",
-                "strict_availability",
-                "precision",
-                "latency",
-            ],
-            "hard_gates": {
-                "pipeline_completion_rate": 1.0,
-                "restore_exact_rate": 1.0,
-                "manifest_valid_document_rate": 1.0,
-                "safety_regressions_allowed": False,
-            },
-        },
-        "parameters": {
+        dataset_report=dataset_report,
+        sampling_report=sampling_report,
+        parameters={
             "configs": list(configs),
             "ner_model_dir": str(args.model_dir),
             "kiji_model_dir": str(args.kiji_model_dir),
@@ -363,10 +346,11 @@ def main() -> int:
                 str(args.opf_daemon_socket) if args.opf_daemon_socket else None
             ),
             "max_documents": args.max_documents,
+            "sampling_seed": sampling_seed,
             "ner_threshold": args.threshold,
         },
-        "runs": runs,
-    }
+        runs=runs,
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"wrote {output_path}", file=sys.stderr)
