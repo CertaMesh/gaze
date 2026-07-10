@@ -4,9 +4,10 @@ use std::sync::{Arc, Mutex};
 
 use gaze::{
     Action, ClassRule, CleanDocument, ConflictTier, DefaultRule, Detection, Detector, DocumentKind,
-    EmittedTokenSpan, FallbackReason, LeakKind, LeakReportTelemetry, LeakSuspect, PiiClass,
-    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, SafetyNet,
-    SafetyNetContext, SafetyNetError, Scope, Session, Value,
+    EmittedTokenSpan, FallbackReason, GazeLocalProtectionTraceItem, LeakKind, LeakReport,
+    LeakReportTelemetry, LeakSuspect, PiiClass, Pipeline, RawDocument, RedactionEntry,
+    RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext, SafetyNetError, Scope,
+    Session, Value,
 };
 
 #[derive(Clone)]
@@ -237,6 +238,299 @@ fn tokenizing_pipeline_with_net(net: MockNet) -> Pipeline {
         .register_safety_net(net)
         .build()
         .expect("pipeline")
+}
+
+fn traced_clean(
+    pipeline: &Pipeline,
+    session: &Session,
+    raw: &str,
+    policy: gaze::SafetyNetPolicy,
+) -> (
+    String,
+    Vec<EmittedTokenSpan>,
+    LeakReport,
+    Vec<GazeLocalProtectionTraceItem>,
+) {
+    let (clean, manifest, report, trace) = pipeline
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            session,
+            raw,
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            policy,
+        )
+        .expect("traced safety-net clean");
+    (text(clean), manifest, report, trace)
+}
+
+fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
+    left.start < right.end && right.start < left.end
+}
+
+fn assert_trace_manifest_contract(
+    raw: &str,
+    clean: &str,
+    manifest: &[EmittedTokenSpan],
+    trace: &[GazeLocalProtectionTraceItem],
+    session: &Session,
+) {
+    for item in trace {
+        let raw_span = item.raw_start()..item.raw_end();
+        assert!(raw_span.start < raw_span.end);
+        assert!(raw_span.end <= raw.len());
+        assert!(raw.is_char_boundary(raw_span.start));
+        assert!(raw.is_char_boundary(raw_span.end));
+
+        match item.action() {
+            "tokenize" => {
+                let matching = manifest
+                    .iter()
+                    .filter(|span| span.raw_span == raw_span && &span.class == item.class())
+                    .count();
+                assert_eq!(
+                    matching, 1,
+                    "reversible trace item must match one manifest entry"
+                );
+            }
+            "redact" => assert!(
+                !manifest
+                    .iter()
+                    .any(|span| ranges_overlap(&span.raw_span, &raw_span)),
+                "redact trace item must not retain an overlapping manifest entry"
+            ),
+            action => panic!("unexpected protection action: {action}"),
+        }
+    }
+
+    assert_eq!(
+        trace
+            .iter()
+            .filter(|item| item.action() == "tokenize")
+            .count(),
+        manifest.len(),
+        "every final manifest entry must have one reversible trace item"
+    );
+    for span in manifest {
+        assert!(span.raw_span.start < span.raw_span.end);
+        assert!(span.raw_span.end <= raw.len());
+        assert!(raw.is_char_boundary(span.raw_span.start));
+        assert!(raw.is_char_boundary(span.raw_span.end));
+        assert!(span.clean_span.start < span.clean_span.end);
+        assert!(span.clean_span.end <= clean.len());
+        assert!(clean.is_char_boundary(span.clean_span.start));
+        assert!(clean.is_char_boundary(span.clean_span.end));
+        let token = &clean[span.clean_span.clone()];
+        assert_eq!(
+            session.restore(token).expect("manifest token restores"),
+            raw[span.raw_span.clone()]
+        );
+    }
+}
+
+fn assert_successful_redaction_is_not_reversible(raw: &str, clean: &str, session: &Session) {
+    let observed_restore = session
+        .restore_strict_text(clean)
+        .expect("successful redaction output remains valid clean text");
+    assert_ne!(
+        observed_restore, raw,
+        "an Ok safety-net result must not override an inexact observed restore"
+    );
+}
+
+#[test]
+fn safety_net_trace_promotes_utf8_prefixed_uncovered_suspect_reversibly() {
+    let raw = "Grüße von Dr. Schmidt";
+    let suspect = "Dr. Schmidt";
+    let start = raw.find(suspect).expect("synthetic suspect");
+    let net = MockNet::new(Some(start..start + suspect.len()), PiiClass::Name);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report, trace) = traced_clean(
+        &pipeline,
+        &session,
+        raw,
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact,
+        ),
+    );
+
+    assert!(!clean.contains(suspect));
+    assert_eq!(report.stats.uncovered_count, 1);
+    assert_eq!(manifest.len(), 1);
+    assert_eq!(trace.len(), 1);
+    assert_eq!(trace[0].raw_start(), start);
+    assert_eq!(trace[0].raw_end(), raw.len());
+    assert_eq!(trace[0].class(), &PiiClass::Name);
+    assert_eq!(trace[0].stage(), "safety_net");
+    assert_eq!(trace[0].decision(), "resolve");
+    assert_eq!(trace[0].action(), "tokenize");
+    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
+    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("exact restore"),
+        raw
+    );
+}
+
+#[test]
+fn safety_net_trace_partial_bleed_tokenizes_only_uncovered_subspan() {
+    let raw = "alice@example.invalid tail";
+    let baseline_session = session();
+    let baseline = text(
+        tokenizing_pipeline()
+            .redact(&baseline_session, RawDocument::Text(raw.to_string()))
+            .expect("baseline"),
+    );
+    let token_end = baseline.find(" tail").expect("token suffix");
+    let net = MockNet::new(Some(0..baseline.len()), PiiClass::Email);
+    let pipeline = tokenizing_pipeline_with_net(net);
+    let session = session();
+
+    let (clean, manifest, report, trace) = traced_clean(
+        &pipeline,
+        &session,
+        raw,
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact,
+        ),
+    );
+
+    assert!(matches!(
+        report.suspects[0].kind,
+        LeakKind::PartialBleed { ref uncovered }
+            if uncovered == &(token_end..baseline.len())
+    ));
+    assert_eq!(manifest.len(), 2);
+    assert_eq!(trace.len(), 2);
+    assert_eq!(trace[0].raw_start(), 0);
+    assert_eq!(trace[0].raw_end(), "alice@example.invalid".len());
+    assert_eq!(trace[0].class(), &PiiClass::Email);
+    assert_eq!(trace[0].stage(), "primary_pipeline");
+    assert_eq!(trace[0].decision(), "policy");
+    assert_eq!(trace[0].action(), "tokenize");
+    assert_eq!(trace[0].source_ids(), &["fixed".to_string()]);
+    let resolved = trace
+        .iter()
+        .find(|item| item.decision() == "resolve")
+        .expect("partial-bleed resolution trace");
+    assert_eq!(
+        resolved.raw_start()..resolved.raw_end(),
+        "alice@example.invalid".len()..raw.len()
+    );
+    assert_eq!(resolved.class(), &PiiClass::Email);
+    assert_eq!(resolved.stage(), "safety_net");
+    assert_eq!(resolved.action(), "tokenize");
+    assert_eq!(resolved.source_ids(), &["mock".to_string()]);
+    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("exact restore"),
+        raw
+    );
+}
+
+#[test]
+fn safety_net_trace_class_mismatch_overlap_falls_back_to_non_reversible_redaction() {
+    let raw = "alice@example.invalid ok";
+    let baseline_session = session();
+    let baseline = text(
+        tokenizing_pipeline()
+            .redact(&baseline_session, RawDocument::Text(raw.to_string()))
+            .expect("baseline"),
+    );
+    let token_end = baseline.find(" ok").expect("token suffix");
+    let net = MockNet::new(Some(0..token_end), PiiClass::Name);
+    let pipeline = tokenizing_pipeline_with_net(net);
+    let session = session();
+
+    let (clean, manifest, report, trace) = traced_clean(
+        &pipeline,
+        &session,
+        raw,
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact,
+        ),
+    );
+
+    assert_eq!(report.stats.class_mismatch_count, 1);
+    assert_eq!(clean, " ok");
+    assert!(manifest.is_empty());
+    assert_eq!(trace.len(), 1);
+    assert_eq!(trace[0].raw_start(), 0);
+    assert_eq!(trace[0].raw_end(), "alice@example.invalid".len());
+    assert_eq!(trace[0].class(), &PiiClass::Name);
+    assert_eq!(trace[0].stage(), "safety_net");
+    assert_eq!(trace[0].decision(), "fallback_redact");
+    assert_eq!(trace[0].action(), "redact");
+    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
+    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
+    assert_successful_redaction_is_not_reversible(raw, &clean, &session);
+}
+
+#[test]
+fn safety_net_trace_residual_utf8_suspect_falls_back_with_original_char_boundaries() {
+    let raw = "Grüße von Dr. Schmidt";
+    let multibyte = raw.find('ü').expect("multibyte character");
+    let net = MockNet::new(Some(multibyte + 1..multibyte + "ü".len()), PiiClass::Name);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report, trace) = traced_clean(
+        &pipeline,
+        &session,
+        raw,
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact,
+        ),
+    );
+
+    assert_eq!(report.stats.uncovered_count, 1);
+    assert_eq!(clean, "Grße von Dr. Schmidt");
+    assert!(manifest.is_empty());
+    assert_eq!(trace.len(), 1);
+    assert_eq!(trace[0].raw_start(), multibyte);
+    assert_eq!(trace[0].raw_end(), multibyte + "ü".len());
+    assert_eq!(trace[0].class(), &PiiClass::Name);
+    assert_eq!(trace[0].stage(), "safety_net");
+    assert_eq!(trace[0].decision(), "fallback_redact");
+    assert_eq!(trace[0].action(), "redact");
+    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
+    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
+    assert_successful_redaction_is_not_reversible(raw, &clean, &session);
+}
+
+#[test]
+fn safety_net_trace_redact_action_protects_utf8_span_without_claiming_restore() {
+    let raw = "Grüße von Dr. Schmidt";
+    let suspect = "Grüße";
+    let net = MockNet::new(Some(0..suspect.len()), PiiClass::Name);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+
+    let (clean, manifest, report, trace) = traced_clean(
+        &pipeline,
+        &session,
+        raw,
+        gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Redact, gaze::SafetyNetFallback::Strict),
+    );
+
+    assert_eq!(report.stats.uncovered_count, 1);
+    assert_eq!(clean, " von Dr. Schmidt");
+    assert!(manifest.is_empty());
+    assert_eq!(trace.len(), 1);
+    assert_eq!(trace[0].raw_start(), 0);
+    assert_eq!(trace[0].raw_end(), suspect.len());
+    assert_eq!(trace[0].class(), &PiiClass::Name);
+    assert_eq!(trace[0].stage(), "safety_net");
+    assert_eq!(trace[0].decision(), "redact");
+    assert_eq!(trace[0].action(), "redact");
+    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
+    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
+    assert_successful_redaction_is_not_reversible(raw, &clean, &session);
 }
 
 #[test]

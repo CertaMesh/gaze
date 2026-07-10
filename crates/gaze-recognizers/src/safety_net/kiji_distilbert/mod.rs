@@ -278,6 +278,27 @@ mod tests {
 
     use super::*;
 
+    #[derive(Debug)]
+    struct StubBackend;
+
+    impl KijiDistilbertBackend for StubBackend {
+        fn id(&self) -> &str {
+            "kiji-test"
+        }
+
+        fn version(&self) -> &str {
+            "synthetic"
+        }
+
+        fn decoding_params(&self) -> &[(&str, String)] {
+            &[]
+        }
+
+        fn infer(&self, _clean: &str) -> Result<Vec<RawSpan>, SafetyNetError> {
+            unreachable!("the no-model unit test supplies normalized spans directly")
+        }
+    }
+
     #[test]
     fn empty_command_failure_is_cached() {
         let net = KijiDistilbertSafetyNet::new(SubprocessKijiConfig::new(""));
@@ -294,5 +315,48 @@ mod tests {
         let second = net.check("clean", context).unwrap_err();
         assert_eq!(first, second);
         assert!(net.backend.get().is_some());
+    }
+
+    #[test]
+    fn normalized_utf8_span_keeps_kiji_action_metadata_for_core_resolution() {
+        let clean = "Grüße von Dr. Schmidt";
+        let start = clean.find("Dr. Schmidt").expect("synthetic name");
+        let normalized = backend::normalize_raw_spans(
+            vec![RawSpan::new(start, clean.len(), "person", Some(0.99))],
+            clean,
+        )
+        .expect("valid UTF-8 Kiji span");
+        let manifest = Manifest::default();
+        let context = SafetyNetContext::new(
+            &manifest,
+            &[LocaleTag::Global],
+            DocumentKind::Text,
+            None,
+            None,
+        );
+
+        let suspect = raw_span_to_suspect(normalized[0].clone(), &StubBackend, context)
+            .expect("Kiji span maps to a suspect")
+            .expect("uncovered Kiji span remains actionable");
+
+        assert_eq!(suspect.span, start..clean.len());
+        assert_eq!(suspect.class, gaze_types::PiiClass::Name);
+        assert_eq!(suspect.safety_net_id, "kiji-test");
+        assert_eq!(suspect.raw_label, "person");
+        assert_eq!(suspect.kind, gaze_types::LeakKind::Uncovered);
+        assert!(clean.is_char_boundary(suspect.span.start));
+        assert!(clean.is_char_boundary(suspect.span.end));
+
+        let multibyte = clean.find('ü').expect("multibyte character");
+        assert!(backend::normalize_raw_spans(
+            vec![RawSpan::new(
+                multibyte + 1,
+                multibyte + "ü".len(),
+                "person",
+                None,
+            )],
+            clean,
+        )
+        .is_err());
     }
 }
