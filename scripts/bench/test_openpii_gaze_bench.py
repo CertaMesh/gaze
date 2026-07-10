@@ -392,17 +392,45 @@ class ResponseValidationTests(unittest.TestCase):
                 ):
                     benchmark.validate_response(self.trace_document(), response)
 
-    def test_trace_accepts_normalized_custom_class_and_stable_source_ids(self) -> None:
+    def test_trace_accepts_producer_canonical_custom_class_and_stable_source_ids(
+        self,
+    ) -> None:
         response = self.tokenize_response()
-        response["manifest_spans"][0]["class"] = "custom:phone_number"
+        response["manifest_spans"][0][
+            "class"
+        ] = "custom:family:payment-card-or-iban"
         item = response["final_protection_trace"][0]
-        item["class"] = "custom:phone_number"
+        item["class"] = "custom:family:payment-card-or-iban"
         item["provenance"]["source_ids"] = [
-            "ner/bert",
-            "phone.structural",
-            "safety_net.backend",
+            "kiji",
+            "rule.iban",
         ]
         benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_rejects_source_id_reproducing_protected_request_content(
+        self,
+    ) -> None:
+        protected_value = "order-1234"
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text=protected_value,
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, len(protected_value), "ORDER"),),
+        )
+        for source_id in (protected_value, f"rule-{protected_value}-source"):
+            with self.subTest(source_id=source_id):
+                response = self.tokenize_response()
+                response["manifest_spans"][0]["raw_end"] = len(protected_value)
+                item = response["final_protection_trace"][0]
+                item["raw_end"] = len(protected_value)
+                item["provenance"]["source_ids"] = [source_id]
+                with self.assertRaisesRegex(
+                    benchmark.ResponseValidationError,
+                    "reproduces protected request content",
+                ):
+                    benchmark.validate_response(document, response)
 
     def test_all_ratified_trace_combinations_validate(self) -> None:
         combinations = (
@@ -533,6 +561,62 @@ class ResponseValidationTests(unittest.TestCase):
         document = self.trace_document()
         validated = benchmark.validate_response(document, response)
         self.assertEqual(benchmark.final_trace_predictions(document, validated), [])
+
+    def test_safety_net_protection_uses_producer_authored_raw_interval(self) -> None:
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text="aaaaabbbbbccccc",
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(),
+        )
+        response = self.success_response()
+        response["manifest_spans"] = [
+            {
+                "raw_start": 5,
+                "raw_end": 10,
+                "clean_start": 5,
+                "clean_end": 8,
+                "class": "name",
+            },
+            {
+                "raw_start": 11,
+                "raw_end": 14,
+                "clean_start": 9,
+                "clean_end": 12,
+                "class": "location",
+            },
+        ]
+        response["manifest_integrity"]["spans"] = 2
+        response["final_protection_trace"] = [
+            {
+                "raw_start": 5,
+                "raw_end": 10,
+                "class": "name",
+                "action": "tokenize",
+                "provenance": {
+                    "stage": "primary_pipeline",
+                    "decision": "policy",
+                    "source_ids": ["rule.name"],
+                },
+            },
+            {
+                "raw_start": 11,
+                "raw_end": 14,
+                "class": "location",
+                "action": "tokenize",
+                "provenance": {
+                    "stage": "safety_net",
+                    "decision": "resolve",
+                    "source_ids": ["safety.location"],
+                },
+            },
+        ]
+        validated = benchmark.validate_response(document, response)
+        predictions = benchmark.final_trace_predictions(document, validated)
+        self.assertEqual(predictions[0], benchmark.Span(5, 10, "name"))
+        self.assertEqual(predictions[1], benchmark.Span(11, 14, "location"))
 
 
 class SamplingTests(unittest.TestCase):

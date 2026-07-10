@@ -307,9 +307,6 @@ VALID_TRACE_COMBINATIONS = frozenset(
 BUILTIN_CANONICAL_CLASSES = frozenset(
     {"email", "name", "location", "organization"}
 )
-CUSTOM_CANONICAL_CLASS_PATTERN = re.compile(
-    r"custom:[a-z0-9]+(?:_[a-z0-9]+)*\Z"
-)
 SOURCE_ID_PATTERN = re.compile(
     r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z"
 )
@@ -424,9 +421,8 @@ def _validate_success_timing(value: object, context: str) -> None:
 
 
 def _validate_canonical_class(value: str, context: str) -> None:
-    if value not in BUILTIN_CANONICAL_CLASSES and not CUSTOM_CANONICAL_CLASS_PATTERN.fullmatch(
-        value
-    ):
+    is_custom = value.startswith("custom:") and len(value) > len("custom:")
+    if value not in BUILTIN_CANONICAL_CLASSES and not is_custom:
         raise ResponseValidationError(
             f"{context}: expected a canonical PiiClass representation"
         )
@@ -445,11 +441,14 @@ def _validate_final_protection_trace(
     manifest: Sequence[object],
 ) -> list[Span]:
     trace = _expect_list(value, "final_protection_trace")
-    original_text_bytes = len(document.text.encode("utf-8"))
+    original_text = document.text.encode("utf-8")
+    original_text_bytes = len(original_text)
     char_boundaries = frozenset(char_to_byte_offsets(document.text))
     previous_raw_end = 0
     predictions: list[Span] = []
     tokenize_items: Counter[tuple[int, int, str]] = Counter()
+    protected_raw_values: list[str] = []
+    source_identifiers: list[tuple[str, str]] = []
 
     for index, raw_item in enumerate(trace):
         context = f"final_protection_trace[{index}]"
@@ -485,9 +484,11 @@ def _validate_final_protection_trace(
                 f"{context}.provenance.source_ids: expected non-empty metadata IDs"
             )
         for source_index, source_id in enumerate(source_ids):
+            source_context = f"{context}.provenance.source_ids[{source_index}]"
             _validate_source_id(
-                source_id, f"{context}.provenance.source_ids[{source_index}]"
+                source_id, source_context
             )
+            source_identifiers.append((source_id, source_context))
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ResponseValidationError(
                 f"{context}.provenance.source_ids: expected sorted duplicate-free IDs"
@@ -505,6 +506,7 @@ def _validate_final_protection_trace(
                 f"{context}: trace spans must be sorted and disjoint"
             )
         previous_raw_end = raw_end
+        protected_raw_values.append(original_text[raw_start:raw_end].decode("utf-8"))
         predictions.append(Span(raw_start, raw_end, pii_class))
         if action == "tokenize":
             tokenize_items[(raw_start, raw_end, pii_class)] += 1
@@ -519,6 +521,11 @@ def _validate_final_protection_trace(
         raise ResponseValidationError(
             "final_protection_trace: tokenize items must agree 1:1 with the final manifest"
         )
+    for source_id, context in source_identifiers:
+        if any(raw_value and raw_value in source_id for raw_value in protected_raw_values):
+            raise ResponseValidationError(
+                f"{context}: identifier reproduces protected request content"
+            )
     return predictions
 
 
