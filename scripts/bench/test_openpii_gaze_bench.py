@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 import io
 import json
 import socket
@@ -12,7 +13,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-import openpii_gaze_bench as benchmark
+import gaze_bench_score as benchmark
+import openpii_gaze_bench as openpii_benchmark
 import dataiku_en_de_gaze_bench as dataiku_benchmark
 import opf_daemon
 
@@ -179,7 +181,7 @@ class ContractTests(unittest.TestCase):
             "fixture_id": document.uid,
             "pipeline_error_code": "POLICY_REJECTED",
             "pipeline_error_stage": "safety_net",
-            "timing": {"total_ms": 1.25, "pass_2_ms": None},
+            "timing": {"total_ms": 1.25},
         }
         process = mock.Mock()
         process.stdin = io.StringIO()
@@ -222,6 +224,175 @@ class ContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(result["latency_ms"]["total_ms"]["median"], 1.25)
+
+
+class ResponseValidationTests(unittest.TestCase):
+    def document(self) -> benchmark.Document:
+        return benchmark.Document(
+            uid="synthetic-response",
+            text="synthetic text",
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(),
+        )
+
+    def success_response(self) -> dict[str, object]:
+        return {
+            "fixture_id": "synthetic-response",
+            "clean_text": "synthetic text",
+            "manifest_spans": [],
+            "pre_safety_text_len": None,
+            "pre_safety_manifest_spans": None,
+            "leak_suspects": [],
+            "safety_net_mode": "off",
+            "strict_would_reject": False,
+            "initial_safety_net_stats": {
+                "suspect_count": 0,
+                "uncovered_count": 0,
+                "partial_bleed_count": 0,
+                "class_mismatch_count": 0,
+                "locale_skipped_count": 0,
+            },
+            "post_policy_safety_net_stats": None,
+            "restore": {
+                "exact": True,
+                "decision": "success",
+                "unknown_token_count": 0,
+                "manifest_bypass_count": 0,
+                "fresh_pii_detected_count": 0,
+                "phase_execution_mask": 1,
+            },
+            "manifest_integrity": {
+                "spans": 0,
+                "invalid_clean_bounds": 0,
+                "invalid_raw_bounds": 0,
+                "overlapping_clean_spans": 0,
+                "non_monotonic_raw_spans": 0,
+                "token_restore_failures": 0,
+                "raw_value_mismatches": 0,
+            },
+            "timing": {
+                "total_ms": 1.0,
+                "pass1_ms": 0.1,
+                "pass2_ms": None,
+                "pass3_ms": 0.2,
+                "restore_ms": 0.3,
+                "post_policy_scan_ms": 0.4,
+            },
+        }
+
+    def test_missing_required_field_fails_closed(self) -> None:
+        response = self.success_response()
+        response.pop("restore")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_unknown_field_fails_closed(self) -> None:
+        response = self.success_response()
+        response["unratified_wire_field"] = 1
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_wrong_typed_nested_field_fails_closed(self) -> None:
+        response = self.success_response()
+        response["manifest_integrity"]["spans"] = True
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "expected an integer"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_unknown_pipeline_error_timing_field_fails_closed(self) -> None:
+        response = {
+            "fixture_id": "synthetic-response",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "pipeline_error",
+            "timing": {"total_ms": 1.0, "extra_ms": 0.1},
+        }
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.document(), response)
+
+
+class SamplingTests(unittest.TestCase):
+    def documents(self) -> list[benchmark.Document]:
+        strata = (
+            ("en", "US"),
+            ("en", "US"),
+            ("en", "GB"),
+            ("en", "GB"),
+            ("de", "DE"),
+            ("de", "DE"),
+        )
+        return [
+            benchmark.Document(
+                uid=f"synthetic-sample-{index}",
+                text="synthetic text",
+                language=language,
+                region=region,
+                source_dataset="unit-test",
+                spans=(),
+            )
+            for index, (language, region) in enumerate(strata)
+        ]
+
+    def test_seed_reproducibility_is_independent_of_input_order(self) -> None:
+        documents = self.documents()
+        first, first_report = benchmark.stratified_sample(documents, 3, seed=41)
+        second, second_report = benchmark.stratified_sample(
+            list(reversed(documents)), 3, seed=41
+        )
+        self.assertEqual([document.uid for document in first], [document.uid for document in second])
+        self.assertEqual(
+            first_report["evaluated_document_ids_digest"],
+            second_report["evaluated_document_ids_digest"],
+        )
+
+    def test_sampling_represents_each_language_region_stratum_when_budget_allows(
+        self,
+    ) -> None:
+        selected, _ = benchmark.stratified_sample(self.documents(), 3, seed=7)
+        self.assertEqual(
+            {(document.language, document.region) for document in selected},
+            {("de", "DE"), ("en", "GB"), ("en", "US")},
+        )
+
+    def test_sampling_reports_available_and_evaluated_populations(self) -> None:
+        _, report = benchmark.stratified_sample(self.documents(), 3, seed=7)
+        self.assertEqual(report["available_population"]["documents"], 6)
+        self.assertEqual(report["evaluated_population"]["documents"], 3)
+        self.assertEqual(len(report["evaluated_document_ids"]), 3)
+
+
+class ScorecardComparisonTests(unittest.TestCase):
+    def scorecard(self, leaked: int) -> dict[str, object]:
+        recall = 1.0 if leaked == 0 else 0.5
+        return {
+            "schema_version": 3,
+            "runs": [
+                {
+                    "config": "rule-floor-extended",
+                    "metrics": {
+                        "zero_leak_document_rate": recall,
+                        "utf8_bytes": {
+                            "leaked": leaked,
+                            "recall": recall,
+                            "precision": 1.0,
+                        },
+                        "entities": {"full_coverage_recall": recall},
+                    },
+                    "pipeline_contract": {
+                        "restore_exact_rate": 1.0,
+                        "manifest_valid_document_rate": 1.0,
+                        "strict_would_reject_documents": 0,
+                    },
+                    "pipeline_availability": {"completion_rate": 1.0},
+                }
+            ],
+        }
+
+    def test_regression_and_release_readiness_are_distinct(self) -> None:
+        history = self.scorecard(leaked=1)
+        comparison = benchmark.compare_scorecards(history, copy.deepcopy(history))
+        self.assertTrue(comparison["regression"]["passed"])
+        self.assertFalse(comparison["release_readiness"]["passed"])
 
 
 class DataikuSelectionTests(unittest.TestCase):
@@ -283,8 +454,8 @@ class DataikuSelectionTests(unittest.TestCase):
         self.assertEqual(report["selection"]["documents"], 2)
         self.assertEqual(report["selection"]["languages"], {"de": 1, "en": 1})
 
-    def test_max_documents_truncates_after_frozen_selection_report(self) -> None:
-        """Baseline debt to fix later: sampled runs report the full selection."""
+    def test_max_documents_reports_available_and_evaluated_populations(self) -> None:
+        """The pre-registered baseline move reports the sampled population exactly."""
         documents = [
             benchmark.Document(
                 uid=f"synthetic-{index}",
@@ -346,7 +517,10 @@ class DataikuSelectionTests(unittest.TestCase):
         evaluated_documents = run_config.call_args.args[3]
         self.assertEqual(len(evaluated_documents), 1)
         self.assertEqual(result["parameters"]["max_documents"], 1)
-        self.assertEqual(result["dataset"]["selection"]["documents"], 2)
+        self.assertEqual(result["dataset"]["selection"]["documents"], 1)
+        self.assertEqual(result["dataset"]["available_population"]["documents"], 2)
+        self.assertEqual(result["dataset"]["evaluated_population"]["documents"], 1)
+        self.assertEqual(result["schema_version"], 3)
 
 
 class ConfigTests(unittest.TestCase):
@@ -362,7 +536,7 @@ class ConfigTests(unittest.TestCase):
         argv = ["benchmark"]
         for config in expected:
             argv.extend(("--config", config))
-        for module in (benchmark, dataiku_benchmark):
+        for module in (openpii_benchmark, dataiku_benchmark):
             with mock.patch.object(sys, "argv", argv):
                 self.assertEqual(tuple(module.parse_args().config), expected)
 
