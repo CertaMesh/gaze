@@ -14,6 +14,7 @@ mod family_policy_coherence;
 mod fixture_citation;
 mod locale_cue_bundle_coherence;
 mod mcp_tier_isolation;
+mod negative_corpus;
 mod no_tenant_knowledge;
 mod publish_plan;
 mod readme_version_check;
@@ -47,6 +48,7 @@ enum Command {
     TokenbridgeEncryptedIndex,
     TokenbridgeNoRawIndex(tokenbridge_no_raw_index::Args),
     McpTierIsolation,
+    GenerateNegativeCorpus(negative_corpus::Args),
     PublishPlan,
     ReadmeVersionCheck,
     ScrubPublicText(scrub_public_text::Args),
@@ -71,6 +73,7 @@ fn main() -> Result<()> {
         Command::TokenbridgeEncryptedIndex => tokenbridge_encrypted_index::run(),
         Command::TokenbridgeNoRawIndex(args) => tokenbridge_no_raw_index::run(args),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
+        Command::GenerateNegativeCorpus(args) => negative_corpus::run(args),
         Command::PublishPlan => publish_plan::run(),
         Command::ReadmeVersionCheck => readme_version_check::run(),
         Command::ScrubPublicText(args) => scrub_public_text::run(args),
