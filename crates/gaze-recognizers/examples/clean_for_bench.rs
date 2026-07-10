@@ -91,6 +91,18 @@ struct ManifestIntegrity {
     raw_value_mismatches: usize,
 }
 
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum Outcome {
+    Success(Response),
+    PipelineError {
+        fixture_id: String,
+        stage: &'static str,
+        code: &'static str,
+        total_ms: f64,
+    },
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = parse_config()?;
     let stdin = io::stdin();
@@ -112,185 +124,199 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        let locale_chain = request
-            .locale_chain
-            .iter()
-            .map(|locale| LocaleTag::parse(locale))
-            .collect::<Result<Vec<_>, _>>()?;
-        let raw_text = request.text;
-        let session = Session::new(Scope::Ephemeral)?;
-        let full_start = Instant::now();
-        let clean_result = full.clean_with_safety_net_policy_detect_context(
-            &session,
-            RawDocument::Text(raw_text.clone()),
-            &locale_chain,
-            &Default::default(),
-            safety_net_policy(config),
-        );
-        let total_ms = full_start.elapsed().as_secs_f64() * 1000.0;
-        let (clean_doc, manifest, report) = match clean_result {
-            Ok(result) => result,
-            Err(error) => {
-                write_pipeline_error(
-                    &mut stdout,
-                    &request.fixture_id,
-                    "clean",
-                    pipeline_error_code(&error),
-                    total_ms,
-                )?;
-                continue;
+        match handle_request(config, &full, &floor, pre_safety.as_ref(), request)? {
+            Outcome::Success(response) => {
+                serde_json::to_writer(&mut stdout, &response)?;
+                stdout.write_all(b"\n")?;
+                stdout.flush()?;
             }
-        };
-
-        let CleanDocument::Text(clean_text) = clean_doc else {
-            return Err("expected text clean document".into());
-        };
-
-        let integrity = manifest_integrity(&session, &raw_text, &clean_text, &manifest);
-        let restore_start = Instant::now();
-        let (restored, restore_telemetry) = full.restore_with_telemetry(&session, &clean_text)?;
-        let restore_ms = restore_start.elapsed().as_secs_f64() * 1000.0;
-        let restore = RestoreResult {
-            exact: restored.text == raw_text,
-            decision: restore_telemetry.restore_decision_str().to_string(),
-            unknown_token_count: restore_telemetry.unknown_token_count,
-            manifest_bypass_count: restore_telemetry.manifest_bypass_count,
-            fresh_pii_detected_count: restore_telemetry.fresh_pii_detected_count,
-            phase_execution_mask: restore_telemetry.phase_execution_mask,
-        };
-
-        let post_policy_scan_start = Instant::now();
-        let post_policy_safety_net_stats = if matches!(
-            config,
-            BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
-        ) {
-            let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
-                Ok(result) => result,
-                Err(error) => {
-                    write_pipeline_error(
-                        &mut stdout,
-                        &request.fixture_id,
-                        "post_policy_scan",
-                        pipeline_error_code(&error),
-                        total_ms,
-                    )?;
-                    continue;
-                }
-            };
-            Some(SafetyNetStats::from(&post_policy.report.stats))
-        } else {
-            None
-        };
-        let post_policy_scan_ms = post_policy_scan_start.elapsed().as_secs_f64() * 1000.0;
-
-        let floor_session = Session::new(Scope::Ephemeral)?;
-        let floor_start = Instant::now();
-        let _ = floor.clean_with_safety_net_policy_detect_context(
-            &floor_session,
-            RawDocument::Text(raw_text.clone()),
-            &locale_chain,
-            &Default::default(),
-            SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
-        )?;
-        let pass1_ms = floor_start.elapsed().as_secs_f64() * 1000.0;
-
-        let (pre_safety_text_len, pre_safety_manifest_spans, pre_safety_ms) =
-            if let Some(pre_safety_pipeline) = &pre_safety {
-                let pre_safety_session = Session::new(Scope::Ephemeral)?;
-                let pre_safety_start = Instant::now();
-                let (pre_safety_doc, pre_safety_manifest, _) = pre_safety_pipeline
-                    .clean_with_safety_net_policy_detect_context(
-                        &pre_safety_session,
-                        RawDocument::Text(raw_text.clone()),
-                        &locale_chain,
-                        &Default::default(),
-                        SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
-                    )?;
-                let elapsed = pre_safety_start.elapsed().as_secs_f64() * 1000.0;
-                let CleanDocument::Text(pre_safety_text) = pre_safety_doc else {
-                    return Err("expected text pre-safety document".into());
-                };
-                (
-                    Some(pre_safety_text.len()),
-                    Some(serialize_manifest(pre_safety_manifest)),
-                    Some(elapsed),
-                )
-            } else {
-                (None, None, None)
-            };
-
-        let manifest_spans = serialize_manifest(manifest);
-        let initial_safety_net_stats = SafetyNetStats::from(&report.stats);
-        let strict_would_reject =
-            report.stats.uncovered_count + report.stats.partial_bleed_count > 0;
-        let leak_suspects = report
-            .suspects
-            .into_iter()
-            .map(|suspect| {
-                let action_span = match &suspect.kind {
-                    LeakKind::PartialBleed { uncovered } => uncovered.clone(),
-                    _ => suspect.span.clone(),
-                };
-                LeakSuspectSpan {
-                    clean_start: suspect.span.start,
-                    clean_end: suspect.span.end,
-                    action_start: action_span.start,
-                    action_end: action_span.end,
-                    class: suspect.class.to_canonical_str(),
-                    safety_net_id: suspect.safety_net_id,
-                    kind: leak_kind_name(&suspect.kind).to_string(),
-                }
-            })
-            .collect::<Vec<_>>();
-        serde_json::to_writer(
-            &mut stdout,
-            &Response {
-                fixture_id: request.fixture_id,
-                clean_text,
-                manifest_spans,
-                pre_safety_text_len,
-                pre_safety_manifest_spans,
-                leak_suspects,
-                safety_net_mode: safety_net_mode_name(safety_net_policy(config).mode).to_string(),
-                strict_would_reject,
-                initial_safety_net_stats,
-                post_policy_safety_net_stats,
-                restore,
-                manifest_integrity: integrity,
-                timing: Timing {
-                    total_ms,
-                    pass1_ms,
-                    pass2_ms: if matches!(
-                        config,
-                        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
-                    ) {
-                        pre_safety_ms.map(|elapsed| (elapsed - pass1_ms).max(0.0))
-                    } else {
-                        (config == BenchConfig::Pass2Ner).then_some((total_ms - pass1_ms).max(0.0))
-                    },
-                    pass3_ms: match config {
-                        BenchConfig::RuleFloorCore
-                        | BenchConfig::RuleFloorExtended
-                        | BenchConfig::Pass2Ner => 0.0,
-                        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve => {
-                            pre_safety_ms
-                                .map(|elapsed| (total_ms - elapsed).max(0.0))
-                                .unwrap_or(0.0)
-                        }
-                        BenchConfig::Pass3Kiji
-                        | BenchConfig::Pass3Opf
-                        | BenchConfig::Pass3LocaleAware => (total_ms - pass1_ms).max(0.0),
-                    },
-                    restore_ms,
-                    post_policy_scan_ms,
-                },
-            },
-        )?;
-        stdout.write_all(b"\n")?;
-        stdout.flush()?;
+            Outcome::PipelineError {
+                fixture_id,
+                stage,
+                code,
+                total_ms,
+            } => {
+                write_pipeline_error(&mut stdout, &fixture_id, stage, code, total_ms)?;
+            }
+        }
     }
 
     Ok(())
+}
+
+fn handle_request(
+    config: BenchConfig,
+    full: &Pipeline,
+    floor: &Pipeline,
+    pre_safety: Option<&Pipeline>,
+    request: Request,
+) -> Result<Outcome, Box<dyn std::error::Error>> {
+    let locale_chain = request
+        .locale_chain
+        .iter()
+        .map(|locale| LocaleTag::parse(locale))
+        .collect::<Result<Vec<_>, _>>()?;
+    let raw_text = request.text;
+    let session = Session::new(Scope::Ephemeral)?;
+    let full_start = Instant::now();
+    let clean_result = full.clean_with_safety_net_policy_detect_context(
+        &session,
+        RawDocument::Text(raw_text.clone()),
+        &locale_chain,
+        &Default::default(),
+        safety_net_policy(config),
+    );
+    let total_ms = full_start.elapsed().as_secs_f64() * 1000.0;
+    let (clean_doc, manifest, report) = match clean_result {
+        Ok(result) => result,
+        Err(error) => {
+            return Ok(Outcome::PipelineError {
+                fixture_id: request.fixture_id,
+                stage: "clean",
+                code: pipeline_error_code(&error),
+                total_ms,
+            });
+        }
+    };
+
+    let CleanDocument::Text(clean_text) = clean_doc else {
+        return Err("expected text clean document".into());
+    };
+
+    let integrity = manifest_integrity(&session, &raw_text, &clean_text, &manifest);
+    let restore_start = Instant::now();
+    let (restored, restore_telemetry) = full.restore_with_telemetry(&session, &clean_text)?;
+    let restore_ms = restore_start.elapsed().as_secs_f64() * 1000.0;
+    let restore = RestoreResult {
+        exact: restored.text == raw_text,
+        decision: restore_telemetry.restore_decision_str().to_string(),
+        unknown_token_count: restore_telemetry.unknown_token_count,
+        manifest_bypass_count: restore_telemetry.manifest_bypass_count,
+        fresh_pii_detected_count: restore_telemetry.fresh_pii_detected_count,
+        phase_execution_mask: restore_telemetry.phase_execution_mask,
+    };
+
+    let post_policy_scan_start = Instant::now();
+    let post_policy_safety_net_stats = if matches!(
+        config,
+        BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+    ) {
+        let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
+            Ok(result) => result,
+            Err(error) => {
+                return Ok(Outcome::PipelineError {
+                    fixture_id: request.fixture_id,
+                    stage: "post_policy_scan",
+                    code: pipeline_error_code(&error),
+                    total_ms,
+                });
+            }
+        };
+        Some(SafetyNetStats::from(&post_policy.report.stats))
+    } else {
+        None
+    };
+    let post_policy_scan_ms = post_policy_scan_start.elapsed().as_secs_f64() * 1000.0;
+
+    let floor_session = Session::new(Scope::Ephemeral)?;
+    let floor_start = Instant::now();
+    let _ = floor.clean_with_safety_net_policy_detect_context(
+        &floor_session,
+        RawDocument::Text(raw_text.clone()),
+        &locale_chain,
+        &Default::default(),
+        SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+    )?;
+    let pass1_ms = floor_start.elapsed().as_secs_f64() * 1000.0;
+
+    let (pre_safety_text_len, pre_safety_manifest_spans, pre_safety_ms) =
+        if let Some(pre_safety_pipeline) = pre_safety {
+            let pre_safety_session = Session::new(Scope::Ephemeral)?;
+            let pre_safety_start = Instant::now();
+            let (pre_safety_doc, pre_safety_manifest, _) = pre_safety_pipeline
+                .clean_with_safety_net_policy_detect_context(
+                    &pre_safety_session,
+                    RawDocument::Text(raw_text.clone()),
+                    &locale_chain,
+                    &Default::default(),
+                    SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+                )?;
+            let elapsed = pre_safety_start.elapsed().as_secs_f64() * 1000.0;
+            let CleanDocument::Text(pre_safety_text) = pre_safety_doc else {
+                return Err("expected text pre-safety document".into());
+            };
+            (
+                Some(pre_safety_text.len()),
+                Some(serialize_manifest(pre_safety_manifest)),
+                Some(elapsed),
+            )
+        } else {
+            (None, None, None)
+        };
+
+    let manifest_spans = serialize_manifest(manifest);
+    let initial_safety_net_stats = SafetyNetStats::from(&report.stats);
+    let strict_would_reject = report.stats.uncovered_count + report.stats.partial_bleed_count > 0;
+    let leak_suspects = report
+        .suspects
+        .into_iter()
+        .map(|suspect| {
+            let action_span = match &suspect.kind {
+                LeakKind::PartialBleed { uncovered } => uncovered.clone(),
+                _ => suspect.span.clone(),
+            };
+            LeakSuspectSpan {
+                clean_start: suspect.span.start,
+                clean_end: suspect.span.end,
+                action_start: action_span.start,
+                action_end: action_span.end,
+                class: suspect.class.to_canonical_str(),
+                safety_net_id: suspect.safety_net_id,
+                kind: leak_kind_name(&suspect.kind).to_string(),
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok(Outcome::Success(Response {
+        fixture_id: request.fixture_id,
+        clean_text,
+        manifest_spans,
+        pre_safety_text_len,
+        pre_safety_manifest_spans,
+        leak_suspects,
+        safety_net_mode: safety_net_mode_name(safety_net_policy(config).mode).to_string(),
+        strict_would_reject,
+        initial_safety_net_stats,
+        post_policy_safety_net_stats,
+        restore,
+        manifest_integrity: integrity,
+        timing: Timing {
+            total_ms,
+            pass1_ms,
+            pass2_ms: if matches!(
+                config,
+                BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
+            ) {
+                pre_safety_ms.map(|elapsed| (elapsed - pass1_ms).max(0.0))
+            } else {
+                (config == BenchConfig::Pass2Ner).then_some((total_ms - pass1_ms).max(0.0))
+            },
+            pass3_ms: match config {
+                BenchConfig::RuleFloorCore
+                | BenchConfig::RuleFloorExtended
+                | BenchConfig::Pass2Ner => 0.0,
+                BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve => {
+                    pre_safety_ms
+                        .map(|elapsed| (total_ms - elapsed).max(0.0))
+                        .unwrap_or(0.0)
+                }
+                BenchConfig::Pass3Kiji | BenchConfig::Pass3Opf | BenchConfig::Pass3LocaleAware => {
+                    (total_ms - pass1_ms).max(0.0)
+                }
+            },
+            restore_ms,
+            post_policy_scan_ms,
+        },
+    }))
 }
 
 #[derive(Debug, Serialize)]
@@ -780,4 +806,218 @@ fn manifest_integrity(
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rule_floor_response(fixture_id: &str, locale: &str, text: &str) -> Response {
+        let config = BenchConfig::RuleFloorExtended;
+        let full = build_pipeline(config).expect("rule-floor-extended pipeline should build");
+        let floor = build_pipeline(floor_config(config)).expect("floor pipeline should build");
+        let request = Request {
+            fixture_id: fixture_id.to_string(),
+            locale_chain: vec![locale.to_string()],
+            text: text.to_string(),
+        };
+
+        match handle_request(config, &full, &floor, None, request)
+            .expect("synthetic request should be handled")
+        {
+            Outcome::Success(response) => response,
+            outcome => panic!("expected a success response, got {outcome:?}"),
+        }
+    }
+
+    fn assert_success_contract(response: &Response, fixture_id: &str, email: &str) {
+        assert_eq!(response.fixture_id, fixture_id);
+        assert!(
+            response
+                .manifest_spans
+                .iter()
+                .any(|span| span.class == "email"),
+            "the deterministic rule floor should tokenize the synthetic email"
+        );
+        assert!(!response.clean_text.contains(email));
+        assert!(response.restore.exact);
+        assert_eq!(response.safety_net_mode, "strict");
+
+        let integrity = &response.manifest_integrity;
+        assert!(integrity.spans >= 1);
+        assert_eq!(integrity.token_restore_failures, 0);
+        assert_eq!(integrity.raw_value_mismatches, 0);
+        assert_eq!(integrity.invalid_clean_bounds, 0);
+        assert_eq!(integrity.invalid_raw_bounds, 0);
+        assert_eq!(integrity.overlapping_clean_spans, 0);
+        assert_eq!(integrity.non_monotonic_raw_spans, 0);
+
+        let serialized = serde_json::to_value(response).expect("response should serialize");
+        let timing = serialized
+            .get("timing")
+            .and_then(serde_json::Value::as_object)
+            .expect("response should contain a timing object");
+        assert_eq!(timing.len(), 6);
+        for field in [
+            "total_ms",
+            "pass1_ms",
+            "pass2_ms",
+            "pass3_ms",
+            "restore_ms",
+            "post_policy_scan_ms",
+        ] {
+            assert!(timing.contains_key(field), "missing timing field {field}");
+        }
+    }
+
+    #[test]
+    fn en_rule_floor_success_response_contract() {
+        let email = "alice@example.invalid";
+        let response = rule_floor_response(
+            "en-1",
+            "en",
+            "Contact alice@example.invalid or call +1-555-0142.",
+        );
+
+        assert_success_contract(&response, "en-1", email);
+    }
+
+    #[test]
+    fn de_rule_floor_success_response_contract() {
+        let email = "dr.schmidt@example.invalid";
+        let response = rule_floor_response(
+            "de-1",
+            "de",
+            "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233.",
+        );
+
+        assert_success_contract(&response, "de-1", email);
+    }
+
+    #[test]
+    fn pipeline_error_codes_cover_each_mapping_arm() {
+        let cases = [
+            (
+                gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
+                    message: "synthetic invalid output".to_string(),
+                }),
+                "safety_net_invalid_output",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::Runtime {
+                    message: "synthetic runtime failure".to_string(),
+                }),
+                "safety_net_runtime",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::Unavailable {
+                    reason: "synthetic unavailable backend".to_string(),
+                }),
+                "safety_net_error",
+            ),
+            (gaze::Error::ExportForbidden, "pipeline_error"),
+        ];
+
+        for (error, expected) in cases {
+            assert_eq!(pipeline_error_code(&error), expected);
+        }
+    }
+
+    #[test]
+    fn pipeline_error_response_has_exact_jsonl_shape() {
+        let response = PipelineErrorResponse {
+            fixture_id: "failure-1",
+            pipeline_error_stage: "clean",
+            pipeline_error_code: "safety_net_runtime",
+            timing: PipelineErrorTiming { total_ms: 12.5 },
+        };
+        let serialized = serde_json::to_string(&response).expect("error response should serialize");
+        assert_eq!(
+            serialized,
+            r#"{"fixture_id":"failure-1","pipeline_error_stage":"clean","pipeline_error_code":"safety_net_runtime","timing":{"total_ms":12.5}}"#
+        );
+
+        let value = serde_json::to_value(&response).expect("error response should serialize");
+        let object = value
+            .as_object()
+            .expect("error response should be a JSON object");
+        assert_eq!(object.len(), 4);
+        for field in [
+            "fixture_id",
+            "pipeline_error_stage",
+            "pipeline_error_code",
+            "timing",
+        ] {
+            assert!(object.contains_key(field), "missing error field {field}");
+        }
+        let timing = object["timing"]
+            .as_object()
+            .expect("error timing should be a JSON object");
+        assert_eq!(timing.len(), 1);
+        assert!(timing.contains_key("total_ms"));
+
+        let mut output = Vec::new();
+        write_pipeline_error(
+            &mut output,
+            "failure-1",
+            "clean",
+            "safety_net_runtime",
+            12.5,
+        )
+        .expect("error response should be written");
+        assert_eq!(output, format!("{serialized}\n").as_bytes());
+    }
+
+    #[cfg(feature = "safety-net-kiji")]
+    #[test]
+    #[ignore = "requires NER and Kiji model environment; records known baseline debt"]
+    fn kiji_response_contract_records_restore_and_manifest_debt() {
+        let config = BenchConfig::FullStackKijiResolve;
+        let full = build_pipeline(config).expect("full Kiji pipeline should build from model env");
+        let floor = build_pipeline(floor_config(config)).expect("floor pipeline should build");
+        let pre_safety =
+            build_pipeline(BenchConfig::Pass2Ner).expect("pre-safety NER pipeline should build");
+        let request = Request {
+            fixture_id: "de-kiji-debt-1".to_string(),
+            locale_chain: vec!["de".to_string()],
+            text: "Bitte an dr.schmidt@example.invalid schreiben, Tel. +49 1555 0112233."
+                .to_string(),
+        };
+        let response = match handle_request(config, &full, &floor, Some(&pre_safety), request)
+            .expect("Kiji request should be handled")
+        {
+            Outcome::Success(response) => response,
+            outcome => panic!("expected a Kiji response, got {outcome:?}"),
+        };
+
+        // Recorded baseline debt (~69.46% exact restore, ~36.85% valid manifest): false
+        // restore.exact and non-zero integrity violations are debt signals, not expected-good.
+        let value = serde_json::to_value(&response).expect("Kiji response should serialize");
+        assert!(value["restore"]["exact"].is_boolean());
+        for field in [
+            "invalid_clean_bounds",
+            "invalid_raw_bounds",
+            "overlapping_clean_spans",
+            "non_monotonic_raw_spans",
+            "token_restore_failures",
+            "raw_value_mismatches",
+        ] {
+            assert!(
+                value["manifest_integrity"][field].is_u64(),
+                "Kiji response should record integrity debt field {field}"
+            );
+        }
+
+        let integrity = &response.manifest_integrity;
+        let violation_count = integrity.invalid_clean_bounds
+            + integrity.invalid_raw_bounds
+            + integrity.overlapping_clean_spans
+            + integrity.non_monotonic_raw_spans
+            + integrity.token_restore_failures
+            + integrity.raw_value_mismatches;
+        eprintln!(
+            "Kiji baseline debt signals: restore_exact={}, manifest_violations={violation_count}",
+            response.restore.exact
+        );
+    }
 }
