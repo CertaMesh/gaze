@@ -121,6 +121,21 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --all-features --no-fail-fast
 
+  benchmark-model-free:
+    name: benchmark model-free Python tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: 0.11.16
+          enable-cache: true
+          cache-dependency-glob: scripts/bench/uv.lock
+      - name: Sync locked benchmark environment
+        run: uv sync --project scripts/bench --locked
+      - name: Run benchmark scorer and comparator tests
+        run: uv run --project scripts/bench python -m unittest discover -s scripts/bench
+
   xtask-gates:
     name: xtask gates
     runs-on: ubuntu-latest

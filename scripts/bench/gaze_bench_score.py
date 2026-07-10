@@ -78,6 +78,7 @@ class Document:
     region: str
     source_dataset: str
     spans: tuple[Span, ...]
+    negative_category: str | None = None
 
     @property
     def locale_chain(self) -> list[str]:
@@ -985,8 +986,14 @@ def run_config(
     opf_daemon_socket: Path | None,
     threshold: float,
     diagnostics_dir: Path,
+    base_environment: Mapping[str, str] | None = None,
+    warmup_count: int = 0,
 ) -> dict[str, object]:
-    environment = os.environ.copy()
+    if not documents:
+        raise ValueError(f"{config}: cannot run an empty document cell")
+    if warmup_count < 0:
+        raise ValueError("warmup_count must be non-negative")
+    environment = dict(base_environment) if base_environment is not None else os.environ.copy()
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
     environment["GAZE_KIJI_DISTILBERT_MODEL_DIR"] = str(kiji_model_dir)
@@ -1018,6 +1025,9 @@ def run_config(
     overall = MetricAccumulator()
     per_language: defaultdict[str, MetricAccumulator] = defaultdict(MetricAccumulator)
     per_label: defaultdict[str, RecallAccumulator] = defaultdict(RecallAccumulator)
+    per_negative_category: defaultdict[str, MetricAccumulator] = defaultdict(
+        MetricAccumulator
+    )
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
     contract = ContractAccumulator()
@@ -1025,25 +1035,103 @@ def run_config(
     pipeline_error_stages: Counter[str] = Counter()
     success_timing: defaultdict[str, list[float]] = defaultdict(list)
     first_response_ms: float | None = None
+    discarded_warmup_samples: list[dict[str, object]] = []
+
+    def exchange(document: Document) -> tuple[dict[str, object], float]:
+        nonlocal first_response_ms
+        request = {
+            "fixture_id": document.uid,
+            "locale_chain": document.locale_chain,
+            "text": document.text,
+        }
+        request_started = time.perf_counter()
+        process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
+        process.stdin.flush()
+        response_line = process.stdout.readline()
+        if not response_line:
+            return_code = process.poll()
+            raise RuntimeError(
+                f"benchmark runner exited before {document.uid}; status={return_code}"
+            )
+        response = validate_response(document, json.loads(response_line))
+        validated_at = time.perf_counter()
+        if first_response_ms is None:
+            first_response_ms = (validated_at - started) * 1000.0
+        return response, (validated_at - request_started) * 1000.0
 
     try:
-        for index, document in enumerate(documents):
-            request = {
-                "fixture_id": document.uid,
-                "locale_chain": document.locale_chain,
-                "text": document.text,
-            }
-            process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
-            process.stdin.flush()
-            response_line = process.stdout.readline()
-            if not response_line:
-                return_code = process.poll()
+        for warmup_index in range(warmup_count):
+            warmup_document = documents[warmup_index % len(documents)]
+            response, round_trip_ms = exchange(warmup_document)
+            if "pipeline_error_code" in response:
                 raise RuntimeError(
-                    f"benchmark runner exited before {document.uid}; status={return_code}"
+                    f"{config}: warmup {warmup_index + 1} failed closed with "
+                    f"{response['pipeline_error_code']} at "
+                    f"{response['pipeline_error_stage']}"
                 )
-            if first_response_ms is None:
-                first_response_ms = (time.perf_counter() - started) * 1000.0
-            response = validate_response(document, json.loads(response_line))
+            timing = response["timing"]
+            assert isinstance(timing, dict)
+            warmup_metrics = MetricAccumulator()
+            warmup_metrics.add(
+                warmup_document,
+                final_trace_predictions(warmup_document, response),
+            )
+            warmup_contract = ContractAccumulator()
+            warmup_contract.add(response)
+            metric_result = warmup_metrics.result()
+            contract_result = warmup_contract.result()
+            warmup_correctness = {
+                "leaked_labeled_utf8_bytes": metric_result["utf8_bytes"]["leaked"],
+                "uncovered_entities": (
+                    metric_result["entities"]["gold"]
+                    - metric_result["entities"]["fully_covered"]
+                ),
+                "restore_failures": 1
+                - contract_result["restore_exact_documents"],
+                "manifest_invalid_documents": 1
+                - contract_result["manifest_valid_documents"],
+                "strict_rejections": contract_result[
+                    "strict_would_reject_documents"
+                ],
+                "residual_suspects": contract_result["post_policy_suspects"],
+                "redact_actions": contract_result["redact_actions"],
+            }
+            universal_warmup_gates = (
+                "restore_failures",
+                "manifest_invalid_documents",
+            )
+            production_warmup_gates = (
+                "leaked_labeled_utf8_bytes",
+                "uncovered_entities",
+                "strict_rejections",
+                "residual_suspects",
+                "redact_actions",
+            )
+            gated = universal_warmup_gates + (
+                production_warmup_gates if config == PRODUCTION_CONFIG else ()
+            )
+            failures = {
+                gate: warmup_correctness[gate]
+                for gate in gated
+                if warmup_correctness[gate] != 0
+            }
+            if failures:
+                raise RuntimeError(
+                    f"{config}: discarded warmup {warmup_index + 1} failed "
+                    f"correctness gates: {failures}"
+                )
+            discarded_warmup_samples.append(
+                {
+                    "sample": warmup_index + 1,
+                    "round_trip_ms": round_trip_ms,
+                    "clean_ms": timing["clean_ms"],
+                    "restore_ms": timing["restore_ms"],
+                    "post_policy_scan_ms": timing["post_policy_scan_ms"],
+                    "correctness": warmup_correctness,
+                }
+            )
+        for index, document in enumerate(documents):
+            response, _ = exchange(document)
             if "pipeline_error_code" in response:
                 pipeline_errors[str(response["pipeline_error_code"])] += 1
                 pipeline_error_stages[str(response["pipeline_error_stage"])] += 1
@@ -1051,6 +1139,10 @@ def run_config(
             predictions = final_trace_predictions(document, response)
             overall.add(document, predictions)
             per_language[document.language].add(document, predictions)
+            if document.negative_category is not None:
+                per_negative_category[document.negative_category].add(
+                    document, predictions
+                )
             direct_spans = [
                 span for span in document.spans if span.label in DIRECT_IDENTIFIER_LABELS
             ]
@@ -1109,6 +1201,10 @@ def run_config(
         "per_label_recall": {
             key: value.result() for key, value in sorted(per_label.items())
         },
+        "per_negative_category": {
+            key: value.result()
+            for key, value in sorted(per_negative_category.items())
+        },
         "latency_ms": {
             key: timing_summary(value)
             for key, value in sorted(success_timing.items())
@@ -1122,6 +1218,9 @@ def run_config(
             "wall_seconds": wall_seconds,
             "documents_per_second": production_documents_per_second,
             "start_to_first_response_ms": first_response_ms,
+            "cold_start_to_first_validated_response_ms": first_response_ms,
+            "warmup_count": warmup_count,
+            "discarded_warmup_samples": discarded_warmup_samples,
             "stderr_log": str(stderr_path.relative_to(repo_root)),
             "stderr_bytes": stderr_path.stat().st_size,
         },
@@ -1168,17 +1267,16 @@ SCORING_METADATA: dict[str, object] = {
         "Latency is considered only after correctness gates pass.",
     ],
     "comparison_gates": {
-        "pipeline_completion_rate": "must equal 1.0 for release readiness; no regression",
-        "leaked_labeled_utf8_bytes": "must equal 0 for release readiness; no regression",
-        "full_entity_coverage_recall": "must equal 1.0 for release readiness; no regression",
-        "zero_leak_document_rate": "must equal 1.0 for release readiness; no regression",
-        "restore_exact_rate": "must equal 1.0 for release readiness; no regression",
-        "manifest_valid_document_rate": "must equal 1.0 for release readiness; no regression",
-        "strict_rejections": "must equal 0 for release readiness; no regression",
-        "residual_suspects": "must equal 0 for release readiness; no regression",
-        "redact_actions": "must equal 0 for exact-reversibility readiness; no regression",
-        "byte_precision": "no regression without explicit review",
-        "p95_latency_ms": "lower only after every correctness gate passes",
+        "correctness": "zero-tolerance integer-count ratchets; ratios are diagnostics only",
+        "release_readiness": "production cell must have zero correctness failures",
+        "population": (
+            "candidate and baseline evaluated-population provenance and invariant "
+            "counts must match"
+        ),
+        "performance": (
+            "clean_ms p95 uses a separately configured tolerance and is "
+            "informational by default"
+        ),
     },
 }
 
@@ -1310,7 +1408,21 @@ def _evaluated_population_provenance(
     }
 
 
-def _run_correctness_values(run: Mapping[str, object]) -> dict[str, int | float]:
+def _count(value: object, context: str) -> int:
+    if type(value) is not int or value < 0:
+        raise ValueError(f"{context} must be a non-negative integer")
+    return value
+
+
+def _count_map(value: object, context: str) -> dict[str, int]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{context} must be an object")
+    return {
+        str(key): _count(item, f"{context}.{key}") for key, item in value.items()
+    }
+
+
+def _run_correctness_counts(run: Mapping[str, object]) -> dict[str, int]:
     metrics = run["metrics"]
     contract = run["pipeline_contract"]
     availability = run["pipeline_availability"]
@@ -1320,72 +1432,242 @@ def _run_correctness_values(run: Mapping[str, object]) -> dict[str, int | float]
     entities = metrics["entities"]
     if not isinstance(utf8_bytes, dict) or not isinstance(entities, dict):
         raise ValueError("scorecard metric sections must be objects")
+    attempted = _count(availability["attempted_documents"], "attempted_documents")
+    completed = _count(availability["completed_documents"], "completed_documents")
+    failed = _count(
+        availability["failed_closed_documents"], "failed_closed_documents"
+    )
+    errors = _count_map(availability.get("errors", {}), "pipeline errors")
+    error_stages = _count_map(
+        availability.get("error_stages", {}), "pipeline error stages"
+    )
+    if completed + failed != attempted:
+        raise ValueError("pipeline attempted/completed/failed counts disagree")
+    if sum(errors.values()) != failed or sum(error_stages.values()) != failed:
+        raise ValueError("pipeline error telemetry disagrees with failed count")
+
+    documents = _count(metrics["documents"], "metrics.documents")
+    without_leaks = _count(
+        metrics["documents_without_leaks"], "documents_without_leaks"
+    )
+    if documents != completed or without_leaks > documents:
+        raise ValueError("metric document counts disagree with pipeline completion")
+    contract_documents = _count(contract["documents"], "contract.documents")
+    if contract_documents != completed:
+        raise ValueError("contract document count disagrees with pipeline completion")
+
+    gold_entities = _count(entities["gold"], "entities.gold")
+    fully_covered = _count(entities["fully_covered"], "entities.fully_covered")
+    if fully_covered > gold_entities:
+        raise ValueError("fully covered entities exceed gold entities")
+    pii_bytes = _count(utf8_bytes["pii"], "utf8_bytes.pii")
+    leaked_bytes = _count(utf8_bytes["leaked"], "utf8_bytes.leaked")
+    if leaked_bytes > pii_bytes:
+        raise ValueError("leaked bytes exceed labeled PII bytes")
+
+    restore_exact = _count(
+        contract["restore_exact_documents"], "restore_exact_documents"
+    )
+    restore_success = _count(
+        contract["restore_success_decisions"], "restore_success_decisions"
+    )
+    manifest_valid = _count(
+        contract["manifest_valid_documents"], "manifest_valid_documents"
+    )
+    post_policy_scanned = _count(
+        contract.get("post_policy_scanned_documents", 0),
+        "post_policy_scanned_documents",
+    )
+    for name, value in (
+        ("restore_exact_documents", restore_exact),
+        ("restore_success_decisions", restore_success),
+        ("manifest_valid_documents", manifest_valid),
+        ("post_policy_scanned_documents", post_policy_scanned),
+    ):
+        if value > contract_documents:
+            raise ValueError(f"{name} exceeds contract documents")
+    integrity_errors = sum(
+        _count_map(
+            contract.get("manifest_integrity_errors", {}),
+            "manifest_integrity_errors",
+        ).values()
+    )
+
     return {
-        "pipeline_completion_rate": float(availability["completion_rate"]),
-        "leaked_labeled_utf8_bytes": int(utf8_bytes["leaked"]),
-        "pii_byte_recall": float(utf8_bytes["recall"]),
-        "full_entity_coverage_recall": float(entities["full_coverage_recall"]),
-        "zero_leak_document_rate": float(metrics["zero_leak_document_rate"]),
-        "restore_exact_rate": float(contract["restore_exact_rate"]),
-        "manifest_valid_document_rate": float(
-            contract["manifest_valid_document_rate"]
+        "attempted_documents": attempted,
+        "completed_documents": completed,
+        "failed_closed_documents": failed,
+        "scored_documents": documents,
+        "documents_without_leaks": without_leaks,
+        "documents_with_leaks": documents - without_leaks,
+        "pii_utf8_bytes": pii_bytes,
+        "leaked_labeled_utf8_bytes": leaked_bytes,
+        "gold_entities": gold_entities,
+        "fully_covered_entities": fully_covered,
+        "uncovered_entities": gold_entities - fully_covered,
+        "false_positive_utf8_bytes": _count(
+            utf8_bytes["false_positive"], "utf8_bytes.false_positive"
         ),
-        "strict_rejections": int(contract["strict_would_reject_documents"]),
-        "residual_suspects": int(contract.get("post_policy_suspects", 0)),
-        "redact_actions": int(contract.get("redact_actions", 0)),
-        "byte_precision": float(utf8_bytes["precision"]),
+        "documents_with_false_positives": _count(
+            metrics["documents_with_false_positives"],
+            "documents_with_false_positives",
+        ),
+        "contract_documents": contract_documents,
+        "restore_exact_documents": restore_exact,
+        "restore_failures": contract_documents - restore_exact,
+        "restore_success_decisions": restore_success,
+        "restore_decision_failures": contract_documents - restore_success,
+        "manifest_valid_documents": manifest_valid,
+        "manifest_invalid_documents": contract_documents - manifest_valid,
+        "manifest_integrity_errors": integrity_errors,
+        "strict_rejections": _count(
+            contract["strict_would_reject_documents"],
+            "strict_would_reject_documents",
+        ),
+        "post_policy_scanned_documents": post_policy_scanned,
+        "post_policy_unscanned_documents": contract_documents - post_policy_scanned,
+        "residual_suspects": _count(
+            contract.get("post_policy_suspects", 0), "post_policy_suspects"
+        ),
+        "redact_actions": _count(contract.get("redact_actions", 0), "redact_actions"),
     }
+
+
+def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, object]:
+    failures: list[dict[str, object]] = []
+    try:
+        candidate_runs = _scorecard_runs(candidate)
+    except (KeyError, TypeError, ValueError) as error:
+        return {
+            "passed": False,
+            "failures": [{"gate": "candidate_runs", "reason": str(error)}],
+        }
+    expected_configs = frozenset(DEFAULT_CONFIGS)
+    if frozenset(candidate_runs) != expected_configs:
+        failures.append(
+            {
+                "gate": "candidate_config_set",
+                "expected": sorted(expected_configs),
+                "actual": sorted(candidate_runs),
+            }
+        )
+    try:
+        _evaluated_population_provenance(candidate)
+    except (KeyError, TypeError, ValueError) as error:
+        failures.append(
+            {
+                "gate": "candidate_evaluated_population_provenance",
+                "reason": str(error),
+            }
+        )
+    cell_counts: dict[str, dict[str, int]] = {}
+    for config in sorted(expected_configs.intersection(candidate_runs)):
+        try:
+            counts = _run_correctness_counts(candidate_runs[config])
+        except (KeyError, TypeError, ValueError) as error:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": "candidate_integer_counts",
+                    "reason": str(error),
+                }
+            )
+            continue
+        cell_counts[config] = counts
+        for gate in (
+            "failed_closed_documents",
+            "restore_failures",
+            "restore_decision_failures",
+            "manifest_invalid_documents",
+            "manifest_integrity_errors",
+        ):
+            if counts[gate] != 0:
+                failures.append(
+                    {
+                        "config": config,
+                        "gate": gate,
+                        "actual": counts[gate],
+                        "required": 0,
+                    }
+                )
+        if counts["attempted_documents"] <= 0:
+            failures.append({"config": config, "gate": "non_empty_run"})
+    if PRODUCTION_CONFIG in candidate_runs:
+        counts = cell_counts.get(PRODUCTION_CONFIG)
+        if counts is not None:
+            zero_targets = (
+                "documents_with_leaks",
+                "leaked_labeled_utf8_bytes",
+                "uncovered_entities",
+                "strict_rejections",
+                "post_policy_unscanned_documents",
+                "residual_suspects",
+                "redact_actions",
+            )
+            for gate in zero_targets:
+                if counts[gate] != 0:
+                    failures.append(
+                        {
+                            "config": PRODUCTION_CONFIG,
+                            "gate": gate,
+                            "actual": counts[gate],
+                            "required": 0,
+                        }
+                    )
+    return {"passed": not failures, "failures": failures}
 
 
 def compare_scorecards(
     candidate: Mapping[str, object], baseline: Mapping[str, object]
 ) -> dict[str, object]:
     regression_failures: list[dict[str, object]] = []
-    readiness_failures: list[dict[str, object]] = []
+    release_readiness = evaluate_release_readiness(candidate)
     try:
         candidate_runs = _scorecard_runs(candidate)
-    except ValueError as error:
+    except (KeyError, TypeError, ValueError) as error:
         candidate_runs = {}
         failure = {"gate": "candidate_runs", "reason": str(error)}
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
     try:
         baseline_runs = _scorecard_runs(baseline)
-    except ValueError as error:
+    except (KeyError, TypeError, ValueError) as error:
         baseline_runs = {}
         failure = {"gate": "baseline_runs", "reason": str(error)}
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
     expected_configs = frozenset(DEFAULT_CONFIGS)
     candidate_configs = frozenset(candidate_runs)
     baseline_configs = frozenset(baseline_runs)
+    invariant_counts = (
+        "attempted_documents",
+        "pii_utf8_bytes",
+        "gold_entities",
+    )
     higher_is_better = (
-        "pipeline_completion_rate",
-        "pii_byte_recall",
-        "full_entity_coverage_recall",
-        "zero_leak_document_rate",
-        "restore_exact_rate",
-        "manifest_valid_document_rate",
-        "byte_precision",
+        "completed_documents",
+        "scored_documents",
+        "documents_without_leaks",
+        "fully_covered_entities",
+        "restore_exact_documents",
+        "restore_success_decisions",
+        "manifest_valid_documents",
+        "post_policy_scanned_documents",
     )
     lower_is_better = (
+        "failed_closed_documents",
+        "documents_with_leaks",
         "leaked_labeled_utf8_bytes",
+        "uncovered_entities",
+        "false_positive_utf8_bytes",
+        "documents_with_false_positives",
+        "restore_failures",
+        "restore_decision_failures",
+        "manifest_invalid_documents",
+        "manifest_integrity_errors",
         "strict_rejections",
+        "post_policy_unscanned_documents",
         "residual_suspects",
         "redact_actions",
     )
-    readiness_targets: dict[str, int | float] = {
-        "pipeline_completion_rate": 1.0,
-        "leaked_labeled_utf8_bytes": 0,
-        "pii_byte_recall": 1.0,
-        "full_entity_coverage_recall": 1.0,
-        "zero_leak_document_rate": 1.0,
-        "restore_exact_rate": 1.0,
-        "manifest_valid_document_rate": 1.0,
-        "strict_rejections": 0,
-        "residual_suspects": 0,
-        "redact_actions": 0,
-    }
 
     if candidate_configs != expected_configs:
         failure = {
@@ -1394,7 +1676,6 @@ def compare_scorecards(
             "actual": sorted(candidate_configs),
         }
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
     if baseline_configs != expected_configs:
         failure = {
             "gate": "baseline_config_set",
@@ -1402,28 +1683,25 @@ def compare_scorecards(
             "actual": sorted(baseline_configs),
         }
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
 
     candidate_provenance: dict[str, object] | None = None
     baseline_provenance: dict[str, object] | None = None
     try:
         candidate_provenance = _evaluated_population_provenance(candidate)
-    except ValueError as error:
+    except (KeyError, TypeError, ValueError) as error:
         failure = {
             "gate": "candidate_evaluated_population_provenance",
             "reason": str(error),
         }
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
     try:
         baseline_provenance = _evaluated_population_provenance(baseline)
-    except ValueError as error:
+    except (KeyError, TypeError, ValueError) as error:
         failure = {
             "gate": "baseline_evaluated_population_provenance",
             "reason": str(error),
         }
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
     if (
         candidate_provenance is not None
         and baseline_provenance is not None
@@ -1434,7 +1712,6 @@ def compare_scorecards(
             "reason": "candidate and baseline provenance differ",
         }
         regression_failures.append(failure)
-        readiness_failures.append(copy.deepcopy(failure))
 
     prerequisites_match = (
         candidate_configs == expected_configs
@@ -1444,8 +1721,28 @@ def compare_scorecards(
     )
     if prerequisites_match:
         for config in sorted(expected_configs):
-            candidate_values = _run_correctness_values(candidate_runs[config])
-            baseline_values = _run_correctness_values(baseline_runs[config])
+            try:
+                candidate_values = _run_correctness_counts(candidate_runs[config])
+                baseline_values = _run_correctness_counts(baseline_runs[config])
+            except (KeyError, TypeError, ValueError) as error:
+                regression_failures.append(
+                    {
+                        "config": config,
+                        "gate": "integer_counts",
+                        "reason": str(error),
+                    }
+                )
+                continue
+            for gate in invariant_counts:
+                if candidate_values[gate] != baseline_values[gate]:
+                    regression_failures.append(
+                        {
+                            "config": config,
+                            "gate": f"{gate}_match",
+                            "candidate": candidate_values[gate],
+                            "baseline": baseline_values[gate],
+                        }
+                    )
             for gate in higher_is_better:
                 if candidate_values[gate] < baseline_values[gate]:
                     regression_failures.append(
@@ -1467,27 +1764,51 @@ def compare_scorecards(
                         }
                     )
 
-    if prerequisites_match:
-        production_values = _run_correctness_values(candidate_runs[PRODUCTION_CONFIG])
-        for gate, target in readiness_targets.items():
-            if production_values[gate] != target:
-                readiness_failures.append(
-                    {
-                        "config": PRODUCTION_CONFIG,
-                        "gate": gate,
-                        "actual": production_values[gate],
-                        "required": target,
-                    }
-                )
-
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
         "regression": {
             "passed": not regression_failures,
             "failures": regression_failures,
         },
-        "release_readiness": {
-            "passed": not readiness_failures,
-            "failures": readiness_failures,
-        },
+        "release_readiness": release_readiness,
+    }
+
+
+def compare_performance(
+    candidate: Mapping[str, object],
+    baseline: Mapping[str, object],
+    *,
+    tolerance_percent: float,
+    gating: bool = False,
+) -> dict[str, object]:
+    if tolerance_percent < 0.0:
+        raise ValueError("performance tolerance must be non-negative")
+    failures: list[dict[str, object]] = []
+    comparisons: list[dict[str, object]] = []
+    try:
+        candidate_runs = _scorecard_runs(candidate)
+        baseline_runs = _scorecard_runs(baseline)
+        for config in sorted(DEFAULT_CONFIGS):
+            candidate_p95 = float(candidate_runs[config]["latency_ms"]["clean_ms"]["p95"])
+            baseline_p95 = float(baseline_runs[config]["latency_ms"]["clean_ms"]["p95"])
+            limit = baseline_p95 * (1.0 + tolerance_percent / 100.0)
+            comparison = {
+                "config": config,
+                "metric": "clean_ms.p95",
+                "candidate": candidate_p95,
+                "baseline": baseline_p95,
+                "limit": limit,
+            }
+            comparisons.append(comparison)
+            if candidate_p95 > limit:
+                failures.append(copy.deepcopy(comparison))
+    except (KeyError, TypeError, ValueError) as error:
+        failures.append({"gate": "performance_data", "reason": str(error)})
+    return {
+        "passed": not failures,
+        "gating": gating,
+        "disposition": "gating" if gating else "informational",
+        "tolerance_percent": tolerance_percent,
+        "comparisons": comparisons,
+        "failures": failures,
     }
