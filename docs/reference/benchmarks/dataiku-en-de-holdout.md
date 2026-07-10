@@ -38,6 +38,7 @@ model directories independently.
 | Selected German rows | `853` |
 | Selected annotations | `14,719` |
 | Observed selected labels | `29` |
+| Selection seed | Not applicable; the complete pinned EN/DE selection is used without sampling or shuffling |
 
 The runner refuses any file whose byte size or digest differs. It also verifies
 the full row count, validates every selected annotation boundary and annotated
@@ -79,12 +80,16 @@ a separately installed verified checkpoint and warmed daemon. See
 Run the pinned benchmark:
 
 ```bash
+cd <repo-root>
 uv run --with pyarrow scripts/bench/dataiku_en_de_gaze_bench.py
 ```
 
 The first run downloads the pinned 2 MB Parquet file into ignored
 `target/bench-data/`. Later runs can add `--no-download`. Generated result JSON
 is written to `target/bench-data/dataiku-en-de/gaze-scorecard.json` by default.
+The checked-in baseline normalizes local paths as `<repo-root>` and
+`<model-cache>`; do not promote a generated absolute home-directory path into
+benchmark evidence.
 
 ## Limits and contamination rule
 
