@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
+use std::path::PathBuf;
 use std::time::Instant;
 
 use gaze::{
@@ -7,13 +7,16 @@ use gaze::{
     RawDocument, RawMatch, RecognizerSpec, Rulepack, RulepackSource, SafetyNetFallback,
     SafetyNetMode, SafetyNetPolicy, Scope, Session,
 };
-use gaze_recognizers::{embedded, NormalizerKind, RegexDetector, ValidatorKind};
+use gaze_recognizers::{
+    embedded, NerOptions, NerRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum BenchConfig {
     RuleFloorCore,
     RuleFloorExtended,
+    Pass2Ner,
     Pass3Kiji,
     Pass3Opf,
     Pass3LocaleAware,
@@ -56,8 +59,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = parse_config()?;
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
-    let mut full_pipelines = HashMap::<String, Pipeline>::new();
-    let mut floor_pipelines = HashMap::<String, Pipeline>::new();
+    let full = build_pipeline(config)?;
+    let floor = build_pipeline(floor_config(config))?;
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -70,22 +73,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .iter()
             .map(|locale| LocaleTag::parse(locale))
             .collect::<Result<Vec<_>, _>>()?;
-        let cache_key = request.locale_chain.join(",");
-        if !full_pipelines.contains_key(&cache_key) {
-            full_pipelines.insert(cache_key.clone(), build_pipeline(config, &locale_chain)?);
-        }
-        if !floor_pipelines.contains_key(&cache_key) {
-            floor_pipelines.insert(
-                cache_key.clone(),
-                build_pipeline(floor_config(config), &locale_chain)?,
-            );
-        }
-        let full = full_pipelines
-            .get(&cache_key)
-            .expect("full pipeline cached");
-        let floor = floor_pipelines
-            .get(&cache_key)
-            .expect("floor pipeline cached");
         let session = Session::new(Scope::Ephemeral)?;
         let full_start = Instant::now();
         let (clean_doc, manifest, report) = full.clean_with_safety_net_policy_detect_context(
@@ -141,8 +128,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 timing: Timing {
                     total_ms,
                     pass1_ms,
-                    pass2_ms: None,
-                    pass3_ms: (total_ms - pass1_ms).max(0.0),
+                    pass2_ms: (config == BenchConfig::Pass2Ner)
+                        .then_some((total_ms - pass1_ms).max(0.0)),
+                    pass3_ms: match config {
+                        BenchConfig::RuleFloorCore
+                        | BenchConfig::RuleFloorExtended
+                        | BenchConfig::Pass2Ner => 0.0,
+                        BenchConfig::Pass3Kiji
+                        | BenchConfig::Pass3Opf
+                        | BenchConfig::Pass3LocaleAware => (total_ms - pass1_ms).max(0.0),
+                    },
                 },
             },
         )?;
@@ -171,6 +166,7 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
             config = match value.as_str() {
                 "rule-floor-core" => BenchConfig::RuleFloorCore,
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
+                "pass2-ner" => BenchConfig::Pass2Ner,
                 "pass3-kiji" => BenchConfig::Pass3Kiji,
                 "pass3-opf" => BenchConfig::Pass3Opf,
                 "pass3-locale-aware" => BenchConfig::Pass3LocaleAware,
@@ -185,19 +181,17 @@ fn floor_config(config: BenchConfig) -> BenchConfig {
     match config {
         BenchConfig::RuleFloorCore => BenchConfig::RuleFloorCore,
         BenchConfig::RuleFloorExtended
+        | BenchConfig::Pass2Ner
         | BenchConfig::Pass3Kiji
         | BenchConfig::Pass3Opf
         | BenchConfig::Pass3LocaleAware => BenchConfig::RuleFloorExtended,
     }
 }
 
-fn build_pipeline(
-    config: BenchConfig,
-    _locale_chain: &[LocaleTag],
-) -> Result<Pipeline, Box<dyn std::error::Error>> {
+fn build_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::error::Error>> {
     let mut pipeline = rule_floor_pipeline(config)?;
     match config {
-        BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended => {}
+        BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
         BenchConfig::Pass3Kiji => {
             pipeline = register_kiji(pipeline)?;
         }
@@ -272,6 +266,25 @@ fn rule_floor_pipeline(config: BenchConfig) -> Result<Pipeline, Box<dyn std::err
         if matches!(spec.matcher, RawMatch::Regex { .. }) {
             builder = builder.recognizer(regex_from_spec(&rulepack, spec)?);
         }
+    }
+
+    if config == BenchConfig::Pass2Ner {
+        let model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
+            .map(PathBuf::from)
+            .ok_or("GAZE_NER_MODEL_DIR is not set")?;
+        let threshold = std::env::var("GAZE_NER_THRESHOLD")
+            .ok()
+            .map(|value| value.parse::<f32>())
+            .transpose()?
+            .unwrap_or(0.3);
+        let recognizer = NerRecognizer::load_with_options(
+            &model_dir,
+            NerOptions {
+                locale: std::env::var("GAZE_NER_LOCALE").ok(),
+                threshold,
+            },
+        )?;
+        builder = builder.recognizer(recognizer);
     }
 
     Ok(builder.build()?)

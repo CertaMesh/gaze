@@ -38,6 +38,36 @@ Most v0.9 benchmarks use the committed synthetic coverage-loop corpus:
 
 The corpus is synthetic by design and must remain free of real PII.
 
+## External Synthetic Holdout
+
+The external holdout uses only the validation split from Ai4Privacy's OpenPII
+Micro corpus. It is synthetic, CC BY 4.0 licensed, SHA-256 pinned, and reserved
+from all Gaze model training and threshold tuning. Primary scoring is
+label-agnostic UTF-8 byte coverage because a partially pseudonymized entity is
+still a leak.
+
+Runnable path:
+
+```bash
+python3 scripts/bench/openpii_gaze_bench.py --no-download
+```
+
+The first run may omit `--no-download`; the script fetches the pinned validation
+file into ignored `target/bench-data/`, then verifies its byte size and SHA-256.
+
+Evidence paths:
+
+| Field | Value |
+| --- | --- |
+| Dataset and scoring contract | `docs/reference/benchmarks/openpii-micro-holdout.md` |
+| Current v0.12 baseline | `docs/reference/benchmarks/v0.12-openpii-baseline.md` |
+| Benchmark runner | `scripts/bench/openpii_gaze_bench.py` |
+| Dataset revision | `ai4privacy/pii-masking-micro-100k@3cd59c65631280839f830d3ba96dcdfe1785cab1` |
+| Validation SHA256 | `bb15da1b5fbb11b3cc6fd4c95eca256197573ecd066230eb3c1fe6898f27a578` |
+
+Generated result JSON stays under `target/bench-data/` unless a reviewed,
+hardware-qualified snapshot is deliberately promoted into the repository.
+
 ## Safety-Net Matrix and Perf
 
 Measures strict span precision, recall, F1, and strict leak rate for Kiji
