@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import statistics
 import subprocess
 import sys
@@ -59,6 +60,7 @@ DEFAULT_CONFIGS = (
     "pass2-ner",
     "full-stack-kiji-resolve",
 )
+PRODUCTION_CONFIG = "full-stack-kiji-resolve"
 
 
 @dataclass(frozen=True)
@@ -173,13 +175,6 @@ def _allocate_strata(
     strata: Mapping[tuple[str, str], Sequence[Document]], sample_size: int
 ) -> dict[tuple[str, str], int]:
     capacities = {key: len(value) for key, value in strata.items()}
-    if sample_size >= len(capacities):
-        allocations = {key: 1 for key in capacities}
-        remaining_capacities = {key: value - 1 for key, value in capacities.items()}
-        extra = _proportional_allocation(
-            remaining_capacities, sample_size - len(capacities)
-        )
-        return {key: allocations[key] + extra[key] for key in capacities}
     return _proportional_allocation(capacities, sample_size)
 
 
@@ -201,22 +196,19 @@ def stratified_sample(
         raise ValueError("document IDs must be unique before sampling")
 
     sample_size = min(max_documents or len(documents), len(documents))
-    if sample_size == len(documents):
-        evaluated = list(documents)
-    else:
-        strata: defaultdict[tuple[str, str], list[Document]] = defaultdict(list)
-        for document in documents:
-            strata[_stratum(document)].append(document)
-        allocation = _allocate_strata(strata, sample_size)
-        evaluated = []
-        for key in sorted(strata):
-            ranked = sorted(
-                strata[key], key=lambda document: (_document_rank(seed, document), document.uid)
-            )
-            evaluated.extend(ranked[: allocation[key]])
-        evaluated.sort(key=lambda document: (_document_rank(seed, document), document.uid))
+    strata: defaultdict[tuple[str, str], list[Document]] = defaultdict(list)
+    for document in documents:
+        strata[_stratum(document)].append(document)
+    allocation = _allocate_strata(strata, sample_size)
+    evaluated: list[Document] = []
+    for key in sorted(strata):
+        ranked = sorted(
+            strata[key], key=lambda document: (_document_rank(seed, document), document.uid)
+        )
+        evaluated.extend(ranked[: allocation[key]])
+    evaluated.sort(key=lambda document: (_document_rank(seed, document), document.uid))
 
-    evaluated_ids = sorted(document.uid for document in evaluated)
+    evaluated_ids = [document.uid for document in evaluated]
     digest_payload = json.dumps(
         evaluated_ids, ensure_ascii=False, separators=(",", ":")
     ).encode("utf-8")
@@ -311,6 +303,15 @@ VALID_TRACE_COMBINATIONS = frozenset(
         ("safety_net", "redact", "redact"),
         ("safety_net", "fallback_redact", "redact"),
     }
+)
+BUILTIN_CANONICAL_CLASSES = frozenset(
+    {"email", "name", "location", "organization"}
+)
+CUSTOM_CANONICAL_CLASS_PATTERN = re.compile(
+    r"custom:[a-z0-9]+(?:_[a-z0-9]+)*\Z"
+)
+SOURCE_ID_PATTERN = re.compile(
+    r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z"
 )
 LEAK_SUSPECT_FIELDS = frozenset(
     {
@@ -422,6 +423,22 @@ def _validate_success_timing(value: object, context: str) -> None:
         _expect_number(timing[field], f"{context}.{field}")
 
 
+def _validate_canonical_class(value: str, context: str) -> None:
+    if value not in BUILTIN_CANONICAL_CLASSES and not CUSTOM_CANONICAL_CLASS_PATTERN.fullmatch(
+        value
+    ):
+        raise ResponseValidationError(
+            f"{context}: expected a canonical PiiClass representation"
+        )
+
+
+def _validate_source_id(value: str, context: str) -> None:
+    if not SOURCE_ID_PATTERN.fullmatch(value):
+        raise ResponseValidationError(
+            f"{context}: expected a metadata-only stable identifier"
+        )
+
+
 def _validate_final_protection_trace(
     document: Document,
     value: object,
@@ -456,17 +473,20 @@ def _validate_final_protection_trace(
             for source_index, source_id in enumerate(source_values)
         ]
 
-        if not pii_class:
-            raise ResponseValidationError(f"{context}.class: expected a canonical class")
+        _validate_canonical_class(pii_class, f"{context}.class")
         if action not in {"tokenize", "redact"}:
             raise ResponseValidationError(f"{context}.action: unknown action {action!r}")
         if (stage, decision, action) not in VALID_TRACE_COMBINATIONS:
             raise ResponseValidationError(
                 f"{context}.provenance: invalid stage/decision/action combination"
             )
-        if not source_ids or any(not source_id for source_id in source_ids):
+        if not source_ids:
             raise ResponseValidationError(
                 f"{context}.provenance.source_ids: expected non-empty metadata IDs"
+            )
+        for source_index, source_id in enumerate(source_ids):
+            _validate_source_id(
+                source_id, f"{context}.provenance.source_ids[{source_index}]"
             )
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ResponseValidationError(
@@ -938,61 +958,6 @@ def validate_prediction(document: Document, raw: dict[str, object]) -> Span:
     return Span(start, end, label)
 
 
-def map_clean_actions_to_raw(
-    document: Document,
-    clean_length: int,
-    manifest: Sequence[dict[str, object]],
-    actions: Sequence[dict[str, object]],
-) -> list[Span]:
-    raw_length = len(document.text.encode("utf-8"))
-    ordered_manifest = sorted(manifest, key=lambda span: int(span["clean_start"]))
-    segments: list[tuple[int, int, int, int, bool]] = []
-    clean_cursor = 0
-    raw_cursor = 0
-    for span in ordered_manifest:
-        clean_start = int(span["clean_start"])
-        clean_end = int(span["clean_end"])
-        raw_start = int(span["raw_start"])
-        raw_end = int(span["raw_end"])
-        if clean_start < clean_cursor or raw_start < raw_cursor:
-            raise RuntimeError(f"{document.uid}: non-monotonic pre-safety manifest")
-        if clean_start - clean_cursor != raw_start - raw_cursor:
-            raise RuntimeError(f"{document.uid}: pre-safety plain-text mapping drift")
-        if clean_start > clean_cursor:
-            segments.append((clean_cursor, clean_start, raw_cursor, raw_start, False))
-        segments.append((clean_start, clean_end, raw_start, raw_end, True))
-        clean_cursor = clean_end
-        raw_cursor = raw_end
-    if clean_length - clean_cursor != raw_length - raw_cursor:
-        raise RuntimeError(f"{document.uid}: pre-safety trailing mapping drift")
-    if clean_cursor < clean_length:
-        segments.append((clean_cursor, clean_length, raw_cursor, raw_length, False))
-
-    mapped: list[Span] = []
-    for action in actions:
-        action_start = int(action["action_start"])
-        action_end = int(action["action_end"])
-        label = str(action["class"])
-        if action_start < 0 or action_end <= action_start or action_end > clean_length:
-            raise RuntimeError(f"{document.uid}: invalid SafetyNet action span")
-        for clean_start, clean_end, raw_start, raw_end, is_token in segments:
-            overlap_start = max(action_start, clean_start)
-            overlap_end = min(action_end, clean_end)
-            if overlap_start >= overlap_end:
-                continue
-            if is_token:
-                mapped.append(Span(raw_start, raw_end, label))
-            else:
-                mapped.append(
-                    Span(
-                        raw_start + overlap_start - clean_start,
-                        raw_start + overlap_end - clean_start,
-                        label,
-                    )
-                )
-    return mapped
-
-
 def final_trace_predictions(
     document: Document, response: dict[str, object]
 ) -> list[Span]:
@@ -1269,6 +1234,70 @@ def _scorecard_runs(scorecard: Mapping[str, object]) -> dict[str, Mapping[str, o
     return result
 
 
+def _evaluated_population_provenance(
+    scorecard: Mapping[str, object],
+) -> dict[str, object]:
+    dataset = scorecard.get("dataset")
+    if not isinstance(dataset, dict):
+        raise ValueError("scorecard dataset must be an object")
+    evaluated = dataset.get("evaluated_population")
+    sampling = dataset.get("sampling")
+    integrity = dataset.get("integrity")
+    if not isinstance(evaluated, dict) or not isinstance(sampling, dict):
+        raise ValueError("scorecard evaluated-population provenance is missing")
+    if not isinstance(integrity, dict):
+        raise ValueError("scorecard dataset integrity must be an object")
+
+    document_count = evaluated.get("documents")
+    evaluated_ids = sampling.get("evaluated_document_ids")
+    digest = sampling.get("evaluated_document_ids_digest")
+    if type(document_count) is not int or document_count <= 0:
+        raise ValueError("evaluated population must contain documents")
+    if not isinstance(evaluated_ids, list) or not all(
+        isinstance(uid, str) and uid for uid in evaluated_ids
+    ):
+        raise ValueError("evaluated document IDs must be a non-empty string array")
+    if len(evaluated_ids) != document_count or len(set(evaluated_ids)) != len(
+        evaluated_ids
+    ):
+        raise ValueError("evaluated document IDs disagree with the population")
+    if not isinstance(digest, dict) or set(digest) != {"algorithm", "value"}:
+        raise ValueError("evaluated document digest has an invalid shape")
+    if digest.get("algorithm") != "sha256" or not isinstance(digest.get("value"), str):
+        raise ValueError("evaluated document digest must use sha256")
+    expected_digest = hashlib.sha256(
+        json.dumps(evaluated_ids, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    ).hexdigest()
+    if digest["value"] != expected_digest:
+        raise ValueError("evaluated document digest does not match the IDs")
+
+    identity_fields = ("repository", "revision", "file")
+    if not all(isinstance(dataset.get(field), str) for field in identity_fields):
+        raise ValueError("scorecard dataset identity is incomplete")
+    dataset_sha256 = integrity.get("sha256")
+    if not isinstance(dataset_sha256, str) or not re.fullmatch(
+        r"[0-9a-f]{64}", dataset_sha256
+    ):
+        raise ValueError("scorecard dataset sha256 is invalid")
+    strategy = sampling.get("strategy")
+    seed = sampling.get("seed")
+    if strategy != SAMPLING_STRATEGY or type(seed) is not int:
+        raise ValueError("scorecard sampling strategy or seed is invalid")
+
+    return {
+        "repository": dataset["repository"],
+        "revision": dataset["revision"],
+        "file": dataset["file"],
+        "sha256": dataset_sha256,
+        "evaluated_population": evaluated,
+        "sampling_strategy": strategy,
+        "sampling_seed": seed,
+        "evaluated_document_ids_digest": digest,
+    }
+
+
 def _run_correctness_values(run: Mapping[str, object]) -> dict[str, int | float]:
     metrics = run["metrics"]
     contract = run["pipeline_contract"]
@@ -1299,10 +1328,25 @@ def _run_correctness_values(run: Mapping[str, object]) -> dict[str, int | float]
 def compare_scorecards(
     candidate: Mapping[str, object], baseline: Mapping[str, object]
 ) -> dict[str, object]:
-    candidate_runs = _scorecard_runs(candidate)
-    baseline_runs = _scorecard_runs(baseline)
     regression_failures: list[dict[str, object]] = []
     readiness_failures: list[dict[str, object]] = []
+    try:
+        candidate_runs = _scorecard_runs(candidate)
+    except ValueError as error:
+        candidate_runs = {}
+        failure = {"gate": "candidate_runs", "reason": str(error)}
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+    try:
+        baseline_runs = _scorecard_runs(baseline)
+    except ValueError as error:
+        baseline_runs = {}
+        failure = {"gate": "baseline_runs", "reason": str(error)}
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+    expected_configs = frozenset(DEFAULT_CONFIGS)
+    candidate_configs = frozenset(candidate_runs)
+    baseline_configs = frozenset(baseline_runs)
     higher_is_better = (
         "pipeline_completion_rate",
         "pii_byte_recall",
@@ -1331,15 +1375,65 @@ def compare_scorecards(
         "redact_actions": 0,
     }
 
-    for config, run in sorted(candidate_runs.items()):
-        candidate_values = _run_correctness_values(run)
-        baseline_run = baseline_runs.get(config)
-        if baseline_run is None:
-            regression_failures.append(
-                {"config": config, "gate": "baseline_config", "reason": "missing"}
-            )
-        else:
-            baseline_values = _run_correctness_values(baseline_run)
+    if candidate_configs != expected_configs:
+        failure = {
+            "gate": "candidate_config_set",
+            "expected": sorted(expected_configs),
+            "actual": sorted(candidate_configs),
+        }
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+    if baseline_configs != expected_configs:
+        failure = {
+            "gate": "baseline_config_set",
+            "expected": sorted(expected_configs),
+            "actual": sorted(baseline_configs),
+        }
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+
+    candidate_provenance: dict[str, object] | None = None
+    baseline_provenance: dict[str, object] | None = None
+    try:
+        candidate_provenance = _evaluated_population_provenance(candidate)
+    except ValueError as error:
+        failure = {
+            "gate": "candidate_evaluated_population_provenance",
+            "reason": str(error),
+        }
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+    try:
+        baseline_provenance = _evaluated_population_provenance(baseline)
+    except ValueError as error:
+        failure = {
+            "gate": "baseline_evaluated_population_provenance",
+            "reason": str(error),
+        }
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+    if (
+        candidate_provenance is not None
+        and baseline_provenance is not None
+        and candidate_provenance != baseline_provenance
+    ):
+        failure = {
+            "gate": "evaluated_population_provenance_match",
+            "reason": "candidate and baseline provenance differ",
+        }
+        regression_failures.append(failure)
+        readiness_failures.append(copy.deepcopy(failure))
+
+    prerequisites_match = (
+        candidate_configs == expected_configs
+        and baseline_configs == expected_configs
+        and candidate_provenance is not None
+        and candidate_provenance == baseline_provenance
+    )
+    if prerequisites_match:
+        for config in sorted(expected_configs):
+            candidate_values = _run_correctness_values(candidate_runs[config])
+            baseline_values = _run_correctness_values(baseline_runs[config])
             for gate in higher_is_better:
                 if candidate_values[gate] < baseline_values[gate]:
                     regression_failures.append(
@@ -1360,13 +1454,16 @@ def compare_scorecards(
                             "baseline": baseline_values[gate],
                         }
                     )
+
+    if prerequisites_match:
+        production_values = _run_correctness_values(candidate_runs[PRODUCTION_CONFIG])
         for gate, target in readiness_targets.items():
-            if candidate_values[gate] != target:
+            if production_values[gate] != target:
                 readiness_failures.append(
                     {
-                        "config": config,
+                        "config": PRODUCTION_CONFIG,
                         "gate": gate,
-                        "actual": candidate_values[gate],
+                        "actual": production_values[gate],
                         "required": target,
                     }
                 )

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import copy
+import hashlib
 import io
 import json
 import socket
@@ -28,42 +29,6 @@ class OffsetTests(unittest.TestCase):
             benchmark.merge_intervals([(5, 9), (0, 3), (3, 6), (12, 14)]),
             [(0, 9), (12, 14)],
         )
-
-    def test_safety_net_action_maps_through_existing_token(self) -> None:
-        document = benchmark.Document(
-            uid="synthetic-map",
-            text="aaaaabbbbbccccc",
-            language="en",
-            region="US",
-            source_dataset="unit-test",
-            spans=(),
-        )
-        manifest = [
-            {
-                "raw_start": 5,
-                "raw_end": 10,
-                "clean_start": 5,
-                "clean_end": 8,
-                "class": "name",
-            }
-        ]
-
-        plain = benchmark.map_clean_actions_to_raw(
-            document,
-            13,
-            manifest,
-            [{"action_start": 9, "action_end": 12, "class": "location"}],
-        )
-        overlapping_token = benchmark.map_clean_actions_to_raw(
-            document,
-            13,
-            manifest,
-            [{"action_start": 6, "action_end": 7, "class": "name"}],
-        )
-
-        self.assertEqual(plain, [benchmark.Span(11, 14, "location")])
-        self.assertEqual(overlapping_token, [benchmark.Span(5, 10, "name")])
-
 
 class MetricTests(unittest.TestCase):
     def document(self) -> benchmark.Document:
@@ -407,6 +372,38 @@ class ResponseValidationTests(unittest.TestCase):
                 with self.assertRaises(benchmark.ResponseValidationError):
                     benchmark.validate_response(self.trace_document(), response)
 
+    def test_trace_rejects_noncanonical_classes_and_pii_bearing_source_ids(self) -> None:
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["class"] = "not-canonical"
+        response["final_protection_trace"][0]["class"] = "not-canonical"
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "canonical PiiClass"
+        ):
+            benchmark.validate_response(self.trace_document(), response)
+
+        for source_id in ("alice@example.invalid", "+1-555-0142", "Dr. Schmidt"):
+            with self.subTest(source_id=source_id):
+                response = self.tokenize_response()
+                response["final_protection_trace"][0]["provenance"][
+                    "source_ids"
+                ] = [source_id]
+                with self.assertRaisesRegex(
+                    benchmark.ResponseValidationError, "metadata-only stable identifier"
+                ):
+                    benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_accepts_normalized_custom_class_and_stable_source_ids(self) -> None:
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["class"] = "custom:phone_number"
+        item = response["final_protection_trace"][0]
+        item["class"] = "custom:phone_number"
+        item["provenance"]["source_ids"] = [
+            "ner/bert",
+            "phone.structural",
+            "safety_net.backend",
+        ]
+        benchmark.validate_response(self.trace_document(), response)
+
     def test_all_ratified_trace_combinations_validate(self) -> None:
         combinations = (
             ("primary_pipeline", "policy", "tokenize"),
@@ -572,6 +569,21 @@ class SamplingTests(unittest.TestCase):
             second_report["evaluated_document_ids_digest"],
         )
 
+    def test_full_population_order_is_seeded_and_input_order_independent(self) -> None:
+        documents = self.documents()
+        first, first_report = benchmark.stratified_sample(documents, None, seed=41)
+        second, second_report = benchmark.stratified_sample(
+            list(reversed(documents)), None, seed=41
+        )
+        self.assertEqual(
+            [document.uid for document in first],
+            [document.uid for document in second],
+        )
+        self.assertEqual(
+            first_report["evaluated_document_ids"],
+            second_report["evaluated_document_ids"],
+        )
+
     def test_sampling_represents_each_language_region_stratum_when_budget_allows(
         self,
     ) -> None:
@@ -579,6 +591,34 @@ class SamplingTests(unittest.TestCase):
         self.assertEqual(
             {(document.language, document.region) for document in selected},
             {("de", "DE"), ("en", "GB"), ("en", "US")},
+        )
+
+    def test_largest_remainder_does_not_preallocate_small_strata(self) -> None:
+        documents = [
+            benchmark.Document(
+                uid=f"synthetic-common-{index}",
+                text="synthetic text",
+                language="en",
+                region="US",
+                source_dataset="unit-test",
+                spans=(),
+            )
+            for index in range(100)
+        ]
+        documents.append(
+            benchmark.Document(
+                uid="synthetic-rare-1",
+                text="synthetic text",
+                language="de",
+                region="DE",
+                source_dataset="unit-test",
+                spans=(),
+            )
+        )
+        selected, _ = benchmark.stratified_sample(documents, 2, seed=7)
+        self.assertEqual(
+            [(document.language, document.region) for document in selected],
+            [("en", "US"), ("en", "US")],
         )
 
     def test_sampling_reports_available_and_evaluated_populations(self) -> None:
@@ -589,29 +629,54 @@ class SamplingTests(unittest.TestCase):
 
 
 class ScorecardComparisonTests(unittest.TestCase):
-    def scorecard(self, leaked: int) -> dict[str, object]:
+    def scorecard(
+        self, leaked: int, evaluated_ids: list[str] | None = None
+    ) -> dict[str, object]:
         recall = 1.0 if leaked == 0 else 0.5
+        ids = evaluated_ids or ["synthetic-comparison-1"]
+        digest = hashlib.sha256(
+            json.dumps(ids, ensure_ascii=False, separators=(",", ":")).encode(
+                "utf-8"
+            )
+        ).hexdigest()
+        run = {
+            "metrics": {
+                "zero_leak_document_rate": recall,
+                "utf8_bytes": {
+                    "leaked": leaked,
+                    "recall": recall,
+                    "precision": 1.0,
+                },
+                "entities": {"full_coverage_recall": recall},
+            },
+            "pipeline_contract": {
+                "restore_exact_rate": 1.0,
+                "manifest_valid_document_rate": 1.0,
+                "strict_would_reject_documents": 0,
+            },
+            "pipeline_availability": {"completion_rate": 1.0},
+        }
         return {
             "schema_version": 3,
+            "dataset": {
+                "repository": "synthetic/comparison",
+                "revision": "synthetic-revision",
+                "file": "synthetic.jsonl",
+                "integrity": {"sha256": "0" * 64},
+                "evaluated_population": {"documents": len(ids)},
+                "sampling": {
+                    "strategy": benchmark.SAMPLING_STRATEGY,
+                    "seed": 7,
+                    "evaluated_document_ids": ids,
+                    "evaluated_document_ids_digest": {
+                        "algorithm": "sha256",
+                        "value": digest,
+                    },
+                },
+            },
             "runs": [
-                {
-                    "config": "rule-floor-extended",
-                    "metrics": {
-                        "zero_leak_document_rate": recall,
-                        "utf8_bytes": {
-                            "leaked": leaked,
-                            "recall": recall,
-                            "precision": 1.0,
-                        },
-                        "entities": {"full_coverage_recall": recall},
-                    },
-                    "pipeline_contract": {
-                        "restore_exact_rate": 1.0,
-                        "manifest_valid_document_rate": 1.0,
-                        "strict_would_reject_documents": 0,
-                    },
-                    "pipeline_availability": {"completion_rate": 1.0},
-                }
+                {"config": config, **copy.deepcopy(run)}
+                for config in benchmark.DEFAULT_CONFIGS
             ],
         }
 
@@ -620,6 +685,40 @@ class ScorecardComparisonTests(unittest.TestCase):
         comparison = benchmark.compare_scorecards(history, copy.deepcopy(history))
         self.assertTrue(comparison["regression"]["passed"])
         self.assertFalse(comparison["release_readiness"]["passed"])
+
+    def test_empty_candidate_fails_regression_and_release_readiness(self) -> None:
+        baseline = self.scorecard(leaked=0)
+        candidate = copy.deepcopy(baseline)
+        candidate["runs"] = []
+        comparison = benchmark.compare_scorecards(candidate, baseline)
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertFalse(comparison["release_readiness"]["passed"])
+
+    def test_missing_candidate_runs_fail_regression_and_release_readiness(self) -> None:
+        baseline = self.scorecard(leaked=0)
+        candidate = copy.deepcopy(baseline)
+        candidate.pop("runs")
+        comparison = benchmark.compare_scorecards(candidate, baseline)
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertFalse(comparison["release_readiness"]["passed"])
+
+    def test_mismatched_evaluated_population_provenance_fails_closed(self) -> None:
+        baseline = self.scorecard(leaked=0)
+        candidate = self.scorecard(leaked=0, evaluated_ids=["synthetic-other-1"])
+        comparison = benchmark.compare_scorecards(candidate, baseline)
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertFalse(comparison["release_readiness"]["passed"])
+
+    def test_release_readiness_uses_the_production_candidate_cell(self) -> None:
+        candidate = self.scorecard(leaked=0)
+        nonproduction = candidate["runs"][0]
+        nonproduction["metrics"]["zero_leak_document_rate"] = 0.0
+        nonproduction["metrics"]["utf8_bytes"]["leaked"] = 1
+        nonproduction["metrics"]["utf8_bytes"]["recall"] = 0.0
+        nonproduction["metrics"]["entities"]["full_coverage_recall"] = 0.0
+        comparison = benchmark.compare_scorecards(candidate, copy.deepcopy(candidate))
+        self.assertTrue(comparison["regression"]["passed"])
+        self.assertTrue(comparison["release_readiness"]["passed"])
 
 
 class DataikuSelectionTests(unittest.TestCase):
