@@ -63,7 +63,11 @@ DIRECT_IDENTIFIER_LABELS = frozenset(
     }
 )
 
-DEFAULT_CONFIGS = ("rule-floor-extended", "pass2-ner")
+DEFAULT_CONFIGS = (
+    "rule-floor-extended",
+    "pass2-ner",
+    "full-stack-kiji-resolve",
+)
 
 
 @dataclass(frozen=True)
@@ -440,6 +444,102 @@ class RecallAccumulator:
         }
 
 
+class ContractAccumulator:
+    INTEGRITY_ERROR_FIELDS = (
+        "invalid_clean_bounds",
+        "invalid_raw_bounds",
+        "overlapping_clean_spans",
+        "non_monotonic_raw_spans",
+        "token_restore_failures",
+        "raw_value_mismatches",
+    )
+
+    def __init__(self) -> None:
+        self.documents = 0
+        self.restore_exact_documents = 0
+        self.restore_success_decisions = 0
+        self.manifest_valid_documents = 0
+        self.manifest_spans = 0
+        self.integrity_errors: Counter[str] = Counter()
+        self.initial_suspects = 0
+        self.initial_actionable_suspects = 0
+        self.initial_class_mismatches = 0
+        self.strict_would_reject_documents = 0
+        self.post_policy_scanned_documents = 0
+        self.post_policy_zero_suspect_documents = 0
+        self.post_policy_suspects = 0
+
+    def add(self, response: dict[str, object]) -> None:
+        self.documents += 1
+        restore = response["restore"]
+        integrity = response["manifest_integrity"]
+        initial = response["initial_safety_net_stats"]
+        assert isinstance(restore, dict)
+        assert isinstance(integrity, dict)
+        assert isinstance(initial, dict)
+
+        self.restore_exact_documents += bool(restore["exact"])
+        self.restore_success_decisions += restore["decision"] == "success"
+        self.manifest_spans += int(integrity["spans"])
+        document_integrity_errors = 0
+        for field in self.INTEGRITY_ERROR_FIELDS:
+            count = int(integrity[field])
+            self.integrity_errors[field] += count
+            document_integrity_errors += count
+        self.manifest_valid_documents += document_integrity_errors == 0
+
+        self.initial_suspects += int(initial["suspect_count"])
+        self.initial_actionable_suspects += int(initial["uncovered_count"]) + int(
+            initial["partial_bleed_count"]
+        )
+        self.initial_class_mismatches += int(initial["class_mismatch_count"])
+        self.strict_would_reject_documents += bool(response["strict_would_reject"])
+
+        post_policy = response["post_policy_safety_net_stats"]
+        if post_policy is not None:
+            assert isinstance(post_policy, dict)
+            self.post_policy_scanned_documents += 1
+            suspects = int(post_policy["suspect_count"])
+            self.post_policy_suspects += suspects
+            self.post_policy_zero_suspect_documents += suspects == 0
+
+    def result(self) -> dict[str, object]:
+        return {
+            "documents": self.documents,
+            "restore_exact_documents": self.restore_exact_documents,
+            "restore_exact_rate": safe_ratio(
+                self.restore_exact_documents, self.documents
+            ),
+            "restore_success_decisions": self.restore_success_decisions,
+            "restore_success_decision_rate": safe_ratio(
+                self.restore_success_decisions, self.documents
+            ),
+            "manifest_spans": self.manifest_spans,
+            "manifest_valid_documents": self.manifest_valid_documents,
+            "manifest_valid_document_rate": safe_ratio(
+                self.manifest_valid_documents, self.documents
+            ),
+            "manifest_integrity_errors": dict(sorted(self.integrity_errors.items())),
+            "initial_safety_net_suspects": self.initial_suspects,
+            "initial_actionable_suspects": self.initial_actionable_suspects,
+            "initial_class_mismatches": self.initial_class_mismatches,
+            "strict_would_reject_documents": self.strict_would_reject_documents,
+            "strict_acceptance_rate": 1.0
+            - safe_ratio(self.strict_would_reject_documents, self.documents),
+            "post_policy_scanned_documents": self.post_policy_scanned_documents,
+            "post_policy_suspects": self.post_policy_suspects,
+            "post_policy_zero_suspect_documents": self.post_policy_zero_suspect_documents,
+            "post_policy_zero_suspect_rate": (
+                safe_ratio(
+                    self.post_policy_zero_suspect_documents,
+                    self.post_policy_scanned_documents,
+                )
+                if self.post_policy_scanned_documents
+                else None
+            ),
+        }
+
+
 def percentile(values: Sequence[float], quantile: float) -> float:
     if not values:
         return 0.0
@@ -474,18 +574,110 @@ def validate_prediction(document: Document, raw: dict[str, object]) -> Span:
     return Span(start, end, label)
 
 
+def map_clean_actions_to_raw(
+    document: Document,
+    clean_length: int,
+    manifest: Sequence[dict[str, object]],
+    actions: Sequence[dict[str, object]],
+) -> list[Span]:
+    raw_length = len(document.text.encode("utf-8"))
+    ordered_manifest = sorted(manifest, key=lambda span: int(span["clean_start"]))
+    segments: list[tuple[int, int, int, int, bool]] = []
+    clean_cursor = 0
+    raw_cursor = 0
+    for span in ordered_manifest:
+        clean_start = int(span["clean_start"])
+        clean_end = int(span["clean_end"])
+        raw_start = int(span["raw_start"])
+        raw_end = int(span["raw_end"])
+        if clean_start < clean_cursor or raw_start < raw_cursor:
+            raise RuntimeError(f"{document.uid}: non-monotonic pre-safety manifest")
+        if clean_start - clean_cursor != raw_start - raw_cursor:
+            raise RuntimeError(f"{document.uid}: pre-safety plain-text mapping drift")
+        if clean_start > clean_cursor:
+            segments.append((clean_cursor, clean_start, raw_cursor, raw_start, False))
+        segments.append((clean_start, clean_end, raw_start, raw_end, True))
+        clean_cursor = clean_end
+        raw_cursor = raw_end
+    if clean_length - clean_cursor != raw_length - raw_cursor:
+        raise RuntimeError(f"{document.uid}: pre-safety trailing mapping drift")
+    if clean_cursor < clean_length:
+        segments.append((clean_cursor, clean_length, raw_cursor, raw_length, False))
+
+    mapped: list[Span] = []
+    for action in actions:
+        action_start = int(action["action_start"])
+        action_end = int(action["action_end"])
+        label = str(action["class"])
+        if action_start < 0 or action_end <= action_start or action_end > clean_length:
+            raise RuntimeError(f"{document.uid}: invalid SafetyNet action span")
+        for clean_start, clean_end, raw_start, raw_end, is_token in segments:
+            overlap_start = max(action_start, clean_start)
+            overlap_end = min(action_end, clean_end)
+            if overlap_start >= overlap_end:
+                continue
+            if is_token:
+                mapped.append(Span(raw_start, raw_end, label))
+            else:
+                mapped.append(
+                    Span(
+                        raw_start + overlap_start - clean_start,
+                        raw_start + overlap_end - clean_start,
+                        label,
+                    )
+                )
+    return mapped
+
+
+def effective_predictions(
+    document: Document, response: dict[str, object]
+) -> list[Span]:
+    pre_safety_manifest = response["pre_safety_manifest_spans"]
+    if pre_safety_manifest is None:
+        return [
+            validate_prediction(document, span) for span in response["manifest_spans"]
+        ]
+    assert isinstance(pre_safety_manifest, list)
+    predictions = [
+        validate_prediction(document, span) for span in pre_safety_manifest
+    ]
+    if response["safety_net_mode"] != "resolve":
+        return predictions
+
+    suspects = response["leak_suspects"]
+    assert isinstance(suspects, list)
+    has_class_mismatch = any(suspect["kind"] == "class_mismatch" for suspect in suspects)
+    actions = [
+        suspect
+        for suspect in suspects
+        if has_class_mismatch
+        or suspect["kind"] in {"uncovered", "partial_bleed"}
+    ]
+    clean_length = response["pre_safety_text_len"]
+    if not isinstance(clean_length, int):
+        raise RuntimeError(f"{document.uid}: missing pre-safety text length")
+    predictions.extend(
+        map_clean_actions_to_raw(
+            document, clean_length, pre_safety_manifest, actions
+        )
+    )
+    return predictions
+
+
 def run_config(
     repo_root: Path,
     binary: Path,
     config: str,
     documents: Sequence[Document],
     model_dir: Path,
+    kiji_model_dir: Path,
     threshold: float,
     diagnostics_dir: Path,
 ) -> dict[str, object]:
     environment = os.environ.copy()
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
+    environment["GAZE_KIJI_DISTILBERT_MODEL_DIR"] = str(kiji_model_dir)
     command = [str(binary), "--config", config]
     diagnostics_dir.mkdir(parents=True, exist_ok=True)
     stderr_path = diagnostics_dir / f"{config}.stderr.log"
@@ -510,6 +702,7 @@ def run_config(
     per_label: defaultdict[str, RecallAccumulator] = defaultdict(RecallAccumulator)
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
+    contract = ContractAccumulator()
     timing: defaultdict[str, list[float]] = defaultdict(list)
     first_response_ms: float | None = None
 
@@ -536,10 +729,7 @@ def run_config(
                     f"runner response mismatch: expected {document.uid}, "
                     f"received {response['fixture_id']}"
                 )
-            predictions = [
-                validate_prediction(document, span)
-                for span in response["manifest_spans"]
-            ]
+            predictions = effective_predictions(document, response)
             overall.add(document, predictions)
             per_language[document.language].add(document, predictions)
             direct_spans = [
@@ -550,6 +740,7 @@ def run_config(
             ]
             direct.add(direct_spans, predictions)
             contextual.add(contextual_spans, predictions)
+            contract.add(response)
             for label in {span.label for span in document.spans}:
                 per_label[label].add(
                     [span for span in document.spans if span.label == label], predictions
@@ -575,6 +766,7 @@ def run_config(
         "metrics": overall.result(),
         "direct_identifier_recall": direct.result(),
         "contextual_pii_recall": contextual.result(),
+        "pipeline_contract": contract.result(),
         "per_language": {
             key: value.result() for key, value in sorted(per_language.items())
         },
@@ -583,6 +775,11 @@ def run_config(
         },
         "latency_ms": {
             key: timing_summary(value) for key, value in sorted(timing.items())
+        },
+        "warm_latency_ms": {
+            key: timing_summary(value[1:])
+            for key, value in sorted(timing.items())
+            if len(value) > 1
         },
         "process": {
             "wall_seconds": wall_seconds,
@@ -636,12 +833,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--threshold", type=float, default=0.3)
     parser.add_argument(
+        "--kiji-model-dir",
+        type=Path,
+        default=Path(
+            os.environ.get(
+                "GAZE_KIJI_DISTILBERT_MODEL_DIR",
+                "~/.local/share/gaze/models/kiji-distilbert",
+            )
+        ).expanduser(),
+    )
+    parser.add_argument(
         "--config",
         action="append",
         choices=(
             "rule-floor-core",
             "rule-floor-extended",
             "pass2-ner",
+            "full-stack-kiji-resolve",
             "pass3-kiji",
             "pass3-opf",
             "pass3-locale-aware",
@@ -688,21 +896,30 @@ def main() -> int:
         dataset_path, languages=languages, max_documents=args.max_documents
     )
     configs = tuple(args.config) if args.config else DEFAULT_CONFIGS
-    if "pass2-ner" in configs and not args.model_dir.is_dir():
+    if any(
+        config in {"pass2-ner", "full-stack-kiji-resolve"} for config in configs
+    ) and not args.model_dir.is_dir():
         raise FileNotFoundError(f"NER model directory does not exist: {args.model_dir}")
+    if any("kiji" in config for config in configs) and not args.kiji_model_dir.is_dir():
+        raise FileNotFoundError(
+            f"Kiji model directory does not exist: {args.kiji_model_dir}"
+        )
 
     binary = repo_root / "target/debug/examples/clean_for_bench"
     if not args.skip_build:
+        build_command = [
+            "cargo",
+            "build",
+            "-q",
+            "-p",
+            "gaze-recognizers",
+            "--example",
+            "clean_for_bench",
+        ]
+        if any("kiji" in config for config in configs):
+            build_command.extend(["--features", "safety-net-kiji"])
         subprocess.run(
-            [
-                "cargo",
-                "build",
-                "-q",
-                "-p",
-                "gaze-recognizers",
-                "--example",
-                "clean_for_bench",
-            ],
+            build_command,
             cwd=repo_root,
             check=True,
         )
@@ -719,13 +936,14 @@ def main() -> int:
                 config,
                 documents,
                 args.model_dir,
+                args.kiji_model_dir,
                 args.threshold,
                 output_path.parent,
             )
         )
 
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "gaze": git_metadata(repo_root),
         "dataset": {
@@ -748,13 +966,25 @@ def main() -> int:
                 "All dataset labels are included in the primary masking score.",
                 "Direct-identifier and contextual-PII recall are diagnostics.",
                 "The source validation rows all contain PII; precision and FPR use non-PII bytes inside those rows.",
+                "The scorecard is non-compensating: safety, reversibility, trust, availability, and latency are reported separately.",
+                "Resolve coverage maps SafetyNet action spans from pre-safety clean text back to raw byte ranges.",
             ],
+            "comparison_gates": {
+                "pii_byte_recall": "higher; no regression allowed",
+                "full_entity_coverage_recall": "higher; no regression allowed",
+                "zero_leak_document_rate": "higher; no regression allowed",
+                "restore_exact_rate": "must equal 1.0",
+                "manifest_valid_document_rate": "must equal 1.0",
+                "byte_precision": "no regression without explicit review",
+                "p95_latency_ms": "lower after correctness gates pass",
+            },
         },
         "parameters": {
             "configs": list(configs),
             "languages": sorted(languages) if languages else "all",
             "max_documents": args.max_documents,
             "ner_model_dir": str(args.model_dir),
+            "kiji_model_dir": str(args.kiji_model_dir),
             "ner_threshold": args.threshold,
         },
         "runs": runs,

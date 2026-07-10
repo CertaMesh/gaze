@@ -19,6 +19,41 @@ class OffsetTests(unittest.TestCase):
             [(0, 9), (12, 14)],
         )
 
+    def test_safety_net_action_maps_through_existing_token(self) -> None:
+        document = benchmark.Document(
+            uid="synthetic-map",
+            text="aaaaabbbbbccccc",
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(),
+        )
+        manifest = [
+            {
+                "raw_start": 5,
+                "raw_end": 10,
+                "clean_start": 5,
+                "clean_end": 8,
+                "class": "name",
+            }
+        ]
+
+        plain = benchmark.map_clean_actions_to_raw(
+            document,
+            13,
+            manifest,
+            [{"action_start": 9, "action_end": 12, "class": "location"}],
+        )
+        overlapping_token = benchmark.map_clean_actions_to_raw(
+            document,
+            13,
+            manifest,
+            [{"action_start": 6, "action_end": 7, "class": "name"}],
+        )
+
+        self.assertEqual(plain, [benchmark.Span(11, 14, "location")])
+        self.assertEqual(overlapping_token, [benchmark.Span(5, 10, "name")])
+
 
 class MetricTests(unittest.TestCase):
     def document(self) -> benchmark.Document:
@@ -58,6 +93,42 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["utf8_bytes"]["recall"], 1.0)
         self.assertEqual(result["entities"]["full_coverage_recall"], 1.0)
         self.assertEqual(result["zero_leak_document_rate"], 1.0)
+
+
+class ContractTests(unittest.TestCase):
+    def test_contract_score_does_not_compensate_restore_failure(self) -> None:
+        accumulator = benchmark.ContractAccumulator()
+        accumulator.add(
+            {
+                "restore": {"exact": False, "decision": "success"},
+                "manifest_integrity": {
+                    "spans": 1,
+                    "invalid_clean_bounds": 0,
+                    "invalid_raw_bounds": 0,
+                    "overlapping_clean_spans": 0,
+                    "non_monotonic_raw_spans": 0,
+                    "token_restore_failures": 0,
+                    "raw_value_mismatches": 1,
+                },
+                "initial_safety_net_stats": {
+                    "suspect_count": 1,
+                    "uncovered_count": 1,
+                    "partial_bleed_count": 0,
+                    "class_mismatch_count": 0,
+                },
+                "strict_would_reject": True,
+                "post_policy_safety_net_stats": {
+                    "suspect_count": 0,
+                },
+            }
+        )
+        result = accumulator.result()
+
+        self.assertEqual(result["restore_exact_rate"], 0.0)
+        self.assertEqual(result["restore_success_decision_rate"], 1.0)
+        self.assertEqual(result["manifest_valid_document_rate"], 0.0)
+        self.assertEqual(result["strict_acceptance_rate"], 0.0)
+        self.assertEqual(result["post_policy_zero_suspect_rate"], 1.0)
 
 
 if __name__ == "__main__":

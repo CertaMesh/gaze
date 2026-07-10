@@ -2,10 +2,12 @@
 
 ## Decision
 
-Gaze uses the validation split of `ai4privacy/pii-masking-micro-100k` as its
-first external multilingual masking holdout. This split is evaluation-only:
-its UIDs must never enter a training, fine-tuning, prompt-example, dictionary,
-rule-authoring, or threshold-selection corpus.
+Gaze keeps the validation split of `ai4privacy/pii-masking-micro-100k` as a
+secondary multilingual masking holdout. This split is evaluation-only: its UIDs
+must never enter a training, fine-tuning, prompt-example, dictionary,
+rule-authoring, or threshold-selection corpus. The primary product-language
+scorecard is now the pinned English/German Dataiku test split documented in
+[`dataiku-en-de-holdout.md`](dataiku-en-de-holdout.md).
 
 The corpus is a useful first gate because it is entirely synthetic, licensed
 under CC BY 4.0, and supplies character-level spans across 30 languages and 37
@@ -75,7 +77,10 @@ The default run compares:
 
 1. `rule-floor-extended`: the shipped deterministic recognizers;
 2. `pass2-ner`: that same floor plus the configured `NerRecognizer`, using the
-   model bundle named by `GAZE_NER_MODEL_DIR` and threshold `0.3` by default.
+   model bundle named by `GAZE_NER_MODEL_DIR` and threshold `0.3` by default;
+3. `full-stack-kiji-resolve`: Pass 2 plus the in-process Kiji SafetyNet using
+   the shipped Resolve/fallback policy, exact restore checks, manifest-integrity
+   checks, and a post-policy SafetyNet scan.
 
 The harness initializes each pipeline once and streams every document through
 the same process. Per-document timings exclude Cargo compilation and model

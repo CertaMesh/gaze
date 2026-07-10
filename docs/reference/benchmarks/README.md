@@ -38,13 +38,44 @@ Most v0.9 benchmarks use the committed synthetic coverage-loop corpus:
 
 The corpus is synthetic by design and must remain free of real PII.
 
-## External Synthetic Holdout
+## Primary English/German Synthetic Holdout
 
-The external holdout uses only the validation split from Ai4Privacy's OpenPII
-Micro corpus. It is synthetic, CC BY 4.0 licensed, SHA-256 pinned, and reserved
-from all Gaze model training and threshold tuning. Primary scoring is
-label-agnostic UTF-8 byte coverage because a partially pseudonymized entity is
-still a leak.
+The primary product-language scorecard uses English and German rows from the
+pinned test split of Dataiku's synthetic Kiji PII corpus. It covers the complete
+Gaze path: deterministic recognizers, Pass 2 NER, Kiji SafetyNet discovery,
+Resolve promotion, fallback, exact restore, manifest integrity, post-policy
+scan, precision, and warm latency.
+
+Runnable path:
+
+```bash
+uv run --with pyarrow scripts/bench/dataiku_en_de_gaze_bench.py --no-download
+```
+
+The first run may omit `--no-download`; the runner fetches and verifies the
+pinned Parquet test file under ignored `target/bench-data/`.
+
+Evidence paths:
+
+| Field | Value |
+| --- | --- |
+| Dataset and scoring contract | `docs/reference/benchmarks/dataiku-en-de-holdout.md` |
+| Current whole-pipeline baseline | `docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md` |
+| Benchmark runner | `scripts/bench/dataiku_en_de_gaze_bench.py` |
+| Dataset revision | `DataikuNLP/kiji-pii-training-data@0275550f0b1f1b8f2dc9356fd31ac1c788b8228b` |
+| Test-file SHA256 | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
+
+The upstream test split is reserved from training. It has no negative-only
+documents, so it remains one layer of the release gate rather than a complete
+PII evaluation.
+
+## Secondary Multilingual Synthetic Holdout
+
+The secondary multilingual holdout uses only the validation split from
+Ai4Privacy's OpenPII Micro corpus. It is synthetic, CC BY 4.0 licensed,
+SHA-256 pinned, and reserved from all Gaze model training and threshold tuning.
+It retains Japanese and 29 other languages as Unicode-offset and out-of-scope
+language stress tests; it is no longer the English/German headline dataset.
 
 Runnable path:
 
