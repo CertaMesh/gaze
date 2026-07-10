@@ -300,6 +300,18 @@ def _expect_list(value: object, context: str) -> list[object]:
 MANIFEST_SPAN_FIELDS = frozenset(
     {"raw_start", "raw_end", "clean_start", "clean_end", "class"}
 )
+FINAL_PROTECTION_TRACE_FIELDS = frozenset(
+    {"raw_start", "raw_end", "class", "action", "provenance"}
+)
+TRACE_PROVENANCE_FIELDS = frozenset({"stage", "decision", "source_ids"})
+VALID_TRACE_COMBINATIONS = frozenset(
+    {
+        ("primary_pipeline", "policy", "tokenize"),
+        ("safety_net", "resolve", "tokenize"),
+        ("safety_net", "redact", "redact"),
+        ("safety_net", "fallback_redact", "redact"),
+    }
+)
 LEAK_SUSPECT_FIELDS = frozenset(
     {
         "clean_start",
@@ -359,6 +371,7 @@ SUCCESS_RESPONSE_FIELDS = frozenset(
         "restore",
         "manifest_integrity",
         "timing",
+        "final_protection_trace",
     }
 )
 PIPELINE_ERROR_RESPONSE_FIELDS = frozenset(
@@ -409,6 +422,86 @@ def _validate_success_timing(value: object, context: str) -> None:
         _expect_number(timing[field], f"{context}.{field}")
 
 
+def _validate_final_protection_trace(
+    document: Document,
+    value: object,
+    manifest: Sequence[object],
+) -> list[Span]:
+    trace = _expect_list(value, "final_protection_trace")
+    original_text_bytes = len(document.text.encode("utf-8"))
+    char_boundaries = frozenset(char_to_byte_offsets(document.text))
+    previous_raw_end = 0
+    predictions: list[Span] = []
+    tokenize_items: Counter[tuple[int, int, str]] = Counter()
+
+    for index, raw_item in enumerate(trace):
+        context = f"final_protection_trace[{index}]"
+        item = _expect_exact_keys(raw_item, FINAL_PROTECTION_TRACE_FIELDS, context)
+        raw_start = _expect_int(item["raw_start"], f"{context}.raw_start")
+        raw_end = _expect_int(item["raw_end"], f"{context}.raw_end")
+        pii_class = _expect_string(item["class"], f"{context}.class")
+        action = _expect_string(item["action"], f"{context}.action")
+        provenance = _expect_exact_keys(
+            item["provenance"], TRACE_PROVENANCE_FIELDS, f"{context}.provenance"
+        )
+        stage = _expect_string(provenance["stage"], f"{context}.provenance.stage")
+        decision = _expect_string(
+            provenance["decision"], f"{context}.provenance.decision"
+        )
+        source_values = _expect_list(
+            provenance["source_ids"], f"{context}.provenance.source_ids"
+        )
+        source_ids = [
+            _expect_string(source_id, f"{context}.provenance.source_ids[{source_index}]")
+            for source_index, source_id in enumerate(source_values)
+        ]
+
+        if not pii_class:
+            raise ResponseValidationError(f"{context}.class: expected a canonical class")
+        if action not in {"tokenize", "redact"}:
+            raise ResponseValidationError(f"{context}.action: unknown action {action!r}")
+        if (stage, decision, action) not in VALID_TRACE_COMBINATIONS:
+            raise ResponseValidationError(
+                f"{context}.provenance: invalid stage/decision/action combination"
+            )
+        if not source_ids or any(not source_id for source_id in source_ids):
+            raise ResponseValidationError(
+                f"{context}.provenance.source_ids: expected non-empty metadata IDs"
+            )
+        if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
+            raise ResponseValidationError(
+                f"{context}.provenance.source_ids: expected sorted duplicate-free IDs"
+            )
+        if raw_start >= raw_end or raw_end > original_text_bytes:
+            raise ResponseValidationError(
+                f"{context}: invalid original-text bounds {raw_start}:{raw_end}"
+            )
+        if raw_start not in char_boundaries or raw_end not in char_boundaries:
+            raise ResponseValidationError(
+                f"{context}: span endpoints are not original-text UTF-8 char boundaries"
+            )
+        if raw_start < previous_raw_end:
+            raise ResponseValidationError(
+                f"{context}: trace spans must be sorted and disjoint"
+            )
+        previous_raw_end = raw_end
+        predictions.append(Span(raw_start, raw_end, pii_class))
+        if action == "tokenize":
+            tokenize_items[(raw_start, raw_end, pii_class)] += 1
+
+    manifest_items: Counter[tuple[int, int, str]] = Counter()
+    for index, raw_span in enumerate(manifest):
+        span = _expect_object(raw_span, f"manifest_spans[{index}]")
+        manifest_items[
+            (int(span["raw_start"]), int(span["raw_end"]), str(span["class"]))
+        ] += 1
+    if tokenize_items != manifest_items:
+        raise ResponseValidationError(
+            "final_protection_trace: tokenize items must agree 1:1 with the final manifest"
+        )
+    return predictions
+
+
 def validate_response(document: Document, value: object) -> dict[str, object]:
     response = _expect_object(value, f"{document.uid}: response")
     if "pipeline_error_code" in response:
@@ -450,6 +543,32 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
         _validate_safety_net_stats(
             response["initial_safety_net_stats"], "initial_safety_net_stats"
         )
+        initial_stats = _expect_object(
+            response["initial_safety_net_stats"], "initial_safety_net_stats"
+        )
+        suspect_kinds = Counter(
+            _expect_object(suspect, "leak_suspect")["kind"] for suspect in suspects
+        )
+        expected_suspect_counts = {
+            "suspect_count": len(suspects),
+            "uncovered_count": suspect_kinds["uncovered"],
+            "partial_bleed_count": suspect_kinds["partial_bleed"],
+            "class_mismatch_count": suspect_kinds["class_mismatch"],
+        }
+        for field, expected in expected_suspect_counts.items():
+            if initial_stats[field] != expected:
+                raise ResponseValidationError(
+                    f"initial_safety_net_stats.{field}: telemetry/output disagreement"
+                )
+        expected_strict_rejection = (
+            expected_suspect_counts["uncovered_count"]
+            + expected_suspect_counts["partial_bleed_count"]
+            > 0
+        )
+        if response["strict_would_reject"] is not expected_strict_rejection:
+            raise ResponseValidationError(
+                "strict_would_reject: telemetry/output disagreement"
+            )
         post_policy = response["post_policy_safety_net_stats"]
         if post_policy is not None:
             _validate_safety_net_stats(post_policy, "post_policy_safety_net_stats")
@@ -457,7 +576,24 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
         _validate_manifest_integrity(
             response["manifest_integrity"], "manifest_integrity"
         )
+        integrity = _expect_object(response["manifest_integrity"], "manifest_integrity")
+        if integrity["spans"] != len(manifest):
+            raise ResponseValidationError(
+                "manifest_integrity.spans: telemetry/output disagreement"
+            )
         _validate_success_timing(response["timing"], "timing")
+        _validate_final_protection_trace(
+            document, response["final_protection_trace"], manifest
+        )
+        if any(
+            _expect_object(item, "final_protection_trace item")["action"] == "redact"
+            for item in _expect_list(
+                response["final_protection_trace"], "final_protection_trace"
+            )
+        ) and _expect_object(response["restore"], "restore")["exact"] is True:
+            raise ResponseValidationError(
+                "restore.exact: redact protection cannot be exactly reversible"
+            )
 
     if fixture_id != document.uid:
         raise ResponseValidationError(
@@ -679,6 +815,10 @@ class ContractAccumulator:
         self.post_policy_scanned_documents = 0
         self.post_policy_zero_suspect_documents = 0
         self.post_policy_suspects = 0
+        self.protection_trace_items = 0
+        self.tokenize_actions = 0
+        self.redact_actions = 0
+        self.documents_with_redact = 0
 
     def add(self, response: dict[str, object]) -> None:
         self.documents += 1
@@ -705,6 +845,15 @@ class ContractAccumulator:
         )
         self.initial_class_mismatches += int(initial["class_mismatch_count"])
         self.strict_would_reject_documents += bool(response["strict_would_reject"])
+        trace = response.get("final_protection_trace", [])
+        assert isinstance(trace, list)
+        actions = [
+            item["action"] for item in trace if isinstance(item, dict)
+        ]
+        self.protection_trace_items += len(actions)
+        self.tokenize_actions += actions.count("tokenize")
+        self.redact_actions += actions.count("redact")
+        self.documents_with_redact += "redact" in actions
 
         post_policy = response["post_policy_safety_net_stats"]
         if post_policy is not None:
@@ -739,6 +888,10 @@ class ContractAccumulator:
             - safe_ratio(self.strict_would_reject_documents, self.documents),
             "post_policy_scanned_documents": self.post_policy_scanned_documents,
             "post_policy_suspects": self.post_policy_suspects,
+            "final_protection_trace_items": self.protection_trace_items,
+            "tokenize_actions": self.tokenize_actions,
+            "redact_actions": self.redact_actions,
+            "documents_with_redact": self.documents_with_redact,
             "post_policy_zero_suspect_documents": self.post_policy_zero_suspect_documents,
             "post_policy_zero_suspect_rate": (
                 safe_ratio(
@@ -840,39 +993,12 @@ def map_clean_actions_to_raw(
     return mapped
 
 
-def effective_predictions(
+def final_trace_predictions(
     document: Document, response: dict[str, object]
 ) -> list[Span]:
-    pre_safety_manifest = response["pre_safety_manifest_spans"]
-    if pre_safety_manifest is None:
-        return [
-            validate_prediction(document, span) for span in response["manifest_spans"]
-        ]
-    assert isinstance(pre_safety_manifest, list)
-    predictions = [
-        validate_prediction(document, span) for span in pre_safety_manifest
-    ]
-    if response["safety_net_mode"] != "resolve":
-        return predictions
-
-    suspects = response["leak_suspects"]
-    assert isinstance(suspects, list)
-    has_class_mismatch = any(suspect["kind"] == "class_mismatch" for suspect in suspects)
-    actions = [
-        suspect
-        for suspect in suspects
-        if has_class_mismatch
-        or suspect["kind"] in {"uncovered", "partial_bleed"}
-    ]
-    clean_length = response["pre_safety_text_len"]
-    if not isinstance(clean_length, int):
-        raise RuntimeError(f"{document.uid}: missing pre-safety text length")
-    predictions.extend(
-        map_clean_actions_to_raw(
-            document, clean_length, pre_safety_manifest, actions
-        )
-    )
-    return predictions
+    trace = response["final_protection_trace"]
+    assert isinstance(trace, list)
+    return [validate_prediction(document, item) for item in trace]
 
 
 def run_config(
@@ -953,7 +1079,7 @@ def run_config(
                     if value is not None:
                         timing[key].append(float(value))
                 continue
-            predictions = effective_predictions(document, response)
+            predictions = final_trace_predictions(document, response)
             overall.add(document, predictions)
             per_language[document.language].add(document, predictions)
             direct_spans = [
@@ -1072,6 +1198,8 @@ SCORING_METADATA: dict[str, object] = {
         "restore_exact_rate": "must equal 1.0 for release readiness; no regression",
         "manifest_valid_document_rate": "must equal 1.0 for release readiness; no regression",
         "strict_rejections": "must equal 0 for release readiness; no regression",
+        "residual_suspects": "must equal 0 for release readiness; no regression",
+        "redact_actions": "must equal 0 for exact-reversibility readiness; no regression",
         "byte_precision": "no regression without explicit review",
         "p95_latency_ms": "lower only after every correctness gate passes",
     },
@@ -1162,6 +1290,8 @@ def _run_correctness_values(run: Mapping[str, object]) -> dict[str, int | float]
             contract["manifest_valid_document_rate"]
         ),
         "strict_rejections": int(contract["strict_would_reject_documents"]),
+        "residual_suspects": int(contract.get("post_policy_suspects", 0)),
+        "redact_actions": int(contract.get("redact_actions", 0)),
         "byte_precision": float(utf8_bytes["precision"]),
     }
 
@@ -1182,7 +1312,12 @@ def compare_scorecards(
         "manifest_valid_document_rate",
         "byte_precision",
     )
-    lower_is_better = ("leaked_labeled_utf8_bytes", "strict_rejections")
+    lower_is_better = (
+        "leaked_labeled_utf8_bytes",
+        "strict_rejections",
+        "residual_suspects",
+        "redact_actions",
+    )
     readiness_targets: dict[str, int | float] = {
         "pipeline_completion_rate": 1.0,
         "leaked_labeled_utf8_bytes": 0,
@@ -1192,6 +1327,8 @@ def compare_scorecards(
         "restore_exact_rate": 1.0,
         "manifest_valid_document_rate": 1.0,
         "strict_rejections": 0,
+        "residual_suspects": 0,
+        "redact_actions": 0,
     }
 
     for config, run in sorted(candidate_runs.items()):

@@ -280,11 +280,55 @@ class ResponseValidationTests(unittest.TestCase):
                 "restore_ms": 0.3,
                 "post_policy_scan_ms": 0.4,
             },
+            "final_protection_trace": [],
         }
+
+    def trace_document(self) -> benchmark.Document:
+        return benchmark.Document(
+            uid="synthetic-response",
+            text="é synthetic",
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, 2, "NAME"),),
+        )
+
+    def tokenize_response(self) -> dict[str, object]:
+        response = self.success_response()
+        response["manifest_spans"] = [
+            {
+                "raw_start": 0,
+                "raw_end": 2,
+                "clean_start": 0,
+                "clean_end": 8,
+                "class": "name",
+            }
+        ]
+        response["manifest_integrity"]["spans"] = 1
+        response["final_protection_trace"] = [
+            {
+                "raw_start": 0,
+                "raw_end": 2,
+                "class": "name",
+                "action": "tokenize",
+                "provenance": {
+                    "stage": "primary_pipeline",
+                    "decision": "policy",
+                    "source_ids": ["rule.name"],
+                },
+            }
+        ]
+        return response
 
     def test_missing_required_field_fails_closed(self) -> None:
         response = self.success_response()
         response.pop("restore")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_missing_final_trace_fails_closed(self) -> None:
+        response = self.success_response()
+        response.pop("final_protection_trace")
         with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
             benchmark.validate_response(self.document(), response)
 
@@ -309,6 +353,189 @@ class ResponseValidationTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
             benchmark.validate_response(self.document(), response)
+
+    def test_tokenize_trace_must_match_final_manifest_one_to_one(self) -> None:
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["class"] = "email"
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "agree 1:1"):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_rejects_unknown_item_and_provenance_fields(self) -> None:
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["raw_value"] = "synthetic"
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["provenance"].pop("source_ids")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["provenance"]["extra"] = "metadata"
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_rejects_wrong_types_and_invalid_closed_enum_combinations(self) -> None:
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["raw_start"] = False
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "expected an integer"):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["action"] = "mask"
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown action"):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["provenance"]["decision"] = "resolve"
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "invalid.*combination"):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_source_ids_are_non_empty_sorted_and_duplicate_free(self) -> None:
+        for source_ids in (
+            [],
+            ["rule.z", "rule.a"],
+            ["rule.a", "rule.a"],
+            [1],
+        ):
+            with self.subTest(source_ids=source_ids):
+                response = self.tokenize_response()
+                response["final_protection_trace"][0]["provenance"][
+                    "source_ids"
+                ] = source_ids
+                with self.assertRaises(benchmark.ResponseValidationError):
+                    benchmark.validate_response(self.trace_document(), response)
+
+    def test_all_ratified_trace_combinations_validate(self) -> None:
+        combinations = (
+            ("primary_pipeline", "policy", "tokenize"),
+            ("safety_net", "resolve", "tokenize"),
+            ("safety_net", "redact", "redact"),
+            ("safety_net", "fallback_redact", "redact"),
+        )
+        for stage, decision, action in combinations:
+            with self.subTest(stage=stage, decision=decision, action=action):
+                response = self.tokenize_response()
+                item = response["final_protection_trace"][0]
+                item["action"] = action
+                item["provenance"]["stage"] = stage
+                item["provenance"]["decision"] = decision
+                if action == "redact":
+                    response["manifest_spans"] = []
+                    response["manifest_integrity"]["spans"] = 0
+                    response["restore"]["exact"] = False
+                benchmark.validate_response(self.trace_document(), response)
+
+    def test_trace_spans_use_original_utf8_boundaries_and_are_disjoint(self) -> None:
+        response = self.tokenize_response()
+        response["final_protection_trace"][0]["raw_end"] = 1
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "char boundaries"):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.tokenize_response()
+        response["manifest_spans"].append(
+            {
+                "raw_start": 2,
+                "raw_end": 4,
+                "clean_start": 8,
+                "clean_end": 16,
+                "class": "name",
+            }
+        )
+        response["final_protection_trace"].append(
+            {
+                "raw_start": 0,
+                "raw_end": 4,
+                "class": "name",
+                "action": "tokenize",
+                "provenance": {
+                    "stage": "safety_net",
+                    "decision": "resolve",
+                    "source_ids": ["safety.name"],
+                },
+            }
+        )
+        with self.assertRaises(benchmark.ResponseValidationError):
+            benchmark.validate_response(self.trace_document(), response)
+
+    def test_pipeline_error_response_must_not_contain_final_trace(self) -> None:
+        response = {
+            "fixture_id": "synthetic-response",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "pipeline_error",
+            "timing": {"total_ms": 1.0},
+            "final_protection_trace": [],
+        }
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_telemetry_output_disagreement_fails_closed(self) -> None:
+        response = self.tokenize_response()
+        response["manifest_integrity"]["spans"] = 0
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "telemetry/output disagreement"
+        ):
+            benchmark.validate_response(self.trace_document(), response)
+
+        response = self.success_response()
+        response["initial_safety_net_stats"]["suspect_count"] = 1
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "telemetry/output disagreement"
+        ):
+            benchmark.validate_response(self.document(), response)
+
+    def test_redact_protects_safety_but_cannot_claim_exact_restore(self) -> None:
+        response = self.success_response()
+        response["restore"]["exact"] = False
+        response["final_protection_trace"] = [
+            {
+                "raw_start": 0,
+                "raw_end": 2,
+                "class": "name",
+                "action": "redact",
+                "provenance": {
+                    "stage": "safety_net",
+                    "decision": "redact",
+                    "source_ids": ["safety.name"],
+                },
+            }
+        ]
+        document = self.trace_document()
+        validated = benchmark.validate_response(document, response)
+        predictions = benchmark.final_trace_predictions(document, validated)
+        metrics = benchmark.MetricAccumulator()
+        metrics.add(document, predictions)
+        contract = benchmark.ContractAccumulator()
+        contract.add(validated)
+        self.assertEqual(metrics.result()["utf8_bytes"]["leaked"], 0)
+        self.assertEqual(contract.result()["redact_actions"], 1)
+        self.assertEqual(contract.result()["restore_exact_rate"], 0.0)
+
+        response["restore"]["exact"] = True
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "cannot be exactly"):
+            benchmark.validate_response(document, response)
+
+    def test_predictions_ignore_pre_safety_manifests_and_leak_suspects(self) -> None:
+        response = self.success_response()
+        response["leak_suspects"] = [
+            {
+                "clean_start": 0,
+                "clean_end": 2,
+                "action_start": 0,
+                "action_end": 2,
+                "class": "name",
+                "safety_net_id": "safety.name",
+                "kind": "uncovered",
+            }
+        ]
+        response["initial_safety_net_stats"].update(
+            {"suspect_count": 1, "uncovered_count": 1}
+        )
+        response["strict_would_reject"] = True
+        document = self.trace_document()
+        validated = benchmark.validate_response(document, response)
+        self.assertEqual(benchmark.final_trace_predictions(document, validated), [])
 
 
 class SamplingTests(unittest.TestCase):

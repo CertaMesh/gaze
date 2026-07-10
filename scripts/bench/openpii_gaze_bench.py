@@ -42,7 +42,6 @@ intersection_length = score.intersection_length
 interval_is_covered = score.interval_is_covered
 interval_overlaps = score.interval_overlaps
 map_clean_actions_to_raw = score.map_clean_actions_to_raw
-effective_predictions = score.effective_predictions
 validate_response = score.validate_response
 run_config = score.run_config
 git_metadata = score.git_metadata
