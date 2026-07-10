@@ -155,6 +155,51 @@ class ModelValidationTests(unittest.TestCase):
             ):
                 runner.validate_required_models(repo_root, missing, missing)
 
+    def test_present_model_with_mismatched_manifest_digest_fails_closed(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "present-model"
+            bundle.mkdir()
+            artifact = bundle / "model.onnx"
+            artifact.write_bytes(b"synthetic model bytes")
+            manifest = bundle / "SHA256SUMS"
+            manifest.write_text(
+                f"{score.sha256_file(artifact)}  model.onnx\n",
+                encoding="utf-8",
+            )
+            pin = runner.ModelPin(
+                "synthetic-present-model",
+                bundle,
+                "SHA256SUMS",
+                "0" * 64,
+            )
+            with mock.patch.object(runner, "load_model_pins", return_value=(pin,)):
+                with self.assertRaisesRegex(
+                    runner.ModelBundleError, "checksum manifest digest mismatch"
+                ):
+                    runner.validate_required_models(repo_root, bundle, bundle)
+
+    def test_present_model_with_mismatched_artifact_digest_fails_closed(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "present-model"
+            bundle.mkdir()
+            artifact = bundle / "model.onnx"
+            artifact.write_bytes(b"synthetic corrupted model bytes")
+            manifest = bundle / "SHA256SUMS"
+            manifest.write_text(f"{'0' * 64}  model.onnx\n", encoding="utf-8")
+            pin = runner.ModelPin(
+                "synthetic-present-model",
+                bundle,
+                "SHA256SUMS",
+                score.sha256_file(manifest),
+            )
+            with mock.patch.object(runner, "load_model_pins", return_value=(pin,)):
+                with self.assertRaisesRegex(
+                    runner.ModelBundleError, "artifact digest mismatch"
+                ):
+                    runner.validate_required_models(repo_root, bundle, bundle)
+
 
 class ProfileIsolationTests(unittest.TestCase):
     def document(self) -> score.Document:
