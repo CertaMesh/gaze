@@ -188,7 +188,8 @@ class ContractTests(unittest.TestCase):
                 "error_stages": {"safety_net": 1},
             },
         )
-        self.assertEqual(result["latency_ms"]["total_ms"]["median"], 1.25)
+        self.assertEqual(result["latency_ms"], {})
+        self.assertIsNone(result["process"]["documents_per_second"])
 
 
 class ResponseValidationTests(unittest.TestCase):
@@ -238,12 +239,9 @@ class ResponseValidationTests(unittest.TestCase):
                 "raw_value_mismatches": 0,
             },
             "timing": {
-                "total_ms": 1.0,
-                "pass1_ms": 0.1,
-                "pass2_ms": None,
-                "pass3_ms": 0.2,
+                "clean_ms": 1.0,
                 "restore_ms": 0.3,
-                "post_policy_scan_ms": 0.4,
+                "post_policy_scan_ms": None,
             },
             "final_protection_trace": [],
         }
@@ -308,6 +306,88 @@ class ResponseValidationTests(unittest.TestCase):
         response["manifest_integrity"]["spans"] = True
         with self.assertRaisesRegex(benchmark.ResponseValidationError, "expected an integer"):
             benchmark.validate_response(self.document(), response)
+
+    def test_success_timing_requires_the_exact_ratified_fields(self) -> None:
+        response = self.success_response()
+        response["timing"]["total_ms"] = 1.0
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+            benchmark.validate_response(self.document(), response)
+
+        response = self.success_response()
+        response["timing"].pop("clean_ms")
+        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+            benchmark.validate_response(self.document(), response)
+
+    def test_success_timing_only_allows_null_for_post_policy_scan(self) -> None:
+        benchmark.validate_response(self.document(), self.success_response())
+
+        for field in ("clean_ms", "restore_ms"):
+            with self.subTest(field=field):
+                response = self.success_response()
+                response["timing"][field] = None
+                with self.assertRaisesRegex(
+                    benchmark.ResponseValidationError, "expected a finite number"
+                ):
+                    benchmark.validate_response(self.document(), response)
+
+    def test_success_timing_rejects_non_finite_boolean_and_negative_values(
+        self,
+    ) -> None:
+        for field in ("clean_ms", "restore_ms", "post_policy_scan_ms"):
+            for value in (True, -0.1, float("nan"), float("inf")):
+                with self.subTest(field=field, value=value):
+                    response = self.success_response()
+                    response["timing"][field] = value
+                    with self.assertRaises(benchmark.ResponseValidationError):
+                        benchmark.validate_response(self.document(), response)
+
+    def test_success_latency_and_throughput_use_measured_clean_ms_only(self) -> None:
+        first = self.success_response()
+        first["timing"] = {
+            "clean_ms": 2.0,
+            "restore_ms": 10.0,
+            "post_policy_scan_ms": None,
+        }
+        second = self.success_response()
+        second["timing"] = {
+            "clean_ms": 3.0,
+            "restore_ms": 20.0,
+            "post_policy_scan_ms": 7.0,
+        }
+        process = mock.Mock()
+        process.stdin = io.StringIO()
+        process.stdout = io.StringIO(
+            "\n".join((json.dumps(first), json.dumps(second))) + "\n"
+        )
+        process.wait.return_value = 0
+        repo_root = Path(benchmark.__file__).resolve().parents[2]
+
+        with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
+            with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
+                result = benchmark.run_config(
+                    repo_root=repo_root,
+                    binary=Path(temporary) / "synthetic-runner",
+                    config="production-full-stack",
+                    documents=[self.document(), self.document()],
+                    model_dir=Path(temporary),
+                    kiji_model_dir=Path(temporary),
+                    opf_command=None,
+                    opf_checkpoint=None,
+                    opf_daemon_socket=None,
+                    threshold=0.5,
+                    diagnostics_dir=Path(temporary) / "diagnostics",
+                )
+
+        self.assertEqual(result["latency_ms"]["clean_ms"]["mean"], 2.5)
+        self.assertEqual(result["latency_ms"]["restore_ms"]["mean"], 15.0)
+        self.assertEqual(
+            result["latency_ms"]["post_policy_scan_ms"]["mean"], 7.0
+        )
+        self.assertNotIn("total_ms", result["latency_ms"])
+        self.assertNotIn("pass1_ms", result["latency_ms"])
+        self.assertNotIn("pass2_ms", result["latency_ms"])
+        self.assertNotIn("pass3_ms", result["latency_ms"])
+        self.assertEqual(result["process"]["documents_per_second"], 400.0)
 
     def test_unknown_pipeline_error_timing_field_fails_closed(self) -> None:
         response = {
