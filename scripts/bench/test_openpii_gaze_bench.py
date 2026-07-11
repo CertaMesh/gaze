@@ -499,17 +499,20 @@ class ResponseValidationTests(unittest.TestCase):
     def test_trace_rejects_source_id_reproducing_protected_request_content(
         self,
     ) -> None:
-        protected_value = "order-1234"
-        document = benchmark.Document(
-            uid="synthetic-response",
-            text=protected_value,
-            language="en",
-            region="US",
-            source_dataset="unit-test",
-            spans=(benchmark.Span(0, len(protected_value), "ORDER"),),
-        )
-        for source_id in (protected_value, f"rule-{protected_value}-source"):
-            with self.subTest(source_id=source_id):
+        for protected_value, source_id in (
+            ("order-1234", "order-1234"),
+            ("order-1234", "rule-order-1234-source"),
+            ("davlan", "ner.davlan"),
+        ):
+            with self.subTest(protected_value=protected_value, source_id=source_id):
+                document = benchmark.Document(
+                    uid="synthetic-response",
+                    text=protected_value,
+                    language="en",
+                    region="US",
+                    source_dataset="unit-test",
+                    spans=(benchmark.Span(0, len(protected_value), "ORDER"),),
+                )
                 response = self.tokenize_response()
                 response["manifest_spans"][0]["raw_end"] = len(protected_value)
                 item = response["final_protection_trace"][0]
@@ -520,6 +523,24 @@ class ResponseValidationTests(unittest.TestCase):
                     "reproduces protected request content",
                 ):
                     benchmark.validate_response(document, response)
+
+    def test_trace_accepts_unbounded_source_id_substring(self) -> None:
+        protected_value = "avl"
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text=protected_value,
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, len(protected_value), "ORDER"),),
+        )
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["raw_end"] = len(protected_value)
+        item = response["final_protection_trace"][0]
+        item["raw_end"] = len(protected_value)
+        item["provenance"]["source_ids"] = ["davlan"]
+
+        benchmark.validate_response(document, response)
 
     def test_all_ratified_trace_combinations_validate(self) -> None:
         combinations = (
