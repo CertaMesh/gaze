@@ -1,0 +1,9 @@
+[pass2_ner]
+id = "davlan-mbert-ner-hrl-onnx"
+hf_repo = "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
+hf_commit = "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
+bundle_sha = "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"   # SHA256 of the canonical SHA256SUMS manifest for these seven ONNX runtime artifacts
+runtime = "onnxruntime"
+model_file = "model.onnx"
+fetch_script = "scripts/fetch/fetch-ner-model.sh"
+required_artifacts = ["model.onnx", "tokenizer.json", "config.json", "tokenizer_config.json", "special_tokens_map.json", "vocab.txt", "labels.json"]

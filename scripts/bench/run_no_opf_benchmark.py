@@ -27,13 +27,16 @@ NEGATIVE_CORPUS = Path(
     "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"
 )
 MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
+NO_OPF_MODEL_CONFIG = Path("scripts/bench/no_opf_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
 DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
 DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     {
         "config.json",
-        "pytorch_model.bin",
+        "labels.json",
+        "model.onnx",
         "special_tokens_map.json",
+        "tokenizer.json",
         "tokenizer_config.json",
         "vocab.txt",
     }
@@ -71,6 +74,9 @@ class ModelPin:
     path: Path
     digest_kind: str
     expected_sha256: str
+    hf_repo: str | None = None
+    hf_commit: str | None = None
+    runtime: str | None = None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -136,25 +142,51 @@ def load_model_pins(
     config_path = repo_root / MODEL_CONFIG
     raw = tomllib.loads(config_path.read_text(encoding="utf-8"))
     models = {item["id"]: item for item in raw.get("model", [])}
+    no_opf_config_path = repo_root / NO_OPF_MODEL_CONFIG
+    no_opf_raw = tomllib.loads(no_opf_config_path.read_text(encoding="utf-8"))
     try:
-        davlan_sha = str(models["davlan-bert-multilingual"]["bundle_sha"])
+        pass2_ner = no_opf_raw["pass2_ner"]
+        davlan_id = str(pass2_ner["id"])
+        davlan_repo = str(pass2_ner["hf_repo"])
+        davlan_commit = str(pass2_ner["hf_commit"])
+        davlan_sha = str(pass2_ner["bundle_sha"])
+        davlan_runtime = str(pass2_ner["runtime"])
+        davlan_model_file = str(pass2_ner["model_file"])
+        davlan_fetch_script = str(pass2_ner["fetch_script"])
+        davlan_artifacts = frozenset(
+            str(item) for item in pass2_ner["required_artifacts"]
+        )
         kiji_sha = str(models["kiji-distilbert"]["bundle_sha"])
-    except KeyError as error:
+    except (KeyError, TypeError) as error:
         raise ModelBundleError(
-            f"required model pin is missing from {config_path}: {error}"
+            "required model pin is missing or invalid in "
+            f"{no_opf_config_path} or {config_path}: {error}"
         ) from error
+    if (
+        davlan_id != "davlan-mbert-ner-hrl-onnx"
+        or davlan_runtime != "onnxruntime"
+        or davlan_model_file != "model.onnx"
+        or davlan_fetch_script != "scripts/fetch/fetch-ner-model.sh"
+        or davlan_artifacts != DAVLAN_RUNTIME_ARTIFACTS
+    ):
+        raise ModelBundleError(
+            f"production pass2 NER contract is invalid in {no_opf_config_path}"
+        )
     return (
         ModelPin(
-            "davlan-bert-multilingual",
+            davlan_id,
             davlan_path,
             "SHA256SUMS",
             davlan_sha,
+            hf_repo=davlan_repo,
+            hf_commit=davlan_commit,
+            runtime=davlan_runtime,
         ),
         ModelPin("kiji-distilbert", kiji_path, "SHA256SUMS", kiji_sha),
     )
 
 
-def _validate_davlan_manifest_surface(pin: ModelPin) -> None:
+def _validate_davlan_manifest_surface(pin: ModelPin) -> dict[str, object]:
     manifest = pin.path / "SHA256SUMS"
     if not manifest.is_file() or manifest.is_symlink():
         raise ModelBundleError(
@@ -187,32 +219,61 @@ def _validate_davlan_manifest_surface(pin: ModelPin) -> None:
                 f"{pin.model_id}: unexpected bundle surface entry: {entry}"
             )
 
-    listed_artifacts: list[str] = []
-    for line_number, line in enumerate(
-        manifest.read_text(encoding="utf-8").splitlines(), start=1
-    ):
-        if not line:
-            continue
+    try:
+        manifest_lines = manifest.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError) as error:
+        raise ModelBundleError(
+            f"{pin.model_id}: cannot read checksum manifest {manifest}: {error}"
+        ) from error
+    listed_artifacts: list[tuple[str, str]] = []
+    for line_number, line in enumerate(manifest_lines, start=1):
         fields = line.split()
-        if len(fields) != 2 or len(fields[0]) != 64:
+        if (
+            len(fields) != 2
+            or len(fields[0]) != 64
+            or any(character not in "0123456789abcdef" for character in fields[0])
+        ):
             raise ModelBundleError(
                 f"{pin.model_id}: malformed {manifest.name} line {line_number}"
             )
-        relative_raw = fields[1]
+        expected, relative_raw = fields
         relative = Path(relative_raw)
         if relative.is_absolute() or ".." in relative.parts:
             raise ModelBundleError(
                 f"{pin.model_id}: unsafe path in {manifest.name} line {line_number}"
             )
-        listed_artifacts.append(relative.as_posix())
+        listed_artifacts.append((relative_raw, expected))
     if (
         len(listed_artifacts) != len(DAVLAN_RUNTIME_ARTIFACTS)
-        or set(listed_artifacts) != DAVLAN_RUNTIME_ARTIFACTS
+        or {name for name, _ in listed_artifacts} != DAVLAN_RUNTIME_ARTIFACTS
     ):
         raise ModelBundleError(
             f"{pin.model_id}: {manifest.name} must list exactly the canonical "
-            "five runtime artifacts"
+            "seven ONNX runtime artifacts"
         )
+    for relative_raw, expected in listed_artifacts:
+        artifact = pin.path / relative_raw
+        if not artifact.is_file() or artifact.is_symlink():
+            raise ModelBundleError(
+                f"{pin.model_id}: required artifact is missing or unsafe: {artifact}"
+            )
+        actual = score.sha256_file(artifact)
+        if actual != expected:
+            raise ModelBundleError(
+                f"{pin.model_id}: artifact digest mismatch for {artifact}; "
+                f"expected {expected}, got {actual}"
+            )
+    return {
+        "model_id": pin.model_id,
+        "hf_repo": pin.hf_repo,
+        "hf_commit": pin.hf_commit,
+        "runtime": pin.runtime,
+        "digest_kind": pin.digest_kind,
+        "bundle_sha": pin.expected_sha256,
+        "expected_sha256": pin.expected_sha256,
+        "observed_sha256": actual_manifest_sha,
+        "verified_artifacts": len(listed_artifacts),
+    }
 
 
 def _validate_checksum_manifest(pin: ModelPin) -> dict[str, object]:
@@ -274,8 +335,12 @@ def validate_model_bundle(pin: ModelPin) -> dict[str, object]:
             f"{pin.model_id}: model directory does not exist: {pin.path}; "
             "install the pinned local model bundle before running"
         )
-    if pin.model_id == "davlan-bert-multilingual":
-        _validate_davlan_manifest_surface(pin)
+    if pin.model_id == "davlan-mbert-ner-hrl-onnx":
+        if pin.path.is_symlink():
+            raise ModelBundleError(
+                f"{pin.model_id}: model directory is a symlink: {pin.path}"
+            )
+        return _validate_davlan_manifest_surface(pin)
     return _validate_checksum_manifest(pin)
 
 

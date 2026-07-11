@@ -18,10 +18,17 @@ import run_no_opf_benchmark as runner
 
 DAVLAN_ARTIFACTS = (
     "config.json",
-    "pytorch_model.bin",
+    "labels.json",
+    "model.onnx",
     "special_tokens_map.json",
+    "tokenizer.json",
     "tokenizer_config.json",
     "vocab.txt",
+)
+DAVLAN_HF_REPO = "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
+DAVLAN_HF_COMMIT = "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
+DAVLAN_BUNDLE_SHA = (
+    "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
 )
 
 
@@ -165,11 +172,28 @@ class ModelValidationTests(unittest.TestCase):
         manifest = bundle / "SHA256SUMS"
         manifest.write_text("".join(manifest_lines), encoding="utf-8")
         return runner.ModelPin(
-            "davlan-bert-multilingual",
+            "davlan-mbert-ner-hrl-onnx",
             bundle,
             "SHA256SUMS",
             score.sha256_file(manifest),
+            hf_repo=DAVLAN_HF_REPO,
+            hf_commit=DAVLAN_HF_COMMIT,
+            runtime="onnxruntime",
         )
+
+    def test_production_davlan_pin_is_separate_and_onnx_specific(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        davlan, kiji = runner.load_model_pins(
+            repo_root,
+            Path("/synthetic/davlan"),
+            Path("/synthetic/kiji"),
+        )
+        self.assertEqual(davlan.model_id, "davlan-mbert-ner-hrl-onnx")
+        self.assertEqual(davlan.hf_repo, DAVLAN_HF_REPO)
+        self.assertEqual(davlan.hf_commit, DAVLAN_HF_COMMIT)
+        self.assertEqual(davlan.expected_sha256, DAVLAN_BUNDLE_SHA)
+        self.assertEqual(davlan.runtime, "onnxruntime")
+        self.assertEqual(kiji.model_id, "kiji-distilbert")
 
     def test_missing_model_is_an_actionable_typed_error(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
@@ -187,9 +211,37 @@ class ModelValidationTests(unittest.TestCase):
         self.assertEqual(result["digest_kind"], "SHA256SUMS")
         self.assertEqual(result["observed_sha256"], pin.expected_sha256)
         self.assertEqual(result["verified_artifacts"], len(DAVLAN_ARTIFACTS))
+        self.assertEqual(result["hf_repo"], DAVLAN_HF_REPO)
+        self.assertEqual(result["hf_commit"], DAVLAN_HF_COMMIT)
+        self.assertEqual(result["bundle_sha"], pin.expected_sha256)
+
+    def test_davlan_transformers_bundle_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "davlan"
+            pin = self.write_davlan_bundle(bundle)
+            (bundle / "model.onnx").unlink()
+            (bundle / "pytorch_model.bin").write_bytes(
+                b"synthetic transformers weights"
+            )
+            with self.assertRaisesRegex(
+                runner.ModelBundleError, "unexpected bundle surface"
+            ):
+                runner.validate_model_bundle(pin)
+
+    def test_davlan_safetensors_bundle_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "davlan"
+            pin = self.write_davlan_bundle(bundle)
+            (bundle / "model.safetensors").write_bytes(
+                b"synthetic alternate weights"
+            )
+            with self.assertRaisesRegex(
+                runner.ModelBundleError, "unexpected bundle surface"
+            ):
+                runner.validate_model_bundle(pin)
 
     def test_davlan_extra_bundle_material_fails_closed(self) -> None:
-        for extra in ("model.safetensors", "model.onnx", "README.md", "cache/tree"):
+        for extra in ("pytorch_model.bin", "README.md"):
             with self.subTest(extra=extra), tempfile.TemporaryDirectory() as tmp:
                 bundle = Path(tmp) / "davlan"
                 pin = self.write_davlan_bundle(bundle)
@@ -200,6 +252,16 @@ class ModelValidationTests(unittest.TestCase):
                     runner.ModelBundleError, "unexpected bundle surface"
                 ):
                     runner.validate_model_bundle(pin)
+
+    def test_davlan_subdirectory_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "davlan"
+            pin = self.write_davlan_bundle(bundle)
+            (bundle / "cache").mkdir()
+            with self.assertRaisesRegex(
+                runner.ModelBundleError, "unexpected bundle surface"
+            ):
+                runner.validate_model_bundle(pin)
 
     def test_davlan_missing_runtime_artifact_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -259,6 +321,42 @@ class ModelValidationTests(unittest.TestCase):
                 runner.ModelBundleError, "must list exactly"
             ):
                 runner.validate_model_bundle(updated_pin)
+
+    def test_davlan_malformed_manifest_line_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp) / "davlan"
+            pin = self.write_davlan_bundle(bundle)
+            manifest = bundle / "SHA256SUMS"
+            lines = manifest.read_text(encoding="utf-8").splitlines()
+            lines[0] = "not-a-sha  config.json"
+            manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            updated_pin = runner.ModelPin(
+                pin.model_id,
+                pin.path,
+                pin.digest_kind,
+                score.sha256_file(manifest),
+            )
+            with self.assertRaisesRegex(runner.ModelBundleError, "malformed"):
+                runner.validate_model_bundle(updated_pin)
+
+    def test_davlan_unsafe_manifest_path_fails_closed(self) -> None:
+        for unsafe in ("../config.json", "/config.json"):
+            with self.subTest(unsafe=unsafe), tempfile.TemporaryDirectory() as tmp:
+                bundle = Path(tmp) / "davlan"
+                pin = self.write_davlan_bundle(bundle)
+                manifest = bundle / "SHA256SUMS"
+                lines = manifest.read_text(encoding="utf-8").splitlines()
+                digest = lines[0].split()[0]
+                lines[0] = f"{digest}  {unsafe}"
+                manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+                updated_pin = runner.ModelPin(
+                    pin.model_id,
+                    pin.path,
+                    pin.digest_kind,
+                    score.sha256_file(manifest),
+                )
+                with self.assertRaisesRegex(runner.ModelBundleError, "unsafe path"):
+                    runner.validate_model_bundle(updated_pin)
 
     def test_davlan_artifact_digest_mismatch_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
