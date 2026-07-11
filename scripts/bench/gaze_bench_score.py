@@ -523,7 +523,14 @@ def _validate_final_protection_trace(
             "final_protection_trace: tokenize items must agree 1:1 with the final manifest"
         )
     for source_id, context in source_identifiers:
-        if any(raw_value and raw_value in source_id for raw_value in protected_raw_values):
+        if any(
+            raw_value
+            and re.search(
+                rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}(?:$|(?=[._:/-]))",
+                source_id,
+            )
+            for raw_value in protected_raw_values
+        ):
             raise ResponseValidationError(
                 f"{context}: identifier reproduces protected request content"
             )
