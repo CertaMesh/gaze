@@ -54,16 +54,26 @@ silently skipped.
 
 | Model | Default location | Pin source | Validation |
 | --- | --- | --- | --- |
-| Davlan multilingual BERT NER | `~/.local/share/gaze/models/davlan-mbert-ner-hrl` | `davlan-bert-multilingual.bundle_sha` in `crates/gaze-recognizers/benches/ner_models.toml` | pinned `SHA256SUMS` digest, exact five-artifact manifest and bundle surface, then every artifact digest |
-| Kiji DistilBERT | `~/.local/share/gaze/models/kiji-distilbert` | `kiji-distilbert.bundle_sha` in the same TOML | pinned `SHA256SUMS` digest, then every listed artifact digest |
+| Davlan multilingual BERT NER (production pass2 ONNX) | `~/.local/share/gaze/models/davlan-mbert-ner-hrl` | `[pass2_ner]` in `scripts/bench/no_opf_models.toml` | pinned `SHA256SUMS` digest, exact seven-artifact manifest and eight-file bundle surface, then every artifact digest |
+| Kiji DistilBERT | `~/.local/share/gaze/models/kiji-distilbert` | `kiji-distilbert.bundle_sha` in `crates/gaze-recognizers/benches/ner_models.toml` | pinned `SHA256SUMS` digest, then every listed artifact digest |
 
 Override locations with `--model-dir` and `--kiji-model-dir`. The runner rejects
 symlinks in validated bundle material. Davlan's canonical bundle contains exactly
-`config.json`, `pytorch_model.bin`, `special_tokens_map.json`,
-`tokenizer_config.json`, `vocab.txt`, and `SHA256SUMS`. Its pin is the SHA-256 of
-that `SHA256SUMS` file. The manifest must list exactly those five runtime
-artifacts, and the directory may contain no other files or directories; missing
-artifacts, alternate weights, cache metadata, and all other extras fail closed.
+`model.onnx`, `tokenizer.json`, `config.json`, `tokenizer_config.json`,
+`special_tokens_map.json`, `vocab.txt`, `labels.json`, and `SHA256SUMS`. Its
+production provenance is repository
+`onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX`, commit
+`cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8`, and canonical manifest digest
+`7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16`.
+The manifest must list exactly the seven runtime artifacts and match that digest;
+the directory may contain no other files, directories, or symlinks. Missing
+artifacts, Transformers or safetensors weights, cache metadata, and all other
+extras fail closed.
+
+This production ONNX pass2 pin is intentionally separate from
+`crates/gaze-recognizers/benches/ner_models.toml`. That file remains the research
+Transformers model matrix and is not the Davlan source of truth for the canonical
+no-OPF runner. Kiji continues to load from its existing `ner_models.toml` entry.
 
 ## Outputs and verdicts
 
