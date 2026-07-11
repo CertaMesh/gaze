@@ -54,11 +54,16 @@ silently skipped.
 
 | Model | Default location | Pin source | Validation |
 | --- | --- | --- | --- |
-| Davlan multilingual BERT NER | `~/.local/share/gaze/models/davlan-mbert-ner-hrl` | `davlan-bert-multilingual.bundle_sha` in `crates/gaze-recognizers/benches/ner_models.toml` | SHA-256 over the complete deterministic file tree |
+| Davlan multilingual BERT NER | `~/.local/share/gaze/models/davlan-mbert-ner-hrl` | `davlan-bert-multilingual.bundle_sha` in `crates/gaze-recognizers/benches/ner_models.toml` | pinned `SHA256SUMS` digest, exact five-artifact manifest and bundle surface, then every artifact digest |
 | Kiji DistilBERT | `~/.local/share/gaze/models/kiji-distilbert` | `kiji-distilbert.bundle_sha` in the same TOML | pinned `SHA256SUMS` digest, then every listed artifact digest |
 
 Override locations with `--model-dir` and `--kiji-model-dir`. The runner rejects
-symlinks in validated bundle material.
+symlinks in validated bundle material. Davlan's canonical bundle contains exactly
+`config.json`, `pytorch_model.bin`, `special_tokens_map.json`,
+`tokenizer_config.json`, `vocab.txt`, and `SHA256SUMS`. Its pin is the SHA-256 of
+that `SHA256SUMS` file. The manifest must list exactly those five runtime
+artifacts, and the directory may contain no other files or directories; missing
+artifacts, alternate weights, cache metadata, and all other extras fail closed.
 
 ## Outputs and verdicts
 

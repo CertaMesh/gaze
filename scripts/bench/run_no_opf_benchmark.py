@@ -29,6 +29,16 @@ NEGATIVE_CORPUS = Path(
 MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
 DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
+DAVLAN_RUNTIME_ARTIFACTS = frozenset(
+    {
+        "config.json",
+        "pytorch_model.bin",
+        "special_tokens_map.json",
+        "tokenizer_config.json",
+        "vocab.txt",
+    }
+)
+DAVLAN_BUNDLE_SURFACE = DAVLAN_RUNTIME_ARTIFACTS | {"SHA256SUMS"}
 
 
 class RunnerError(RuntimeError):
@@ -120,22 +130,6 @@ def repo_path(repo_root: Path, path: Path) -> Path:
     return path if path.is_absolute() else repo_root / path
 
 
-def sha256_tree(path: Path) -> str:
-    digest = hashlib.sha256()
-    for child in sorted(path.rglob("*")):
-        if child.is_symlink():
-            raise ModelBundleError(
-                f"model bundle {path} contains a symlink: {child.relative_to(path)}"
-            )
-        if child.is_file():
-            relative = child.relative_to(path).as_posix().encode("utf-8")
-            digest.update(relative)
-            digest.update(b"\0")
-            digest.update(score.sha256_file(child).encode("ascii"))
-            digest.update(b"\0")
-    return digest.hexdigest()
-
-
 def load_model_pins(
     repo_root: Path, davlan_path: Path, kiji_path: Path
 ) -> tuple[ModelPin, ModelPin]:
@@ -150,9 +144,75 @@ def load_model_pins(
             f"required model pin is missing from {config_path}: {error}"
         ) from error
     return (
-        ModelPin("davlan-bert-multilingual", davlan_path, "tree", davlan_sha),
+        ModelPin(
+            "davlan-bert-multilingual",
+            davlan_path,
+            "SHA256SUMS",
+            davlan_sha,
+        ),
         ModelPin("kiji-distilbert", kiji_path, "SHA256SUMS", kiji_sha),
     )
+
+
+def _validate_davlan_manifest_surface(pin: ModelPin) -> None:
+    manifest = pin.path / "SHA256SUMS"
+    if not manifest.is_file() or manifest.is_symlink():
+        raise ModelBundleError(
+            f"{pin.model_id}: required checksum manifest is missing or unsafe: "
+            f"{manifest}; install the pinned local model bundle before running"
+        )
+    actual_manifest_sha = score.sha256_file(manifest)
+    if actual_manifest_sha != pin.expected_sha256:
+        raise ModelBundleError(
+            f"{pin.model_id}: checksum manifest digest mismatch at {manifest}; "
+            f"expected {pin.expected_sha256}, got {actual_manifest_sha}"
+        )
+
+    entries = list(pin.path.iterdir())
+    actual_surface = {entry.name for entry in entries}
+    if actual_surface != DAVLAN_BUNDLE_SURFACE:
+        missing = sorted(DAVLAN_BUNDLE_SURFACE - actual_surface)
+        unexpected = sorted(actual_surface - DAVLAN_BUNDLE_SURFACE)
+        raise ModelBundleError(
+            f"{pin.model_id}: unexpected bundle surface at {pin.path}; "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    for entry in entries:
+        if entry.is_symlink():
+            raise ModelBundleError(
+                f"{pin.model_id}: bundle surface contains a symlink: {entry}"
+            )
+        if not entry.is_file():
+            raise ModelBundleError(
+                f"{pin.model_id}: unexpected bundle surface entry: {entry}"
+            )
+
+    listed_artifacts: list[str] = []
+    for line_number, line in enumerate(
+        manifest.read_text(encoding="utf-8").splitlines(), start=1
+    ):
+        if not line:
+            continue
+        fields = line.split()
+        if len(fields) != 2 or len(fields[0]) != 64:
+            raise ModelBundleError(
+                f"{pin.model_id}: malformed {manifest.name} line {line_number}"
+            )
+        relative_raw = fields[1]
+        relative = Path(relative_raw)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ModelBundleError(
+                f"{pin.model_id}: unsafe path in {manifest.name} line {line_number}"
+            )
+        listed_artifacts.append(relative.as_posix())
+    if (
+        len(listed_artifacts) != len(DAVLAN_RUNTIME_ARTIFACTS)
+        or set(listed_artifacts) != DAVLAN_RUNTIME_ARTIFACTS
+    ):
+        raise ModelBundleError(
+            f"{pin.model_id}: {manifest.name} must list exactly the canonical "
+            "five runtime artifacts"
+        )
 
 
 def _validate_checksum_manifest(pin: ModelPin) -> dict[str, object]:
@@ -214,21 +274,9 @@ def validate_model_bundle(pin: ModelPin) -> dict[str, object]:
             f"{pin.model_id}: model directory does not exist: {pin.path}; "
             "install the pinned local model bundle before running"
         )
-    if pin.digest_kind != "tree":
-        return _validate_checksum_manifest(pin)
-    actual = sha256_tree(pin.path)
-    if actual != pin.expected_sha256:
-        raise ModelBundleError(
-            f"{pin.model_id}: model bundle digest mismatch at {pin.path}; "
-            f"expected {pin.expected_sha256}, got {actual}"
-        )
-    return {
-        "model_id": pin.model_id,
-        "digest_kind": "tree",
-        "expected_sha256": pin.expected_sha256,
-        "observed_sha256": actual,
-        "verified_artifacts": sum(1 for item in pin.path.rglob("*") if item.is_file()),
-    }
+    if pin.model_id == "davlan-bert-multilingual":
+        _validate_davlan_manifest_surface(pin)
+    return _validate_checksum_manifest(pin)
 
 
 def validate_required_models(
