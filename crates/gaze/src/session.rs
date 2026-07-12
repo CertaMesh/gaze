@@ -306,6 +306,26 @@ impl Session {
         })
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    #[doc(hidden)]
+    /// Constructs a benchmark/test-only Session with a fixed token prefix.
+    ///
+    /// This constructor is forbidden in production; production callers must use
+    /// [`Session::new`] so session unlinkability continues to use fresh randomness.
+    pub fn new_with_session_hex_for_tests(scope: Scope, session_hex: [u8; 4]) -> Result<Self> {
+        Ok(Self {
+            scope,
+            session_hex,
+            audit_session_id: new_audit_session_id(),
+            next_by_class: DashMap::new(),
+            token_by_value: DashMap::new(),
+            value_by_token: DashMap::new(),
+            prefix_cache: DashMap::new(),
+            restore_regex_cache: RwLock::new(None),
+            signing_key: SessionKey::generate()?,
+        })
+    }
+
     pub fn from_policy(policy: &Policy) -> Result<Self> {
         Self::from_policy_with_ttl_override(policy, None)
     }
@@ -1441,6 +1461,21 @@ fn snapshot_signing_preimage(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_only_constructor_pins_session_hex_without_changing_token_contract() {
+        let session =
+            Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x01, 0x23, 0x45, 0x67])
+                .expect("fixed-prefix session");
+
+        assert_eq!(session.session_hex(), "01234567");
+        assert_eq!(
+            session
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .expect("synthetic email token"),
+            "<01234567:Email_1>"
+        );
+    }
 
     fn signed_snapshot_v03(payload: SnapshotPayload) -> SensitiveSnapshot {
         let payload_bytes = serde_json::to_vec(&payload).expect("serialize payload");
