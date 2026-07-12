@@ -7,3 +7,15 @@ runtime = "onnxruntime"
 model_file = "model.onnx"
 fetch_script = "scripts/fetch/fetch-ner-model.sh"
 required_artifacts = ["model.onnx", "tokenizer.json", "config.json", "tokenizer_config.json", "special_tokens_map.json", "vocab.txt", "labels.json"]
+
+[builtin_source_ids]
+ids = [
+    "ner",
+    "kiji-distilbert",
+    "kiji-distilbert-ort",
+    "kiji-distilbert-tract",
+    "kiji-distilbert-candle",
+    "kiji-distilbert-subprocess",
+    "openai-privacy-filter",
+    "openai-privacy-filter-subprocess",
+]

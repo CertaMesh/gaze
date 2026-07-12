@@ -7,6 +7,7 @@ import json
 import socket
 import sys
 import tempfile
+import tomllib
 import types
 import unittest
 from pathlib import Path
@@ -18,6 +19,30 @@ import gaze_bench_score as benchmark
 import openpii_gaze_bench as openpii_benchmark
 import dataiku_en_de_gaze_bench as dataiku_benchmark
 import opf_daemon
+
+
+EXPECTED_BUILTIN_SOURCE_IDS = frozenset(
+    {
+        "ner",
+        "kiji-distilbert",
+        "kiji-distilbert-ort",
+        "kiji-distilbert-tract",
+        "kiji-distilbert-candle",
+        "kiji-distilbert-subprocess",
+        "openai-privacy-filter",
+        "openai-privacy-filter-subprocess",
+    }
+)
+BUILTIN_SOURCE_LITERAL_PATHS = (
+    "crates/gaze-recognizers/src/ner/recognizer.rs",
+    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/mod.rs",
+    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/ort.rs",
+    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/tract.rs",
+    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/candle.rs",
+    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/subprocess.rs",
+    "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs",
+    "crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs",
+)
 
 
 class OffsetTests(unittest.TestCase):
@@ -613,6 +638,24 @@ class ResponseValidationTests(unittest.TestCase):
 
         benchmark.validate_response(document, response)
 
+    def test_trace_accepts_builtin_id_equal_to_protected_content(self) -> None:
+        protected_value = "ner"
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text=protected_value,
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, len(protected_value), "ORDER"),),
+        )
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["raw_end"] = len(protected_value)
+        item = response["final_protection_trace"][0]
+        item["raw_end"] = len(protected_value)
+        item["provenance"]["source_ids"] = ["ner"]
+
+        benchmark.validate_response(document, response)
+
     def test_trace_rejects_novel_id_with_bounded_protected_segment(self) -> None:
         protected_value = "de"
         document = benchmark.Document(
@@ -1188,6 +1231,40 @@ class ConfigTests(unittest.TestCase):
             "davlan-mbert-ner-hrl-onnx",
             benchmark.COMMITTED_SOURCE_ID_VOCABULARY,
         )
+        self.assertTrue(
+            EXPECTED_BUILTIN_SOURCE_IDS.issubset(
+                benchmark.COMMITTED_SOURCE_ID_VOCABULARY
+            )
+        )
+
+    def test_builtin_source_id_declaration_matches_committed_source_literals(
+        self,
+    ) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        with (repo_root / "scripts/bench/no_opf_models.toml").open("rb") as handle:
+            models = tomllib.load(handle)
+        declared = models["builtin_source_ids"]["ids"]
+        self.assertEqual(len(declared), len(EXPECTED_BUILTIN_SOURCE_IDS))
+        self.assertEqual(frozenset(declared), EXPECTED_BUILTIN_SOURCE_IDS)
+        source_text = "\n".join(
+            (repo_root / relative_path).read_text(encoding="utf-8")
+            for relative_path in BUILTIN_SOURCE_LITERAL_PATHS
+        )
+
+        def assert_committed_literals(source_ids: list[str]) -> None:
+            for source_id in source_ids:
+                self.assertIn(
+                    f'"{source_id}"',
+                    source_text,
+                    f"declared built-in source ID lacks a committed source literal: "
+                    f"{source_id}",
+                )
+
+        assert_committed_literals(declared)
+        with self.assertRaisesRegex(AssertionError, "fabricated-built-in-source"):
+            assert_committed_literals(
+                [*declared, "fabricated-built-in-source"]
+            )
 
     def test_committed_source_id_vocabulary_load_failure_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -1196,6 +1273,33 @@ class ConfigTests(unittest.TestCase):
                 "committed rulepack directory is missing",
             ):
                 benchmark.load_committed_source_id_vocabulary(Path(temporary))
+
+    def test_builtin_source_id_declaration_failures_fail_closed(self) -> None:
+        declarations = {
+            "missing": "",
+            "malformed": "builtin_source_ids = []\n",
+            "empty": "[builtin_source_ids]\nids = []\n",
+        }
+        for name, declaration in declarations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                repo_root = Path(temporary)
+                rulepack_dir = repo_root / "crates/gaze-recognizers/embedded"
+                rulepack_dir.mkdir(parents=True)
+                (rulepack_dir / "synthetic.toml").write_text(
+                    '[[recognizers]]\nid = "synthetic-rule"\n',
+                    encoding="utf-8",
+                )
+                model_path = repo_root / "scripts/bench/no_opf_models.toml"
+                model_path.parent.mkdir(parents=True)
+                model_path.write_text(
+                    f'{declaration}[synthetic_model]\nid = "synthetic-model"\n',
+                    encoding="utf-8",
+                )
+                with self.assertRaisesRegex(
+                    benchmark.SourceIdVocabularyError,
+                    "builtin_source_ids|built-in source-ID declaration",
+                ):
+                    benchmark.load_committed_source_id_vocabulary(repo_root)
 
     def test_all_no_opf_config_names_are_present_and_spelled_exactly(self) -> None:
         expected = (
