@@ -236,6 +236,7 @@ fn handle_request(
     let (clean_doc, manifest, report, final_protection_trace) = match clean_result {
         Ok(result) => result,
         Err(error) => {
+            emit_invalid_output_diagnostic("clean", &error);
             return Ok(Outcome::PipelineError {
                 fixture_id: request.fixture_id,
                 stage: "clean",
@@ -270,6 +271,7 @@ fn handle_request(
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
             Ok(result) => result,
             Err(error) => {
+                emit_invalid_output_diagnostic("post_policy_scan", &error);
                 return Ok(Outcome::PipelineError {
                     fixture_id: request.fixture_id,
                     stage: "post_policy_scan",
@@ -391,6 +393,31 @@ fn pipeline_error_code(error: &gaze::Error) -> &'static str {
         gaze::Error::SafetyNet(_) => "safety_net_error",
         _ => "pipeline_error",
     }
+}
+
+fn emit_invalid_output_diagnostic(stage: &str, error: &gaze::Error) {
+    if let Some(reason) = invalid_output_reason(error) {
+        eprintln!("gaze_bench_invalid_output stage={stage} reason={reason}");
+    }
+}
+
+fn invalid_output_reason(error: &gaze::Error) -> Option<&'static str> {
+    let gaze::Error::SafetyNet(SafetyNetError::InvalidOutput { message }) = error else {
+        return None;
+    };
+    Some(match message.as_str() {
+        "kiji ort returned invalid logits shape" => "logits_shape",
+        "kiji returned out-of-bounds span" | "kiji returned overlapping spans" => {
+            "raw_span_normalization"
+        }
+        "clean-to-raw start mapping failed"
+        | "clean-to-raw end mapping failed"
+        | "empty clean-to-raw mapping" => "clean_to_raw_mapping",
+        "overlapping protection trace" | "trace-manifest mismatch" | "manifest-trace mismatch" => {
+            "trace_manifest"
+        }
+        _ => "other_invalid_output",
+    })
 }
 
 fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
@@ -1201,6 +1228,25 @@ mod tests {
         for (error, expected) in cases {
             assert_eq!(pipeline_error_code(&error), expected);
         }
+    }
+
+    #[test]
+    fn invalid_output_diagnostics_are_non_pii_branch_labels() {
+        let cases = [
+            ("kiji ort returned invalid logits shape", "logits_shape"),
+            ("kiji returned overlapping spans", "raw_span_normalization"),
+            ("clean-to-raw start mapping failed", "clean_to_raw_mapping"),
+            ("trace-manifest mismatch", "trace_manifest"),
+            ("synthetic unknown branch", "other_invalid_output"),
+        ];
+
+        for (message, expected) in cases {
+            let error = gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
+                message: message.to_string(),
+            });
+            assert_eq!(invalid_output_reason(&error), Some(expected));
+        }
+        assert_eq!(invalid_output_reason(&gaze::Error::ExportForbidden), None);
     }
 
     #[test]
