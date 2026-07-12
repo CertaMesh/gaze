@@ -11,6 +11,7 @@ use gaze::{
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const BENCHMARK_ACTIVE_LOCALES: &[LocaleTag] = &[
     LocaleTag::EnUs,
@@ -222,8 +223,9 @@ fn handle_request(
         .iter()
         .map(|locale| LocaleTag::parse(locale))
         .collect::<Result<Vec<_>, _>>()?;
+    let session_hex = session_hex_for_fixture(&request.fixture_id);
     let raw_text = request.text;
-    let session = Session::new(Scope::Ephemeral)?;
+    let session = Session::new_with_session_hex_for_tests(Scope::Ephemeral, session_hex)?;
     let clean_start = Instant::now();
     let clean_result = full.clean_text_with_safety_net_policy_detect_context_and_protection_trace(
         &session,
@@ -236,6 +238,7 @@ fn handle_request(
     let (clean_doc, manifest, report, final_protection_trace) = match clean_result {
         Ok(result) => result,
         Err(error) => {
+            emit_invalid_output_diagnostic("clean", &error);
             return Ok(Outcome::PipelineError {
                 fixture_id: request.fixture_id,
                 stage: "clean",
@@ -270,6 +273,7 @@ fn handle_request(
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
             Ok(result) => result,
             Err(error) => {
+                emit_invalid_output_diagnostic("post_policy_scan", &error);
                 return Ok(Outcome::PipelineError {
                     fixture_id: request.fixture_id,
                     stage: "post_policy_scan",
@@ -332,6 +336,11 @@ fn handle_request(
     }))
 }
 
+fn session_hex_for_fixture(fixture_id: &str) -> [u8; 4] {
+    let digest = Sha256::digest(fixture_id.as_bytes());
+    [digest[0], digest[1], digest[2], digest[3]]
+}
+
 #[derive(Debug, Serialize)]
 struct Response {
     fixture_id: String,
@@ -391,6 +400,31 @@ fn pipeline_error_code(error: &gaze::Error) -> &'static str {
         gaze::Error::SafetyNet(_) => "safety_net_error",
         _ => "pipeline_error",
     }
+}
+
+fn emit_invalid_output_diagnostic(stage: &str, error: &gaze::Error) {
+    if let Some(reason) = invalid_output_reason(error) {
+        eprintln!("gaze_bench_invalid_output stage={stage} reason={reason}");
+    }
+}
+
+fn invalid_output_reason(error: &gaze::Error) -> Option<&'static str> {
+    let gaze::Error::SafetyNet(SafetyNetError::InvalidOutput { message }) = error else {
+        return None;
+    };
+    Some(match message.as_str() {
+        "kiji ort returned invalid logits shape" => "logits_shape",
+        "kiji returned out-of-bounds span" | "kiji returned overlapping spans" => {
+            "raw_span_normalization"
+        }
+        "clean-to-raw start mapping failed"
+        | "clean-to-raw end mapping failed"
+        | "empty clean-to-raw mapping" => "clean_to_raw_mapping",
+        "overlapping protection trace" | "trace-manifest mismatch" | "manifest-trace mismatch" => {
+            "trace_manifest"
+        }
+        _ => "other_invalid_output",
+    })
 }
 
 fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
@@ -843,6 +877,10 @@ mod tests {
     use super::*;
     use gaze::RawDocument;
 
+    const PRODUCER_DETERMINISM_CHILD: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_CHILD";
+    const PRODUCER_DETERMINISM_BEGIN: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_BEGIN";
+    const PRODUCER_DETERMINISM_END: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_END";
+
     fn rule_floor_response(fixture_id: &str, locale: &str, text: &str) -> Response {
         let config = BenchConfig::RuleFloorExtended;
         let full = build_pipeline(config).expect("rule-floor-extended pipeline should build");
@@ -856,6 +894,13 @@ mod tests {
             Outcome::Success(response) => response,
             outcome => panic!("expected a success response, got {outcome:?}"),
         }
+    }
+
+    #[test]
+    fn fixture_session_hex_is_stable_and_varies_by_document() {
+        let first = session_hex_for_fixture("synthetic-document-1");
+        assert_eq!(first, session_hex_for_fixture("synthetic-document-1"));
+        assert_ne!(first, session_hex_for_fixture("synthetic-document-2"));
     }
 
     fn assert_success_timing_contract(response: &Response, expects_post_policy_scan: bool) {
@@ -1204,6 +1249,25 @@ mod tests {
     }
 
     #[test]
+    fn invalid_output_diagnostics_are_non_pii_branch_labels() {
+        let cases = [
+            ("kiji ort returned invalid logits shape", "logits_shape"),
+            ("kiji returned overlapping spans", "raw_span_normalization"),
+            ("clean-to-raw start mapping failed", "clean_to_raw_mapping"),
+            ("trace-manifest mismatch", "trace_manifest"),
+            ("synthetic unknown branch", "other_invalid_output"),
+        ];
+
+        for (message, expected) in cases {
+            let error = gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
+                message: message.to_string(),
+            });
+            assert_eq!(invalid_output_reason(&error), Some(expected));
+        }
+        assert_eq!(invalid_output_reason(&gaze::Error::ExportForbidden), None);
+    }
+
+    #[test]
     fn pipeline_error_response_has_exact_jsonl_shape() {
         let response = PipelineErrorResponse {
             fixture_id: "failure-1",
@@ -1247,6 +1311,127 @@ mod tests {
         )
         .expect("error response should be written");
         assert_eq!(output, format!("{serialized}\n").as_bytes());
+    }
+
+    #[cfg(feature = "safety-net-kiji")]
+    #[test]
+    #[ignore = "requires pinned NER and Kiji bundles; verifies fresh-process full-stack producer determinism"]
+    fn full_stack_kiji_producer_is_deterministic_across_fresh_processes() {
+        if std::env::var_os(PRODUCER_DETERMINISM_CHILD).is_some() {
+            run_producer_determinism_child();
+            return;
+        }
+
+        let home = PathBuf::from(std::env::var_os("HOME").unwrap_or_default());
+        let ner_model_dir = std::env::var_os("GAZE_NER_MODEL_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local/share/gaze/models/davlan-mbert-ner-hrl"));
+        let kiji_model_dir = std::env::var_os("GAZE_KIJI_DISTILBERT_MODEL_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".local/share/gaze/models/kiji-distilbert"));
+        assert!(
+            ner_model_dir.is_dir(),
+            "pinned NER bundle is missing at {}",
+            ner_model_dir.display()
+        );
+        assert!(
+            kiji_model_dir.is_dir(),
+            "pinned Kiji bundle is missing at {}",
+            kiji_model_dir.display()
+        );
+
+        let current_exe = std::env::current_exe().expect("resolve example test executable");
+        let mut baseline: Option<Vec<u8>> = None;
+        for run in 1..=3 {
+            let output = std::process::Command::new(&current_exe)
+                .arg("--exact")
+                .arg("tests::full_stack_kiji_producer_is_deterministic_across_fresh_processes")
+                .arg("--ignored")
+                .arg("--nocapture")
+                .env(PRODUCER_DETERMINISM_CHILD, "1")
+                .env("GAZE_NER_MODEL_DIR", &ner_model_dir)
+                .env("GAZE_NER_THRESHOLD", "0.3")
+                .env("GAZE_KIJI_DISTILBERT_MODEL_DIR", &kiji_model_dir)
+                .env("RUST_TEST_THREADS", "1")
+                .output()
+                .unwrap_or_else(|error| panic!("spawn producer child {run}: {error}"));
+            assert!(
+                output.status.success(),
+                "producer child {run} failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let canonical = extract_producer_determinism_output(&output.stdout);
+            if let Some(expected) = &baseline {
+                assert_eq!(
+                    canonical, *expected,
+                    "full-stack producer diverged in fresh child process {run}"
+                );
+            } else {
+                baseline = Some(canonical);
+            }
+        }
+
+        println!("full-stack Kiji producer determinism verified across 3 fresh processes");
+    }
+
+    #[cfg(feature = "safety-net-kiji")]
+    fn run_producer_determinism_child() {
+        let config = BenchConfig::FullStackKijiResolve;
+        let full = build_pipeline(config).expect("build full-stack Kiji pipeline");
+        println!("{PRODUCER_DETERMINISM_BEGIN}");
+        for request in [
+            Request {
+                fixture_id: "producer-determinism-en-1".to_string(),
+                locale_chain: vec!["en-US".to_string()],
+                text: "Dr. Schmidt from Example Labs reviews GAZE-1001 in Berlin. Contact alice@example.invalid or +1-555-0101. This synthetic paragraph repeats Example Labs, Dr. Schmidt, Berlin, and GAZE-1001 so the full producer exercises deterministic recognition, Pass 2 NER, Kiji resolution, manifest restoration, and post-policy scanning across a document longer than three hundred bytes.".to_string(),
+            },
+            Request {
+                fixture_id: "producer-determinism-de-2".to_string(),
+                locale_chain: vec!["de-DE".to_string()],
+                text: "Dr. Schmidt prueft fuer Example Labs den synthetischen Vorgang GAZE-1002 in Berlin. Der Testkontakt lautet alice@example.invalid und die Testnummer +49 1555 0112233. Dieser erfundene Absatz wiederholt Example Labs, Dr. Schmidt, Berlin und GAZE-1002, damit der vollstaendige Produzent Erkennung, Pass 2 NER, Kiji-Aufloesung, Manifest-Wiederherstellung und die abschliessende Pruefung ueber mehr als dreihundert Bytes ausfuehrt.".to_string(),
+            },
+        ] {
+            let outcome =
+                handle_request(config, &full, request).expect("handle synthetic Kiji request");
+            let canonical = match outcome {
+                Outcome::Success(response) => {
+                    let mut value =
+                        serde_json::to_value(response).expect("serialize producer response");
+                    value
+                        .as_object_mut()
+                        .expect("producer response object")
+                        .remove("timing");
+                    value
+                }
+                Outcome::PipelineError {
+                    fixture_id,
+                    stage,
+                    code,
+                    ..
+                } => serde_json::json!({
+                    "fixture_id": fixture_id,
+                    "pipeline_error_stage": stage,
+                    "pipeline_error_code": code,
+                }),
+            };
+            println!(
+                "{}",
+                serde_json::to_string(&canonical).expect("serialize canonical producer outcome")
+            );
+        }
+        println!("{PRODUCER_DETERMINISM_END}");
+    }
+
+    #[cfg(feature = "safety-net-kiji")]
+    fn extract_producer_determinism_output(stdout: &[u8]) -> Vec<u8> {
+        let stdout = String::from_utf8(stdout.to_vec()).expect("producer stdout must be UTF-8");
+        let (_, after_begin) = stdout
+            .split_once(&format!("{PRODUCER_DETERMINISM_BEGIN}\n"))
+            .expect("producer child output must include begin sentinel");
+        let (canonical, _) = after_begin
+            .split_once(&format!("{PRODUCER_DETERMINISM_END}\n"))
+            .expect("producer child output must include end sentinel");
+        canonical.as_bytes().to_vec()
     }
 
     #[cfg(feature = "safety-net-kiji")]
