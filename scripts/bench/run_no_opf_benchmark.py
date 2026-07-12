@@ -586,8 +586,8 @@ def markdown_summary(
         f"- Performance: **{performance['disposition']} / {performance['status']}**",
         "",
         "| Config | Attempted | Failed closed | Leaked bytes | Restore failures "
-        "| Residual suspects | clean_ms p95 |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| Strict rejections | Residual suspects | clean_ms p95 |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for run in scorecard["runs"]:
         counts = score._run_correctness_counts(run)
@@ -597,7 +597,8 @@ def markdown_summary(
             f"| {run['config']} | {counts['attempted_documents']} | "
             f"{counts['failed_closed_documents']} | "
             f"{counts['leaked_labeled_utf8_bytes']} | "
-            f"{counts['restore_failures']} | {counts['residual_suspects']} | "
+            f"{counts['restore_failures']} | {counts['strict_rejections']} | "
+            f"{counts['residual_suspects']} | "
             f"{clean_display} |"
         )
     return "\n".join(lines) + "\n"

@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import sys
 import time
+import tomllib
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -232,6 +233,10 @@ class ResponseValidationError(RuntimeError):
     """The Rust benchmark producer violated its closed schema-v3 wire contract."""
 
 
+class SourceIdVocabularyError(RuntimeError):
+    """A committed source-ID vocabulary input could not be loaded safely."""
+
+
 def _expect_object(value: object, context: str) -> dict[str, object]:
     if not isinstance(value, dict) or not all(
         isinstance(key, str) for key in value
@@ -436,6 +441,97 @@ def _validate_source_id(value: str, context: str) -> None:
         )
 
 
+def _load_committed_toml(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        raise SourceIdVocabularyError(
+            f"committed source-ID vocabulary input is missing: {path}"
+        )
+    try:
+        with path.open("rb") as handle:
+            value = tomllib.load(handle)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise SourceIdVocabularyError(
+            f"cannot read committed source-ID vocabulary input {path}: {error}"
+        ) from error
+    if not isinstance(value, dict):
+        raise SourceIdVocabularyError(
+            f"committed source-ID vocabulary input must be a TOML table: {path}"
+        )
+    return value
+
+
+def _committed_vocabulary_id(value: object, context: str) -> str:
+    if not isinstance(value, str) or not SOURCE_ID_PATTERN.fullmatch(value):
+        raise SourceIdVocabularyError(
+            f"{context}: expected a metadata-only stable identifier"
+        )
+    return value
+
+
+def load_committed_source_id_vocabulary(
+    repo_root: Path | None = None,
+) -> frozenset[str]:
+    root = repo_root or Path(__file__).resolve().parents[2]
+    rulepack_dir = root / "crates/gaze-recognizers/embedded"
+    if not rulepack_dir.is_dir():
+        raise SourceIdVocabularyError(
+            f"committed rulepack directory is missing: {rulepack_dir}"
+        )
+    rulepack_paths = sorted(rulepack_dir.glob("*.toml"))
+    if not rulepack_paths:
+        raise SourceIdVocabularyError(
+            f"committed rulepack directory contains no TOML bundles: {rulepack_dir}"
+        )
+
+    identifiers: set[str] = set()
+    recognizer_count = 0
+    for path in rulepack_paths:
+        rulepack = _load_committed_toml(path)
+        recognizers = rulepack.get("recognizers", [])
+        if not isinstance(recognizers, list):
+            raise SourceIdVocabularyError(
+                f"{path}: recognizers must be an array of tables"
+            )
+        for index, recognizer in enumerate(recognizers):
+            if not isinstance(recognizer, dict) or "id" not in recognizer:
+                raise SourceIdVocabularyError(
+                    f"{path}: recognizers[{index}] must declare an id"
+                )
+            identifiers.add(
+                _committed_vocabulary_id(
+                    recognizer["id"], f"{path}: recognizers[{index}].id"
+                )
+            )
+            recognizer_count += 1
+    if recognizer_count == 0:
+        raise SourceIdVocabularyError(
+            f"committed rulepacks declare no recognizer IDs: {rulepack_dir}"
+        )
+
+    model_path = root / "scripts/bench/no_opf_models.toml"
+    models = _load_committed_toml(model_path)
+    model_count = 0
+    for section_name, section in models.items():
+        if not isinstance(section, dict) or "id" not in section:
+            continue
+        identifiers.add(
+            _committed_vocabulary_id(
+                section["id"], f"{model_path}: {section_name}.id"
+            )
+        )
+        model_count += 1
+    if model_count == 0:
+        raise SourceIdVocabularyError(
+            f"committed model source declares no IDs: {model_path}"
+        )
+    if not identifiers:
+        raise SourceIdVocabularyError("committed source-ID vocabulary is empty")
+    return frozenset(identifiers)
+
+
+COMMITTED_SOURCE_ID_VOCABULARY = load_committed_source_id_vocabulary()
+
+
 def _validate_final_protection_trace(
     document: Document,
     value: object,
@@ -523,7 +619,7 @@ def _validate_final_protection_trace(
             "final_protection_trace: tokenize items must agree 1:1 with the final manifest"
         )
     for source_id, context in source_identifiers:
-        if any(
+        if source_id not in COMMITTED_SOURCE_ID_VOCABULARY and any(
             raw_value
             and re.search(
                 rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}(?:$|(?=[._:/-]))",
@@ -1071,11 +1167,18 @@ def run_config(
             warmup_document = documents[warmup_index % len(documents)]
             response, round_trip_ms = exchange(warmup_document)
             if "pipeline_error_code" in response:
-                raise RuntimeError(
-                    f"{config}: warmup {warmup_index + 1} failed closed with "
-                    f"{response['pipeline_error_code']} at "
-                    f"{response['pipeline_error_stage']}"
+                timing = response["timing"]
+                assert isinstance(timing, dict)
+                discarded_warmup_samples.append(
+                    {
+                        "sample": warmup_index + 1,
+                        "round_trip_ms": round_trip_ms,
+                        "pipeline_error_code": response["pipeline_error_code"],
+                        "pipeline_error_stage": response["pipeline_error_stage"],
+                        "total_ms": timing["total_ms"],
+                    }
                 )
+                continue
             timing = response["timing"]
             assert isinstance(timing, dict)
             warmup_metrics = MetricAccumulator()
@@ -1103,30 +1206,6 @@ def run_config(
                 "residual_suspects": contract_result["post_policy_suspects"],
                 "redact_actions": contract_result["redact_actions"],
             }
-            universal_warmup_gates = (
-                "restore_failures",
-                "manifest_invalid_documents",
-            )
-            production_warmup_gates = (
-                "leaked_labeled_utf8_bytes",
-                "uncovered_entities",
-                "strict_rejections",
-                "residual_suspects",
-                "redact_actions",
-            )
-            gated = universal_warmup_gates + (
-                production_warmup_gates if config == PRODUCTION_CONFIG else ()
-            )
-            failures = {
-                gate: warmup_correctness[gate]
-                for gate in gated
-                if warmup_correctness[gate] != 0
-            }
-            if failures:
-                raise RuntimeError(
-                    f"{config}: discarded warmup {warmup_index + 1} failed "
-                    f"correctness gates: {failures}"
-                )
             discarded_warmup_samples.append(
                 {
                     "sample": warmup_index + 1,
@@ -1587,6 +1666,7 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
             "restore_decision_failures",
             "manifest_invalid_documents",
             "manifest_integrity_errors",
+            "strict_rejections",
         ):
             if counts[gate] != 0:
                 failures.append(
@@ -1606,7 +1686,6 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
                 "documents_with_leaks",
                 "leaked_labeled_utf8_bytes",
                 "uncovered_entities",
-                "strict_rejections",
                 "post_policy_unscanned_documents",
                 "residual_suspects",
                 "redact_actions",

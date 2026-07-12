@@ -398,6 +398,75 @@ class ResponseValidationTests(unittest.TestCase):
         self.assertNotIn("pass3_ms", result["latency_ms"])
         self.assertEqual(result["process"]["documents_per_second"], 400.0)
 
+    def test_warmup_correctness_and_pipeline_errors_are_logged_not_counted(
+        self,
+    ) -> None:
+        document = self.document()
+        warmup_error = {
+            "fixture_id": document.uid,
+            "pipeline_error_stage": "safety_net",
+            "pipeline_error_code": "POLICY_REJECTED",
+            "timing": {"total_ms": 1.25},
+        }
+        warmup_rejection = self.success_response()
+        scored_rejection = self.success_response()
+        for response in (warmup_rejection, scored_rejection):
+            response["leak_suspects"] = [
+                {
+                    "clean_start": 0,
+                    "clean_end": 2,
+                    "action_start": 0,
+                    "action_end": 2,
+                    "class": "name",
+                    "safety_net_id": "safety.name",
+                    "kind": "uncovered",
+                }
+            ]
+            response["initial_safety_net_stats"].update(
+                {"suspect_count": 1, "uncovered_count": 1}
+            )
+            response["strict_would_reject"] = True
+        process = mock.Mock()
+        process.stdin = io.StringIO()
+        process.stdout = io.StringIO(
+            "\n".join(
+                json.dumps(response)
+                for response in (warmup_error, warmup_rejection, scored_rejection)
+            )
+            + "\n"
+        )
+        process.wait.return_value = 0
+        repo_root = Path(benchmark.__file__).resolve().parents[2]
+
+        with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
+            with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
+                result = benchmark.run_config(
+                    repo_root=repo_root,
+                    binary=Path(temporary) / "synthetic-runner",
+                    config="full-stack-kiji-resolve",
+                    documents=[document],
+                    model_dir=Path(temporary),
+                    kiji_model_dir=Path(temporary),
+                    opf_command=None,
+                    opf_checkpoint=None,
+                    opf_daemon_socket=None,
+                    threshold=0.3,
+                    diagnostics_dir=Path(temporary) / "diagnostics",
+                    warmup_count=2,
+                )
+
+        self.assertEqual(result["pipeline_contract"]["documents"], 1)
+        self.assertEqual(
+            result["pipeline_contract"]["strict_would_reject_documents"], 1
+        )
+        self.assertEqual(result["pipeline_contract"]["strict_acceptance_rate"], 0.0)
+        self.assertEqual(result["pipeline_availability"]["failed_closed_documents"], 0)
+        discarded = result["process"]["discarded_warmup_samples"]
+        self.assertEqual(len(discarded), 2)
+        self.assertEqual(discarded[0]["pipeline_error_code"], "POLICY_REJECTED")
+        self.assertEqual(discarded[0]["pipeline_error_stage"], "safety_net")
+        self.assertEqual(discarded[1]["correctness"]["strict_rejections"], 1)
+
     def test_unknown_pipeline_error_timing_field_fails_closed(self) -> None:
         response = {
             "fixture_id": "synthetic-response",
@@ -523,6 +592,48 @@ class ResponseValidationTests(unittest.TestCase):
                     "reproduces protected request content",
                 ):
                     benchmark.validate_response(document, response)
+
+    def test_trace_accepts_committed_id_despite_bounded_protected_segment(
+        self,
+    ) -> None:
+        protected_value = "de"
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text=protected_value,
+            language="de",
+            region="DE",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, len(protected_value), "POSTAL"),),
+        )
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["raw_end"] = len(protected_value)
+        item = response["final_protection_trace"][0]
+        item["raw_end"] = len(protected_value)
+        item["provenance"]["source_ids"] = ["postal.de"]
+
+        benchmark.validate_response(document, response)
+
+    def test_trace_rejects_novel_id_with_bounded_protected_segment(self) -> None:
+        protected_value = "de"
+        document = benchmark.Document(
+            uid="synthetic-response",
+            text=protected_value,
+            language="de",
+            region="DE",
+            source_dataset="unit-test",
+            spans=(benchmark.Span(0, len(protected_value), "POSTAL"),),
+        )
+        response = self.tokenize_response()
+        response["manifest_spans"][0]["raw_end"] = len(protected_value)
+        item = response["final_protection_trace"][0]
+        item["raw_end"] = len(protected_value)
+        item["provenance"]["source_ids"] = ["novel.de.source"]
+
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError,
+            "reproduces protected request content",
+        ):
+            benchmark.validate_response(document, response)
 
     def test_trace_accepts_unbounded_source_id_substring(self) -> None:
         protected_value = "avl"
@@ -1071,6 +1182,21 @@ class DataikuSelectionTests(unittest.TestCase):
 
 
 class ConfigTests(unittest.TestCase):
+    def test_committed_source_id_vocabulary_loads_rulepack_and_model_ids(self) -> None:
+        self.assertIn("postal.de", benchmark.COMMITTED_SOURCE_ID_VOCABULARY)
+        self.assertIn(
+            "davlan-mbert-ner-hrl-onnx",
+            benchmark.COMMITTED_SOURCE_ID_VOCABULARY,
+        )
+
+    def test_committed_source_id_vocabulary_load_failure_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            with self.assertRaisesRegex(
+                benchmark.SourceIdVocabularyError,
+                "committed rulepack directory is missing",
+            ):
+                benchmark.load_committed_source_id_vocabulary(Path(temporary))
+
     def test_all_no_opf_config_names_are_present_and_spelled_exactly(self) -> None:
         expected = (
             "rule-floor-extended",
