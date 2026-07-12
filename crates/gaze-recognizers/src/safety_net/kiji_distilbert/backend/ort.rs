@@ -140,10 +140,42 @@ impl OrtKijiBackend {
                     sanitize_error(&err.to_string())
                 ),
             })?;
-        let session = ort::session::Session::builder()
-            .map_err(|err| SafetyNetError::ModelUnavailable {
+        let session_builder =
+            ort::session::Session::builder().map_err(|err| SafetyNetError::ModelUnavailable {
                 reason: format!(
                     "failed to initialize kiji ort session: {}",
+                    sanitize_error(&err.to_string())
+                ),
+            })?;
+        let session_builder = session_builder.with_intra_threads(1).map_err(|err| {
+            SafetyNetError::ModelUnavailable {
+                reason: format!(
+                    "failed to configure kiji ort intra-op threads: {}",
+                    sanitize_error(&err.to_string())
+                ),
+            }
+        })?;
+        let session_builder = session_builder.with_inter_threads(1).map_err(|err| {
+            SafetyNetError::ModelUnavailable {
+                reason: format!(
+                    "failed to configure kiji ort inter-op threads: {}",
+                    sanitize_error(&err.to_string())
+                ),
+            }
+        })?;
+        let session_builder = session_builder
+            .with_parallel_execution(false)
+            .map_err(|err| SafetyNetError::ModelUnavailable {
+                reason: format!(
+                    "failed to configure kiji ort sequential execution: {}",
+                    sanitize_error(&err.to_string())
+                ),
+            })?;
+        let session = session_builder
+            .with_deterministic_compute(true)
+            .map_err(|err| SafetyNetError::ModelUnavailable {
+                reason: format!(
+                    "failed to configure deterministic kiji ort compute: {}",
                     sanitize_error(&err.to_string())
                 ),
             })?
