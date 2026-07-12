@@ -33,16 +33,48 @@ EXPECTED_BUILTIN_SOURCE_IDS = frozenset(
         "openai-privacy-filter-subprocess",
     }
 )
-BUILTIN_SOURCE_LITERAL_PATHS = (
-    "crates/gaze-recognizers/src/ner/recognizer.rs",
-    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/mod.rs",
-    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/ort.rs",
-    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/tract.rs",
-    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/candle.rs",
-    "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/subprocess.rs",
-    "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs",
-    "crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs",
-)
+BUILTIN_SOURCE_LITERAL_PATHS = {
+    "ner": "crates/gaze-recognizers/src/ner/recognizer.rs",
+    "kiji-distilbert": (
+        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/mod.rs"
+    ),
+    "kiji-distilbert-ort": (
+        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/ort.rs"
+    ),
+    "kiji-distilbert-tract": (
+        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/tract.rs"
+    ),
+    "kiji-distilbert-candle": (
+        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/candle.rs"
+    ),
+    "kiji-distilbert-subprocess": (
+        "crates/gaze-recognizers/src/safety_net/kiji_distilbert/backend/subprocess.rs"
+    ),
+    "openai-privacy-filter": (
+        "crates/gaze-recognizers/src/safety_net/openai_filter/mod.rs"
+    ),
+    "openai-privacy-filter-subprocess": (
+        "crates/gaze-recognizers/src/safety_net/openai_filter/backend/subprocess.rs"
+    ),
+}
+
+
+def assert_builtin_source_literals(
+    source_ids: list[str], authoritative_source_text: dict[str, str]
+) -> None:
+    for source_id in source_ids:
+        relative_path = BUILTIN_SOURCE_LITERAL_PATHS.get(source_id)
+        if relative_path is None:
+            raise AssertionError(
+                f"declared built-in source ID has no authoritative source mapping: "
+                f"{source_id}"
+            )
+        source_text = authoritative_source_text.get(relative_path)
+        if source_text is None or f'"{source_id}"' not in source_text:
+            raise AssertionError(
+                f"declared built-in source ID lacks a literal in its authoritative "
+                f"source file {relative_path}: {source_id}"
+            )
 
 
 class OffsetTests(unittest.TestCase):
@@ -1246,24 +1278,41 @@ class ConfigTests(unittest.TestCase):
         declared = models["builtin_source_ids"]["ids"]
         self.assertEqual(len(declared), len(EXPECTED_BUILTIN_SOURCE_IDS))
         self.assertEqual(frozenset(declared), EXPECTED_BUILTIN_SOURCE_IDS)
-        source_text = "\n".join(
-            (repo_root / relative_path).read_text(encoding="utf-8")
-            for relative_path in BUILTIN_SOURCE_LITERAL_PATHS
+        self.assertEqual(
+            frozenset(BUILTIN_SOURCE_LITERAL_PATHS),
+            EXPECTED_BUILTIN_SOURCE_IDS,
         )
+        authoritative_source_text = {
+            relative_path: (repo_root / relative_path).read_text(encoding="utf-8")
+            for relative_path in set(BUILTIN_SOURCE_LITERAL_PATHS.values())
+        }
 
-        def assert_committed_literals(source_ids: list[str]) -> None:
-            for source_id in source_ids:
-                self.assertIn(
-                    f'"{source_id}"',
-                    source_text,
-                    f"declared built-in source ID lacks a committed source literal: "
-                    f"{source_id}",
-                )
-
-        assert_committed_literals(declared)
+        assert_builtin_source_literals(declared, authoritative_source_text)
         with self.assertRaisesRegex(AssertionError, "fabricated-built-in-source"):
-            assert_committed_literals(
-                [*declared, "fabricated-built-in-source"]
+            assert_builtin_source_literals(
+                [*declared, "fabricated-built-in-source"],
+                authoritative_source_text,
+            )
+
+    def test_builtin_source_id_coherence_rejects_stripped_authoritative_literal(
+        self,
+    ) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        source_id = "kiji-distilbert"
+        relative_path = BUILTIN_SOURCE_LITERAL_PATHS[source_id]
+        source_text = (repo_root / relative_path).read_text(encoding="utf-8")
+        literal = f'"{source_id}"'
+        self.assertIn(literal, source_text)
+        stripped_source_text = source_text.replace(literal, "")
+        self.assertNotIn(literal, stripped_source_text)
+
+        with self.assertRaisesRegex(AssertionError, source_id):
+            assert_builtin_source_literals(
+                [source_id],
+                {
+                    relative_path: stripped_source_text,
+                    "unrelated/test_fixture.rs": literal,
+                },
             )
 
     def test_committed_source_id_vocabulary_load_failure_fails_closed(self) -> None:
