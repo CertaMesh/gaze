@@ -63,6 +63,8 @@ Evidence paths:
 | --- | --- |
 | Dataset and scoring contract | `docs/reference/benchmarks/dataiku-en-de-holdout.md` |
 | Current whole-pipeline baseline | `docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md` |
+| Normalized no-OPF schema-v3 scorecard | `docs/reference/benchmarks/v0.12-no-opf-scorecard-v3.json` |
+| Prioritized no-OPF Kiji error buckets | `docs/reference/benchmarks/v0.12-no-opf-error-buckets.md` |
 | Warm OpenAI Privacy Filter sample | `docs/reference/benchmarks/v0.12-opf-daemon-sample.md` |
 | Canonical benchmark runner | `scripts/bench/run_no_opf_benchmark.py` |
 | Runner contract and outputs | `scripts/bench/README.md` |
