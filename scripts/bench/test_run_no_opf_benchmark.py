@@ -149,6 +149,30 @@ class IntegerComparatorTests(unittest.TestCase):
         self.assertFalse(comparison["regression"]["passed"])
         self.assertFalse(comparison["release_readiness"]["passed"])
 
+    def test_strict_rejections_are_bucketed_ratcheted_and_release_blocking(
+        self,
+    ) -> None:
+        baseline = scorecard()
+        candidate = copy.deepcopy(baseline)
+        candidate["runs"][0]["pipeline_contract"][
+            "strict_would_reject_documents"
+        ] = 1
+
+        counts = score._run_correctness_counts(candidate["runs"][0])
+        comparison = score.compare_scorecards(candidate, baseline)
+
+        self.assertEqual(counts["strict_rejections"], 1)
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertFalse(comparison["release_readiness"]["passed"])
+        for verdict in ("regression", "release_readiness"):
+            self.assertTrue(
+                any(
+                    failure.get("config") == score.DEFAULT_CONFIGS[0]
+                    and failure.get("gate") == "strict_rejections"
+                    for failure in comparison[verdict]["failures"]
+                )
+            )
+
     def test_performance_is_informational_by_default(self) -> None:
         baseline = scorecard()
         candidate = copy.deepcopy(baseline)
@@ -495,6 +519,42 @@ class ProfileIsolationTests(unittest.TestCase):
             [document.uid for document in first],
             [document.uid for document in second],
         )
+
+    def test_repetitions_require_exact_strict_rejection_counts(self) -> None:
+        runs_by_config = {
+            run["config"]: run for run in scorecard()["runs"]
+        }
+        call_count = 0
+
+        def fake_run_config(*args: object, **kwargs: object) -> dict[str, object]:
+            nonlocal call_count
+            config = str(args[2])
+            run = copy.deepcopy(runs_by_config[config])
+            if (
+                call_count >= len(score.DEFAULT_CONFIGS)
+                and config == score.DEFAULT_CONFIGS[0]
+            ):
+                run["pipeline_contract"]["strict_would_reject_documents"] = 1
+            call_count += 1
+            return run
+
+        with mock.patch.object(score, "run_config", side_effect=fake_run_config):
+            with self.assertRaisesRegex(
+                runner.RepetitionMismatchError,
+                "integer correctness counts",
+            ):
+                runner.execute_measurements(
+                    repo_root=Path("/synthetic/repo"),
+                    binary=Path("/synthetic/clean_for_bench"),
+                    documents=[self.document()],
+                    davlan_model=Path("/synthetic/davlan"),
+                    kiji_model=Path("/synthetic/kiji"),
+                    threshold=0.3,
+                    diagnostics_dir=Path("/synthetic/diagnostics"),
+                    warmup_count=0,
+                    measured_repetitions=2,
+                    source_environment={"PATH": "/synthetic/bin"},
+                )
 
 
 class BaselineGuardTests(unittest.TestCase):

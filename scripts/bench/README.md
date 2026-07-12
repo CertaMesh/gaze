@@ -75,6 +75,13 @@ This production ONNX pass2 pin is intentionally separate from
 Transformers model matrix and is not the Davlan source of truth for the canonical
 no-OPF runner. Kiji continues to load from its existing `ner_models.toml` entry.
 
+At scorer initialization, stable provenance IDs are loaded from every committed
+`crates/gaze-recognizers/embedded/*.toml` recognizer and from the model IDs in
+`scripts/bench/no_opf_models.toml`. An exact, case-sensitive vocabulary match may
+skip only the protected-content reproduction check; source-ID grammar, ordering,
+non-empty, and uniqueness validation still apply. Missing, unreadable, malformed,
+or empty committed vocabulary inputs abort scoring with a typed error.
+
 ## Outputs and verdicts
 
 Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
@@ -91,11 +98,11 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
-or population-mismatched candidates. Release readiness checks the production
-candidate cell itself: no leaked labeled bytes, uncovered entities, pipeline
-failures, restore failures, invalid manifests, telemetry disagreement,
-unscanned documents, residual suspects, or redact actions. A full command exits
-nonzero for either correctness failure.
+or population-mismatched candidates. Release readiness requires every candidate
+cell to have no pipeline, restore, manifest, telemetry-agreement, or strict
+rejection failures. The production candidate cell must additionally have no
+leaked labeled bytes, uncovered entities, unscanned documents, residual suspects,
+or redact actions. A full command exits nonzero for either correctness failure.
 
 A quick result is always marked not release-ready because it samples the
 population. Quick exits successfully when that incompleteness is its only
@@ -104,9 +111,12 @@ readiness failure, but any observed correctness failure still exits nonzero.
 Performance compares `timing.clean_ms.p95` with
 `--performance-tolerance-percent` and is informational by default. Add
 `--performance-gating` only for an explicitly reviewed performance gate.
-Warmup count, measured-repetition count, every discarded warmup sample, and
-external process/model cold-start-to-first-validated-response are recorded in
-`runner_provenance`. Cold start is separate from Rust response timing.
+Warmup count, measured-repetition count, every discarded warmup sample and its
+outcome, and external process/model cold-start-to-first-validated-response are
+recorded in `runner_provenance`. Warmups are timing-only: their pipeline and
+correctness outcomes never abort or contribute to the scorecard. Each document is
+counted exactly once in the scored pass. Cold start is separate from Rust response
+timing.
 
 ## Baseline acceptance
 
