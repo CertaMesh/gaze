@@ -468,6 +468,37 @@ def _committed_vocabulary_id(value: object, context: str) -> str:
     return value
 
 
+def _committed_builtin_source_ids(
+    models: dict[str, object], model_path: Path
+) -> tuple[str, ...]:
+    section = models.get("builtin_source_ids")
+    if not isinstance(section, dict):
+        raise SourceIdVocabularyError(
+            f"committed built-in source-ID declaration must contain a "
+            f"[builtin_source_ids] table: {model_path}"
+        )
+    if set(section) != {"ids"}:
+        raise SourceIdVocabularyError(
+            f"{model_path}: [builtin_source_ids] must contain only an ids array"
+        )
+    values = section["ids"]
+    if not isinstance(values, list) or not values:
+        raise SourceIdVocabularyError(
+            f"{model_path}: [builtin_source_ids].ids must be a non-empty array"
+        )
+    identifiers = tuple(
+        _committed_vocabulary_id(
+            value, f"{model_path}: builtin_source_ids.ids[{index}]"
+        )
+        for index, value in enumerate(values)
+    )
+    if len(set(identifiers)) != len(identifiers):
+        raise SourceIdVocabularyError(
+            f"{model_path}: [builtin_source_ids].ids must not contain duplicates"
+        )
+    return identifiers
+
+
 def load_committed_source_id_vocabulary(
     repo_root: Path | None = None,
 ) -> frozenset[str]:
@@ -510,8 +541,11 @@ def load_committed_source_id_vocabulary(
 
     model_path = root / "scripts/bench/no_opf_models.toml"
     models = _load_committed_toml(model_path)
+    identifiers.update(_committed_builtin_source_ids(models, model_path))
     model_count = 0
     for section_name, section in models.items():
+        if section_name == "builtin_source_ids":
+            continue
         if not isinstance(section, dict) or "id" not in section:
             continue
         identifiers.add(

@@ -77,10 +77,14 @@ no-OPF runner. Kiji continues to load from its existing `ner_models.toml` entry.
 
 At scorer initialization, stable provenance IDs are loaded from every committed
 `crates/gaze-recognizers/embedded/*.toml` recognizer and from the model IDs in
-`scripts/bench/no_opf_models.toml`. An exact, case-sensitive vocabulary match may
-skip only the protected-content reproduction check; source-ID grammar, ordering,
-non-empty, and uniqueness validation still apply. Missing, unreadable, malformed,
-or empty committed vocabulary inputs abort scoring with a typed error.
+`scripts/bench/no_opf_models.toml`. That file's `[builtin_source_ids]` declaration
+adds built-in producer IDs only from committed ground truth; tests require every
+declared ID to appear as a string literal in the read-only `gaze-recognizers`
+sources. Runtime producer assertions never extend this vocabulary. An exact,
+case-sensitive vocabulary match may skip only the protected-content reproduction
+check; source-ID grammar, ordering, non-empty, and uniqueness validation still
+apply. Missing, unreadable, malformed, or empty committed vocabulary inputs abort
+scoring with a typed error.
 
 ## Outputs and verdicts
 
