@@ -144,7 +144,7 @@ Support summary mentions Dr. Schmidt after triage.
 }
 
 #[test]
-fn index_ingest_redacts_residual_suspects_by_default_without_raw_persistence() {
+fn index_ingest_default_residual_mode_fails_closed_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
     let index = temp.path().join("owner-index");
@@ -167,43 +167,25 @@ Support summary mentions Dr. Schmidt marker after triage.
         .output()
         .expect("run index ingest");
     assert!(
-        ingest.status.success(),
-        "default residual ingest failed: stderr={}",
-        String::from_utf8_lossy(&ingest.stderr)
+        !ingest.status.success(),
+        "default residual ingest unexpectedly succeeded"
     );
-
-    let search = gaze_index_command(&fake_kiji)
-        .args(["index", "search", "alice@example.invalid"])
-        .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
-        .arg(&index)
-        .output()
-        .expect("run index search");
+    let stderr = String::from_utf8_lossy(&ingest.stderr);
+    assert!(stderr.contains("ResidualSuspect"), "stderr={stderr}");
     assert!(
-        search.status.success(),
-        "search failed: stderr={}",
-        String::from_utf8_lossy(&search.stderr)
+        stderr.contains("index safety net failed closed"),
+        "stderr={stderr}"
     );
-
-    let stdout = String::from_utf8(search.stdout).expect("utf8 stdout");
-    assert!(stdout.contains(":Email_"));
     for raw in ["alice@example.invalid", "Dr. Schmidt"] {
         assert!(
-            !stdout.contains(raw),
-            "search stdout leaked raw fixture value {raw}: {stdout}"
+            !stderr.contains(raw),
+            "stderr leaked raw fixture value: {stderr}"
         );
     }
-
-    let sealed = fs::read(index.join("index.json")).expect("read sealed index");
-    assert!(sealed.starts_with(b"GAZEIDX1"));
-    for raw in [
-        b"alice@example.invalid".as_slice(),
-        b"Dr. Schmidt".as_slice(),
-    ] {
-        assert!(
-            !bytes_contain(&sealed, raw),
-            "sealed index bytes contain raw fixture value"
-        );
-    }
+    assert!(
+        !index.join("index.json").exists(),
+        "failed ingest persisted an index"
+    );
 }
 
 #[test]

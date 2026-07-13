@@ -432,7 +432,7 @@ fn safety_net_trace_partial_bleed_tokenizes_only_uncovered_subspan() {
 }
 
 #[test]
-fn safety_net_trace_class_mismatch_overlap_falls_back_to_non_reversible_redaction() {
+fn safety_net_trace_class_mismatch_inside_live_token_is_reversible_noop() {
     let raw = "alice@example.invalid ok";
     let baseline_session = session();
     let baseline = text(
@@ -456,51 +456,68 @@ fn safety_net_trace_class_mismatch_overlap_falls_back_to_non_reversible_redactio
     );
 
     assert_eq!(report.stats.class_mismatch_count, 1);
-    assert_eq!(clean, " ok");
-    assert!(manifest.is_empty());
+    assert!(clean.ends_with(" ok"));
+    assert_eq!(manifest.len(), 1);
     assert_eq!(trace.len(), 1);
     assert_eq!(trace[0].raw_start(), 0);
     assert_eq!(trace[0].raw_end(), "alice@example.invalid".len());
-    assert_eq!(trace[0].class(), &PiiClass::Name);
-    assert_eq!(trace[0].stage(), "safety_net");
-    assert_eq!(trace[0].decision(), "fallback_redact");
-    assert_eq!(trace[0].action(), "redact");
-    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
+    assert_eq!(trace[0].class(), &PiiClass::Email);
+    assert_eq!(trace[0].stage(), "primary_pipeline");
+    assert_eq!(trace[0].decision(), "policy");
+    assert_eq!(trace[0].action(), "tokenize");
+    assert_eq!(trace[0].source_ids(), &["fixed".to_string()]);
     assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
-    assert_successful_redaction_is_not_reversible(raw, &clean, &session);
+    assert_eq!(
+        session
+            .restore_strict_text(&clean)
+            .expect("protected mismatch restores"),
+        raw
+    );
 }
 
 #[test]
-fn safety_net_trace_residual_utf8_suspect_falls_back_with_original_char_boundaries() {
+fn safety_net_trace_residual_utf8_suspect_fails_closed() {
     let raw = "Grüße von Dr. Schmidt";
     let multibyte = raw.find('ü').expect("multibyte character");
     let net = MockNet::new(Some(multibyte + 1..multibyte + "ü".len()), PiiClass::Name);
     let pipeline = pipeline_with_net(Some(net));
-    let session = session();
+    let traced_session = session();
 
-    let (clean, manifest, report, trace) = traced_clean(
-        &pipeline,
-        &session,
-        raw,
-        gaze::SafetyNetPolicy::new(
-            gaze::SafetyNetMode::Resolve,
-            gaze::SafetyNetFallback::Redact,
-        ),
-    );
+    let error = pipeline
+        .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+            &traced_session,
+            raw,
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Resolve,
+                gaze::SafetyNetFallback::Redact,
+            ),
+        )
+        .expect_err("invalid UTF-8 residual must fail closed");
 
-    assert_eq!(report.stats.uncovered_count, 1);
-    assert_eq!(clean, "Grße von Dr. Schmidt");
-    assert!(manifest.is_empty());
-    assert_eq!(trace.len(), 1);
-    assert_eq!(trace[0].raw_start(), multibyte);
-    assert_eq!(trace[0].raw_end(), multibyte + "ü".len());
-    assert_eq!(trace[0].class(), &PiiClass::Name);
-    assert_eq!(trace[0].stage(), "safety_net");
-    assert_eq!(trace[0].decision(), "fallback_redact");
-    assert_eq!(trace[0].action(), "redact");
-    assert_eq!(trace[0].source_ids(), &["mock".to_string()]);
-    assert_trace_manifest_contract(raw, &clean, &manifest, &trace, &session);
-    assert_successful_redaction_is_not_reversible(raw, &clean, &session);
+    assert!(matches!(
+        error,
+        gaze::Error::SafetyNetFallback(FallbackReason::ResidualSuspect)
+    ));
+
+    let untraced_session = session();
+    let untraced_error = pipeline
+        .clean_with_safety_net_policy_detect_context(
+            &untraced_session,
+            RawDocument::Text(raw.to_string()),
+            &[gaze::LocaleTag::Global],
+            &gaze::DictionaryBundle::default(),
+            gaze::SafetyNetPolicy::new(
+                gaze::SafetyNetMode::Resolve,
+                gaze::SafetyNetFallback::Redact,
+            ),
+        )
+        .expect_err("invalid UTF-8 residual must also fail closed without tracing");
+    assert!(matches!(
+        untraced_error,
+        gaze::Error::SafetyNetFallback(FallbackReason::ResidualSuspect)
+    ));
 }
 
 #[test]
@@ -732,7 +749,7 @@ fn safety_net_redact_mode_keeps_aligned_span_redaction_behavior() {
 }
 
 #[test]
-fn safety_net_resolve_overlap_conflict_triggers_redact_fallback_audit() {
+fn safety_net_resolve_live_token_mismatch_is_audited_noop() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -763,13 +780,21 @@ fn safety_net_resolve_overlap_conflict_triggers_redact_fallback_audit() {
             &gaze::DictionaryBundle::default(),
             gaze::SafetyNetPolicy::default(),
         )
-        .expect("fallback redact");
+        .expect("protected mismatch");
 
     assert_eq!(report.stats.class_mismatch_count, 1);
-    assert_eq!(text(clean), " ok");
+    let clean = text(clean);
+    assert!(clean.ends_with(" ok"));
+    assert_eq!(
+        session
+            .restore_strict_text(&clean)
+            .expect("protected mismatch restores"),
+        "alice@example.invalid ok"
+    );
     assert!(logger.entries().iter().any(|entry| {
-        entry.decided_by == ConflictTier::Fallback
-            && entry.fallback_triggered == Some(FallbackReason::OverlapConflict)
+        entry.decided_by == ConflictTier::Resolve
+            && entry.conflict_loser
+            && entry.fallback_triggered.is_none()
     }));
 }
 

@@ -970,6 +970,7 @@ impl Pipeline {
                 protection_trace,
             ),
             SafetyNetMode::Resolve => {
+                let raw_before_resolution = session.restore_strict_text(&clean.text)?;
                 let reason = match self.resolve_safety_net_suspects(
                     session,
                     clean,
@@ -989,8 +990,13 @@ impl Pipeline {
                             field_path,
                             SafetyNetMode::Resolve,
                         )?;
-                        (follow_up.stats.uncovered_count + follow_up.stats.partial_bleed_count > 0)
-                            .then_some(FallbackReason::ResidualSuspect)
+                        self.post_resolution_fallback_reason(
+                            session,
+                            clean,
+                            &follow_up,
+                            document_kind,
+                            field_path,
+                        )?
                     }
                 };
                 if let Some(reason) = reason {
@@ -1004,6 +1010,14 @@ impl Pipeline {
                         reason,
                         protection_trace,
                     )?;
+                } else {
+                    validate_clean_manifest(clean)?;
+                    let restored = session.restore_strict_text(&clean.text)?;
+                    if restored != raw_before_resolution {
+                        return Err(protection_trace_error(
+                            "safety-net resolution broke exact restore",
+                        ));
+                    }
                 }
                 Ok(())
             }
@@ -1019,23 +1033,62 @@ impl Pipeline {
         field_path: Option<&str>,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<Option<FallbackReason>> {
-        if report
-            .suspects
-            .iter()
-            .any(|suspect| matches!(suspect.kind, LeakKind::ClassMismatch { .. }))
-        {
-            return Ok(Some(FallbackReason::OverlapConflict));
+        validate_clean_manifest(clean)?;
+        let mut protected = Vec::new();
+        let mut actionable = Vec::new();
+        for suspect in &report.suspects {
+            if suspect_is_inside_live_token(session, clean, suspect) {
+                protected.push(suspect);
+            } else if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+                return Ok(Some(FallbackReason::OverlapConflict));
+            } else {
+                actionable.push(suspect);
+            }
         }
-        for suspect in actionable_suspects(report).into_iter().rev() {
+        sort_safety_net_suspects(&mut protected);
+        sort_safety_net_suspects(&mut actionable);
+
+        let mut plans = Vec::with_capacity(actionable.len());
+        for suspect in actionable {
             let span = suspect_action_span(suspect);
             if !is_char_boundary_range(&clean.text, &span) {
                 return Ok(Some(FallbackReason::ResidualSuspect));
             }
-            // Establish the original interval before tokenization mutates the session or any
-            // clean text, manifest, or diagnostic trace state.
+            if !suspect_action_span_matches_manifest(clean, suspect) {
+                return Ok(Some(FallbackReason::OverlapConflict));
+            }
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             let raw = clean.text[span.clone()].to_string();
-            let replacement = session.tokenize_with_family("safety_net", &suspect.class, &raw)?;
+            plans.push(PlannedSafetyNetResolution {
+                suspect,
+                clean_span: span,
+                raw_span,
+                raw,
+            });
+        }
+        if plans
+            .windows(2)
+            .any(|pair| ranges_overlap(&pair[0].clean_span, &pair[1].clean_span))
+        {
+            return Ok(Some(FallbackReason::OverlapConflict));
+        }
+
+        for suspect in protected {
+            self.log_safety_net_entry(
+                session,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
+        }
+        for plan in plans.into_iter().rev() {
+            let suspect = plan.suspect;
+            let replacement =
+                session.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
             self.log_safety_net_entry(
                 session,
                 suspect,
@@ -1048,17 +1101,17 @@ impl Pipeline {
             )?;
             replace_clean_span(
                 clean,
-                span.clone(),
+                plan.clean_span.clone(),
                 &replacement,
                 Some(EmittedTokenSpan::new(
-                    span.start..span.start + replacement.len(),
-                    raw_span.clone(),
+                    plan.clean_span.start..plan.clean_span.start + replacement.len(),
+                    plan.raw_span.clone(),
                     suspect.class.clone(),
                 )),
             );
             if let Some(trace) = protection_trace.as_deref_mut() {
                 trace.record(
-                    raw_span,
+                    plan.raw_span,
                     suspect.class.clone(),
                     GazeLocalProtectionTraceKind::SafetyNetResolveTokenize,
                     vec![suspect.safety_net_id.clone()],
@@ -1068,17 +1121,55 @@ impl Pipeline {
         Ok(None)
     }
 
+    fn post_resolution_fallback_reason(
+        &self,
+        session: &Session,
+        clean: &CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+    ) -> Result<Option<FallbackReason>> {
+        validate_clean_manifest(clean)?;
+        let mut protected = Vec::new();
+        for suspect in &report.suspects {
+            if suspect_is_inside_live_token(session, clean, suspect) {
+                protected.push(suspect);
+                continue;
+            }
+            let reason = if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+                FallbackReason::OverlapConflict
+            } else {
+                FallbackReason::ResidualSuspect
+            };
+            return Ok(Some(reason));
+        }
+        sort_safety_net_suspects(&mut protected);
+        for suspect in protected {
+            self.log_safety_net_entry(
+                session,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
+        }
+        Ok(None)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_fallback(
         &self,
         session: &Session,
-        clean: &mut CleanText,
+        _clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         fallback: SafetyNetFallback,
         reason: FallbackReason,
-        protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+        _protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
         for suspect in redaction_suspects(report) {
             self.log_safety_net_entry(
@@ -1095,16 +1186,7 @@ impl Pipeline {
         match fallback {
             SafetyNetFallback::Strict => Err(Error::SafetyNetFallback(reason)),
             SafetyNetFallback::Tolerant => Ok(()),
-            SafetyNetFallback::Redact => self.redact_safety_net_suspects(
-                session,
-                clean,
-                report,
-                document_kind,
-                field_path,
-                Some(reason),
-                false,
-                protection_trace,
-            ),
+            SafetyNetFallback::Redact => Err(Error::SafetyNetFallback(reason)),
         }
     }
 
@@ -1120,18 +1202,33 @@ impl Pipeline {
         log_entries: bool,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
-        for suspect in redaction_suspects(report).into_iter().rev() {
+        validate_clean_manifest(clean)?;
+        let mut plans = Vec::new();
+        for suspect in redaction_suspects(report) {
             let span =
                 round_span_outward_to_char_boundaries(&clean.text, suspect_action_span(suspect))?;
             let span = expand_span_to_overlapping_manifest_entries(clean, span);
-            let raw_span = protection_trace
-                .as_ref()
-                .map(|_| map_clean_span_to_raw(clean, &span))
-                .transpose()?;
+            let raw_span = map_clean_span_to_raw(clean, &span)?;
+            plans.push(PlannedSafetyNetRedaction {
+                suspect,
+                clean_span: span,
+                raw_span,
+            });
+        }
+        if plans
+            .windows(2)
+            .any(|pair| ranges_overlap(&pair[0].clean_span, &pair[1].clean_span))
+        {
+            return Err(protection_trace_error(
+                "overlapping safety-net redaction spans",
+            ));
+        }
+        for plan in plans.into_iter().rev() {
+            let suspect = plan.suspect;
             for existing in clean
                 .manifest
                 .iter()
-                .filter(|existing| ranges_overlap(&existing.clean_span, &span))
+                .filter(|existing| ranges_overlap(&existing.clean_span, &plan.clean_span))
             {
                 tracing::warn!(
                     class = ?existing.class,
@@ -1156,10 +1253,10 @@ impl Pipeline {
                     fallback_reason,
                 )?;
             }
-            replace_clean_span(clean, span, "", None);
-            if let (Some(trace), Some(raw_span)) = (protection_trace.as_deref_mut(), raw_span) {
+            replace_clean_span(clean, plan.clean_span, "", None);
+            if let Some(trace) = protection_trace.as_deref_mut() {
                 trace.record(
-                    raw_span,
+                    plan.raw_span,
                     suspect.class.clone(),
                     if fallback_reason.is_some() {
                         GazeLocalProtectionTraceKind::SafetyNetFallbackRedact
@@ -1460,6 +1557,19 @@ struct CleanText {
     manifest: Vec<EmittedTokenSpan>,
 }
 
+struct PlannedSafetyNetResolution<'a> {
+    suspect: &'a LeakSuspect,
+    clean_span: Range<usize>,
+    raw_span: Range<usize>,
+    raw: String,
+}
+
+struct PlannedSafetyNetRedaction<'a> {
+    suspect: &'a LeakSuspect,
+    clean_span: Range<usize>,
+    raw_span: Range<usize>,
+}
+
 struct ProtectionTraceCollector<'a> {
     raw_text: &'a str,
     items: Vec<GazeLocalProtectionTraceItem>,
@@ -1593,6 +1703,106 @@ fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range
     Ok(start..end)
 }
 
+fn validate_clean_manifest(clean: &CleanText) -> Result<()> {
+    for emitted in &clean.manifest {
+        let mapped = map_clean_span_to_raw(clean, &emitted.clean_span)?;
+        if mapped != emitted.raw_span {
+            return Err(protection_trace_error(
+                "manifest clean-to-raw mapping mismatch",
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn suspect_is_inside_live_token(
+    session: &Session,
+    clean: &CleanText,
+    suspect: &LeakSuspect,
+) -> bool {
+    let span = &suspect.span;
+    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
+        return false;
+    }
+    let mut containing = clean.manifest.iter().filter(|emitted| {
+        emitted.clean_span.start <= span.start && span.end <= emitted.clean_span.end
+    });
+    let Some(emitted) = containing.next() else {
+        return false;
+    };
+    if containing.next().is_some() {
+        return false;
+    }
+    let Some(token) = clean.text.get(emitted.clean_span.clone()) else {
+        return false;
+    };
+    let Some(restored) = session.restore(token) else {
+        return false;
+    };
+    session.contains_token(token)
+        && emitted.raw_span.start < emitted.raw_span.end
+        && restored.len() == emitted.raw_span.end - emitted.raw_span.start
+}
+
+fn suspect_action_span_matches_manifest(clean: &CleanText, suspect: &LeakSuspect) -> bool {
+    if suspect.span.start >= suspect.span.end || !is_char_boundary_range(&clean.text, &suspect.span)
+    {
+        return false;
+    }
+    match &suspect.kind {
+        LeakKind::Uncovered => !clean
+            .manifest
+            .iter()
+            .any(|emitted| ranges_overlap(&emitted.clean_span, &suspect.span)),
+        LeakKind::PartialBleed { uncovered } => {
+            if uncovered.start >= uncovered.end
+                || !is_char_boundary_range(&clean.text, uncovered)
+                || uncovered.start < suspect.span.start
+                || uncovered.end > suspect.span.end
+            {
+                return false;
+            }
+            let mut cursor = suspect.span.start;
+            let mut gaps = Vec::new();
+            for emitted in clean
+                .manifest
+                .iter()
+                .filter(|emitted| ranges_overlap(&emitted.clean_span, &suspect.span))
+            {
+                let covered_start = emitted.clean_span.start.max(suspect.span.start);
+                let covered_end = emitted.clean_span.end.min(suspect.span.end);
+                if cursor < covered_start {
+                    gaps.push(cursor..covered_start);
+                }
+                cursor = cursor.max(covered_end);
+            }
+            if cursor < suspect.span.end {
+                gaps.push(cursor..suspect.span.end);
+            }
+            gaps.as_slice() == [uncovered.clone()]
+        }
+        LeakKind::ClassMismatch { .. } => false,
+        _ => false,
+    }
+}
+
+fn sort_safety_net_suspects(suspects: &mut Vec<&LeakSuspect>) {
+    suspects.sort_by(|left, right| {
+        (
+            left.span.start,
+            left.span.end,
+            left.class.to_canonical_str(),
+            left.safety_net_id.as_str(),
+        )
+            .cmp(&(
+                right.span.start,
+                right.span.end,
+                right.class.to_canonical_str(),
+                right.safety_net_id.as_str(),
+            ))
+    });
+}
+
 fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Option<usize> {
     let mut clean_cursor = 0usize;
     let mut raw_cursor = 0usize;
@@ -1619,21 +1829,6 @@ fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Op
         raw_cursor = emitted.raw_span.end;
     }
     raw_cursor.checked_add(offset.checked_sub(clean_cursor)?)
-}
-
-fn actionable_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
-    let mut suspects = report
-        .suspects
-        .iter()
-        .filter(|suspect| {
-            matches!(
-                suspect.kind,
-                LeakKind::Uncovered | LeakKind::PartialBleed { .. }
-            )
-        })
-        .collect::<Vec<_>>();
-    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
-    suspects
 }
 
 fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
@@ -2849,8 +3044,437 @@ mod tests {
         assert_eq!(trace_coordinates, production_coordinates);
     }
 
+    fn fallback_redact_parity_fixture() -> (Session, CleanText, LeakReport, String) {
+        let email_raw = "alice@example.invalid";
+        let phone_raw = "+1-555-0101";
+        let raw_text = format!("{email_raw} A B {phone_raw}");
+        let session =
+            Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x01, 0x23, 0x45, 0x67])
+                .expect("session");
+        let email_token = session
+            .tokenize_with_family("counter", &PiiClass::Email, email_raw)
+            .expect("email token");
+        let phone_class = PiiClass::custom("phone");
+        let phone_token = session
+            .tokenize_with_family("counter", &phone_class, phone_raw)
+            .expect("phone token");
+        let clean_text = format!("{email_token} A B {phone_token}");
+        let phone_clean_start = clean_text.find(&phone_token).expect("phone token offset");
+        let phone_raw_start = raw_text.find(phone_raw).expect("phone raw offset");
+        let a_start = clean_text.find("A B").expect("synthetic gap");
+        let b_start = a_start + "A ".len();
+        let clean = CleanText {
+            text: clean_text,
+            manifest: vec![
+                EmittedTokenSpan::new(0..email_token.len(), 0..email_raw.len(), PiiClass::Email),
+                EmittedTokenSpan::new(
+                    phone_clean_start..phone_clean_start + phone_token.len(),
+                    phone_raw_start..phone_raw_start + phone_raw.len(),
+                    phone_class,
+                ),
+            ],
+        };
+        let report = LeakReport::from_parts(
+            vec![
+                LeakSuspect::new(
+                    1..2,
+                    PiiClass::Name,
+                    "parity.fixture",
+                    Some(1.0),
+                    LeakKind::ClassMismatch {
+                        pipeline_class: PiiClass::Email,
+                        safety_net_class: PiiClass::Name,
+                    },
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                ),
+                LeakSuspect::new(
+                    a_start..a_start + 1,
+                    PiiClass::Name,
+                    "parity.fixture",
+                    Some(1.0),
+                    LeakKind::Uncovered,
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                ),
+                LeakSuspect::new(
+                    b_start..b_start + 1,
+                    PiiClass::Name,
+                    "parity.fixture",
+                    Some(1.0),
+                    LeakKind::Uncovered,
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                ),
+            ],
+            Vec::new(),
+        );
+        (session, clean, report, raw_text)
+    }
+
     #[test]
-    fn ambiguous_safety_resolve_mapping_fails_before_any_emission() {
+    fn fallback_redact_manifest_desync_has_traced_untraced_parity() {
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+
+        let (traced_session, mut traced_clean, traced_report, raw_text) =
+            fallback_redact_parity_fixture();
+        let mut trace = ProtectionTraceCollector::new(&raw_text);
+        let traced_result = pipeline.apply_safety_net_policy(
+            &traced_session,
+            &mut traced_clean,
+            &traced_report,
+            DocumentKind::Text,
+            &[crate::LocaleTag::Global],
+            None,
+            policy,
+            Some(&mut trace),
+        );
+
+        let (untraced_session, mut untraced_clean, untraced_report, _) =
+            fallback_redact_parity_fixture();
+        let untraced_result = pipeline.apply_safety_net_policy(
+            &untraced_session,
+            &mut untraced_clean,
+            &untraced_report,
+            DocumentKind::Text,
+            &[crate::LocaleTag::Global],
+            None,
+            policy,
+            None,
+        );
+
+        assert!(traced_result.is_ok());
+        assert!(untraced_result.is_ok());
+        assert_eq!(traced_clean.text, untraced_clean.text);
+        assert_eq!(traced_clean.manifest, untraced_clean.manifest);
+        assert_eq!(
+            traced_session
+                .restore_strict_text(&traced_clean.text)
+                .expect("traced output restores"),
+            raw_text
+        );
+        assert_eq!(
+            untraced_session
+                .restore_strict_text(&untraced_clean.text)
+                .expect("untraced output restores"),
+            raw_text
+        );
+    }
+
+    #[test]
+    fn genuine_residual_fails_closed_with_traced_untraced_parity() {
+        fn fixture() -> (Session, CleanText, LeakReport) {
+            let raw = "Dr. Schmidt tail";
+            let session =
+                Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x01, 0x23, 0x45, 0x67])
+                    .expect("session");
+            let clean = CleanText {
+                text: raw.to_string(),
+                manifest: Vec::new(),
+            };
+            let report = LeakReport::from_parts(
+                vec![LeakSuspect::new(
+                    0.."Dr. Schmidt".len(),
+                    PiiClass::Name,
+                    "initial.fixture",
+                    Some(1.0),
+                    LeakKind::Uncovered,
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                )],
+                Vec::new(),
+            );
+            (session, clean, report)
+        }
+
+        let pipeline = Pipeline::builder()
+            .register_safety_net(MarkerSafetyNet {
+                id: "residual.fixture",
+                marker: "tail",
+                class: PiiClass::Name,
+            })
+            .build()
+            .expect("pipeline");
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+        let raw = "Dr. Schmidt tail";
+
+        let (traced_session, mut traced_clean, traced_report) = fixture();
+        let mut trace = ProtectionTraceCollector::new(raw);
+        let traced_error = pipeline
+            .apply_safety_net_policy(
+                &traced_session,
+                &mut traced_clean,
+                &traced_report,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                None,
+                policy,
+                Some(&mut trace),
+            )
+            .expect_err("genuine traced residual must fail closed");
+
+        let (untraced_session, mut untraced_clean, untraced_report) = fixture();
+        let untraced_error = pipeline
+            .apply_safety_net_policy(
+                &untraced_session,
+                &mut untraced_clean,
+                &untraced_report,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                None,
+                policy,
+                None,
+            )
+            .expect_err("genuine untraced residual must fail closed");
+
+        assert!(matches!(
+            traced_error,
+            Error::SafetyNetFallback(FallbackReason::ResidualSuspect)
+        ));
+        assert!(matches!(
+            untraced_error,
+            Error::SafetyNetFallback(FallbackReason::ResidualSuspect)
+        ));
+        assert_eq!(traced_clean.text, untraced_clean.text);
+        assert_eq!(traced_clean.manifest, untraced_clean.manifest);
+        assert_eq!(
+            traced_session
+                .restore_strict_text(&traced_clean.text)
+                .expect("traced failed output remains reversible"),
+            raw
+        );
+        assert_eq!(
+            untraced_session
+                .restore_strict_text(&untraced_clean.text)
+                .expect("untraced failed output remains reversible"),
+            raw
+        );
+    }
+
+    #[test]
+    fn non_affine_manifest_fails_before_mutation_with_traced_untraced_parity() {
+        fn fixture() -> (Session, CleanText, LeakReport, String) {
+            let (session, mut clean, _, raw) = fallback_redact_parity_fixture();
+            let b_start = clean.text.find('B').expect("synthetic gap byte");
+            replace_clean_span(&mut clean, b_start..b_start + 1, "", None);
+            let a_start = clean.text.find('A').expect("remaining synthetic gap byte");
+            let report = LeakReport::from_parts(
+                vec![LeakSuspect::new(
+                    a_start..a_start + 1,
+                    PiiClass::Name,
+                    "non-affine.fixture",
+                    Some(1.0),
+                    LeakKind::Uncovered,
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                )],
+                Vec::new(),
+            );
+            (session, clean, report, raw)
+        }
+
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+        let (traced_session, mut traced_clean, traced_report, raw) = fixture();
+        let traced_before = (traced_clean.text.clone(), traced_clean.manifest.clone());
+        let mut trace = ProtectionTraceCollector::new(&raw);
+        let traced_error = pipeline
+            .apply_safety_net_policy(
+                &traced_session,
+                &mut traced_clean,
+                &traced_report,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                None,
+                policy,
+                Some(&mut trace),
+            )
+            .expect_err("traced non-affine manifest must fail closed");
+
+        let (untraced_session, mut untraced_clean, untraced_report, _) = fixture();
+        let untraced_before = (untraced_clean.text.clone(), untraced_clean.manifest.clone());
+        let untraced_error = pipeline
+            .apply_safety_net_policy(
+                &untraced_session,
+                &mut untraced_clean,
+                &untraced_report,
+                DocumentKind::Text,
+                &[crate::LocaleTag::Global],
+                None,
+                policy,
+                None,
+            )
+            .expect_err("untraced non-affine manifest must fail closed");
+
+        for error in [traced_error, untraced_error] {
+            assert!(matches!(
+                error,
+                Error::SafetyNet(SafetyNetError::InvalidOutput { message })
+                    if message == "clean-to-raw start mapping failed"
+            ));
+        }
+        assert_eq!((traced_clean.text, traced_clean.manifest), traced_before);
+        assert_eq!(
+            (untraced_clean.text, untraced_clean.manifest),
+            untraced_before
+        );
+        assert!(trace.items.is_empty());
+    }
+
+    #[test]
+    fn resolve_straddles_both_live_tokens_without_retokenizing_them() {
+        let (session, mut clean, _, raw) = fallback_redact_parity_fixture();
+        let email_end = clean.manifest[0].clean_span.end;
+        let phone_start = clean.manifest[1].clean_span.start;
+        let report = LeakReport::from_parts(
+            vec![
+                LeakSuspect::new(
+                    email_end - 1..email_end + 2,
+                    PiiClass::Name,
+                    "left-straddle.fixture",
+                    Some(1.0),
+                    LeakKind::PartialBleed {
+                        uncovered: email_end..email_end + 2,
+                    },
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                ),
+                LeakSuspect::new(
+                    phone_start - 2..phone_start + 1,
+                    PiiClass::Name,
+                    "right-straddle.fixture",
+                    Some(1.0),
+                    LeakKind::PartialBleed {
+                        uncovered: phone_start - 2..phone_start,
+                    },
+                    PiiClass::Name.to_canonical_str(),
+                    None,
+                ),
+            ],
+            Vec::new(),
+        );
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+        let mut trace = ProtectionTraceCollector::new(&raw);
+
+        let reason = pipeline
+            .resolve_safety_net_suspects(
+                &session,
+                &mut clean,
+                &report,
+                DocumentKind::Text,
+                None,
+                Some(&mut trace),
+            )
+            .expect("straddles resolve");
+
+        assert_eq!(reason, None);
+        validate_clean_manifest(&clean).expect("manifest remains affine");
+        assert_eq!(clean.manifest.len(), 4);
+        assert_eq!(trace.items.len(), 2);
+        assert_eq!(
+            session
+                .restore_strict_text(&clean.text)
+                .expect("straddles restore"),
+            raw
+        );
+    }
+
+    #[test]
+    fn resolve_token_gap_token_protects_only_the_single_uncovered_gap() {
+        let (session, mut clean, _, raw) = fallback_redact_parity_fixture();
+        let email_end = clean.manifest[0].clean_span.end;
+        let phone_start = clean.manifest[1].clean_span.start;
+        let report = LeakReport::from_parts(
+            vec![LeakSuspect::new(
+                email_end - 1..phone_start + 1,
+                PiiClass::Name,
+                "token-gap-token.fixture",
+                Some(1.0),
+                LeakKind::PartialBleed {
+                    uncovered: email_end..phone_start,
+                },
+                PiiClass::Name.to_canonical_str(),
+                None,
+            )],
+            Vec::new(),
+        );
+        let pipeline = Pipeline::builder().build().expect("pipeline");
+
+        let reason = pipeline
+            .resolve_safety_net_suspects(
+                &session,
+                &mut clean,
+                &report,
+                DocumentKind::Text,
+                None,
+                None,
+            )
+            .expect("single gap resolves");
+
+        assert_eq!(reason, None);
+        validate_clean_manifest(&clean).expect("manifest remains affine");
+        assert_eq!(clean.manifest.len(), 3);
+        assert_eq!(
+            session
+                .restore_strict_text(&clean.text)
+                .expect("token-gap-token restores"),
+            raw
+        );
+    }
+
+    #[test]
+    fn overlapping_and_nested_resolve_suspects_fail_before_emission() {
+        let raw = "Dr. Schmidt tail";
+        for spans in [[0..11, 3..11], [3..11, 0..11]] {
+            let session =
+                Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x01, 0x23, 0x45, 0x67])
+                    .expect("session");
+            let mut clean = CleanText {
+                text: raw.to_string(),
+                manifest: Vec::new(),
+            };
+            let report = LeakReport::from_parts(
+                spans
+                    .into_iter()
+                    .map(|span| {
+                        LeakSuspect::new(
+                            span,
+                            PiiClass::Name,
+                            "overlap.fixture",
+                            Some(1.0),
+                            LeakKind::Uncovered,
+                            PiiClass::Name.to_canonical_str(),
+                            None,
+                        )
+                    })
+                    .collect(),
+                Vec::new(),
+            );
+            let pipeline = Pipeline::builder().build().expect("pipeline");
+            let mut trace = ProtectionTraceCollector::new(raw);
+
+            let reason = pipeline
+                .resolve_safety_net_suspects(
+                    &session,
+                    &mut clean,
+                    &report,
+                    DocumentKind::Text,
+                    None,
+                    Some(&mut trace),
+                )
+                .expect("overlap classification succeeds");
+
+            assert_eq!(reason, Some(FallbackReason::OverlapConflict));
+            assert_eq!(clean.text, raw);
+            assert!(clean.manifest.is_empty());
+            assert!(trace.items.is_empty());
+            assert!(session.snapshot_entries().is_empty());
+        }
+    }
+
+    #[test]
+    fn unknown_token_shaped_safety_suspect_falls_back_before_any_emission() {
         let raw_text = "alice@example.invalid tail";
         let existing_token = "<Email_1>";
         let mut clean = CleanText {
@@ -2879,7 +3503,7 @@ mod tests {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let mut trace = ProtectionTraceCollector::new(raw_text);
 
-        let error = pipeline
+        let reason = pipeline
             .resolve_safety_net_suspects(
                 &session,
                 &mut clean,
@@ -2888,13 +3512,9 @@ mod tests {
                 None,
                 Some(&mut trace),
             )
-            .expect_err("an interval inside an existing token is ambiguous");
+            .expect("classification succeeds");
 
-        assert!(matches!(
-            error,
-            Error::SafetyNet(SafetyNetError::InvalidOutput { message })
-                if message == "clean-to-raw start mapping failed"
-        ));
+        assert_eq!(reason, Some(FallbackReason::OverlapConflict));
         assert_eq!(clean.text, before_text);
         assert_eq!(clean.manifest, before_manifest);
         assert!(trace.items.is_empty());
@@ -2941,17 +3561,17 @@ mod tests {
                 SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact),
             )
             .expect("fallback trace");
-        assert!(fallback_manifest.is_empty());
+        assert_eq!(fallback_manifest.len(), 1);
         assert_eq!(fallback_trace.len(), 1);
         assert_eq!(fallback_trace[0].raw_start(), 0);
         assert_eq!(fallback_trace[0].raw_end(), 21);
-        assert_eq!(fallback_trace[0].class(), &PiiClass::Name);
-        assert_eq!(fallback_trace[0].stage(), "safety_net");
-        assert_eq!(fallback_trace[0].decision(), "fallback_redact");
-        assert_eq!(fallback_trace[0].action(), "redact");
+        assert_eq!(fallback_trace[0].class(), &PiiClass::Email);
+        assert_eq!(fallback_trace[0].stage(), "primary_pipeline");
+        assert_eq!(fallback_trace[0].decision(), "policy");
+        assert_eq!(fallback_trace[0].action(), "tokenize");
         assert_eq!(
             fallback_trace[0].source_ids(),
-            &["manifest-mismatch.fixture".to_string()]
+            &["email.fixture".to_string()]
         );
     }
 
