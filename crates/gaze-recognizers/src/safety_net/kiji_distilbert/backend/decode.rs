@@ -5,6 +5,7 @@ use gaze_types::SafetyNetError;
 pub(crate) const ID2LABEL: [&str; 9] = [
     "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC",
 ];
+const PINNED_LABEL_COUNT: usize = ID2LABEL.len();
 
 pub(crate) fn decode_logits(
     clean: &str,
@@ -13,6 +14,20 @@ pub(crate) fn decode_logits(
     seq_len: usize,
     num_labels: usize,
 ) -> Result<Vec<RawSpan>, SafetyNetError> {
+    if num_labels != PINNED_LABEL_COUNT {
+        return Err(invalid_output("kiji returned invalid classifier width"));
+    }
+    if seq_len != offsets.len() {
+        return Err(invalid_output("kiji returned mismatched token offsets"));
+    }
+    let expected_len = expected_logit_len(seq_len)?;
+    if flat.len() != expected_len {
+        return Err(invalid_output("kiji returned invalid logits length"));
+    }
+    if flat.iter().any(|value| !value.is_finite()) {
+        return Err(invalid_output("kiji returned non-finite logits"));
+    }
+
     let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
     let mut subword_scores = Vec::with_capacity(seq_len);
     for pos in 0..seq_len {
@@ -31,6 +46,12 @@ pub(crate) fn decode_logits(
 }
 
 fn label_for_row(row: &[f32]) -> Result<(&'static str, f32), SafetyNetError> {
+    if row.len() != PINNED_LABEL_COUNT {
+        return Err(invalid_output("kiji returned invalid classifier row"));
+    }
+    if row.iter().any(|value| !value.is_finite()) {
+        return Err(invalid_output("kiji returned non-finite logits"));
+    }
     let (argmax, _) =
         row.iter()
             .enumerate()
@@ -48,6 +69,18 @@ fn label_for_row(row: &[f32]) -> Result<(&'static str, f32), SafetyNetError> {
             message: "kiji returned unknown classifier label".to_string(),
         })?;
     Ok((label, softmax_confidence(row, argmax)))
+}
+
+fn expected_logit_len(seq_len: usize) -> Result<usize, SafetyNetError> {
+    seq_len
+        .checked_mul(PINNED_LABEL_COUNT)
+        .ok_or_else(|| invalid_output("kiji returned overflowing logits shape"))
+}
+
+fn invalid_output(message: &str) -> SafetyNetError {
+    SafetyNetError::InvalidOutput {
+        message: message.to_string(),
+    }
 }
 
 fn merge_kiji_bio_spans(
@@ -202,5 +235,50 @@ mod tests {
                 RawSpan::new(19, 25, "location", Some(0.7)),
             ]
         );
+    }
+
+    #[test]
+    fn rejects_wrong_classifier_width() {
+        let error = decode_logits("", &[], &[], 0, 8).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
+
+    #[test]
+    fn rejects_offset_sequence_mismatch() {
+        let error = decode_logits("x", &[], &[0.0; 9], 1, 9).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
+
+    #[test]
+    fn rejects_flat_length_mismatch() {
+        let error = decode_logits("", &[(0, 0)], &[0.0; 8], 1, 9).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
+
+    #[test]
+    fn rejects_overflowing_shape() {
+        let error = expected_logit_len(usize::MAX).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
+
+    #[test]
+    fn rejects_non_finite_logits() {
+        let mut logits = [0.0; 9];
+        logits[4] = f32::NAN;
+        let error = decode_logits("", &[(0, 0)], &logits, 1, 9).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
+
+    #[test]
+    fn accepts_o_for_zero_length_special_token() {
+        let spans = decode_logits(
+            "",
+            &[(0, 0)],
+            &[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            1,
+            9,
+        )
+        .unwrap();
+        assert!(spans.is_empty());
     }
 }

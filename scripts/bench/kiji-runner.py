@@ -5,9 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Sequence
 
 import numpy as np
 import onnxruntime as ort
@@ -153,27 +154,64 @@ def build_inputs(session: ort.InferenceSession, encoding: Any) -> dict[str, np.n
         elif "token_type" in lowered or "segment" in lowered:
             values[name] = type_ids
         else:
-            raise KijiRunnerError(f"unsupported ONNX input: {name}")
+            raise KijiRunnerError("unsupported ONNX input shape")
     return values
 
 
 def label_for(logits: np.ndarray, id_to_label: dict[int, str]) -> tuple[str, float]:
-    label_id = int(np.argmax(logits))
-    score = softmax_score(logits, label_id)
-    return id_to_label.get(label_id, "O"), score
+    if getattr(logits, "ndim", None) != 1 or getattr(logits, "shape", None) != (9,):
+        raise KijiRunnerError("invalid classifier row width")
+    try:
+        values = tuple(float(value) for value in logits)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise KijiRunnerError("invalid classifier row") from exc
+    if len(values) != 9 or any(not math.isfinite(value) for value in values):
+        raise KijiRunnerError("non-finite classifier row")
+    label_id = max(range(len(values)), key=values.__getitem__)
+    label = id_to_label.get(label_id)
+    if label is None or label != PINNED_LABELS.get(label_id):
+        raise KijiRunnerError("unknown classifier label id")
+    return label, softmax_score(values, label_id)
 
 
-def softmax_score(logits: np.ndarray, label_id: int) -> float:
-    values = logits.astype(np.float64)
-    values = values - np.max(values)
-    exp = np.exp(values)
-    denom = float(np.sum(exp))
-    if denom == 0.0 or not np.isfinite(denom):
-        return 0.0
-    score = float(exp[label_id] / denom)
-    if not np.isfinite(score):
-        return 0.0
+def softmax_score(logits: Sequence[float], label_id: int) -> float:
+    try:
+        maximum = max(logits)
+        exponentials = tuple(math.exp(value - maximum) for value in logits)
+        denominator = sum(exponentials)
+        score = exponentials[label_id] / denominator
+    except (ArithmeticError, IndexError, TypeError, ValueError) as exc:
+        raise KijiRunnerError("invalid classifier confidence") from exc
+    if denominator <= 0.0 or not math.isfinite(denominator) or not math.isfinite(score):
+        raise KijiRunnerError("non-finite classifier confidence")
     return score
+
+
+def utf8_boundaries(text: str) -> tuple[int, set[int]]:
+    boundaries = {0}
+    byte_length = 0
+    for character in text:
+        byte_length += len(character.encode("utf-8"))
+        boundaries.add(byte_length)
+    return byte_length, boundaries
+
+
+def validate_offset(
+    offset: Any,
+    text_byte_length: int,
+    boundaries: set[int],
+    token_index: int,
+) -> tuple[int, int]:
+    if not isinstance(offset, (list, tuple)) or len(offset) != 2:
+        raise KijiRunnerError(f"token {token_index}: invalid token offset shape")
+    start, end = offset
+    if type(start) is not int or type(end) is not int:
+        raise KijiRunnerError(f"token {token_index}: invalid token offset type")
+    if start < 0 or end < start or end > text_byte_length:
+        raise KijiRunnerError(f"token {token_index}: invalid token offset bounds")
+    if start not in boundaries or end not in boundaries:
+        raise KijiRunnerError(f"token {token_index}: invalid token offset boundary")
+    return start, end
 
 
 def split_bio(label: str) -> tuple[str, str | None]:
@@ -242,6 +280,9 @@ def run(model_dir: Path, text: str, precision: str = "fp32") -> list[dict[str, A
     encoding = tokenizer.encode(text)
     if not encoding.ids:
         return []
+    offsets = encoding.offsets
+    if len(offsets) != len(encoding.ids):
+        raise KijiRunnerError("tokenizer returned mismatched offsets")
 
     session = ort.InferenceSession(str(model_path), providers=["CPUExecutionProvider"])
     outputs = session.run(None, build_inputs(session, encoding))
@@ -249,25 +290,20 @@ def run(model_dir: Path, text: str, precision: str = "fp32") -> list[dict[str, A
         raise KijiRunnerError("ONNX model returned no outputs")
 
     logits = np.asarray(outputs[0])
-    if logits.ndim == 3:
-        logits = logits[0]
-    if logits.ndim != 2:
-        raise KijiRunnerError(f"unexpected logits shape: {list(logits.shape)}")
+    expected_shape = (1, len(offsets), 9)
+    if logits.ndim != 3 or tuple(logits.shape) != expected_shape:
+        raise KijiRunnerError("ONNX model returned invalid logits shape")
+    logits = logits[0]
 
     id_to_label = load_labels(labels_path)
+    text_byte_length, boundaries = utf8_boundaries(text)
     predictions: list[tuple[str, int, int, float]] = []
-    for index, offset in enumerate(encoding.offsets):
-        if index >= logits.shape[0]:
-            break
-        start, end = int(offset[0]), int(offset[1])
-        if start < 0 or end < start:
-            print(f"kiji-runner: skipping invalid token offset at {index}", file=sys.stderr)
-            continue
+    for index, offset in enumerate(offsets):
         try:
+            start, end = validate_offset(offset, text_byte_length, boundaries, index)
             label, score = label_for(logits[index], id_to_label)
-        except Exception as exc:  # keep one bad token from failing the whole request
-            print(f"kiji-runner: skipping token {index}: {exc}", file=sys.stderr)
-            continue
+        except Exception as exc:
+            raise KijiRunnerError(f"token {index}: token decode failed") from exc
         predictions.append((label, start, end, score))
 
     return spans_from_predictions(predictions)
@@ -278,11 +314,14 @@ def main(argv: list[str]) -> int:
         args = parse_args(argv)
         text = read_stdin()
         spans = run(Path(args.model_dir), text, args.precision)
-        json.dump(spans, sys.stdout, separators=(",", ":"))
-        sys.stdout.write("\n")
+        output = json.dumps(spans, separators=(",", ":"), allow_nan=False)
+        sys.stdout.write(f"{output}\n")
         return 0
-    except Exception as exc:
+    except KijiRunnerError as exc:
         print(f"kiji-runner: {exc}", file=sys.stderr)
+        return 1
+    except Exception:
+        print("kiji-runner: request failed", file=sys.stderr)
         return 1
 
 

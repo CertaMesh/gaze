@@ -294,18 +294,12 @@ impl KijiDistilbertBackend for OrtKijiBackend {
                 sanitize_error(&err.to_string())
             ),
         })?;
-        let logits = match outputs.iter().next() {
-            Some((_, value)) => value,
-            None => return Ok(Vec::new()),
-        };
+        let logits = require_ort_output(outputs.iter().next().map(|(_, value)| value))?;
         let (shape_obj, flat) =
             logits
                 .try_extract_tensor::<f32>()
-                .map_err(|err| SafetyNetError::Runtime {
-                    message: format!(
-                        "kiji ort output failed: {}",
-                        sanitize_error(&err.to_string())
-                    ),
+                .map_err(|_| SafetyNetError::InvalidOutput {
+                    message: "kiji ort returned invalid output tensor".to_string(),
                 })?;
         let shape: Vec<usize> = shape_obj.iter().map(|dim| *dim as usize).collect();
         if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
@@ -319,6 +313,12 @@ impl KijiDistilbertBackend for OrtKijiBackend {
             clean,
         )
     }
+}
+
+fn require_ort_output<T>(output: Option<T>) -> Result<T, SafetyNetError> {
+    output.ok_or_else(|| SafetyNetError::InvalidOutput {
+        message: "kiji ort returned no output tensor".to_string(),
+    })
 }
 
 fn sanitize_error(message: &str) -> String {
@@ -340,4 +340,15 @@ fn sanitize_token(token: &str) -> String {
     }
 
     token.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_output_fails_closed() {
+        let error = require_ort_output::<()>(None).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    }
 }

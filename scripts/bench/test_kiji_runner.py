@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
 import re
 import sys
@@ -11,6 +12,8 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from contextlib import redirect_stderr, redirect_stdout
+from unittest import mock
 
 
 EXPECTED_LABELS = (
@@ -26,9 +29,39 @@ EXPECTED_LABELS = (
 )
 
 
+class FakeArray:
+    def __init__(self, values: object) -> None:
+        self.values = values
+        self.shape = self._shape(values)
+        self.ndim = len(self.shape)
+
+    @classmethod
+    def _shape(cls, values: object) -> tuple[int, ...]:
+        if not isinstance(values, (list, tuple)):
+            return ()
+        if not values:
+            return (0,)
+        child_shape = cls._shape(values[0])
+        if any(cls._shape(value) != child_shape for value in values):
+            return (len(values),)
+        return (len(values), *child_shape)
+
+    def __getitem__(self, index: int) -> object:
+        value = self.values[index]  # type: ignore[index]
+        return FakeArray(value) if isinstance(value, (list, tuple)) else value
+
+    def __iter__(self):
+        for value in self.values:  # type: ignore[union-attr]
+            yield FakeArray(value) if isinstance(value, (list, tuple)) else value
+
+
 def load_runner() -> types.ModuleType:
     numpy_stub = types.ModuleType("numpy")
     numpy_stub.ndarray = object
+    numpy_stub.int64 = int
+    numpy_stub.asarray = lambda values, dtype=None: (
+        values if isinstance(values, FakeArray) else FakeArray(values)
+    )
     ort_stub = types.ModuleType("onnxruntime")
     ort_stub.InferenceSession = object
     tokenizers_stub = types.ModuleType("tokenizers")
@@ -181,6 +214,151 @@ class KijiLabelRegistryTests(unittest.TestCase):
         path.write_text('{"id2label": {}, "id2label": {}}', encoding="utf-8")
         with self.assertRaises(runner.KijiRunnerError):
             runner.load_labels(path)
+
+
+class KijiRequestValidationTests(unittest.TestCase):
+    @staticmethod
+    def row(label_id: int = 0) -> list[float]:
+        values = [0.0] * 9
+        values[label_id] = 1.0
+        return values
+
+    def configure_inference(
+        self,
+        offsets: list[object],
+        output: object,
+        *,
+        text: str = "Dr. Schmidt",
+    ) -> tuple[Path, str]:
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        model_dir = Path(directory.name)
+        (model_dir / "model.onnx").touch()
+        (model_dir / "tokenizer.json").touch()
+        labels = {
+            "schema_version": 1,
+            "source": "onnx-community/distilbert-NER-ONNX",
+            "source_commit": "3a19fe9404a4469d91aa3d551558a97f68872f67",
+            "labels": [
+                {"id": "person", "upstream": ["B-PER", "I-PER"]},
+                {"id": "organization", "upstream": ["B-ORG", "I-ORG"]},
+                {"id": "location", "upstream": ["B-LOC", "I-LOC"]},
+                {"id": "miscellaneous", "upstream": ["B-MISC", "I-MISC"]},
+            ]
+        }
+        (model_dir / "labels.json").write_text(json.dumps(labels), encoding="utf-8")
+
+        encoding = types.SimpleNamespace(
+            ids=list(range(len(offsets))),
+            attention_mask=[1] * len(offsets),
+            type_ids=[0] * len(offsets),
+            offsets=offsets,
+        )
+
+        class FakeTokenizer:
+            @classmethod
+            def from_file(cls, _path: str):
+                return cls()
+
+            def encode(self, _text: str):
+                return encoding
+
+        class FakeSession:
+            def __init__(self, *_args, **_kwargs) -> None:
+                pass
+
+            def get_inputs(self):
+                return [types.SimpleNamespace(name="input_ids")]
+
+            def run(self, *_args, **_kwargs):
+                return [output]
+
+        tokenizer_patch = mock.patch.object(runner, "Tokenizer", FakeTokenizer)
+        session_patch = mock.patch.object(runner.ort, "InferenceSession", FakeSession)
+        tokenizer_patch.start()
+        session_patch.start()
+        self.addCleanup(tokenizer_patch.stop)
+        self.addCleanup(session_patch.stop)
+        return model_dir, text
+
+    def test_label_for_rejects_bad_width_non_finite_and_unknown_id(self) -> None:
+        with self.assertRaises(runner.KijiRunnerError):
+            runner.label_for(FakeArray([0.0] * 8), dict(enumerate(EXPECTED_LABELS)))
+        non_finite = self.row(3)
+        non_finite[4] = float("nan")
+        with self.assertRaises(runner.KijiRunnerError):
+            runner.label_for(FakeArray(non_finite), dict(enumerate(EXPECTED_LABELS)))
+        missing = dict(enumerate(EXPECTED_LABELS))
+        missing.pop(3)
+        with self.assertRaises(runner.KijiRunnerError):
+            runner.label_for(FakeArray(self.row(3)), missing)
+
+    def test_label_for_rejects_non_finite_softmax(self) -> None:
+        with mock.patch.object(runner.math, "exp", return_value=float("inf")):
+            with self.assertRaises(runner.KijiRunnerError):
+                runner.label_for(FakeArray(self.row(1)), dict(enumerate(EXPECTED_LABELS)))
+
+    def test_rejects_rank_row_count_column_count_and_batch_mismatch(self) -> None:
+        cases = [
+            FakeArray([self.row()]),
+            FakeArray([[self.row()[:-1]]]),
+            FakeArray([[self.row(), self.row()]]),
+            FakeArray([[self.row()], [self.row()]]),
+        ]
+        for output in cases:
+            with self.subTest(shape=output.shape):
+                model_dir, text = self.configure_inference([(0, 0)], output)
+                with self.assertRaises(runner.KijiRunnerError):
+                    runner.run(model_dir, text)
+
+    def test_rejects_invalid_offsets_for_whole_request(self) -> None:
+        invalid_offsets = [(-1, 0), (1, 0), (0, 3), (1, 2), ("0", 0), (0,)]
+        for offset in invalid_offsets:
+            with self.subTest(offset=offset):
+                model_dir, text = self.configure_inference(
+                    [offset], FakeArray([[self.row()]]), text="ä"
+                )
+                with self.assertRaises(runner.KijiRunnerError):
+                    runner.run(model_dir, text)
+
+    def test_injected_decode_exception_fails_whole_request_safely(self) -> None:
+        model_dir, text = self.configure_inference([(0, 0)], FakeArray([[self.row()]]))
+        failures = [
+            RuntimeError("alice@example.invalid must not escape"),
+            runner.KijiRunnerError("alice@example.invalid must not escape"),
+        ]
+        for failure in failures:
+            with self.subTest(exception=type(failure).__name__):
+                with mock.patch.object(runner, "label_for", side_effect=failure):
+                    with self.assertRaisesRegex(
+                        runner.KijiRunnerError, r"^token 0: token decode failed$"
+                    ):
+                        runner.run(model_dir, text)
+
+    def test_accepts_zero_length_special_token_offset(self) -> None:
+        model_dir, text = self.configure_inference([(0, 0)], FakeArray([[self.row(0)]]))
+        self.assertEqual(runner.run(model_dir, text), [])
+
+    def test_main_failure_is_nonzero_empty_stdout_and_sanitized_stderr(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        args = types.SimpleNamespace(model_dir="synthetic", precision="fp32")
+        with (
+            mock.patch.object(runner, "parse_args", return_value=args),
+            mock.patch.object(runner, "read_stdin", return_value="alice@example.invalid"),
+            mock.patch.object(
+                runner,
+                "run",
+                side_effect=RuntimeError("alice@example.invalid must not escape"),
+            ),
+            redirect_stdout(stdout),
+            redirect_stderr(stderr),
+        ):
+            exit_code = runner.main([])
+        self.assertNotEqual(exit_code, 0)
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertEqual(stderr.getvalue(), "kiji-runner: request failed\n")
+        self.assertNotIn("alice@example.invalid", stderr.getvalue())
 
 
 if __name__ == "__main__":
