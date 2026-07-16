@@ -15,21 +15,39 @@ from tokenizers import Tokenizer
 
 
 MAX_INPUT_BYTES = 1024 * 1024
-LABEL_FALLBACK = {
+PINNED_LABELS = {
     0: "O",
-    1: "B-MISC",
-    2: "I-MISC",
-    3: "B-PER",
-    4: "I-PER",
-    5: "B-ORG",
-    6: "I-ORG",
-    7: "B-LOC",
-    8: "I-LOC",
+    1: "B-PER",
+    2: "I-PER",
+    3: "B-ORG",
+    4: "I-ORG",
+    5: "B-LOC",
+    6: "I-LOC",
+    7: "B-MISC",
+    8: "I-MISC",
 }
+PINNED_VOCABULARY = {
+    "person": frozenset({"B-PER", "I-PER"}),
+    "organization": frozenset({"B-ORG", "I-ORG"}),
+    "location": frozenset({"B-LOC", "I-LOC"}),
+    "miscellaneous": frozenset({"B-MISC", "I-MISC"}),
+}
+PINNED_LABELS_MANIFEST_KEYS = frozenset({"schema_version", "source", "source_commit", "labels"})
+PINNED_LABELS_SOURCE = "onnx-community/distilbert-NER-ONNX"
+PINNED_LABELS_SOURCE_COMMIT = "3a19fe9404a4469d91aa3d551558a97f68872f67"
 
 
 class KijiRunnerError(RuntimeError):
     pass
+
+
+def reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise KijiRunnerError("invalid labels metadata: duplicate key")
+        result[key] = value
+    return result
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -54,31 +72,69 @@ def read_stdin() -> str:
 
 
 def load_labels(path: Path) -> dict[int, str]:
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle, object_pairs_hook=reject_duplicate_keys)
+    except KijiRunnerError:
+        raise
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise KijiRunnerError("invalid labels metadata") from exc
 
-    id_to_label: dict[int, str] = {}
-    if isinstance(data, dict) and isinstance(data.get("id2label"), dict):
-        for key, value in data["id2label"].items():
-            id_to_label[int(key)] = str(value)
-    elif isinstance(data, dict) and isinstance(data.get("labels"), list):
-        # Gaze's pinned labels.json records the closed allowed upstream labels,
-        # not the ONNX classifier id order. The upstream DistilBERT NER export
-        # uses the standard id2label order below.
-        allowed = {
-            str(label)
-            for item in data["labels"]
-            for label in item.get("upstream", [])
-        }
-        id_to_label = {
-            key: value
-            for key, value in LABEL_FALLBACK.items()
-            if value == "O" or value in allowed
-        }
+    if not isinstance(data, dict):
+        raise KijiRunnerError("invalid labels metadata shape")
 
-    if not id_to_label:
-        id_to_label = dict(LABEL_FALLBACK)
-    return id_to_label
+    metadata_keys = set(data)
+    if metadata_keys == {"id2label"}:
+        id_to_label = data["id2label"]
+        expected_keys = {str(index) for index in PINNED_LABELS}
+        if not isinstance(id_to_label, dict) or set(id_to_label) != expected_keys:
+            raise KijiRunnerError("invalid pinned id2label mapping")
+        for index, expected_label in PINNED_LABELS.items():
+            if type(id_to_label[str(index)]) is not str:
+                raise KijiRunnerError("invalid pinned id2label mapping")
+            if id_to_label[str(index)] != expected_label:
+                raise KijiRunnerError("invalid pinned id2label mapping")
+        return dict(PINNED_LABELS)
+
+    if metadata_keys != PINNED_LABELS_MANIFEST_KEYS:
+        raise KijiRunnerError("invalid labels metadata shape")
+    if type(data["schema_version"]) is not int or data["schema_version"] != 1:
+        raise KijiRunnerError("invalid pinned label vocabulary metadata")
+    if data["source"] != PINNED_LABELS_SOURCE:
+        raise KijiRunnerError("invalid pinned label vocabulary metadata")
+    if data["source_commit"] != PINNED_LABELS_SOURCE_COMMIT:
+        raise KijiRunnerError("invalid pinned label vocabulary metadata")
+
+    labels = data["labels"]
+    if not isinstance(labels, list) or len(labels) != len(PINNED_VOCABULARY):
+        raise KijiRunnerError("invalid pinned label vocabulary")
+
+    seen_ids: set[str] = set()
+    seen_labels: set[str] = set()
+    for item in labels:
+        if not isinstance(item, dict) or set(item) != {"id", "upstream"}:
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        entity_id = item["id"]
+        upstream = item["upstream"]
+        if type(entity_id) is not str or entity_id in seen_ids:
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        if not isinstance(upstream, list) or any(type(label) is not str for label in upstream):
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        if len(upstream) != len(set(upstream)):
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        expected = PINNED_VOCABULARY.get(entity_id)
+        if expected is None or frozenset(upstream) != expected:
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        if seen_labels.intersection(upstream):
+            raise KijiRunnerError("invalid pinned label vocabulary")
+        seen_ids.add(entity_id)
+        seen_labels.update(upstream)
+
+    if seen_ids != set(PINNED_VOCABULARY):
+        raise KijiRunnerError("invalid pinned label vocabulary")
+    if seen_labels != set(PINNED_LABELS.values()) - {"O"}:
+        raise KijiRunnerError("invalid pinned label vocabulary")
+    return dict(PINNED_LABELS)
 
 
 def build_inputs(session: ort.InferenceSession, encoding: Any) -> dict[str, np.ndarray]:

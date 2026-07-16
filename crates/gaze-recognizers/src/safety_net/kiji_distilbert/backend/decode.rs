@@ -1,8 +1,9 @@
 use super::RawSpan;
 use crate::ner::decode::{softmax_confidence, split_bio};
+use gaze_types::SafetyNetError;
 
 pub(crate) const ID2LABEL: [&str; 9] = [
-    "O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG", "B-MISC", "I-MISC",
+    "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC",
 ];
 
 pub(crate) fn decode_logits(
@@ -11,26 +12,42 @@ pub(crate) fn decode_logits(
     flat: &[f32],
     seq_len: usize,
     num_labels: usize,
-) -> Vec<RawSpan> {
+) -> Result<Vec<RawSpan>, SafetyNetError> {
     let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
     let mut subword_scores = Vec::with_capacity(seq_len);
     for pos in 0..seq_len {
         let base = pos * num_labels;
         let row = &flat[base..base + num_labels];
-        let (argmax, _) =
-            row.iter()
-                .enumerate()
-                .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
-                    if value > acc.1 {
-                        (index, value)
-                    } else {
-                        acc
-                    }
-                });
-        subword_labels.push(ID2LABEL.get(argmax).copied().unwrap_or("O"));
-        subword_scores.push(softmax_confidence(row, argmax));
+        let (label, score) = label_for_row(row)?;
+        subword_labels.push(label);
+        subword_scores.push(score);
     }
-    merge_kiji_bio_spans(clean, offsets, &subword_labels, &subword_scores)
+    Ok(merge_kiji_bio_spans(
+        clean,
+        offsets,
+        &subword_labels,
+        &subword_scores,
+    ))
+}
+
+fn label_for_row(row: &[f32]) -> Result<(&'static str, f32), SafetyNetError> {
+    let (argmax, _) =
+        row.iter()
+            .enumerate()
+            .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
+                if value > acc.1 {
+                    (index, value)
+                } else {
+                    acc
+                }
+            });
+    let label = ID2LABEL
+        .get(argmax)
+        .copied()
+        .ok_or_else(|| SafetyNetError::InvalidOutput {
+            message: "kiji returned unknown classifier label".to_string(),
+        })?;
+    Ok((label, softmax_confidence(row, argmax)))
 }
 
 fn merge_kiji_bio_spans(
@@ -141,5 +158,49 @@ fn kiji_entity_label(entity: &str) -> Option<&'static str> {
         "ORG" => Some("organization"),
         "MISC" => Some("miscellaneous"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXPECTED_LABELS: [&str; 9] = [
+        "O", "B-PER", "I-PER", "B-ORG", "I-ORG", "B-LOC", "I-LOC", "B-MISC", "I-MISC",
+    ];
+
+    #[test]
+    fn maps_every_pinned_classifier_id() {
+        assert_eq!(ID2LABEL, EXPECTED_LABELS);
+        for (expected_id, expected_label) in EXPECTED_LABELS.iter().enumerate() {
+            let mut row = [0.0; 9];
+            row[expected_id] = 1.0;
+            let (actual_label, _) = label_for_row(&row).unwrap();
+            assert_eq!(actual_label, *expected_label, "classifier id {expected_id}");
+        }
+    }
+
+    #[test]
+    fn keeps_organization_and_location_ids_distinct() {
+        assert_eq!(ID2LABEL[3], "B-ORG");
+        assert_eq!(ID2LABEL[4], "I-ORG");
+        assert_eq!(ID2LABEL[5], "B-LOC");
+        assert_eq!(ID2LABEL[6], "I-LOC");
+    }
+
+    #[test]
+    fn preserves_bio_merge_and_joiner_behavior() {
+        let source = "Dr. Schmidt visits Berlin";
+        let spans = [(0, 2), (2, 3), (4, 11), (12, 18), (19, 25)];
+        let labels = ["B-PER", "O", "B-PER", "O", "B-LOC"];
+        let scores = [0.9, 0.1, 0.8, 0.1, 0.7];
+        let out = merge_kiji_bio_spans(source, &spans, &labels, &scores);
+        assert_eq!(
+            out,
+            vec![
+                RawSpan::new(0, 11, "person", Some(0.8)),
+                RawSpan::new(19, 25, "location", Some(0.7)),
+            ]
+        );
     }
 }

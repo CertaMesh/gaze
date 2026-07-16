@@ -201,32 +201,43 @@ impl KijiDistilbertBackend for TractKijiBackend {
                 sanitize_error(&err.to_string())
             ),
         })?;
-        let Some(output) = outputs.first() else {
-            return Ok(Vec::new());
-        };
-        let tensor: &Tensor = output;
-        let shape = tensor.shape();
-        if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
-            return Err(SafetyNetError::InvalidOutput {
-                message: "kiji tract returned invalid logits shape".to_string(),
-            });
-        }
-        let num_labels = shape[2];
-        let flat = tensor
-            .try_as_plain()
-            .and_then(|view| view.as_slice::<f32>())
-            .map_err(|err| SafetyNetError::Runtime {
-                message: format!(
-                    "kiji tract output slice failed: {}",
-                    sanitize_error(&err.to_string())
-                ),
-            })?;
+        decode_first_output(outputs.as_slice(), |output| {
+            let tensor: &Tensor = output;
+            let shape = tensor.shape();
+            if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
+                return Err(SafetyNetError::InvalidOutput {
+                    message: "kiji tract returned invalid logits shape".to_string(),
+                });
+            }
+            let num_labels = shape[2];
+            let flat = tensor
+                .try_as_plain()
+                .and_then(|view| view.as_slice::<f32>())
+                .map_err(|err| SafetyNetError::Runtime {
+                    message: format!(
+                        "kiji tract output slice failed: {}",
+                        sanitize_error(&err.to_string())
+                    ),
+                })?;
 
-        normalize_raw_spans(
-            decode_logits(clean, offsets, flat, seq_len, num_labels),
-            clean,
-        )
+            normalize_raw_spans(
+                decode_logits(clean, offsets, flat, seq_len, num_labels)?,
+                clean,
+            )
+        })
     }
+}
+
+fn decode_first_output<T, U>(
+    outputs: &[T],
+    decode: impl FnOnce(&T) -> Result<Vec<U>, SafetyNetError>,
+) -> Result<Vec<U>, SafetyNetError> {
+    let output = outputs
+        .first()
+        .ok_or_else(|| SafetyNetError::InvalidOutput {
+            message: "kiji tract returned no output".to_string(),
+        })?;
+    decode(output)
 }
 
 fn sanitize_error(message: &str) -> String {
@@ -246,4 +257,23 @@ fn sanitize_token(token: &str) -> String {
         return "<redacted>".to_string();
     }
     token.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_output_fails_closed() {
+        let outputs: [(); 0] = [];
+        let err = decode_first_output(&outputs, |_| Ok(Vec::<()>::new()))
+            .expect_err("missing output must fail closed");
+
+        match err {
+            SafetyNetError::InvalidOutput { message } => {
+                assert_eq!(message, "kiji tract returned no output");
+            }
+            other => panic!("expected InvalidOutput, got {other:?}"),
+        }
+    }
 }
