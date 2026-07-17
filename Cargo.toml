@@ -3,6 +3,7 @@ members = [
     "crates/gaze",
     "crates/gaze-assembly",
     "crates/gaze-audit",
+    "crates/gaze-inspection",
     "crates/gaze-model-setup",
     "crates/gaze-recognizers",
     "crates/gaze-types",
@@ -24,6 +25,7 @@ license = "Apache-2.0 OR MIT"
 
 [workspace.dependencies]
 gaze-audit = { path = "crates/gaze-audit", version = "0.12.0" }
+gaze-inspection = { path = "crates/gaze-inspection", version = "0.12.0" }
 gaze = { path = "crates/gaze", version = "0.12.0", package = "gaze-pii" }
 gaze-assembly = { path = "crates/gaze-assembly", version = "0.12.0" }
 gaze-mcp-bridge = { path = "crates/gaze-mcp-bridge", version = "0.12.0" }

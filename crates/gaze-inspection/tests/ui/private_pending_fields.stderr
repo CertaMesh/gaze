@@ -1,0 +1,5 @@
+error[E0451]: field `descriptor` of struct `PendingInspectionProducerV1` is private
+ --> tests/ui/private_pending_fields.rs:6:50
+  |
+6 |     let _pending = PendingInspectionProducerV1 { descriptor };
+  |                                                  ^^^^^^^^^^ private field

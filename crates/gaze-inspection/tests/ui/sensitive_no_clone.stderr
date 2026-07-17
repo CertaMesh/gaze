@@ -1,0 +1,5 @@
+error[E0599]: no method named `clone` found for struct `ProviderVisiblePayloadV1` in the current scope
+ --> tests/ui/sensitive_no_clone.rs:5:21
+  |
+5 |     let _ = payload.clone();
+  |                     ^^^^^ method not found in `ProviderVisiblePayloadV1`

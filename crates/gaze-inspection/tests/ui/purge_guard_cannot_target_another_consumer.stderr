@@ -1,0 +1,16 @@
+error[E0061]: this method takes 0 arguments but 1 argument was supplied
+ --> tests/ui/purge_guard_cannot_target_another_consumer.rs:7:11
+  |
+7 |     guard.complete(other);
+  |           ^^^^^^^^ ----- unexpected argument of type `&mut ActivatedInspectionConsumerV1`
+  |
+note: method defined here
+ --> src/lib.rs
+  |
+  |     pub fn complete(mut self) -> Result<InspectionEpochV1, InspectionPurgeErrorV1> {
+  |            ^^^^^^^^
+help: remove the extra argument
+  |
+7 -     guard.complete(other);
+7 +     guard.complete();
+  |

@@ -1,0 +1,7 @@
+error[E0277]: `OwnerRawPayloadV1` doesn't implement `Debug`
+ --> tests/ui/sensitive_no_debug.rs:5:22
+  |
+5 |     let _ = format!("{payload:?}");
+  |                      ^^^^^^^^^^^ `OwnerRawPayloadV1` cannot be formatted using `{:?}` because it doesn't implement `Debug`
+  |
+  = help: the trait `Debug` is not implemented for `OwnerRawPayloadV1`

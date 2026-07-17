@@ -1,0 +1,8 @@
+error[E0277]: `OwnerRawPayloadV1` doesn't implement `std::fmt::Display`
+ --> tests/ui/sensitive_no_display.rs:5:22
+  |
+5 |     let _ = format!("{payload}");
+  |                      ^^^^^^^^^ `OwnerRawPayloadV1` cannot be formatted with the default formatter
+  |
+  = help: the trait `std::fmt::Display` is not implemented for `OwnerRawPayloadV1`
+  = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead

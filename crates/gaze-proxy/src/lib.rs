@@ -8,10 +8,26 @@
 
 pub mod adapter;
 pub mod adapters;
+#[allow(
+    dead_code,
+    reason = "constructors are consumed by the next server integration checkpoint"
+)]
+pub mod codec;
+#[allow(
+    dead_code,
+    reason = "codec probes are consumed by the next server integration checkpoint"
+)]
+pub mod codecs;
 #[cfg(feature = "proxy-daemon")]
 pub mod daemon;
 pub mod error;
+pub mod principal;
 pub mod server;
+#[allow(
+    dead_code,
+    reason = "finite registry is integrated by the serialized P3/P4 checkpoints"
+)]
+pub(crate) mod session_registry;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -19,9 +35,30 @@ use std::time::Duration;
 
 use gaze::Pipeline;
 
-pub use adapter::{PiiSurface, ProviderAdapter, SseEvent};
-pub use error::ProxyError;
-pub use server::{serve, HealthSnapshot};
+pub use adapter::{
+    AdapterContract, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface, ProtocolContract,
+    ProviderAdapter, RedirectPolicy, RoutePolicy, SessionPolicy, SessionRegistryConfig,
+    SessionRegistryConfigError, SseEvent,
+};
+pub use codec::{
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OutputProvenance,
+    ProvedRequestBody, ProvedResponseBody, RequestPseudonymizer, RequestTransformContext,
+    ResponseResidualValidator, ResponseTransformContext, WireFormat,
+};
+pub use codecs::anthropic::{
+    AnthropicMessagesCodec, ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
+};
+pub use error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+pub use principal::{
+    AuthenticatedPrincipal, ListenerScope, LocalAuthCredential, PeerScope, PrincipalContext,
+    PrincipalResolveError, PrincipalResolver, ProcessLocalLoopbackResolver,
+    TlsClientCertificateHash, MAX_AUTHENTICATED_PRINCIPAL_BYTES, MAX_LOCAL_AUTH_CREDENTIAL_BYTES,
+};
+pub use server::{
+    classify_upstream_status, parse_request_stream_format, serve, validate_declared_body,
+    validate_direct_response_head, DirectResponseHead, HealthSnapshot, DIRECT_PROXY_ERROR_FRAME,
+    DIRECT_PROXY_PING_FRAME,
+};
 
 #[derive(Clone)]
 #[non_exhaustive]
