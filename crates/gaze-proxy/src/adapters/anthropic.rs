@@ -246,6 +246,7 @@ impl AnthropicAdapterBuilder {
 
     pub fn build(self) -> Result<AnthropicAdapter, DirectProxyError> {
         self.adapter.validate_upstream_origin()?;
+        validate_codec_limits(self.adapter.codec_limits)?;
         if self.adapter.connect_timeout > self.adapter.request_timeout
             || self.adapter.request_timeout > self.adapter.total_timeout
         {
@@ -269,6 +270,40 @@ fn validate_lowered_limit(value: usize, maximum: usize) -> Result<(), DirectProx
     } else {
         Ok(())
     }
+}
+
+fn validate_codec_limits(limits: CodecLimits) -> Result<(), DirectProxyError> {
+    let ceilings = CodecLimits::default();
+    for (value, maximum) in [
+        (limits.max_body_bytes(), ceilings.max_body_bytes()),
+        (limits.max_json_depth(), ceilings.max_json_depth()),
+        (limits.max_json_nodes(), ceilings.max_json_nodes()),
+        (limits.max_string_bytes(), ceilings.max_string_bytes()),
+        (limits.max_number_bytes(), ceilings.max_number_bytes()),
+        (limits.max_sse_line_bytes(), ceilings.max_sse_line_bytes()),
+        (limits.max_sse_frame_bytes(), ceilings.max_sse_frame_bytes()),
+        (limits.max_sse_events(), ceilings.max_sse_events()),
+        (limits.max_sse_indices(), ceilings.max_sse_indices()),
+        (
+            limits.max_sse_accumulator_bytes(),
+            ceilings.max_sse_accumulator_bytes(),
+        ),
+    ] {
+        validate_lowered_limit(value, maximum)?;
+    }
+
+    let body = limits.max_body_bytes();
+    if limits.max_sse_line_bytes() > limits.max_sse_frame_bytes()
+        || limits.max_sse_line_bytes() > body
+        || limits.max_sse_frame_bytes() > body
+        || limits.max_string_bytes() > body
+        || limits.max_number_bytes() > body
+        || limits.max_sse_accumulator_bytes() > body
+    {
+        return Err(configuration_error());
+    }
+
+    Ok(())
 }
 
 fn validate_allowlist_value(value: &str) -> Result<(), DirectProxyError> {

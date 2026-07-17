@@ -13,9 +13,10 @@ use gaze::{Action, ClassRule, DefaultRule, PiiClass, Pipeline};
 use gaze_proxy::adapters::anthropic::DEFAULT_ANTHROPIC_UPSTREAM;
 use gaze_proxy::adapters::AnthropicAdapter;
 use gaze_proxy::{
-    AuthenticatedPrincipal, PrincipalContext, PrincipalResolveError, PrincipalResolver,
-    ProtocolContract, ProviderAdapter, ProxyConfig, ProxyErrorCode, SessionPolicy,
-    SessionRegistryConfig, ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
+    AuthenticatedPrincipal, CodecLimits, PrincipalContext, PrincipalResolveError,
+    PrincipalResolver, ProtocolContract, ProviderAdapter, ProxyConfig, ProxyErrorCode,
+    ProxyErrorPhase, SessionPolicy, SessionRegistryConfig, ANTHROPIC_PROXY_ERROR_FRAME,
+    ANTHROPIC_PROXY_PING_FRAME,
 };
 use gaze_recognizers::RegexDetector;
 use reqwest::Client;
@@ -339,6 +340,132 @@ fn builder_rejects_an_untrusted_upstream_origin() {
         .unwrap()
         .build()
         .unwrap();
+}
+
+fn assert_codec_limits_rejected(limits: CodecLimits) {
+    let error = AnthropicAdapter::builder(Url::parse("https://api.anthropic.com").unwrap())
+        .codec_limits(limits)
+        .build()
+        .unwrap_err();
+
+    assert_eq!(error.code(), ProxyErrorCode::ProxyConfiguration);
+    assert_eq!(error.phase(), ProxyErrorPhase::UpstreamConfiguration);
+    assert_eq!(
+        error.to_string(),
+        "proxy_UpstreamConfiguration_ProxyConfiguration"
+    );
+    assert_eq!(
+        format!("{error:?}"),
+        "DirectProxyError { code: ProxyConfiguration, phase: UpstreamConfiguration }"
+    );
+}
+
+#[test]
+fn builder_accepts_default_and_valid_lowered_codec_limits() {
+    let upstream = Url::parse("https://api.anthropic.com").unwrap();
+    AnthropicAdapter::builder(upstream.clone())
+        .codec_limits(CodecLimits::default())
+        .build()
+        .unwrap();
+
+    let lowered = CodecLimits::default()
+        .with_max_body_bytes(16 * 1024 * 1024)
+        .with_max_json_depth(64)
+        .with_max_json_nodes(50_000)
+        .with_max_string_bytes(2 * 1024 * 1024)
+        .with_max_number_bytes(64)
+        .with_max_sse_line_bytes(128 * 1024)
+        .with_max_sse_frame_bytes(512 * 1024)
+        .with_max_sse_events(5_000)
+        .with_max_sse_indices(128)
+        .with_max_sse_accumulator_bytes(4 * 1024 * 1024);
+    AnthropicAdapter::builder(upstream)
+        .codec_limits(lowered)
+        .build()
+        .unwrap();
+}
+
+#[test]
+fn builder_rejects_zero_and_above_ceiling_codec_limits() {
+    let defaults = CodecLimits::default();
+    let zero_limits = [
+        defaults.with_max_body_bytes(0),
+        defaults.with_max_json_depth(0),
+        defaults.with_max_json_nodes(0),
+        defaults.with_max_string_bytes(0),
+        defaults.with_max_number_bytes(0),
+        defaults.with_max_sse_line_bytes(0),
+        defaults.with_max_sse_frame_bytes(0),
+        defaults.with_max_sse_events(0),
+        defaults.with_max_sse_indices(0),
+        defaults.with_max_sse_accumulator_bytes(0),
+    ];
+    for limits in zero_limits {
+        assert_codec_limits_rejected(limits);
+    }
+
+    let above_ceiling_limits = [
+        defaults.with_max_body_bytes(defaults.max_body_bytes() + 1),
+        defaults.with_max_json_depth(defaults.max_json_depth() + 1),
+        defaults.with_max_json_nodes(defaults.max_json_nodes() + 1),
+        defaults.with_max_string_bytes(defaults.max_string_bytes() + 1),
+        defaults.with_max_number_bytes(defaults.max_number_bytes() + 1),
+        defaults.with_max_sse_line_bytes(defaults.max_sse_line_bytes() + 1),
+        defaults.with_max_sse_frame_bytes(defaults.max_sse_frame_bytes() + 1),
+        defaults.with_max_sse_events(defaults.max_sse_events() + 1),
+        defaults.with_max_sse_indices(defaults.max_sse_indices() + 1),
+        defaults.with_max_sse_accumulator_bytes(defaults.max_sse_accumulator_bytes() + 1),
+    ];
+    for limits in above_ceiling_limits {
+        assert_codec_limits_rejected(limits);
+    }
+}
+
+#[test]
+fn builder_rejects_invalid_codec_limit_orderings() {
+    let defaults = CodecLimits::default();
+    for limits in [
+        defaults
+            .with_max_sse_line_bytes(513)
+            .with_max_sse_frame_bytes(512),
+        defaults
+            .with_max_body_bytes(1024)
+            .with_max_string_bytes(512)
+            .with_max_number_bytes(128)
+            .with_max_sse_line_bytes(1025)
+            .with_max_sse_frame_bytes(2048)
+            .with_max_sse_accumulator_bytes(512),
+        defaults
+            .with_max_body_bytes(1024)
+            .with_max_string_bytes(512)
+            .with_max_number_bytes(128)
+            .with_max_sse_line_bytes(512)
+            .with_max_sse_frame_bytes(1025)
+            .with_max_sse_accumulator_bytes(512),
+        defaults
+            .with_max_body_bytes(1024)
+            .with_max_string_bytes(1025)
+            .with_max_number_bytes(128)
+            .with_max_sse_line_bytes(512)
+            .with_max_sse_frame_bytes(1024)
+            .with_max_sse_accumulator_bytes(512),
+        defaults
+            .with_max_body_bytes(64)
+            .with_max_string_bytes(64)
+            .with_max_number_bytes(65)
+            .with_max_sse_line_bytes(64)
+            .with_max_sse_frame_bytes(64)
+            .with_max_sse_accumulator_bytes(64),
+        defaults
+            .with_max_body_bytes(1024)
+            .with_max_string_bytes(512)
+            .with_max_number_bytes(128)
+            .with_max_sse_line_bytes(512)
+            .with_max_sse_frame_bytes(1024)
+            .with_max_sse_accumulator_bytes(1025),
+    ] {
+        assert_codec_limits_rejected(limits);
+    }
 }
 
 #[tokio::test]
