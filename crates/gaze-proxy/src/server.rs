@@ -1389,6 +1389,7 @@ fn prepare_and_commit_direct_request(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
+    max_request_bytes: usize,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     prepare_and_commit_direct_request_with_hook(
         pipeline,
@@ -1399,6 +1400,7 @@ fn prepare_and_commit_direct_request(
         headers,
         expected_response,
         limits,
+        max_request_bytes,
         |_, _| Ok(()),
     )
 }
@@ -1413,6 +1415,7 @@ fn prepare_and_commit_direct_request_with_hook(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
+    max_request_bytes: usize,
     mut before_commit: impl FnMut(u8, &Session) -> Result<(), DirectProxyError>,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     for attempt in 0..=1 {
@@ -1431,6 +1434,11 @@ fn prepare_and_commit_direct_request_with_hook(
             proved_body,
             expected_response,
         )?;
+        if request.body.len() > max_request_bytes {
+            return Err(
+                ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
+            );
+        }
         let prepared = PreparedDirectRequest::new(transaction, request);
         before_commit(attempt, session)?;
         match prepared.commit() {
@@ -1888,6 +1896,7 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
+                runtime.client_config.max_request_bytes,
             )?
         }
         DirectIngressSession::Continuity(lease) => {
@@ -1901,6 +1910,7 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
+                runtime.client_config.max_request_bytes,
             );
             drop(request_guard);
             committed?
@@ -2461,6 +2471,7 @@ mod tests {
     use crate::codec::OutputProvenance;
 
     const SYNTHETIC_EMAIL: &str = "alice@example.invalid";
+    const SYNTHETIC_PHONE: &str = "+1-555-0199";
 
     struct SyntheticPrincipalResolver;
 
@@ -2647,6 +2658,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();
 
@@ -2684,6 +2696,7 @@ mod tests {
                 &headers,
                 WireFormat::Json,
                 CodecLimits::default(),
+                DEFAULT_MAX_REQUEST_BYTES,
             )
             .unwrap_or_else(|error| panic!("{action:?} first proof failed: {error:?}"));
             let proved_once = first.request.body.clone();
@@ -2698,6 +2711,7 @@ mod tests {
                 &headers,
                 WireFormat::Json,
                 CodecLimits::default(),
+                DEFAULT_MAX_REQUEST_BYTES,
             )
             .unwrap();
             assert_eq!(second.request.body, proved_once);
@@ -2736,6 +2750,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap_err();
 
@@ -2755,6 +2770,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();
         assert_eq!(session.tokens().len(), 1);
@@ -2787,6 +2803,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live| {
                 hook_calls += 1;
                 if attempt == 0 {
@@ -2836,6 +2853,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live| {
                 live.tokenize(&PiiClass::Name, &format!("Dr. Schmidt {attempt}"))
                     .unwrap();
@@ -2945,6 +2963,134 @@ mod tests {
         assert!(!std::str::from_utf8(&restored)
             .unwrap()
             .contains("Dr. Schmidt"));
+    }
+
+    #[tokio::test]
+    async fn transformed_request_overlimit_rejects_before_commit_and_zero_io() {
+        const SESSION_ID: &str = "00000000-0000-4000-8000-000000000001";
+
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let phone_class = PiiClass::Custom("phone".to_string());
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::new(r"\+1-555-0199", phone_class.clone()).unwrap())
+            .rule(ClassRule::new(phone_class, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":"{SYNTHETIC_PHONE}"}}]}}"#
+        );
+        let request_limit = body.len() + 1;
+        let probe_session = Session::new(Scope::Ephemeral).unwrap();
+        let probe_request = direct_request(url.clone(), WireFormat::Json, body.as_bytes()).unwrap();
+        let transformed = prepare_and_commit_direct_request(
+            &pipeline,
+            &probe_session,
+            &codec,
+            body.as_bytes(),
+            &probe_request.url,
+            &probe_request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
+        )
+        .unwrap();
+        assert!(body.len() < request_limit);
+        assert!(transformed.request.body.len() > request_limit);
+
+        let registry_config = crate::SessionRegistryConfig::default();
+        let registry = SessionRegistry::with_secret(registry_config, [0x5a; 32]);
+        let observed_lease = registry
+            .acquire(
+                crate::AuthenticatedPrincipal::try_from_canonical_bytes(
+                    b"synthetic-principal".to_vec(),
+                )
+                .unwrap(),
+                SESSION_ID,
+                None,
+            )
+            .unwrap();
+        let request_lease = registry
+            .acquire(
+                crate::AuthenticatedPrincipal::try_from_canonical_bytes(
+                    b"synthetic-principal".to_vec(),
+                )
+                .unwrap(),
+                SESSION_ID,
+                None,
+            )
+            .unwrap();
+        let client_config = DirectClientConfig::default()
+            .try_with_max_request_bytes(request_limit)
+            .unwrap();
+        let runtime = DirectRuntime {
+            client: DirectClient::new(client_config).unwrap(),
+            endpoint: url.clone(),
+            session_policy: SessionPolicy::OpaqueHeaderContinuity(registry_config),
+            registry: Some(registry),
+            resolver: Arc::new(SyntheticPrincipalResolver),
+            listener_scope: ListenerScope::Loopback,
+            allowed_versions: Arc::from([DEFAULT_ANTHROPIC_VERSION.to_string()]),
+            allowed_betas: Arc::from([]),
+            codec_limits: CodecLimits::default(),
+            client_config,
+            ping_interval: Duration::from_secs(10),
+        };
+        let state = AppState {
+            config: Arc::new(ProxyConfig::new("127.0.0.1:0".parse().unwrap(), Vec::new())),
+            pipeline: Arc::new(pipeline),
+            client: Client::new(),
+            direct: Some(Arc::new(runtime)),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            started_at: Instant::now(),
+        };
+        let ingress = PreparedDirectIngress {
+            outbound_headers: probe_request.headers.clone(),
+            session: DirectIngressSession::Continuity(request_lease),
+        };
+
+        let error = direct_proxy_inner(&state, ingress, body.as_bytes(), &codec)
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code(), ProxyErrorCode::RequestBodyLimitExceeded);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        assert!(observed_lease.session().tokens().is_empty());
+        assert!(observed_lease.session().snapshot_entries().is_empty());
+
+        let extended_body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":"{SYNTHETIC_PHONE} reports"}}]}}"#
+        );
+        let recovered = prepare_and_commit_direct_request(
+            &state.pipeline,
+            observed_lease.session(),
+            &codec,
+            extended_body.as_bytes(),
+            &url,
+            &probe_request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            DEFAULT_MAX_REQUEST_BYTES,
+        )
+        .unwrap();
+        let first_token = format!(
+            "<{}:Custom:phone_1>",
+            observed_lease.session().session_hex()
+        );
+        assert_eq!(observed_lease.session().tokens(), vec![first_token.clone()]);
+        assert!(std::str::from_utf8(&recovered.request.body)
+            .unwrap()
+            .contains(&first_token));
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        server.abort();
     }
 
     #[tokio::test]
