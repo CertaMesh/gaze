@@ -906,9 +906,31 @@ impl<'session> SessionTransaction<'session> {
         &self.identity.audit_session_id
     }
 
-    // Kept crate-private: exposing cache writes would let adopters bypass the
-    // pipeline's trusted prefix-cache population contract.
-    #[allow(dead_code)]
+    /// Validates every Gaze token-shaped substring against staged manifest state.
+    ///
+    /// This performs shape and membership validation only. It does not build a
+    /// restored string or otherwise materialize mapped owner PII.
+    pub fn validate_token_shapes(&self, text: &str) -> std::result::Result<(), RestoreError> {
+        validate_token_shapes_from_state(&self.staged, text)
+    }
+
+    // Kept crate-private: the Pipeline is the sole cache reader/writer, so
+    // adopters cannot bypass its trusted prefix-cache population contract.
+    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+        self.staged
+            .prefix_cache
+            .values()
+            .filter(|cached| {
+                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
+            })
+            .map(|cached| PrefixCacheHit {
+                raw_len: cached.raw.len(),
+                clean_text: cached.clean_text.clone(),
+                manifest: cached.manifest.clone(),
+            })
+            .max_by_key(|hit| hit.raw_len)
+    }
+
     pub(crate) fn store_prefix_cache(
         &mut self,
         raw: &str,
@@ -1121,13 +1143,7 @@ fn restore_strict_text_with_provenance_from_state(
     state: &SessionState,
     text: &str,
 ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-    let tokens = strict_restore_tokens(text)?;
-    for token in &tokens {
-        if !state.value_by_token.contains_key(token.parsed.raw.as_str()) {
-            return Err(unknown_token_error(token.parsed.raw.as_str()));
-        }
-    }
-
+    let tokens = validated_restore_tokens(state, text)?;
     let mut restored = String::with_capacity(text.len());
     let mut authorized_output_ranges = Vec::<Range<usize>>::with_capacity(tokens.len());
     let mut cursor = 0usize;
@@ -1158,6 +1174,26 @@ fn restore_strict_text_with_provenance_from_state(
         text: restored,
         authorized_output_ranges,
     })
+}
+
+fn validate_token_shapes_from_state(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<(), RestoreError> {
+    validated_restore_tokens(state, text).map(|_| ())
+}
+
+fn validated_restore_tokens(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<Vec<StrictRestoreToken>, RestoreError> {
+    let tokens = strict_restore_tokens(text)?;
+    for token in &tokens {
+        if !state.value_by_token.contains_key(token.parsed.raw.as_str()) {
+            return Err(unknown_token_error(token.parsed.raw.as_str()));
+        }
+    }
+    Ok(tokens)
 }
 
 fn default_counter_family() -> String {
@@ -2912,5 +2948,64 @@ mod tests {
         assert!(session
             .restore_strict_text_with_provenance(&cross_session)
             .is_err());
+    }
+
+    #[test]
+    fn transaction_token_shape_validation_rejects_unknown_malformed_nested_and_cross_session() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut transaction = session.begin_transaction();
+        let ordinary = transaction
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("ordinary token");
+        let format_preserving = transaction
+            .format_preserving_fake(&PiiClass::Email, "alice@example.invalid")
+            .expect("format-preserving token");
+
+        transaction
+            .validate_token_shapes(&format!("known {ordinary} and {format_preserving}"))
+            .expect("known staged tokens");
+        assert!(transaction.validate_token_shapes("trap <Email_1>").is_err());
+        assert!(transaction
+            .validate_token_shapes("trap email1@gaze-fake.invalid")
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!(
+                "unknown <{}:Email_999>",
+                transaction.session_hex()
+            ))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!(
+                "unknown email999.{}@gaze-fake.invalid",
+                transaction.session_hex()
+            ))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!("nested <{ordinary}>"))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes("malformed <deadbeef:Email_>")
+            .is_err());
+
+        let other = Session::new(Scope::Ephemeral).expect("other session");
+        let cross_ordinary = other
+            .tokenize(&PiiClass::Location, "München")
+            .expect("cross ordinary");
+        let cross_format = other
+            .format_preserving_fake(&PiiClass::Name, "Synthetic Colleague")
+            .expect("cross format-preserving");
+        assert!(transaction.validate_token_shapes(&cross_ordinary).is_err());
+        assert!(transaction.validate_token_shapes(&cross_format).is_err());
+    }
+
+    #[test]
+    fn transaction_token_shape_validation_rejects_degenerate_shadow_shape_before_mapping() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let transaction = session.begin_transaction();
+        let would_be_fake = format!("{}:name_1", transaction.session_hex());
+
+        assert!(transaction.validate_token_shapes(&would_be_fake).is_err());
+        assert!(transaction.tokens().is_empty());
+        assert!(session.tokens().is_empty());
     }
 }

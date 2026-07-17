@@ -234,6 +234,13 @@ fn raw_document_is_not_serializable() {
 }
 
 #[test]
+fn pipeline_transaction_target_is_concrete_and_uncommitted() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/ui/pipeline_transaction_rejects_fake_target.rs");
+    t.compile_fail("tests/ui/pipeline_transaction_rejects_committed_snapshot.rs");
+}
+
+#[test]
 fn normalization_runs_before_detection() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let pipeline = Pipeline::builder()

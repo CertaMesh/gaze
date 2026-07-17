@@ -22,7 +22,7 @@ use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
-use crate::session::{RestoreEvent, Session};
+use crate::session::{PrefixCacheHit, RestoreEvent, Session, SessionTransaction};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
 
@@ -196,6 +196,53 @@ pub struct Pipeline {
     rules: Vec<Arc<dyn Rule>>,
 }
 
+enum ProtectionTarget<'target, 'session> {
+    Live(&'target Session),
+    Staged(&'target mut SessionTransaction<'session>),
+}
+
+impl ProtectionTarget<'_, '_> {
+    fn tokenize_with_family(
+        &mut self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+    ) -> Result<String> {
+        match self {
+            Self::Live(session) => session.tokenize_with_family(family, class, raw),
+            Self::Staged(transaction) => transaction.tokenize_with_family(family, class, raw),
+        }
+    }
+
+    fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        match self {
+            Self::Live(session) => session.format_preserving_fake(class, raw),
+            Self::Staged(transaction) => transaction.format_preserving_fake(class, raw),
+        }
+    }
+
+    fn audit_session_id(&self) -> &str {
+        match self {
+            Self::Live(session) => session.audit_session_id(),
+            Self::Staged(transaction) => transaction.audit_session_id(),
+        }
+    }
+
+    fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+        match self {
+            Self::Live(session) => session.lookup_prefix_cache(text),
+            Self::Staged(transaction) => transaction.lookup_prefix_cache(text),
+        }
+    }
+
+    fn store_prefix_cache(&mut self, raw: &str, clean_text: &str, manifest: &[EmittedTokenSpan]) {
+        match self {
+            Self::Live(session) => session.store_prefix_cache(raw, clean_text, manifest),
+            Self::Staged(transaction) => transaction.store_prefix_cache(raw, clean_text, manifest),
+        }
+    }
+}
+
 /// Observer-only safety-net scan result.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
@@ -301,17 +348,45 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanDocument> {
+        let mut target = ProtectionTarget::Live(session);
+        self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
+    }
+
+    /// Runs the detector/rule pipeline against isolated transaction state.
+    ///
+    /// Mapping and prefix-cache publication occurs only when the caller commits
+    /// the transaction. Configured [`RedactionLogger`] sinks still receive
+    /// trusted-side attempt rows synchronously; discarding the transaction does
+    /// not retract those metadata-only audit attempts.
+    pub fn pseudonymize_transaction_with_detect_context(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<CleanDocument> {
+        let mut target = ProtectionTarget::Staged(transaction);
+        self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
+    }
+
+    fn pseudonymize_target_with_detect_context(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<CleanDocument> {
         match raw {
             RawDocument::Structured(structured_fields) => redact_structured(
                 self,
-                session,
+                target,
                 structured_fields,
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
             ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
-                session,
+                target,
                 &text,
                 None,
                 DocumentKind::Text,
@@ -356,12 +431,52 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         policy: SafetyNetPolicy,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        let mut target = ProtectionTarget::Live(session);
+        self.clean_target_with_safety_net_policy_detect_context(
+            &mut target,
+            raw,
+            locale_chain,
+            dictionaries,
+            policy,
+        )
+    }
+
+    /// Runs detector and safety-net protection against isolated transaction state.
+    ///
+    /// Mapping/cache publication and trusted-side audit-attempt behavior match
+    /// [`Self::pseudonymize_transaction_with_detect_context`].
+    pub fn clean_transaction_with_safety_net_policy_detect_context(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        let mut target = ProtectionTarget::Staged(transaction);
+        self.clean_target_with_safety_net_policy_detect_context(
+            &mut target,
+            raw,
+            locale_chain,
+            dictionaries,
+            policy,
+        )
+    }
+
+    fn clean_target_with_safety_net_policy_detect_context(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         match raw {
             RawDocument::Structured(structured_fields) => {
                 let mut report = LeakReport::default();
                 let clean = redact_structured_with_safety_net(
                     self,
-                    session,
+                    target,
                     structured_fields,
                     locale_chain,
                     dictionaries,
@@ -372,7 +487,7 @@ impl Pipeline {
             }
             RawDocument::Text(text) => {
                 let mut clean = self.redact_text_with_manifest(
-                    session,
+                    target,
                     &text,
                     None,
                     DocumentKind::Text,
@@ -380,7 +495,7 @@ impl Pipeline {
                     dictionaries,
                 )?;
                 let report = self.run_safety_nets(
-                    session,
+                    target,
                     &clean.text,
                     &Manifest::from_spans(clean.manifest.clone()),
                     DocumentKind::Text,
@@ -389,7 +504,7 @@ impl Pipeline {
                     policy.mode,
                 )?;
                 self.apply_safety_net_policy(
-                    session,
+                    target,
                     &mut clean,
                     &report,
                     DocumentKind::Text,
@@ -417,8 +532,9 @@ impl Pipeline {
             });
         }
 
+        let mut target = ProtectionTarget::Live(session);
         let report = self.run_safety_nets(
-            session,
+            &mut target,
             clean_text,
             &Manifest::default(),
             DocumentKind::Text,
@@ -444,8 +560,16 @@ impl Pipeline {
         }
 
         let mut report = LeakReport::default();
+        let mut target = ProtectionTarget::Live(session);
         for (key, value) in document {
-            walk_value_for_safety_net_scan(self, session, value, key, locale_chain, &mut report)?;
+            walk_value_for_safety_net_scan(
+                self,
+                &mut target,
+                value,
+                key,
+                locale_chain,
+                &mut report,
+            )?;
         }
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -477,7 +601,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn pseudonymize_text(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -486,7 +610,7 @@ impl Pipeline {
     ) -> Result<String> {
         Ok(self
             .redact_text_with_manifest(
-                session,
+                target,
                 text,
                 field_name,
                 document_kind,
@@ -499,7 +623,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn redact_text_with_manifest(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -507,13 +631,13 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanText> {
         if self.optimization_config.prefix_cache {
-            if let Some(hit) = session
+            if let Some(hit) = target
                 .lookup_prefix_cache(text)
                 .filter(|hit| hit.raw_len < text.len())
             {
                 let suffix = &text[hit.raw_len..];
                 let suffix_clean = self.redact_text_with_manifest_uncached(
-                    session,
+                    target,
                     suffix,
                     field_name,
                     document_kind,
@@ -533,13 +657,13 @@ impl Pipeline {
                 let mut clean_text = hit.clean_text;
                 clean_text.push_str(&suffix_clean.text);
                 self.log_prefix_cache_entries(
-                    session,
+                    target,
                     &hit.manifest,
                     field_name,
                     document_kind,
                     locale_chain,
                 )?;
-                session.store_prefix_cache(text, &clean_text, &manifest);
+                target.store_prefix_cache(text, &clean_text, &manifest);
                 return Ok(CleanText {
                     text: clean_text,
                     manifest,
@@ -548,7 +672,7 @@ impl Pipeline {
         }
 
         let clean = self.redact_text_with_manifest_uncached(
-            session,
+            target,
             text,
             field_name,
             document_kind,
@@ -556,7 +680,7 @@ impl Pipeline {
             dictionaries,
         )?;
         if self.optimization_config.prefix_cache {
-            session.store_prefix_cache(text, &clean.text, &clean.manifest);
+            target.store_prefix_cache(text, &clean.text, &clean.manifest);
         }
         Ok(clean)
     }
@@ -564,7 +688,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn redact_text_with_manifest_uncached(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -590,7 +714,7 @@ impl Pipeline {
             .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
-                session,
+                target,
                 loser,
                 field_name,
                 document_kind,
@@ -599,7 +723,7 @@ impl Pipeline {
             )?;
         }
         for vetoed in &vetoed {
-            self.log_vetoed_entry(session, vetoed, field_name, document_kind)?;
+            self.log_vetoed_entry(target, vetoed, field_name, document_kind)?;
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
@@ -611,24 +735,17 @@ impl Pipeline {
             let raw = text[detection.detection.span.clone()].to_string();
             let context = build_context(field_name);
             let action = self.action_for(&detection.detection, &context);
-            self.log_entry(
-                session,
-                &detection,
-                field_name,
-                document_kind,
-                action,
-                false,
-            )?;
+            self.log_entry(target, &detection, field_name, document_kind, action, false)?;
 
             let replacement = match action {
-                Action::Tokenize => Some(session.tokenize_with_family(
+                Action::Tokenize => Some(target.tokenize_with_family(
                     &detection.family,
                     &detection.detection.class,
                     &raw,
                 )?),
                 Action::Redact => Some("[REDACTED]".to_string()),
                 Action::FormatPreserve => {
-                    Some(session.format_preserving_fake(&detection.detection.class, &raw)?)
+                    Some(target.format_preserving_fake(&detection.detection.class, &raw)?)
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
@@ -667,7 +784,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn run_safety_nets(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean_text: &str,
         manifest: &Manifest,
         document_kind: DocumentKind,
@@ -699,7 +816,7 @@ impl Pipeline {
                 manifest,
                 locale_chain,
                 document_kind,
-                Some(session.audit_session_id()),
+                Some(target.audit_session_id()),
                 field_path,
             );
             let mut reported = net.check(clean_text, context)?;
@@ -734,7 +851,7 @@ impl Pipeline {
                     "locale-aware safety-net registry resolved multiple backends; using first"
                 );
                 self.log_backend_silently_dropped(
-                    session,
+                    target,
                     document_kind,
                     field_path,
                     selected_backend,
@@ -814,7 +931,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_policy(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -825,7 +942,7 @@ impl Pipeline {
         match policy.mode {
             SafetyNetMode::Strict | SafetyNetMode::Tolerant => Ok(()),
             SafetyNetMode::Redact => self.redact_safety_net_suspects(
-                session,
+                target,
                 clean,
                 report,
                 document_kind,
@@ -835,7 +952,7 @@ impl Pipeline {
             ),
             SafetyNetMode::Resolve => {
                 let reason = match self.resolve_safety_net_suspects(
-                    session,
+                    target,
                     clean,
                     report,
                     document_kind,
@@ -844,7 +961,7 @@ impl Pipeline {
                     Some(reason) => Some(reason),
                     None => {
                         let follow_up = self.run_safety_nets(
-                            session,
+                            target,
                             &clean.text,
                             &Manifest::from_spans(clean.manifest.clone()),
                             document_kind,
@@ -858,7 +975,7 @@ impl Pipeline {
                 };
                 if let Some(reason) = reason {
                     self.apply_safety_net_fallback(
-                        session,
+                        target,
                         clean,
                         report,
                         document_kind,
@@ -874,7 +991,7 @@ impl Pipeline {
 
     fn resolve_safety_net_suspects(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -893,9 +1010,9 @@ impl Pipeline {
                 return Ok(Some(FallbackReason::ResidualSuspect));
             }
             let raw = clean.text[span.clone()].to_string();
-            let replacement = session.tokenize_with_family("safety_net", &suspect.class, &raw)?;
+            let replacement = target.tokenize_with_family("safety_net", &suspect.class, &raw)?;
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -921,7 +1038,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_fallback(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -931,7 +1048,7 @@ impl Pipeline {
     ) -> Result<()> {
         for suspect in redaction_suspects(report) {
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -945,7 +1062,7 @@ impl Pipeline {
             SafetyNetFallback::Strict => Err(Error::SafetyNetFallback(reason)),
             SafetyNetFallback::Tolerant => Ok(()),
             SafetyNetFallback::Redact => self.redact_safety_net_suspects(
-                session,
+                target,
                 clean,
                 report,
                 document_kind,
@@ -959,7 +1076,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn redact_safety_net_suspects(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -985,7 +1102,7 @@ impl Pipeline {
             }
             if log_entries {
                 self.log_safety_net_entry(
-                    session,
+                    target,
                     suspect,
                     document_kind,
                     field_path,
@@ -1007,7 +1124,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn log_safety_net_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         suspect: &LeakSuspect,
         document_kind: DocumentKind,
         field_path: Option<&str>,
@@ -1028,7 +1145,7 @@ impl Pipeline {
             conflict_loser,
             decided_by,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(Some(source), None);
         if let Some(reason) = fallback_reason {
@@ -1042,7 +1159,7 @@ impl Pipeline {
 
     fn log_backend_silently_dropped(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         selected_backend: &str,
@@ -1057,7 +1174,7 @@ impl Pipeline {
             true,
             ConflictTier::None,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_backend_silently_dropped(dropped);
         for logger in &self.redaction_loggers {
@@ -1075,7 +1192,7 @@ impl Pipeline {
 
     fn log_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         detection: &IndexedDetection,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1091,7 +1208,7 @@ impl Pipeline {
             conflict_loser,
             detection.decided_by,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(
             detection.recognizer_id.clone(),
@@ -1116,7 +1233,7 @@ impl Pipeline {
 
     fn log_prefix_cache_entries(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         manifest: &[EmittedTokenSpan],
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1137,7 +1254,7 @@ impl Pipeline {
                 false,
                 ConflictTier::None,
                 crate::redaction_log::current_epoch_ms(),
-                Some(session.audit_session_id().to_string()),
+                Some(target.audit_session_id().to_string()),
             )
             .with_recognizer_metadata(Some("prefix_cache".to_string()), None)
             .with_provenance_metadata(
@@ -1236,7 +1353,7 @@ impl Pipeline {
 
     fn log_vetoed_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         vetoed: &crate::validator_veto::VetoedCandidate,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1257,7 +1374,7 @@ impl Pipeline {
             true,
             ConflictTier::ValidatorVeto,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(
             Some(vetoed.candidate.recognizer_id.clone()),
@@ -1692,7 +1809,7 @@ fn model_error_to_safety_net_error(error: ModelError) -> SafetyNetError {
 
 fn redact_structured(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     fields: BTreeMap<String, Value>,
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
@@ -1705,7 +1822,7 @@ fn redact_structured(
             key.clone(),
             redact_structured_value(
                 pipeline,
-                session,
+                target,
                 value,
                 &key,
                 &path,
@@ -1721,7 +1838,7 @@ fn redact_structured(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_value(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: Value,
     field_name: &str,
     field_path: &str,
@@ -1731,7 +1848,7 @@ fn redact_structured_value(
 ) -> Result<Value> {
     match value {
         Value::String(text) => Ok(Value::String(pipeline.pseudonymize_text(
-            session,
+            target,
             &text,
             Some(field_name),
             document_kind,
@@ -1744,7 +1861,7 @@ fn redact_structured_value(
             .map(|(idx, value)| {
                 redact_structured_value(
                     pipeline,
-                    session,
+                    target,
                     value,
                     field_name,
                     &format!("{field_path}[{idx}]"),
@@ -1763,7 +1880,7 @@ fn redact_structured_value(
                     key.clone(),
                     redact_structured_value(
                         pipeline,
-                        session,
+                        target,
                         value,
                         &key,
                         &child_path,
@@ -1783,7 +1900,7 @@ fn redact_structured_value(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_with_safety_net(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     fields: BTreeMap<String, Value>,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
@@ -1797,7 +1914,7 @@ fn redact_structured_with_safety_net(
             key.clone(),
             redact_structured_value_with_safety_net(
                 pipeline,
-                session,
+                target,
                 value,
                 &key,
                 &path,
@@ -1814,7 +1931,7 @@ fn redact_structured_with_safety_net(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_value_with_safety_net(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: Value,
     field_name: &str,
     field_path: &str,
@@ -1829,7 +1946,7 @@ fn redact_structured_value_with_safety_net(
                 return Ok(Value::String(text));
             }
             let clean = pipeline.redact_text_with_manifest(
-                session,
+                target,
                 &text,
                 Some(field_name),
                 DocumentKind::Structured,
@@ -1839,7 +1956,7 @@ fn redact_structured_value_with_safety_net(
             // For RawDocument::Structured, locale gating uses the session-level
             // locale chain across all fields; fields have no locale annotations.
             let field_report = pipeline.run_safety_nets(
-                session,
+                target,
                 &clean.text,
                 &Manifest::from_spans(clean.manifest),
                 DocumentKind::Structured,
@@ -1856,7 +1973,7 @@ fn redact_structured_value_with_safety_net(
             .map(|(idx, value)| {
                 redact_structured_value_with_safety_net(
                     pipeline,
-                    session,
+                    target,
                     value,
                     field_name,
                     &format!("{field_path}[{idx}]"),
@@ -1876,7 +1993,7 @@ fn redact_structured_value_with_safety_net(
                     key.clone(),
                     redact_structured_value_with_safety_net(
                         pipeline,
-                        session,
+                        target,
                         value,
                         &key,
                         &child_path,
@@ -1892,7 +2009,7 @@ fn redact_structured_value_with_safety_net(
         Value::Null | Value::Bool(_) | Value::I64(_) => {
             if let Some(scalar) = value.scalar_to_safety_net_string() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     &scalar,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -1910,7 +2027,7 @@ fn redact_structured_value_with_safety_net(
 
 fn walk_value_for_safety_net_scan(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: &Value,
     field_path: &str,
     locale_chain: &[crate::LocaleTag],
@@ -1920,7 +2037,7 @@ fn walk_value_for_safety_net_scan(
         Value::String(text) => {
             if !text.is_empty() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     text,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -1935,7 +2052,7 @@ fn walk_value_for_safety_net_scan(
         Value::Bool(_) | Value::I64(_) => {
             if let Some(scalar) = value.scalar_to_safety_net_string() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     &scalar,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -1950,7 +2067,7 @@ fn walk_value_for_safety_net_scan(
             for (idx, value) in values.iter().enumerate() {
                 walk_value_for_safety_net_scan(
                     pipeline,
-                    session,
+                    target,
                     value,
                     &format!("{field_path}[{idx}]"),
                     locale_chain,
@@ -1962,7 +2079,7 @@ fn walk_value_for_safety_net_scan(
             for (key, value) in fields {
                 walk_value_for_safety_net_scan(
                     pipeline,
-                    session,
+                    target,
                     value,
                     &format!("{field_path}.{key}"),
                     locale_chain,
@@ -2194,6 +2311,142 @@ mod tests {
         fn token_family(&self) -> &str {
             "counter"
         }
+    }
+
+    struct NeedleDetector {
+        needle: &'static str,
+        class: PiiClass,
+        source: &'static str,
+    }
+
+    impl Detector for NeedleDetector {
+        fn detect(&self, input: &str) -> Vec<Detection> {
+            input
+                .match_indices(self.needle)
+                .map(|(start, matched)| {
+                    Detection::new(
+                        start..start + matched.len(),
+                        self.class.clone(),
+                        self.source,
+                    )
+                })
+                .collect()
+        }
+    }
+
+    struct DictionaryRecognizer {
+        class: PiiClass,
+    }
+
+    impl Recognizer for DictionaryRecognizer {
+        fn id(&self) -> &str {
+            "dictionary.synthetic_ids"
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            &self.class
+        }
+
+        fn detect(
+            &self,
+            input: &str,
+            ctx: &DetectContext<'_>,
+        ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+            let Some(dictionary) = ctx.dictionaries.get("synthetic_ids") else {
+                return Ok(Vec::new());
+            };
+            Ok(dictionary
+                .terms()
+                .iter()
+                .flat_map(|term| input.match_indices(term))
+                .map(|(start, matched)| {
+                    Candidate::new(
+                        start..start + matched.len(),
+                        self.class.clone(),
+                        self.id(),
+                        1.0,
+                        0,
+                        None,
+                        self.token_family(),
+                        self.id(),
+                        ConflictTier::None,
+                        Vec::new(),
+                    )
+                })
+                .collect())
+        }
+
+        fn token_family(&self) -> &str {
+            "dictionary"
+        }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    struct DeterministicNerDetector;
+
+    #[cfg(feature = "bundled-recognizers")]
+    impl Detector for DeterministicNerDetector {
+        fn detect(&self, input: &str) -> Vec<Detection> {
+            let Some(start) = input.find("Dr. Schmidt") else {
+                return Vec::new();
+            };
+            let labels =
+                gaze_recognizers::LabelMap(BTreeMap::from([("PER".to_string(), PiiClass::Name)]));
+            gaze_recognizers::NerDetector::merge_bio_spans(
+                &labels,
+                &[
+                    (start, start + "Dr.".len()),
+                    (start + "Dr. ".len(), start + "Dr. Schmidt".len()),
+                ],
+                &["B-PER", "I-PER"],
+                "ner/deterministic",
+            )
+        }
+    }
+
+    struct ResolveSafetyNet;
+
+    impl SafetyNet for ResolveSafetyNet {
+        fn id(&self) -> &str {
+            "resolve-fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(clean_text
+                .find("Dr. Schmidt")
+                .map(|start| {
+                    LeakSuspect::new(
+                        start..start + "Dr. Schmidt".len(),
+                        PiiClass::Name,
+                        self.id(),
+                        Some(1.0),
+                        LeakKind::Uncovered,
+                        "PER",
+                        None,
+                    )
+                })
+                .into_iter()
+                .collect())
+        }
+    }
+
+    fn normalized_log_entries(entries: &[RedactionEntry]) -> Vec<RedactionEntry> {
+        entries
+            .iter()
+            .cloned()
+            .map(|mut entry| {
+                entry.created_at = 0;
+                entry
+            })
+            .collect()
     }
 
     fn detector_with_detections(source: &str, detections: Vec<Detection>) -> FixedDetector {
@@ -2865,5 +3118,303 @@ mod tests {
         );
         assert_eq!(session.restore(&token).as_deref(), Some("Dr. Schmidt"));
         assert_eq!(session.restore(&beta).as_deref(), Some("Dr. Schmidt"));
+    }
+
+    #[test]
+    fn transaction_pipeline_detector_rule_dictionary_parity_without_publish() {
+        let custom_class = PiiClass::Custom("synthetic_id".to_string());
+        let dictionaries = DictionaryBundle::from_entries([(
+            "synthetic_ids".to_string(),
+            gaze_types::DictionaryEntry::new(
+                "synthetic_ids",
+                vec!["SYN-0001".to_string()],
+                true,
+                gaze_types::DictionarySource::Cli,
+            )
+            .expect("synthetic dictionary"),
+        )]);
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "alice@example.invalid",
+                class: PiiClass::Email,
+                source: "email.fixture",
+            })
+            .recognizer(DictionaryRecognizer {
+                class: custom_class.clone(),
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(ClassRule::new(custom_class, Action::FormatPreserve))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let raw = RawDocument::Structured(BTreeMap::from([
+            (
+                "contact".to_string(),
+                Value::String("alice@example.invalid".to_string()),
+            ),
+            (
+                "reference".to_string(),
+                Value::String("SYN-0001".to_string()),
+            ),
+        ]));
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("staged protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(transaction.tokens().len(), 2);
+        let staged_logs = {
+            let captured = entries.lock().unwrap();
+            assert_eq!(captured.len(), 2);
+            normalized_log_entries(&captured)
+        };
+        drop(transaction);
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(
+            entries.lock().unwrap().len(),
+            2,
+            "trusted attempt rows survive discard"
+        );
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("live protection");
+        let live_logs = normalized_log_entries(&entries.lock().unwrap());
+        let (CleanDocument::Structured(staged), CleanDocument::Structured(live)) = (staged, live)
+        else {
+            panic!("expected structured outputs");
+        };
+        assert_eq!(staged, live);
+        assert_eq!(staged_logs, live_logs);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn transaction_pipeline_bundled_deterministic_ner_parity_without_publish() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(DeterministicNerDetector)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let raw = RawDocument::Text("Assigned to Dr. Schmidt".to_string());
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("staged NER protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        let staged_logs = normalized_log_entries(&entries.lock().unwrap());
+        drop(transaction);
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("live NER protection");
+        let (CleanDocument::Text(staged), CleanDocument::Text(live)) = (staged, live) else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(staged, live);
+        assert_eq!(
+            staged_logs,
+            normalized_log_entries(&entries.lock().unwrap())
+        );
+    }
+
+    #[test]
+    fn transaction_pipeline_safety_net_resolve_parity_without_publish() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(ResolveSafetyNet)
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let raw = RawDocument::Text("Assigned to Dr. Schmidt".to_string());
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .clean_transaction_with_safety_net_policy_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                policy,
+            )
+            .expect("staged safety-net protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(transaction.tokens().len(), 1);
+        let staged_logs = normalized_log_entries(&entries.lock().unwrap());
+        drop(transaction);
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                policy,
+            )
+            .expect("live safety-net protection");
+        let (staged_document, staged_spans, staged_report) = staged;
+        let (live_document, live_spans, live_report) = live;
+        let (CleanDocument::Text(staged_text), CleanDocument::Text(live_text)) =
+            (staged_document, live_document)
+        else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(staged_text, live_text);
+        assert_eq!(staged_spans, live_spans);
+        assert_eq!(staged_report, live_report);
+        assert_eq!(
+            staged_logs,
+            normalized_log_entries(&entries.lock().unwrap())
+        );
+    }
+
+    #[test]
+    fn transaction_pipeline_prefix_cache_is_staged_and_drop_discards() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "Dr. Schmidt",
+                class: PiiClass::Name,
+                source: "name.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+
+        let mut transaction = session.begin_transaction();
+        let first = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime staged cache");
+        let extended = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt reports".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("hit staged cache");
+        let (CleanDocument::Text(first), CleanDocument::Text(extended)) = (first, extended) else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(extended, format!("{first} reports"));
+        assert_eq!(transaction.tokens().len(), 1);
+        assert!(session.tokens().is_empty());
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        drop(transaction);
+        assert!(session.tokens().is_empty());
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime committed cache");
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt reports".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("hit committed cache");
+        let staged_tokens = transaction.tokens();
+        let snapshot = transaction.commit().expect("atomic commit");
+        assert_eq!(snapshot.tokens(), staged_tokens);
+        assert_eq!(session.tokens(), staged_tokens);
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_some());
+    }
+
+    #[test]
+    fn transaction_pipeline_generation_conflict_publishes_no_staged_mapping() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "Dr. Schmidt",
+                class: PiiClass::Name,
+                source: "name.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("stage mapping");
+        let staged_token = transaction.tokens().pop().expect("staged token");
+        let winner = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("winning live mutation");
+
+        assert!(matches!(
+            transaction.commit(),
+            Err(crate::session::SessionTransactionError::GenerationConflict)
+        ));
+        assert!(session.contains_token(&winner));
+        assert!(!session.contains_token(&staged_token));
+        assert!(session.lookup_prefix_cache("Dr. Schmidt").is_none());
     }
 }

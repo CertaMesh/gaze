@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+  --> tests/ui/pipeline_transaction_rejects_committed_snapshot.rs:11:9
+   |
+10 |     let _ = pipeline.pseudonymize_transaction_with_detect_context(
+   |                      -------------------------------------------- arguments to this method are incorrect
+11 |         &mut snapshot,
+   |         ^^^^^^^^^^^^^ expected `&mut SessionTransaction<'_>`, found `&mut CommittedSessionSnapshot`
+   |
+   = note: expected mutable reference `&mut SessionTransaction<'_>`
+              found mutable reference `&mut CommittedSessionSnapshot`
+note: method defined here
+  --> src/pipeline.rs
+   |
+   |     pub fn pseudonymize_transaction_with_detect_context(
+   |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
