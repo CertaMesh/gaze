@@ -33,6 +33,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
+use adapters::AnthropicAdapter;
 use gaze::Pipeline;
 
 pub use adapter::{
@@ -67,6 +68,7 @@ pub struct ProxyConfig {
     pub adapters: Vec<Arc<dyn ProviderAdapter>>,
     pub session_ttl: Duration,
     pub body_limit_bytes: u64,
+    pub(crate) direct_anthropic: Option<Arc<AnthropicAdapter>>,
 }
 
 impl ProxyConfig {
@@ -76,6 +78,25 @@ impl ProxyConfig {
             adapters,
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
+            direct_anthropic: None,
+        }
+    }
+
+    /// Constructs the strict direct Anthropic profile without a generic trait-object handoff.
+    ///
+    /// This preserves builder-only settings such as continuity, allowlists, timeouts, and an
+    /// optional trusted principal resolver. [`Self::new`] remains source-compatible for legacy
+    /// multi-provider configurations and uses the direct profile's frozen defaults.
+    #[must_use]
+    pub fn anthropic_direct(bind: SocketAddr, adapter: AnthropicAdapter) -> Self {
+        let adapter = Arc::new(adapter);
+        let dynamic: Arc<dyn ProviderAdapter> = adapter.clone();
+        Self {
+            bind,
+            adapters: vec![dynamic],
+            session_ttl: Duration::from_secs(30 * 60),
+            body_limit_bytes: 2 * 1024 * 1024,
+            direct_anthropic: Some(adapter),
         }
     }
 }

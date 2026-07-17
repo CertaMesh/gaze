@@ -1,17 +1,20 @@
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::body::{Body, Bytes};
-use axum::extract::State;
+use axum::extract::{ConnectInfo, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
 use futures_util::StreamExt;
-use gaze::{token_shape, CleanDocument, Pipeline, RawDocument, Scope, Session};
+use gaze::{
+    token_shape, CleanDocument, CommittedSessionSnapshot, DictionaryBundle, LocaleTag, Pipeline,
+    RawDocument, Scope, Session, SessionTransaction, SessionTransactionError,
+};
 use reqwest::{Client, ClientBuilder};
 use serde::de::{MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
@@ -20,9 +23,19 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use url::{Host, Url};
 
-use crate::adapter::{ProviderAdapter, SseEvent};
-use crate::codec::{ProvedRequestBody, WireFormat};
+use crate::adapter::{ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
+use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
+use crate::codec::{
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, ProvedRequestBody,
+    RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
+    ResponseTransformContext, WireFormat,
+};
 use crate::error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+use crate::principal::{
+    invoke_resolver, ListenerScope, PeerScope, PrincipalContext, PrincipalResolver,
+    ProcessLocalLoopbackResolver,
+};
+use crate::session_registry::{RegistryError, SessionLease, SessionRegistry};
 use crate::ProxyConfig;
 
 const SESSION_HEADER: &str = "x-gaze-session-id";
@@ -79,6 +92,24 @@ impl Default for DirectClientConfig {
 // P3 builds this crate-private substrate before the P4 orchestration wires it into `serve`.
 #[allow(dead_code)]
 impl DirectClientConfig {
+    fn from_anthropic(adapter: Option<&AnthropicAdapter>) -> Self {
+        let Some(adapter) = adapter else {
+            return Self::default();
+        };
+        let (max_headers, max_header_name_bytes, max_header_value_bytes, max_header_bytes) =
+            adapter.header_limits();
+        Self {
+            connect_timeout: adapter.connect_timeout(),
+            request_timeout: adapter.request_timeout(),
+            total_timeout: adapter.total_timeout(),
+            max_headers,
+            max_header_name_bytes,
+            max_header_value_bytes,
+            max_header_bytes,
+            ..Self::default()
+        }
+    }
+
     #[must_use]
     pub(crate) const fn connect_timeout(self) -> Duration {
         self.connect_timeout
@@ -176,6 +207,118 @@ impl DirectClientConfig {
     }
 }
 
+struct DirectRuntime {
+    client: DirectClient,
+    endpoint: Url,
+    session_policy: SessionPolicy,
+    registry: Option<SessionRegistry>,
+    resolver: Arc<dyn PrincipalResolver>,
+    listener_scope: ListenerScope,
+    allowed_versions: Arc<[String]>,
+    allowed_betas: Arc<[String]>,
+    codec_limits: CodecLimits,
+    client_config: DirectClientConfig,
+    ping_interval: Duration,
+}
+
+enum DirectIngressSession {
+    Ephemeral,
+    Continuity(SessionLease),
+}
+
+struct PreparedDirectIngress {
+    outbound_headers: HeaderMap,
+    session: DirectIngressSession,
+}
+
+impl DirectRuntime {
+    fn from_config(config: &ProxyConfig) -> Result<Option<Self>, ProxyError> {
+        let direct_adapters: Vec<_> = config
+            .adapters
+            .iter()
+            .filter(|adapter| matches!(adapter.contract().protocol(), ProtocolContract::Codec(_)))
+            .collect();
+        if direct_adapters.is_empty() {
+            return Ok(None);
+        }
+        if direct_adapters.len() != 1 {
+            return Err(direct_readiness_error("direct_adapter_count_invalid"));
+        }
+        let adapter = direct_adapters[0];
+        let contract = adapter.contract();
+        let session_policy = contract
+            .session_policy()
+            .ok_or_else(|| direct_readiness_error("direct_session_policy_missing"))?;
+        let codec_limits = contract
+            .codec_limits()
+            .ok_or_else(|| direct_readiness_error("direct_codec_limits_missing"))?;
+        validate_direct_origin(adapter.upstream_base())
+            .map_err(|_| direct_readiness_error("direct_upstream_invalid"))?;
+        let mut endpoint = adapter.upstream_base().clone();
+        endpoint.set_path("/v1/messages");
+
+        let explicit = config.direct_anthropic.as_deref();
+        if explicit.is_some_and(|value| value.upstream_base() != adapter.upstream_base()) {
+            return Err(direct_readiness_error("direct_adapter_mismatch"));
+        }
+        let client_config = DirectClientConfig::from_anthropic(explicit);
+        let client = DirectClient::new(client_config)
+            .map_err(|_| direct_readiness_error("direct_client_invalid"))?;
+        let listener_scope = if config.bind.ip().is_loopback() {
+            ListenerScope::Loopback
+        } else {
+            ListenerScope::NonLoopback
+        };
+        let resolver: Arc<dyn PrincipalResolver> =
+            if let Some(resolver) = explicit.and_then(AnthropicAdapter::principal_resolver) {
+                Arc::clone(resolver)
+            } else if listener_scope == ListenerScope::Loopback {
+                Arc::new(
+                    ProcessLocalLoopbackResolver::new()
+                        .map_err(|_| direct_readiness_error("direct_principal_unavailable"))?,
+                )
+            } else {
+                return Err(direct_readiness_error("direct_principal_required"));
+            };
+        let registry = match session_policy {
+            SessionPolicy::EphemeralSingleRequest => None,
+            SessionPolicy::OpaqueHeaderContinuity(registry_config) => Some(
+                SessionRegistry::new(registry_config)
+                    .map_err(|_| direct_readiness_error("direct_registry_invalid"))?,
+            ),
+        };
+        let allowed_versions = explicit.map_or_else(
+            || Arc::from([DEFAULT_ANTHROPIC_VERSION.to_string()]),
+            |value| Arc::from(value.allowed_versions()),
+        );
+        let allowed_betas = explicit.map_or_else(
+            || Arc::<[String]>::from([]),
+            |value| Arc::from(value.allowed_betas()),
+        );
+        let ping_interval =
+            explicit.map_or(Duration::from_secs(10), AnthropicAdapter::ping_interval);
+        Ok(Some(Self {
+            client,
+            endpoint,
+            session_policy,
+            registry,
+            resolver,
+            listener_scope,
+            allowed_versions,
+            allowed_betas,
+            codec_limits,
+            client_config,
+            ping_interval,
+        }))
+    }
+}
+
+fn direct_readiness_error(detail: &'static str) -> ProxyError {
+    ProxyError::DaemonConfig {
+        detail: detail.to_string(),
+    }
+}
+
 /// One exact already-proved direct request. It has no `Debug` implementation by design.
 #[allow(dead_code)]
 pub(crate) struct DirectRequest {
@@ -205,6 +348,79 @@ impl DirectRequest {
             body: proved_body.into_bytes(),
             expected_response,
         })
+    }
+}
+
+/// A proved request whose real core transaction has not yet been published.
+///
+/// This type is crate-private and has exactly one consuming transition to
+/// [`CommittedDirectRequest`]. Dropping it publishes neither mappings nor prefix-cache state.
+struct PreparedDirectRequest<'session> {
+    transaction: SessionTransaction<'session>,
+    request: DirectRequest,
+    lifecycle: DirectTransactionState,
+}
+
+impl<'session> PreparedDirectRequest<'session> {
+    fn new(transaction: SessionTransaction<'session>, request: DirectRequest) -> Self {
+        Self {
+            transaction,
+            request,
+            lifecycle: DirectTransactionState::new(),
+        }
+    }
+
+    fn commit(mut self) -> Result<CommittedDirectRequest, SessionTransactionError> {
+        let snapshot = self.transaction.commit()?;
+        self.lifecycle.state = DirectIoState::CommittedNoIo;
+        Ok(CommittedDirectRequest {
+            snapshot,
+            request: self.request,
+            lifecycle: self.lifecycle,
+        })
+    }
+}
+
+/// The only request state accepted by [`DirectClient`].
+///
+/// Fields stay private so neither the committed snapshot nor the no-I/O state can be forged.
+struct CommittedDirectRequest {
+    snapshot: CommittedSessionSnapshot,
+    request: DirectRequest,
+    lifecycle: DirectTransactionState,
+}
+
+impl fmt::Debug for CommittedDirectRequest {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CommittedDirectRequest")
+            .field("lifecycle", &self.lifecycle)
+            .finish_non_exhaustive()
+    }
+}
+
+struct CommittedDirectResponse {
+    snapshot: CommittedSessionSnapshot,
+    response: DirectResponse,
+    lifecycle: DirectTransactionState,
+}
+
+struct CommittedDirectSse {
+    snapshot: CommittedSessionSnapshot,
+    response: reqwest::Response,
+    head: DirectResponseHead,
+    lifecycle: DirectTransactionState,
+    remaining_total_timeout: Duration,
+}
+
+impl fmt::Debug for CommittedDirectResponse {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("CommittedDirectResponse")
+            .field("status", &self.response.status())
+            .field("format", &self.response.format())
+            .field("lifecycle", &self.lifecycle)
+            .finish_non_exhaustive()
     }
 }
 
@@ -287,6 +503,10 @@ impl DirectResponse {
     pub(crate) fn into_body(self) -> Vec<u8> {
         self.body
     }
+
+    fn into_parts(self) -> (DirectResponseHead, Vec<u8>) {
+        (self.head, self.body)
+    }
 }
 
 /// Dedicated hardened client for direct codec-backed adapters.
@@ -308,21 +528,94 @@ impl DirectClient {
     }
 
     /// Sends the exact request body once and buffers the raw response with accumulated limits.
-    pub(crate) async fn execute(
+    async fn execute(
         &self,
-        lifecycle: &mut DirectTransactionState,
-        request: DirectRequest,
-    ) -> Result<DirectResponse, DirectProxyError> {
-        lifecycle.require_committed_no_io()?;
-        if request.body.len() > self.config.max_request_bytes {
+        mut committed: CommittedDirectRequest,
+    ) -> Result<CommittedDirectResponse, DirectProxyError> {
+        committed.lifecycle.require_committed_no_io()?;
+        if committed.request.body.len() > self.config.max_request_bytes {
             return Err(
                 ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
             );
         }
-        lifecycle.mark_io_attempted()?;
-        match tokio::time::timeout(self.config.total_timeout, self.execute_inner(request)).await {
-            Ok(result) => result,
+        committed.lifecycle.mark_io_attempted()?;
+        match tokio::time::timeout(
+            self.config.total_timeout,
+            self.execute_inner(committed.request),
+        )
+        .await
+        {
+            Ok(Ok(response)) => Ok(CommittedDirectResponse {
+                snapshot: committed.snapshot,
+                response,
+                lifecycle: committed.lifecycle,
+            }),
+            Ok(Err(error)) => Err(error),
             Err(_) => Err(ProxyErrorCode::TotalTimeout.error(ProxyErrorPhase::UpstreamBody)),
+        }
+    }
+
+    async fn execute_sse(
+        &self,
+        mut committed: CommittedDirectRequest,
+    ) -> Result<CommittedDirectSse, DirectProxyError> {
+        committed.lifecycle.require_committed_no_io()?;
+        if committed.request.body.len() > self.config.max_request_bytes {
+            return Err(
+                ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
+            );
+        }
+        if committed.request.expected_response != WireFormat::Sse {
+            return Err(ProxyErrorCode::InvalidStateTransition.error(ProxyErrorPhase::Framework));
+        }
+        committed.lifecycle.mark_io_attempted()?;
+        let started = tokio::time::Instant::now();
+        let opened = tokio::time::timeout(
+            self.config.total_timeout,
+            self.open_sse_response(committed.request),
+        )
+        .await
+        .map_err(|_| ProxyErrorCode::TotalTimeout.error(ProxyErrorPhase::UpstreamHeaders))??;
+        let remaining_total_timeout = self.config.total_timeout.saturating_sub(started.elapsed());
+        Ok(CommittedDirectSse {
+            snapshot: committed.snapshot,
+            response: opened.0,
+            head: opened.1,
+            lifecycle: committed.lifecycle,
+            remaining_total_timeout,
+        })
+    }
+
+    async fn open_sse_response(
+        &self,
+        request: DirectRequest,
+    ) -> Result<(reqwest::Response, DirectResponseHead), DirectProxyError> {
+        let response = self
+            .client
+            .post(request.url)
+            .headers(request.headers)
+            .header(reqwest::header::ACCEPT_ENCODING, "identity")
+            .body(request.body)
+            .timeout(self.config.request_timeout)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
+        let status = response.status();
+        if status.is_redirection() {
+            return Err(ProxyErrorCode::UpstreamRedirect.error(ProxyErrorPhase::UpstreamHeaders));
+        }
+        match validate_direct_response_head_with_config(
+            status,
+            response.headers(),
+            WireFormat::Sse,
+            self.config,
+        ) {
+            Ok(head) => Ok((response, head)),
+            Err(error) if is_mapped_upstream_status(error.code()) => {
+                discard_error_body(response, self.config.max_error_body_bytes).await;
+                Err(error)
+            }
+            Err(error) => Err(error),
         }
     }
 
@@ -467,6 +760,15 @@ fn validate_direct_url(url: &Url) -> Result<(), DirectProxyError> {
     } else {
         Err(ProxyErrorCode::InvalidUpstreamUrl.error(ProxyErrorPhase::UpstreamConfiguration))
     }
+}
+
+fn validate_direct_origin(url: &Url) -> Result<(), DirectProxyError> {
+    if url.path() != "/" {
+        return Err(
+            ProxyErrorCode::InvalidUpstreamUrl.error(ProxyErrorPhase::UpstreamConfiguration)
+        );
+    }
+    validate_direct_url(url)
 }
 
 #[allow(dead_code)]
@@ -949,6 +1251,206 @@ pub fn parse_request_stream_format(body: &[u8]) -> Result<WireFormat, DirectProx
     }
 }
 
+/// Production request protection over the real staged core transaction.
+///
+/// It delegates to the single shared Pipeline algorithm introduced by P4a and performs only
+/// validation against the staged token namespace. No throwaway session, replay, or whole-value
+/// token shortcut exists here.
+struct PipelineRequestPseudonymizer<'pipeline, 'transaction, 'session> {
+    pipeline: &'pipeline Pipeline,
+    transaction: &'transaction mut SessionTransaction<'session>,
+    dictionaries: DictionaryBundle,
+}
+
+impl<'pipeline, 'transaction, 'session>
+    PipelineRequestPseudonymizer<'pipeline, 'transaction, 'session>
+{
+    fn new(
+        pipeline: &'pipeline Pipeline,
+        transaction: &'transaction mut SessionTransaction<'session>,
+    ) -> Self {
+        Self {
+            pipeline,
+            transaction,
+            dictionaries: DictionaryBundle::default(),
+        }
+    }
+
+    fn protect_unstaged_segment(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        let clean = self
+            .pipeline
+            .pseudonymize_transaction_with_detect_context(
+                self.transaction,
+                RawDocument::Text(input.to_owned()),
+                &[LocaleTag::Global],
+                &self.dictionaries,
+            )
+            .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
+        match clean {
+            CleanDocument::Text(text) => Ok(text),
+            _ => Err(CodecErrorCode::ProtectionFailedClosed),
+        }
+    }
+}
+
+impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_> {
+    fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        self.validate_token_shapes(input)?;
+        let mut tokens = self.transaction.tokens();
+        if tokens.is_empty() {
+            return self.protect_unstaged_segment(input);
+        }
+        tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
+
+        let mut output = String::with_capacity(input.len());
+        let mut cursor = 0;
+        while cursor < input.len() {
+            let next = tokens
+                .iter()
+                .filter_map(|token| {
+                    input[cursor..]
+                        .find(token)
+                        .map(|offset| (cursor + offset, token.as_str()))
+                })
+                .min_by(|left, right| {
+                    left.0
+                        .cmp(&right.0)
+                        .then_with(|| right.1.len().cmp(&left.1.len()))
+                });
+            let Some((start, token)) = next else {
+                output.push_str(&self.protect_unstaged_segment(&input[cursor..])?);
+                break;
+            };
+            if start > cursor {
+                output.push_str(&self.protect_unstaged_segment(&input[cursor..start])?);
+            }
+            output.push_str(token);
+            cursor = start + token.len();
+        }
+        Ok(output)
+    }
+
+    fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
+        self.transaction
+            .validate_token_shapes(input)
+            .map_err(|_| CodecErrorCode::RestoreFailedClosed)
+    }
+}
+
+struct PipelineResponseResidualValidator<'pipeline> {
+    pipeline: &'pipeline Pipeline,
+    validation_session: Session,
+}
+
+impl<'pipeline> PipelineResponseResidualValidator<'pipeline> {
+    fn new(pipeline: &'pipeline Pipeline) -> Result<Self, DirectProxyError> {
+        let validation_session = Session::new(Scope::Ephemeral).map_err(|_| {
+            ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::ResponseValidation)
+        })?;
+        Ok(Self {
+            pipeline,
+            validation_session,
+        })
+    }
+}
+
+impl ResponseResidualValidator for PipelineResponseResidualValidator<'_> {
+    fn validate(
+        &mut self,
+        value: &str,
+        authorized_output_ranges: &[std::ops::Range<usize>],
+    ) -> Result<(), CodecErrorCode> {
+        let (_, spans, _) = self
+            .pipeline
+            .clean_with_safety_net(
+                &self.validation_session,
+                RawDocument::Text(value.to_owned()),
+                &[LocaleTag::Global],
+            )
+            .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
+        for span in spans {
+            if !authorized_output_ranges.iter().any(|authorized| {
+                authorized.start <= span.raw_span.start && authorized.end >= span.raw_span.end
+            }) {
+                return Err(CodecErrorCode::ProviderOriginPii);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_and_commit_direct_request(
+    pipeline: &Pipeline,
+    session: &Session,
+    codec: &dyn BodyCodec,
+    original_body: &[u8],
+    endpoint: &Url,
+    headers: &HeaderMap,
+    expected_response: WireFormat,
+    limits: CodecLimits,
+) -> Result<CommittedDirectRequest, DirectProxyError> {
+    prepare_and_commit_direct_request_with_hook(
+        pipeline,
+        session,
+        codec,
+        original_body,
+        endpoint,
+        headers,
+        expected_response,
+        limits,
+        |_, _| Ok(()),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_and_commit_direct_request_with_hook(
+    pipeline: &Pipeline,
+    session: &Session,
+    codec: &dyn BodyCodec,
+    original_body: &[u8],
+    endpoint: &Url,
+    headers: &HeaderMap,
+    expected_response: WireFormat,
+    limits: CodecLimits,
+    mut before_commit: impl FnMut(u8, &Session) -> Result<(), DirectProxyError>,
+) -> Result<CommittedDirectRequest, DirectProxyError> {
+    for attempt in 0..=1 {
+        let mut transaction = session.begin_transaction();
+        let proved_body = {
+            let mut pseudonymizer = PipelineRequestPseudonymizer::new(pipeline, &mut transaction);
+            let mut context =
+                RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
+            codec
+                .protect_request(original_body, &mut context)
+                .map_err(map_codec_error)?
+        };
+        let request = DirectRequest::from_proved(
+            endpoint.clone(),
+            headers.clone(),
+            proved_body,
+            expected_response,
+        )?;
+        let prepared = PreparedDirectRequest::new(transaction, request);
+        before_commit(attempt, session)?;
+        match prepared.commit() {
+            Ok(committed) => return Ok(committed),
+            Err(SessionTransactionError::GenerationConflict) if attempt == 0 => {}
+            Err(SessionTransactionError::GenerationConflict) => {
+                return Err(
+                    ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session)
+                );
+            }
+            Err(_) => {
+                return Err(
+                    ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session)
+                );
+            }
+        }
+    }
+    Err(ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session))
+}
+
 /// Direct transaction state around the only possible upstream send.
 #[derive(Debug, Eq, PartialEq)]
 #[allow(dead_code)]
@@ -1044,6 +1546,7 @@ struct AppState {
     config: Arc<ProxyConfig>,
     pipeline: Arc<Pipeline>,
     client: Client,
+    direct: Option<Arc<DirectRuntime>>,
     sessions: Arc<RwLock<HashMap<String, SessionEntry>>>,
     started_at: Instant,
 }
@@ -1070,10 +1573,12 @@ pub struct AdapterSnapshot {
 
 pub async fn serve(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<(), ProxyError> {
     let bind = config.bind;
+    let direct = DirectRuntime::from_config(&config)?.map(Arc::new);
     let state = AppState {
         config: Arc::new(config),
         pipeline,
         client: Client::new(),
+        direct,
         sessions: Arc::new(RwLock::new(HashMap::new())),
         started_at: Instant::now(),
     };
@@ -1084,9 +1589,12 @@ pub async fn serve(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<(), P
     let listener = TcpListener::bind(bind)
         .await
         .map_err(|source| ProxyError::Server { source })?;
-    axum::serve(listener, app)
-        .await
-        .map_err(|source| ProxyError::Server { source })
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await
+    .map_err(|source| ProxyError::Server { source })
 }
 
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
@@ -1109,14 +1617,55 @@ fn health_snapshot(state: &AppState) -> HealthSnapshot {
     }
 }
 
-async fn proxy(State(state): State<AppState>, request: Request<Body>) -> Response {
+async fn proxy(
+    State(state): State<AppState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    request: Request<Body>,
+) -> Response {
     let (parts, body) = request.into_parts();
-    let body = match collect_inbound_body(body, &parts.headers, state.config.body_limit_bytes).await
-    {
+    let direct_route_candidate =
+        state.direct.is_some() && matches!(parts.uri.path(), "/v1/messages" | "/v1/messages/");
+    let direct_ingress = if direct_route_candidate {
+        match prepare_direct_ingress(&state, peer, &parts.method, &parts.uri, &parts.headers) {
+            Ok(ingress) => Some(ingress),
+            Err(error) => return direct_error_response(error),
+        }
+    } else {
+        None
+    };
+    let is_direct = direct_ingress.is_some();
+    let body_limit_bytes = if is_direct {
+        state
+            .direct
+            .as_ref()
+            .map_or(state.config.body_limit_bytes, |runtime| {
+                state
+                    .config
+                    .body_limit_bytes
+                    .min(runtime.client_config.max_request_bytes as u64)
+            })
+    } else {
+        state.config.body_limit_bytes
+    };
+    let body = match collect_inbound_body(body, &parts.headers, body_limit_bytes).await {
         Ok(body) => body,
+        Err(_) if is_direct => {
+            return direct_error_response(
+                ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation),
+            )
+        }
         Err(error) => return proxy_error_response(error),
     };
-    match proxy_inner(state, parts.method, parts.uri, parts.headers, body).await {
+    match proxy_inner(
+        state,
+        parts.method,
+        parts.uri,
+        parts.headers,
+        body,
+        direct_ingress,
+    )
+    .await
+    {
         Ok(response) => response,
         Err(err) => proxy_error_response(err),
     }
@@ -1161,6 +1710,7 @@ async fn proxy_inner(
     uri: Uri,
     headers: HeaderMap,
     body: Bytes,
+    direct_ingress: Option<PreparedDirectIngress>,
 ) -> Result<Response, ProxyError> {
     if body.len() as u64 > state.config.body_limit_bytes {
         return Err(ProxyError::BodyTooLarge {
@@ -1178,6 +1728,24 @@ async fn proxy_inner(
             path: path.to_string(),
             method: method.clone(),
         })?;
+    let contract = adapter.contract();
+    if let ProtocolContract::Codec(codec) = contract.protocol() {
+        return Ok(
+            match direct_proxy_inner(
+                &state,
+                direct_ingress.ok_or_else(|| ProxyError::DaemonConfig {
+                    detail: "direct_ingress_missing".to_string(),
+                })?,
+                &body,
+                codec,
+            )
+            .await
+            {
+                Ok(response) => response,
+                Err(error) => direct_error_response(error),
+            },
+        );
+    }
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
@@ -1239,6 +1807,447 @@ async fn proxy_inner(
         .map_err(|source| ProxyError::DaemonConfig {
             detail: source.to_string(),
         })
+}
+
+fn prepare_direct_ingress(
+    state: &AppState,
+    peer: SocketAddr,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+) -> Result<PreparedDirectIngress, DirectProxyError> {
+    let runtime = state
+        .direct
+        .as_ref()
+        .ok_or_else(|| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Framework))?;
+    if method != Method::POST || uri.path() != "/v1/messages" || uri.query().is_some() {
+        return Err(ProxyErrorCode::RouteRejected.error(ProxyErrorPhase::Ingress));
+    }
+    let outbound_headers = validate_direct_request_headers(headers, runtime)?;
+    let session = match runtime.session_policy {
+        SessionPolicy::EphemeralSingleRequest => {
+            if headers.get_all(SESSION_HEADER).iter().next().is_some() {
+                return Err(ProxyErrorCode::UnexpectedSessionHeader
+                    .error(ProxyErrorPhase::RequestValidation));
+            }
+            DirectIngressSession::Ephemeral
+        }
+        SessionPolicy::OpaqueHeaderContinuity(_) => {
+            let identifier = canonical_session_identifier(headers)?;
+            let peer_scope = if peer.ip().is_loopback() {
+                PeerScope::Loopback
+            } else {
+                PeerScope::NonLoopback
+            };
+            let context = PrincipalContext::new(runtime.listener_scope, peer_scope, None, None)
+                .map_err(|_| ProxyErrorCode::PrincipalRejected.error(ProxyErrorPhase::Session))?;
+            let principal = invoke_resolver(runtime.resolver.as_ref(), context)
+                .map_err(|_| ProxyErrorCode::PrincipalRejected.error(ProxyErrorPhase::Session))?;
+            let registry = runtime.registry.as_ref().ok_or_else(|| {
+                ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Session)
+            })?;
+            let lease = registry
+                .acquire(principal, identifier, None)
+                .map_err(map_registry_error)?;
+            DirectIngressSession::Continuity(lease)
+        }
+    };
+    Ok(PreparedDirectIngress {
+        outbound_headers,
+        session,
+    })
+}
+
+async fn direct_proxy_inner(
+    state: &AppState,
+    ingress: PreparedDirectIngress,
+    body: &[u8],
+    codec: &dyn BodyCodec,
+) -> Result<Response, DirectProxyError> {
+    let runtime = state
+        .direct
+        .as_ref()
+        .ok_or_else(|| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Framework))?;
+    if body.len() > runtime.client_config.max_request_bytes {
+        return Err(
+            ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation)
+        );
+    }
+    let expected_response = parse_request_stream_format(body)?;
+
+    let committed = match ingress.session {
+        DirectIngressSession::Ephemeral => {
+            let session = Session::new(Scope::Ephemeral)
+                .map_err(|_| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Session))?;
+            prepare_and_commit_direct_request(
+                &state.pipeline,
+                &session,
+                codec,
+                body,
+                &runtime.endpoint,
+                &ingress.outbound_headers,
+                expected_response,
+                runtime.codec_limits,
+            )?
+        }
+        DirectIngressSession::Continuity(lease) => {
+            let request_guard = lease.lock_request().await;
+            let committed = prepare_and_commit_direct_request(
+                &state.pipeline,
+                lease.session(),
+                codec,
+                body,
+                &runtime.endpoint,
+                &ingress.outbound_headers,
+                expected_response,
+                runtime.codec_limits,
+            );
+            drop(request_guard);
+            committed?
+        }
+    };
+
+    if expected_response == WireFormat::Sse {
+        let opened = runtime.client.execute_sse(committed).await?;
+        return stage_and_replay_direct_sse(
+            Arc::clone(&state.pipeline),
+            opened,
+            runtime.codec_limits,
+            runtime.client_config.max_response_bytes,
+            runtime.ping_interval,
+        );
+    }
+    let executed = runtime.client.execute(committed).await?;
+    restore_direct_response(&state.pipeline, codec, executed, runtime.codec_limits)
+}
+
+fn stage_and_replay_direct_sse(
+    pipeline: Arc<Pipeline>,
+    opened: CommittedDirectSse,
+    limits: CodecLimits,
+    max_response_bytes: usize,
+    ping_interval: Duration,
+) -> Result<Response, DirectProxyError> {
+    let CommittedDirectSse {
+        snapshot,
+        response: upstream_response,
+        head,
+        lifecycle,
+        remaining_total_timeout,
+    } = opened;
+    let status = head.status();
+    let headers = head.headers().clone();
+    let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
+    tokio::spawn(async move {
+        let proof = async move {
+            let body = collect_response_body(upstream_response, max_response_bytes).await?;
+            validate_declared_body(WireFormat::Sse, &body, max_response_bytes)?;
+            let mut residual = PipelineResponseResidualValidator::new(&pipeline)?;
+            let mut context =
+                ResponseTransformContext::new(&snapshot, &mut residual, WireFormat::Sse, limits);
+            let proved = crate::codecs::anthropic::AnthropicMessagesCodec
+                .restore_response(&body, &mut context)
+                .map_err(map_codec_error)?;
+            let mut lifecycle = lifecycle;
+            lifecycle.mark_response_complete()?;
+            Ok::<Vec<u8>, DirectProxyError>(proved.into_bytes())
+        };
+        let timed_proof = tokio::time::timeout(remaining_total_timeout, proof);
+        tokio::pin!(timed_proof);
+        let mut ping = tokio::time::interval(ping_interval);
+        ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        ping.tick().await;
+        loop {
+            tokio::select! {
+                () = sender.closed() => {
+                    break;
+                }
+                result = &mut timed_proof => {
+                    let output = match result {
+                        Ok(Ok(bytes)) => Bytes::from(bytes),
+                        Ok(Err(_)) | Err(_) => Bytes::from_static(DIRECT_PROXY_ERROR_FRAME),
+                    };
+                    let _ = sender.send(Ok(output)).await;
+                    break;
+                }
+                _ = ping.tick() => {
+                    if sender
+                        .send(Ok(Bytes::from_static(DIRECT_PROXY_PING_FRAME)))
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    let mut response = Response::builder().status(status);
+    for (name, value) in &headers {
+        response = response.header(name, value);
+    }
+    response
+        .body(Body::from_stream(
+            tokio_stream::wrappers::ReceiverStream::new(receiver),
+        ))
+        .map_err(|_| ProxyErrorCode::UpstreamProtocol.error(ProxyErrorPhase::Framework))
+}
+
+fn validate_direct_request_headers(
+    headers: &HeaderMap,
+    runtime: &DirectRuntime,
+) -> Result<HeaderMap, DirectProxyError> {
+    validate_header_space(headers, runtime.client_config)?;
+    for singleton in [
+        "content-type",
+        "content-length",
+        "transfer-encoding",
+        "content-encoding",
+        "connection",
+        "x-api-key",
+        "anthropic-version",
+        "anthropic-beta",
+        SESSION_HEADER,
+    ] {
+        reject_duplicate_request_header(headers, singleton)?;
+    }
+    if headers.get(axum::http::header::CONTENT_ENCODING).is_some() {
+        return Err(
+            ProxyErrorCode::UnsupportedContentEncoding.error(ProxyErrorPhase::RequestValidation)
+        );
+    }
+    if let Some(connection) = one_request_header(headers, "connection", false)? {
+        let connection = connection.to_str().map_err(|_| {
+            ProxyErrorCode::InvalidFraming.error(ProxyErrorPhase::RequestValidation)
+        })?;
+        if !connection.eq_ignore_ascii_case("keep-alive")
+            && !connection.eq_ignore_ascii_case("close")
+        {
+            return Err(ProxyErrorCode::InvalidFraming.error(ProxyErrorPhase::RequestValidation));
+        }
+    }
+    if headers.get(axum::http::header::TRANSFER_ENCODING).is_some()
+        && headers.get(axum::http::header::CONTENT_LENGTH).is_some()
+    {
+        return Err(ProxyErrorCode::InvalidFraming.error(ProxyErrorPhase::RequestValidation));
+    }
+    let content_type = one_request_header(headers, "content-type", true)?
+        .ok_or_else(|| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    if parse_wire_content_type(content_type)? != WireFormat::Json {
+        return Err(ProxyErrorCode::InvalidRequestFormat.error(ProxyErrorPhase::RequestValidation));
+    }
+    let api_key = one_request_header(headers, "x-api-key", true)?
+        .ok_or_else(|| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    if !api_key
+        .as_bytes()
+        .iter()
+        .all(|byte| (0x21..=0x7e).contains(byte) && *byte != b',')
+    {
+        return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+    }
+    let version = one_request_header(headers, "anthropic-version", true)?
+        .ok_or_else(|| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    let version_text = std::str::from_utf8(version.as_bytes())
+        .map_err(|_| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    if !runtime
+        .allowed_versions
+        .iter()
+        .any(|allowed| allowed == version_text)
+    {
+        return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+    }
+    let beta = one_request_header(headers, "anthropic-beta", false)?;
+    if let Some(beta) = beta {
+        let beta_text = std::str::from_utf8(beta.as_bytes()).map_err(|_| {
+            ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation)
+        })?;
+        if !runtime
+            .allowed_betas
+            .iter()
+            .any(|allowed| allowed == beta_text)
+        {
+            return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+        }
+    }
+
+    let mut outbound = HeaderMap::new();
+    outbound.insert(
+        axum::http::header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json"),
+    );
+    outbound.insert(HeaderName::from_static("x-api-key"), api_key.clone());
+    outbound.insert(
+        HeaderName::from_static("anthropic-version"),
+        version.clone(),
+    );
+    if let Some(beta) = beta {
+        outbound.insert(HeaderName::from_static("anthropic-beta"), beta.clone());
+    }
+    Ok(outbound)
+}
+
+fn one_request_header<'a>(
+    headers: &'a HeaderMap,
+    name: &'static str,
+    required: bool,
+) -> Result<Option<&'a HeaderValue>, DirectProxyError> {
+    let mut values = headers.get_all(name).iter();
+    let first = values.next();
+    if values.next().is_some() || first.is_some_and(|value| value.is_empty()) {
+        return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+    }
+    match (first, required) {
+        (Some(value), _) => Ok(Some(value)),
+        (None, false) => Ok(None),
+        (None, true) => {
+            Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))
+        }
+    }
+}
+
+fn reject_duplicate_request_header(
+    headers: &HeaderMap,
+    name: &'static str,
+) -> Result<(), DirectProxyError> {
+    let mut values = headers.get_all(name).iter();
+    let _ = values.next();
+    if values.next().is_some() {
+        Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))
+    } else {
+        Ok(())
+    }
+}
+
+fn canonical_session_identifier(headers: &HeaderMap) -> Result<&str, DirectProxyError> {
+    let value = one_request_header(headers, SESSION_HEADER, false)?
+        .ok_or_else(|| {
+            ProxyErrorCode::SessionIdentityRequired.error(ProxyErrorPhase::RequestValidation)
+        })?
+        .to_str()
+        .map_err(|_| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    let identifier = uuid::Uuid::parse_str(value)
+        .map_err(|_| ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation))?;
+    if identifier.get_version() != Some(uuid::Version::Random)
+        || identifier.get_variant() != uuid::Variant::RFC4122
+        || identifier.hyphenated().to_string() != value
+    {
+        return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+    }
+    Ok(value)
+}
+
+fn restore_direct_response(
+    pipeline: &Pipeline,
+    codec: &dyn BodyCodec,
+    mut executed: CommittedDirectResponse,
+    limits: CodecLimits,
+) -> Result<Response, DirectProxyError> {
+    let (head, body) = executed.response.into_parts();
+    let mut residual = PipelineResponseResidualValidator::new(pipeline)?;
+    let mut context =
+        ResponseTransformContext::new(&executed.snapshot, &mut residual, head.format(), limits);
+    let proved = codec
+        .restore_response(&body, &mut context)
+        .map_err(map_codec_error)?;
+    executed.lifecycle.mark_response_complete()?;
+    let mut response = Response::builder().status(head.status());
+    for (name, value) in head.headers() {
+        response = response.header(name, value);
+    }
+    response
+        .body(Body::from(proved.into_bytes()))
+        .map_err(|_| ProxyErrorCode::UpstreamProtocol.error(ProxyErrorPhase::Framework))
+}
+
+fn map_registry_error(error: RegistryError) -> DirectProxyError {
+    let code = match error {
+        RegistryError::InvalidSessionIdentifier => ProxyErrorCode::HeaderRejected,
+        RegistryError::SessionExpired => ProxyErrorCode::SessionExpired,
+        RegistryError::SessionGenerationConflict => ProxyErrorCode::SessionGenerationConflict,
+        RegistryError::ActiveCapacityReached => ProxyErrorCode::RegistryCapacity,
+        RegistryError::EntropyUnavailable
+        | RegistryError::SessionCreationFailed
+        | RegistryError::EpochExhausted
+        | RegistryError::InternalFailure => ProxyErrorCode::ProxyConfiguration,
+    };
+    code.error(ProxyErrorPhase::Session)
+}
+
+fn map_codec_error(error: CodecError) -> DirectProxyError {
+    let code = match error.code() {
+        CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
+        CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
+        CodecErrorCode::ControlWouldMutate => ProxyErrorCode::ControlWouldMutate,
+        CodecErrorCode::OpaqueMediaUninspected => ProxyErrorCode::OpaqueMediaUninspected,
+        CodecErrorCode::SignedMutationRequired => ProxyErrorCode::SignedMutationRequired,
+        CodecErrorCode::SignedSurfaceMalformed => ProxyErrorCode::SignedSurfaceMalformed,
+        CodecErrorCode::InvalidSseLifecycle | CodecErrorCode::IncompleteSseStream => {
+            ProxyErrorCode::InvalidSseLifecycle
+        }
+        CodecErrorCode::InvalidContentBlockIndex | CodecErrorCode::InvalidContentBlockDelta => {
+            ProxyErrorCode::InvalidContentBlockIndex
+        }
+        CodecErrorCode::DepthLimitExceeded
+        | CodecErrorCode::NodeLimitExceeded
+        | CodecErrorCode::StringLimitExceeded
+        | CodecErrorCode::NumberLimitExceeded
+        | CodecErrorCode::BodyLimitExceeded
+        | CodecErrorCode::GrowthLimitExceeded
+        | CodecErrorCode::SseLineLimitExceeded
+        | CodecErrorCode::SseFrameLimitExceeded
+        | CodecErrorCode::SseEventLimitExceeded
+        | CodecErrorCode::SseIndexLimitExceeded
+        | CodecErrorCode::SseAccumulatorLimitExceeded => ProxyErrorCode::ResponseBodyLimitExceeded,
+        CodecErrorCode::ProtectionFailedClosed
+        | CodecErrorCode::RestoreFailedClosed
+        | CodecErrorCode::ProviderOriginPii
+        | CodecErrorCode::ProviderOriginNumeric
+        | CodecErrorCode::TransformedKeyCollision
+        | CodecErrorCode::InvalidUtf8
+        | CodecErrorCode::InvalidJson
+        | CodecErrorCode::InvalidWireFormat
+        | CodecErrorCode::UnsupportedRequestSurface
+        | CodecErrorCode::UnsupportedResponseSurface
+        | CodecErrorCode::InvalidSseField
+        | CodecErrorCode::InvalidSseFrame
+        | CodecErrorCode::InvalidSseEventPair
+        | CodecErrorCode::UnsafeFutureEvent
+        | CodecErrorCode::ProviderErrorEvent => ProxyErrorCode::InvalidToken,
+    };
+    let phase = match error.phase() {
+        CodecPhase::RequestParse => ProxyErrorPhase::RequestValidation,
+        CodecPhase::RequestProtection | CodecPhase::RequestProof => {
+            ProxyErrorPhase::RequestTransform
+        }
+        CodecPhase::ResponseParse => ProxyErrorPhase::ResponseValidation,
+        CodecPhase::ResponseRestore | CodecPhase::ResponseProof => {
+            ProxyErrorPhase::ResponseTransform
+        }
+        CodecPhase::SseDecode | CodecPhase::SseLifecycle => ProxyErrorPhase::ResponseValidation,
+        CodecPhase::SseReplay => ProxyErrorPhase::ResponseReplay,
+    };
+    code.error(phase)
+}
+
+fn direct_error_response(error: DirectProxyError) -> Response {
+    let body = serde_json::json!({
+        "type": "error",
+        "error": {
+            "type": "api_error",
+            "message": "proxy_validation_failed",
+            "code": format!("{:?}", error.code()),
+        }
+    });
+    let mut response = Response::builder()
+        .status(error.http_status())
+        .header(axum::http::header::CONTENT_TYPE, "application/json");
+    if let Some(seconds) = error.retry_after_seconds() {
+        response = response.header(axum::http::header::RETRY_AFTER, seconds.to_string());
+    }
+    response
+        .body(Body::from(body.to_string()))
+        .unwrap_or_else(|_| Response::new(Body::empty()))
 }
 
 async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Session>, ProxyError> {
@@ -1444,9 +2453,26 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
+    use axum::body::to_bytes;
     use axum::routing::post;
+    use gaze::{Action, ClassRule, DefaultRule, PiiClass};
+    use gaze_recognizers::RegexDetector;
 
     use crate::codec::OutputProvenance;
+
+    const SYNTHETIC_EMAIL: &str = "alice@example.invalid";
+
+    struct SyntheticPrincipalResolver;
+
+    impl PrincipalResolver for SyntheticPrincipalResolver {
+        fn resolve(
+            &self,
+            _context: PrincipalContext<'_>,
+        ) -> Result<crate::AuthenticatedPrincipal, crate::principal::PrincipalResolveError>
+        {
+            crate::AuthenticatedPrincipal::try_from_canonical_bytes(b"synthetic-principal".to_vec())
+        }
+    }
 
     #[derive(Clone, Default)]
     struct Capture {
@@ -1502,6 +2528,53 @@ mod tests {
         DirectRequest::from_proved(url, headers, proved(bytes), expected)
     }
 
+    fn committed_direct_request(
+        url: Url,
+        expected: WireFormat,
+        bytes: &[u8],
+    ) -> CommittedDirectRequest {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let transaction = session.begin_transaction();
+        PreparedDirectRequest::new(transaction, direct_request(url, expected, bytes).unwrap())
+            .commit()
+            .unwrap()
+    }
+
+    fn email_pipeline() -> Pipeline {
+        Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn non_loopback_readiness_requires_an_explicit_principal_resolver() {
+        let bind = "0.0.0.0:8787".parse().unwrap();
+        let upstream = Url::parse("https://api.anthropic.com").unwrap();
+        let missing = ProxyConfig::anthropic_direct(bind, AnthropicAdapter::new(upstream.clone()));
+        assert!(DirectRuntime::from_config(&missing).is_err());
+
+        let configured = ProxyConfig::anthropic_direct(
+            bind,
+            AnthropicAdapter::builder(upstream)
+                .principal_resolver(Arc::new(SyntheticPrincipalResolver))
+                .build()
+                .unwrap(),
+        );
+        assert!(DirectRuntime::from_config(&configured).unwrap().is_some());
+    }
+
+    #[test]
+    fn invalid_direct_upstream_fails_readiness_before_any_request() {
+        let config = ProxyConfig::anthropic_direct(
+            "127.0.0.1:8787".parse().unwrap(),
+            AnthropicAdapter::new(Url::parse("https://synthetic:credential@127.0.0.1").unwrap()),
+        );
+        assert!(DirectRuntime::from_config(&config).is_err());
+    }
+
     #[tokio::test]
     async fn direct_send_requires_commit_is_single_use_and_captures_exact_proof() {
         let capture = Capture::default();
@@ -1513,62 +2586,365 @@ mod tests {
         .await;
         let exact = br#"{"messages":[{"role":"user","content":"<Email_1>"}]}"#;
         let client = DirectClient::new(DirectClientConfig::default()).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
 
-        let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url.clone(), WireFormat::Json, exact).unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(error.code(), ProxyErrorCode::InvalidStateTransition);
-        assert_eq!(lifecycle.state(), &DirectIoState::Prepared);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let prepared = PreparedDirectRequest::new(
+            session.begin_transaction(),
+            direct_request(url.clone(), WireFormat::Json, exact).unwrap(),
+        );
+        drop(prepared);
+        assert!(session.tokens().is_empty());
         assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
 
+        let mut lifecycle = DirectTransactionState::new();
         lifecycle.retry_generation_conflict().unwrap();
         assert_eq!(lifecycle.generation_retries(), 1);
         assert_eq!(
             lifecycle.retry_generation_conflict().unwrap_err().code(),
             ProxyErrorCode::SessionGenerationConflict
         );
-        lifecycle.mark_committed().unwrap();
         let response = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url.clone(), WireFormat::Json, exact).unwrap(),
-            )
+            .execute(committed_direct_request(url, WireFormat::Json, exact))
             .await
             .unwrap();
-        assert_eq!(lifecycle.state(), &DirectIoState::IoAttempted);
+        assert_eq!(response.lifecycle.state(), &DirectIoState::IoAttempted);
         assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
         assert_eq!(&*capture.body.lock().unwrap(), exact);
-        assert_eq!(response.body(), br#"{"ok":true}"#);
-        assert_eq!(response.headers().len(), 1);
-        assert!(response.headers().get("set-cookie").is_none());
-
-        let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url.clone(), WireFormat::Json, exact).unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(error.code(), ProxyErrorCode::InvalidStateTransition);
-        assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
-
-        lifecycle.mark_response_complete().unwrap();
-        assert_eq!(lifecycle.state(), &DirectIoState::ResponseComplete);
-        let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url, WireFormat::Json, exact).unwrap(),
-            )
-            .await
-            .unwrap_err();
-        assert_eq!(error.code(), ProxyErrorCode::InvalidStateTransition);
-        assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
+        assert_eq!(response.response.body(), br#"{"ok":true}"#);
+        assert_eq!(response.response.headers().len(), 1);
+        assert!(response.response.headers().get("set-cookie").is_none());
         server.abort();
+    }
+
+    #[test]
+    fn signed_shadow_probe_reuses_only_the_previously_staged_mapping() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let expected_token = format!("<{}:Email_1>", session.session_hex());
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"system":"{SYNTHETIC_EMAIL}","messages":[{{"role":"assistant","content":[{{"type":"thinking","thinking":"{expected_token}","signature":"opaque-signature"}}]}}]}}"#
+        );
+        let request = direct_request(
+            Url::parse("https://api.anthropic.com/v1/messages").unwrap(),
+            WireFormat::Json,
+            body.as_bytes(),
+        )
+        .unwrap();
+
+        let committed = prepare_and_commit_direct_request(
+            &pipeline,
+            &session,
+            &codec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+        )
+        .unwrap();
+
+        assert_eq!(session.tokens(), vec![expected_token.clone()]);
+        let protected = std::str::from_utf8(&committed.request.body).unwrap();
+        assert!(!protected.contains(SYNTHETIC_EMAIL));
+        assert_eq!(protected.matches(&expected_token).count(), 2);
+    }
+
+    #[test]
+    fn final_request_reproof_is_idempotent_for_ordinary_and_format_preserving_tokens() {
+        let endpoint = Url::parse("https://api.anthropic.com/v1/messages").unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+
+        for action in [Action::Tokenize, Action::FormatPreserve] {
+            let pipeline = Pipeline::builder()
+                .detector(RegexDetector::emails().unwrap())
+                .rule(ClassRule::new(PiiClass::Email, action))
+                .rule(DefaultRule::new(Action::Preserve))
+                .build()
+                .unwrap();
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let original = format!(
+                r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":"{SYNTHETIC_EMAIL}"}}]}}"#
+            );
+            let headers = direct_request(endpoint.clone(), WireFormat::Json, original.as_bytes())
+                .unwrap()
+                .headers;
+            let first = prepare_and_commit_direct_request(
+                &pipeline,
+                &session,
+                &codec,
+                original.as_bytes(),
+                &endpoint,
+                &headers,
+                WireFormat::Json,
+                CodecLimits::default(),
+            )
+            .unwrap_or_else(|error| panic!("{action:?} first proof failed: {error:?}"));
+            let proved_once = first.request.body.clone();
+            assert_eq!(session.tokens().len(), 1);
+
+            let second = prepare_and_commit_direct_request(
+                &pipeline,
+                &session,
+                &codec,
+                &proved_once,
+                &endpoint,
+                &headers,
+                WireFormat::Json,
+                CodecLimits::default(),
+            )
+            .unwrap();
+            assert_eq!(second.request.body, proved_once);
+            assert_eq!(session.tokens().len(), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn late_signed_failure_discards_all_staged_state_and_does_zero_io() {
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"system":"{SYNTHETIC_EMAIL}","messages":[{{"role":"assistant","content":[{{"type":"thinking","thinking":"{SYNTHETIC_EMAIL}","signature":"opaque-signature"}}]}}]}}"#
+        );
+        let request = direct_request(url, WireFormat::Json, body.as_bytes()).unwrap();
+        let error = prepare_and_commit_direct_request(
+            &pipeline,
+            &session,
+            &codec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+        )
+        .unwrap_err();
+
+        assert_eq!(error.code(), ProxyErrorCode::SignedMutationRequired);
+        assert!(session.tokens().is_empty());
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+
+        let valid = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"system":"{SYNTHETIC_EMAIL} reports","messages":[{{"role":"user","content":"synthetic"}}]}}"#
+        );
+        prepare_and_commit_direct_request(
+            &pipeline,
+            &session,
+            &codec,
+            valid.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(session.tokens().len(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn generation_conflict_reproofs_once_and_sends_only_the_winning_body() {
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let pipeline = email_pipeline();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":"{SYNTHETIC_EMAIL}"}}]}}"#
+        );
+        let request = direct_request(url.clone(), WireFormat::Json, body.as_bytes()).unwrap();
+        let mut hook_calls = 0;
+        let committed = prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            |attempt, live| {
+                hook_calls += 1;
+                if attempt == 0 {
+                    live.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(hook_calls, 2);
+        assert_eq!(session.tokens().len(), 2);
+
+        DirectClient::new(DirectClientConfig::default())
+            .unwrap()
+            .execute(committed)
+            .await
+            .unwrap();
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
+        let captured = String::from_utf8(capture.body.lock().unwrap().clone()).unwrap();
+        assert!(!captured.contains(SYNTHETIC_EMAIL));
+        assert_eq!(captured.matches(":Email_1>").count(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn second_generation_conflict_fails_closed_without_upstream_io() {
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let pipeline = email_pipeline();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":"{SYNTHETIC_EMAIL}"}}]}}"#
+        );
+        let request = direct_request(url, WireFormat::Json, body.as_bytes()).unwrap();
+        let error = prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            |attempt, live| {
+                live.tokenize(&PiiClass::Name, &format!("Dr. Schmidt {attempt}"))
+                    .unwrap();
+                Ok(())
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), ProxyErrorCode::SessionGenerationConflict);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        assert!(session
+            .tokens()
+            .iter()
+            .all(|token| !token.contains(":Email_")));
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn cancellation_publishes_only_after_commit_and_never_rolls_it_back() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut staged = session.begin_transaction();
+        staged.tokenize(&PiiClass::Email, SYNTHETIC_EMAIL).unwrap();
+        let prepared = PreparedDirectRequest::new(
+            staged,
+            direct_request(
+                Url::parse("https://api.anthropic.com/v1/messages").unwrap(),
+                WireFormat::Json,
+                br#"{}"#,
+            )
+            .unwrap(),
+        );
+        drop(prepared);
+        assert!(session.tokens().is_empty());
+
+        let (url, server) = spawn_test_server(Router::new().route(
+            "/v1/messages",
+            post(|| async {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                ([("content-type", "application/json")], "{}")
+            }),
+        ))
+        .await;
+        let mut staged = session.begin_transaction();
+        staged.tokenize(&PiiClass::Email, SYNTHETIC_EMAIL).unwrap();
+        let committed = PreparedDirectRequest::new(
+            staged,
+            direct_request(url, WireFormat::Json, br#"{}"#).unwrap(),
+        )
+        .commit()
+        .unwrap();
+        assert_eq!(session.tokens().len(), 1);
+        let client = DirectClient::new(DirectClientConfig::default()).unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), client.execute(committed))
+                .await
+                .is_err()
+        );
+        assert_eq!(session.tokens().len(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn response_restore_uses_the_exact_committed_snapshot_after_live_mutation() {
+        let pipeline = email_pipeline();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let committed_token = transaction
+            .tokenize(&PiiClass::Email, SYNTHETIC_EMAIL)
+            .unwrap();
+        let snapshot = transaction.commit().unwrap();
+        session.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+        assert_eq!(session.tokens().len(), 2);
+
+        let body = format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"{committed_token}"}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        let executed = CommittedDirectResponse {
+            snapshot,
+            response: DirectResponse {
+                head: DirectResponseHead {
+                    status: StatusCode::OK,
+                    format: WireFormat::Json,
+                    headers,
+                },
+                body: body.into_bytes(),
+            },
+            lifecycle: DirectTransactionState {
+                state: DirectIoState::IoAttempted,
+                generation_retries: 0,
+            },
+        };
+        let response = restore_direct_response(
+            &pipeline,
+            &crate::codecs::anthropic::AnthropicMessagesCodec,
+            executed,
+            CodecLimits::default(),
+        )
+        .unwrap();
+        let restored = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
+        assert!(std::str::from_utf8(&restored)
+            .unwrap()
+            .contains(SYNTHETIC_EMAIL));
+        assert!(!std::str::from_utf8(&restored)
+            .unwrap()
+            .contains("Dr. Schmidt"));
     }
 
     #[tokio::test]
@@ -1584,17 +2960,15 @@ mod tests {
             .try_with_max_request_bytes(4)
             .unwrap();
         let client = DirectClient::new(config).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url.clone(), WireFormat::Json, br#"{"over":true}"#).unwrap(),
-            )
+            .execute(committed_direct_request(
+                url.clone(),
+                WireFormat::Json,
+                br#"{"over":true}"#,
+            ))
             .await
             .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::RequestBodyLimitExceeded);
-        assert_eq!(lifecycle.state(), &DirectIoState::CommittedNoIo);
         assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
 
         for singleton in ["x-api-key", "anthropic-version", "anthropic-beta"] {
@@ -1664,13 +3038,12 @@ mod tests {
         ))
         .await;
         let client = DirectClient::new(DirectClientConfig::default()).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(origin_url, WireFormat::Json, br#"{}"#).unwrap(),
-            )
+            .execute(committed_direct_request(
+                origin_url,
+                WireFormat::Json,
+                br#"{}"#,
+            ))
             .await
             .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::UpstreamRedirect);
@@ -1692,13 +3065,8 @@ mod tests {
             }),
         ))
         .await;
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url, WireFormat::Json, br#"{}"#).unwrap(),
-            )
+            .execute(committed_direct_request(url, WireFormat::Json, br#"{}"#))
             .await
             .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::UpstreamUnavailable);
@@ -1729,17 +3097,11 @@ mod tests {
             .try_with_max_response_bytes(8)
             .unwrap();
         let client = DirectClient::new(config).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url, WireFormat::Json, br#"{}"#).unwrap(),
-            )
+            .execute(committed_direct_request(url, WireFormat::Json, br#"{}"#))
             .await
             .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::ResponseBodyLimitExceeded);
-        assert_eq!(lifecycle.state(), &DirectIoState::IoAttempted);
         server.abort();
     }
 
@@ -1761,17 +3123,15 @@ mod tests {
             )
             .unwrap();
         let client = DirectClient::new(config).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(slow_url, WireFormat::Json, br#"{}"#).unwrap(),
-            )
+            .execute(committed_direct_request(
+                slow_url,
+                WireFormat::Json,
+                br#"{}"#,
+            ))
             .await
             .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::TotalTimeout);
-        assert_eq!(lifecycle.state(), &DirectIoState::IoAttempted);
         slow_server.abort();
 
         let chunks =
@@ -1798,17 +3158,11 @@ mod tests {
         ))
         .await;
         let client = DirectClient::new(DirectClientConfig::default()).unwrap();
-        let mut lifecycle = DirectTransactionState::new();
-        lifecycle.mark_committed().unwrap();
         let error = client
-            .execute(
-                &mut lifecycle,
-                direct_request(url, WireFormat::Json, br#"{}"#).unwrap(),
-            )
+            .execute(committed_direct_request(url, WireFormat::Json, br#"{}"#))
             .await
             .unwrap_err();
         assert_eq!(error.phase(), ProxyErrorPhase::UpstreamBody);
-        assert_eq!(lifecycle.state(), &DirectIoState::IoAttempted);
         server.abort();
     }
 
@@ -1858,13 +3212,8 @@ mod tests {
             std::env::remove_var("no_proxy");
 
             let client = DirectClient::new(DirectClientConfig::default()).unwrap();
-            let mut lifecycle = DirectTransactionState::new();
-            lifecycle.mark_committed().unwrap();
             client
-                .execute(
-                    &mut lifecycle,
-                    direct_request(url, WireFormat::Json, br#"{}"#).unwrap(),
-                )
+                .execute(committed_direct_request(url, WireFormat::Json, br#"{}"#))
                 .await
                 .unwrap();
             assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
@@ -1918,6 +3267,7 @@ mod tests {
             pipeline: Arc::new(Pipeline::builder().build().unwrap()),
             client: Client::new(),
             sessions: Arc::new(RwLock::new(HashMap::new())),
+            direct: None,
             started_at: Instant::now(),
         };
         assert_eq!(health_snapshot(&state).adapters[0].name, "openai");
