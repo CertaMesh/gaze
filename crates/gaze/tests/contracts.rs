@@ -73,6 +73,32 @@ fn restore_strict_text_still_rejects_ascii_shaped_unknown_token() {
 }
 
 #[test]
+fn token_shape_finds_bare_generic_literal_in_raw_text() {
+    assert_eq!(gaze::token_shape::find_token("a_0%"), Some("a_0"));
+}
+
+#[test]
+fn restore_strict_text_rejects_bare_generic_unknown_token() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let err = session
+        .restore_strict_text("a_0%")
+        .expect_err("strict restore must reject unmanifested bare generic token shapes");
+
+    match err {
+        Error::UnknownToken {
+            class,
+            ordinal,
+            raw,
+        } => {
+            assert_eq!(class, PiiClass::Custom("a".to_string()));
+            assert_eq!(ordinal, 0);
+            assert_eq!(raw, "a_0");
+        }
+        other => panic!("expected UnknownToken, got {other:?}"),
+    }
+}
+
+#[test]
 fn restore_regex_cache_invalidates_when_session_gains_tokens() {
     let pipeline = Pipeline::builder().build().expect("pipeline");
     let empty = Session::new(Scope::Ephemeral).expect("empty session");
