@@ -1,5 +1,6 @@
 use std::net::{SocketAddr, TcpListener as StdTcpListener};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
@@ -19,7 +20,7 @@ use gaze_proxy::{ProxyConfig, ProxyInspectionProducerV1};
 use gaze_recognizers::RegexDetector;
 use gaze_types::inspection::{
     CaptureDomainsV1, DashboardCaptureDescriptorV1, EndpointSelectionCodeV1,
-    InspectionStageDomainV1, PortSelectionCodeV1, ProjectionAvailabilityV1,
+    InspectionStageDomainV1, LogicalInspectionIdV1, PortSelectionCodeV1, ProjectionAvailabilityV1,
     ProjectionOmissionReasonV1,
 };
 use reqwest::Client;
@@ -27,6 +28,8 @@ use serde_json::{json, Value};
 use url::Url;
 
 const SYNTHETIC_EMAIL: &str = "alice@example.invalid";
+const PRIMING_PLACEHOLDER: &str = "synthetic inspection priming";
+const PRIMING_ATTEMPT_LIMIT: usize = 8;
 
 #[derive(Clone, Copy)]
 enum SinkBehavior {
@@ -36,6 +39,7 @@ enum SinkBehavior {
 }
 
 struct RecordedEvent {
+    logical_id: LogicalInspectionIdV1,
     meta: Value,
     kind: InspectionEventKindV1,
     payload: Option<Vec<u8>>,
@@ -58,6 +62,7 @@ struct RecordedAvailability {
 struct RecordingSink {
     behavior: SinkBehavior,
     events: Mutex<Vec<RecordedEvent>>,
+    gate: Option<Arc<SinkGate>>,
 }
 
 impl RecordingSink {
@@ -65,16 +70,39 @@ impl RecordingSink {
         Self {
             behavior,
             events: Mutex::new(Vec::new()),
+            gate: None,
+        }
+    }
+
+    fn gated(behavior: SinkBehavior, gate: Arc<SinkGate>) -> Self {
+        Self {
+            behavior,
+            events: Mutex::new(Vec::new()),
+            gate: Some(gate),
         }
     }
 
     fn len(&self) -> usize {
         self.events.lock().unwrap().len()
     }
+
+    fn delivery_result(&self) -> Result<(), InspectionSinkErrorV1> {
+        match self.behavior {
+            SinkBehavior::Capture => Ok(()),
+            SinkBehavior::Reject => Err(InspectionSinkErrorV1::Rejected),
+            SinkBehavior::Panic => panic!("synthetic inspection sink panic"),
+        }
+    }
 }
 
 impl InspectionSink for RecordingSink {
     fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
+        let logical_id = event.meta().logical_id();
+        if let Some(gate) = &self.gate {
+            if gate.enter_and_wait(logical_id) {
+                return self.delivery_result();
+            }
+        }
         let (payload, availability) = match event.view() {
             InspectionEventViewV1::OwnerRequest(projection) => record_owner_raw(projection),
             InspectionEventViewV1::ProviderRequest(projection)
@@ -87,16 +115,165 @@ impl InspectionSink for RecordingSink {
             InspectionEventViewV1::Omitted { .. } => (None, None),
         };
         self.events.lock().unwrap().push(RecordedEvent {
+            logical_id,
             meta: serde_json::to_value(event.meta()).unwrap(),
             kind: event.kind(),
             payload,
             availability,
         });
-        match self.behavior {
-            SinkBehavior::Capture => Ok(()),
-            SinkBehavior::Reject => Err(InspectionSinkErrorV1::Rejected),
-            SinkBehavior::Panic => panic!("synthetic inspection sink panic"),
+        self.delivery_result()
+    }
+}
+
+const SINK_GATE_TIMEOUT: Duration = Duration::from_secs(3);
+
+struct SinkGate {
+    armed: AtomicBool,
+    priming_id: std::sync::OnceLock<LogicalInspectionIdV1>,
+    entered: AtomicBool,
+    entered_notify: tokio::sync::Notify,
+    released: Mutex<bool>,
+    released_notify: Condvar,
+    released_observed: AtomicBool,
+    timed_out: AtomicBool,
+}
+
+impl SinkGate {
+    fn new() -> Self {
+        Self {
+            armed: AtomicBool::new(false),
+            priming_id: std::sync::OnceLock::new(),
+            entered: AtomicBool::new(false),
+            entered_notify: tokio::sync::Notify::new(),
+            released: Mutex::new(false),
+            released_notify: Condvar::new(),
+            released_observed: AtomicBool::new(false),
+            timed_out: AtomicBool::new(false),
         }
+    }
+
+    fn arm(&self) {
+        assert!(
+            !self.armed.swap(true, Ordering::AcqRel),
+            "synthetic inspection priming gate was armed more than once"
+        );
+        assert!(
+            self.priming_id().is_none(),
+            "synthetic inspection priming gate claimed a logical ID before arming"
+        );
+        assert!(
+            !self.released_observed.load(Ordering::Acquire),
+            "synthetic inspection priming gate was released before arming"
+        );
+    }
+
+    fn enter_and_wait(&self, logical_id: LogicalInspectionIdV1) -> bool {
+        if !self.armed.load(Ordering::Acquire) {
+            return false;
+        }
+        let priming_id = *self.priming_id.get_or_init(|| logical_id);
+        if logical_id != priming_id {
+            return false;
+        }
+        if self.entered.swap(true, Ordering::AcqRel) {
+            return true;
+        }
+        self.entered_notify.notify_one();
+
+        let released = self
+            .released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (released, timeout) = self
+            .released_notify
+            .wait_timeout_while(released, SINK_GATE_TIMEOUT, |released| !*released)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if timeout.timed_out() && !*released {
+            self.timed_out.store(true, Ordering::Release);
+            drop(released);
+            panic!(
+                "synthetic inspection priming gate timed out after {SINK_GATE_TIMEOUT:?}; entered=true released=false priming_logical_id={}",
+                priming_id.get()
+            );
+        }
+        true
+    }
+
+    async fn entered_after_response_drain(&self) -> bool {
+        let entered = self.entered_notify.notified();
+        if self.entered.load(Ordering::Acquire) {
+            return true;
+        }
+        tokio::select! {
+            () = entered => true,
+            () = tokio::task::yield_now() => self.entered.load(Ordering::Acquire),
+        }
+    }
+
+    fn release(&self) {
+        let mut released = self
+            .released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *released = true;
+        self.released_observed.store(true, Ordering::Release);
+        self.released_notify.notify_all();
+    }
+
+    fn priming_id(&self) -> Option<LogicalInspectionIdV1> {
+        self.priming_id.get().copied()
+    }
+
+    fn assert_parked(&self) {
+        assert!(
+            self.armed.load(Ordering::Acquire),
+            "synthetic inspection priming gate was never armed"
+        );
+        assert!(
+            self.entered.load(Ordering::Acquire),
+            "synthetic inspection priming gate was never entered"
+        );
+        assert!(
+            self.priming_id().is_some(),
+            "synthetic inspection priming gate entered without a logical ID"
+        );
+        assert!(
+            !self.released_observed.load(Ordering::Acquire),
+            "synthetic inspection priming gate was released before the real response drained"
+        );
+        assert!(
+            !self.timed_out.load(Ordering::Acquire),
+            "synthetic inspection priming gate timed out before explicit release"
+        );
+    }
+
+    fn assert_completed(&self) {
+        assert!(
+            self.entered.load(Ordering::Acquire),
+            "synthetic inspection priming gate was never entered"
+        );
+        assert!(
+            self.released_observed.load(Ordering::Acquire),
+            "synthetic inspection priming gate was not released"
+        );
+        assert!(
+            !self.timed_out.load(Ordering::Acquire),
+            "synthetic inspection priming gate timed out before explicit release"
+        );
+    }
+}
+
+struct SinkGateRelease(Arc<SinkGate>);
+
+impl SinkGateRelease {
+    fn new(gate: Arc<SinkGate>) -> Self {
+        Self(gate)
+    }
+}
+
+impl Drop for SinkGateRelease {
+    fn drop(&mut self) {
+        self.0.release();
     }
 }
 
@@ -221,6 +398,128 @@ impl Drop for RunningServer {
 struct RunningProxy {
     server: RunningServer,
     consumer: Option<ActivatedInspectionConsumerV1>,
+}
+
+struct PrimedInspectionHarness {
+    _gate_release: SinkGateRelease,
+    gate: Arc<SinkGate>,
+    sink: Arc<RecordingSink>,
+    proxy: RunningProxy,
+}
+
+impl PrimedInspectionHarness {
+    async fn new(upstream: &RunningServer, domains: CaptureDomainsV1) -> Self {
+        let harness = Self::unprimed(upstream, domains).await;
+        harness.arm_and_prime().await;
+        harness
+    }
+
+    async fn unprimed(upstream: &RunningServer, domains: CaptureDomainsV1) -> Self {
+        let gate = Arc::new(SinkGate::new());
+        let gate_release = SinkGateRelease::new(Arc::clone(&gate));
+        let sink = Arc::new(RecordingSink::gated(
+            SinkBehavior::Capture,
+            Arc::clone(&gate),
+        ));
+        let proxy = spawn_proxy(upstream, Some(install(domains, Arc::clone(&sink)))).await;
+
+        Self {
+            _gate_release: gate_release,
+            gate,
+            sink,
+            proxy,
+        }
+    }
+
+    async fn arm_and_prime(&self) {
+        assert_eq!(
+            self.sink.len(),
+            0,
+            "inspection priming must start without recorded events"
+        );
+        self.gate.arm();
+        for attempt in 1..=PRIMING_ATTEMPT_LIMIT {
+            let response = request(&self.proxy, PRIMING_PLACEHOLDER, "/v1/messages").await;
+            assert_eq!(
+                response.status(),
+                StatusCode::OK,
+                "synthetic inspection priming request {attempt} failed"
+            );
+            let _ = response.bytes().await.unwrap();
+            if self.gate.entered_after_response_drain().await {
+                break;
+            }
+            assert!(
+                attempt < PRIMING_ATTEMPT_LIMIT,
+                "synthetic inspection priming gate did not enter after {PRIMING_ATTEMPT_LIMIT} drained attempts; entered={} priming_id_present={} timed_out={}",
+                self.gate.entered.load(Ordering::Acquire),
+                self.gate.priming_id().is_some(),
+                self.gate.timed_out.load(Ordering::Acquire)
+            );
+        }
+        self.gate.assert_parked();
+        assert_eq!(
+            self.sink.len(),
+            0,
+            "priming events must not be recorded before the real request"
+        );
+    }
+
+    async fn release_and_collect(&self, expected_count: usize) -> Vec<RecordedEvent> {
+        assert_eq!(
+            self.sink.len(),
+            0,
+            "dispatcher must remain parked in the priming sink callback until explicit release"
+        );
+        self.gate.assert_parked();
+        self.gate.release();
+        wait_for_events(&self.sink, expected_count).await;
+        self.gate.assert_completed();
+
+        let events = {
+            let mut events = self.sink.events.lock().unwrap();
+            assert_eq!(events.len(), expected_count);
+            std::mem::take(&mut *events)
+        };
+        let priming_id = self.gate.priming_id().unwrap();
+        for event in &events {
+            assert_ne!(
+                event.logical_id, priming_id,
+                "priming logical ID must be filtered from the returned real events"
+            );
+        }
+        events
+    }
+}
+
+fn assert_request_groups(events: &[RecordedEvent], request_count: usize) {
+    assert_eq!(events.len(), request_count * 4);
+    let mut logical_ids = Vec::with_capacity(request_count);
+    for group in events.chunks_exact(4) {
+        let logical_id = group[0].logical_id;
+        assert!(
+            !logical_ids.contains(&logical_id),
+            "real requests must retain distinct logical IDs"
+        );
+        logical_ids.push(logical_id);
+        for (index, event) in group.iter().enumerate() {
+            assert_eq!(event.logical_id, logical_id);
+            assert_eq!(event.meta["logical_id"], json!(logical_id.get()));
+            assert_eq!(event.meta["sequence"], json!((index + 1) as u64));
+        }
+    }
+}
+
+fn assert_four_stage_kinds(events: &[RecordedEvent]) {
+    assert_eq!(
+        events.iter().map(|event| event.kind).collect::<Vec<_>>(),
+        vec![
+            InspectionEventKindV1::OwnerRequest,
+            InspectionEventKindV1::ProviderRequest,
+            InspectionEventKindV1::ProviderResponse,
+            InspectionEventKindV1::OwnerRestoredResponse,
+        ]
+    );
 }
 
 fn inspection_pipeline() -> Pipeline {
@@ -411,32 +710,22 @@ fn normalize_meta(mut meta: Value) -> Value {
 #[tokio::test]
 async fn metadata_only_is_content_independent_and_uses_exact_policy_omissions() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink))),
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::MetadataOnly).await;
+
+    let response = request(&harness.proxy, "short synthetic text", "/v1/messages").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    let response = request(
+        &harness.proxy,
+        &format!("longer synthetic text with {SYNTHETIC_EMAIL}"),
+        "/v1/messages",
     )
     .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
 
-    assert_eq!(
-        request(&proxy, "short synthetic text", "/v1/messages")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    assert_eq!(
-        request(
-            &proxy,
-            &format!("longer synthetic text with {SYNTHETIC_EMAIL}"),
-            "/v1/messages",
-        )
-        .await
-        .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 8).await;
-
-    let events = sink.events.lock().unwrap();
+    let events = harness.release_and_collect(8).await;
+    assert_request_groups(&events, 2);
     for event in events.iter() {
         assert_eq!(event.payload, None);
         assert_eq!(event.availability, None);
@@ -479,22 +768,14 @@ async fn metadata_only_is_content_independent_and_uses_exact_policy_omissions() 
 #[tokio::test]
 async fn all_domains_share_one_logical_id_and_strictly_monotonic_typed_stages() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::All, Arc::clone(&sink))),
-    )
-    .await;
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::All).await;
 
-    assert_eq!(
-        request(&proxy, SYNTHETIC_EMAIL, "/v1/messages")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 4).await;
-    let events = sink.events.lock().unwrap();
-    let logical = events[0].meta["logical_id"].clone();
+    let response = request(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    let events = harness.release_and_collect(4).await;
+    assert_request_groups(&events, 1);
+    assert_four_stage_kinds(&events);
     let stages = [
         InspectionStageDomainV1::OwnerRequest,
         InspectionStageDomainV1::ProviderRequest,
@@ -502,8 +783,6 @@ async fn all_domains_share_one_logical_id_and_strictly_monotonic_typed_stages() 
         InspectionStageDomainV1::OwnerRestoredResponse,
     ];
     for (index, (event, stage)) in events.iter().zip(stages).enumerate() {
-        assert_eq!(event.meta["logical_id"], logical);
-        assert_eq!(event.meta["sequence"], json!((index + 1) as u64));
         assert_eq!(
             event.meta["stage_domain"],
             serde_json::to_value(stage).unwrap()
@@ -540,19 +819,14 @@ async fn all_domains_share_one_logical_id_and_strictly_monotonic_typed_stages() 
 #[tokio::test]
 async fn sse_response_projects_only_the_closed_ordinal_timeline() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::All, Arc::clone(&sink))),
-    )
-    .await;
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::All).await;
 
-    let response = request_with_stream(&proxy, SYNTHETIC_EMAIL, "/v1/messages", true).await;
+    let response = request_with_stream(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages", true).await;
     assert_eq!(response.status(), StatusCode::OK);
     let _ = response.bytes().await.unwrap();
-    wait_for_events(&sink, 4).await;
-
-    let events = sink.events.lock().unwrap();
+    let events = harness.release_and_collect(4).await;
+    assert_request_groups(&events, 1);
+    assert_four_stage_kinds(&events);
     for (index, event) in events[..2].iter().enumerate() {
         let availability = event.availability.as_ref().unwrap();
         assert_eq!(availability.json_shape_present, index == 1);
@@ -602,12 +876,7 @@ async fn sse_response_projects_only_the_closed_ordinal_timeline() {
 #[tokio::test]
 async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::All, Arc::clone(&sink))),
-    )
-    .await;
+    let harness = PrimedInspectionHarness::new(&upstream, CaptureDomainsV1::All).await;
 
     let signed_request = json!({
         "model": "claude-test",
@@ -621,13 +890,9 @@ async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
             }]
         }]
     });
-    assert_eq!(
-        request_json(&proxy, "/v1/messages", signed_request)
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 4).await;
+    let response = request_json(&harness.proxy, "/v1/messages", signed_request).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
 
     let signed_response = json!({
         "model": "claude-signed-test",
@@ -635,13 +900,9 @@ async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
         "messages": [{"role": "user", "content": "synthetic response request"}],
         "stream": false
     });
-    assert_eq!(
-        request_json(&proxy, "/v1/messages", signed_response)
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 8).await;
+    let response = request_json(&harness.proxy, "/v1/messages", signed_response).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
 
     let signed_sse = json!({
         "model": "claude-signed-test",
@@ -649,12 +910,12 @@ async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
         "messages": [{"role": "user", "content": "synthetic stream request"}],
         "stream": true
     });
-    let response = request_json(&proxy, "/v1/messages", signed_sse).await;
+    let response = request_json(&harness.proxy, "/v1/messages", signed_sse).await;
     assert_eq!(response.status(), StatusCode::OK);
     let _ = response.bytes().await.unwrap();
-    wait_for_events(&sink, 12).await;
 
-    let events = sink.events.lock().unwrap();
+    let events = harness.release_and_collect(12).await;
+    assert_request_groups(&events, 3);
     for event in [
         &events[0],
         &events[1],
@@ -737,29 +998,22 @@ async fn purge_disable_and_hostile_sink_never_change_proxy_enforcement() {
 #[tokio::test]
 async fn route_code_is_stamped_only_after_exact_direct_route_validation() {
     let upstream = spawn_upstream().await;
-    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
-    let proxy = spawn_proxy(
-        &upstream,
-        Some(install(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink))),
-    )
-    .await;
+    let harness =
+        PrimedInspectionHarness::unprimed(&upstream, CaptureDomainsV1::MetadataOnly).await;
 
-    assert_ne!(
-        request(&proxy, SYNTHETIC_EMAIL, "/v1/messages/")
-            .await
-            .status(),
-        StatusCode::OK
-    );
+    let response = request(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages/").await;
+    assert_ne!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
     tokio::time::sleep(Duration::from_millis(50)).await;
-    assert_eq!(sink.len(), 0);
-    assert_eq!(
-        request(&proxy, SYNTHETIC_EMAIL, "/v1/messages")
-            .await
-            .status(),
-        StatusCode::OK
-    );
-    wait_for_events(&sink, 4).await;
-    for event in sink.events.lock().unwrap().iter() {
+    assert_eq!(harness.sink.len(), 0);
+
+    harness.arm_and_prime().await;
+    let response = request(&harness.proxy, SYNTHETIC_EMAIL, "/v1/messages").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    let events = harness.release_and_collect(4).await;
+    assert_request_groups(&events, 1);
+    for event in &events {
         assert_eq!(event.meta["route"], json!("anthropic_messages"));
     }
 }
