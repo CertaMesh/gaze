@@ -21,6 +21,7 @@ pub mod codecs;
 #[cfg(feature = "proxy-daemon")]
 pub mod daemon;
 pub mod error;
+pub mod inspection;
 pub mod principal;
 pub mod server;
 #[allow(
@@ -50,6 +51,7 @@ pub use codecs::anthropic::{
     AnthropicMessagesCodec, ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
 };
 pub use error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+pub use inspection::{install_proxy_inspection_v1, ProxyInspectionProducerV1};
 pub use principal::{
     AuthenticatedPrincipal, ListenerScope, LocalAuthCredential, PeerScope, PrincipalContext,
     PrincipalResolveError, PrincipalResolver, ProcessLocalLoopbackResolver,
@@ -69,6 +71,7 @@ pub struct ProxyConfig {
     pub session_ttl: Duration,
     pub body_limit_bytes: u64,
     pub(crate) direct_anthropic: Option<Arc<AnthropicAdapter>>,
+    pub(crate) inspection: Option<Arc<ProxyInspectionProducerV1>>,
 }
 
 impl ProxyConfig {
@@ -79,6 +82,7 @@ impl ProxyConfig {
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
             direct_anthropic: None,
+            inspection: None,
         }
     }
 
@@ -97,7 +101,19 @@ impl ProxyConfig {
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
             direct_anthropic: Some(adapter),
+            inspection: None,
         }
+    }
+
+    /// Installs the immutable provider-neutral inspection producer for this launch.
+    ///
+    /// The producer can be created only by [`install_proxy_inspection_v1`], which atomically
+    /// binds it to the adopter-supplied pending consumer half. Omitting this method constructs no
+    /// inspection registration or runtime.
+    #[must_use]
+    pub fn with_inspection(mut self, inspection: ProxyInspectionProducerV1) -> Self {
+        self.inspection = Some(Arc::new(inspection));
+        self
     }
 }
 

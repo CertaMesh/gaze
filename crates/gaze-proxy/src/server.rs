@@ -26,11 +26,12 @@ use url::{Host, Url};
 use crate::adapter::{ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
-    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, ProvedRequestBody,
-    RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionProjectionSourceV1,
+    ProvedRequestBody, RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
     ResponseTransformContext, WireFormat,
 };
 use crate::error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+use crate::inspection::ProxyInspectionLogicalV1;
 use crate::principal::{
     invoke_resolver, ListenerScope, PeerScope, PrincipalContext, PrincipalResolver,
     ProcessLocalLoopbackResolver,
@@ -326,6 +327,7 @@ pub(crate) struct DirectRequest {
     headers: HeaderMap,
     body: Vec<u8>,
     expected_response: WireFormat,
+    inspection_source: Option<Box<dyn InspectionProjectionSourceV1>>,
 }
 
 #[allow(dead_code)]
@@ -342,11 +344,13 @@ impl DirectRequest {
         if !proved_body.provenance().final_buffer_verified() {
             return Err(ProxyErrorCode::InvalidProvenance.error(ProxyErrorPhase::RequestTransform));
         }
+        let (body, inspection_source) = proved_body.into_inspection_parts();
         Ok(Self {
             url,
             headers,
-            body: proved_body.into_bytes(),
+            body,
             expected_response,
+            inspection_source,
         })
     }
 }
@@ -1389,6 +1393,7 @@ fn prepare_and_commit_direct_request(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
+    inspection_projection_requested: bool,
     max_request_bytes: usize,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     prepare_and_commit_direct_request_with_hook(
@@ -1400,6 +1405,7 @@ fn prepare_and_commit_direct_request(
         headers,
         expected_response,
         limits,
+        inspection_projection_requested,
         max_request_bytes,
         |_, _| Ok(()),
     )
@@ -1415,6 +1421,7 @@ fn prepare_and_commit_direct_request_with_hook(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
+    inspection_projection_requested: bool,
     max_request_bytes: usize,
     mut before_commit: impl FnMut(u8, &Session) -> Result<(), DirectProxyError>,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
@@ -1424,6 +1431,9 @@ fn prepare_and_commit_direct_request_with_hook(
             let mut pseudonymizer = PipelineRequestPseudonymizer::new(pipeline, &mut transaction);
             let mut context =
                 RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
+            if inspection_projection_requested {
+                context.request_inspection_projection();
+            }
             codec
                 .protect_request(original_body, &mut context)
                 .map_err(map_codec_error)?
@@ -1882,6 +1892,11 @@ async fn direct_proxy_inner(
         );
     }
     let expected_response = parse_request_stream_format(body)?;
+    let mut inspection = state
+        .config
+        .inspection
+        .as_ref()
+        .and_then(|producer| producer.begin_logical());
 
     let committed = match ingress.session {
         DirectIngressSession::Ephemeral => {
@@ -1896,6 +1911,7 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
+                inspection.is_some(),
                 runtime.client_config.max_request_bytes,
             )?
         }
@@ -1910,12 +1926,21 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
+                inspection.is_some(),
                 runtime.client_config.max_request_bytes,
             );
             drop(request_guard);
             committed?
         }
     };
+
+    if let Some(inspection) = inspection.as_mut() {
+        inspection.emit_request_stages(
+            body,
+            &committed.request.body,
+            committed.request.inspection_source.as_deref(),
+        );
+    }
 
     if expected_response == WireFormat::Sse {
         let opened = runtime.client.execute_sse(committed).await?;
@@ -1925,10 +1950,17 @@ async fn direct_proxy_inner(
             runtime.codec_limits,
             runtime.client_config.max_response_bytes,
             runtime.ping_interval,
+            inspection,
         );
     }
     let executed = runtime.client.execute(committed).await?;
-    restore_direct_response(&state.pipeline, codec, executed, runtime.codec_limits)
+    restore_direct_response(
+        &state.pipeline,
+        codec,
+        executed,
+        runtime.codec_limits,
+        inspection.as_mut(),
+    )
 }
 
 fn stage_and_replay_direct_sse(
@@ -1937,6 +1969,7 @@ fn stage_and_replay_direct_sse(
     limits: CodecLimits,
     max_response_bytes: usize,
     ping_interval: Duration,
+    inspection: Option<ProxyInspectionLogicalV1>,
 ) -> Result<Response, DirectProxyError> {
     let CommittedDirectSse {
         snapshot,
@@ -1949,15 +1982,22 @@ fn stage_and_replay_direct_sse(
     let headers = head.headers().clone();
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
     tokio::spawn(async move {
+        let mut inspection = inspection;
         let proof = async move {
             let body = collect_response_body(upstream_response, max_response_bytes).await?;
             validate_declared_body(WireFormat::Sse, &body, max_response_bytes)?;
             let mut residual = PipelineResponseResidualValidator::new(&pipeline)?;
             let mut context =
                 ResponseTransformContext::new(&snapshot, &mut residual, WireFormat::Sse, limits);
+            if inspection.is_some() {
+                context.request_inspection_projection();
+            }
             let proved = crate::codecs::anthropic::AnthropicMessagesCodec
                 .restore_response(&body, &mut context)
                 .map_err(map_codec_error)?;
+            if let Some(inspection) = inspection.as_mut() {
+                inspection.emit_response_stages(&body, proved.bytes(), proved.inspection_source());
+            }
             let mut lifecycle = lifecycle;
             lifecycle.mark_response_complete()?;
             Ok::<Vec<u8>, DirectProxyError>(proved.into_bytes())
@@ -2152,14 +2192,21 @@ fn restore_direct_response(
     codec: &dyn BodyCodec,
     mut executed: CommittedDirectResponse,
     limits: CodecLimits,
+    inspection: Option<&mut ProxyInspectionLogicalV1>,
 ) -> Result<Response, DirectProxyError> {
     let (head, body) = executed.response.into_parts();
     let mut residual = PipelineResponseResidualValidator::new(pipeline)?;
     let mut context =
         ResponseTransformContext::new(&executed.snapshot, &mut residual, head.format(), limits);
+    if inspection.is_some() {
+        context.request_inspection_projection();
+    }
     let proved = codec
         .restore_response(&body, &mut context)
         .map_err(map_codec_error)?;
+    if let Some(inspection) = inspection {
+        inspection.emit_response_stages(&body, proved.bytes(), proved.inspection_source());
+    }
     executed.lifecycle.mark_response_complete()?;
     let mut response = Response::builder().status(head.status());
     for (name, value) in head.headers() {
@@ -2658,6 +2705,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();
@@ -2696,6 +2744,7 @@ mod tests {
                 &headers,
                 WireFormat::Json,
                 CodecLimits::default(),
+                false,
                 DEFAULT_MAX_REQUEST_BYTES,
             )
             .unwrap_or_else(|error| panic!("{action:?} first proof failed: {error:?}"));
@@ -2711,6 +2760,7 @@ mod tests {
                 &headers,
                 WireFormat::Json,
                 CodecLimits::default(),
+                false,
                 DEFAULT_MAX_REQUEST_BYTES,
             )
             .unwrap();
@@ -2750,6 +2800,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap_err();
@@ -2770,6 +2821,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();
@@ -2803,6 +2855,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live| {
                 hook_calls += 1;
@@ -2853,6 +2906,7 @@ mod tests {
             &request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
             |attempt, live| {
                 live.tokenize(&PiiClass::Name, &format!("Dr. Schmidt {attempt}"))
@@ -2954,6 +3008,7 @@ mod tests {
             &crate::codecs::anthropic::AnthropicMessagesCodec,
             executed,
             CodecLimits::default(),
+            None,
         )
         .unwrap();
         let restored = to_bytes(response.into_body(), 64 * 1024).await.unwrap();
@@ -3000,6 +3055,7 @@ mod tests {
             &probe_request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();
@@ -3078,6 +3134,7 @@ mod tests {
             &probe_request.headers,
             WireFormat::Json,
             CodecLimits::default(),
+            false,
             DEFAULT_MAX_REQUEST_BYTES,
         )
         .unwrap();

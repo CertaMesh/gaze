@@ -1,10 +1,17 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 
+use gaze_types::inspection::{
+    ContentBlockIndexV1, JsonNodeOrdinalV1, JsonShapeNodeV1, JsonShapeSummaryV1,
+    JsonShapeTruncationCodeV1, JsonTypeCodeV1, ProjectionAvailabilityV1,
+    ProjectionOmissionReasonV1, SseDeltaKindV1, SseEntryOrdinalV1, SseEventKindV1,
+    SseTimelineEntryV1, SseTimelineMetaV1, MAX_JSON_SHAPE_NODES_V1,
+};
+
 use crate::codec::{
-    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OutputProvenance,
-    ProvedRequestBody, ProvedResponseBody, RequestTransformContext, ResponseTransformContext,
-    WireFormat,
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionProjectionSourceV1,
+    InspectionStructuralProjectionV1, OutputProvenance, ProvedRequestBody, ProvedResponseBody,
+    RequestTransformContext, ResponseTransformContext, WireFormat,
 };
 
 pub const ANTHROPIC_PROXY_PING_FRAME: &[u8] = b"event: ping\ndata: {\"type\":\"ping\"}\n\n";
@@ -97,7 +104,18 @@ impl BodyCodec for AnthropicMessagesCodec {
         verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
             .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
         provenance.mark_final_buffer_verified();
-        Ok(ProvedRequestBody::new(bytes, WireFormat::Json, provenance))
+        if ctx.inspection_projection_requested() {
+            Ok(ProvedRequestBody::new_with_inspection_source(
+                bytes,
+                WireFormat::Json,
+                provenance,
+                Box::new(JsonInspectionProjectionSourceV1 {
+                    root: reparsed.root,
+                }),
+            ))
+        } else {
+            Ok(ProvedRequestBody::new(bytes, WireFormat::Json, provenance))
+        }
     }
 
     fn restore_response(
@@ -226,7 +244,18 @@ fn restore_json_response(
     verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
         .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
     provenance.mark_final_buffer_verified();
-    Ok(ProvedResponseBody::new(bytes, WireFormat::Json, provenance))
+    if ctx.inspection_projection_requested() {
+        Ok(ProvedResponseBody::new_with_inspection_source(
+            bytes,
+            WireFormat::Json,
+            provenance,
+            Box::new(JsonInspectionProjectionSourceV1 {
+                root: reparsed.root,
+            }),
+        ))
+    } else {
+        Ok(ProvedResponseBody::new(bytes, WireFormat::Json, provenance))
+    }
 }
 
 fn validate_adjacent_response_text(
@@ -458,6 +487,90 @@ enum JsonKind {
     Number(String),
     Bool(bool),
     Null,
+}
+
+struct JsonInspectionProjectionSourceV1 {
+    root: JsonNode,
+}
+
+struct SseInspectionProjectionSourceV1 {
+    entries: Vec<SseTimelineEntryV1>,
+}
+
+impl InspectionProjectionSourceV1 for SseInspectionProjectionSourceV1 {
+    fn project(&self) -> InspectionStructuralProjectionV1 {
+        let sse_timeline = SseTimelineMetaV1::try_new(self.entries.clone()).map_or_else(
+            |_| {
+                ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                )
+            },
+            ProjectionAvailabilityV1::Present,
+        );
+        InspectionStructuralProjectionV1 {
+            json_shape: ProjectionAvailabilityV1::Omitted(
+                ProjectionOmissionReasonV1::UnsupportedFormat,
+            ),
+            sse_timeline,
+        }
+    }
+}
+
+impl InspectionProjectionSourceV1 for JsonInspectionProjectionSourceV1 {
+    fn project(&self) -> InspectionStructuralProjectionV1 {
+        let mut nodes = Vec::with_capacity(MAX_JSON_SHAPE_NODES_V1.min(64));
+        let mut truncated = false;
+        collect_json_shape(&self.root, &mut nodes, &mut truncated);
+        let truncation = if truncated {
+            JsonShapeTruncationCodeV1::NodeLimit
+        } else {
+            JsonShapeTruncationCodeV1::Complete
+        };
+        let json_shape = JsonShapeSummaryV1::try_new(nodes, truncation).map_or_else(
+            |_| {
+                ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                )
+            },
+            ProjectionAvailabilityV1::Present,
+        );
+        InspectionStructuralProjectionV1 {
+            json_shape,
+            sse_timeline: ProjectionAvailabilityV1::Omitted(
+                ProjectionOmissionReasonV1::UnsupportedFormat,
+            ),
+        }
+    }
+}
+
+fn collect_json_shape(node: &JsonNode, output: &mut Vec<JsonShapeNodeV1>, truncated: &mut bool) {
+    if output.len() >= MAX_JSON_SHAPE_NODES_V1 {
+        *truncated = true;
+        return;
+    }
+    let ordinal = JsonNodeOrdinalV1::new(output.len() as u32);
+    let type_code = match &node.kind {
+        JsonKind::Object(_) => JsonTypeCodeV1::Object,
+        JsonKind::Array(_) => JsonTypeCodeV1::Array,
+        JsonKind::String(_) => JsonTypeCodeV1::String,
+        JsonKind::Number(_) => JsonTypeCodeV1::Number,
+        JsonKind::Bool(_) => JsonTypeCodeV1::Boolean,
+        JsonKind::Null => JsonTypeCodeV1::Null,
+    };
+    output.push(JsonShapeNodeV1::new(ordinal, type_code));
+    match &node.kind {
+        JsonKind::Object(members) => {
+            for member in members {
+                collect_json_shape(&member.value, output, truncated);
+            }
+        }
+        JsonKind::Array(values) => {
+            for value in values {
+                collect_json_shape(value, output, truncated);
+            }
+        }
+        JsonKind::String(_) | JsonKind::Number(_) | JsonKind::Bool(_) | JsonKind::Null => {}
+    }
 }
 
 struct JsonMember {
@@ -2850,6 +2963,9 @@ fn restore_sse_frames(
     let mut concatenated_text = String::new();
     let mut concatenated_authorized = Vec::<Range<usize>>::new();
     let mut occurrence_count = 0usize;
+    let mut inspection_entries = ctx
+        .inspection_projection_requested()
+        .then(Vec::<SseTimelineEntryV1>::new);
     for frame in frames {
         if frame.comment {
             if matches!(lifecycle, MessageLifecycle::MessageStopped) {
@@ -2884,6 +3000,10 @@ fn restore_sse_frames(
                 CodecPhase::SseDecode,
             ));
         }
+        let inspection_entry = inspection_entries
+            .as_ref()
+            .map(|entries| sse_inspection_entry(&document, event, entries.len()))
+            .transpose()?;
         match event {
             "ping" => {
                 validate_simple_event(&document, "ping")?;
@@ -3023,6 +3143,9 @@ fn restore_sse_frames(
                 validate_future_event(&document, event, ctx)?;
             }
         }
+        if let (Some(entries), Some(entry)) = (inspection_entries.as_mut(), inspection_entry) {
+            entries.push(entry);
+        }
     }
     if !matches!(lifecycle, MessageLifecycle::MessageStopped) || !blocks.is_empty() {
         return Err(codec_error(
@@ -3081,7 +3204,69 @@ fn restore_sse_frames(
     verify_final_wire_proof(&output, &provenance, &expected_authorized, &expected_signed)
         .map_err(|code| codec_error(code, CodecPhase::SseReplay))?;
     provenance.mark_final_buffer_verified();
-    Ok(ProvedResponseBody::new(output, WireFormat::Sse, provenance))
+    if let Some(entries) = inspection_entries {
+        Ok(ProvedResponseBody::new_with_inspection_source(
+            output,
+            WireFormat::Sse,
+            provenance,
+            Box::new(SseInspectionProjectionSourceV1 { entries }),
+        ))
+    } else {
+        Ok(ProvedResponseBody::new(output, WireFormat::Sse, provenance))
+    }
+}
+
+fn sse_inspection_entry(
+    document: &JsonDocument,
+    event: &str,
+    ordinal: usize,
+) -> Result<SseTimelineEntryV1, CodecError> {
+    let ordinal = u32::try_from(ordinal).map_err(|_| {
+        codec_error(
+            CodecErrorCode::InternalCoverageFailure,
+            CodecPhase::SseLifecycle,
+        )
+    })?;
+    let event_kind = match event {
+        "message_start" => SseEventKindV1::MessageStart,
+        "content_block_start" => SseEventKindV1::ContentBlockStart,
+        "content_block_delta" => SseEventKindV1::ContentBlockDelta,
+        "content_block_stop" => SseEventKindV1::ContentBlockStop,
+        "message_delta" => SseEventKindV1::MessageDelta,
+        "message_stop" => SseEventKindV1::MessageStop,
+        "ping" => SseEventKindV1::Ping,
+        "error" => SseEventKindV1::Error,
+        _ => SseEventKindV1::UnknownFuture,
+    };
+    let content_block = match event {
+        "content_block_start" | "content_block_delta" | "content_block_stop" => {
+            ProjectionAvailabilityV1::Present(ContentBlockIndexV1::new(event_index(document)?))
+        }
+        _ => ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::NotApplicable),
+    };
+    let delta_kind = if event == "content_block_delta" {
+        let delta = object_value(&document.root, "delta")
+            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
+        let delta_type = object_string(delta, "type")
+            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
+        let kind = match delta_type {
+            "text_delta" => SseDeltaKindV1::Text,
+            "input_json_delta" => SseDeltaKindV1::InputJson,
+            "thinking_delta" => SseDeltaKindV1::Thinking,
+            "signature_delta" => SseDeltaKindV1::Signature,
+            "citations_delta" => SseDeltaKindV1::Citation,
+            _ => SseDeltaKindV1::UnknownFuture,
+        };
+        ProjectionAvailabilityV1::Present(kind)
+    } else {
+        ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::NotApplicable)
+    };
+    Ok(SseTimelineEntryV1::new(
+        SseEntryOrdinalV1::new(ordinal),
+        event_kind,
+        delta_kind,
+        content_block,
+    ))
 }
 
 fn append_expected_wire_chunk(

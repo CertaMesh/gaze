@@ -2,6 +2,9 @@ use std::fmt;
 use std::ops::Range;
 
 use gaze::{CommittedSessionSnapshot, RestoreError, RestoredTextWithProvenance};
+use gaze_types::inspection::{
+    JsonShapeSummaryV1, ProjectionAvailabilityV1, ProjectionOmissionReasonV1, SseTimelineMetaV1,
+};
 
 /// Transport-independent body representation selected by a reviewed adapter contract.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -290,6 +293,7 @@ pub struct RequestTransformContext<'a> {
     pseudonymizer: &'a mut dyn RequestPseudonymizer,
     format: WireFormat,
     limits: CodecLimits,
+    inspection_projection_requested: bool,
 }
 
 impl<'a> RequestTransformContext<'a> {
@@ -303,6 +307,7 @@ impl<'a> RequestTransformContext<'a> {
             pseudonymizer,
             format,
             limits,
+            inspection_projection_requested: false,
         }
     }
 
@@ -314,6 +319,14 @@ impl<'a> RequestTransformContext<'a> {
     #[must_use]
     pub const fn limits(&self) -> CodecLimits {
         self.limits
+    }
+
+    pub(crate) fn request_inspection_projection(&mut self) {
+        self.inspection_projection_requested = true;
+    }
+
+    pub(crate) const fn inspection_projection_requested(&self) -> bool {
+        self.inspection_projection_requested
     }
 
     pub(crate) fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
@@ -331,6 +344,7 @@ pub struct ResponseTransformContext<'a> {
     residual: &'a mut dyn ResponseResidualValidator,
     format: WireFormat,
     limits: CodecLimits,
+    inspection_projection_requested: bool,
 }
 
 impl<'a> ResponseTransformContext<'a> {
@@ -346,6 +360,7 @@ impl<'a> ResponseTransformContext<'a> {
             residual,
             format,
             limits,
+            inspection_projection_requested: false,
         }
     }
 
@@ -357,6 +372,14 @@ impl<'a> ResponseTransformContext<'a> {
     #[must_use]
     pub const fn limits(&self) -> CodecLimits {
         self.limits
+    }
+
+    pub(crate) fn request_inspection_projection(&mut self) {
+        self.inspection_projection_requested = true;
+    }
+
+    pub(crate) const fn inspection_projection_requested(&self) -> bool {
+        self.inspection_projection_requested
     }
 
     pub(crate) fn restore(
@@ -441,12 +464,40 @@ fn push_coalesced(ranges: &mut Vec<Range<usize>>, range: Range<usize>) {
     ranges.push(range);
 }
 
+/// Crate-private structural projection created lazily from codec-owned proved structure.
+pub(crate) struct InspectionStructuralProjectionV1 {
+    pub(crate) json_shape: ProjectionAvailabilityV1<JsonShapeSummaryV1>,
+    pub(crate) sse_timeline: ProjectionAvailabilityV1<SseTimelineMetaV1>,
+}
+
+impl InspectionStructuralProjectionV1 {
+    pub(crate) const fn unsupported() -> Self {
+        Self {
+            json_shape: ProjectionAvailabilityV1::Omitted(
+                ProjectionOmissionReasonV1::UnsupportedFormat,
+            ),
+            sse_timeline: ProjectionAvailabilityV1::Omitted(
+                ProjectionOmissionReasonV1::UnsupportedFormat,
+            ),
+        }
+    }
+}
+
+/// Opaque crate-private source that retains parser-owned proved structure without projecting it.
+///
+/// The domain projection is allocated only when a selected `gaze-inspection` emitter invokes its
+/// build closure. The proxy never reparses proved bytes to recover structure.
+pub(crate) trait InspectionProjectionSourceV1: Send + Sync {
+    fn project(&self) -> InspectionStructuralProjectionV1;
+}
+
 macro_rules! proved_body {
     ($name:ident) => {
         pub struct $name {
             bytes: Vec<u8>,
             format: WireFormat,
             provenance: OutputProvenance,
+            inspection_source: Option<Box<dyn InspectionProjectionSourceV1>>,
         }
 
         impl $name {
@@ -459,6 +510,21 @@ macro_rules! proved_body {
                     bytes,
                     format,
                     provenance,
+                    inspection_source: None,
+                }
+            }
+
+            pub(crate) fn new_with_inspection_source(
+                bytes: Vec<u8>,
+                format: WireFormat,
+                provenance: OutputProvenance,
+                inspection_source: Box<dyn InspectionProjectionSourceV1>,
+            ) -> Self {
+                Self {
+                    bytes,
+                    format,
+                    provenance,
+                    inspection_source: Some(inspection_source),
                 }
             }
 
@@ -475,6 +541,16 @@ macro_rules! proved_body {
             #[must_use]
             pub const fn provenance(&self) -> &OutputProvenance {
                 &self.provenance
+            }
+
+            pub(crate) fn inspection_source(&self) -> Option<&dyn InspectionProjectionSourceV1> {
+                self.inspection_source.as_deref()
+            }
+
+            pub(crate) fn into_inspection_parts(
+                self,
+            ) -> (Vec<u8>, Option<Box<dyn InspectionProjectionSourceV1>>) {
+                (self.bytes, self.inspection_source)
             }
 
             #[must_use]

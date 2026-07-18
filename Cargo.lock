@@ -1593,6 +1593,7 @@ dependencies = [
  "fs2",
  "futures-util",
  "gaze-assembly",
+ "gaze-inspection",
  "gaze-pii",
  "gaze-recognizers",
  "gaze-types",
