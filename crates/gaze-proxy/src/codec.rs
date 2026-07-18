@@ -1,7 +1,9 @@
 use std::fmt;
 use std::ops::Range;
 
-use gaze::{CommittedSessionSnapshot, RestoreError, RestoredTextWithProvenance};
+use gaze::{
+    CommittedSessionSnapshot, PrefixCacheWriteMode, RestoreError, RestoredTextWithProvenance,
+};
 use gaze_types::inspection::{
     JsonShapeSummaryV1, ProjectionAvailabilityV1, ProjectionOmissionReasonV1, SseTimelineMetaV1,
 };
@@ -273,6 +275,18 @@ pub trait RequestPseudonymizer {
     /// Protects one complete decoded logical value against the staged transaction.
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode>;
 
+    /// Protects one decoded value with an explicit prefix-cache write mode.
+    ///
+    /// Cache-owning implementations must override this method. The default preserves
+    /// source compatibility for stateless pseudonymizers that have no cache capability.
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        _mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect(input)
+    }
+
     /// Proves that every Gaze-shaped token belongs to the staged transaction.
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode>;
 }
@@ -330,7 +344,16 @@ impl<'a> RequestTransformContext<'a> {
     }
 
     pub(crate) fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
-        self.pseudonymizer.protect(input)
+        self.pseudonymizer
+            .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
+    }
+
+    pub(crate) fn probe_without_prefix_cache_write(
+        &mut self,
+        input: &str,
+    ) -> Result<String, CodecErrorCode> {
+        self.pseudonymizer
+            .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Suppress)
     }
 
     pub(crate) fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {

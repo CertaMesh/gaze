@@ -13,7 +13,7 @@ use axum::Router;
 use futures_util::StreamExt;
 use gaze::{
     token_shape, CleanDocument, CommittedSessionSnapshot, DictionaryBundle, LocaleTag, Pipeline,
-    RawDocument, Scope, Session, SessionTransaction, SessionTransactionError,
+    PrefixCacheWriteMode, RawDocument, Scope, Session, SessionTransaction, SessionTransactionError,
 };
 use reqwest::{Client, ClientBuilder};
 use serde::de::{MapAccess, SeqAccess, Visitor};
@@ -1287,14 +1287,19 @@ impl<'pipeline, 'transaction, 'session>
         }
     }
 
-    fn protect_unstaged_segment(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+    fn protect_unstaged_segment(
+        &mut self,
+        input: &str,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
         let clean = self
             .pipeline
-            .pseudonymize_transaction_with_detect_context(
+            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
                 self.transaction,
                 RawDocument::Text(input.to_owned()),
                 &[LocaleTag::Global],
                 &self.dictionaries,
+                prefix_cache_write_mode,
             )
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
         match clean {
@@ -1306,10 +1311,18 @@ impl<'pipeline, 'transaction, 'session>
 
 impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_> {
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
+    }
+
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
         self.validate_token_shapes(input)?;
         let mut tokens = self.transaction.tokens();
         if tokens.is_empty() {
-            return self.protect_unstaged_segment(input);
+            return self.protect_unstaged_segment(input, prefix_cache_write_mode);
         }
         tokens.sort_unstable_by_key(|token| std::cmp::Reverse(token.len()));
 
@@ -1329,11 +1342,16 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_> {
                         .then_with(|| right.1.len().cmp(&left.1.len()))
                 });
             let Some((start, token)) = next else {
-                output.push_str(&self.protect_unstaged_segment(&input[cursor..])?);
+                output.push_str(
+                    &self.protect_unstaged_segment(&input[cursor..], prefix_cache_write_mode)?,
+                );
                 break;
             };
             if start > cursor {
-                output.push_str(&self.protect_unstaged_segment(&input[cursor..start])?);
+                output.push_str(
+                    &self
+                        .protect_unstaged_segment(&input[cursor..start], prefix_cache_write_mode)?,
+                );
             }
             output.push_str(token);
             cursor = start + token.len();
@@ -1414,7 +1432,7 @@ fn prepare_and_commit_direct_request(
         limits,
         provider_request_projection_selected,
         max_request_bytes,
-        |_, _| Ok(()),
+        |_, _, _| Ok(()),
     )
 }
 
@@ -1430,7 +1448,7 @@ fn prepare_and_commit_direct_request_with_hook(
     limits: CodecLimits,
     provider_request_projection_selected: bool,
     max_request_bytes: usize,
-    mut before_commit: impl FnMut(u8, &Session) -> Result<(), DirectProxyError>,
+    mut before_commit: impl FnMut(u8, &Session, &SessionTransaction<'_>) -> Result<(), DirectProxyError>,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     for attempt in 0..=1 {
         let mut transaction = session.begin_transaction();
@@ -1457,7 +1475,7 @@ fn prepare_and_commit_direct_request_with_hook(
             );
         }
         let prepared = PreparedDirectRequest::new(transaction, request);
-        before_commit(attempt, session)?;
+        before_commit(attempt, session, &prepared.transaction)?;
         match prepared.commit() {
             Ok(committed) => return Ok(committed),
             Err(SessionTransactionError::GenerationConflict) if attempt == 0 => {}
@@ -2733,7 +2751,7 @@ mod tests {
         )
         .unwrap();
 
-        let committed = prepare_and_commit_direct_request(
+        let committed = prepare_and_commit_direct_request_with_hook(
             &pipeline,
             &session,
             &codec,
@@ -2744,13 +2762,25 @@ mod tests {
             CodecLimits::default(),
             false,
             DEFAULT_MAX_REQUEST_BYTES,
+            |attempt, live, staged| {
+                assert_eq!(attempt, 0);
+                assert_eq!(staged.prefix_cache_entry_count(), 1);
+                assert_eq!(live.prefix_cache_entry_count(), 0);
+                Ok(())
+            },
         )
         .unwrap();
 
         assert_eq!(session.tokens(), vec![expected_token.clone()]);
+        assert_eq!(committed.snapshot.tokens(), vec![expected_token.clone()]);
+        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 1);
+        assert_eq!(session.prefix_cache_entry_count(), 1);
         let protected = std::str::from_utf8(&committed.request.body).unwrap();
         assert!(!protected.contains(SYNTHETIC_EMAIL));
         assert_eq!(protected.matches(&expected_token).count(), 2);
+        assert!(protected.contains(&format!(
+            r#""thinking":"{expected_token}","signature":"opaque-signature""#
+        )));
     }
 
     #[test]
@@ -2844,6 +2874,7 @@ mod tests {
 
         assert_eq!(error.code(), ProxyErrorCode::SignedMutationRequired);
         assert!(session.tokens().is_empty());
+        assert_eq!(session.prefix_cache_entry_count(), 0);
         assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
 
         let valid = format!(
@@ -2894,7 +2925,7 @@ mod tests {
             CodecLimits::default(),
             false,
             DEFAULT_MAX_REQUEST_BYTES,
-            |attempt, live| {
+            |attempt, live, _staged| {
                 hook_calls += 1;
                 if attempt == 0 {
                     live.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
@@ -2927,7 +2958,13 @@ mod tests {
                 .with_state(capture.clone()),
         )
         .await;
-        let pipeline = email_pipeline();
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
         let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
         let session = Session::new(Scope::Ephemeral).unwrap();
         let body = format!(
@@ -2945,7 +2982,9 @@ mod tests {
             CodecLimits::default(),
             false,
             DEFAULT_MAX_REQUEST_BYTES,
-            |attempt, live| {
+            |attempt, live, staged| {
+                assert_eq!(staged.prefix_cache_entry_count(), 1);
+                assert_eq!(live.prefix_cache_entry_count(), 0);
                 live.tokenize(&PiiClass::Name, &format!("Dr. Schmidt {attempt}"))
                     .unwrap();
                 Ok(())
@@ -2954,6 +2993,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.code(), ProxyErrorCode::SessionGenerationConflict);
         assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
         assert!(session
             .tokens()
             .iter()

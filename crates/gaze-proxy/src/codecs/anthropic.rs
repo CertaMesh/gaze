@@ -1312,7 +1312,7 @@ fn validate_signed_request_block(
                 let text = string_value(&member.value)?;
                 guard_mutable_text(text)?;
                 ctx.validate_token_shapes(text)?;
-                if ctx.protect(text)? != text {
+                if ctx.probe_without_prefix_cache_write(text)? != text {
                     return Err(CodecErrorCode::SignedMutationRequired);
                 }
                 has_payload = true;
@@ -1337,14 +1337,14 @@ fn probe_signed_request_value(
     match &node.kind {
         JsonKind::String(value) => {
             ctx.validate_token_shapes(&value.value)?;
-            if ctx.protect(&value.value)? != value.value {
+            if ctx.probe_without_prefix_cache_write(&value.value)? != value.value {
                 return Err(CodecErrorCode::SignedMutationRequired);
             }
         }
         JsonKind::Object(members) => {
             for member in members {
                 ctx.validate_token_shapes(&member.key.value)?;
-                if ctx.protect(&member.key.value)? != member.key.value {
+                if ctx.probe_without_prefix_cache_write(&member.key.value)? != member.key.value {
                     return Err(CodecErrorCode::SignedMutationRequired);
                 }
                 probe_signed_request_value(&member.value, ctx)?;
@@ -1502,7 +1502,9 @@ fn transform_request_schema(
                             ledger.mark(definition.key_occurrence)?;
                             guard_mutable_text(&definition.key.value)?;
                             ctx.validate_token_shapes(&definition.key.value)?;
-                            if ctx.protect(&definition.key.value)? != definition.key.value {
+                            if ctx.probe_without_prefix_cache_write(&definition.key.value)?
+                                != definition.key.value
+                            {
                                 return Err(CodecErrorCode::ControlWouldMutate);
                             }
                             transform_request_schema(&mut definition.value, ctx, ledger)?;
@@ -1630,7 +1632,7 @@ fn request_string_control(
     };
     guard_mutable_text(&value.value)?;
     ctx.validate_token_shapes(&value.value)?;
-    if ctx.protect(&value.value)? == value.value {
+    if ctx.probe_without_prefix_cache_write(&value.value)? == value.value {
         Ok(())
     } else {
         Err(CodecErrorCode::ControlWouldMutate)
@@ -1725,7 +1727,7 @@ fn validate_cache_control_probe(
         }
         guard_mutable_text(value)?;
         ctx.validate_token_shapes(value)?;
-        if ctx.protect(value)? != value {
+        if ctx.probe_without_prefix_cache_write(value)? != value {
             return Err(CodecErrorCode::SignedMutationRequired);
         }
     }

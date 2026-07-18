@@ -521,6 +521,13 @@ impl Session {
             .collect()
     }
 
+    /// Returns only the prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.state_snapshot().prefix_cache.len()
+    }
+
     pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
         let captured = self.state_snapshot();
         if let Some((cache_generation, regex)) = &captured.restore_regex_cache {
@@ -894,6 +901,13 @@ impl<'session> SessionTransaction<'session> {
         self.staged.value_by_token.keys().cloned().collect()
     }
 
+    /// Returns only the staged prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.staged.prefix_cache.len()
+    }
+
     pub fn contains_token(&self, token: &str) -> bool {
         self.staged.value_by_token.contains_key(token)
     }
@@ -998,6 +1012,13 @@ impl<'session> SessionTransaction<'session> {
 impl CommittedSessionSnapshot {
     pub fn tokens(&self) -> Vec<String> {
         self.state.value_by_token.keys().cloned().collect()
+    }
+
+    /// Returns only the committed prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.state.prefix_cache.len()
     }
 
     pub fn contains_token(&self, token: &str) -> bool {

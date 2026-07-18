@@ -138,6 +138,17 @@ impl PipelineOptimizationConfig {
     }
 }
 
+/// Controls whether one transactional protection call may populate the prefix cache.
+///
+/// [`Self::Suppress`] retains prefix-cache lookup and all detector, mapping, and manifest
+/// behavior while preventing new cache entries from being staged. It is intended for
+/// mutation probes whose output is inspected but never emitted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrefixCacheWriteMode {
+    Allow,
+    Suppress,
+}
+
 impl Default for SafetyNetPolicy {
     fn default() -> Self {
         Self {
@@ -198,7 +209,10 @@ pub struct Pipeline {
 
 enum ProtectionTarget<'target, 'session> {
     Live(&'target Session),
-    Staged(&'target mut SessionTransaction<'session>),
+    Staged(
+        &'target mut SessionTransaction<'session>,
+        PrefixCacheWriteMode,
+    ),
 }
 
 impl ProtectionTarget<'_, '_> {
@@ -210,35 +224,38 @@ impl ProtectionTarget<'_, '_> {
     ) -> Result<String> {
         match self {
             Self::Live(session) => session.tokenize_with_family(family, class, raw),
-            Self::Staged(transaction) => transaction.tokenize_with_family(family, class, raw),
+            Self::Staged(transaction, _) => transaction.tokenize_with_family(family, class, raw),
         }
     }
 
     fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
         match self {
             Self::Live(session) => session.format_preserving_fake(class, raw),
-            Self::Staged(transaction) => transaction.format_preserving_fake(class, raw),
+            Self::Staged(transaction, _) => transaction.format_preserving_fake(class, raw),
         }
     }
 
     fn audit_session_id(&self) -> &str {
         match self {
             Self::Live(session) => session.audit_session_id(),
-            Self::Staged(transaction) => transaction.audit_session_id(),
+            Self::Staged(transaction, _) => transaction.audit_session_id(),
         }
     }
 
     fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
         match self {
             Self::Live(session) => session.lookup_prefix_cache(text),
-            Self::Staged(transaction) => transaction.lookup_prefix_cache(text),
+            Self::Staged(transaction, _) => transaction.lookup_prefix_cache(text),
         }
     }
 
     fn store_prefix_cache(&mut self, raw: &str, clean_text: &str, manifest: &[EmittedTokenSpan]) {
         match self {
             Self::Live(session) => session.store_prefix_cache(raw, clean_text, manifest),
-            Self::Staged(transaction) => transaction.store_prefix_cache(raw, clean_text, manifest),
+            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
+                transaction.store_prefix_cache(raw, clean_text, manifest);
+            }
+            Self::Staged(_, PrefixCacheWriteMode::Suppress) => {}
         }
     }
 }
@@ -365,7 +382,29 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanDocument> {
-        let mut target = ProtectionTarget::Staged(transaction);
+        self.pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+            transaction,
+            raw,
+            locale_chain,
+            dictionaries,
+            PrefixCacheWriteMode::Allow,
+        )
+    }
+
+    /// Runs transactional protection with an explicit prefix-cache write mode.
+    ///
+    /// Suppressing writes does not disable cache lookup, detection, tokenization, or manifest
+    /// staging. The caller still owns the transaction and decides whether any staged mapping is
+    /// committed.
+    pub fn pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+    ) -> Result<CleanDocument> {
+        let mut target = ProtectionTarget::Staged(transaction, prefix_cache_write_mode);
         self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
     }
 
@@ -453,7 +492,7 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         policy: SafetyNetPolicy,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
-        let mut target = ProtectionTarget::Staged(transaction);
+        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Allow);
         self.clean_target_with_safety_net_policy_detect_context(
             &mut target,
             raw,
