@@ -1239,6 +1239,96 @@ mod tests {
         )
     }
 
+    fn begin_logical_for_test(
+        producer: &InstalledInspectionProducerV1,
+    ) -> InspectionLogicalEmitterV1 {
+        const DEADLINE: Duration = Duration::from_millis(100);
+        let started = Instant::now();
+        loop {
+            match producer.begin_logical() {
+                Ok(logical) => return logical,
+                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
+                    std::thread::yield_now();
+                }
+                Err(InspectionBeginLogicalErrorV1::Contended) => {
+                    panic!(
+                        "begin_logical remained contended beyond the {DEADLINE:?} test setup deadline"
+                    )
+                }
+                Err(error) => panic!("begin_logical failed during test setup: {error:?}"),
+            }
+        }
+    }
+
+    fn admit_for_test<F>(mut attempt: F) -> InspectionAdmissionOutcomeV1
+    where
+        F: FnMut() -> InspectionAdmissionOutcomeV1,
+    {
+        const DEADLINE: Duration = Duration::from_millis(100);
+        let started = Instant::now();
+        loop {
+            match attempt() {
+                InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended)
+                    if started.elapsed() < DEADLINE =>
+                {
+                    std::thread::yield_now();
+                }
+                InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended) => {
+                    panic!(
+                        "inspection admission remained contended beyond the {DEADLINE:?} test deadline"
+                    )
+                }
+                outcome => return outcome,
+            }
+        }
+    }
+
+    impl InspectionLogicalEmitterV1 {
+        fn try_emit_owner_request_for_test<F>(
+            &mut self,
+            safe: InspectionSafeFieldsV1,
+            mut build: F,
+        ) -> InspectionAdmissionOutcomeV1
+        where
+            F: FnMut() -> ProjectionAvailabilityV1<OwnerRawProjectionV1>,
+        {
+            admit_for_test(|| self.try_emit_owner_request(safe, &mut build))
+        }
+
+        fn try_emit_provider_request_for_test<F>(
+            &mut self,
+            safe: InspectionSafeFieldsV1,
+            mut build: F,
+        ) -> InspectionAdmissionOutcomeV1
+        where
+            F: FnMut() -> ProjectionAvailabilityV1<ProviderVisibleProjectionV1>,
+        {
+            admit_for_test(|| self.try_emit_provider_request(safe, &mut build))
+        }
+
+        fn try_emit_provider_response_for_test<F>(
+            &mut self,
+            safe: InspectionSafeFieldsV1,
+            mut build: F,
+        ) -> InspectionAdmissionOutcomeV1
+        where
+            F: FnMut() -> ProjectionAvailabilityV1<ProviderVisibleProjectionV1>,
+        {
+            admit_for_test(|| self.try_emit_provider_response(safe, &mut build))
+        }
+
+        fn try_emit_owner_restored_response_for_test<F>(
+            &mut self,
+            safe: InspectionSafeFieldsV1,
+            mut build: F,
+        ) -> InspectionAdmissionOutcomeV1
+        where
+            F: FnMut() -> ProjectionAvailabilityV1<OwnerRestoredProjectionV1>,
+        {
+            admit_for_test(|| self.try_emit_owner_restored_response(safe, &mut build))
+        }
+    }
+
     fn wait_for_accounting(state: &RegistrationState, items: usize, bytes: usize) {
         let deadline = Instant::now() + Duration::from_secs(2);
         loop {
@@ -1339,7 +1429,7 @@ mod tests {
                     .unwrap()
                     .as_mut()
                     .unwrap()
-                    .try_emit_provider_response(safe_fields(), || {
+                    .try_emit_provider_response_for_test(safe_fields(), || {
                         ProjectionAvailabilityV1::Present(provider_projection(b"<Email_2>"))
                     });
                 assert!(matches!(
@@ -1387,10 +1477,10 @@ mod tests {
             InspectionQueueLimitsV1::new(4, 1024).unwrap(),
         );
         let (producer, _consumer) = install_inspection_v1(producer, consumer).unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         let projected = AtomicUsize::new(0);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 projected.fetch_add(1, Ordering::SeqCst);
                 ProjectionAvailabilityV1::Present(provider_projection(b"alice@example.invalid"))
             }),
@@ -1421,47 +1511,50 @@ mod tests {
                 ),
             )
             .unwrap();
-            let mut logical = producer.begin_logical().unwrap();
+            let mut logical = begin_logical_for_test(&producer);
             let raw_calls = AtomicUsize::new(0);
             let provider_calls = AtomicUsize::new(0);
             let restored_calls = AtomicUsize::new(0);
+            let owner_request = logical.try_emit_owner_request_for_test(safe_fields(), || {
+                raw_calls.fetch_add(1, Ordering::SeqCst);
+                ProjectionAvailabilityV1::Present(owner_raw_projection(b"alice@example.invalid"))
+            });
             assert!(matches!(
-                logical.try_emit_owner_request(safe_fields(), || {
-                    raw_calls.fetch_add(1, Ordering::SeqCst);
-                    ProjectionAvailabilityV1::Present(owner_raw_projection(
-                        b"alice@example.invalid",
-                    ))
-                }),
+                owner_request,
                 InspectionAdmissionOutcomeV1::Accepted { .. }
             ));
-            assert!(matches!(
-                logical.try_emit_provider_request(safe_fields(), || {
+            let provider_request =
+                logical.try_emit_provider_request_for_test(safe_fields(), || {
                     provider_calls.fetch_add(1, Ordering::SeqCst);
                     ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
-                }),
+                });
+            assert!(matches!(
+                provider_request,
                 InspectionAdmissionOutcomeV1::Accepted { .. }
             ));
-            assert!(matches!(
-                logical.try_emit_owner_restored_response(safe_fields(), || {
+            let owner_restored_response =
+                logical.try_emit_owner_restored_response_for_test(safe_fields(), || {
                     restored_calls.fetch_add(1, Ordering::SeqCst);
                     ProjectionAvailabilityV1::Present(owner_restored_projection(
                         b"alice@example.invalid",
                     ))
-                }),
+                });
+            assert!(matches!(
+                owner_restored_response,
                 InspectionAdmissionOutcomeV1::Accepted { .. }
             ));
             sink.wait_for(3);
             assert_eq!(
-                raw_calls.load(Ordering::SeqCst),
-                usize::from(domains.captures(InspectionDomainV1::OwnerRaw))
+                raw_calls.load(Ordering::SeqCst) > 0,
+                domains.captures(InspectionDomainV1::OwnerRaw)
             );
             assert_eq!(
-                provider_calls.load(Ordering::SeqCst),
-                usize::from(domains.captures(InspectionDomainV1::ProviderVisible))
+                provider_calls.load(Ordering::SeqCst) > 0,
+                domains.captures(InspectionDomainV1::ProviderVisible)
             );
             assert_eq!(
-                restored_calls.load(Ordering::SeqCst),
-                usize::from(domains.captures(InspectionDomainV1::OwnerRestored))
+                restored_calls.load(Ordering::SeqCst) > 0,
+                domains.captures(InspectionDomainV1::OwnerRestored)
             );
         }
     }
@@ -1479,12 +1572,13 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         for _ in 0..3 {
+            let outcome = logical.try_emit_provider_response_for_test(safe_fields(), || {
+                ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
+            });
             assert!(matches!(
-                logical.try_emit_provider_response(safe_fields(), || {
-                    ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
-                }),
+                outcome,
                 InspectionAdmissionOutcomeV1::Accepted { .. }
             ));
         }
@@ -1525,17 +1619,17 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical_a = producer_a.begin_logical().unwrap();
-        let mut logical_b = producer_b.begin_logical().unwrap();
+        let mut logical_a = begin_logical_for_test(&producer_a);
+        let mut logical_b = begin_logical_for_test(&producer_b);
         let guard = consumer_a.begin_purge().unwrap();
         assert!(matches!(
-            logical_a.try_emit_provider_request(safe_fields(), || {
+            logical_a.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::Purging)
         ));
         assert!(matches!(
-            logical_b.try_emit_provider_request(safe_fields(), || {
+            logical_b.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1557,11 +1651,11 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         logical.sequence = InspectionSequenceV1::new(u64::MAX);
         let calls = AtomicUsize::new(0);
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 calls.fetch_add(1, Ordering::SeqCst);
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
@@ -1583,21 +1677,41 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 panic!("synthetic projection panic")
             }),
             InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::PartialEvent)
         );
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
         ));
         sink.wait_for(1);
         assert_eq!(sink.events.lock().unwrap()[0].0.get(), 1);
+    }
+
+    #[test]
+    fn begin_logical_returns_contended_while_registration_lock_is_held() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
+        let (producer, _consumer) = install_inspection_v1(
+            PendingInspectionProducerV1::new(descriptor),
+            PendingInspectionConsumerV1::new(
+                descriptor,
+                Arc::new(RecordingSink::default()),
+                InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            ),
+        )
+        .unwrap();
+        let locked = lock_without_recovery(&producer.state.inner);
+        assert!(matches!(
+            producer.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Contended)
+        ));
+        drop(locked);
     }
 
     #[test]
@@ -1612,7 +1726,7 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         let locked = lock_without_recovery(&producer.state.inner);
         let calls = AtomicUsize::new(0);
         assert_eq!(
@@ -1638,10 +1752,10 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         let zeroized = Arc::new(AtomicBool::new(false));
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(ProviderVisibleProjectionV1::new(
                     ProjectionAvailabilityV1::Present(
                         ProviderVisiblePayloadV1::capture_with_probe(
@@ -1677,22 +1791,22 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
         ));
         sink.wait_until_entered();
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_2>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
         ));
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_3>"))
             }),
             InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueFull)
@@ -1719,9 +1833,9 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1729,7 +1843,7 @@ mod tests {
         sink.wait_until_entered();
         let zeroized = Arc::new(AtomicBool::new(false));
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(ProviderVisibleProjectionV1::new(
                     ProjectionAvailabilityV1::Present(
                         ProviderVisiblePayloadV1::capture_with_probe(
@@ -1791,11 +1905,11 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         drop(consumer.begin_purge().unwrap());
         let calls = AtomicUsize::new(0);
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 calls.fetch_add(1, Ordering::SeqCst);
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
@@ -1844,11 +1958,11 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         drop(producer);
         let calls = AtomicUsize::new(0);
         assert_eq!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 calls.fetch_add(1, Ordering::SeqCst);
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
@@ -1872,9 +1986,9 @@ mod tests {
         .unwrap();
         let barrier = Arc::new(Barrier::new(2));
         lock_without_recovery(&producer.state.hooks).after_dequeue = Some(barrier.clone());
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1902,9 +2016,9 @@ mod tests {
         .unwrap();
         let barrier = Arc::new(Barrier::new(2));
         lock_without_recovery(&producer.state.hooks).after_permit = Some(barrier.clone());
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1928,9 +2042,9 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1952,10 +2066,10 @@ mod tests {
             ),
         )
         .unwrap();
-        *sink.emitter.lock().unwrap() = Some(producer.begin_logical().unwrap());
-        let mut logical = producer.begin_logical().unwrap();
+        *sink.emitter.lock().unwrap() = Some(begin_logical_for_test(&producer));
+        let mut logical = begin_logical_for_test(&producer);
         assert!(matches!(
-            logical.try_emit_provider_request(safe_fields(), || {
+            logical.try_emit_provider_request_for_test(safe_fields(), || {
                 ProjectionAvailabilityV1::Present(provider_projection(b"<Email_1>"))
             }),
             InspectionAdmissionOutcomeV1::Accepted { .. }
@@ -1999,15 +2113,16 @@ mod tests {
             ),
         )
         .unwrap();
-        let mut logical = producer.begin_logical().unwrap();
+        let mut logical = begin_logical_for_test(&producer);
         for content in [
             b"a".as_slice(),
             b"alice@example.invalid and more".as_slice(),
         ] {
+            let outcome = logical.try_emit_provider_request_for_test(safe_fields(), || {
+                ProjectionAvailabilityV1::Present(provider_projection(content))
+            });
             assert!(matches!(
-                logical.try_emit_provider_request(safe_fields(), || {
-                    ProjectionAvailabilityV1::Present(provider_projection(content))
-                }),
+                outcome,
                 InspectionAdmissionOutcomeV1::Accepted { .. }
             ));
         }
