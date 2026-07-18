@@ -66,6 +66,7 @@ pub enum ProxyErrorCode {
     UnexpectedSessionHeader,
     SessionExpired,
     SessionGenerationConflict,
+    SessionCommitFailure,
     PrincipalRequired,
     PrincipalRejected,
     RegistryCapacity,
@@ -145,9 +146,9 @@ impl ProxyErrorCode {
             Self::UpstreamBadRequest => StatusCode::BAD_REQUEST,
             Self::UpstreamNotFound => StatusCode::NOT_FOUND,
             Self::UpstreamRateLimited => StatusCode::TOO_MANY_REQUESTS,
-            Self::InspectionInternal | Self::InvalidStateTransition => {
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
+            Self::SessionCommitFailure
+            | Self::InspectionInternal
+            | Self::InvalidStateTransition => StatusCode::INTERNAL_SERVER_ERROR,
             Self::InvalidUpstreamHeader
             | Self::UnsupportedContentEncoding
             | Self::InvalidFraming

@@ -1436,6 +1436,30 @@ fn prepare_and_commit_direct_request(
     )
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SessionCommitFailureKind {
+    GenerationConflict,
+    NonConflict,
+}
+
+fn classify_session_commit_failure(error: &SessionTransactionError) -> SessionCommitFailureKind {
+    match error {
+        SessionTransactionError::GenerationConflict => SessionCommitFailureKind::GenerationConflict,
+        _ => SessionCommitFailureKind::NonConflict,
+    }
+}
+
+fn map_session_commit_failure(kind: SessionCommitFailureKind) -> DirectProxyError {
+    match kind {
+        SessionCommitFailureKind::GenerationConflict => {
+            ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session)
+        }
+        SessionCommitFailureKind::NonConflict => {
+            ProxyErrorCode::SessionCommitFailure.error(ProxyErrorPhase::Session)
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn prepare_and_commit_direct_request_with_hook(
     pipeline: &Pipeline,
@@ -1478,17 +1502,10 @@ fn prepare_and_commit_direct_request_with_hook(
         before_commit(attempt, session, &prepared.transaction)?;
         match prepared.commit() {
             Ok(committed) => return Ok(committed),
-            Err(SessionTransactionError::GenerationConflict) if attempt == 0 => {}
-            Err(SessionTransactionError::GenerationConflict) => {
-                return Err(
-                    ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session)
-                );
-            }
-            Err(_) => {
-                return Err(
-                    ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session)
-                );
-            }
+            Err(error) => match classify_session_commit_failure(&error) {
+                SessionCommitFailureKind::GenerationConflict if attempt == 0 => {}
+                kind => return Err(map_session_commit_failure(kind)),
+            },
         }
     }
     Err(ProxyErrorCode::SessionGenerationConflict.error(ProxyErrorPhase::Session))
@@ -1923,6 +1940,7 @@ async fn direct_proxy_inner(
         .as_ref()
         .and_then(|producer| producer.begin_logical(runtime.inspection_endpoint_codes));
 
+    let mut continuity_lease = None;
     let mut committed = match ingress.session {
         DirectIngressSession::Ephemeral => {
             let session = Session::new(Scope::Ephemeral)
@@ -1959,7 +1977,9 @@ async fn direct_proxy_inner(
                 runtime.client_config.max_request_bytes,
             );
             drop(request_guard);
-            committed?
+            let committed = committed?;
+            continuity_lease = Some(lease);
+            committed
         }
     };
 
@@ -1982,16 +2002,19 @@ async fn direct_proxy_inner(
             runtime.client_config.max_response_bytes,
             runtime.ping_interval,
             inspection,
+            continuity_lease,
         );
     }
     let executed = runtime.client.execute(committed).await?;
-    restore_direct_response(
+    let response = restore_direct_response(
         &state.pipeline,
         codec,
         executed,
         runtime.codec_limits,
         inspection.as_mut(),
-    )
+    );
+    drop(continuity_lease);
+    response
 }
 
 fn stage_and_replay_direct_sse(
@@ -2001,6 +2024,7 @@ fn stage_and_replay_direct_sse(
     max_response_bytes: usize,
     ping_interval: Duration,
     inspection: Option<ProxyInspectionLogicalV1>,
+    continuity_lease: Option<SessionLease>,
 ) -> Result<Response, DirectProxyError> {
     let CommittedDirectSse {
         snapshot,
@@ -2012,7 +2036,17 @@ fn stage_and_replay_direct_sse(
     let status = head.status();
     let headers = head.headers().clone();
     let (sender, receiver) = tokio::sync::mpsc::channel::<Result<Bytes, std::io::Error>>(8);
+    let mut response = Response::builder().status(status);
+    for (name, value) in &headers {
+        response = response.header(name, value);
+    }
+    let response = response
+        .body(Body::from_stream(
+            tokio_stream::wrappers::ReceiverStream::new(receiver),
+        ))
+        .map_err(|_| ProxyErrorCode::UpstreamProtocol.error(ProxyErrorPhase::Framework))?;
     tokio::spawn(async move {
+        let _continuity_lease = continuity_lease;
         let mut inspection = inspection;
         let proof = async move {
             let body = collect_response_body(upstream_response, max_response_bytes).await?;
@@ -2075,16 +2109,7 @@ fn stage_and_replay_direct_sse(
             }
         }
     });
-
-    let mut response = Response::builder().status(status);
-    for (name, value) in &headers {
-        response = response.header(name, value);
-    }
-    response
-        .body(Body::from_stream(
-            tokio_stream::wrappers::ReceiverStream::new(receiver),
-        ))
-        .map_err(|_| ProxyErrorCode::UpstreamProtocol.error(ProxyErrorPhase::Framework))
+    Ok(response)
 }
 
 fn validate_direct_request_headers(
@@ -2287,6 +2312,11 @@ fn map_registry_error(error: RegistryError) -> DirectProxyError {
 }
 
 fn map_codec_error(error: CodecError) -> DirectProxyError {
+    let codec_phase = error.phase();
+    let request_direction = matches!(
+        codec_phase,
+        CodecPhase::RequestParse | CodecPhase::RequestProtection | CodecPhase::RequestProof
+    );
     let code = match error.code() {
         CodecErrorCode::DuplicateObjectKey => ProxyErrorCode::DuplicateObjectKey,
         CodecErrorCode::InternalCoverageFailure => ProxyErrorCode::InternalCoverageFailure,
@@ -2310,7 +2340,13 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         | CodecErrorCode::SseFrameLimitExceeded
         | CodecErrorCode::SseEventLimitExceeded
         | CodecErrorCode::SseIndexLimitExceeded
-        | CodecErrorCode::SseAccumulatorLimitExceeded => ProxyErrorCode::ResponseBodyLimitExceeded,
+        | CodecErrorCode::SseAccumulatorLimitExceeded => {
+            if request_direction {
+                ProxyErrorCode::RequestBodyLimitExceeded
+            } else {
+                ProxyErrorCode::ResponseBodyLimitExceeded
+            }
+        }
         CodecErrorCode::ProtectionFailedClosed
         | CodecErrorCode::RestoreFailedClosed
         | CodecErrorCode::ProviderOriginPii
@@ -2327,7 +2363,7 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         | CodecErrorCode::UnsafeFutureEvent
         | CodecErrorCode::ProviderErrorEvent => ProxyErrorCode::InvalidToken,
     };
-    let phase = match error.phase() {
+    let phase = match codec_phase {
         CodecPhase::RequestParse => ProxyErrorPhase::RequestValidation,
         CodecPhase::RequestProtection | CodecPhase::RequestProof => {
             ProxyErrorPhase::RequestTransform
@@ -2660,6 +2696,267 @@ mod tests {
             .rule(DefaultRule::new(Action::Preserve))
             .build()
             .unwrap()
+    }
+
+    const DIRECT_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}]}"#;
+    const DIRECT_SSE_REQUEST_BODY: &[u8] = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic request"}],"stream":true}"#;
+    const DIRECT_JSON_RESPONSE: &[u8] = br#"{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"text","text":"synthetic response"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}"#;
+    const DIRECT_SSE_RESPONSE: &[u8] = b"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"synthetic response\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":1}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+    const NON_STREAM_SESSION_ID: &str = "00000000-0000-4000-8000-000000000003";
+
+    #[derive(Clone)]
+    struct ResponseControl {
+        hits: Arc<AtomicUsize>,
+        body_started: Arc<tokio::sync::Notify>,
+        release: Arc<tokio::sync::Notify>,
+        stream_error: bool,
+    }
+
+    impl ResponseControl {
+        fn new(stream_error: bool) -> Self {
+            Self {
+                hits: Arc::new(AtomicUsize::new(0)),
+                body_started: Arc::new(tokio::sync::Notify::new()),
+                release: Arc::new(tokio::sync::Notify::new()),
+                stream_error,
+            }
+        }
+    }
+
+    async fn delayed_json_response(
+        State(control): State<ResponseControl>,
+        _body: Bytes,
+    ) -> Response {
+        control.hits.fetch_add(1, Ordering::SeqCst);
+        control.body_started.notify_one();
+        control.release.notified().await;
+        let body = if control.stream_error {
+            b"{".as_slice()
+        } else {
+            DIRECT_JSON_RESPONSE
+        };
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap()
+    }
+
+    async fn controlled_sse_response(
+        State(control): State<ResponseControl>,
+        _body: Bytes,
+    ) -> Response {
+        control.hits.fetch_add(1, Ordering::SeqCst);
+        let body_control = control.clone();
+        let chunks = futures_util::stream::once(async move {
+            body_control.body_started.notify_one();
+            body_control.release.notified().await;
+            if body_control.stream_error {
+                Err(std::io::Error::other("synthetic stream failure"))
+            } else {
+                Ok(Bytes::from_static(DIRECT_SSE_RESPONSE))
+            }
+        });
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/event-stream")
+            .body(Body::from_stream(chunks))
+            .unwrap()
+    }
+
+    fn synthetic_principal() -> crate::AuthenticatedPrincipal {
+        crate::AuthenticatedPrincipal::try_from_canonical_bytes(b"synthetic-principal".to_vec())
+            .unwrap()
+    }
+
+    fn direct_test_state(
+        endpoint: Url,
+        pipeline: Pipeline,
+        session_policy: SessionPolicy,
+        registry: Option<SessionRegistry>,
+    ) -> AppState {
+        let client_config = DirectClientConfig::default();
+        let runtime = DirectRuntime {
+            client: DirectClient::new(client_config).unwrap(),
+            endpoint: endpoint.clone(),
+            session_policy,
+            registry,
+            resolver: Arc::new(SyntheticPrincipalResolver),
+            listener_scope: ListenerScope::Loopback,
+            allowed_versions: Arc::from([DEFAULT_ANTHROPIC_VERSION.to_string()]),
+            allowed_betas: Arc::from([]),
+            codec_limits: CodecLimits::default(),
+            client_config,
+            ping_interval: Duration::from_secs(10),
+            inspection_endpoint_codes: ProxyInspectionEndpointCodesV1::from_validated_origin(
+                &endpoint,
+            ),
+        };
+        AppState {
+            config: Arc::new(ProxyConfig::new("127.0.0.1:0".parse().unwrap(), Vec::new())),
+            pipeline: Arc::new(pipeline),
+            client: Client::new(),
+            direct: Some(Arc::new(runtime)),
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            started_at: Instant::now(),
+        }
+    }
+
+    fn direct_test_ingress(
+        endpoint: Url,
+        session: DirectIngressSession,
+        expected: WireFormat,
+        body: &[u8],
+    ) -> PreparedDirectIngress {
+        let request = direct_request(endpoint, expected, body).unwrap();
+        PreparedDirectIngress {
+            outbound_headers: request.headers,
+            session,
+        }
+    }
+
+    async fn wait_for_lease_count(registry: &SessionRegistry, expected: usize) {
+        tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if registry.stats().total_leases() == expected {
+                    return;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[derive(Clone, Copy)]
+    enum LimitFailureDirection {
+        Request,
+        Response,
+    }
+
+    struct LimitFailureCodec(LimitFailureDirection);
+
+    impl BodyCodec for LimitFailureCodec {
+        fn protect_request(
+            &self,
+            input: &[u8],
+            _ctx: &mut RequestTransformContext<'_>,
+        ) -> Result<ProvedRequestBody, CodecError> {
+            match self.0 {
+                LimitFailureDirection::Request => Err(CodecError::new(
+                    CodecErrorCode::DepthLimitExceeded,
+                    CodecPhase::RequestParse,
+                )),
+                LimitFailureDirection::Response => Ok(proved(input)),
+            }
+        }
+
+        fn restore_response(
+            &self,
+            _input: &[u8],
+            _ctx: &mut ResponseTransformContext<'_>,
+        ) -> Result<crate::codec::ProvedResponseBody, CodecError> {
+            Err(CodecError::new(
+                CodecErrorCode::DepthLimitExceeded,
+                CodecPhase::ResponseParse,
+            ))
+        }
+    }
+
+    async fn begin_delayed_non_stream(
+        invalid_response: bool,
+    ) -> (
+        tokio::task::JoinHandle<Result<Response, DirectProxyError>>,
+        ResponseControl,
+        SessionRegistry,
+        Instant,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let control = ResponseControl::new(invalid_response);
+        let (endpoint, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(delayed_json_response))
+                .with_state(control.clone()),
+        )
+        .await;
+        let registry_config = crate::SessionRegistryConfig::default();
+        let registry = SessionRegistry::with_secret(registry_config, [0x7c; 32]);
+        let request_lease = registry
+            .acquire(synthetic_principal(), NON_STREAM_SESSION_ID, None)
+            .unwrap();
+        let state = direct_test_state(
+            endpoint.clone(),
+            email_pipeline(),
+            SessionPolicy::OpaqueHeaderContinuity(registry_config),
+            Some(registry.clone()),
+        );
+        let ingress = direct_test_ingress(
+            endpoint,
+            DirectIngressSession::Continuity(request_lease),
+            WireFormat::Json,
+            DIRECT_REQUEST_BODY,
+        );
+        let request = tokio::spawn(async move {
+            direct_proxy_inner(
+                &state,
+                ingress,
+                DIRECT_REQUEST_BODY,
+                &crate::codecs::anthropic::AnthropicMessagesCodec,
+            )
+            .await
+        });
+        control.body_started.notified().await;
+        let expired_at = Instant::now() + Duration::from_secs(60 * 60);
+        (request, control, registry, expired_at, server)
+    }
+
+    async fn begin_controlled_sse(
+        stream_error: bool,
+    ) -> (
+        Response,
+        ResponseControl,
+        SessionRegistry,
+        Instant,
+        tokio::task::JoinHandle<()>,
+    ) {
+        const SESSION_ID: &str = "00000000-0000-4000-8000-000000000002";
+
+        let control = ResponseControl::new(stream_error);
+        let (endpoint, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(controlled_sse_response))
+                .with_state(control.clone()),
+        )
+        .await;
+        let registry_config = crate::SessionRegistryConfig::default();
+        let registry = SessionRegistry::with_secret(registry_config, [0x6b; 32]);
+        let request_lease = registry
+            .acquire(synthetic_principal(), SESSION_ID, None)
+            .unwrap();
+        let state = direct_test_state(
+            endpoint.clone(),
+            email_pipeline(),
+            SessionPolicy::OpaqueHeaderContinuity(registry_config),
+            Some(registry.clone()),
+        );
+        let ingress = direct_test_ingress(
+            endpoint,
+            DirectIngressSession::Continuity(request_lease),
+            WireFormat::Sse,
+            DIRECT_SSE_REQUEST_BODY,
+        );
+
+        let response = direct_proxy_inner(
+            &state,
+            ingress,
+            DIRECT_SSE_REQUEST_BODY,
+            &crate::codecs::anthropic::AnthropicMessagesCodec,
+        )
+        .await
+        .unwrap();
+        control.body_started.notified().await;
+        let expired_at = Instant::now() + Duration::from_secs(60 * 60);
+        (response, control, registry, expired_at, server)
     }
 
     #[test]
@@ -3444,6 +3741,238 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.phase(), ProxyErrorPhase::UpstreamBody);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn codec_limit_direction_pins_code_phase_status_body_and_io() {
+        let capture = Capture::default();
+        let (endpoint, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let state = direct_test_state(
+            endpoint.clone(),
+            email_pipeline(),
+            SessionPolicy::EphemeralSingleRequest,
+            None,
+        );
+
+        let request_error = direct_proxy_inner(
+            &state,
+            direct_test_ingress(
+                endpoint.clone(),
+                DirectIngressSession::Ephemeral,
+                WireFormat::Json,
+                DIRECT_REQUEST_BODY,
+            ),
+            DIRECT_REQUEST_BODY,
+            &LimitFailureCodec(LimitFailureDirection::Request),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            request_error.code(),
+            ProxyErrorCode::RequestBodyLimitExceeded
+        );
+        assert_eq!(request_error.phase(), ProxyErrorPhase::RequestValidation);
+        assert_eq!(request_error.http_status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        let request_response = direct_error_response(request_error);
+        assert_eq!(request_response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let request_body = to_bytes(request_response.into_body(), 4 * 1024)
+            .await
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&request_body).unwrap(),
+            serde_json::json!({
+                "type": "error",
+                "error": {
+                    "type": "api_error",
+                    "message": "proxy_validation_failed",
+                    "code": "RequestBodyLimitExceeded"
+                }
+            })
+        );
+
+        let response_error = direct_proxy_inner(
+            &state,
+            direct_test_ingress(
+                endpoint,
+                DirectIngressSession::Ephemeral,
+                WireFormat::Json,
+                DIRECT_REQUEST_BODY,
+            ),
+            DIRECT_REQUEST_BODY,
+            &LimitFailureCodec(LimitFailureDirection::Response),
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(
+            response_error.code(),
+            ProxyErrorCode::ResponseBodyLimitExceeded
+        );
+        assert_eq!(response_error.phase(), ProxyErrorPhase::ResponseValidation);
+        assert_eq!(response_error.http_status(), StatusCode::BAD_GATEWAY);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 1);
+        let response = direct_error_response(response_error);
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        let response_body = to_bytes(response.into_body(), 4 * 1024).await.unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&response_body).unwrap(),
+            serde_json::json!({
+                "type": "error",
+                "error": {
+                    "type": "api_error",
+                    "message": "proxy_validation_failed",
+                    "code": "ResponseBodyLimitExceeded"
+                }
+            })
+        );
+        server.abort();
+    }
+
+    #[test]
+    fn future_non_conflict_session_commit_failure_is_never_a_conflict() {
+        let generation_conflict =
+            map_session_commit_failure(SessionCommitFailureKind::GenerationConflict);
+        assert_eq!(
+            generation_conflict.code(),
+            ProxyErrorCode::SessionGenerationConflict
+        );
+        assert_eq!(generation_conflict.phase(), ProxyErrorPhase::Session);
+        assert_eq!(generation_conflict.http_status(), StatusCode::CONFLICT);
+
+        let non_conflict = map_session_commit_failure(SessionCommitFailureKind::NonConflict);
+        assert_eq!(non_conflict.code(), ProxyErrorCode::SessionCommitFailure);
+        assert_eq!(non_conflict.phase(), ProxyErrorPhase::Session);
+        assert_eq!(
+            non_conflict.http_status(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
+        assert_ne!(non_conflict.code(), generation_conflict.code());
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_spans_non_stream_response_without_holding_request_mutex() {
+        let (request, control, registry, expired_at, server) =
+            begin_delayed_non_stream(false).await;
+
+        assert_eq!(control.hits.load(Ordering::SeqCst), 1);
+        assert_eq!(registry.stats().total_leases(), 1);
+        let concurrent_lease = registry
+            .acquire(synthetic_principal(), NON_STREAM_SESSION_ID, None)
+            .unwrap();
+        let concurrent_request_guard = concurrent_lease
+            .try_lock_request()
+            .expect("request mutex must be free before upstream I/O");
+        drop(concurrent_request_guard);
+        drop(concurrent_lease);
+        assert_eq!(registry.stats().total_leases(), 1);
+
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+        assert_eq!(registry.stats().tombstones(), 0);
+
+        control.release.notify_one();
+        let response = request.await.unwrap().unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_releases_on_non_stream_error() {
+        let (request, control, registry, expired_at, server) = begin_delayed_non_stream(true).await;
+        assert_eq!(registry.stats().total_leases(), 1);
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+
+        control.release.notify_one();
+        let error = request.await.unwrap().unwrap_err();
+        assert_eq!(error.phase(), ProxyErrorPhase::ResponseValidation);
+        assert_eq!(error.http_status(), StatusCode::BAD_GATEWAY);
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_releases_on_non_stream_cancellation() {
+        let (request, _control, registry, expired_at, server) =
+            begin_delayed_non_stream(false).await;
+        assert_eq!(registry.stats().total_leases(), 1);
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+
+        request.abort();
+        assert!(request.await.unwrap_err().is_cancelled());
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_spans_sse_message_stop_then_becomes_expirable() {
+        let (response, control, registry, expired_at, server) = begin_controlled_sse(false).await;
+        assert_eq!(control.hits.load(Ordering::SeqCst), 1);
+        assert_eq!(registry.stats().total_leases(), 1);
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+        assert_eq!(registry.stats().tombstones(), 0);
+
+        control.release.notify_one();
+        let body = to_bytes(response.into_body(), DEFAULT_MAX_RESPONSE_BYTES)
+            .await
+            .unwrap();
+        assert_eq!(body.as_ref(), DIRECT_SSE_RESPONSE);
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_releases_once_on_sse_error() {
+        let (response, control, registry, expired_at, server) = begin_controlled_sse(true).await;
+        assert_eq!(registry.stats().total_leases(), 1);
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+
+        control.release.notify_one();
+        let body = to_bytes(response.into_body(), DEFAULT_MAX_RESPONSE_BYTES)
+            .await
+            .unwrap();
+        assert_eq!(body.as_ref(), DIRECT_PROXY_ERROR_FRAME);
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn continuity_lease_releases_once_on_sse_downstream_cancellation() {
+        let (response, _control, registry, expired_at, server) = begin_controlled_sse(false).await;
+        assert_eq!(registry.stats().total_leases(), 1);
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 1);
+
+        drop(response);
+        wait_for_lease_count(&registry, 0).await;
+        registry.cleanup_at(expired_at);
+        assert_eq!(registry.stats().active_entries(), 0);
+        assert_eq!(registry.stats().tombstones(), 1);
         server.abort();
     }
 
