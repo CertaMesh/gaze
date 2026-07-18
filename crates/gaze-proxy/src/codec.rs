@@ -481,14 +481,54 @@ impl InspectionStructuralProjectionV1 {
             ),
         }
     }
+
+    pub(crate) const fn unavailable(format: WireFormat) -> Self {
+        match format {
+            WireFormat::Json => Self {
+                json_shape: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                ),
+                sse_timeline: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::UnsupportedFormat,
+                ),
+            },
+            WireFormat::Sse => Self {
+                json_shape: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::UnsupportedFormat,
+                ),
+                sse_timeline: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                ),
+            },
+            WireFormat::Ndjson | WireFormat::Utf8Text | WireFormat::Empty => Self {
+                json_shape: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::UnsupportedFormat,
+                ),
+                sse_timeline: ProjectionAvailabilityV1::Omitted(
+                    ProjectionOmissionReasonV1::UnsupportedFormat,
+                ),
+            },
+        }
+    }
 }
 
-/// Opaque crate-private source that retains parser-owned proved structure without projecting it.
+/// Opaque crate-private parsed facts moved from the codec's existing proof pass.
 ///
-/// The domain projection is allocated only when a selected `gaze-inspection` emitter invokes its
-/// build closure. The proxy never reparses proved bytes to recover structure.
-pub(crate) trait InspectionProjectionSourceV1: Send + Sync {
-    fn project(&self) -> InspectionStructuralProjectionV1;
+/// These facts are retained only for an immutable startup-selected stage. Turning them into an
+/// inspection source/timeline remains inside the `gaze-inspection` build closure, after its real
+/// lifecycle pre-projection fence. Proved bytes are never reparsed by the proxy.
+pub(crate) enum InspectionParsedFactsV1 {
+    AnthropicJson(crate::anthropic::JsonInspectionParsedFactsV1),
+    AnthropicSse(crate::anthropic::SseInspectionParsedFactsV1),
+}
+
+impl InspectionParsedFactsV1 {
+    pub(crate) fn project(self) -> InspectionStructuralProjectionV1 {
+        match self {
+            Self::AnthropicJson(facts) => facts.project(),
+            Self::AnthropicSse(facts) => facts.project(),
+        }
+    }
 }
 
 macro_rules! proved_body {
@@ -497,7 +537,8 @@ macro_rules! proved_body {
             bytes: Vec<u8>,
             format: WireFormat,
             provenance: OutputProvenance,
-            inspection_source: Option<Box<dyn InspectionProjectionSourceV1>>,
+            inspection_parsed_facts: Option<InspectionParsedFactsV1>,
+            signed_or_encrypted_surface: bool,
         }
 
         impl $name {
@@ -506,25 +547,30 @@ macro_rules! proved_body {
                 format: WireFormat,
                 provenance: OutputProvenance,
             ) -> Self {
+                let signed_or_encrypted_surface = !provenance.signed_opaque_ranges().is_empty();
                 Self {
                     bytes,
                     format,
                     provenance,
-                    inspection_source: None,
+                    inspection_parsed_facts: None,
+                    signed_or_encrypted_surface,
                 }
             }
 
-            pub(crate) fn new_with_inspection_source(
+            pub(crate) fn new_with_inspection_parsed_facts(
                 bytes: Vec<u8>,
                 format: WireFormat,
                 provenance: OutputProvenance,
-                inspection_source: Box<dyn InspectionProjectionSourceV1>,
+                inspection_parsed_facts: InspectionParsedFactsV1,
             ) -> Self {
+                let signed_or_encrypted_surface = !provenance.signed_opaque_ranges().is_empty();
                 Self {
                     bytes,
                     format,
                     provenance,
-                    inspection_source: Some(inspection_source),
+                    inspection_parsed_facts: (!signed_or_encrypted_surface)
+                        .then_some(inspection_parsed_facts),
+                    signed_or_encrypted_surface,
                 }
             }
 
@@ -543,14 +589,24 @@ macro_rules! proved_body {
                 &self.provenance
             }
 
-            pub(crate) fn inspection_source(&self) -> Option<&dyn InspectionProjectionSourceV1> {
-                self.inspection_source.as_deref()
+            pub(crate) const fn signed_or_encrypted_surface(&self) -> bool {
+                self.signed_or_encrypted_surface
             }
 
             pub(crate) fn into_inspection_parts(
                 self,
-            ) -> (Vec<u8>, Option<Box<dyn InspectionProjectionSourceV1>>) {
-                (self.bytes, self.inspection_source)
+            ) -> (Vec<u8>, Option<InspectionParsedFactsV1>, bool) {
+                (
+                    self.bytes,
+                    self.inspection_parsed_facts,
+                    self.signed_or_encrypted_surface,
+                )
+            }
+
+            pub(crate) fn take_inspection_parsed_facts(
+                &mut self,
+            ) -> Option<InspectionParsedFactsV1> {
+                self.inspection_parsed_facts.take()
             }
 
             #[must_use]

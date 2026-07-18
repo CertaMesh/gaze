@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 
+#[cfg(test)]
+use std::cell::Cell;
+
 use gaze_types::inspection::{
     ContentBlockIndexV1, JsonNodeOrdinalV1, JsonShapeNodeV1, JsonShapeSummaryV1,
     JsonShapeTruncationCodeV1, JsonTypeCodeV1, ProjectionAvailabilityV1,
@@ -9,7 +12,7 @@ use gaze_types::inspection::{
 };
 
 use crate::codec::{
-    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionProjectionSourceV1,
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
     InspectionStructuralProjectionV1, OutputProvenance, ProvedRequestBody, ProvedResponseBody,
     RequestTransformContext, ResponseTransformContext, WireFormat,
 };
@@ -19,6 +22,45 @@ pub const ANTHROPIC_PROXY_ERROR_FRAME: &[u8] = b"event: error\ndata: {\"type\":\
 const MAX_ANTHROPIC_REQUEST_BODY_BYTES: usize = 2 * 1024 * 1024;
 // Mirror the frozen default JSON-depth ceiling for wrapper syntax inside one string.
 const MAX_ANGLE_WRAPPER_DEPTH: usize = 128;
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct InspectionConstructionCountsV1 {
+    pub(crate) json_sources_built: usize,
+    pub(crate) sse_sources_built: usize,
+    pub(crate) sse_timelines_built: usize,
+}
+
+#[cfg(test)]
+thread_local! {
+    static INSPECTION_CONSTRUCTION_COUNTS: Cell<InspectionConstructionCountsV1> =
+        const { Cell::new(InspectionConstructionCountsV1 {
+            json_sources_built: 0,
+            sse_sources_built: 0,
+            sse_timelines_built: 0,
+        }) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_inspection_construction_counts() {
+    INSPECTION_CONSTRUCTION_COUNTS.with(|counts| {
+        counts.set(InspectionConstructionCountsV1::default());
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn inspection_construction_counts() -> InspectionConstructionCountsV1 {
+    INSPECTION_CONSTRUCTION_COUNTS.with(Cell::get)
+}
+
+#[cfg(test)]
+fn record_inspection_construction(update: impl FnOnce(&mut InspectionConstructionCountsV1)) {
+    INSPECTION_CONSTRUCTION_COUNTS.with(|cell| {
+        let mut counts = cell.get();
+        update(&mut counts);
+        cell.set(counts);
+    });
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AnthropicMessagesCodec;
@@ -104,12 +146,12 @@ impl BodyCodec for AnthropicMessagesCodec {
         verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
             .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
         provenance.mark_final_buffer_verified();
-        if ctx.inspection_projection_requested() {
-            Ok(ProvedRequestBody::new_with_inspection_source(
+        if ctx.inspection_projection_requested() && provenance.signed_opaque_ranges().is_empty() {
+            Ok(ProvedRequestBody::new_with_inspection_parsed_facts(
                 bytes,
                 WireFormat::Json,
                 provenance,
-                Box::new(JsonInspectionProjectionSourceV1 {
+                InspectionParsedFactsV1::AnthropicJson(JsonInspectionParsedFactsV1 {
                     root: reparsed.root,
                 }),
             ))
@@ -244,12 +286,12 @@ fn restore_json_response(
     verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
         .map_err(|code| codec_error(code, CodecPhase::ResponseProof))?;
     provenance.mark_final_buffer_verified();
-    if ctx.inspection_projection_requested() {
-        Ok(ProvedResponseBody::new_with_inspection_source(
+    if ctx.inspection_projection_requested() && provenance.signed_opaque_ranges().is_empty() {
+        Ok(ProvedResponseBody::new_with_inspection_parsed_facts(
             bytes,
             WireFormat::Json,
             provenance,
-            Box::new(JsonInspectionProjectionSourceV1 {
+            InspectionParsedFactsV1::AnthropicJson(JsonInspectionParsedFactsV1 {
                 root: reparsed.root,
             }),
         ))
@@ -489,24 +531,69 @@ enum JsonKind {
     Null,
 }
 
+pub(crate) struct JsonInspectionParsedFactsV1 {
+    root: JsonNode,
+}
+
+pub(crate) struct SseInspectionParsedFactsV1 {
+    frames: Vec<SseFrame>,
+    complete: bool,
+}
+
 struct JsonInspectionProjectionSourceV1 {
     root: JsonNode,
 }
 
 struct SseInspectionProjectionSourceV1 {
-    entries: Vec<SseTimelineEntryV1>,
+    frames: Vec<SseFrame>,
+    complete: bool,
 }
 
-impl InspectionProjectionSourceV1 for SseInspectionProjectionSourceV1 {
-    fn project(&self) -> InspectionStructuralProjectionV1 {
-        let sse_timeline = SseTimelineMetaV1::try_new(self.entries.clone()).map_or_else(
-            |_| {
-                ProjectionAvailabilityV1::Omitted(
-                    ProjectionOmissionReasonV1::ProjectionFailedClosed,
-                )
-            },
-            ProjectionAvailabilityV1::Present,
-        );
+impl SseInspectionParsedFactsV1 {
+    pub(crate) fn project(self) -> InspectionStructuralProjectionV1 {
+        #[cfg(test)]
+        record_inspection_construction(|counts| counts.sse_sources_built += 1);
+        SseInspectionProjectionSourceV1 {
+            frames: self.frames,
+            complete: self.complete,
+        }
+        .project()
+    }
+}
+
+impl SseInspectionProjectionSourceV1 {
+    fn project(self) -> InspectionStructuralProjectionV1 {
+        #[cfg(test)]
+        record_inspection_construction(|counts| counts.sse_timelines_built += 1);
+        let entries = self
+            .complete
+            .then(|| {
+                self.frames
+                    .into_iter()
+                    .filter_map(|frame| frame.inspection_fact)
+                    .enumerate()
+                    .map(|(ordinal, fact)| {
+                        let ordinal = u32::try_from(ordinal).ok()?;
+                        Some(SseTimelineEntryV1::new(
+                            SseEntryOrdinalV1::new(ordinal),
+                            fact.event_kind,
+                            fact.delta_kind,
+                            fact.content_block,
+                        ))
+                    })
+                    .collect::<Option<Vec<_>>>()
+            })
+            .flatten();
+        let sse_timeline = entries
+            .and_then(|entries| SseTimelineMetaV1::try_new(entries).ok())
+            .map_or_else(
+                || {
+                    ProjectionAvailabilityV1::Omitted(
+                        ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                    )
+                },
+                ProjectionAvailabilityV1::Present,
+            );
         InspectionStructuralProjectionV1 {
             json_shape: ProjectionAvailabilityV1::Omitted(
                 ProjectionOmissionReasonV1::UnsupportedFormat,
@@ -516,8 +603,16 @@ impl InspectionProjectionSourceV1 for SseInspectionProjectionSourceV1 {
     }
 }
 
-impl InspectionProjectionSourceV1 for JsonInspectionProjectionSourceV1 {
-    fn project(&self) -> InspectionStructuralProjectionV1 {
+impl JsonInspectionParsedFactsV1 {
+    pub(crate) fn project(self) -> InspectionStructuralProjectionV1 {
+        #[cfg(test)]
+        record_inspection_construction(|counts| counts.json_sources_built += 1);
+        JsonInspectionProjectionSourceV1 { root: self.root }.project()
+    }
+}
+
+impl JsonInspectionProjectionSourceV1 {
+    fn project(self) -> InspectionStructuralProjectionV1 {
         let mut nodes = Vec::with_capacity(MAX_JSON_SHAPE_NODES_V1.min(64));
         let mut truncated = false;
         collect_json_shape(&self.root, &mut nodes, &mut truncated);
@@ -2705,6 +2800,13 @@ struct SseFrame {
     data: Vec<u8>,
     raw: Vec<u8>,
     comment: bool,
+    inspection_fact: Option<SseInspectionFrameFactV1>,
+}
+
+struct SseInspectionFrameFactV1 {
+    event_kind: SseEventKindV1,
+    delta_kind: ProjectionAvailabilityV1<SseDeltaKindV1>,
+    content_block: ProjectionAvailabilityV1<ContentBlockIndexV1>,
 }
 
 impl SseDecoder {
@@ -2764,6 +2866,7 @@ impl SseDecoder {
                         data: Vec::new(),
                         raw: std::mem::take(&mut raw),
                         comment: true,
+                        inspection_fact: None,
                     });
                 } else if event.is_some() || !data_lines.is_empty() {
                     raw.extend_from_slice(line.raw);
@@ -2793,6 +2896,7 @@ impl SseDecoder {
                         data,
                         raw: std::mem::take(&mut raw),
                         comment: false,
+                        inspection_fact: None,
                     });
                 } else if !raw.is_empty() {
                     return Err(codec_error(
@@ -2953,7 +3057,7 @@ struct ReplaySlot {
 }
 
 fn restore_sse_frames(
-    frames: Vec<SseFrame>,
+    mut frames: Vec<SseFrame>,
     ctx: &mut ResponseTransformContext<'_>,
 ) -> Result<ProvedResponseBody, CodecError> {
     let mut lifecycle = MessageLifecycle::AwaitingMessageStart;
@@ -2963,10 +3067,8 @@ fn restore_sse_frames(
     let mut concatenated_text = String::new();
     let mut concatenated_authorized = Vec::<Range<usize>>::new();
     let mut occurrence_count = 0usize;
-    let mut inspection_entries = ctx
-        .inspection_projection_requested()
-        .then(Vec::<SseTimelineEntryV1>::new);
-    for frame in frames {
+    let mut inspection_facts_complete = true;
+    for frame in &mut frames {
         if frame.comment {
             if matches!(lifecycle, MessageLifecycle::MessageStopped) {
                 return Err(codec_error(
@@ -3000,10 +3102,6 @@ fn restore_sse_frames(
                 CodecPhase::SseDecode,
             ));
         }
-        let inspection_entry = inspection_entries
-            .as_ref()
-            .map(|entries| sse_inspection_entry(&document, event, entries.len()))
-            .transpose()?;
         match event {
             "ping" => {
                 validate_simple_event(&document, "ping")?;
@@ -3143,8 +3241,9 @@ fn restore_sse_frames(
                 validate_future_event(&document, event, ctx)?;
             }
         }
-        if let (Some(entries), Some(entry)) = (inspection_entries.as_mut(), inspection_entry) {
-            entries.push(entry);
+        if ctx.inspection_projection_requested() {
+            frame.inspection_fact = sse_inspection_fact(&document, event);
+            inspection_facts_complete &= frame.inspection_fact.is_some();
         }
     }
     if !matches!(lifecycle, MessageLifecycle::MessageStopped) || !blocks.is_empty() {
@@ -3204,29 +3303,27 @@ fn restore_sse_frames(
     verify_final_wire_proof(&output, &provenance, &expected_authorized, &expected_signed)
         .map_err(|code| codec_error(code, CodecPhase::SseReplay))?;
     provenance.mark_final_buffer_verified();
-    if let Some(entries) = inspection_entries {
-        Ok(ProvedResponseBody::new_with_inspection_source(
+    if ctx.inspection_projection_requested() && provenance.signed_opaque_ranges().is_empty() {
+        for frame in &mut frames {
+            frame.event = None;
+            frame.data = Vec::new();
+            frame.raw = Vec::new();
+        }
+        Ok(ProvedResponseBody::new_with_inspection_parsed_facts(
             output,
             WireFormat::Sse,
             provenance,
-            Box::new(SseInspectionProjectionSourceV1 { entries }),
+            InspectionParsedFactsV1::AnthropicSse(SseInspectionParsedFactsV1 {
+                frames,
+                complete: inspection_facts_complete,
+            }),
         ))
     } else {
         Ok(ProvedResponseBody::new(output, WireFormat::Sse, provenance))
     }
 }
 
-fn sse_inspection_entry(
-    document: &JsonDocument,
-    event: &str,
-    ordinal: usize,
-) -> Result<SseTimelineEntryV1, CodecError> {
-    let ordinal = u32::try_from(ordinal).map_err(|_| {
-        codec_error(
-            CodecErrorCode::InternalCoverageFailure,
-            CodecPhase::SseLifecycle,
-        )
-    })?;
+fn sse_inspection_fact(document: &JsonDocument, event: &str) -> Option<SseInspectionFrameFactV1> {
     let event_kind = match event {
         "message_start" => SseEventKindV1::MessageStart,
         "content_block_start" => SseEventKindV1::ContentBlockStart,
@@ -3240,15 +3337,13 @@ fn sse_inspection_entry(
     };
     let content_block = match event {
         "content_block_start" | "content_block_delta" | "content_block_stop" => {
-            ProjectionAvailabilityV1::Present(ContentBlockIndexV1::new(event_index(document)?))
+            ProjectionAvailabilityV1::Present(ContentBlockIndexV1::new(event_index(document).ok()?))
         }
         _ => ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::NotApplicable),
     };
     let delta_kind = if event == "content_block_delta" {
-        let delta = object_value(&document.root, "delta")
-            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
-        let delta_type = object_string(delta, "type")
-            .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
+        let delta = object_value(&document.root, "delta").ok()?;
+        let delta_type = object_string(delta, "type").ok()?;
         let kind = match delta_type {
             "text_delta" => SseDeltaKindV1::Text,
             "input_json_delta" => SseDeltaKindV1::InputJson,
@@ -3261,12 +3356,11 @@ fn sse_inspection_entry(
     } else {
         ProjectionAvailabilityV1::Omitted(ProjectionOmissionReasonV1::NotApplicable)
     };
-    Ok(SseTimelineEntryV1::new(
-        SseEntryOrdinalV1::new(ordinal),
+    Some(SseInspectionFrameFactV1 {
         event_kind,
         delta_kind,
         content_block,
-    ))
+    })
 }
 
 fn append_expected_wire_chunk(
@@ -4592,4 +4686,53 @@ fn built_delta_frame(
     );
     output.extend_from_slice(b"}}\n\n");
     (output, provenance)
+}
+
+#[cfg(test)]
+mod inspection_parity_tests {
+    use gaze::{Scope, Session};
+
+    use super::*;
+    use crate::codec::ResponseResidualValidator;
+
+    struct CleanResidual;
+
+    impl ResponseResidualValidator for CleanResidual {
+        fn validate(
+            &mut self,
+            _value: &str,
+            _authorized_output_ranges: &[Range<usize>],
+        ) -> Result<(), CodecErrorCode> {
+            Ok(())
+        }
+    }
+
+    fn malformed_sse_error(inspection_configured: bool) -> CodecError {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let snapshot = session.begin_transaction().commit().unwrap();
+        let mut residual = CleanResidual;
+        let mut context = ResponseTransformContext::new(
+            &snapshot,
+            &mut residual,
+            WireFormat::Sse,
+            CodecLimits::default(),
+        );
+        if inspection_configured {
+            context.request_inspection_projection();
+        }
+        AnthropicMessagesCodec
+            .restore_response(
+                b"event: content_block_start\ndata: {\"type\":\"content_block_start\",\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                &mut context,
+            )
+            .unwrap_err()
+    }
+
+    #[test]
+    fn malformed_sse_error_is_identical_with_and_without_inspection() {
+        let without = malformed_sse_error(false);
+        let with = malformed_sse_error(true);
+        assert_eq!(with.code(), without.code());
+        assert_eq!(with.phase(), without.phase());
+    }
 }

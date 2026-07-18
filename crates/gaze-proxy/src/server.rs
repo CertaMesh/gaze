@@ -26,12 +26,12 @@ use url::{Host, Url};
 use crate::adapter::{ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
-    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionProjectionSourceV1,
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
     ProvedRequestBody, RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
     ResponseTransformContext, WireFormat,
 };
 use crate::error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
-use crate::inspection::ProxyInspectionLogicalV1;
+use crate::inspection::{ProxyInspectionEndpointCodesV1, ProxyInspectionLogicalV1};
 use crate::principal::{
     invoke_resolver, ListenerScope, PeerScope, PrincipalContext, PrincipalResolver,
     ProcessLocalLoopbackResolver,
@@ -220,6 +220,7 @@ struct DirectRuntime {
     codec_limits: CodecLimits,
     client_config: DirectClientConfig,
     ping_interval: Duration,
+    inspection_endpoint_codes: ProxyInspectionEndpointCodesV1,
 }
 
 enum DirectIngressSession {
@@ -257,6 +258,8 @@ impl DirectRuntime {
             .map_err(|_| direct_readiness_error("direct_upstream_invalid"))?;
         let mut endpoint = adapter.upstream_base().clone();
         endpoint.set_path("/v1/messages");
+        let inspection_endpoint_codes =
+            ProxyInspectionEndpointCodesV1::from_validated_origin(&endpoint);
 
         let explicit = config.direct_anthropic.as_deref();
         if explicit.is_some_and(|value| value.upstream_base() != adapter.upstream_base()) {
@@ -310,6 +313,7 @@ impl DirectRuntime {
             codec_limits,
             client_config,
             ping_interval,
+            inspection_endpoint_codes,
         }))
     }
 }
@@ -327,7 +331,8 @@ pub(crate) struct DirectRequest {
     headers: HeaderMap,
     body: Vec<u8>,
     expected_response: WireFormat,
-    inspection_source: Option<Box<dyn InspectionProjectionSourceV1>>,
+    inspection_parsed_facts: Option<InspectionParsedFactsV1>,
+    signed_or_encrypted_surface: bool,
 }
 
 #[allow(dead_code)]
@@ -344,13 +349,15 @@ impl DirectRequest {
         if !proved_body.provenance().final_buffer_verified() {
             return Err(ProxyErrorCode::InvalidProvenance.error(ProxyErrorPhase::RequestTransform));
         }
-        let (body, inspection_source) = proved_body.into_inspection_parts();
+        let (body, inspection_parsed_facts, signed_or_encrypted_surface) =
+            proved_body.into_inspection_parts();
         Ok(Self {
             url,
             headers,
             body,
             expected_response,
-            inspection_source,
+            inspection_parsed_facts,
+            signed_or_encrypted_surface,
         })
     }
 }
@@ -1393,7 +1400,7 @@ fn prepare_and_commit_direct_request(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
-    inspection_projection_requested: bool,
+    provider_request_projection_selected: bool,
     max_request_bytes: usize,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     prepare_and_commit_direct_request_with_hook(
@@ -1405,7 +1412,7 @@ fn prepare_and_commit_direct_request(
         headers,
         expected_response,
         limits,
-        inspection_projection_requested,
+        provider_request_projection_selected,
         max_request_bytes,
         |_, _| Ok(()),
     )
@@ -1421,7 +1428,7 @@ fn prepare_and_commit_direct_request_with_hook(
     headers: &HeaderMap,
     expected_response: WireFormat,
     limits: CodecLimits,
-    inspection_projection_requested: bool,
+    provider_request_projection_selected: bool,
     max_request_bytes: usize,
     mut before_commit: impl FnMut(u8, &Session) -> Result<(), DirectProxyError>,
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
@@ -1431,7 +1438,7 @@ fn prepare_and_commit_direct_request_with_hook(
             let mut pseudonymizer = PipelineRequestPseudonymizer::new(pipeline, &mut transaction);
             let mut context =
                 RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
-            if inspection_projection_requested {
+            if provider_request_projection_selected {
                 context.request_inspection_projection();
             }
             codec
@@ -1896,9 +1903,9 @@ async fn direct_proxy_inner(
         .config
         .inspection
         .as_ref()
-        .and_then(|producer| producer.begin_logical());
+        .and_then(|producer| producer.begin_logical(runtime.inspection_endpoint_codes));
 
-    let committed = match ingress.session {
+    let mut committed = match ingress.session {
         DirectIngressSession::Ephemeral => {
             let session = Session::new(Scope::Ephemeral)
                 .map_err(|_| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Session))?;
@@ -1911,7 +1918,9 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
-                inspection.is_some(),
+                inspection
+                    .as_ref()
+                    .is_some_and(ProxyInspectionLogicalV1::provider_request_projection_selected),
                 runtime.client_config.max_request_bytes,
             )?
         }
@@ -1926,7 +1935,9 @@ async fn direct_proxy_inner(
                 &ingress.outbound_headers,
                 expected_response,
                 runtime.codec_limits,
-                inspection.is_some(),
+                inspection
+                    .as_ref()
+                    .is_some_and(ProxyInspectionLogicalV1::provider_request_projection_selected),
                 runtime.client_config.max_request_bytes,
             );
             drop(request_guard);
@@ -1935,10 +1946,12 @@ async fn direct_proxy_inner(
     };
 
     if let Some(inspection) = inspection.as_mut() {
+        let inspection_parsed_facts = committed.request.inspection_parsed_facts.take();
         inspection.emit_request_stages(
             body,
             &committed.request.body,
-            committed.request.inspection_source.as_deref(),
+            inspection_parsed_facts,
+            committed.request.signed_or_encrypted_surface,
         );
     }
 
@@ -1989,14 +2002,26 @@ fn stage_and_replay_direct_sse(
             let mut residual = PipelineResponseResidualValidator::new(&pipeline)?;
             let mut context =
                 ResponseTransformContext::new(&snapshot, &mut residual, WireFormat::Sse, limits);
-            if inspection.is_some() {
+            if inspection
+                .as_ref()
+                .is_some_and(ProxyInspectionLogicalV1::owner_restored_response_projection_selected)
+            {
                 context.request_inspection_projection();
             }
-            let proved = crate::codecs::anthropic::AnthropicMessagesCodec
+            let mut proved = crate::codecs::anthropic::AnthropicMessagesCodec
                 .restore_response(&body, &mut context)
                 .map_err(map_codec_error)?;
             if let Some(inspection) = inspection.as_mut() {
-                inspection.emit_response_stages(&body, proved.bytes(), proved.inspection_source());
+                let format = proved.format();
+                let signed_or_encrypted_surface = proved.signed_or_encrypted_surface();
+                let inspection_parsed_facts = proved.take_inspection_parsed_facts();
+                inspection.emit_response_stages(
+                    &body,
+                    proved.bytes(),
+                    format,
+                    inspection_parsed_facts,
+                    signed_or_encrypted_surface,
+                );
             }
             let mut lifecycle = lifecycle;
             lifecycle.mark_response_complete()?;
@@ -2198,14 +2223,26 @@ fn restore_direct_response(
     let mut residual = PipelineResponseResidualValidator::new(pipeline)?;
     let mut context =
         ResponseTransformContext::new(&executed.snapshot, &mut residual, head.format(), limits);
-    if inspection.is_some() {
+    if inspection
+        .as_deref()
+        .is_some_and(ProxyInspectionLogicalV1::owner_restored_response_projection_selected)
+    {
         context.request_inspection_projection();
     }
-    let proved = codec
+    let mut proved = codec
         .restore_response(&body, &mut context)
         .map_err(map_codec_error)?;
     if let Some(inspection) = inspection {
-        inspection.emit_response_stages(&body, proved.bytes(), proved.inspection_source());
+        let format = proved.format();
+        let signed_or_encrypted_surface = proved.signed_or_encrypted_surface();
+        let inspection_parsed_facts = proved.take_inspection_parsed_facts();
+        inspection.emit_response_stages(
+            &body,
+            proved.bytes(),
+            format,
+            inspection_parsed_facts,
+            signed_or_encrypted_surface,
+        );
     }
     executed.lifecycle.mark_response_complete()?;
     let mut response = Response::builder().status(head.status());
@@ -3099,6 +3136,7 @@ mod tests {
             codec_limits: CodecLimits::default(),
             client_config,
             ping_interval: Duration::from_secs(10),
+            inspection_endpoint_codes: ProxyInspectionEndpointCodesV1::from_validated_origin(&url),
         };
         let state = AppState {
             config: Arc::new(ProxyConfig::new("127.0.0.1:0".parse().unwrap(), Vec::new())),

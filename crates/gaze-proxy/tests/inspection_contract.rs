@@ -18,8 +18,9 @@ use gaze_proxy::inspection::install_proxy_inspection_v1;
 use gaze_proxy::{ProxyConfig, ProxyInspectionProducerV1};
 use gaze_recognizers::RegexDetector;
 use gaze_types::inspection::{
-    CaptureDomainsV1, DashboardCaptureDescriptorV1, InspectionStageDomainV1,
-    ProjectionAvailabilityV1, ProjectionOmissionReasonV1,
+    CaptureDomainsV1, DashboardCaptureDescriptorV1, EndpointSelectionCodeV1,
+    InspectionStageDomainV1, PortSelectionCodeV1, ProjectionAvailabilityV1,
+    ProjectionOmissionReasonV1,
 };
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -44,6 +45,7 @@ struct RecordedEvent {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct RecordedAvailability {
     measurement_present: bool,
+    measurement_omission: Option<ProjectionOmissionReasonV1>,
     json_shape_present: bool,
     json_omission: Option<ProjectionOmissionReasonV1>,
     sse_timeline: Option<Value>,
@@ -191,6 +193,10 @@ fn record_availability<M, J, S: serde::Serialize, P, D, A>(
     };
     RecordedAvailability {
         measurement_present: matches!(measurement, ProjectionAvailabilityV1::Present(_)),
+        measurement_omission: match measurement {
+            ProjectionAvailabilityV1::Present(_) => None,
+            ProjectionAvailabilityV1::Omitted(reason) => Some(*reason),
+        },
         json_shape_present: matches!(json_shape, ProjectionAvailabilityV1::Present(_)),
         json_omission,
         sse_timeline,
@@ -234,16 +240,38 @@ async fn echo_anthropic_request(request: Request<Body>) -> axum::response::Respo
     let protected = request_json["messages"][0]["content"]
         .as_str()
         .unwrap_or("synthetic");
+    let signed_response = request_json["model"] == "claude-signed-test";
     if request_json["stream"].as_bool().unwrap_or(false) {
-        let escaped = serde_json::to_string(protected).unwrap();
-        let frames = format!(
-            "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{{\"input_tokens\":1,\"output_tokens\":0}}}}}}\n\nevent: content_block_start\ndata: {{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{{\"type\":\"text\",\"text\":\"\"}}}}\n\nevent: content_block_delta\ndata: {{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{{\"type\":\"text_delta\",\"text\":{escaped}}}}}\n\nevent: content_block_stop\ndata: {{\"type\":\"content_block_stop\",\"index\":0}}\n\nevent: message_delta\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"end_turn\",\"stop_sequence\":null}},\"usage\":{{\"output_tokens\":1}}}}\n\nevent: message_stop\ndata: {{\"type\":\"message_stop\"}}\n\n"
-        );
+        let frames = if signed_response {
+            "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"synthetic reasoning\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"signature_delta\",\"signature\":\"opaque-synthetic-signature\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":1}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n".to_owned()
+        } else {
+            let escaped = serde_json::to_string(protected).unwrap();
+            format!(
+                "event: message_start\ndata: {{\"type\":\"message_start\",\"message\":{{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{{\"input_tokens\":1,\"output_tokens\":0}}}}}}\n\nevent: content_block_start\ndata: {{\"type\":\"content_block_start\",\"index\":0,\"content_block\":{{\"type\":\"text\",\"text\":\"\"}}}}\n\nevent: content_block_delta\ndata: {{\"type\":\"content_block_delta\",\"index\":0,\"delta\":{{\"type\":\"text_delta\",\"text\":{escaped}}}}}\n\nevent: content_block_stop\ndata: {{\"type\":\"content_block_stop\",\"index\":0}}\n\nevent: message_delta\ndata: {{\"type\":\"message_delta\",\"delta\":{{\"stop_reason\":\"end_turn\",\"stop_sequence\":null}},\"usage\":{{\"output_tokens\":1}}}}\n\nevent: message_stop\ndata: {{\"type\":\"message_stop\"}}\n\n"
+            )
+        };
         return axum::response::Response::builder()
             .status(StatusCode::OK)
             .header("content-type", "text/event-stream")
             .body(Body::from(frames))
             .unwrap();
+    }
+    if signed_response {
+        return Json(json!({
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-test",
+            "content": [{
+                "type": "thinking",
+                "thinking": "synthetic reasoning",
+                "signature": "opaque-synthetic-signature"
+            }],
+            "stop_reason": "end_turn",
+            "stop_sequence": null,
+            "usage": {"input_tokens": 1, "output_tokens": 1}
+        }))
+        .into_response();
     }
     Json(json!({
         "id": "msg_1",
@@ -348,16 +376,25 @@ async fn request_with_stream(
     path: &str,
     stream: bool,
 ) -> reqwest::Response {
-    Client::new()
-        .post(format!("{}{}", proxy.server.base_url, path))
-        .header("x-api-key", "sdk-synthetic-key")
-        .header("anthropic-version", "2023-06-01")
-        .json(&json!({
+    request_json(
+        proxy,
+        path,
+        json!({
             "model": "claude-test",
             "max_tokens": 32,
             "messages": [{"role": "user", "content": content}],
             "stream": stream
-        }))
+        }),
+    )
+    .await
+}
+
+async fn request_json(proxy: &RunningProxy, path: &str, body: Value) -> reqwest::Response {
+    Client::new()
+        .post(format!("{}{}", proxy.server.base_url, path))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&body)
         .send()
         .await
         .unwrap()
@@ -472,18 +509,29 @@ async fn all_domains_share_one_logical_id_and_strictly_monotonic_typed_stages() 
             serde_json::to_value(stage).unwrap()
         );
         assert_eq!(event.meta["route"], json!("anthropic_messages"));
+        assert_eq!(
+            event.meta["endpoint"],
+            serde_json::to_value(EndpointSelectionCodeV1::RevalidatedLoopback).unwrap()
+        );
+        assert_eq!(
+            event.meta["port"],
+            serde_json::to_value(PortSelectionCodeV1::FixedConfigured).unwrap()
+        );
         assert!(event.payload.is_some());
+        let json_shape_present = matches!(index, 1 | 3);
         assert_eq!(
             event.availability,
             Some(RecordedAvailability {
-                measurement_present: true,
-                json_shape_present: true,
-                json_omission: None,
+                measurement_present: false,
+                measurement_omission: Some(ProjectionOmissionReasonV1::ProjectionFailedClosed),
+                json_shape_present,
+                json_omission: (!json_shape_present)
+                    .then_some(ProjectionOmissionReasonV1::ProjectionFailedClosed),
                 sse_timeline: None,
                 sse_omission: Some(ProjectionOmissionReasonV1::UnsupportedFormat),
-                pii_omission: ProjectionOmissionReasonV1::NotApplicable,
-                decision_omission: ProjectionOmissionReasonV1::NotApplicable,
-                attestation_omission: ProjectionOmissionReasonV1::NotApplicable,
+                pii_omission: ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                decision_omission: ProjectionOmissionReasonV1::ProjectionFailedClosed,
+                attestation_omission: ProjectionOmissionReasonV1::ProjectionFailedClosed,
             })
         );
     }
@@ -505,23 +553,34 @@ async fn sse_response_projects_only_the_closed_ordinal_timeline() {
     wait_for_events(&sink, 4).await;
 
     let events = sink.events.lock().unwrap();
-    for event in &events[..2] {
+    for (index, event) in events[..2].iter().enumerate() {
         let availability = event.availability.as_ref().unwrap();
-        assert!(availability.json_shape_present);
-        assert_eq!(availability.json_omission, None);
+        assert_eq!(availability.json_shape_present, index == 1);
+        assert_eq!(
+            availability.json_omission,
+            (index == 0).then_some(ProjectionOmissionReasonV1::ProjectionFailedClosed)
+        );
         assert_eq!(availability.sse_timeline, None);
         assert_eq!(
             availability.sse_omission,
             Some(ProjectionOmissionReasonV1::UnsupportedFormat)
         );
     }
-    for event in &events[2..] {
+    for (index, event) in events[2..].iter().enumerate() {
         let availability = event.availability.as_ref().unwrap();
         assert!(!availability.json_shape_present);
         assert_eq!(
             availability.json_omission,
             Some(ProjectionOmissionReasonV1::UnsupportedFormat)
         );
+        if index == 0 {
+            assert_eq!(
+                availability.sse_omission,
+                Some(ProjectionOmissionReasonV1::ProjectionFailedClosed)
+            );
+            assert_eq!(availability.sse_timeline, None);
+            continue;
+        }
         assert_eq!(availability.sse_omission, None);
         let entries = availability.sse_timeline.as_ref().unwrap()["entries"]
             .as_array()
@@ -537,6 +596,85 @@ async fn sse_response_projects_only_the_closed_ordinal_timeline() {
         assert_eq!(entries[2]["event_kind"], json!("content_block_delta"));
         assert_eq!(entries[2]["delta_kind"], json!({"present": "text"}));
         assert_eq!(entries[2]["content_block"], json!({"present": 0}));
+    }
+}
+
+#[tokio::test]
+async fn signed_request_non_stream_and_sse_surfaces_are_omitted_whole() {
+    let upstream = spawn_upstream().await;
+    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
+    let proxy = spawn_proxy(
+        &upstream,
+        Some(install(CaptureDomainsV1::All, Arc::clone(&sink))),
+    )
+    .await;
+
+    let signed_request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{
+            "role": "assistant",
+            "content": [{
+                "type": "thinking",
+                "thinking": "synthetic reasoning",
+                "signature": "opaque-synthetic-signature"
+            }]
+        }]
+    });
+    assert_eq!(
+        request_json(&proxy, "/v1/messages", signed_request)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    wait_for_events(&sink, 4).await;
+
+    let signed_response = json!({
+        "model": "claude-signed-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": "synthetic response request"}],
+        "stream": false
+    });
+    assert_eq!(
+        request_json(&proxy, "/v1/messages", signed_response)
+            .await
+            .status(),
+        StatusCode::OK
+    );
+    wait_for_events(&sink, 8).await;
+
+    let signed_sse = json!({
+        "model": "claude-signed-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": "synthetic stream request"}],
+        "stream": true
+    });
+    let response = request_json(&proxy, "/v1/messages", signed_sse).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    wait_for_events(&sink, 12).await;
+
+    let events = sink.events.lock().unwrap();
+    for event in [
+        &events[0],
+        &events[1],
+        &events[6],
+        &events[7],
+        &events[10],
+        &events[11],
+    ] {
+        assert_eq!(event.payload, None);
+        assert_eq!(event.availability, None);
+        assert!(matches!(
+            event.kind,
+            InspectionEventKindV1::Omitted {
+                reason: ProjectionOmissionReasonV1::SignedOrEncryptedSurface,
+                ..
+            }
+        ));
+        let encoded = serde_json::to_string(&event.meta).unwrap();
+        assert!(!encoded.contains("opaque-synthetic-signature"));
+        assert!(!encoded.contains("synthetic reasoning"));
     }
 }
 

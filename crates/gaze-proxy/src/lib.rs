@@ -18,6 +18,7 @@ pub mod codec;
     reason = "codec probes are consumed by the next server integration checkpoint"
 )]
 pub mod codecs;
+pub(crate) use codecs::anthropic;
 #[cfg(feature = "proxy-daemon")]
 pub mod daemon;
 pub mod error;
