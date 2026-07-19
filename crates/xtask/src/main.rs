@@ -21,6 +21,7 @@ mod safety_net_sanity;
 mod scrub_public_text;
 mod tokenbridge_encrypted_index;
 mod tokenbridge_no_raw_index;
+mod trybuild_fixture_hygiene;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about)]
@@ -46,6 +47,7 @@ enum Command {
     SafetyNetSanity,
     TokenbridgeEncryptedIndex,
     TokenbridgeNoRawIndex(tokenbridge_no_raw_index::Args),
+    TrybuildFixtureHygiene,
     McpTierIsolation,
     PublishPlan,
     ReadmeVersionCheck,
@@ -70,6 +72,7 @@ fn main() -> Result<()> {
         Command::SafetyNetSanity => safety_net_sanity::run(),
         Command::TokenbridgeEncryptedIndex => tokenbridge_encrypted_index::run(),
         Command::TokenbridgeNoRawIndex(args) => tokenbridge_no_raw_index::run(args),
+        Command::TrybuildFixtureHygiene => trybuild_fixture_hygiene::run(),
         Command::McpTierIsolation => mcp_tier_isolation::run(),
         Command::PublishPlan => publish_plan::run(),
         Command::ReadmeVersionCheck => readme_version_check::run(),

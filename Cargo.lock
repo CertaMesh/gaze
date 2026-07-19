@@ -1472,6 +1472,7 @@ dependencies = [
  "gaze-types",
  "serde",
  "serde_json",
+ "static_assertions",
  "trybuild",
  "zeroize",
 ]

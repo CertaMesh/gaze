@@ -22,6 +22,7 @@ zeroize = "1"
 [dev-dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+static_assertions = "1"
 trybuild = "1"
 
 [features]

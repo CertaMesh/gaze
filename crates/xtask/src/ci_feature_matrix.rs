@@ -54,6 +54,11 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         args: &["run", "-p", "xtask", "--", "fixture-citation-lint"],
     },
     MatrixCommand {
+        label: "cargo run -p xtask -- trybuild-fixture-hygiene",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "trybuild-fixture-hygiene"],
+    },
+    MatrixCommand {
         label: "cargo run -p xtask -- family-policy-table-coherence",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "family-policy-table-coherence"],
@@ -172,6 +177,7 @@ const REQUIRED_NO_PHONE_PARSER_TEST_COUNT: &str = "running 2 tests";
 const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
 const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
 const REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK: &str = "tokenbridge-encrypted-index";
+const REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK: &str = "trybuild-fixture-hygiene";
 const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
     label:
         "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
@@ -256,6 +262,17 @@ fn ensure_matrix_contract() -> Result<()> {
         );
     }
 
+    if !FEATURE_MATRIX.iter().any(|command| {
+        command
+            .args
+            .contains(&REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK)
+    }) {
+        bail!(
+            "ci_feature_matrix: feature matrix must run xtask {}",
+            REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK
+        );
+    }
+
     Ok(())
 }
 
@@ -311,6 +328,8 @@ fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
         "CARGO_HOME",
         "RUSTUP_HOME",
         "RUSTUP_TOOLCHAIN",
+        "RUSTC",
+        "RUSTDOC",
         "LANG",
         "LC_ALL",
         "CI",
