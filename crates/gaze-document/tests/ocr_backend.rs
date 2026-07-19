@@ -53,24 +53,30 @@ fn tesseract_backend_recognizes_synthetic_image_spans() {
 
 #[cfg(target_os = "macos")]
 #[test]
-fn tesseract_backend_canonicalizes_logical_tmp_input() {
+fn tesseract_backend_normalizes_logical_tmp_without_resolving_interior_symlink() {
     use std::io::Write as _;
-    use std::os::unix::fs::PermissionsExt as _;
+    use std::os::unix::fs::{symlink, PermissionsExt as _};
     use std::path::Path;
 
     let task_dir = tempfile::Builder::new()
         .prefix("gaze-tesseract-boundary-")
         .tempdir_in("/private/tmp")
         .expect("task-local physical tempdir");
-    let physical_input = task_dir.path().join("synthetic-image.png");
+    let hidden_dir = task_dir.path().join("synthetic-hidden-target");
+    std::fs::create_dir(&hidden_dir).expect("create synthetic hidden target");
+    let physical_input = hidden_dir.join("synthetic-image.png");
     std::fs::copy(testdata_dir().join("synthetic_image.png"), &physical_input)
         .expect("copy synthetic fixture");
+    let safe_alias = task_dir.path().join("safe-alias");
+    symlink(&hidden_dir, &safe_alias).expect("create synthetic safe alias");
 
-    let logical_input = Path::new("/").join(
-        physical_input
+    let logical_task_dir = Path::new("/").join(
+        task_dir
+            .path()
             .strip_prefix("/private")
             .expect("physical temp path starts with /private"),
     );
+    let logical_input = logical_task_dir.join("safe-alias/synthetic-image.png");
     assert!(logical_input.starts_with("/tmp"));
     assert!(logical_input.exists());
 
@@ -79,12 +85,13 @@ fn tesseract_backend_canonicalizes_logical_tmp_input() {
     fake.write_all(
         br#"#!/bin/sh
 case "$1" in
-  /tmp|/tmp/*) exit 64 ;;
+  /tmp|/tmp/*) printf 'logical tmp rejected: %s\n' "$1" >&2; exit 64 ;;
   /private/tmp/*) ;;
-  *) exit 65 ;;
+  *) printf 'unexpected input: %s\n' "$1" >&2; exit 65 ;;
 esac
 [ -r "$1" ] || exit 66
-printf 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t0\t0\t10\t10\t99\tSynthetic\n'
+printf 'synthetic argv: %s\n' "$1" >&2
+exit 67
 "#,
     )
     .expect("write fake tesseract");
@@ -95,11 +102,25 @@ printf 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidt
     let mut backend = TesseractBackend::new();
     backend.binary = Some(fake_tesseract);
 
-    let result = backend
+    let failure = backend
         .extract_from_file(&logical_input)
-        .expect("logical /tmp input is normalized at the Tesseract boundary");
-    assert_eq!(result.text, "Synthetic");
-    assert_eq!(result.word_count, 1);
+        .expect_err("synthetic fake tesseract must fail closed");
+    let stderr = match &failure {
+        DocumentError::TesseractFailed { status: 67, stderr } => stderr,
+        other => panic!("unexpected prefix/disclosure error: {other}"),
+    };
+    assert!(
+        stderr.contains("/private/tmp"),
+        "unexpected stderr: {stderr}"
+    );
+    assert!(stderr.contains("safe-alias"), "unexpected stderr: {stderr}");
+    assert!(
+        !stderr.contains("synthetic-hidden-target"),
+        "physical target escaped through stderr: {stderr}"
+    );
+    let agent_facing_error = failure.to_string();
+    assert!(agent_facing_error.contains("safe-alias"));
+    assert!(!agent_facing_error.contains("synthetic-hidden-target"));
 
     std::fs::set_permissions(&physical_input, std::fs::Permissions::from_mode(0o000))
         .expect("make synthetic input unreadable");
