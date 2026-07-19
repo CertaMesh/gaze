@@ -77,6 +77,11 @@ impl TesseractBackend {
             .map(AsRef::as_ref)
             .unwrap_or_else(|| "tesseract".as_ref());
 
+        #[cfg(target_os = "macos")]
+        let canonical_path = path.canonicalize()?;
+        #[cfg(target_os = "macos")]
+        let path = canonical_path.as_path();
+
         let output = Command::new(binary)
             .arg(path)
             .arg("stdout")
