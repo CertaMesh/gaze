@@ -1,6 +1,6 @@
 use std::net::{SocketAddr, TcpListener as StdTcpListener};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
 
 use axum::body::{to_bytes, Body};
@@ -29,7 +29,7 @@ use url::Url;
 
 const SYNTHETIC_EMAIL: &str = "alice@example.invalid";
 const PRIMING_PLACEHOLDER: &str = "synthetic inspection priming";
-const PRIMING_ATTEMPT_LIMIT: usize = 8;
+const COMPLETION_PLACEHOLDER: &str = "synthetic inspection completion";
 
 #[derive(Clone, Copy)]
 enum SinkBehavior {
@@ -63,6 +63,7 @@ struct RecordingSink {
     behavior: SinkBehavior,
     events: Mutex<Vec<RecordedEvent>>,
     gate: Option<Arc<SinkGate>>,
+    test_control: Option<Arc<SinkTestControl>>,
 }
 
 impl RecordingSink {
@@ -71,14 +72,20 @@ impl RecordingSink {
             behavior,
             events: Mutex::new(Vec::new()),
             gate: None,
+            test_control: None,
         }
     }
 
-    fn gated(behavior: SinkBehavior, gate: Arc<SinkGate>) -> Self {
+    fn gated(
+        behavior: SinkBehavior,
+        gate: Arc<SinkGate>,
+        test_control: Option<Arc<SinkTestControl>>,
+    ) -> Self {
         Self {
             behavior,
             events: Mutex::new(Vec::new()),
             gate: Some(gate),
+            test_control,
         }
     }
 
@@ -99,7 +106,11 @@ impl InspectionSink for RecordingSink {
     fn try_emit(&self, event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
         let logical_id = event.meta().logical_id();
         if let Some(gate) = &self.gate {
-            if gate.enter_and_wait(logical_id) {
+            let class = gate.classify(logical_id);
+            if let Some(control) = &self.test_control {
+                control.before_event(class, event.meta().stage_domain());
+            }
+            if gate.enter_and_wait(logical_id, event.meta().stage_domain(), class) {
                 return self.delivery_result();
             }
         }
@@ -127,28 +138,185 @@ impl InspectionSink for RecordingSink {
 
 const SINK_GATE_TIMEOUT: Duration = Duration::from_secs(3);
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SinkEventClass {
+    Priming,
+    Real,
+    Completion,
+}
+
+struct SinkPause {
+    entered: AtomicBool,
+    entered_notify: tokio::sync::Notify,
+    released: Mutex<bool>,
+    released_notify: Condvar,
+}
+
+impl SinkPause {
+    fn new() -> Self {
+        Self {
+            entered: AtomicBool::new(false),
+            entered_notify: tokio::sync::Notify::new(),
+            released: Mutex::new(false),
+            released_notify: Condvar::new(),
+        }
+    }
+
+    fn enter_and_wait(&self) {
+        if self.entered.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.entered_notify.notify_one();
+        let released = self
+            .released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (released, timeout) = self
+            .released_notify
+            .wait_timeout_while(released, SINK_GATE_TIMEOUT, |released| !*released)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if timeout.timed_out() && !*released {
+            panic!("synthetic inspection test pause timed out after {SINK_GATE_TIMEOUT:?}");
+        }
+    }
+
+    async fn wait_until_entered(&self) {
+        let entered = self.entered_notify.notified();
+        if !self.entered.load(Ordering::Acquire) {
+            tokio::time::timeout(SINK_GATE_TIMEOUT, entered)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "synthetic inspection test pause was not entered after {SINK_GATE_TIMEOUT:?}"
+                    )
+                });
+        }
+        assert!(
+            self.entered.load(Ordering::Acquire),
+            "synthetic inspection test pause notification lacked entered state"
+        );
+    }
+
+    fn release(&self) {
+        let mut released = self
+            .released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *released = true;
+        self.released_notify.notify_all();
+    }
+}
+
+struct SinkPauseRelease(Arc<SinkPause>);
+
+impl SinkPauseRelease {
+    fn new(pause: Arc<SinkPause>) -> Self {
+        Self(pause)
+    }
+}
+
+impl Drop for SinkPauseRelease {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
+struct SinkTestControl {
+    readiness_pause: Option<Arc<SinkPause>>,
+    readiness_pause_used: AtomicBool,
+    real_event_pause: Option<(usize, Arc<SinkPause>)>,
+    completion_pause: Option<Arc<SinkPause>>,
+    real_event_count: AtomicUsize,
+}
+
+impl SinkTestControl {
+    fn new(
+        readiness_pause: Option<Arc<SinkPause>>,
+        real_event_pause: Option<(usize, Arc<SinkPause>)>,
+        completion_pause: Option<Arc<SinkPause>>,
+    ) -> Self {
+        Self {
+            readiness_pause,
+            readiness_pause_used: AtomicBool::new(false),
+            real_event_pause,
+            completion_pause,
+            real_event_count: AtomicUsize::new(0),
+        }
+    }
+
+    fn before_event(&self, class: SinkEventClass, stage: InspectionStageDomainV1) {
+        match class {
+            SinkEventClass::Priming => {
+                if let Some(pause) = &self.readiness_pause {
+                    if !self.readiness_pause_used.swap(true, Ordering::AcqRel) {
+                        pause.enter_and_wait();
+                    }
+                }
+            }
+            SinkEventClass::Real => {
+                let ordinal = self.real_event_count.fetch_add(1, Ordering::AcqRel) + 1;
+                if let Some((target, pause)) = &self.real_event_pause {
+                    if ordinal == *target {
+                        pause.enter_and_wait();
+                    }
+                }
+            }
+            SinkEventClass::Completion
+                if stage == InspectionStageDomainV1::OwnerRestoredResponse =>
+            {
+                if let Some(pause) = &self.completion_pause {
+                    pause.enter_and_wait();
+                }
+            }
+            SinkEventClass::Completion => {}
+        }
+    }
+}
+
 struct SinkGate {
     armed: AtomicBool,
-    priming_id: std::sync::OnceLock<LogicalInspectionIdV1>,
+    priming_request_count: AtomicUsize,
+    priming_ids: Mutex<Vec<LogicalInspectionIdV1>>,
+    parked_priming_id: OnceLock<LogicalInspectionIdV1>,
     entered: AtomicBool,
     entered_notify: tokio::sync::Notify,
     released: Mutex<bool>,
     released_notify: Condvar,
     released_observed: AtomicBool,
     timed_out: AtomicBool,
+    real_request_count: OnceLock<usize>,
+    real_ids: Mutex<Vec<LogicalInspectionIdV1>>,
+    completion_id: OnceLock<LogicalInspectionIdV1>,
+    completion_entered: AtomicBool,
+    completion_entered_notify: tokio::sync::Notify,
+    completion_released: Mutex<bool>,
+    completion_released_notify: Condvar,
+    completion_released_observed: AtomicBool,
+    completion_timed_out: AtomicBool,
 }
 
 impl SinkGate {
     fn new() -> Self {
         Self {
             armed: AtomicBool::new(false),
-            priming_id: std::sync::OnceLock::new(),
+            priming_request_count: AtomicUsize::new(0),
+            priming_ids: Mutex::new(Vec::new()),
+            parked_priming_id: OnceLock::new(),
             entered: AtomicBool::new(false),
             entered_notify: tokio::sync::Notify::new(),
             released: Mutex::new(false),
             released_notify: Condvar::new(),
             released_observed: AtomicBool::new(false),
             timed_out: AtomicBool::new(false),
+            real_request_count: OnceLock::new(),
+            real_ids: Mutex::new(Vec::new()),
+            completion_id: OnceLock::new(),
+            completion_entered: AtomicBool::new(false),
+            completion_entered_notify: tokio::sync::Notify::new(),
+            completion_released: Mutex::new(false),
+            completion_released_notify: Condvar::new(),
+            completion_released_observed: AtomicBool::new(false),
+            completion_timed_out: AtomicBool::new(false),
         }
     }
 
@@ -158,7 +326,10 @@ impl SinkGate {
             "synthetic inspection priming gate was armed more than once"
         );
         assert!(
-            self.priming_id().is_none(),
+            self.priming_ids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_empty(),
             "synthetic inspection priming gate claimed a logical ID before arming"
         );
         assert!(
@@ -167,16 +338,104 @@ impl SinkGate {
         );
     }
 
-    fn enter_and_wait(&self, logical_id: LogicalInspectionIdV1) -> bool {
+    fn register_priming_request(&self) {
+        assert!(
+            self.armed.load(Ordering::Acquire),
+            "synthetic inspection priming request was registered before arming"
+        );
+        assert!(
+            self.real_request_count.get().is_none(),
+            "synthetic inspection priming request was registered after completion preparation"
+        );
+        assert!(
+            !self.released_observed.load(Ordering::Acquire),
+            "synthetic inspection priming request was registered after release"
+        );
+        self.priming_request_count.fetch_add(1, Ordering::AcqRel);
+    }
+
+    fn prepare_completion(&self, real_request_count: usize) {
+        assert!(real_request_count > 0);
+        self.real_request_count
+            .set(real_request_count)
+            .unwrap_or_else(|_| {
+                panic!("synthetic inspection completion was prepared more than once")
+            });
+    }
+
+    fn classify(&self, logical_id: LogicalInspectionIdV1) -> SinkEventClass {
         if !self.armed.load(Ordering::Acquire) {
-            return false;
+            return SinkEventClass::Real;
         }
-        let priming_id = *self.priming_id.get_or_init(|| logical_id);
+
+        let expected_priming = self.priming_request_count.load(Ordering::Acquire);
+        {
+            let mut priming_ids = self
+                .priming_ids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if priming_ids.contains(&logical_id) {
+                return SinkEventClass::Priming;
+            }
+            if priming_ids.len() < expected_priming {
+                priming_ids.push(logical_id);
+                return SinkEventClass::Priming;
+            }
+        }
+
+        let expected_real = *self.real_request_count.get().unwrap_or_else(|| {
+            panic!("real inspection event reached the sink before completion preparation")
+        });
+        {
+            let mut real_ids = self
+                .real_ids
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if real_ids.contains(&logical_id) {
+                return SinkEventClass::Real;
+            }
+            if real_ids.len() < expected_real {
+                real_ids.push(logical_id);
+                return SinkEventClass::Real;
+            }
+        }
+
+        let completion_id = *self.completion_id.get_or_init(|| logical_id);
+        assert_eq!(
+            logical_id, completion_id,
+            "more than one logical request followed the declared real inspection requests"
+        );
+        SinkEventClass::Completion
+    }
+
+    fn enter_and_wait(
+        &self,
+        logical_id: LogicalInspectionIdV1,
+        stage: InspectionStageDomainV1,
+        class: SinkEventClass,
+    ) -> bool {
+        match class {
+            SinkEventClass::Priming => {
+                self.enter_priming_and_wait(logical_id);
+                true
+            }
+            SinkEventClass::Real => false,
+            SinkEventClass::Completion => {
+                if stage == InspectionStageDomainV1::OwnerRestoredResponse {
+                    self.enter_completion_and_wait(logical_id);
+                }
+                true
+            }
+        }
+    }
+
+    fn enter_priming_and_wait(&self, logical_id: LogicalInspectionIdV1) {
+        let priming_id = *self.parked_priming_id.get_or_init(|| logical_id);
         if logical_id != priming_id {
-            return false;
+            return;
         }
         if self.entered.swap(true, Ordering::AcqRel) {
-            return true;
+            return;
         }
         self.entered_notify.notify_one();
 
@@ -196,21 +455,81 @@ impl SinkGate {
                 priming_id.get()
             );
         }
-        true
     }
 
-    async fn entered_after_response_drain(&self) -> bool {
+    async fn wait_until_priming_parked(&self, deadline: tokio::time::Instant) {
         let entered = self.entered_notify.notified();
-        if self.entered.load(Ordering::Acquire) {
-            return true;
+        if !self.entered.load(Ordering::Acquire) {
+            tokio::time::timeout_at(deadline, entered)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "synthetic inspection priming gate did not enter before the {SINK_GATE_TIMEOUT:?} readiness deadline; priming_requests={} priming_ids={} timed_out={}",
+                        self.priming_request_count.load(Ordering::Acquire),
+                        self.priming_id_count(),
+                        self.timed_out.load(Ordering::Acquire)
+                    )
+                });
         }
-        tokio::select! {
-            () = entered => true,
-            () = tokio::task::yield_now() => self.entered.load(Ordering::Acquire),
+        assert!(
+            self.entered.load(Ordering::Acquire),
+            "synthetic inspection priming notification lacked entered state"
+        );
+    }
+
+    fn enter_completion_and_wait(&self, logical_id: LogicalInspectionIdV1) {
+        assert_eq!(
+            self.completion_id.get().copied(),
+            Some(logical_id),
+            "completion gate was entered by an unclassified logical request"
+        );
+        if self.completion_entered.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.completion_entered_notify.notify_one();
+
+        let released = self
+            .completion_released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let (released, timeout) = self
+            .completion_released_notify
+            .wait_timeout_while(released, SINK_GATE_TIMEOUT, |released| !*released)
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if timeout.timed_out() && !*released {
+            self.completion_timed_out.store(true, Ordering::Release);
+            drop(released);
+            panic!(
+                "synthetic inspection completion gate timed out after {SINK_GATE_TIMEOUT:?}; entered=true released=false completion_logical_id={}",
+                logical_id.get()
+            );
         }
     }
 
-    fn release(&self) {
+    async fn wait_until_completion_parked(&self, collector_waiting: Option<&tokio::sync::Notify>) {
+        let entered = self.completion_entered_notify.notified();
+        if !self.completion_entered.load(Ordering::Acquire) {
+            if let Some(collector_waiting) = collector_waiting {
+                collector_waiting.notify_one();
+            }
+            tokio::time::timeout(SINK_GATE_TIMEOUT, entered)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "synthetic inspection completion gate did not enter after {SINK_GATE_TIMEOUT:?}; real_ids={} completion_id_present={} timed_out={}",
+                        self.real_id_count(),
+                        self.completion_id.get().is_some(),
+                        self.completion_timed_out.load(Ordering::Acquire)
+                    )
+                });
+        }
+        assert!(
+            self.completion_entered.load(Ordering::Acquire),
+            "synthetic inspection completion notification lacked entered state"
+        );
+    }
+
+    fn release_priming(&self) {
         let mut released = self
             .released
             .lock()
@@ -220,8 +539,36 @@ impl SinkGate {
         self.released_notify.notify_all();
     }
 
-    fn priming_id(&self) -> Option<LogicalInspectionIdV1> {
-        self.priming_id.get().copied()
+    fn release_completion(&self) {
+        let mut released = self
+            .completion_released
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *released = true;
+        self.completion_released_observed
+            .store(true, Ordering::Release);
+        self.completion_released_notify.notify_all();
+    }
+
+    fn priming_id_count(&self) -> usize {
+        self.priming_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
+    }
+
+    fn is_priming_id(&self, logical_id: LogicalInspectionIdV1) -> bool {
+        self.priming_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(&logical_id)
+    }
+
+    fn real_id_count(&self) -> usize {
+        self.real_ids
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .len()
     }
 
     fn assert_parked(&self) {
@@ -234,7 +581,7 @@ impl SinkGate {
             "synthetic inspection priming gate was never entered"
         );
         assert!(
-            self.priming_id().is_some(),
+            self.parked_priming_id.get().is_some(),
             "synthetic inspection priming gate entered without a logical ID"
         );
         assert!(
@@ -244,6 +591,47 @@ impl SinkGate {
         assert!(
             !self.timed_out.load(Ordering::Acquire),
             "synthetic inspection priming gate timed out before explicit release"
+        );
+    }
+
+    fn assert_completion_parked(&self) {
+        assert!(
+            self.entered.load(Ordering::Acquire),
+            "synthetic inspection priming gate was never entered"
+        );
+        assert!(
+            self.released_observed.load(Ordering::Acquire),
+            "synthetic inspection priming gate was not released"
+        );
+        assert!(
+            !self.timed_out.load(Ordering::Acquire),
+            "synthetic inspection priming gate timed out before explicit release"
+        );
+        assert!(
+            self.completion_entered.load(Ordering::Acquire),
+            "synthetic inspection completion gate was never entered"
+        );
+        assert!(
+            self.completion_id.get().is_some(),
+            "synthetic inspection completion gate entered without a logical ID"
+        );
+        assert_eq!(
+            self.priming_id_count(),
+            self.priming_request_count.load(Ordering::Acquire),
+            "not every registered priming request reached the dispatcher"
+        );
+        assert_eq!(
+            self.real_id_count(),
+            *self.real_request_count.get().unwrap(),
+            "not every declared real request reached the dispatcher"
+        );
+        assert!(
+            !self.completion_released_observed.load(Ordering::Acquire),
+            "synthetic inspection completion gate was released before collection"
+        );
+        assert!(
+            !self.completion_timed_out.load(Ordering::Acquire),
+            "synthetic inspection completion gate timed out before collection"
         );
     }
 
@@ -260,6 +648,18 @@ impl SinkGate {
             !self.timed_out.load(Ordering::Acquire),
             "synthetic inspection priming gate timed out before explicit release"
         );
+        assert!(
+            self.completion_entered.load(Ordering::Acquire),
+            "synthetic inspection completion gate was never entered"
+        );
+        assert!(
+            self.completion_released_observed.load(Ordering::Acquire),
+            "synthetic inspection completion gate was not released"
+        );
+        assert!(
+            !self.completion_timed_out.load(Ordering::Acquire),
+            "synthetic inspection completion gate timed out before explicit release"
+        );
     }
 }
 
@@ -273,7 +673,8 @@ impl SinkGateRelease {
 
 impl Drop for SinkGateRelease {
     fn drop(&mut self) {
-        self.0.release();
+        self.0.release_priming();
+        self.0.release_completion();
     }
 }
 
@@ -415,11 +816,20 @@ impl PrimedInspectionHarness {
     }
 
     async fn unprimed(upstream: &RunningServer, domains: CaptureDomainsV1) -> Self {
+        Self::unprimed_with_test_control(upstream, domains, None).await
+    }
+
+    async fn unprimed_with_test_control(
+        upstream: &RunningServer,
+        domains: CaptureDomainsV1,
+        test_control: Option<Arc<SinkTestControl>>,
+    ) -> Self {
         let gate = Arc::new(SinkGate::new());
         let gate_release = SinkGateRelease::new(Arc::clone(&gate));
         let sink = Arc::new(RecordingSink::gated(
             SinkBehavior::Capture,
             Arc::clone(&gate),
+            test_control,
         ));
         let proxy = spawn_proxy(upstream, Some(install(domains, Arc::clone(&sink)))).await;
 
@@ -438,25 +848,18 @@ impl PrimedInspectionHarness {
             "inspection priming must start without recorded events"
         );
         self.gate.arm();
-        for attempt in 1..=PRIMING_ATTEMPT_LIMIT {
-            let response = request(&self.proxy, PRIMING_PLACEHOLDER, "/v1/messages").await;
-            assert_eq!(
-                response.status(),
-                StatusCode::OK,
-                "synthetic inspection priming request {attempt} failed"
-            );
-            let _ = response.bytes().await.unwrap();
-            if self.gate.entered_after_response_drain().await {
-                break;
-            }
-            assert!(
-                attempt < PRIMING_ATTEMPT_LIMIT,
-                "synthetic inspection priming gate did not enter after {PRIMING_ATTEMPT_LIMIT} drained attempts; entered={} priming_id_present={} timed_out={}",
-                self.gate.entered.load(Ordering::Acquire),
-                self.gate.priming_id().is_some(),
-                self.gate.timed_out.load(Ordering::Acquire)
-            );
-        }
+        self.gate.register_priming_request();
+        let readiness_deadline = tokio::time::Instant::now() + SINK_GATE_TIMEOUT;
+        let response = request(&self.proxy, PRIMING_PLACEHOLDER, "/v1/messages").await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "synthetic inspection priming request failed"
+        );
+        let _ = response.bytes().await.unwrap();
+        self.gate
+            .wait_until_priming_parked(readiness_deadline)
+            .await;
         self.gate.assert_parked();
         assert_eq!(
             self.sink.len(),
@@ -465,29 +868,76 @@ impl PrimedInspectionHarness {
         );
     }
 
+    async fn enqueue_additional_priming_request(&self) {
+        self.gate.assert_parked();
+        self.gate.register_priming_request();
+        let response = request(&self.proxy, PRIMING_PLACEHOLDER, "/v1/messages").await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "additional synthetic inspection priming request failed"
+        );
+        let _ = response.bytes().await.unwrap();
+        assert_eq!(
+            self.sink.len(),
+            0,
+            "additional priming events must remain queued behind the parked dispatcher"
+        );
+    }
+
     async fn release_and_collect(&self, expected_count: usize) -> Vec<RecordedEvent> {
+        self.release_and_collect_with_fence_ack(expected_count, None)
+            .await
+    }
+
+    async fn release_and_collect_with_fence_ack(
+        &self,
+        expected_count: usize,
+        collector_waiting: Option<&tokio::sync::Notify>,
+    ) -> Vec<RecordedEvent> {
+        assert_eq!(
+            expected_count % 4,
+            0,
+            "real inspection event count must contain complete four-stage request groups"
+        );
         assert_eq!(
             self.sink.len(),
             0,
             "dispatcher must remain parked in the priming sink callback until explicit release"
         );
         self.gate.assert_parked();
-        self.gate.release();
-        wait_for_events(&self.sink, expected_count).await;
-        self.gate.assert_completed();
+        self.gate.prepare_completion(expected_count / 4);
+        let response = request(&self.proxy, COMPLETION_PLACEHOLDER, "/v1/messages").await;
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "synthetic inspection completion request failed"
+        );
+        let _ = response.bytes().await.unwrap();
+
+        self.gate.release_priming();
+        self.gate
+            .wait_until_completion_parked(collector_waiting)
+            .await;
+        self.gate.assert_completion_parked();
 
         let events = {
             let mut events = self.sink.events.lock().unwrap();
-            assert_eq!(events.len(), expected_count);
+            assert_eq!(
+                events.len(),
+                expected_count,
+                "causally drained inspection snapshot contained a non-real or incomplete event set"
+            );
             std::mem::take(&mut *events)
         };
-        let priming_id = self.gate.priming_id().unwrap();
         for event in &events {
-            assert_ne!(
-                event.logical_id, priming_id,
+            assert!(
+                !self.gate.is_priming_id(event.logical_id),
                 "priming logical ID must be filtered from the returned real events"
             );
         }
+        self.gate.release_completion();
+        self.gate.assert_completed();
         events
     }
 }
@@ -705,6 +1155,115 @@ fn normalize_meta(mut meta: Value) -> Value {
     object.remove("emission_id");
     object.remove("sequence");
     meta
+}
+
+#[tokio::test]
+async fn delayed_dispatcher_readiness_obeys_the_elapsed_deadline() {
+    let upstream = spawn_upstream().await;
+    let readiness_pause = Arc::new(SinkPause::new());
+    let _readiness_release = SinkPauseRelease::new(Arc::clone(&readiness_pause));
+    let control = Arc::new(SinkTestControl::new(
+        Some(Arc::clone(&readiness_pause)),
+        None,
+        None,
+    ));
+    let harness = PrimedInspectionHarness::unprimed_with_test_control(
+        &upstream,
+        CaptureDomainsV1::MetadataOnly,
+        Some(control),
+    )
+    .await;
+
+    tokio::join!(harness.arm_and_prime(), async {
+        readiness_pause.wait_until_entered().await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            !harness.gate.entered.load(Ordering::Acquire),
+            "readiness pause must precede priming gate entry"
+        );
+        readiness_pause.release();
+    });
+
+    let response = request(&harness.proxy, "synthetic readiness proof", "/v1/messages").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    let events = harness.release_and_collect(4).await;
+    assert_request_groups(&events, 1);
+}
+
+#[tokio::test]
+async fn extra_priming_and_delayed_ninth_event_cannot_false_green() {
+    let upstream = spawn_upstream().await;
+    let late_real_pause = Arc::new(SinkPause::new());
+    let completion_pause = Arc::new(SinkPause::new());
+    let _late_real_release = SinkPauseRelease::new(Arc::clone(&late_real_pause));
+    let _completion_release = SinkPauseRelease::new(Arc::clone(&completion_pause));
+    let control = Arc::new(SinkTestControl::new(
+        None,
+        Some((5, Arc::clone(&late_real_pause))),
+        Some(Arc::clone(&completion_pause)),
+    ));
+    let harness = PrimedInspectionHarness::unprimed_with_test_control(
+        &upstream,
+        CaptureDomainsV1::MetadataOnly,
+        Some(control),
+    )
+    .await;
+    harness.arm_and_prime().await;
+    harness.enqueue_additional_priming_request().await;
+
+    let response = request(&harness.proxy, "short synthetic text", "/v1/messages").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+    let response = request(
+        &harness.proxy,
+        &format!("longer synthetic text with {SYNTHETIC_EMAIL}"),
+        "/v1/messages",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.bytes().await.unwrap();
+
+    let collector_waiting = Arc::new(tokio::sync::Notify::new());
+    let collection_returned = Arc::new(tokio::sync::Notify::new());
+    let collect = async {
+        let events = harness
+            .release_and_collect_with_fence_ack(8, Some(&collector_waiting))
+            .await;
+        collection_returned.notify_one();
+        events
+    };
+    let coordinate = async {
+        late_real_pause.wait_until_entered().await;
+        assert_eq!(
+            harness.gate.priming_id_count(),
+            2,
+            "every issued priming request must have a classified logical ID"
+        );
+        assert_eq!(
+            harness.sink.len(),
+            4,
+            "extra priming events must not replace the delayed second real request"
+        );
+        late_real_pause.release();
+
+        completion_pause.wait_until_entered().await;
+        assert_eq!(
+            harness.sink.len(),
+            8,
+            "all real events must precede the completion fence"
+        );
+        tokio::select! {
+            biased;
+            _ = collection_returned.notified() => {
+                panic!("minimum-count collection returned before the causal completion fence");
+            }
+            _ = collector_waiting.notified() => {}
+        }
+        completion_pause.release();
+    };
+    let (events, ()) = tokio::join!(collect, coordinate);
+    assert_request_groups(&events, 2);
 }
 
 #[tokio::test]
