@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fs, path::Path};
 
 use anyhow::{bail, Context, Result};
 
-use crate::{ensure_test_exists, run_behavioral_test, BehavioralTest};
+use crate::{ensure_test_exists, run_behavioral_test, BehavioralTarget, BehavioralTest};
 
 const ALLOWLIST_PATH: &str = "lint/data/safety-net-class-allowlist.toml";
 const OPENAI_CLASS_MAP_PATH: &str =
@@ -15,22 +15,22 @@ const GAZE_TYPES_PATH: &str = "crates/gaze-types/src/lib.rs";
 const CLASS_MAP_OVERRIDE_SAFETY_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
         package: "gaze-assembly",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "tests::t20_context_class_map_overrides_policy_dict_class",
     },
     BehavioralTest {
         package: "gaze-assembly",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "tests::t20a_class_map_override_fails_closed_when_action_rule_uncovered",
     },
     BehavioralTest {
         package: "gaze-assembly",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "tests::t20b_rulepack_context_dict_override_fails_closed_when_uncovered",
     },
     BehavioralTest {
         package: "gaze-cli",
-        test_target: Some("cli_pipe"),
+        target: BehavioralTarget::Integration("cli_pipe"),
         name: "context_json_standalone_dictionary_detects_without_policy_entry",
     },
 ];

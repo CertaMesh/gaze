@@ -5,17 +5,17 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 
-use crate::{ensure_test_exists, run_behavioral_test, BehavioralTest};
+use crate::{ensure_test_exists, run_behavioral_test, BehavioralTarget, BehavioralTest};
 
 const README_VERSION_CHECK_TESTS: &[BehavioralTest] = &[
     BehavioralTest {
         package: "xtask",
-        test_target: None,
+        target: BehavioralTarget::Bin("xtask"),
         name: "readme_version_check::tests::readme_version_check_accepts_matching_fixture",
     },
     BehavioralTest {
         package: "xtask",
-        test_target: None,
+        target: BehavioralTarget::Bin("xtask"),
         name: "readme_version_check::tests::readme_version_check_rejects_mismatched_fixture",
     },
 ];
