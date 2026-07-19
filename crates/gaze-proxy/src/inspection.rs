@@ -375,32 +375,46 @@ mod tests {
 
     #[derive(Default)]
     struct BlockingSink {
-        entered: Mutex<bool>,
+        entered: Mutex<usize>,
         entered_changed: Condvar,
         released: Mutex<bool>,
         released_changed: Condvar,
+        completed: Mutex<usize>,
+        completed_changed: Condvar,
     }
 
     impl BlockingSink {
-        fn wait_until_entered(&self) {
+        fn wait_until_entered(&self, exact: usize) {
             let guard = self.entered.lock().unwrap();
             let (guard, timeout) = self
                 .entered_changed
-                .wait_timeout_while(guard, Duration::from_secs(2), |entered| !*entered)
+                .wait_timeout_while(guard, Duration::from_secs(2), |entered| *entered < exact)
                 .unwrap();
             assert!(!timeout.timed_out());
-            assert!(*guard);
+            assert_eq!(*guard, exact);
         }
 
         fn release(&self) {
             *self.released.lock().unwrap() = true;
             self.released_changed.notify_all();
         }
+
+        fn wait_until_completed(&self, exact: usize) {
+            let guard = self.completed.lock().unwrap();
+            let (guard, timeout) = self
+                .completed_changed
+                .wait_timeout_while(guard, Duration::from_secs(2), |completed| {
+                    *completed < exact
+                })
+                .unwrap();
+            assert!(!timeout.timed_out());
+            assert_eq!(*guard, exact);
+        }
     }
 
     impl InspectionSink for BlockingSink {
         fn try_emit(&self, _event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
-            *self.entered.lock().unwrap() = true;
+            *self.entered.lock().unwrap() += 1;
             self.entered_changed.notify_all();
             let guard = self.released.lock().unwrap();
             drop(
@@ -408,7 +422,26 @@ mod tests {
                     .wait_while(guard, |released| !*released)
                     .unwrap(),
             );
+            *self.completed.lock().unwrap() += 1;
+            self.completed_changed.notify_all();
             Ok(())
+        }
+    }
+
+    struct ParkedDispatcher {
+        sink: Arc<BlockingSink>,
+    }
+
+    impl ParkedDispatcher {
+        fn release_and_wait(self, exact_deliveries: usize) {
+            self.sink.release();
+            self.sink.wait_until_completed(exact_deliveries);
+        }
+    }
+
+    impl Drop for ParkedDispatcher {
+        fn drop(&mut self) {
+            self.sink.release();
         }
     }
 
@@ -442,6 +475,50 @@ mod tests {
             );
             std::thread::yield_now();
         }
+    }
+
+    fn park_dispatcher_for_test(
+        producer: &ProxyInspectionProducerV1,
+        sink: Arc<BlockingSink>,
+    ) -> ParkedDispatcher {
+        let parked = ParkedDispatcher { sink };
+        let mut priming = begin_for_test(producer);
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let outcome = priming.emitter.try_emit_owner_request(
+                accepted_pending_fields(priming.endpoint_codes),
+                || {
+                    ProjectionAvailabilityV1::Present(owner_raw_projection(
+                        b"synthetic inspection priming",
+                    ))
+                },
+            );
+            match outcome {
+                InspectionAdmissionOutcomeV1::Accepted { .. } => break,
+                InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended) => {
+                    assert!(
+                        Instant::now() < deadline,
+                        "inspection priming stayed contended"
+                    );
+                    std::thread::yield_now();
+                }
+                outcome => panic!("inspection priming failed: {outcome:?}"),
+            }
+        }
+        parked.sink.wait_until_entered(1);
+        parked
+    }
+
+    #[test]
+    fn parked_dispatcher_releases_sink_during_unwind() {
+        let sink = Arc::new(BlockingSink::default());
+        let (producer, _consumer) = install_for_test(CaptureDomainsV1::All, sink.clone(), 1);
+        let unwind = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _parked = park_dispatcher_for_test(&producer, sink.clone());
+            panic!("synthetic panic after dispatcher parking");
+        }));
+        assert!(unwind.is_err());
+        sink.wait_until_completed(1);
     }
 
     #[test]
@@ -489,20 +566,24 @@ mod tests {
     #[test]
     fn every_capture_combination_controls_actual_codec_fact_and_projection_construction() {
         for domains in CaptureDomainsV1::ALL {
-            reset_inspection_construction_counts();
-            let (producer, _consumer) =
-                install_for_test(domains, Arc::new(NoopInspectionSinkV1), 8);
+            let sink = Arc::new(BlockingSink::default());
+            let (producer, _consumer) = install_for_test(domains, sink.clone(), 8);
+            let parked = park_dispatcher_for_test(&producer, sink);
             let mut logical = begin_for_test(&producer);
+            reset_inspection_construction_counts();
             let mut request = protect_request_for(Some(&logical));
             let request_signed = request.signed_or_encrypted_surface();
             let request_facts = request.take_inspection_parsed_facts();
             assert_eq!(inspection_construction_counts().json_sources_built, 0);
-            logical.emit_request_stages(
+            let request_outcomes = logical.emit_request_stages(
                 SAFE_REQUEST,
                 request.bytes(),
                 request_facts,
                 request_signed,
             );
+            assert!(request_outcomes
+                .iter()
+                .all(|outcome| matches!(outcome, InspectionAdmissionOutcomeV1::Accepted { .. })));
             let provider_selected = domains.captures(InspectionDomainV1::ProviderVisible);
             let request_counts = inspection_construction_counts();
             assert_eq!(
@@ -517,13 +598,16 @@ mod tests {
             let before_response_emit = inspection_construction_counts();
             assert_eq!(before_response_emit.sse_sources_built, 0);
             assert_eq!(before_response_emit.sse_timelines_built, 0);
-            logical.emit_response_stages(
+            let response_outcomes = logical.emit_response_stages(
                 SAFE_SSE,
                 response.bytes(),
                 WireFormat::Sse,
                 response_facts,
                 response_signed,
             );
+            assert!(response_outcomes
+                .iter()
+                .all(|outcome| matches!(outcome, InspectionAdmissionOutcomeV1::Accepted { .. })));
             let owner_restored_selected = domains.captures(InspectionDomainV1::OwnerRestored);
             let response_counts = inspection_construction_counts();
             assert_eq!(
@@ -534,6 +618,7 @@ mod tests {
                 response_counts.sse_timelines_built,
                 usize::from(owner_restored_selected)
             );
+            parked.release_and_wait(5);
         }
     }
 
@@ -639,11 +724,10 @@ mod tests {
 
     #[test]
     fn metadata_only_omits_every_content_projection_by_policy() {
-        let (producer, _consumer) = install_for_test(
-            CaptureDomainsV1::MetadataOnly,
-            Arc::new(NoopInspectionSinkV1),
-            4,
-        );
+        let sink = Arc::new(BlockingSink::default());
+        let (producer, _consumer) =
+            install_for_test(CaptureDomainsV1::MetadataOnly, sink.clone(), 4);
+        let parked = park_dispatcher_for_test(&producer, sink);
         let mut logical = begin_for_test(&producer);
         let outcomes = logical.emit_request_stages(
             b"synthetic owner bytes",
@@ -654,25 +738,25 @@ mod tests {
         assert!(outcomes
             .iter()
             .all(|outcome| matches!(outcome, InspectionAdmissionOutcomeV1::Accepted { .. })));
+        parked.release_and_wait(3);
     }
 
     #[test]
     fn bounded_queue_reports_queue_full_without_blocking_enforcement() {
         let sink = Arc::new(BlockingSink::default());
-        let (producer, _consumer) = install_for_test(CaptureDomainsV1::All, sink.clone(), 2);
+        let (producer, _consumer) = install_for_test(CaptureDomainsV1::All, sink.clone(), 3);
+        let parked = park_dispatcher_for_test(&producer, sink);
         let mut logical = begin_for_test(&producer);
         let request = logical.emit_request_stages(b"owner", b"provider", None, false);
         assert!(request
             .iter()
             .all(|outcome| matches!(outcome, InspectionAdmissionOutcomeV1::Accepted { .. })));
-        sink.wait_until_entered();
         reset_inspection_construction_counts();
         let mut blocked_request = protect_request_for(Some(&logical));
         let signed = blocked_request.signed_or_encrypted_surface();
         let facts = blocked_request.take_inspection_parsed_facts();
         let response =
             logical.emit_request_stages(SAFE_REQUEST, blocked_request.bytes(), facts, signed);
-        sink.release();
         assert_eq!(
             response,
             [
@@ -682,6 +766,7 @@ mod tests {
         );
         let counts = inspection_construction_counts();
         assert_eq!(counts.json_sources_built, 1);
+        parked.release_and_wait(3);
     }
 
     #[test]
