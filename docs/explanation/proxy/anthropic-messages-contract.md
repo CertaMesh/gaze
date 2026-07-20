@@ -99,6 +99,8 @@ as controls; mutable owner payload is pseudonymized through the session.
 | `image` or another opaque/unknown block | Rejected with `OpaqueMediaUninspected` (`422`) or `InvalidRequestFormat` (`400`); it is never skipped or forwarded uninspected. |
 | `tools` | Definitions use a closed schema. Descriptions plus admitted schema property names, descriptions, and enum strings are protected; tool names and structural schema controls are validated. |
 
+Every JSON member name—including owner-defined metadata, tool-input, and admitted schema-property names—must be ASCII; a non-ASCII member name fails as `InvalidRequestFormat`.
+
 ## Non-stream response matrix
 
 A successful non-stream response must be one exact Anthropic message object with
@@ -226,7 +228,8 @@ The builder may lower these defaults but cannot raise them:
 
 | Limit | Default |
 | --- | ---: |
-| Request or response body | 32 MiB |
+| Request body | 2 MiB |
+| Response body | 32 MiB |
 | JSON depth | 128 |
 | JSON nodes | 100,000 |
 | One JSON string | 4 MiB |
