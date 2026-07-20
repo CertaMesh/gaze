@@ -3321,7 +3321,7 @@ mod tests {
             .unwrap();
         let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
         let session = Session::new(Scope::Ephemeral).unwrap();
-        let body = br#"{"model":"claude-test","max_tokens":32,"system":"system-safe","tools":[{"name":"tool-safe-name","description":"tool-safe-description","input_schema":{"type":"object","description":"schema-safe-description","properties":{"property-safe":{"type":"string"}},"required":["property-safe"]}}],"metadata":{"metadata-safe-key":"metadata-safe-value"},"messages":[{"role":"user","content":"message-safe"}]}"#;
+        let body = br#"{"model":"claude-test","max_tokens":32,"system":"system-safe","tools":[{"name":"tool-safe-name","description":"tool.safe-description","input_schema":{"type":"object","description":"schema-safe-description","properties":{"property-safe":{"type":"string"}},"required":["property-safe"]}}],"metadata":{"metadata-safe-key":"metadata-safe-value"},"messages":[{"role":"user","content":"message-safe"}]}"#;
         let request = direct_request(
             Url::parse("https://api.anthropic.com/v1/messages").unwrap(),
             WireFormat::Json,

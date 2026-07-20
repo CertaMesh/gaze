@@ -1,5 +1,5 @@
 use std::net::{SocketAddr, TcpListener as StdTcpListener};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,16 +9,25 @@ use axum::http::{HeaderMap, Request, StatusCode};
 use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
-use gaze::{Action, ClassRule, DefaultRule, PiiClass, Pipeline};
+use gaze::{
+    Action, ClassRule, DefaultRule, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
+    RedactionLogger,
+};
+use gaze_inspection::{
+    ActivatedInspectionConsumerV1, InspectionEventV1, InspectionQueueLimitsV1, InspectionSink,
+    InspectionSinkErrorV1, PendingInspectionConsumerV1,
+};
 use gaze_proxy::adapters::anthropic::DEFAULT_ANTHROPIC_UPSTREAM;
 use gaze_proxy::adapters::AnthropicAdapter;
+use gaze_proxy::inspection::install_proxy_inspection_v1;
 use gaze_proxy::{
     AuthenticatedPrincipal, CodecLimits, PrincipalContext, PrincipalResolveError,
     PrincipalResolver, ProtocolContract, ProviderAdapter, ProxyConfig, ProxyErrorCode,
-    ProxyErrorPhase, SessionPolicy, SessionRegistryConfig, ANTHROPIC_PROXY_ERROR_FRAME,
-    ANTHROPIC_PROXY_PING_FRAME,
+    ProxyErrorPhase, ProxyInspectionProducerV1, SessionPolicy, SessionRegistryConfig,
+    ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
 };
 use gaze_recognizers::RegexDetector;
+use gaze_types::inspection::{CaptureDomainsV1, DashboardCaptureDescriptorV1};
 use reqwest::Client;
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
@@ -40,6 +49,42 @@ impl PrincipalResolver for RecordingResolver {
     }
 }
 
+#[derive(Clone, Default)]
+struct CountingRedactionLogger {
+    entries: Arc<AtomicUsize>,
+}
+
+impl CountingRedactionLogger {
+    fn len(&self) -> usize {
+        self.entries.load(Ordering::SeqCst)
+    }
+}
+
+impl RedactionLogger for CountingRedactionLogger {
+    fn log(&self, _entry: &RedactionEntry) -> Result<(), RedactionLogError> {
+        self.entries.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+struct CountingInspectionSink {
+    events: AtomicUsize,
+}
+
+impl CountingInspectionSink {
+    fn len(&self) -> usize {
+        self.events.load(Ordering::SeqCst)
+    }
+}
+
+impl InspectionSink for CountingInspectionSink {
+    fn try_emit(&self, _event: InspectionEventV1) -> Result<(), InspectionSinkErrorV1> {
+        self.events.fetch_add(1, Ordering::SeqCst);
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 struct UpstreamState {
     captures: Arc<Mutex<Vec<CapturedRequest>>>,
@@ -57,6 +102,7 @@ struct CapturedRequest {
 struct RunningServer {
     base_url: String,
     handle: tokio::task::JoinHandle<()>,
+    _inspection_consumer: Option<ActivatedInspectionConsumerV1>,
 }
 
 impl Drop for RunningServer {
@@ -68,12 +114,15 @@ impl Drop for RunningServer {
 struct MockUpstream {
     origin: Url,
     captures: Arc<Mutex<Vec<CapturedRequest>>>,
-    handle: tokio::task::JoinHandle<()>,
+    connections: Arc<AtomicUsize>,
+    backend_handle: tokio::task::JoinHandle<()>,
+    forwarding_handle: tokio::task::JoinHandle<()>,
 }
 
 impl Drop for MockUpstream {
     fn drop(&mut self) {
-        self.handle.abort();
+        self.backend_handle.abort();
+        self.forwarding_handle.abort();
     }
 }
 
@@ -183,30 +232,70 @@ async fn spawn_upstream_with_mode(
             invalid_stream,
             delayed_stream,
         });
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    let handle = tokio::spawn(async move {
-        axum::serve(listener, app).await.unwrap();
+    let backend_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let backend_addr = backend_listener.local_addr().unwrap();
+    let backend_handle = tokio::spawn(async move {
+        axum::serve(backend_listener, app).await.unwrap();
+    });
+    let forwarding_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let forwarding_addr = forwarding_listener.local_addr().unwrap();
+    let connections = Arc::new(AtomicUsize::new(0));
+    let connection_counter = Arc::clone(&connections);
+    let forwarding_handle = tokio::spawn(async move {
+        loop {
+            let (mut inbound, _) = forwarding_listener.accept().await.unwrap();
+            connection_counter.fetch_add(1, Ordering::SeqCst);
+            tokio::spawn(async move {
+                let mut outbound = tokio::net::TcpStream::connect(backend_addr).await.unwrap();
+                let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+            });
+        }
     });
     MockUpstream {
-        origin: Url::parse(&format!("http://{addr}")).unwrap(),
+        origin: Url::parse(&format!("http://{forwarding_addr}")).unwrap(),
         captures,
-        handle,
+        connections,
+        backend_handle,
+        forwarding_handle,
     }
 }
 
 async fn spawn_proxy(adapter: AnthropicAdapter) -> RunningServer {
+    spawn_proxy_with_observability(adapter, email_pipeline(), None).await
+}
+
+fn counting_inspection() -> (
+    ProxyInspectionProducerV1,
+    ActivatedInspectionConsumerV1,
+    Arc<CountingInspectionSink>,
+) {
+    let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::All);
+    let sink = Arc::new(CountingInspectionSink::default());
+    let limits = InspectionQueueLimitsV1::new(64, 4 * 1024 * 1024).unwrap();
+    let consumer = PendingInspectionConsumerV1::new(descriptor, sink.clone(), limits);
+    let (producer, consumer) = install_proxy_inspection_v1(descriptor, consumer).unwrap();
+    (producer, consumer, sink)
+}
+
+async fn spawn_proxy_with_observability(
+    adapter: AnthropicAdapter,
+    pipeline: Pipeline,
+    inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
+) -> RunningServer {
     let bind = unused_local_addr();
     let config = ProxyConfig::anthropic_direct(bind, adapter);
+    let (config, inspection_consumer) = match inspection {
+        Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
+        None => (config, None),
+    };
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve(config, Arc::new(email_pipeline()))
-            .await
-            .unwrap();
+        gaze_proxy::serve(config, Arc::new(pipeline)).await.unwrap();
     });
     wait_for_proxy(bind).await;
     RunningServer {
         base_url: format!("http://{bind}"),
         handle,
+        _inspection_consumer: inspection_consumer,
     }
 }
 
@@ -695,6 +784,123 @@ async fn split_logical_domain_rejects_before_upstream_io() {
         Value::String("ControlWouldMutate".to_string())
     );
     assert!(upstream.captures.lock().await.is_empty());
+}
+
+#[tokio::test]
+async fn split_opaque_carriers_reject_across_complete_request_views_without_side_effects() {
+    let upstream = spawn_upstream().await;
+    let logger = CountingRedactionLogger::default();
+    let (inspection, consumer, sink) = counting_inspection();
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        email_pipeline().with_redaction_logger(logger.clone()),
+        Some((inspection, consumer)),
+    )
+    .await;
+    let encoded_left = "A".repeat(32);
+    let encoded_right = "B".repeat(32);
+    let requests = [
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "system": "ht",
+            "messages": [{"role": "user", "content": "tps://agent.example.invalid"}]
+        }),
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "tools": [{
+                "name": "data",
+                "description": ":text/plain",
+                "input_schema": {"type": "object"}
+            }],
+            "messages": [{"role": "user", "content": "synthetic"}]
+        }),
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "fi"},
+                    {"type": "text", "text": "le:synthetic"}
+                ]
+            }]
+        }),
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{
+                "role": "assistant",
+                "content": [{
+                    "type": "tool_use",
+                    "id": "toolu_synthetic",
+                    "name": "synthetic_tool",
+                    "input": {"fragments": ["%", "2f"]}
+                }]
+            }]
+        }),
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "ht"},
+                    {"type": "redacted_thinking", "data": "opaque-synthetic-data"},
+                    {"type": "text", "text": "tps://agent.example.invalid"}
+                ]
+            }]
+        }),
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "synthetic"}],
+            "metadata": {"fragments": [encoded_left, encoded_right]}
+        }),
+    ];
+
+    for request in requests {
+        let response = sdk_client_request(&Client::new(), &proxy, false)
+            .body(serde_json::to_vec(&request).unwrap())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let error: Value = response.json().await.unwrap();
+        assert_eq!(
+            error["error"]["code"],
+            Value::String("OpaqueMediaUninspected".to_string())
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(logger.len(), 0);
+        assert_eq!(sink.len(), 0);
+        assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+        assert!(upstream.captures.lock().await.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn joined_opaque_guard_preserves_signed_bytes_without_a_joined_finding() {
+    const SIGNED_BLOCK: &[u8] = br#"{"type":"redacted_thinking","data":"opaque-synthetic-data"}"#;
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let body = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"assistant","content":[{"type":"text","text":"synthetic"},{"type":"redacted_thinking","data":"opaque-synthetic-data"},{"type":"text","text":"continuation"}]}]}"#;
+
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .body(body.as_slice())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(upstream.connections.load(Ordering::SeqCst), 1);
+    let captures = upstream.captures.lock().await;
+    assert_eq!(captures.len(), 1);
+    assert!(captures[0]
+        .body
+        .windows(SIGNED_BLOCK.len())
+        .any(|window| window == SIGNED_BLOCK));
 }
 
 #[tokio::test]

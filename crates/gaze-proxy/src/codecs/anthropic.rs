@@ -2014,13 +2014,34 @@ fn append_bounded(output: &mut String, value: &str, limit: usize) -> Result<(), 
     Ok(())
 }
 
+#[derive(Default)]
+struct RequestViewProbeOutcome {
+    would_mutate: bool,
+    contains_opaque_carrier: bool,
+}
+
+impl RequestViewProbeOutcome {
+    fn include(&mut self, other: Self) {
+        self.would_mutate |= other.would_mutate;
+        self.contains_opaque_carrier |= other.contains_opaque_carrier;
+    }
+}
+
 fn probe_request_view(
     view: &str,
     ctx: &mut RequestTransformContext<'_>,
-) -> Result<bool, CodecErrorCode> {
+) -> Result<RequestViewProbeOutcome, CodecErrorCode> {
+    let contains_opaque_carrier = match guard_mutable_text(view) {
+        Ok(()) => false,
+        Err(CodecErrorCode::OpaqueMediaUninspected) => true,
+        Err(code) => return Err(code),
+    };
     ctx.validate_token_shapes(view)?;
     let transformed = Zeroizing::new(ctx.probe_without_prefix_cache_write(view)?);
-    Ok(transformed.as_bytes() != view.as_bytes())
+    Ok(RequestViewProbeOutcome {
+        would_mutate: transformed.as_bytes() != view.as_bytes(),
+        contains_opaque_carrier,
+    })
 }
 
 fn prove_prompt_order(
@@ -2029,7 +2050,7 @@ fn prove_prompt_order(
     order: CarrierOrder,
     limit: usize,
     ctx: &mut RequestTransformContext<'_>,
-) -> Result<bool, CodecErrorCode> {
+) -> Result<RequestViewProbeOutcome, CodecErrorCode> {
     let mut components = Vec::new();
     for component in [
         PromptComponent::System,
@@ -2044,7 +2065,7 @@ fn prove_prompt_order(
         }
     }
     if components.is_empty() {
-        return Ok(false);
+        return Ok(RequestViewProbeOutcome::default());
     }
     let permutations: &[&[usize]] = match components.len() {
         1 => &[&[0]],
@@ -2059,15 +2080,15 @@ fn prove_prompt_order(
         ],
         _ => return Err(CodecErrorCode::InternalCoverageFailure),
     };
-    let mut would_mutate = false;
+    let mut outcome = RequestViewProbeOutcome::default();
     for permutation in permutations {
         let mut view = Zeroizing::new(String::new());
         for index in *permutation {
             append_bounded(&mut view, &components[*index].1, limit)?;
         }
-        would_mutate |= probe_request_view(&view, ctx)?;
+        outcome.include(probe_request_view(&view, ctx)?);
     }
-    Ok(would_mutate)
+    Ok(outcome)
 }
 
 fn prove_request_logical_domains(
@@ -2080,17 +2101,19 @@ fn prove_request_logical_domains(
         .limits()
         .max_body_bytes()
         .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES);
-    let mut would_mutate = false;
+    let mut outcome = RequestViewProbeOutcome::default();
     for order in [CarrierOrder::Semantic, CarrierOrder::Emitted] {
-        would_mutate |= prove_prompt_order(root, &inventory, order, limit, ctx)?;
+        outcome.include(prove_prompt_order(root, &inventory, order, limit, ctx)?);
     }
     if inventory.metadata_present() {
         for order in [CarrierOrder::Semantic, CarrierOrder::Emitted] {
             let view = build_metadata_view(root, &inventory, order, limit)?;
-            would_mutate |= probe_request_view(&view, ctx)?;
+            outcome.include(probe_request_view(&view, ctx)?);
         }
     }
-    if would_mutate {
+    if outcome.contains_opaque_carrier {
+        Err(CodecErrorCode::OpaqueMediaUninspected)
+    } else if outcome.would_mutate {
         Err(CodecErrorCode::ControlWouldMutate)
     } else {
         Ok(())
