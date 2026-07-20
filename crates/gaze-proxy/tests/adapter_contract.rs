@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use gaze::PrefixCacheWriteMode;
 use gaze_proxy::adapters::{GeminiAdapter, OpenAiAdapter};
 use gaze_proxy::{
     AdapterContract, AnthropicMessagesCodec, BodyCodec, CodecError, CodecErrorCode, CodecLimits,
@@ -108,6 +109,40 @@ fn accepted_codec_types_are_public_and_protocol_uses_a_borrowed_trait_object() {
     let _: Option<ResponseTransformContext<'static>> = None;
     let _: Option<&'static mut dyn RequestPseudonymizer> = None;
     let _: Option<&'static mut dyn ResponseResidualValidator> = None;
+}
+
+struct DefaultModePseudonymizer {
+    protect_calls: usize,
+}
+
+impl RequestPseudonymizer for DefaultModePseudonymizer {
+    fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        self.protect_calls += 1;
+        Ok(input.to_owned())
+    }
+
+    fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
+        Ok(())
+    }
+}
+
+#[test]
+fn default_request_pseudonymizer_allows_normal_calls_and_fails_closed_on_suppression() {
+    let mut pseudonymizer = DefaultModePseudonymizer { protect_calls: 0 };
+
+    assert_eq!(
+        pseudonymizer
+            .protect_with_prefix_cache_write_mode("synthetic", PrefixCacheWriteMode::Allow)
+            .unwrap(),
+        "synthetic"
+    );
+    assert_eq!(pseudonymizer.protect_calls, 1);
+    assert_eq!(
+        pseudonymizer
+            .protect_with_prefix_cache_write_mode("synthetic", PrefixCacheWriteMode::Suppress),
+        Err(CodecErrorCode::ProtectionFailedClosed)
+    );
+    assert_eq!(pseudonymizer.protect_calls, 1);
 }
 
 #[test]

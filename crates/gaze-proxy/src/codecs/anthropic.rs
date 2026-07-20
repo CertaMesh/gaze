@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, HashSet};
 use std::ops::Range;
 
+use zeroize::Zeroizing;
+
 #[cfg(test)]
 use std::cell::Cell;
 
@@ -142,6 +144,8 @@ impl BodyCodec for AnthropicMessagesCodec {
                 CodecPhase::RequestProof,
             ));
         }
+        prove_request_logical_domains(&reparsed.root, reparsed.occurrence_count, ctx)
+            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
         provenance.set_occurrence_count(reparsed.occurrence_count);
         verify_final_wire_proof(&bytes, &provenance, &expected_authorized, &expected_signed)
             .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
@@ -1014,6 +1018,1082 @@ impl CoverageLedger {
         } else {
             Err(CodecErrorCode::InternalCoverageFailure)
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RequestCarrierClass {
+    ReviewedConstant,
+    RoutingControl,
+    PromptMutable,
+    PromptImmutable,
+    MetadataMutable,
+    SignedOpaque,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PromptComponent {
+    System,
+    Tools,
+    Messages,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CarrierOrder {
+    Semantic,
+    Emitted,
+}
+
+#[derive(Clone, Copy)]
+enum SemanticObjectOrder {
+    Closed(&'static [&'static str]),
+    DecodedKeys,
+}
+
+#[derive(Clone, Copy)]
+struct FinalRequestCarrier<'a> {
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    text: &'a str,
+}
+
+struct FinalRequestCarrierInventory<'a> {
+    carriers: Vec<Option<FinalRequestCarrier<'a>>>,
+    object_orders: Vec<Option<SemanticObjectOrder>>,
+}
+
+impl<'a> FinalRequestCarrierInventory<'a> {
+    fn new(occurrence_count: usize) -> Self {
+        Self {
+            carriers: vec![None; occurrence_count],
+            object_orders: vec![None; occurrence_count],
+        }
+    }
+
+    fn classify(
+        &mut self,
+        occurrence: usize,
+        text: &'a str,
+        class: RequestCarrierClass,
+        component: Option<PromptComponent>,
+    ) -> Result<(), CodecErrorCode> {
+        let slot = self
+            .carriers
+            .get_mut(occurrence)
+            .ok_or(CodecErrorCode::InternalCoverageFailure)?;
+        if slot.is_some() {
+            return Err(CodecErrorCode::InternalCoverageFailure);
+        }
+        *slot = Some(FinalRequestCarrier {
+            class,
+            component,
+            text,
+        });
+        Ok(())
+    }
+
+    fn set_object_order(
+        &mut self,
+        occurrence: usize,
+        order: SemanticObjectOrder,
+    ) -> Result<(), CodecErrorCode> {
+        let slot = self
+            .object_orders
+            .get_mut(occurrence)
+            .ok_or(CodecErrorCode::InternalCoverageFailure)?;
+        if slot.is_some() {
+            return Err(CodecErrorCode::InternalCoverageFailure);
+        }
+        *slot = Some(order);
+        Ok(())
+    }
+
+    fn carrier(&self, occurrence: usize) -> Result<FinalRequestCarrier<'a>, CodecErrorCode> {
+        self.carriers
+            .get(occurrence)
+            .and_then(Option::as_ref)
+            .copied()
+            .ok_or(CodecErrorCode::InternalCoverageFailure)
+    }
+
+    fn object_order(&self, occurrence: usize) -> Result<SemanticObjectOrder, CodecErrorCode> {
+        self.object_orders
+            .get(occurrence)
+            .and_then(Option::as_ref)
+            .copied()
+            .ok_or(CodecErrorCode::InternalCoverageFailure)
+    }
+
+    fn prompt_component_present(&self, component: PromptComponent) -> bool {
+        self.carriers.iter().flatten().any(|carrier| {
+            carrier.component == Some(component)
+                && matches!(
+                    carrier.class,
+                    RequestCarrierClass::PromptMutable | RequestCarrierClass::PromptImmutable
+                )
+        })
+    }
+
+    fn metadata_present(&self) -> bool {
+        self.carriers
+            .iter()
+            .flatten()
+            .any(|carrier| carrier.class == RequestCarrierClass::MetadataMutable)
+    }
+
+    fn validate_complete(&self, root: &JsonNode) -> Result<(), CodecErrorCode> {
+        let mut expected_carriers = vec![false; self.carriers.len()];
+        let mut expected_objects = vec![false; self.object_orders.len()];
+        collect_inventory_expectations(root, &mut expected_carriers, &mut expected_objects)?;
+        if expected_carriers
+            .iter()
+            .zip(&self.carriers)
+            .any(|(expected, carrier)| *expected != carrier.is_some())
+            || expected_objects
+                .iter()
+                .zip(&self.object_orders)
+                .any(|(expected, order)| *expected != order.is_some())
+        {
+            return Err(CodecErrorCode::InternalCoverageFailure);
+        }
+        Ok(())
+    }
+}
+
+const ROOT_SEMANTIC_FIELDS: &[&str] = &[
+    "system",
+    "tools",
+    "messages",
+    "metadata",
+    "model",
+    "service_tier",
+    "max_tokens",
+    "top_k",
+    "temperature",
+    "top_p",
+    "stream",
+    "stop_sequences",
+    "thinking",
+    "tool_choice",
+    "cache_control",
+];
+const MESSAGE_SEMANTIC_FIELDS: &[&str] = &["role", "content"];
+const TEXT_BLOCK_SEMANTIC_FIELDS: &[&str] = &["type", "text", "cache_control"];
+const TOOL_USE_BLOCK_SEMANTIC_FIELDS: &[&str] = &["type", "id", "name", "input", "cache_control"];
+const TOOL_RESULT_BLOCK_SEMANTIC_FIELDS: &[&str] = &[
+    "type",
+    "tool_use_id",
+    "content",
+    "is_error",
+    "cache_control",
+];
+const DOCUMENT_BLOCK_SEMANTIC_FIELDS: &[&str] =
+    &["type", "source", "title", "context", "cache_control"];
+const SEARCH_BLOCK_SEMANTIC_FIELDS: &[&str] = &[
+    "type",
+    "title",
+    "context",
+    "text",
+    "content",
+    "cache_control",
+];
+const THINKING_BLOCK_SEMANTIC_FIELDS: &[&str] = &["type", "thinking", "signature", "cache_control"];
+const REDACTED_THINKING_BLOCK_SEMANTIC_FIELDS: &[&str] = &["type", "data", "cache_control"];
+const DOCUMENT_SOURCE_SEMANTIC_FIELDS: &[&str] = &["type", "media_type", "data", "text", "content"];
+const TOOL_SEMANTIC_FIELDS: &[&str] = &[
+    "name",
+    "type",
+    "description",
+    "input_schema",
+    "cache_control",
+];
+const SCHEMA_SEMANTIC_FIELDS: &[&str] = &[
+    "type",
+    "title",
+    "description",
+    "properties",
+    "required",
+    "$defs",
+    "items",
+    "additionalProperties",
+    "anyOf",
+    "allOf",
+    "oneOf",
+    "examples",
+    "default",
+    "const",
+    "enum",
+    "$ref",
+    "$id",
+    "$schema",
+    "format",
+    "pattern",
+    "minimum",
+    "maximum",
+];
+const CACHE_CONTROL_SEMANTIC_FIELDS: &[&str] = &["type", "ttl"];
+const THINKING_CONTROL_SEMANTIC_FIELDS: &[&str] = &["type", "budget_tokens"];
+const TOOL_CHOICE_SEMANTIC_FIELDS: &[&str] = &["type", "name", "disable_parallel_tool_use"];
+
+fn collect_inventory_expectations(
+    node: &JsonNode,
+    carriers: &mut [bool],
+    objects: &mut [bool],
+) -> Result<(), CodecErrorCode> {
+    let mark = |slots: &mut [bool], occurrence: usize| -> Result<(), CodecErrorCode> {
+        let slot = slots
+            .get_mut(occurrence)
+            .ok_or(CodecErrorCode::InternalCoverageFailure)?;
+        if *slot {
+            return Err(CodecErrorCode::InternalCoverageFailure);
+        }
+        *slot = true;
+        Ok(())
+    };
+    match &node.kind {
+        JsonKind::Object(members) => {
+            mark(objects, node.occurrence)?;
+            for member in members {
+                mark(carriers, member.key_occurrence)?;
+                collect_inventory_expectations(&member.value, carriers, objects)?;
+            }
+        }
+        JsonKind::Array(values) => {
+            for value in values {
+                collect_inventory_expectations(value, carriers, objects)?;
+            }
+        }
+        JsonKind::String(_) => mark(carriers, node.occurrence)?,
+        JsonKind::Number(_) | JsonKind::Bool(_) | JsonKind::Null => {}
+    }
+    Ok(())
+}
+
+fn collect_final_request_carriers<'a>(
+    root: &'a JsonNode,
+    occurrence_count: usize,
+) -> Result<FinalRequestCarrierInventory<'a>, CodecErrorCode> {
+    let mut inventory = FinalRequestCarrierInventory::new(occurrence_count);
+    classify_request_root(root, &mut inventory)?;
+    inventory.validate_complete(root)?;
+    Ok(inventory)
+}
+
+fn classify_request_root<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(
+        node.occurrence,
+        SemanticObjectOrder::Closed(ROOT_SEMANTIC_FIELDS),
+    )?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        match member.key.value.as_str() {
+            "model" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::RoutingControl,
+                None,
+                inventory,
+            )?,
+            "service_tier" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?,
+            "stop_sequences" => classify_string_array(
+                &member.value,
+                RequestCarrierClass::RoutingControl,
+                None,
+                inventory,
+            )?,
+            "system" => classify_request_system(&member.value, inventory)?,
+            "messages" => classify_request_messages(&member.value, inventory)?,
+            "tools" => classify_request_tools(&member.value, inventory)?,
+            "metadata" => classify_arbitrary_value(
+                &member.value,
+                RequestCarrierClass::MetadataMutable,
+                None,
+                inventory,
+            )?,
+            "thinking" => classify_thinking_control(&member.value, inventory)?,
+            "tool_choice" => classify_tool_choice_control(&member.value, inventory)?,
+            "cache_control" => classify_cache_control(&member.value, inventory)?,
+            "max_tokens" | "top_k" | "temperature" | "top_p" | "stream" => {}
+            _ => return Err(CodecErrorCode::InternalCoverageFailure),
+        }
+    }
+    Ok(())
+}
+
+fn classify_request_system<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::String(_) => classify_string_node(
+            node,
+            RequestCarrierClass::PromptMutable,
+            Some(PromptComponent::System),
+            inventory,
+        ),
+        JsonKind::Array(blocks) => {
+            for block in blocks {
+                classify_request_block(block, PromptComponent::System, inventory)?;
+            }
+            Ok(())
+        }
+        _ => Err(CodecErrorCode::InternalCoverageFailure),
+    }
+}
+
+fn classify_request_messages<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let JsonKind::Array(messages) = &node.kind else {
+        return Err(CodecErrorCode::InternalCoverageFailure);
+    };
+    for message in messages {
+        let members = object_members(message)?;
+        inventory.set_object_order(
+            message.occurrence,
+            SemanticObjectOrder::Closed(MESSAGE_SEMANTIC_FIELDS),
+        )?;
+        for member in members {
+            classify_key(
+                member,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?;
+            match member.key.value.as_str() {
+                "role" => classify_string_node(
+                    &member.value,
+                    RequestCarrierClass::ReviewedConstant,
+                    None,
+                    inventory,
+                )?,
+                "content" => {
+                    classify_request_content(&member.value, PromptComponent::Messages, inventory)?
+                }
+                _ => return Err(CodecErrorCode::InternalCoverageFailure),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn classify_request_content<'a>(
+    node: &'a JsonNode,
+    component: PromptComponent,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::String(_) => classify_string_node(
+            node,
+            RequestCarrierClass::PromptMutable,
+            Some(component),
+            inventory,
+        ),
+        JsonKind::Array(blocks) => {
+            for block in blocks {
+                classify_request_block(block, component, inventory)?;
+            }
+            Ok(())
+        }
+        _ => Err(CodecErrorCode::InternalCoverageFailure),
+    }
+}
+
+fn classify_request_block<'a>(
+    node: &'a JsonNode,
+    component: PromptComponent,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let block_type = object_string(node, "type")?;
+    let order = match block_type {
+        "text" => TEXT_BLOCK_SEMANTIC_FIELDS,
+        "tool_use" => TOOL_USE_BLOCK_SEMANTIC_FIELDS,
+        "tool_result" => TOOL_RESULT_BLOCK_SEMANTIC_FIELDS,
+        "document" => DOCUMENT_BLOCK_SEMANTIC_FIELDS,
+        "search_result" | "custom_content" => SEARCH_BLOCK_SEMANTIC_FIELDS,
+        "thinking" => THINKING_BLOCK_SEMANTIC_FIELDS,
+        "redacted_thinking" => REDACTED_THINKING_BLOCK_SEMANTIC_FIELDS,
+        _ => return Err(CodecErrorCode::InternalCoverageFailure),
+    };
+    let members = object_members(node)?;
+    inventory.set_object_order(node.occurrence, SemanticObjectOrder::Closed(order))?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        match (block_type, member.key.value.as_str()) {
+            (_, "type") => classify_string_node(
+                &member.value,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?,
+            (_, "cache_control") => classify_cache_control(&member.value, inventory)?,
+            ("text", "text") => classify_string_node(
+                &member.value,
+                RequestCarrierClass::PromptMutable,
+                Some(component),
+                inventory,
+            )?,
+            ("tool_use", "id" | "name") | ("tool_result", "tool_use_id") => classify_string_node(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                Some(component),
+                inventory,
+            )?,
+            ("tool_use", "input") => classify_arbitrary_value(
+                &member.value,
+                RequestCarrierClass::PromptMutable,
+                Some(component),
+                inventory,
+            )?,
+            ("tool_result", "content") => {
+                classify_request_content(&member.value, component, inventory)?
+            }
+            ("tool_result", "is_error") => {}
+            ("document", "source") => {
+                classify_document_source(&member.value, component, inventory)?
+            }
+            ("document", "title" | "context")
+            | ("search_result" | "custom_content", "title" | "context" | "text" | "content") => {
+                classify_arbitrary_value(
+                    &member.value,
+                    RequestCarrierClass::PromptMutable,
+                    Some(component),
+                    inventory,
+                )?
+            }
+            ("thinking", "thinking") => classify_string_node(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                Some(component),
+                inventory,
+            )?,
+            ("thinking", "signature") | ("redacted_thinking", "data") => classify_string_node(
+                &member.value,
+                RequestCarrierClass::SignedOpaque,
+                None,
+                inventory,
+            )?,
+            _ => return Err(CodecErrorCode::InternalCoverageFailure),
+        }
+    }
+    Ok(())
+}
+
+fn classify_document_source<'a>(
+    node: &'a JsonNode,
+    component: PromptComponent,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(
+        node.occurrence,
+        SemanticObjectOrder::Closed(DOCUMENT_SOURCE_SEMANTIC_FIELDS),
+    )?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        match member.key.value.as_str() {
+            "type" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?,
+            "media_type" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                Some(component),
+                inventory,
+            )?,
+            "data" | "text" | "content" => classify_arbitrary_value(
+                &member.value,
+                RequestCarrierClass::PromptMutable,
+                Some(component),
+                inventory,
+            )?,
+            _ => return Err(CodecErrorCode::InternalCoverageFailure),
+        }
+    }
+    Ok(())
+}
+
+fn classify_request_tools<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let JsonKind::Array(tools) = &node.kind else {
+        return Err(CodecErrorCode::InternalCoverageFailure);
+    };
+    for tool in tools {
+        let members = object_members(tool)?;
+        inventory.set_object_order(
+            tool.occurrence,
+            SemanticObjectOrder::Closed(TOOL_SEMANTIC_FIELDS),
+        )?;
+        for member in members {
+            classify_key(
+                member,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?;
+            match member.key.value.as_str() {
+                "name" => classify_string_node(
+                    &member.value,
+                    RequestCarrierClass::PromptImmutable,
+                    Some(PromptComponent::Tools),
+                    inventory,
+                )?,
+                "type" => classify_string_node(
+                    &member.value,
+                    RequestCarrierClass::ReviewedConstant,
+                    None,
+                    inventory,
+                )?,
+                "description" => classify_string_node(
+                    &member.value,
+                    RequestCarrierClass::PromptMutable,
+                    Some(PromptComponent::Tools),
+                    inventory,
+                )?,
+                "input_schema" => classify_request_schema(&member.value, inventory)?,
+                "cache_control" => classify_cache_control(&member.value, inventory)?,
+                _ => return Err(CodecErrorCode::InternalCoverageFailure),
+            }
+        }
+    }
+    Ok(())
+}
+
+fn classify_request_schema<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(
+        node.occurrence,
+        SemanticObjectOrder::Closed(SCHEMA_SEMANTIC_FIELDS),
+    )?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        match member.key.value.as_str() {
+            "description" | "title" | "examples" | "default" => classify_arbitrary_value(
+                &member.value,
+                RequestCarrierClass::PromptMutable,
+                Some(PromptComponent::Tools),
+                inventory,
+            )?,
+            "properties" => {
+                classify_schema_map(&member.value, RequestCarrierClass::PromptMutable, inventory)?
+            }
+            "$defs" => classify_schema_map(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                inventory,
+            )?,
+            "items" => classify_request_schema(&member.value, inventory)?,
+            "additionalProperties" => {
+                if matches!(member.value.kind, JsonKind::Object(_)) {
+                    classify_request_schema(&member.value, inventory)?;
+                }
+            }
+            "anyOf" | "allOf" | "oneOf" => {
+                let JsonKind::Array(values) = &member.value.kind else {
+                    return Err(CodecErrorCode::InternalCoverageFailure);
+                };
+                for value in values {
+                    classify_request_schema(value, inventory)?;
+                }
+            }
+            "required" => classify_string_array(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                Some(PromptComponent::Tools),
+                inventory,
+            )?,
+            "type" => classify_schema_type(&member.value, inventory)?,
+            "$ref" | "$id" | "$schema" | "format" | "pattern" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::PromptImmutable,
+                Some(PromptComponent::Tools),
+                inventory,
+            )?,
+            "const" => classify_schema_literal(&member.value, inventory)?,
+            "enum" => {
+                let JsonKind::Array(values) = &member.value.kind else {
+                    return Err(CodecErrorCode::InternalCoverageFailure);
+                };
+                for value in values {
+                    classify_schema_literal(value, inventory)?;
+                }
+            }
+            "minimum" | "maximum" => {}
+            _ => return Err(CodecErrorCode::InternalCoverageFailure),
+        }
+    }
+    Ok(())
+}
+
+fn classify_schema_map<'a>(
+    node: &'a JsonNode,
+    key_class: RequestCarrierClass,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(node.occurrence, SemanticObjectOrder::DecodedKeys)?;
+    for member in members {
+        classify_key(member, key_class, Some(PromptComponent::Tools), inventory)?;
+        classify_request_schema(&member.value, inventory)?;
+    }
+    Ok(())
+}
+
+fn classify_schema_type<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::String(_) => {
+            classify_string_node(node, RequestCarrierClass::ReviewedConstant, None, inventory)
+        }
+        JsonKind::Array(values) => {
+            for value in values {
+                classify_string_node(
+                    value,
+                    RequestCarrierClass::ReviewedConstant,
+                    None,
+                    inventory,
+                )?;
+            }
+            Ok(())
+        }
+        _ => Err(CodecErrorCode::InternalCoverageFailure),
+    }
+}
+
+fn classify_schema_literal<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    if matches!(node.kind, JsonKind::String(_)) {
+        classify_string_node(
+            node,
+            RequestCarrierClass::PromptImmutable,
+            Some(PromptComponent::Tools),
+            inventory,
+        )?;
+    }
+    Ok(())
+}
+
+fn classify_arbitrary_value<'a>(
+    node: &'a JsonNode,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::Object(members) => {
+            inventory.set_object_order(node.occurrence, SemanticObjectOrder::DecodedKeys)?;
+            for member in members {
+                classify_key(member, class, component, inventory)?;
+                classify_arbitrary_value(&member.value, class, component, inventory)?;
+            }
+            Ok(())
+        }
+        JsonKind::Array(values) => {
+            for value in values {
+                classify_arbitrary_value(value, class, component, inventory)?;
+            }
+            Ok(())
+        }
+        JsonKind::String(_) => classify_string_node(node, class, component, inventory),
+        JsonKind::Bool(_) | JsonKind::Null => Ok(()),
+        JsonKind::Number(_) => Err(CodecErrorCode::InternalCoverageFailure),
+    }
+}
+
+fn classify_cache_control<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    classify_closed_constant_object(node, CACHE_CONTROL_SEMANTIC_FIELDS, inventory)
+}
+
+fn classify_thinking_control<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    classify_closed_constant_object(node, THINKING_CONTROL_SEMANTIC_FIELDS, inventory)
+}
+
+fn classify_tool_choice_control<'a>(
+    node: &'a JsonNode,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(
+        node.occurrence,
+        SemanticObjectOrder::Closed(TOOL_CHOICE_SEMANTIC_FIELDS),
+    )?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        match member.key.value.as_str() {
+            "type" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?,
+            "name" => classify_string_node(
+                &member.value,
+                RequestCarrierClass::RoutingControl,
+                None,
+                inventory,
+            )?,
+            "disable_parallel_tool_use" => {}
+            _ => return Err(CodecErrorCode::InternalCoverageFailure),
+        }
+    }
+    Ok(())
+}
+
+fn classify_closed_constant_object<'a>(
+    node: &'a JsonNode,
+    order: &'static [&'static str],
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let members = object_members(node)?;
+    inventory.set_object_order(node.occurrence, SemanticObjectOrder::Closed(order))?;
+    for member in members {
+        classify_key(
+            member,
+            RequestCarrierClass::ReviewedConstant,
+            None,
+            inventory,
+        )?;
+        if matches!(member.value.kind, JsonKind::String(_)) {
+            classify_string_node(
+                &member.value,
+                RequestCarrierClass::ReviewedConstant,
+                None,
+                inventory,
+            )?;
+        }
+    }
+    Ok(())
+}
+
+fn classify_string_array<'a>(
+    node: &'a JsonNode,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let JsonKind::Array(values) = &node.kind else {
+        return Err(CodecErrorCode::InternalCoverageFailure);
+    };
+    for value in values {
+        classify_string_node(value, class, component, inventory)?;
+    }
+    Ok(())
+}
+
+fn classify_key<'a>(
+    member: &'a JsonMember,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    inventory.classify(member.key_occurrence, &member.key.value, class, component)
+}
+
+fn classify_string_node<'a>(
+    node: &'a JsonNode,
+    class: RequestCarrierClass,
+    component: Option<PromptComponent>,
+    inventory: &mut FinalRequestCarrierInventory<'a>,
+) -> Result<(), CodecErrorCode> {
+    let JsonKind::String(value) = &node.kind else {
+        return Err(CodecErrorCode::InternalCoverageFailure);
+    };
+    inventory.classify(node.occurrence, &value.value, class, component)
+}
+
+fn object_members(node: &JsonNode) -> Result<&[JsonMember], CodecErrorCode> {
+    let JsonKind::Object(members) = &node.kind else {
+        return Err(CodecErrorCode::InternalCoverageFailure);
+    };
+    Ok(members)
+}
+
+#[derive(Clone, Copy)]
+enum RequestViewSelection {
+    Prompt(PromptComponent),
+    Metadata,
+}
+
+fn build_prompt_component_view(
+    root: &JsonNode,
+    inventory: &FinalRequestCarrierInventory<'_>,
+    component: PromptComponent,
+    order: CarrierOrder,
+    limit: usize,
+) -> Result<Zeroizing<String>, CodecErrorCode> {
+    let mut output = Zeroizing::new(String::new());
+    append_request_view(
+        root,
+        inventory,
+        RequestViewSelection::Prompt(component),
+        order,
+        limit,
+        &mut output,
+    )?;
+    Ok(output)
+}
+
+fn build_metadata_view(
+    root: &JsonNode,
+    inventory: &FinalRequestCarrierInventory<'_>,
+    order: CarrierOrder,
+    limit: usize,
+) -> Result<Zeroizing<String>, CodecErrorCode> {
+    let mut output = Zeroizing::new(String::new());
+    append_request_view(
+        root,
+        inventory,
+        RequestViewSelection::Metadata,
+        order,
+        limit,
+        &mut output,
+    )?;
+    Ok(output)
+}
+
+fn append_request_view(
+    node: &JsonNode,
+    inventory: &FinalRequestCarrierInventory<'_>,
+    selection: RequestViewSelection,
+    order: CarrierOrder,
+    limit: usize,
+    output: &mut String,
+) -> Result<(), CodecErrorCode> {
+    match &node.kind {
+        JsonKind::Object(members) => match order {
+            CarrierOrder::Emitted => {
+                for member in members {
+                    append_inventory_carrier(
+                        member.key_occurrence,
+                        inventory,
+                        selection,
+                        limit,
+                        output,
+                    )?;
+                    append_request_view(&member.value, inventory, selection, order, limit, output)?;
+                }
+            }
+            CarrierOrder::Semantic => {
+                let mut ordered = Vec::new();
+                ordered
+                    .try_reserve(members.len())
+                    .map_err(|_| CodecErrorCode::BodyLimitExceeded)?;
+                ordered.extend(members);
+                match inventory.object_order(node.occurrence)? {
+                    SemanticObjectOrder::Closed(fields) => {
+                        if ordered
+                            .iter()
+                            .any(|member| !fields.contains(&member.key.value.as_str()))
+                        {
+                            return Err(CodecErrorCode::InternalCoverageFailure);
+                        }
+                        ordered.sort_by_key(|member| {
+                            fields
+                                .iter()
+                                .position(|field| *field == member.key.value)
+                                .unwrap_or(fields.len())
+                        });
+                    }
+                    SemanticObjectOrder::DecodedKeys => ordered.sort_by(|left, right| {
+                        left.key.value.as_bytes().cmp(right.key.value.as_bytes())
+                    }),
+                }
+                for member in ordered {
+                    append_inventory_carrier(
+                        member.key_occurrence,
+                        inventory,
+                        selection,
+                        limit,
+                        output,
+                    )?;
+                    append_request_view(&member.value, inventory, selection, order, limit, output)?;
+                }
+            }
+        },
+        JsonKind::Array(values) => {
+            for value in values {
+                append_request_view(value, inventory, selection, order, limit, output)?;
+            }
+        }
+        JsonKind::String(_) => {
+            append_inventory_carrier(node.occurrence, inventory, selection, limit, output)?;
+        }
+        JsonKind::Number(_) | JsonKind::Bool(_) | JsonKind::Null => {}
+    }
+    Ok(())
+}
+
+fn append_inventory_carrier(
+    occurrence: usize,
+    inventory: &FinalRequestCarrierInventory<'_>,
+    selection: RequestViewSelection,
+    limit: usize,
+    output: &mut String,
+) -> Result<(), CodecErrorCode> {
+    let carrier = inventory.carrier(occurrence)?;
+    let include = match selection {
+        RequestViewSelection::Prompt(component) => {
+            carrier.component == Some(component)
+                && matches!(
+                    carrier.class,
+                    RequestCarrierClass::PromptMutable | RequestCarrierClass::PromptImmutable
+                )
+        }
+        RequestViewSelection::Metadata => carrier.class == RequestCarrierClass::MetadataMutable,
+    };
+    if include {
+        append_bounded(output, carrier.text, limit)?;
+    }
+    Ok(())
+}
+
+fn append_bounded(output: &mut String, value: &str, limit: usize) -> Result<(), CodecErrorCode> {
+    let new_len = output
+        .len()
+        .checked_add(value.len())
+        .ok_or(CodecErrorCode::BodyLimitExceeded)?;
+    if new_len > limit {
+        return Err(CodecErrorCode::BodyLimitExceeded);
+    }
+    output
+        .try_reserve(value.len())
+        .map_err(|_| CodecErrorCode::BodyLimitExceeded)?;
+    output.push_str(value);
+    Ok(())
+}
+
+fn probe_request_view(
+    view: &str,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<bool, CodecErrorCode> {
+    ctx.validate_token_shapes(view)?;
+    let transformed = Zeroizing::new(ctx.probe_without_prefix_cache_write(view)?);
+    Ok(transformed.as_bytes() != view.as_bytes())
+}
+
+fn prove_prompt_order(
+    root: &JsonNode,
+    inventory: &FinalRequestCarrierInventory<'_>,
+    order: CarrierOrder,
+    limit: usize,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<bool, CodecErrorCode> {
+    let mut components = Vec::new();
+    for component in [
+        PromptComponent::System,
+        PromptComponent::Tools,
+        PromptComponent::Messages,
+    ] {
+        if inventory.prompt_component_present(component) {
+            components.push((
+                component,
+                build_prompt_component_view(root, inventory, component, order, limit)?,
+            ));
+        }
+    }
+    if components.is_empty() {
+        return Ok(false);
+    }
+    let permutations: &[&[usize]] = match components.len() {
+        1 => &[&[0]],
+        2 => &[&[0, 1], &[1, 0]],
+        3 => &[
+            &[0, 1, 2],
+            &[0, 2, 1],
+            &[1, 0, 2],
+            &[1, 2, 0],
+            &[2, 0, 1],
+            &[2, 1, 0],
+        ],
+        _ => return Err(CodecErrorCode::InternalCoverageFailure),
+    };
+    let mut would_mutate = false;
+    for permutation in permutations {
+        let mut view = Zeroizing::new(String::new());
+        for index in *permutation {
+            append_bounded(&mut view, &components[*index].1, limit)?;
+        }
+        would_mutate |= probe_request_view(&view, ctx)?;
+    }
+    Ok(would_mutate)
+}
+
+fn prove_request_logical_domains(
+    root: &JsonNode,
+    occurrence_count: usize,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<(), CodecErrorCode> {
+    let inventory = collect_final_request_carriers(root, occurrence_count)?;
+    let limit = ctx
+        .limits()
+        .max_body_bytes()
+        .min(MAX_ANTHROPIC_REQUEST_BODY_BYTES);
+    let mut would_mutate = false;
+    for order in [CarrierOrder::Semantic, CarrierOrder::Emitted] {
+        would_mutate |= prove_prompt_order(root, &inventory, order, limit, ctx)?;
+    }
+    if inventory.metadata_present() {
+        for order in [CarrierOrder::Semantic, CarrierOrder::Emitted] {
+            let view = build_metadata_view(root, &inventory, order, limit)?;
+            would_mutate |= probe_request_view(&view, ctx)?;
+        }
+    }
+    if would_mutate {
+        Err(CodecErrorCode::ControlWouldMutate)
+    } else {
+        Ok(())
     }
 }
 

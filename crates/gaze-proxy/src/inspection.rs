@@ -323,6 +323,14 @@ mod tests {
             Ok(input.to_owned())
         }
 
+        fn protect_with_prefix_cache_write_mode(
+            &mut self,
+            input: &str,
+            _mode: gaze::PrefixCacheWriteMode,
+        ) -> Result<String, CodecErrorCode> {
+            self.protect(input)
+        }
+
         fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
             Ok(())
         }

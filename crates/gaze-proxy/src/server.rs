@@ -3195,6 +3195,194 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn logical_domain_failure_discards_state_before_commit_and_does_zero_io() {
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let split = 6;
+        let (left, right) = SYNTHETIC_EMAIL.split_at(split);
+
+        let mut prefix_transaction = session.begin_transaction();
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut prefix_transaction,
+                RawDocument::Text(left.to_owned()),
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
+            )
+            .unwrap();
+        prefix_transaction.commit().unwrap();
+        let baseline_entries = session.snapshot_entries();
+        let baseline_tokens = session.tokens();
+        let baseline_cache_entries = session.prefix_cache_entry_count();
+        assert_eq!(baseline_cache_entries, 1);
+
+        let body = format!(
+            r#"{{"model":"claude-test","max_tokens":32,"messages":[{{"role":"user","content":[{{"type":"text","text":"{left}"}},{{"type":"text","text":"{right}"}}]}}]}}"#
+        );
+        let request = direct_request(url, WireFormat::Json, body.as_bytes()).unwrap();
+        let mut before_commit_calls = 0usize;
+        let error = match prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body.as_bytes(),
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            false,
+            DEFAULT_MAX_REQUEST_BYTES,
+            |_, _, _| {
+                before_commit_calls += 1;
+                Ok(())
+            },
+        ) {
+            Ok(_) => panic!("expected closed request proof failure"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.code(), ProxyErrorCode::ControlWouldMutate);
+        assert_eq!(error.phase(), ProxyErrorPhase::RequestTransform);
+        assert_eq!(error.http_status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(before_commit_calls, 0);
+        assert_eq!(session.snapshot_entries(), baseline_entries);
+        assert_eq!(session.tokens(), baseline_tokens);
+        assert_eq!(session.prefix_cache_entry_count(), baseline_cache_entries);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
+        server.abort();
+    }
+
+    #[test]
+    fn suppression_only_request_sites_do_not_populate_the_prefix_cache() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"synthetic reasoning","signature":"opaque-signature","cache_control":{"type":"ephemeral"}}]}],"tools":[{"name":"synthetic_tool","input_schema":{"type":"object","$defs":{"synthetic_definition":{"type":"string"}}}}]}"#;
+        let request = direct_request(
+            Url::parse("https://api.anthropic.com/v1/messages").unwrap(),
+            WireFormat::Json,
+            body,
+        )
+        .unwrap();
+
+        let committed = prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body,
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            false,
+            DEFAULT_MAX_REQUEST_BYTES,
+            |attempt, live, staged| {
+                assert_eq!(attempt, 0);
+                assert_eq!(live.prefix_cache_entry_count(), 0);
+                assert_eq!(staged.prefix_cache_entry_count(), 0);
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert!(session.tokens().is_empty());
+        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 0);
+        assert_eq!(session.prefix_cache_entry_count(), 0);
+    }
+
+    #[test]
+    fn every_logical_domain_probe_family_preserves_exact_cache_cardinality() {
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().unwrap())
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .unwrap();
+        let codec = crate::codecs::anthropic::AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = br#"{"model":"claude-test","max_tokens":32,"system":"system-safe","tools":[{"name":"tool-safe-name","description":"tool-safe-description","input_schema":{"type":"object","description":"schema-safe-description","properties":{"property-safe":{"type":"string"}},"required":["property-safe"]}}],"metadata":{"metadata-safe-key":"metadata-safe-value"},"messages":[{"role":"user","content":"message-safe"}]}"#;
+        let request = direct_request(
+            Url::parse("https://api.anthropic.com/v1/messages").unwrap(),
+            WireFormat::Json,
+            body,
+        )
+        .unwrap();
+
+        let committed = prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body,
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            false,
+            DEFAULT_MAX_REQUEST_BYTES,
+            |attempt, live, staged| {
+                assert_eq!(attempt, 0);
+                assert_eq!(live.prefix_cache_entry_count(), 0);
+                assert_eq!(staged.prefix_cache_entry_count(), 7);
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(committed.snapshot.prefix_cache_entry_count(), 7);
+        assert_eq!(session.prefix_cache_entry_count(), 7);
+    }
+
+    struct RejectOnSecondAttemptCodec {
+        protect_calls: AtomicUsize,
+    }
+
+    impl BodyCodec for RejectOnSecondAttemptCodec {
+        fn protect_request(
+            &self,
+            input: &[u8],
+            ctx: &mut RequestTransformContext<'_>,
+        ) -> Result<ProvedRequestBody, CodecError> {
+            if self.protect_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                crate::codecs::anthropic::AnthropicMessagesCodec.protect_request(input, ctx)
+            } else {
+                Err(CodecError::new(
+                    CodecErrorCode::ControlWouldMutate,
+                    CodecPhase::RequestProof,
+                ))
+            }
+        }
+
+        fn restore_response(
+            &self,
+            input: &[u8],
+            ctx: &mut ResponseTransformContext<'_>,
+        ) -> Result<crate::codec::ProvedResponseBody, CodecError> {
+            crate::codecs::anthropic::AnthropicMessagesCodec.restore_response(input, ctx)
+        }
+    }
+
+    #[tokio::test]
     async fn generation_conflict_reproofs_once_and_sends_only_the_winning_body() {
         let capture = Capture::default();
         let (url, server) = spawn_test_server(
@@ -3243,6 +3431,57 @@ mod tests {
         let captured = String::from_utf8(capture.body.lock().unwrap().clone()).unwrap();
         assert!(!captured.contains(SYNTHETIC_EMAIL));
         assert_eq!(captured.matches(":Email_1>").count(), 1);
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn second_attempt_request_proof_failure_rejects_without_upstream_io() {
+        let capture = Capture::default();
+        let (url, server) = spawn_test_server(
+            Router::new()
+                .route("/v1/messages", post(capture_ok))
+                .with_state(capture.clone()),
+        )
+        .await;
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .unwrap();
+        let codec = RejectOnSecondAttemptCodec {
+            protect_calls: AtomicUsize::new(0),
+        };
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let body = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":"synthetic"}]}"#;
+        let request = direct_request(url, WireFormat::Json, body).unwrap();
+        let mut hook_calls = 0usize;
+
+        let error = prepare_and_commit_direct_request_with_hook(
+            &pipeline,
+            &session,
+            &codec,
+            body,
+            &request.url,
+            &request.headers,
+            WireFormat::Json,
+            CodecLimits::default(),
+            false,
+            DEFAULT_MAX_REQUEST_BYTES,
+            |attempt, live, _staged| {
+                hook_calls += 1;
+                assert_eq!(attempt, 0);
+                live.tokenize(&PiiClass::Name, "Dr. Schmidt").unwrap();
+                Ok(())
+            },
+        )
+        .unwrap_err();
+
+        assert_eq!(codec.protect_calls.load(Ordering::SeqCst), 2);
+        assert_eq!(hook_calls, 1);
+        assert_eq!(error.code(), ProxyErrorCode::ControlWouldMutate);
+        assert_eq!(error.phase(), ProxyErrorPhase::RequestTransform);
+        assert_eq!(error.http_status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(session.tokens().len(), 1);
+        assert_eq!(capture.hits.load(Ordering::SeqCst), 0);
         server.abort();
     }
 

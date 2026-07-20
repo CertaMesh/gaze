@@ -188,6 +188,38 @@ data: {"type":"error","error":{"type":"api_error","message":"proxy_validation_fa
 It never includes provider bytes, raw error text, or partially restored data.
 Successful events are then replayed from the proved buffer.
 
+### Complete request logical-domain proof
+
+After the ordinary per-carrier transform and exact reparse proof, Gaze performs
+an independent proof over the complete final request. It constructs contiguous
+views without inserting separators, then suppression-probes each view before
+the session can commit, upstream I/O can begin, or an inspection event can be
+published. A probe must reproduce its input byte-for-byte; otherwise the
+request fails closed with `ControlWouldMutate` (codec phase `RequestProof`,
+proxy phase `RequestTransform`, HTTP `422`).
+
+The prompt proof covers both provider-semantic order and emitted JSON order. It
+checks every present permutation of the system, tools, and messages components,
+and it checks metadata as its own semantic and emitted-order domain. Object
+members with a provider-defined order use that closed order; arbitrary objects
+use decoded-key byte order for the semantic view and source member order for the
+emitted view. Arrays retain API order. JSON member keys precede their value
+subtrees in each view. Signed or encrypted payloads remain opaque carriers, but
+their surrounding reviewed fields still participate in occurrence coverage.
+
+The proof deliberately does not join metadata or routing controls to prompt
+content, reorder arrays, skip intervening visible text, or claim to model every
+possible future concatenation an arbitrary LLM application might perform. The
+closed carrier inventory rejects unclassified or multiply classified strings,
+so adding a provider field requires an explicit contract decision.
+
+Suppression probes bypass both prefix-cache lookup and prefix-cache storage.
+They therefore cannot reuse a cached fragment to hide a newly joined detector
+match and cannot publish speculative cache entries. This conservative boundary
+can reject a benign request when a detector would change one of the proved
+views; that availability cost is intentional because an ambiguous cross-carrier
+join must never be allowed to reach the provider.
+
 ## Limits and timeouts
 
 The builder may lower these defaults but cannot raise them:

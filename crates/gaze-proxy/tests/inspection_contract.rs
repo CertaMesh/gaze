@@ -1518,6 +1518,39 @@ async fn panicking_sink_never_changes_proxy_enforcement() {
 }
 
 #[tokio::test]
+async fn split_logical_domain_rejection_emits_no_inspection_event() {
+    let upstream = spawn_upstream().await;
+    let sink = Arc::new(RecordingSink::new(SinkBehavior::Capture));
+    let proxy = spawn_proxy(
+        &upstream,
+        Some(install(CaptureDomainsV1::MetadataOnly, Arc::clone(&sink))),
+    )
+    .await;
+
+    let response = request_json(
+        &proxy,
+        "/v1/messages",
+        json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "alice@"},
+                    {"type": "text", "text": "example.invalid"}
+                ]
+            }]
+        }),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let _: Value = response.json().await.unwrap();
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    assert_eq!(sink.len(), 0);
+}
+
+#[tokio::test]
 async fn purge_disable_and_hostile_sink_never_change_proxy_enforcement() {
     let upstream = spawn_upstream().await;
     let sink = Arc::new(RecordingSink::new(SinkBehavior::Reject));

@@ -7,10 +7,10 @@ mod codec;
 
 use anthropic::AnthropicMessagesCodec;
 use codec::{
-    BodyCodec, CodecErrorCode, CodecLimits, RequestPseudonymizer, RequestTransformContext,
-    ResponseResidualValidator, ResponseTransformContext, WireFormat,
+    BodyCodec, CodecErrorCode, CodecLimits, CodecPhase, RequestPseudonymizer,
+    RequestTransformContext, ResponseResidualValidator, ResponseTransformContext, WireFormat,
 };
-use gaze::{PiiClass, Scope, Session, SessionTransaction};
+use gaze::{PiiClass, PrefixCacheWriteMode, Scope, Session, SessionTransaction};
 
 const EMAIL: &str = "alice@example.invalid";
 
@@ -28,6 +28,14 @@ impl RequestPseudonymizer for SyntheticPseudonymizer<'_, '_> {
             .tokenize(&PiiClass::Email, EMAIL)
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
         Ok(input.replace(EMAIL, &token))
+    }
+
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        _mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect(input)
     }
 
     fn validate_token_shapes(&mut self, input: &str) -> Result<(), CodecErrorCode> {
@@ -84,6 +92,14 @@ impl RequestPseudonymizer for ExpandingPseudonymizer {
         }
     }
 
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        _mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect(input)
+    }
+
     fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
         Ok(())
     }
@@ -93,6 +109,538 @@ fn request_context<'a>(
     pseudonymizer: &'a mut dyn RequestPseudonymizer,
 ) -> RequestTransformContext<'a> {
     RequestTransformContext::new(pseudonymizer, WireFormat::Json, CodecLimits::default())
+}
+
+fn assert_logical_domain_rejected(request: &serde_json::Value) {
+    let input = serde_json::to_vec(request).unwrap();
+    assert_logical_domain_rejected_bytes(&input);
+}
+
+fn assert_logical_domain_rejected_bytes(input: &[u8]) {
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    {
+        let mut transaction = session.begin_transaction();
+        let mut pseudonymizer = SyntheticPseudonymizer {
+            transaction: &mut transaction,
+        };
+        let error = match codec.protect_request(input, &mut request_context(&mut pseudonymizer)) {
+            Ok(_) => panic!("expected closed request proof failure"),
+            Err(error) => error,
+        };
+        assert_eq!(error.code(), CodecErrorCode::ControlWouldMutate);
+        assert_eq!(error.phase(), CodecPhase::RequestProof);
+        assert!(session.tokens().is_empty());
+    }
+    assert!(session.tokens().is_empty());
+}
+
+fn assert_logical_domain_accepted(request: &serde_json::Value) {
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let mut pseudonymizer = SyntheticPseudonymizer {
+        transaction: &mut transaction,
+    };
+    let input = serde_json::to_vec(request).unwrap();
+    assert!(codec
+        .protect_request(&input, &mut request_context(&mut pseudonymizer))
+        .is_ok());
+}
+
+#[test]
+fn request_logical_domains_reject_every_email_split_across_supported_carriers() {
+    for split in 1..EMAIL.len() {
+        let (left, right) = EMAIL.split_at(split);
+        let cases = [
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "system": [
+                    {"type": "text", "text": left},
+                    {"type": "text", "text": right}
+                ],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": left},
+                        {"type": "text", "text": right}
+                    ]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [
+                    {"role": "user", "content": left},
+                    {"role": "assistant", "content": right}
+                ]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "system": left,
+                "messages": [{"role": "user", "content": right}]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": left,
+                    "description": right,
+                    "input_schema": {"type": "object"}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [
+                    {"name": left, "input_schema": {"type": "object"}},
+                    {"name": right, "input_schema": {"type": "object"}}
+                ],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "description": left,
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {(right): {"type": "string"}},
+                        "required": [right]
+                    }
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {"type": "object", "title": left, "description": right}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {"type": "object", "description": left, "$ref": right}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {"type": "object", "examples": [left], "default": right}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {"type": "object", "const": left, "enum": [right]}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {
+                        "type": "object",
+                        "$defs": {(left): {"type": "string", "description": right}}
+                    }
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "tools": [{
+                    "name": "lookup",
+                    "input_schema": {"type": "object", "$id": left, "pattern": right}
+                }],
+                "messages": []
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "lookup",
+                        "input": {(left): right}
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "lookup",
+                        "input": [left, [right]]
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_1",
+                        "content": [
+                            {"type": "text", "text": left},
+                            {"type": "custom_content", "content": [right]}
+                        ]
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": left,
+                        "content": right
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "document",
+                        "source": {"type": "text", "media_type": left, "text": right}
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{
+                        "type": "document",
+                        "source": {"type": "text", "text": "synthetic"},
+                        "title": left,
+                        "context": right
+                    }]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "user",
+                    "content": [{"type": "search_result", "title": left, "content": right}]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": left},
+                        {"type": "thinking", "thinking": right, "signature": "opaque-signature"}
+                    ]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": left, "signature": "opaque-signature"},
+                        {"type": "text", "text": right}
+                    ]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "messages": [{
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": left},
+                        {"type": "redacted_thinking", "data": "opaque-synthetic-data"},
+                        {"type": "text", "text": right}
+                    ]
+                }]
+            }),
+            serde_json::json!({
+                "model": "claude-test",
+                "max_tokens": 32,
+                "metadata": {(left): right},
+                "messages": []
+            }),
+        ];
+        for request in cases {
+            assert_logical_domain_rejected(&request);
+        }
+    }
+
+    let decoded_escape = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":[{"type":"text","text":"\u0061lice@"},{"type":"text","text":"example.invalid"}]}]}"#;
+    assert_logical_domain_rejected_bytes(decoded_escape);
+}
+
+#[test]
+fn request_carrier_inventory_is_source_independent_from_the_mutation_visitor() {
+    let source = include_str!("../src/codecs/anthropic.rs");
+    let start = source
+        .find("fn collect_final_request_carriers")
+        .expect("independent inventory entry point must exist");
+    let end = source[start..]
+        .find("fn classify_request_root")
+        .map(|offset| start + offset)
+        .expect("independent inventory must retain a closed helper boundary");
+    let inventory_entry = &source[start..end];
+
+    assert!(!inventory_entry.contains("CoverageLedger"));
+    assert!(!inventory_entry.contains("transform_request_"));
+}
+
+#[test]
+fn request_logical_domains_cover_semantic_emitted_and_all_prompt_component_orders() {
+    let emitted_only = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":[{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"alice":null,"@example.invalid":null}}]}]}"#;
+    assert_logical_domain_rejected_bytes(emitted_only);
+
+    let semantic_only = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":[{"type":"tool_use","id":"toolu_1","name":"lookup","input":{"example.invalid":null,"alice@":null}}]}]}"#;
+    assert_logical_domain_rejected_bytes(semantic_only);
+
+    let fragments = ["ali", "ce@exa", "mple.invalid"];
+    for permutation in [
+        [0usize, 1usize, 2usize],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let mut components = [""; 3];
+        for (fragment, component) in fragments.iter().zip(permutation) {
+            components[component] = fragment;
+        }
+        let request = serde_json::json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "system": components[0],
+            "tools": [{"name": components[1], "input_schema": {"type": "object"}}],
+            "messages": [{"role": "user", "content": components[2]}]
+        });
+        assert_logical_domain_rejected(&request);
+    }
+}
+
+#[test]
+fn request_logical_domains_cover_three_four_and_higher_fragment_partitions() {
+    let three = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "system": [
+            {"type": "text", "text": "alice"},
+            {"type": "text", "text": "@example"},
+            {"type": "text", "text": ".invalid"}
+        ],
+        "messages": []
+    });
+    assert_logical_domain_rejected(&three);
+
+    let tool_three = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "tools": [{
+            "name": "alice",
+            "description": "@example",
+            "input_schema": {"type": "object", "description": ".invalid"}
+        }],
+        "messages": []
+    });
+    assert_logical_domain_rejected(&tool_three);
+
+    let four = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "metadata": {"ali": "ce@", "exa": "mple.invalid"},
+        "messages": []
+    });
+    assert_logical_domain_rejected(&four);
+
+    let nested_four = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{
+            "role": "user",
+            "content": [{
+                "type": "tool_use",
+                "id": "toolu_1",
+                "name": "lookup",
+                "input": ["ali", {"ce@": ["exa", "mple.invalid"]}]
+            }]
+        }]
+    });
+    assert_logical_domain_rejected(&nested_four);
+
+    let signed_three = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{
+            "role": "assistant",
+            "content": [
+                {"type": "thinking", "thinking": "alice", "signature": "opaque-signature"},
+                {"type": "redacted_thinking", "data": "opaque-synthetic-data"},
+                {"type": "text", "text": "@example.invalid"}
+            ]
+        }]
+    });
+    assert_logical_domain_rejected(&signed_three);
+
+    let blocks = EMAIL
+        .chars()
+        .map(|character| serde_json::json!({"type": "text", "text": character.to_string()}))
+        .collect::<Vec<_>>();
+    let higher = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": blocks}]
+    });
+    assert_logical_domain_rejected(&higher);
+}
+
+#[test]
+fn request_logical_domain_limitations_are_explicit_non_joins() {
+    let (left, right) = EMAIL.split_at(6);
+    let metadata_prompt = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "metadata": {"fragment": left},
+        "messages": [{"role": "user", "content": right}]
+    });
+    assert_logical_domain_accepted(&metadata_prompt);
+
+    let routing_prompt = serde_json::json!({
+        "model": left,
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": right}]
+    });
+    assert_logical_domain_accepted(&routing_prompt);
+
+    let no_array_reorder = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [
+            {"role": "user", "content": right},
+            {"role": "assistant", "content": left}
+        ]
+    });
+    assert_logical_domain_accepted(&no_array_reorder);
+
+    let intervening_visible_text = serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": left},
+                {"type": "text", "text": "synthetic"},
+                {"type": "text", "text": right}
+            ]
+        }]
+    });
+    assert_logical_domain_accepted(&intervening_visible_text);
+}
+
+struct CountingModePseudonymizer {
+    suppressed_calls: usize,
+    mutate_views: bool,
+}
+
+impl RequestPseudonymizer for CountingModePseudonymizer {
+    fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        Ok(input.to_owned())
+    }
+
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
+        if mode == PrefixCacheWriteMode::Suppress {
+            self.suppressed_calls += 1;
+            if self.mutate_views && input.matches("TRIGGER").count() >= 2 {
+                return Ok(format!("{input}!"));
+            }
+        }
+        Ok(input.to_owned())
+    }
+
+    fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
+        Ok(())
+    }
+}
+
+#[test]
+fn request_logical_domain_failure_runs_the_complete_structure_determined_schedule() {
+    let codec = AnthropicMessagesCodec;
+    let request = serde_json::to_vec(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "system": "TRIGGER-system",
+        "tools": [{
+            "name": "TRIGGER-tool",
+            "input_schema": {"type": "object", "description": "TRIGGER-schema"}
+        }],
+        "metadata": {"TRIGGER-metadata": "synthetic"},
+        "messages": [{"role": "user", "content": "TRIGGER-message"}]
+    }))
+    .unwrap();
+    let mut clean = CountingModePseudonymizer {
+        suppressed_calls: 0,
+        mutate_views: false,
+    };
+    assert!(codec
+        .protect_request(&request, &mut request_context(&mut clean))
+        .is_ok());
+
+    let mut mutating = CountingModePseudonymizer {
+        suppressed_calls: 0,
+        mutate_views: true,
+    };
+    let error = match codec.protect_request(&request, &mut request_context(&mut mutating)) {
+        Ok(_) => panic!("expected closed request proof failure"),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), CodecErrorCode::ControlWouldMutate);
+    assert_eq!(error.phase(), CodecPhase::RequestProof);
+    assert_eq!(mutating.suppressed_calls, clean.suppressed_calls);
 }
 
 #[test]

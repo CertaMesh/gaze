@@ -677,6 +677,27 @@ async fn trusted_principal_resolution_precedes_request_body_materialization() {
 }
 
 #[tokio::test]
+async fn split_logical_domain_rejects_before_upstream_io() {
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let body = br#"{"model":"claude-test","max_tokens":32,"messages":[{"role":"user","content":[{"type":"text","text":"alice@"},{"type":"text","text":"example.invalid"}]}]}"#;
+
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .body(body.as_slice())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error: Value = response.json().await.unwrap();
+    assert_eq!(
+        error["error"]["code"],
+        Value::String("ControlWouldMutate".to_string())
+    );
+    assert!(upstream.captures.lock().await.is_empty());
+}
+
+#[tokio::test]
 async fn beta_header_is_denied_by_default_and_forwarded_only_when_allowlisted() {
     const BETA: &str = "tools-2025-01-01";
 

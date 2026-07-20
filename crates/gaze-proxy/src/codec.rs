@@ -275,16 +275,21 @@ pub trait RequestPseudonymizer {
     /// Protects one complete decoded logical value against the staged transaction.
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode>;
 
-    /// Protects one decoded value with an explicit prefix-cache write mode.
+    /// Protects one decoded value with an explicit prefix-cache mode.
     ///
-    /// Cache-owning implementations must override this method. The default preserves
-    /// source compatibility for stateless pseudonymizers that have no cache capability.
+    /// [`PrefixCacheWriteMode::Allow`] preserves the source-compatible delegation to
+    /// [`Self::protect`]. [`PrefixCacheWriteMode::Suppress`] fails closed unless an
+    /// implementation explicitly overrides this method with a stateless or isolated
+    /// no-read/no-write guarantee.
     fn protect_with_prefix_cache_write_mode(
         &mut self,
         input: &str,
-        _mode: PrefixCacheWriteMode,
+        mode: PrefixCacheWriteMode,
     ) -> Result<String, CodecErrorCode> {
-        self.protect(input)
+        match mode {
+            PrefixCacheWriteMode::Allow => self.protect(input),
+            PrefixCacheWriteMode::Suppress => Err(CodecErrorCode::ProtectionFailedClosed),
+        }
     }
 
     /// Proves that every Gaze-shaped token belongs to the staged transaction.
@@ -348,6 +353,7 @@ impl<'a> RequestTransformContext<'a> {
             .protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
 
+    /// Runs an isolated mutation probe that may neither reuse nor publish prefix-cache state.
     pub(crate) fn probe_without_prefix_cache_write(
         &mut self,
         input: &str,
