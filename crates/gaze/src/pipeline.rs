@@ -138,11 +138,11 @@ impl PipelineOptimizationConfig {
     }
 }
 
-/// Controls whether one transactional protection call may populate the prefix cache.
+/// Controls whether one transactional protection call may reuse or populate the prefix cache.
 ///
-/// [`Self::Suppress`] retains prefix-cache lookup and all detector, mapping, and manifest
-/// behavior while preventing new cache entries from being staged. It is intended for
-/// mutation probes whose output is inspected but never emitted.
+/// [`Self::Suppress`] bypasses both prefix-cache lookup and publication while retaining all
+/// detector, mapping, and manifest behavior. It is intended for mutation probes whose output is
+/// inspected but never emitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrefixCacheWriteMode {
     Allow,
@@ -245,7 +245,10 @@ impl ProtectionTarget<'_, '_> {
     fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
         match self {
             Self::Live(session) => session.lookup_prefix_cache(text),
-            Self::Staged(transaction, _) => transaction.lookup_prefix_cache(text),
+            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
+                transaction.lookup_prefix_cache(text)
+            }
+            Self::Staged(_, PrefixCacheWriteMode::Suppress) => None,
         }
     }
 
@@ -391,11 +394,11 @@ impl Pipeline {
         )
     }
 
-    /// Runs transactional protection with an explicit prefix-cache write mode.
+    /// Runs transactional protection with an explicit prefix-cache mode.
     ///
-    /// Suppressing writes does not disable cache lookup, detection, tokenization, or manifest
-    /// staging. The caller still owns the transaction and decides whether any staged mapping is
-    /// committed.
+    /// Suppression bypasses cache lookup and publication without disabling detection,
+    /// tokenization, or manifest staging. The caller still owns the transaction and decides
+    /// whether any staged mapping is committed.
     pub fn pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
         &self,
         transaction: &mut SessionTransaction<'_>,
@@ -3417,6 +3420,74 @@ mod tests {
         assert_eq!(snapshot.tokens(), staged_tokens);
         assert_eq!(session.tokens(), staged_tokens);
         assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_some());
+    }
+
+    #[test]
+    fn transaction_pipeline_suppression_bypasses_prefix_cache_lookup_and_store() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "alice@example.invalid",
+                class: PiiClass::Email,
+                source: "email.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let mut transaction = session.begin_transaction();
+
+        let cached_prefix = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("alice@".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime staged prefix cache");
+        let CleanDocument::Text(cached_prefix) = cached_prefix else {
+            panic!("expected text output");
+        };
+        assert_eq!(cached_prefix, "alice@");
+        assert_eq!(
+            transaction
+                .lookup_prefix_cache("alice@example.invalid")
+                .expect("preseeded prefix cache hit")
+                .raw_len,
+            "alice@".len()
+        );
+        #[cfg(feature = "test-support")]
+        let staged_cache_entries = transaction.prefix_cache_entry_count();
+        #[cfg(feature = "test-support")]
+        let live_cache_entries = session.prefix_cache_entry_count();
+
+        let protected = pipeline
+            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+                &mut transaction,
+                RawDocument::Text("alice@example.invalid".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                PrefixCacheWriteMode::Suppress,
+            )
+            .expect("suppression probe");
+        let CleanDocument::Text(protected) = protected else {
+            panic!("expected text output");
+        };
+        assert_ne!(protected, "alice@example.invalid");
+        assert_eq!(transaction.tokens().len(), 1);
+        #[cfg(feature = "test-support")]
+        {
+            assert_eq!(transaction.prefix_cache_entry_count(), staged_cache_entries);
+            assert_eq!(session.prefix_cache_entry_count(), live_cache_entries);
+        }
+
+        drop(transaction);
+        assert!(session.tokens().is_empty());
+        assert!(session
+            .lookup_prefix_cache("alice@example.invalid")
+            .is_none());
     }
 
     #[test]
