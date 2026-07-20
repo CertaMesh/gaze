@@ -23,18 +23,27 @@ configured `gaze::Pipeline` and recognizer registry make detection decisions.
 | Provider | Request surfaces | Response surfaces | Streaming surfaces |
 | --- | --- | --- | --- |
 | OpenAI | `messages[].content`, `system`, `tool_calls[].function.arguments`, `input` | `choices[].message.content`, `choices[].message.tool_calls[].function.arguments`, `output` | `choices[].delta.content`, `choices[].delta.tool_calls[].function.arguments` |
-| Anthropic | `system`, `messages[].content[].text`, `tool_use.input`, `tool_result.content` | `content[].text`, `tool_use.input`, `tool_result.content` | `content_block_delta.delta.text`, `delta.partial_json` |
+| Anthropic | Strict, schema-aware Messages codec; see the [public contract](anthropic-messages-contract.md) | Strict, schema-aware Messages codec; see the [public contract](anthropic-messages-contract.md) | Strict lifecycle with proved replay; see the [public contract](anthropic-messages-contract.md) |
 | Gemini | `contents[].parts[].text`, `functionCall.args`, `functionResponse.response`, `systemInstruction.parts[].text` | `candidates[].content.parts[].text`, `functionCall.args` | same parts shape per chunk |
 
-Image payloads are skipped. Tool and function objects are walked as native JSON
-objects where the provider exposes them as objects; string-encoded argument
-fields are redacted as strings without provider-shape transcoding.
+The legacy OpenAI and Gemini adapters walk tool and function objects as native
+JSON without provider-shape transcoding. The strict Anthropic direct profile is
+different: it admits only its documented Messages schema, rejects unknown or
+opaque media surfaces, and proves the complete transformed request or response.
 
-## Session TTL
+## Anthropic Direct Sessions
 
-The proxy uses `X-Gaze-Session-Id` when supplied. Without that header it creates
-an ephemeral UUID-backed session. Sessions are held in memory and evicted after
-`session_ttl`; the manifest contract remains `gaze::Session`.
+`AnthropicAdapter::new` is intentionally ephemeral and single-request. It creates
+an internal session for that request and rejects any `x-gaze-session-id` header;
+it does not infer continuity from a supplied header.
+
+Continuity is opt-in through the adapter builder or equivalent host
+configuration. Once enabled, every request must carry `x-gaze-session-id` with
+a canonical lowercase UUIDv4 value. Active mappings are bounded and held in
+memory; expiry is reported as `SessionExpired` (`410`) and is not silently
+recreated. See the [strict Anthropic Messages contract](anthropic-messages-contract.md)
+for registry bounds, principal resolution, and the migration from legacy
+header behavior.
 
 ## Daemon Lifecycle
 
