@@ -8,7 +8,7 @@ const ORIGIN: &[u8] = b"http://127.99.88.77:43123";
 
 #[test]
 fn raw_gate_accepts_only_one_canonical_origin_form_request() {
-    let request = b"POST /api/v1/events/snapshot HTTP/1.1\r\nHost: 127.99.88.77:43123\r\nOrigin: http://127.99.88.77:43123\r\nContent-Length: 0\r\nX-Gaze-Page-Session: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nX-Gaze-Csrf: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n\r\n";
+    let request = b"POST /api/v1/events/snapshot HTTP/1.1\r\nHost: 127.99.88.77:43123\r\nOrigin: http://127.99.88.77:43123\r\nContent-Type: application/json\r\nContent-Length: 2\r\nX-Gaze-Page-Session: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nX-Gaze-Csrf: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n\r\n{}";
     let validated = DashboardHttp1Gate::validate(request, HOST, ORIGIN).expect("canonical request");
     assert_eq!(validated.route(), ValidatedDashboardRequestV1::Snapshot);
 }
@@ -26,6 +26,8 @@ fn smuggling_rebinding_cors_and_ambient_auth_all_fail_closed() {
         b"GET / HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
         b"GET / HTTP/1.1\nHost: 127.99.88.77:43123\n\n",
         b"GET / HTTP/1.1\r\nHost: 127.99.88.77:43123\rX-Test: no\r\n\r\n",
+        b"GET / HTTP/1.1\r\nHost: 127.99.88.77:43123\r\nX-Unknown: no\r\n\r\n",
+        b"POST /api/v1/events/snapshot HTTP/1.1\r\nHost: 127.99.88.77:43123\r\nOrigin: http://127.99.88.77:43123\r\nAuthorization: GazeDashboardV1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nContent-Type: application/json\r\nContent-Length: 2\r\nX-Gaze-Page-Session: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nX-Gaze-Csrf: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n\r\n{}",
     ];
     for request in cases {
         let Err(error) = DashboardHttp1Gate::validate(request, HOST, ORIGIN) else {

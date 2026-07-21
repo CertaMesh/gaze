@@ -32,8 +32,12 @@ fn omissions_and_traces_use_exact_closed_caution_language() {
         ProjectionOmissionReasonV1::NotCapturedByPolicy,
     ))
     .unwrap();
-    assert!(omitted.contains("node_count\":null"));
-    assert!(!omitted.contains("node_count\":0"));
+    assert!(!omitted.contains("node_count"));
+    assert!(!omitted.contains("value"));
+    assert_eq!(
+        omitted,
+        r#"{"state":"Omitted","reason":"NotCapturedByPolicy"}"#
+    );
     assert_eq!(
         DecisionTraceVm::new(
             DecisionEngineCodeV1::ResidualScan,

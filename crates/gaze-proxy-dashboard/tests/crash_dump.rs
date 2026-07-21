@@ -1,4 +1,5 @@
 #![cfg(unix)]
+#![cfg_attr(target_os = "macos", allow(dead_code, unused_imports))]
 
 use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
@@ -32,6 +33,7 @@ fn crash_helper() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn unix_child_readiness_sets_and_verifies_zero_core_limit() {
     assert_eq!(NoDumpReadiness::install_and_verify(), Verified);
     use rustix::process::{getrlimit, Resource};
@@ -41,6 +43,7 @@ fn unix_child_readiness_sets_and_verifies_zero_core_limit() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn forced_panic_emits_no_canary_or_owned_artifact() {
     let (output, artifact_count) = run_to_exit("panic");
     assert!(!output.status.success());
@@ -58,6 +61,7 @@ fn forced_abort_emits_no_canary_or_owned_artifact() {
 }
 
 #[test]
+#[cfg(not(target_os = "macos"))]
 fn forced_kill_leaves_no_owned_artifact_or_orphan() {
     let temp = tempfile::tempdir().unwrap();
     let mut child = helper_command("kill", temp.path())
@@ -80,6 +84,15 @@ fn forced_kill_leaves_no_owned_artifact_or_orphan() {
     let status = child.wait().unwrap();
     assert!(!status.success());
     assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn darwin_is_honestly_unsupported_before_sensitive_child_startup() {
+    assert_eq!(
+        NoDumpReadiness::install_and_verify(),
+        NoDumpReadiness::Unsupported
+    );
 }
 
 fn run_to_exit(mode: &str) -> (std::process::Output, usize) {
