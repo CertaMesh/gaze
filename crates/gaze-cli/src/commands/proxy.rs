@@ -23,6 +23,8 @@ pub(crate) struct ServeArgs {
     pub(crate) rulepack: String,
     pub(crate) session_ttl: String,
     pub(crate) foreground_daemon: bool,
+    #[cfg(feature = "dashboard")]
+    pub(crate) dashboard: super::proxy_dashboard::DashboardArgs,
 }
 
 pub(crate) struct StartArgs {
@@ -33,6 +35,8 @@ pub(crate) struct StartArgs {
     pub(crate) policy: Option<PathBuf>,
     pub(crate) rulepack: Option<String>,
     pub(crate) session_ttl: Option<String>,
+    #[cfg(feature = "dashboard")]
+    pub(crate) dashboard: super::proxy_dashboard::DashboardArgs,
 }
 
 pub(crate) struct StopArgs {
@@ -57,6 +61,26 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
         args.upstream_gemini,
     );
     config.session_ttl = parse_duration(&args.session_ttl)?;
+    #[cfg(feature = "dashboard")]
+    let mut _dashboard_launch = None;
+    #[cfg(feature = "dashboard")]
+    {
+        use super::proxy_dashboard::{self, DashboardDecision};
+        match proxy_dashboard::decide(&args.dashboard) {
+            DashboardDecision::Off => {}
+            DashboardDecision::Disabled(reason) => {
+                eprintln!("gaze dashboard disabled: {reason}");
+            }
+            DashboardDecision::Enable(plan) => match proxy_dashboard::activate(plan) {
+                Ok(active) => {
+                    config = config.with_inspection(active.producer);
+                    _dashboard_launch = Some(active.launch);
+                    eprintln!("gaze dashboard active");
+                }
+                Err(reason) => eprintln!("gaze dashboard disabled: {reason}"),
+            },
+        }
+    }
     let pipeline = build_pipeline(args.policy, &args.rulepack)?;
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|err| CliError::ProxyDetail(format!("runtime: {err}")))?;
@@ -68,9 +92,14 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
 pub(crate) fn start(args: StartArgs) -> Result<(), CliError> {
     let paths = DaemonPaths::resolve().map_err(map_proxy)?;
     let mut config = daemon::read_or_default_config(&paths).map_err(map_proxy)?;
+    #[cfg(feature = "dashboard")]
+    let dashboard_args = args.dashboard.clone();
     apply_start_overrides(&mut config, args);
-    let pid = daemon::start(daemon::StartOptions::new(paths.clone(), config.clone()))
-        .map_err(map_proxy)?;
+    let start_options = daemon::StartOptions::new(paths.clone(), config.clone());
+    #[cfg(feature = "dashboard")]
+    let start_options =
+        start_options.with_extra_args(super::proxy_dashboard::relay_extra_args(&dashboard_args));
+    let pid = daemon::start(start_options).map_err(map_proxy)?;
     println!(
         "gaze-proxy started (pid={pid}, bind={}, log={})",
         config.bind,
@@ -229,7 +258,7 @@ fn apply_start_overrides(config: &mut DaemonConfig, args: StartArgs) {
     );
 }
 
-fn parse_duration(input: &str) -> Result<Duration, CliError> {
+pub(crate) fn parse_duration(input: &str) -> Result<Duration, CliError> {
     let trimmed = input.trim();
     let parse_number = |suffix: &str| {
         trimmed
