@@ -14,6 +14,7 @@ use gaze_types::inspection::DashboardCaptureDescriptorV1;
 use zeroize::Zeroize;
 
 use crate::collector::WriterHandle;
+use crate::ipc::reject_immediate_trailing;
 use crate::runtime::{DashboardLaunch, RuntimeParts};
 use crate::sink::{Admission, DashboardInspectionSink};
 use crate::{
@@ -240,21 +241,6 @@ fn acknowledge_pairing(
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
     Ok(authority)
-}
-
-fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
-    control
-        .set_nonblocking(true)
-        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    let mut trailing = [0_u8; 1];
-    let read = control.read(&mut trailing);
-    control
-        .set_nonblocking(false)
-        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    match read {
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
-        _ => Err(DashboardError::new(DashboardErrorCode::PairingFailed)),
-    }
 }
 
 /// Acknowledged one-shot pairing state. It exposes no sink.

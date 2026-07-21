@@ -1,5 +1,6 @@
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
+use std::os::unix::net::UnixStream;
 
 use gaze_inspection::{
     InspectionEventV1, InspectionEventViewV1, OwnerRawProjectionV1, OwnerRestoredProjectionV1,
@@ -139,6 +140,21 @@ impl DeliveredAckV1 {
             .read_exact(&mut bytes)
             .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
         Self::decode(bytes, expected_nonce)
+    }
+}
+
+pub(crate) fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
+    control
+        .set_nonblocking(true)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    let mut trailing = [0_u8; 1];
+    let read = control.read(&mut trailing);
+    control
+        .set_nonblocking(false)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    match read {
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
+        _ => Err(DashboardError::new(DashboardErrorCode::PairingFailed)),
     }
 }
 
@@ -453,5 +469,13 @@ mod tests {
         assert_eq!(ack_bytes.len(), 22);
         assert!(DeliveredAckV1::decode(ack_bytes.clone().try_into().unwrap(), nonce).is_ok());
         assert!(DeliveredAckV1::decode(ack_bytes.try_into().unwrap(), [8_u8; 16]).is_err());
+    }
+
+    #[test]
+    fn persistent_pairing_stream_rejects_immediate_trailing_bytes() {
+        let (mut receiver, mut sender) = UnixStream::pair().unwrap();
+        assert!(reject_immediate_trailing(&mut receiver).is_ok());
+        sender.write_all(&[0x42]).unwrap();
+        assert!(reject_immediate_trailing(&mut receiver).is_err());
     }
 }

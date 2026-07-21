@@ -1,4 +1,4 @@
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -12,7 +12,7 @@ use gaze_types::inspection::{
 use zeroize::Zeroizing;
 
 use crate::auth::{decode_secondary_header, AuthRegistry};
-use crate::ipc::DecodedInspectionFrame;
+use crate::ipc::{reject_immediate_trailing, DecodedInspectionFrame};
 use crate::security_headers::SECURITY_HEADERS;
 use crate::store::{EventStore, ResponseLease, RevealRegistry};
 use crate::{
@@ -230,21 +230,6 @@ fn child_pair(
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
     crate::DeliveredAckV1::read_from(control, nonce)?;
     reject_immediate_trailing(control)
-}
-
-fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
-    control
-        .set_nonblocking(true)
-        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    let mut trailing = [0_u8; 1];
-    let read = control.read(&mut trailing);
-    control
-        .set_nonblocking(false)
-        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    match read {
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
-        _ => Err(DashboardError::new(DashboardErrorCode::PairingFailed)),
-    }
 }
 
 fn inspection_loop(
