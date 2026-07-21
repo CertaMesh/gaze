@@ -13,6 +13,7 @@ members = [
     "crates/gaze-mcp-core",
     "crates/gaze-mcp-rmcp",
     "crates/gaze-proxy",
+    "crates/gaze-proxy-dashboard",
     "crates/gaze-token-bridge",
     "crates/xtask",
 ]
@@ -34,6 +35,7 @@ gaze-mcp-rmcp = { path = "crates/gaze-mcp-rmcp", version = "0.12.0" }
 gaze-model-setup = { path = "crates/gaze-model-setup", version = "0.12.0" }
 gaze-recognizers = { path = "crates/gaze-recognizers", version = "0.12.1" }
 gaze-proxy = { path = "crates/gaze-proxy", version = "0.12.0" }
+gaze-proxy-dashboard = { path = "crates/gaze-proxy-dashboard", version = "0.12.0" }
 gaze-types = { path = "crates/gaze-types", version = "0.12.0" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 serde = { version = "1" }
