@@ -450,15 +450,27 @@
     hardTeardown("Session ended. Pair again to continue.");
   }
 
-  window.addEventListener("pagehide", () => { hardTeardown(null); });
-  document.addEventListener("freeze", () => { hardTeardown(null); });
+  /* Hidden/freeze/pagehide must leave no launch token typed, enabled, or in
+   * flight — on the preauth screen as well as the paired app. Re-entry after
+   * a hide requires a fresh service-worker absence proof. */
+  window.addEventListener("pagehide", () => { hardTeardown(null); disablePairEntry(); });
+  document.addEventListener("freeze", () => { hardTeardown(null); disablePairEntry(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden" && state.screen === "app") {
-      hardTeardown(null);
+    if (document.visibilityState === "hidden") {
+      if (state.screen === "app") { hardTeardown(null); } else { abortAll(); }
+      disablePairEntry();
+      return;
+    }
+    if (document.visibilityState === "visible" && state.screen === "preauth") {
+      proveSwAbsentAndEnable();
     }
   });
   window.addEventListener("pageshow", (ev) => {
-    if (ev.persisted) { hardTeardown("Restored page discarded. Pair again to continue."); }
+    if (ev.persisted) {
+      hardTeardown("Restored page discarded. Pair again to continue.");
+      disablePairEntry();
+      proveSwAbsentAndEnable();
+    }
   });
   window.addEventListener("offline", () => {
     if (state.screen === "app") { enterDisconnected("ConnectionLost"); }
@@ -1323,6 +1335,27 @@
     syncBarHeight();
   }
 
+  /* The page/document is the real scroll container at every viewport
+   * (.pane-list declares no overflow), so upward-scroll detection binds once
+   * to window. The per-render element listener below stays for any future
+   * element-level scroller; scroll events do not bubble, so the two paths
+   * never double-fire for the same scroll. */
+  let pageScrollLastTop = null;
+
+  function onPageScrollPause() {
+    const doc = document.scrollingElement || document.documentElement;
+    const top = doc ? doc.scrollTop : 0;
+    const last = pageScrollLastTop;
+    pageScrollLastTop = top;
+    if (state.screen !== "app" || state.terminal) { return; }
+    if (last !== null && top < last) {
+      state.follow.pauseReasons.add("scroll");
+      updateFollowControls();
+    }
+  }
+
+  window.addEventListener("scroll", onPageScrollPause, { passive: true });
+
   function attachScrollPause() {
     const list = document.getElementById("event-list");
     if (!list) { return; }
@@ -1423,30 +1456,45 @@
 
   /* ================= boot ================= */
 
-  async function boot() {
+  function disablePairEntry() {
+    if (tokenInput) { tokenInput.value = ""; tokenInput.disabled = true; }
+    if (pairButton) { pairButton.disabled = true; }
+  }
+
+  async function proveSwAbsentAndEnable() {
     if (!tokenInput || !pairButton) { return; }
-    // Trusted shell code refuses token entry when a service worker exists for
-    // this origin.
-    let swClean = true;
+    // Trusted shell code refuses token entry unless the ABSENCE of any
+    // service-worker controller/registration is affirmatively proved.
+    // Enumeration failure or API unavailability is not proof of absence.
+    let swProof = "unproven";
     if ("serviceWorker" in navigator) {
       try {
-        if (navigator.serviceWorker.controller) { swClean = false; }
+        const controlled = Boolean(navigator.serviceWorker.controller);
         const regs = await navigator.serviceWorker.getRegistrations();
-        if (regs && regs.length > 0) { swClean = false; }
+        swProof = (controlled || (regs && regs.length > 0)) ? "present" : "absent";
       } catch (_e) {
-        swClean = true; // API unavailable: nothing is registered.
+        swProof = "unproven";
       }
     }
-    if (!swClean) {
-      setPairError("A service worker is registered for this origin. Token entry is disabled. Launch the dashboard on a fresh origin.");
+    if (swProof !== "absent") {
+      disablePairEntry();
+      setPairError(swProof === "present"
+        ? "A service worker is registered for this origin. Token entry is disabled. Launch the dashboard on a fresh origin."
+        : "Service worker state could not be verified. Token entry is disabled. Launch the dashboard on a fresh origin.");
       return;
     }
+    setPairError("");
     tokenInput.disabled = false;
     pairButton.disabled = false;
+  }
+
+  function boot() {
+    if (!tokenInput || !pairButton) { return; }
     pairButton.addEventListener("click", attemptPair);
     tokenInput.addEventListener("keydown", (kev) => {
       if (kev.key === "Enter") { kev.preventDefault(); attemptPair(); }
     });
+    proveSwAbsentAndEnable();
   }
 
   boot();

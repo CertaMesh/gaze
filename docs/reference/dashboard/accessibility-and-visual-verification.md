@@ -20,8 +20,9 @@ regenerated on every run of the browser contract.
   `crates/gaze-proxy-dashboard/browser-tests/`; axe-core for the automated
   accessibility pass; a std-only Rust asset contract in
   `crates/gaze-proxy-dashboard/tests/browser_contract.rs`.
-- Result: **59/59 automated tests pass** — the 44 matrix states plus 15
-  security/lifecycle/accessibility suites.
+- Result: **63/63 automated tests pass** — the 44 matrix states plus 19
+  security/lifecycle/accessibility suites (see "Post-review corrections"
+  below for the four regression tests added after review).
 
 ## How to reproduce
 
@@ -190,8 +191,10 @@ control when concealment removes the focused region.
   (`⟦U+XXXX⟧` placeholders in LTR plain text); no element or script is
   created, no dialog fires, and `Object.prototype` is unpolluted.
 - **Fresh origin:** cookies, localStorage, sessionStorage, Cache API, and
-  service-worker registrations are all empty after full use; the shell
-  refuses token entry if a service worker controls the origin.
+  service-worker registrations are all empty after full use; the shell enables
+  token entry only after affirmatively proving that no service worker controls
+  or is registered for the origin — enumeration failure or API unavailability
+  keeps entry disabled (fail closed).
 - **SSE rule (seam audit #5953 INFO-2):** stream rows render ordinal, event
   kind, delta kind, and content-block index only. Table headers are asserted
   exactly; per-entry byte counts, timestamps, cadence, latency, and relative
@@ -267,3 +270,32 @@ file was touched):
 None of these stand-ins add provider semantics, reconstruct projections, or
 narrow the 44-state matrix; renderers treat every unknown wire value as a
 closed caution state.
+
+## Post-review corrections (2026-07-21, branch `agent/proxy-dashboard-visual-scroll-fix-4590`)
+
+Two review findings against the visual surface were remediated and
+regression-locked after the original 59-test evidence run:
+
+1. **Scroll-up follow pause (#5971 BLOCKER-1):** the pause listener was bound
+   to `.pane-list`, which is not a scroll container, so a real upward scroll
+   of the document never paused live follow. Upward-scroll detection now also
+   binds once to `window` (the actual rendered scroll container at every
+   viewport); the element-level listener remains for any future element
+   scroller. `LC-SCROLL-PAUSE` scrolls the real document with wheel input at
+   V7 and proves: downward scroll stays LIVE, upward scroll shows
+   `FOLLOW PAUSED — N BUFFERED`, rows never change while paused, and explicit
+   Resume applies buffered rows. The test fails on the pre-fix assets.
+2. **Service-worker proof and pre-auth token lifecycle (#5976 BLOCKER-7):**
+   the boot proof previously treated enumeration failure as "clean" and the
+   hidden-lifecycle teardown ran only post-auth. Token entry now enables only
+   after affirmatively proving the absence of any service-worker controller
+   and registration; enumeration rejection or API unavailability keeps entry
+   disabled (fail closed). `visibilitychange(hidden)`, `freeze`, and
+   `pagehide` clear and disable the pre-auth token input and abort any
+   in-flight pairing request; returning visible re-runs the proof before
+   re-enabling. `SEC-SW-FAILCLOSED`, `LC-PREAUTH-HIDDEN`, and
+   `LC-PREAUTH-ABORT` prove each path in a real browser with token canaries;
+   all three fail on the pre-fix assets.
+
+The 44-state matrix, its 259 assertions, and the four honest conditionals are
+unchanged; the suite total is now 63.

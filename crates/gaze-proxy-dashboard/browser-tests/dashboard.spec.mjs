@@ -985,6 +985,48 @@ test("SEC-FRESH-ORIGIN no cookies, storage, cache, or service worker", async ({ 
   await page.context().close();
 });
 
+test("SEC-SW-FAILCLOSED service-worker proof failure keeps token entry disabled", async ({ browser }) => {
+  const entry = ledgerState({ id: "SEC-SW-FAILCLOSED", layer: "security", viewport: "V2", tier: "-", content: "sw-fail-closed", condition: "-", fixture: "fx-default" });
+  await control("/__fixture", { id: "fx-default" });
+  await check(entry, "registration enumeration rejection keeps input disabled and pairing impossible", async () => {
+    const page = await newPage(browser, "V2", {});
+    await page.addInitScript(() => {
+      const desc = Object.getOwnPropertyDescriptor(Navigator.prototype, "serviceWorker");
+      Object.defineProperty(Navigator.prototype, "serviceWorker", {
+        configurable: true,
+        get() {
+          const real = desc.get.call(this);
+          return new Proxy(real, {
+            get(t, p) {
+              if (p === "getRegistrations") {
+                return () => Promise.reject(new Error("enumeration rejected"));
+              }
+              const v = Reflect.get(t, p);
+              return typeof v === "function" ? v.bind(t) : v;
+            },
+          });
+        },
+      });
+    });
+    await page.goto(server.origin + "/");
+    await expect(page.locator("#preauth-alert")).toContainText("could not be verified");
+    await expect(page.locator("#token-input")).toBeDisabled();
+    await expect(page.locator("#pair-button")).toBeDisabled();
+    await page.context().close();
+  });
+  await check(entry, "service-worker API unavailability keeps input disabled and pairing impossible", async () => {
+    const page = await newPage(browser, "V2", {});
+    await page.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, "serviceWorker", { configurable: true, get: () => undefined });
+    });
+    await page.goto(server.origin + "/");
+    await expect(page.locator("#preauth-alert")).toContainText("could not be verified");
+    await expect(page.locator("#token-input")).toBeDisabled();
+    await expect(page.locator("#pair-button")).toBeDisabled();
+    await page.context().close();
+  });
+});
+
 test("LC-RELOAD reload requires fresh pairing", async ({ browser }) => {
   const entry = ledgerState({ id: "LC-RELOAD", layer: "lifecycle", viewport: "V2", tier: "-", content: "reload", condition: "-", fixture: "fx-default" });
   const page = await openState(browser, "V2", "fx-default");
@@ -1012,6 +1054,84 @@ test("LC-HIDDEN visibility hidden clears auth, model, and payload", async ({ bro
     });
     await expect(page.locator("#preauth")).toBeVisible();
     await assertConcealedSentinelsAbsent(page, [RAW_SENTINEL]);
+  });
+  await page.context().close();
+});
+
+test("LC-PREAUTH-HIDDEN preauth hidden/freeze/pagehide clear and disable token entry", async ({ browser }) => {
+  const entry = ledgerState({ id: "LC-PREAUTH-HIDDEN", layer: "lifecycle", viewport: "V2", tier: "-", content: "preauth-hidden", condition: "-", fixture: "fx-default" });
+  await control("/__fixture", { id: "fx-default" });
+  const page = await newPage(browser, "V2", {});
+  await gotoShell(page);
+  await check(entry, "hidden on preauth clears and disables the typed token; no canary in DOM/JS state", async () => {
+    await page.fill("#token-input", LAUNCH_TOKEN);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(page.locator("#token-input")).toBeDisabled();
+    await expect(page.locator("#pair-button")).toBeDisabled();
+    await expect(page.locator("#token-input")).toHaveValue("");
+    const html = await domHtml(page);
+    expect(html.includes(LAUNCH_TOKEN)).toBe(false);
+    const jsVisible = await page.evaluate(() => document.getElementById("token-input").value);
+    expect(jsVisible).toBe("");
+  });
+  await check(entry, "returning visible re-proves service-worker absence and re-enables entry", async () => {
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { get: () => "visible", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(page.locator("#token-input")).toBeEnabled();
+    await expect(page.locator("#pair-button")).toBeEnabled();
+  });
+  await check(entry, "freeze on preauth clears and disables token entry", async () => {
+    await page.fill("#token-input", LAUNCH_TOKEN);
+    await page.evaluate(() => { document.dispatchEvent(new Event("freeze")); });
+    await expect(page.locator("#token-input")).toBeDisabled();
+    await expect(page.locator("#token-input")).toHaveValue("");
+    await page.evaluate(() => { document.dispatchEvent(new Event("visibilitychange")); });
+    await expect(page.locator("#token-input")).toBeEnabled();
+  });
+  await check(entry, "pagehide on preauth clears and disables token entry", async () => {
+    await page.fill("#token-input", LAUNCH_TOKEN);
+    await page.evaluate(() => { window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false })); });
+    await expect(page.locator("#token-input")).toBeDisabled();
+    await expect(page.locator("#token-input")).toHaveValue("");
+    const html = await domHtml(page);
+    expect(html.includes(LAUNCH_TOKEN)).toBe(false);
+  });
+  await page.context().close();
+});
+
+test("LC-PREAUTH-ABORT hidden aborts an in-flight pairing request", async ({ browser }) => {
+  const entry = ledgerState({ id: "LC-PREAUTH-ABORT", layer: "lifecycle", viewport: "V2", tier: "-", content: "preauth-abort", condition: "-", fixture: "fx-default" });
+  await control("/__fixture", { id: "fx-default" });
+  const page = await newPage(browser, "V2", {});
+  let pairHeaders = null;
+  await page.route("**/api/v1/session/pair", async (route) => {
+    pairHeaders = route.request().headers();
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue().catch(() => {});
+  });
+  await gotoShell(page);
+  await check(entry, "pairing in flight when hidden is aborted and never completes into a paired app", async () => {
+    await page.fill("#token-input", LAUNCH_TOKEN);
+    await page.click("#pair-button");
+    await page.waitForFunction(() => document.getElementById("token-input").value === "");
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { get: () => "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(2500);
+    await expect(page.locator("#main")).toBeHidden();
+    await expect(page.locator("#preauth")).toBeVisible();
+    await expect(page.locator("#token-input")).toBeDisabled();
+  });
+  await check(entry, "pairing request carried omit/no-store/no-referrer credential discipline", async () => {
+    expect(pairHeaders).not.toBeNull();
+    expect(pairHeaders.cookie).toBeUndefined();
+    expect(pairHeaders.referer).toBeUndefined();
   });
   await page.context().close();
 });
@@ -1086,6 +1206,44 @@ test("LC-FOLLOW-PAUSE follow pauses on interaction and resumes with buffered cou
     await expect(resume).toHaveAttribute("aria-label", /Resume live follow \([1-9]\d* buffered events\)/, { timeout: 15000 });
     await resume.click();
     await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+  });
+  await control("/__fixture", { id: "fx-default" });
+  await page.context().close();
+});
+
+test("LC-SCROLL-PAUSE upward page scroll pauses follow and blocks silent row replacement", async ({ browser }) => {
+  const entry = ledgerState({ id: "LC-SCROLL-PAUSE", layer: "lifecycle", viewport: "V7", tier: "-", content: "scroll-pause", condition: "-", fixture: "fx-default" });
+  const page = await openState(browser, "V7", "fx-default");
+  await check(entry, "the actual rendered scroll container is the document and it overflows", async () => {
+    const m = await page.evaluate(() => {
+      const doc = document.scrollingElement || document.documentElement;
+      return { scrollHeight: doc.scrollHeight, clientHeight: doc.clientHeight };
+    });
+    expect(m.scrollHeight).toBeGreaterThan(m.clientHeight);
+  });
+  await check(entry, "downward real-wheel scroll keeps follow live", async () => {
+    await page.mouse.move(180, 400);
+    await page.mouse.wheel(0, 400);
+    await page.waitForFunction(() => (document.scrollingElement || document.documentElement).scrollTop > 0);
+    await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
+  });
+  await check(entry, "upward real-wheel scroll of the document pauses follow with buffered count", async () => {
+    await page.waitForFunction(() => {
+      const doc = document.scrollingElement || document.documentElement;
+      return doc.scrollTop > 100;
+    });
+    await page.mouse.wheel(0, -80);
+    await expect(page.locator("#follow-state")).toContainText("FOLLOW PAUSED — 0 BUFFERED");
+  });
+  await check(entry, "rows never silently change while scroll-paused; explicit resume applies them", async () => {
+    await control("/__fixture", { id: "fx-owner-both" });
+    const resume = page.locator("#resume-follow");
+    await expect(resume).toHaveAttribute("aria-label", /Resume live follow \([1-9]\d* buffered events\)/, { timeout: 15000 });
+    await expect(page.locator('.event-row[data-logical-id="12"]')).toHaveCount(0);
+    await shot(page, entry);
+    await resume.click();
+    await expect(page.locator('.event-row[data-logical-id="12"]')).toBeVisible();
+    await expect(page.locator("#follow-state")).toContainText("FOLLOW: LIVE");
   });
   await control("/__fixture", { id: "fx-default" });
   await page.context().close();

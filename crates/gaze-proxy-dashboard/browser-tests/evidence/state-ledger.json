@@ -1660,6 +1660,26 @@
     {
       "assertions": [
         {
+          "name": "registration enumeration rejection keeps input disabled and pairing impossible",
+          "result": "PASS"
+        },
+        {
+          "name": "service-worker API unavailability keeps input disabled and pairing impossible",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-SW-FAILCLOSED",
+      "layer": "security",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "sw-fail-closed",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
           "name": "reload lands on data-free preauth",
           "result": "PASS"
         }
@@ -1688,6 +1708,54 @@
       "content": "visibility-hidden",
       "condition": "-",
       "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "hidden on preauth clears and disables the typed token; no canary in DOM/JS state",
+          "result": "PASS"
+        },
+        {
+          "name": "returning visible re-proves service-worker absence and re-enables entry",
+          "result": "PASS"
+        },
+        {
+          "name": "freeze on preauth clears and disables token entry",
+          "result": "PASS"
+        },
+        {
+          "name": "pagehide on preauth clears and disables token entry",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PREAUTH-HIDDEN",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "preauth-hidden",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "pairing in flight when hidden is aborted and never completes into a paired app",
+          "result": "PASS"
+        },
+        {
+          "name": "pairing request carried omit/no-store/no-referrer credential discipline",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PREAUTH-ABORT",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "preauth-abort",
+      "condition": "-",
+      "fixture": "fx-default"
     },
     {
       "assertions": [
@@ -1758,6 +1826,34 @@
       "viewport": "V2",
       "tier": "-",
       "content": "follow-pause",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "the actual rendered scroll container is the document and it overflows",
+          "result": "PASS"
+        },
+        {
+          "name": "downward real-wheel scroll keeps follow live",
+          "result": "PASS"
+        },
+        {
+          "name": "upward real-wheel scroll of the document pauses follow with buffered count",
+          "result": "PASS"
+        },
+        {
+          "name": "rows never silently change while scroll-paused; explicit resume applies them",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "LC-SCROLL-PAUSE.png",
+      "id": "LC-SCROLL-PAUSE",
+      "layer": "lifecycle",
+      "viewport": "V7",
+      "tier": "-",
+      "content": "scroll-pause",
       "condition": "-",
       "fixture": "fx-default"
     },
