@@ -1,4 +1,7 @@
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+// Runtime activation is intentionally unreachable until gaze-inspection exposes identity proof.
+#![allow(dead_code)]
+
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -9,6 +12,8 @@ use crate::collector::WriterHandle;
 use crate::sink::Admission;
 use crate::supervisor::{PairingDelivery, SpawnedDashboardChild};
 use crate::{DashboardError, DashboardErrorCode, DashboardStatus};
+
+const CONTROL_QUEUE_CAPACITY: usize = 16;
 
 /// Serialized runtime lifecycle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -44,7 +49,7 @@ pub(crate) struct RuntimeParts {
 /// Host control for purge, rotation, shutdown, and sanitized status.
 #[derive(Clone)]
 pub struct DashboardControl {
-    commands: Sender<RuntimeCommand>,
+    commands: SyncSender<RuntimeCommand>,
     lifecycle: Arc<Mutex<DashboardLifecycle>>,
     status: Arc<Mutex<DashboardStatus>>,
 }
@@ -54,9 +59,7 @@ impl DashboardControl {
     /// child state is zeroized while the matching guard is held; only then is it completed.
     pub fn purge(&self) -> Result<(), DashboardError> {
         let (reply_tx, reply_rx) = mpsc::channel();
-        self.commands
-            .send(RuntimeCommand::Purge(reply_tx))
-            .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
+        send_command(&self.commands, RuntimeCommand::Purge(reply_tx))?;
         reply_rx
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?
@@ -68,9 +71,7 @@ impl DashboardControl {
         delivery: Box<dyn PairingDelivery>,
     ) -> Result<(), DashboardError> {
         let (reply_tx, reply_rx) = mpsc::channel();
-        self.commands
-            .send(RuntimeCommand::Rotate(delivery, reply_tx))
-            .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
+        send_command(&self.commands, RuntimeCommand::Rotate(delivery, reply_tx))?;
         reply_rx
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?
@@ -79,9 +80,7 @@ impl DashboardControl {
     /// Permanently disables capture, zeroizes state, terminates, and reaps the child.
     pub fn shutdown(&self) -> Result<(), DashboardError> {
         let (reply_tx, reply_rx) = mpsc::channel();
-        self.commands
-            .send(RuntimeCommand::Shutdown(reply_tx))
-            .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
+        send_command(&self.commands, RuntimeCommand::Shutdown(reply_tx))?;
         reply_rx
             .recv_timeout(Duration::from_secs(5))
             .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?
@@ -119,7 +118,7 @@ impl DashboardLaunch {
         parts: RuntimeParts,
         authority: std::net::SocketAddrV4,
     ) -> Result<Self, DashboardError> {
-        let (commands, command_rx) = mpsc::channel();
+        let (commands, command_rx) = mpsc::sync_channel(CONTROL_QUEUE_CAPACITY);
         let lifecycle = Arc::new(Mutex::new(DashboardLifecycle::Running(0)));
         let status = Arc::new(Mutex::new(DashboardStatus::Active));
         let thread_lifecycle = lifecycle.clone();
@@ -259,9 +258,9 @@ fn disable_and_reap(
     lifecycle: &Mutex<DashboardLifecycle>,
     status: &Mutex<DashboardStatus>,
 ) {
-    parts.admission.disable();
-    let _ = parts.writer.stop_and_join();
+    let _ = parts.admission.disable();
     let _ = parts.activated.disable();
+    let _ = parts.writer.stop_and_join();
     *lifecycle
         .lock()
         .unwrap_or_else(|poison| poison.into_inner()) = DashboardLifecycle::Disabled;
@@ -274,6 +273,16 @@ fn disable_and_reap(
     *status.lock().unwrap_or_else(|poison| poison.into_inner()) = DashboardStatus::Stopped;
 }
 
+fn send_command(
+    commands: &SyncSender<RuntimeCommand>,
+    command: RuntimeCommand,
+) -> Result<(), DashboardError> {
+    commands.try_send(command).map_err(|error| match error {
+        TrySendError::Full(_) => DashboardError::new(DashboardErrorCode::ControlQueueFull),
+        TrySendError::Disconnected(_) => DashboardError::new(DashboardErrorCode::FatalDisabled),
+    })
+}
+
 fn lifecycle_epoch(lifecycle: &Mutex<DashboardLifecycle>) -> u64 {
     match *lifecycle
         .lock()
@@ -282,5 +291,24 @@ fn lifecycle_epoch(lifecycle: &Mutex<DashboardLifecycle>) -> u64 {
         DashboardLifecycle::Running(epoch) => epoch,
         DashboardLifecycle::Purging { to, .. } => to,
         DashboardLifecycle::Disabled | DashboardLifecycle::Stopped => 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn serialized_control_queue_accepts_exactly_sixteen_pending_commands() {
+        let (commands, _receiver) = mpsc::sync_channel(CONTROL_QUEUE_CAPACITY);
+        for _ in 0..CONTROL_QUEUE_CAPACITY {
+            let (reply, _reply_rx) = mpsc::channel();
+            assert!(commands.try_send(RuntimeCommand::Purge(reply)).is_ok());
+        }
+        let (reply, _reply_rx) = mpsc::channel();
+        assert!(matches!(
+            commands.try_send(RuntimeCommand::Purge(reply)),
+            Err(TrySendError::Full(_))
+        ));
     }
 }

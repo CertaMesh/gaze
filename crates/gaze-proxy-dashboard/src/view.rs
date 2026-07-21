@@ -107,27 +107,40 @@ impl TrafficCountsVm {
 
 /// Ordinal/type-only JSON-shape view.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct SafeJsonShapeVm {
-    availability: ProjectionAvailabilityVm,
-    node_count: Option<u32>,
+#[serde(tag = "state", rename_all = "PascalCase")]
+pub enum SafeJsonShapeVm {
+    /// A startup-authorized value container.
+    Present {
+        /// Exact ordinal/type-only node count.
+        value: SafeJsonShapeValueVm,
+    },
+    /// No value container or synthetic empty value exists.
+    Omitted {
+        /// Exact closed producer omission reason.
+        reason: ProjectionOmissionReasonVm,
+    },
+}
+
+/// Present JSON-shape value container.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct SafeJsonShapeValueVm {
+    node_count: u32,
 }
 
 impl SafeJsonShapeVm {
     /// Creates an available safe shape count.
     #[must_use]
     pub const fn present(node_count: u32) -> Self {
-        Self {
-            availability: ProjectionAvailabilityVm::Present,
-            node_count: Some(node_count),
+        Self::Present {
+            value: SafeJsonShapeValueVm { node_count },
         }
     }
 
     /// Creates an omitted shape with no synthetic zero/empty value.
     #[must_use]
     pub const fn omitted(reason: ProjectionOmissionReasonV1) -> Self {
-        Self {
-            availability: ProjectionAvailabilityVm::Omitted(reason),
-            node_count: None,
+        Self::Omitted {
+            reason: ProjectionOmissionReasonVm(reason),
         }
     }
 }
@@ -161,28 +174,73 @@ impl SseTimelineEntryVm {
 
 /// Bounded SSE timeline or an exact closed omission.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct SseTimelineVm {
-    availability: ProjectionAvailabilityVm,
+#[serde(tag = "state", rename_all = "PascalCase")]
+pub enum SseTimelineVm {
+    /// A startup-authorized value container.
+    Present {
+        /// Exact bounded timeline container.
+        value: SseTimelineValueVm,
+    },
+    /// No entries field or synthetic empty value exists.
+    Omitted {
+        /// Exact closed producer omission reason.
+        reason: ProjectionOmissionReasonVm,
+    },
+}
+
+/// Present SSE value container.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct SseTimelineValueVm {
     entries: Vec<SseTimelineEntryVm>,
 }
+
+/// Closed omission spelling used by the production browser protocol.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct ProjectionOmissionReasonVm(#[serde(with = "pascal_reason")] ProjectionOmissionReasonV1);
 
 impl SseTimelineVm {
     /// Creates a present bounded timeline.
     #[must_use]
     pub fn present(entries: Vec<SseTimelineEntryVm>) -> Self {
-        Self {
-            availability: ProjectionAvailabilityVm::Present,
-            entries,
+        Self::Present {
+            value: SseTimelineValueVm { entries },
         }
     }
 
     /// Creates an omitted timeline with no synthetic empty value.
     #[must_use]
     pub fn omitted(reason: ProjectionOmissionReasonV1) -> Self {
-        Self {
-            availability: ProjectionAvailabilityVm::Omitted(reason),
-            entries: Vec::new(),
+        Self::Omitted {
+            reason: ProjectionOmissionReasonVm(reason),
         }
+    }
+}
+
+mod pascal_reason {
+    use gaze_types::inspection::ProjectionOmissionReasonV1;
+    use serde::Serializer;
+
+    pub(super) fn serialize<S>(
+        value: &ProjectionOmissionReasonV1,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(match value {
+            ProjectionOmissionReasonV1::NotCapturedByPolicy => "NotCapturedByPolicy",
+            ProjectionOmissionReasonV1::NotApplicable => "NotApplicable",
+            ProjectionOmissionReasonV1::UnsupportedFormat => "UnsupportedFormat",
+            ProjectionOmissionReasonV1::MalformedFailClosed => "MalformedFailClosed",
+            ProjectionOmissionReasonV1::LimitExceeded => "LimitExceeded",
+            ProjectionOmissionReasonV1::SignedOrEncryptedSurface => "SignedOrEncryptedSurface",
+            ProjectionOmissionReasonV1::Purging => "Purging",
+            ProjectionOmissionReasonV1::Disabled => "Disabled",
+            ProjectionOmissionReasonV1::QueueClosed => "QueueClosed",
+            ProjectionOmissionReasonV1::ProjectionFailedClosed => "ProjectionFailedClosed",
+            ProjectionOmissionReasonV1::UnknownFuture => "UnknownFuture",
+        })
     }
 }
 
@@ -332,7 +390,7 @@ mod tests {
         assert!(!json.contains("time"));
         assert_eq!(
             json,
-            r#"{"availability":{"state":"present"},"entries":[{"ordinal":4,"kind":"content_block_delta","delta":"text","content_block_index":2}]}"#
+            r#"{"state":"Present","value":{"entries":[{"ordinal":4,"kind":"content_block_delta","delta":"text","content_block_index":2}]}}"#
         );
     }
 
@@ -340,14 +398,27 @@ mod tests {
     fn closed_omissions_never_render_as_zero_empty_or_clean() {
         for reason in [
             ProjectionOmissionReasonV1::NotCapturedByPolicy,
+            ProjectionOmissionReasonV1::NotApplicable,
+            ProjectionOmissionReasonV1::UnsupportedFormat,
+            ProjectionOmissionReasonV1::MalformedFailClosed,
+            ProjectionOmissionReasonV1::LimitExceeded,
+            ProjectionOmissionReasonV1::SignedOrEncryptedSurface,
+            ProjectionOmissionReasonV1::Purging,
+            ProjectionOmissionReasonV1::Disabled,
+            ProjectionOmissionReasonV1::QueueClosed,
             ProjectionOmissionReasonV1::ProjectionFailedClosed,
             ProjectionOmissionReasonV1::UnknownFuture,
         ] {
             let vm = SafeJsonShapeVm::omitted(reason);
             let json = serde_json::to_string(&vm).unwrap();
-            assert!(json.contains("node_count\":null"));
-            assert!(!json.contains("\"node_count\":0"));
+            assert!(!json.contains("node_count"));
+            assert!(!json.contains("value"));
             assert!(!json.to_ascii_lowercase().contains("clean"));
+            let sse = serde_json::to_string(&SseTimelineVm::omitted(reason)).unwrap();
+            assert!(!sse.contains("entries"));
+            assert!(!sse.contains("value"));
+            assert!(!sse.contains("byte"));
+            assert!(!sse.contains("timing"));
         }
     }
 }

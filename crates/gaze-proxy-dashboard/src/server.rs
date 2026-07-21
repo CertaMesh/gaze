@@ -1,8 +1,6 @@
-use std::collections::HashSet;
-
 use zeroize::Zeroizing;
 
-use crate::assets::DATA_FREE_SHELL;
+use crate::assets::{APP_CSS, APP_JS, DATA_FREE_SHELL};
 use crate::security_headers::SECURITY_HEADERS;
 use crate::{DashboardError, DashboardErrorCode};
 
@@ -143,13 +141,14 @@ impl DashboardHttp1Gate {
                 | ValidatedDashboardRequestV1::Script
         );
 
-        let mut names = HashSet::new();
+        let mut seen_headers = 0_u64;
         let mut host = None;
         let mut origin = None;
         let mut authorization = None;
         let mut page_session = None;
         let mut csrf = None;
         let mut content_length = None;
+        let mut content_type = None;
         let mut count = 0_usize;
         for raw_line in lines {
             let line = trim_cr(raw_line);
@@ -176,17 +175,22 @@ impl DashboardHttp1Gate {
             {
                 return rejected();
             }
-            let lower = name.iter().map(u8::to_ascii_lowercase).collect::<Vec<_>>();
-            if !names.insert(lower.clone()) {
+            let Some((header_id, semantic)) = header_semantic(name) else {
+                return rejected();
+            };
+            let bit = 1_u64 << header_id;
+            if seen_headers & bit != 0 {
                 return rejected();
             }
-            match lower.as_slice() {
-                b"host" => host = Some(value),
-                b"origin" => origin = Some(value),
-                b"authorization" => authorization = Some(Zeroizing::new(value.to_vec())),
-                b"x-gaze-page-session" => page_session = Some(Zeroizing::new(value.to_vec())),
-                b"x-gaze-csrf" => csrf = Some(Zeroizing::new(value.to_vec())),
-                b"content-length" => {
+            seen_headers |= bit;
+            match semantic {
+                HeaderSemantic::Host => host = Some(value),
+                HeaderSemantic::Origin => origin = Some(value),
+                HeaderSemantic::Authorization => authorization = Some(value),
+                HeaderSemantic::PageSession => page_session = Some(value),
+                HeaderSemantic::Csrf => csrf = Some(value),
+                HeaderSemantic::ContentType => content_type = Some(value),
+                HeaderSemantic::ContentLength => {
                     let text = std::str::from_utf8(value).map_err(|_| rejected_error())?;
                     if text.starts_with('+')
                         || (text.len() > 1 && text.starts_with('0'))
@@ -196,26 +200,10 @@ impl DashboardHttp1Gate {
                     }
                     content_length = Some(text.parse::<usize>().map_err(|_| rejected_error())?);
                 }
-                b"transfer-encoding"
-                | b"upgrade"
-                | b"expect"
-                | b"forwarded"
-                | b"x-forwarded-for"
-                | b"x-forwarded-host"
-                | b"x-forwarded-proto"
-                | b"cookie"
-                | b"cookie2"
-                | b"proxy-authorization" => return rejected(),
-                _ => {}
+                HeaderSemantic::Passive => {}
             }
         }
         if host != Some(expected_host) {
-            return rejected();
-        }
-        if method == b"POST" && origin != Some(expected_origin) {
-            return rejected();
-        }
-        if method == b"GET" && origin.is_some() {
             return rejected();
         }
         let declared = content_length.unwrap_or(0);
@@ -226,25 +214,141 @@ impl DashboardHttp1Gate {
         {
             return rejected();
         }
+        let is_asset = matches!(
+            route,
+            ValidatedDashboardRequestV1::Shell
+                | ValidatedDashboardRequestV1::Stylesheet
+                | ValidatedDashboardRequestV1::Script
+        );
+        if is_asset {
+            if origin.is_some()
+                || authorization.is_some()
+                || page_session.is_some()
+                || csrf.is_some()
+                || content_type.is_some()
+                || content_length.is_some()
+            {
+                return rejected();
+            }
+        } else if origin != Some(expected_origin) {
+            return rejected();
+        }
+        match route {
+            ValidatedDashboardRequestV1::PairSession => {
+                if authorization.is_none()
+                    || page_session.is_some()
+                    || csrf.is_some()
+                    || content_type != Some(b"application/gaze-dashboard-pair-v1")
+                    || body != b"GZDB-PAIR-V1"
+                {
+                    return rejected();
+                }
+            }
+            ValidatedDashboardRequestV1::Snapshot
+            | ValidatedDashboardRequestV1::Follow
+            | ValidatedDashboardRequestV1::Purge => {
+                if authorization.is_some()
+                    || page_session.is_none()
+                    || csrf.is_none()
+                    || content_type != Some(b"application/json")
+                    || body != b"{}"
+                {
+                    return rejected();
+                }
+            }
+            ValidatedDashboardRequestV1::ProviderVisible
+            | ValidatedDashboardRequestV1::RevealOwnerRaw
+            | ValidatedDashboardRequestV1::RevealOwnerRestored => {
+                if authorization.is_some()
+                    || page_session.is_none()
+                    || csrf.is_none()
+                    || content_type != Some(b"application/json")
+                    || body.is_empty()
+                {
+                    return rejected();
+                }
+            }
+            ValidatedDashboardRequestV1::Shell
+            | ValidatedDashboardRequestV1::Stylesheet
+            | ValidatedDashboardRequestV1::Script => {}
+        }
         Ok(ValidatedRequest {
             route,
             body: Zeroizing::new(body.to_vec()),
-            authorization,
-            page_session,
-            csrf,
+            authorization: authorization.map(|value| Zeroizing::new(value.to_vec())),
+            page_session: page_session.map(|value| Zeroizing::new(value.to_vec())),
+            csrf: csrf.map(|value| Zeroizing::new(value.to_vec())),
         })
     }
 
     pub(crate) fn shell_response() -> Vec<u8> {
+        Self::asset_response("text/html; charset=utf-8", DATA_FREE_SHELL)
+    }
+
+    pub(crate) fn stylesheet_response() -> Vec<u8> {
+        Self::asset_response("text/css; charset=utf-8", APP_CSS)
+    }
+
+    pub(crate) fn script_response() -> Vec<u8> {
+        Self::asset_response("text/javascript; charset=utf-8", APP_JS)
+    }
+
+    fn asset_response(content_type: &str, body: &[u8]) -> Vec<u8> {
         let mut response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\n{}\r\n",
-            DATA_FREE_SHELL.len(),
+            "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n{}\r\n",
+            body.len(),
             SECURITY_HEADERS
         )
         .into_bytes();
-        response.extend_from_slice(DATA_FREE_SHELL);
+        response.extend_from_slice(body);
         response
     }
+}
+
+#[derive(Clone, Copy)]
+enum HeaderSemantic {
+    Host,
+    Origin,
+    Authorization,
+    PageSession,
+    Csrf,
+    ContentLength,
+    ContentType,
+    Passive,
+}
+
+fn header_semantic(name: &[u8]) -> Option<(u8, HeaderSemantic)> {
+    let known = [
+        (b"host".as_slice(), HeaderSemantic::Host),
+        (b"origin".as_slice(), HeaderSemantic::Origin),
+        (b"authorization".as_slice(), HeaderSemantic::Authorization),
+        (
+            b"x-gaze-page-session".as_slice(),
+            HeaderSemantic::PageSession,
+        ),
+        (b"x-gaze-csrf".as_slice(), HeaderSemantic::Csrf),
+        (b"content-length".as_slice(), HeaderSemantic::ContentLength),
+        (b"content-type".as_slice(), HeaderSemantic::ContentType),
+        (b"accept".as_slice(), HeaderSemantic::Passive),
+        (b"accept-encoding".as_slice(), HeaderSemantic::Passive),
+        (b"accept-language".as_slice(), HeaderSemantic::Passive),
+        (b"user-agent".as_slice(), HeaderSemantic::Passive),
+        (b"sec-fetch-dest".as_slice(), HeaderSemantic::Passive),
+        (b"sec-fetch-mode".as_slice(), HeaderSemantic::Passive),
+        (b"sec-fetch-site".as_slice(), HeaderSemantic::Passive),
+        (b"sec-ch-ua".as_slice(), HeaderSemantic::Passive),
+        (b"sec-ch-ua-mobile".as_slice(), HeaderSemantic::Passive),
+        (b"sec-ch-ua-platform".as_slice(), HeaderSemantic::Passive),
+        (b"dnt".as_slice(), HeaderSemantic::Passive),
+        (b"priority".as_slice(), HeaderSemantic::Passive),
+        (b"pragma".as_slice(), HeaderSemantic::Passive),
+        (b"cache-control".as_slice(), HeaderSemantic::Passive),
+    ];
+    known
+        .iter()
+        .enumerate()
+        .find(|(_, (known, _))| name.eq_ignore_ascii_case(known))
+        .map(|(index, (_, semantic))| (index as u8, *semantic))
 }
 
 fn route(method: &[u8], target: &[u8]) -> Option<ValidatedDashboardRequestV1> {
@@ -369,5 +473,43 @@ mod tests {
             };
             assert_eq!(error.code(), DashboardErrorCode::HttpRejected);
         }
+    }
+
+    #[test]
+    fn production_assets_are_embedded_byte_for_byte_with_security_headers() {
+        for (response, expected) in [
+            (DashboardHttp1Gate::shell_response(), DATA_FREE_SHELL),
+            (DashboardHttp1Gate::stylesheet_response(), APP_CSS),
+            (DashboardHttp1Gate::script_response(), APP_JS),
+        ] {
+            let boundary = response
+                .windows(4)
+                .position(|part| part == b"\r\n\r\n")
+                .unwrap()
+                + 4;
+            assert_eq!(&response[boundary..], expected);
+            let headers = std::str::from_utf8(&response[..boundary]).unwrap();
+            assert!(headers.contains("Cache-Control: no-store"));
+            assert!(headers.contains("Content-Security-Policy:"));
+            assert!(headers.contains("Clear-Site-Data:"));
+        }
+    }
+
+    #[test]
+    fn pairing_and_post_pair_headers_have_disjoint_credential_contracts() {
+        let pair = b"POST /api/v1/session/pair HTTP/1.1\r\nHost: 127.12.34.56:54321\r\nOrigin: http://127.12.34.56:54321\r\nAuthorization: GazeDashboardV1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nContent-Type: application/gaze-dashboard-pair-v1\r\nContent-Length: 12\r\n\r\nGZDB-PAIR-V1";
+        assert_eq!(
+            DashboardHttp1Gate::validate(pair, HOST, ORIGIN)
+                .unwrap()
+                .route(),
+            ValidatedDashboardRequestV1::PairSession
+        );
+        let post_pair = b"POST /api/v1/events/snapshot HTTP/1.1\r\nHost: 127.12.34.56:54321\r\nOrigin: http://127.12.34.56:54321\r\nContent-Type: application/json\r\nContent-Length: 2\r\nX-Gaze-Page-Session: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\nX-Gaze-Csrf: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\r\n\r\n{}";
+        assert_eq!(
+            DashboardHttp1Gate::validate(post_pair, HOST, ORIGIN)
+                .unwrap()
+                .route(),
+            ValidatedDashboardRequestV1::Snapshot
+        );
     }
 }

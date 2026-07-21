@@ -1,16 +1,23 @@
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use gaze_types::inspection::{
     InspectionEmissionIdV1, InspectionEpochV1, InspectionSequenceV1, InspectionStageDomainV1,
     LogicalInspectionIdV1,
 };
+use serde::Serialize;
 use zeroize::Zeroizing;
 
 use crate::ipc::DecodedInspectionFrame;
 use crate::RetentionLimits;
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+const SENSITIVE_ENVELOPE_HEADER_BYTES: usize = 11;
+const RESPONSE_WRITE_OVERHEAD_BYTES: usize = 1_024;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct StoreCounters {
     pub(crate) expired: u64,
     pub(crate) capacity_evicted: u64,
@@ -49,7 +56,7 @@ pub(crate) struct EventStore {
     logical: HashMap<LogicalInspectionIdV1, StoredLogical>,
     oldest: VecDeque<(LogicalInspectionIdV1, u64, Instant)>,
     retained_bytes: usize,
-    active_response_bytes: usize,
+    active_response_bytes: Arc<AtomicUsize>,
     next_generation: u64,
     accepted_epoch: InspectionEpochV1,
     limits: RetentionLimits,
@@ -63,7 +70,7 @@ impl EventStore {
             logical: HashMap::new(),
             oldest: VecDeque::new(),
             retained_bytes: 0,
-            active_response_bytes: 0,
+            active_response_bytes: Arc::new(AtomicUsize::new(0)),
             next_generation: 1,
             accepted_epoch: epoch,
             limits,
@@ -115,7 +122,7 @@ impl EventStore {
             || (is_new_logical && self.logical.len() >= self.limits.max_events())
             || self
                 .retained_bytes
-                .checked_add(self.active_response_bytes)
+                .checked_add(self.active_response_bytes.load(Ordering::Acquire))
                 .and_then(|bytes| bytes.checked_add(accounted_bytes))
                 .is_none_or(|bytes| bytes > self.limits.max_bytes())
         {
@@ -246,32 +253,50 @@ impl EventStore {
         })
     }
 
-    pub(crate) fn copy_payload_for_response(
+    pub(crate) fn encode_payload_for_response(
         &mut self,
         lease: &ResponseLease,
         auth_generation: u64,
         now: Instant,
-    ) -> Option<Zeroizing<Vec<u8>>> {
+        domain_tag: u8,
+        stage_tag: u8,
+    ) -> Option<SensitiveResponseBuffer> {
         if !self.lease_valid(lease, auth_generation, now) {
             return None;
         }
         let stored = self.global.get(&lease.emission_id)?;
-        let payload_len = stored.frame.payload.len();
+        let envelope_len = stored
+            .frame
+            .payload
+            .len()
+            .checked_add(SENSITIVE_ENVELOPE_HEADER_BYTES)?;
+        let reservation = envelope_len
+            .checked_add(std::mem::size_of::<ResponseLease>())?
+            .checked_add(RESPONSE_WRITE_OVERHEAD_BYTES)?;
         let total = self
             .retained_bytes
-            .checked_add(self.active_response_bytes)?
-            .checked_add(payload_len)?;
+            .checked_add(self.active_response_bytes.load(Ordering::Acquire))?
+            .checked_add(reservation)?;
         if total > self.limits.max_bytes() {
             return None;
         }
-        self.active_response_bytes += payload_len;
-        Some(Zeroizing::new(stored.frame.payload.to_vec()))
+        self.active_response_bytes
+            .fetch_add(reservation, Ordering::AcqRel);
+        let mut bytes = Zeroizing::new(Vec::with_capacity(envelope_len));
+        bytes.extend_from_slice(b"GZPL");
+        bytes.push(1);
+        bytes.push(domain_tag);
+        bytes.push(stage_tag);
+        bytes.extend_from_slice(&(stored.frame.payload.len() as u32).to_be_bytes());
+        bytes.extend_from_slice(stored.frame.payload.as_slice());
+        Some(SensitiveResponseBuffer {
+            bytes,
+            reservation,
+            accounting: self.active_response_bytes.clone(),
+        })
     }
 
-    pub(crate) fn release_response_bytes(&mut self, bytes: usize) {
-        self.active_response_bytes = self.active_response_bytes.saturating_sub(bytes);
-    }
-
+    #[cfg(test)]
     pub(crate) fn retained_bytes(&self) -> usize {
         self.retained_bytes
     }
@@ -280,8 +305,66 @@ impl EventStore {
         self.accepted_epoch
     }
 
+    #[cfg(test)]
     pub(crate) fn logical_len(&self) -> usize {
         self.logical.len()
+    }
+
+    pub(crate) const fn safe_counters(&self) -> StoreCounters {
+        self.counters
+    }
+
+    pub(crate) fn safe_snapshot_events(&self) -> Vec<serde_json::Value> {
+        let mut logical_ids = self.logical.keys().copied().collect::<Vec<_>>();
+        logical_ids.sort_by_key(|id| id.get());
+        logical_ids
+            .into_iter()
+            .filter_map(|logical_id| {
+                let logical = self.logical.get(&logical_id)?;
+                let mut stages = serde_json::Map::new();
+                for emission_id in &logical.emissions {
+                    let Some(stored) = self.global.get(emission_id) else {
+                        continue;
+                    };
+                    let stage = match stored.frame.stage_domain {
+                        InspectionStageDomainV1::OwnerRequest => "ownerRequest",
+                        InspectionStageDomainV1::ProviderRequest => "providerRequest",
+                        InspectionStageDomainV1::ProviderResponse => "providerResponse",
+                        InspectionStageDomainV1::OwnerRestoredResponse => "ownerRestoredResponse",
+                    };
+                    let safe_meta =
+                        serde_json::from_slice::<serde_json::Value>(&stored.frame.safe_meta)
+                            .unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "state": "Omitted",
+                                    "reason": "ProjectionFailedClosed"
+                                })
+                            });
+                    let projection =
+                        serde_json::from_slice::<serde_json::Value>(&stored.frame.projection)
+                            .unwrap_or_else(|_| {
+                                serde_json::json!({
+                                    "state": "Omitted",
+                                    "reason": "ProjectionFailedClosed"
+                                })
+                            });
+                    stages.insert(
+                        stage.to_owned(),
+                        serde_json::json!({
+                            "emissionId": stored.frame.emission_id.get(),
+                            "sequence": stored.frame.sequence.get(),
+                            "safeMeta": safe_meta,
+                            "projection": projection,
+                            "domainState": { "kind": "Available" }
+                        }),
+                    );
+                }
+                Some(serde_json::json!({
+                    "logicalId": logical_id.get(),
+                    "stages": stages
+                }))
+            })
+            .collect()
     }
 
     #[cfg(test)]
@@ -325,6 +408,30 @@ pub(crate) struct ResponseLease {
     stage_domain: InspectionStageDomainV1,
     insertion_generation: u64,
     deadline: Instant,
+}
+
+pub(crate) struct SensitiveResponseBuffer {
+    bytes: Zeroizing<Vec<u8>>,
+    reservation: usize,
+    accounting: Arc<AtomicUsize>,
+}
+
+impl Drop for SensitiveResponseBuffer {
+    fn drop(&mut self) {
+        self.accounting
+            .fetch_sub(self.reservation, Ordering::AcqRel);
+    }
+}
+
+impl SensitiveResponseBuffer {
+    pub(crate) fn as_slice(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+
+    #[cfg(test)]
+    pub(crate) const fn reservation(&self) -> usize {
+        self.reservation
+    }
 }
 
 pub(crate) struct RevealRegistry {
@@ -554,5 +661,51 @@ mod tests {
             .is_some());
         assert!(reveals.consume(key, now).is_some());
         assert!(reveals.consume(key, now).is_none());
+    }
+
+    #[test]
+    fn sensitive_response_accounts_full_single_buffer_peak_at_exact_cap() {
+        let limits = RetentionLimits::new(4, 16 * 1024, Duration::from_secs(60)).unwrap();
+        let now = Instant::now();
+        let mut store = EventStore::new(limits, InspectionEpochV1::new(1));
+        let stage = InspectionStageDomainV1::ProviderResponse;
+        assert_eq!(
+            store.admit(frame(1, 1, 0, 1, stage, b"<Email_1>"), now),
+            AdmissionOutcome::Inserted
+        );
+        let lease = store
+            .lease(
+                LogicalInspectionIdV1::new(1),
+                InspectionEmissionIdV1::new(1),
+                stage,
+                now,
+                now + Duration::from_secs(30),
+                0,
+            )
+            .unwrap();
+        let first = store
+            .encode_payload_for_response(&lease, 0, now, 1, 3)
+            .unwrap();
+        assert_eq!(&first.as_slice()[0..7], b"GZPL\x01\x01\x03");
+        assert_eq!(&first.as_slice()[11..], b"<Email_1>");
+        let exact = store
+            .retained_bytes
+            .checked_add(first.reservation() * 2)
+            .unwrap();
+        store.limits = RetentionLimits::new(4, exact - 1, Duration::from_secs(60)).unwrap();
+        assert!(store
+            .encode_payload_for_response(&lease, 0, now, 1, 3)
+            .is_none());
+        store.limits = RetentionLimits::new(4, exact, Duration::from_secs(60)).unwrap();
+        let second = store
+            .encode_payload_for_response(&lease, 0, now, 1, 3)
+            .unwrap();
+        assert_eq!(
+            store.active_response_bytes.load(Ordering::Acquire),
+            first.reservation() * 2
+        );
+        drop(second);
+        drop(first);
+        assert_eq!(store.active_response_bytes.load(Ordering::Acquire), 0);
     }
 }

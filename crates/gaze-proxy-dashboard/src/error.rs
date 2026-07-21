@@ -26,6 +26,8 @@ pub enum DashboardErrorCode {
     IngressFull,
     /// Bounded ingress was closed for purge or disable.
     IngressClosed,
+    /// The fixed-capacity serialized control queue was full.
+    ControlQueueFull,
     /// A typed IPC frame was malformed or exceeded its cap.
     IpcRejected,
     /// A one-request HTTP/1.1 connection failed the raw gate.
@@ -54,6 +56,7 @@ impl DashboardErrorCode {
             Self::ActivationFailed => "dashboard_activation_failed",
             Self::IngressFull => "dashboard_ingress_full",
             Self::IngressClosed => "dashboard_ingress_closed",
+            Self::ControlQueueFull => "dashboard_control_queue_full",
             Self::IpcRejected => "dashboard_ipc_rejected",
             Self::HttpRejected => "dashboard_http_rejected",
             Self::Unauthorized => "dashboard_unauthorized",

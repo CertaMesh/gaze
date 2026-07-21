@@ -140,21 +140,23 @@ impl SensitiveBootstrapResponseV1 {
         })
     }
 
-    /// Consumes the envelope and writes its fixed 65-byte versioned representation once.
+    /// Consumes the envelope and writes its fixed 70-byte versioned representation once.
     pub fn write_once(self, writer: &mut impl Write) -> io::Result<()> {
         let bytes = self.encode_for_one_response();
         writer.write_all(bytes.as_ref())
     }
 
-    pub(crate) fn encode_for_one_response(&self) -> Zeroizing<[u8; 65]> {
-        let mut encoded = Zeroizing::new([0_u8; 65]);
-        encoded[0] = 1;
+    pub(crate) fn encode_for_one_response(&self) -> Zeroizing<[u8; 70]> {
+        let mut encoded = Zeroizing::new([0_u8; 70]);
+        encoded[0..4].copy_from_slice(b"GZDB");
+        encoded[4] = 1;
+        encoded[5] = 2;
         self.page_session
             .0
-            .with_bytes(|bytes| encoded[1..33].copy_from_slice(bytes));
+            .with_bytes(|bytes| encoded[6..38].copy_from_slice(bytes));
         self.csrf
             .0
-            .with_bytes(|bytes| encoded[33..65].copy_from_slice(bytes));
+            .with_bytes(|bytes| encoded[38..70].copy_from_slice(bytes));
         encoded
     }
 
@@ -222,10 +224,6 @@ impl AuthRegistry {
                 && session.page.ct_eq(&page).unwrap_u8() == 1
                 && session.csrf.ct_eq(&csrf).unwrap_u8() == 1
         })
-    }
-
-    pub(crate) fn validate_authorization(&self, authorization: &CanonicalAuthorizationV1) -> bool {
-        authorization.validates(&self.launch_digest)
     }
 
     pub(crate) const fn generation(&self) -> u64 {
@@ -297,5 +295,16 @@ mod tests {
         let mut wrong_case = header;
         wrong_case[0] = b'g';
         assert!(CanonicalAuthorizationV1::parse(&wrong_case).is_err());
+    }
+
+    #[test]
+    fn bootstrap_is_exact_production_seventy_byte_envelope() {
+        let response = SensitiveBootstrapResponseV1::generate().unwrap();
+        let bytes = response.encode_for_one_response();
+        assert_eq!(bytes.len(), 70);
+        assert_eq!(&bytes[0..4], b"GZDB");
+        assert_eq!(bytes[4], 1);
+        assert_eq!(bytes[5], 2);
+        assert_ne!(&bytes[6..38], &bytes[38..70]);
     }
 }

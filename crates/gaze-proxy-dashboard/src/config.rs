@@ -159,6 +159,14 @@ impl ClientLimits {
         self.page_sessions
     }
 
+    pub(crate) const fn followers(self) -> usize {
+        self.followers
+    }
+
+    pub(crate) const fn active_http_connections(self) -> usize {
+        self.page_sessions
+    }
+
     pub(crate) const fn active_payload_responses(self) -> usize {
         self.active_payload_responses
     }

@@ -1,8 +1,11 @@
+// Kept compiled for the post-identity activation path; the public seam currently rejects closed.
+#![allow(dead_code)]
+
 use std::io::Write;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender, TryRecvError, TrySendError};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -13,12 +16,12 @@ use crate::ipc::EncodedInspectionFrame;
 use crate::{DashboardError, DashboardErrorCode};
 
 enum WriterCommand {
-    Drain(Sender<()>),
-    Stop(Sender<()>),
+    Drain(SyncSender<()>),
+    Stop(SyncSender<()>),
 }
 
 pub(crate) struct WriterHandle {
-    commands: Sender<WriterCommand>,
+    commands: SyncSender<WriterCommand>,
     faulted: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -29,7 +32,7 @@ impl WriterHandle {
         stream: UnixStream,
         frame_cap: usize,
     ) -> Result<Self, DashboardError> {
-        let (commands, command_rx) = mpsc::channel();
+        let (commands, command_rx) = mpsc::sync_channel(16);
         let faulted = Arc::new(AtomicBool::new(false));
         let thread_faulted = faulted.clone();
         let thread = thread::Builder::new()
@@ -44,10 +47,10 @@ impl WriterHandle {
     }
 
     pub(crate) fn drain(&self) -> Result<(), DashboardError> {
-        let (ack_tx, ack_rx) = mpsc::channel();
+        let (ack_tx, ack_rx) = mpsc::sync_channel(1);
         self.commands
-            .send(WriterCommand::Drain(ack_tx))
-            .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
+            .try_send(WriterCommand::Drain(ack_tx))
+            .map_err(map_command_error)?;
         ack_rx
             .recv_timeout(Duration::from_secs(2))
             .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))
@@ -58,10 +61,10 @@ impl WriterHandle {
     }
 
     pub(crate) fn stop_and_join(&mut self) -> Result<(), DashboardError> {
-        let (ack_tx, ack_rx) = mpsc::channel();
+        let (ack_tx, ack_rx) = mpsc::sync_channel(1);
         self.commands
-            .send(WriterCommand::Stop(ack_tx))
-            .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
+            .try_send(WriterCommand::Stop(ack_tx))
+            .map_err(map_command_error)?;
         ack_rx
             .recv_timeout(Duration::from_secs(2))
             .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
@@ -71,6 +74,13 @@ impl WriterHandle {
                 .map_err(|_| DashboardError::new(DashboardErrorCode::FatalDisabled))?;
         }
         Ok(())
+    }
+}
+
+fn map_command_error(error: TrySendError<WriterCommand>) -> DashboardError {
+    match error {
+        TrySendError::Full(_) => DashboardError::new(DashboardErrorCode::ControlQueueFull),
+        TrySendError::Disconnected(_) => DashboardError::new(DashboardErrorCode::FatalDisabled),
     }
 }
 

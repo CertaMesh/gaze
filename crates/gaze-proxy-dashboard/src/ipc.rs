@@ -1,3 +1,6 @@
+// Encoder reachability is blocked on an unforgeable gaze-inspection registration receipt.
+#![allow(dead_code)]
+
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::os::unix::net::UnixStream;
@@ -11,7 +14,8 @@ use gaze_types::inspection::{
     InspectionMeasurementV1, InspectionSequenceV1, InspectionStageDomainV1, JsonShapeSummaryV1,
     LogicalInspectionIdV1, PiiSummaryV1, ProjectionAvailabilityV1, SseTimelineMetaV1,
 };
-use serde::Serialize;
+use serde::ser::SerializeStruct as _;
+use serde::{Serialize, Serializer};
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::PairingSecret;
@@ -160,12 +164,66 @@ pub(crate) fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), 
 
 #[derive(Serialize)]
 struct SafeProjection<'a> {
-    measurement: &'a ProjectionAvailabilityV1<InspectionMeasurementV1>,
-    json_shape: &'a ProjectionAvailabilityV1<JsonShapeSummaryV1>,
-    sse_timeline: &'a ProjectionAvailabilityV1<SseTimelineMetaV1>,
-    pii_summary: &'a ProjectionAvailabilityV1<PiiSummaryV1>,
-    decision_trace: &'a ProjectionAvailabilityV1<DecisionTraceV1>,
-    attestation: &'a ProjectionAvailabilityV1<AttestationTraceV1>,
+    domain_state: BrowserDomainState,
+    measurement: BrowserAvailability<'a, InspectionMeasurementV1>,
+    json_shape: BrowserAvailability<'a, JsonShapeSummaryV1>,
+    sse_timeline: BrowserAvailability<'a, SseTimelineMetaV1>,
+    pii_summary: BrowserAvailability<'a, PiiSummaryV1>,
+    decision_trace: BrowserAvailability<'a, DecisionTraceV1>,
+    attestation: BrowserAvailability<'a, AttestationTraceV1>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "kind")]
+enum BrowserDomainState {
+    Available,
+    Omitted { reason: &'static str },
+}
+
+struct BrowserAvailability<'a, T>(&'a ProjectionAvailabilityV1<T>);
+
+impl<T> Serialize for BrowserAvailability<'_, T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self.0 {
+            ProjectionAvailabilityV1::Present(value) => {
+                let mut wire = serializer.serialize_struct("ProjectionAvailability", 2)?;
+                wire.serialize_field("state", "Present")?;
+                wire.serialize_field("value", value)?;
+                wire.end()
+            }
+            ProjectionAvailabilityV1::Omitted(reason) => {
+                let mut wire = serializer.serialize_struct("ProjectionAvailability", 2)?;
+                wire.serialize_field("state", "Omitted")?;
+                wire.serialize_field("reason", projection_reason_wire(*reason))?;
+                wire.end()
+            }
+        }
+    }
+}
+
+const fn projection_reason_wire(
+    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
+) -> &'static str {
+    use gaze_types::inspection::ProjectionOmissionReasonV1 as Reason;
+    match reason {
+        Reason::NotCapturedByPolicy => "NotCapturedByPolicy",
+        Reason::NotApplicable => "NotApplicable",
+        Reason::UnsupportedFormat => "UnsupportedFormat",
+        Reason::MalformedFailClosed => "MalformedFailClosed",
+        Reason::LimitExceeded => "LimitExceeded",
+        Reason::SignedOrEncryptedSurface => "SignedOrEncryptedSurface",
+        Reason::Purging => "Purging",
+        Reason::Disabled => "Disabled",
+        Reason::QueueClosed => "QueueClosed",
+        Reason::ProjectionFailedClosed => "ProjectionFailedClosed",
+        Reason::UnknownFuture => "UnknownFuture",
+    }
 }
 
 /// Zeroizing, globally capped typed IPC frame.
@@ -193,8 +251,9 @@ impl EncodedInspectionFrame {
             InspectionEventViewV1::OwnerRestoredResponse(projection) => {
                 Self::encode_owner_restored(event, projection, &meta, max_bytes)
             }
-            InspectionEventViewV1::Omitted { .. } => {
-                Self::finish(event, &meta, &[], &[], max_bytes)
+            InspectionEventViewV1::Omitted { reason, .. } => {
+                let safe = serialize_omitted_projection(reason)?;
+                Self::finish(event, &meta, &safe, &[], max_bytes)
             }
         }
     }
@@ -301,17 +360,40 @@ where
     T: ProjectionAccess,
 {
     let safe = SafeProjection {
-        measurement: projection.measurement(),
-        json_shape: projection.json_shape(),
-        sse_timeline: projection.sse_timeline(),
-        pii_summary: projection.pii_summary(),
-        decision_trace: projection.decision_trace(),
-        attestation: projection.attestation(),
+        domain_state: match projection.payload_omission() {
+            None => BrowserDomainState::Available,
+            Some(reason) => BrowserDomainState::Omitted {
+                reason: projection_reason_wire(reason),
+            },
+        },
+        measurement: BrowserAvailability(projection.measurement()),
+        json_shape: BrowserAvailability(projection.json_shape()),
+        sse_timeline: BrowserAvailability(projection.sse_timeline()),
+        pii_summary: BrowserAvailability(projection.pii_summary()),
+        decision_trace: BrowserAvailability(projection.decision_trace()),
+        attestation: BrowserAvailability(projection.attestation()),
     };
     serde_json::to_vec(&safe).map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))
 }
 
+fn serialize_omitted_projection(
+    reason: gaze_types::inspection::ProjectionOmissionReasonV1,
+) -> Result<Vec<u8>, DashboardError> {
+    let reason = projection_reason_wire(reason);
+    serde_json::to_vec(&serde_json::json!({
+        "domain_state": { "kind": "Omitted", "reason": reason },
+        "measurement": { "state": "Omitted", "reason": reason },
+        "json_shape": { "state": "Omitted", "reason": reason },
+        "sse_timeline": { "state": "Omitted", "reason": reason },
+        "pii_summary": { "state": "Omitted", "reason": reason },
+        "decision_trace": { "state": "Omitted", "reason": reason },
+        "attestation": { "state": "Omitted", "reason": reason }
+    }))
+    .map_err(|_| DashboardError::new(DashboardErrorCode::IpcRejected))
+}
+
 trait ProjectionAccess {
+    fn payload_omission(&self) -> Option<gaze_types::inspection::ProjectionOmissionReasonV1>;
     fn measurement(&self) -> &ProjectionAvailabilityV1<InspectionMeasurementV1>;
     fn json_shape(&self) -> &ProjectionAvailabilityV1<JsonShapeSummaryV1>;
     fn sse_timeline(&self) -> &ProjectionAvailabilityV1<SseTimelineMetaV1>;
@@ -323,6 +405,14 @@ trait ProjectionAccess {
 macro_rules! projection_access {
     ($type:ty) => {
         impl ProjectionAccess for $type {
+            fn payload_omission(
+                &self,
+            ) -> Option<gaze_types::inspection::ProjectionOmissionReasonV1> {
+                match self.payload() {
+                    ProjectionAvailabilityV1::Present(_) => None,
+                    ProjectionAvailabilityV1::Omitted(reason) => Some(*reason),
+                }
+            }
             fn measurement(&self) -> &ProjectionAvailabilityV1<InspectionMeasurementV1> {
                 self.measurement()
             }
@@ -477,5 +567,29 @@ mod tests {
         assert!(reject_immediate_trailing(&mut receiver).is_ok());
         sender.write_all(&[0x42]).unwrap();
         assert!(reject_immediate_trailing(&mut receiver).is_err());
+    }
+
+    #[test]
+    fn browser_availability_omits_the_value_container_for_every_closed_reason() {
+        use gaze_types::inspection::ProjectionOmissionReasonV1 as Reason;
+        for reason in [
+            Reason::NotCapturedByPolicy,
+            Reason::NotApplicable,
+            Reason::UnsupportedFormat,
+            Reason::MalformedFailClosed,
+            Reason::LimitExceeded,
+            Reason::SignedOrEncryptedSurface,
+            Reason::Purging,
+            Reason::Disabled,
+            Reason::QueueClosed,
+            Reason::ProjectionFailedClosed,
+            Reason::UnknownFuture,
+        ] {
+            let availability = ProjectionAvailabilityV1::<InspectionMeasurementV1>::Omitted(reason);
+            let value = serde_json::to_value(BrowserAvailability(&availability)).unwrap();
+            assert_eq!(value["state"], "Omitted");
+            assert_eq!(value["reason"], projection_reason_wire(reason));
+            assert!(value.get("value").is_none());
+        }
     }
 }
