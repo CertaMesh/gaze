@@ -2,9 +2,10 @@
 
 gaze-proxy-dashboard is the provider-neutral, memory-only inspection dashboard runtime for Gaze.
 It is deliberately absent by default. An adopter must explicitly construct the dashboard child,
-complete acknowledged local pairing, create the pending consumer, atomically install that consumer
-with the producer through gaze-inspection, and move the returned activated consumer back into the
-dashboard.
+complete acknowledged local pairing, and create the pending consumer. Activation currently fails
+closed because `ActivatedInspectionConsumerV1` exposes no unforgeable registration identity. The
+remaining fix belongs in `gaze-inspection`; descriptor equality and caller assertions are not an
+acceptable substitute.
 
 Among Gaze crates, the normal dependency closure is exactly:
 
@@ -26,14 +27,25 @@ outbound client, analytics, telemetry, or a crash-dump handler.
   writer owns typed, capped IPC.
 - Listener, launch/session/CSRF authentication, retention, reveal state, and response buffers live
   in a killable child process.
-- The child verifies application core-dump suppression before binding, token generation, or
-  sensitive IPC acceptance. An unsupported or unverifiable platform disables dashboard activation.
-- Purge ordering is fixed: close Track B admission, drain ingress, begin the registration-bound
+- On reviewed non-Darwin Unix targets, the child verifies zero core-dump limits before binding,
+  token generation, or sensitive IPC acceptance. Darwin is explicitly unsupported and fails closed
+  before those operations; the implementation makes no macOS crash-artifact suppression claim.
+- Parent channels are crate-owned: `SpawnedDashboardChild::spawn` creates private sockets, launches
+  the exact child, and validates the peer PID where the OS exposes it. There is no public loose
+  `Child` plus `UnixStream` assembly API.
+- Inspection EOF, partial framing, oversize framing, or decode failure purges child state, stops
+  HTTP/control service, exits the child, and causes parent disable/reap.
+- Once the identity blocker is resolved, purge ordering is fixed: close Track B admission, drain ingress, begin the registration-bound
   purge, zeroize child store/auth/reveal/response state while holding the matching guard, then
   complete the guard and reopen only for its returned epoch.
 - Fatal disable is one-way and always terminates and reaps the sensitive child.
 
 ## Current typed limitations
+
+Dashboard activation is intentionally unavailable on the current dependency manifest. A sound
+commit requires authority to add an opaque registration receipt/match operation in
+`crates/gaze-inspection/src/lib.rs` and its UI/compile-fail tests. The dashboard's `commit` method
+disables the supplied handle, tears down the child, and returns `ActivationFailed` until then.
 
 The queue snapshot field is not measured and must be presented as unavailable, never as zero,
 empty, healthy, or no traffic. ProjectionFailedClosed is intentionally coarse and must not be

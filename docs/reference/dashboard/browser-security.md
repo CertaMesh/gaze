@@ -34,8 +34,9 @@ and CSRF secrets once. The three secret types have no Debug, Display, Clone, Ser
 AsRef, or implicit conversion surface. Server state retains only validation digests bound to
 authentication generation and page session.
 
-Browser requests use page-memory Authorization and credentials: omit, cache: no-store, redirect:
-error, and referrerPolicy: no-referrer. Reload, pagehide, freeze, hidden visibility, network/follow
+Only the pair request may carry launch `Authorization`. Every post-pair request must omit it and
+carry the page-session and CSRF headers from page memory, with `credentials: omit`, `cache:
+no-store`, `redirect: error`, and `referrerPolicy: no-referrer`. Reload, pagehide, freeze, hidden visibility, network/follow
 loss, authentication failure, rotation, and bfcache restoration must abort requests, remove payload
 DOM, and clear mutable secrets where possible.
 
@@ -46,6 +47,9 @@ the exact startup-captured owner domain and consumes a 30-second permit. There i
 hover/focus reveal, export, download, copy, or clipboard operation.
 
 Sensitive responses use separate provider-visible, OwnerRaw, and OwnerRestored manual encoders.
+The wire envelope is exactly `GZPL`, version, domain tag, stage tag, big-endian payload length, and
+UTF-8 payload. A single zeroizing envelope is reserved against the global byte cap before copying;
+no second payload/envelope/chunk buffer is created.
 Before header commit and every application write, the child revalidates authentication generation,
 inspection epoch, logical ID, stage, emission ID, domain, insertion generation, and deadline.
 Purge, TTL, rotation, conceal, authentication loss, disconnect, failure, and shutdown prevent later
