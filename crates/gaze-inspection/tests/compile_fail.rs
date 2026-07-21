@@ -2,10 +2,33 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use gaze_inspection::{ActivatedInspectionConsumerV1, ProviderVisiblePayloadV1};
+use gaze_inspection::{
+    ActivatedInspectionConsumerV1, BoundActivatedInspectionConsumerV1, InspectionConsumerBindingV1,
+    ProviderVisiblePayloadV1,
+};
 use static_assertions::assert_not_impl_any;
 
 assert_not_impl_any!(ActivatedInspectionConsumerV1: Sync);
+assert_not_impl_any!(
+    InspectionConsumerBindingV1:
+        Clone,
+        std::fmt::Debug,
+        std::fmt::Display,
+        PartialEq,
+        Eq,
+        std::hash::Hash,
+        serde::Serialize
+);
+assert_not_impl_any!(
+    BoundActivatedInspectionConsumerV1:
+        Clone,
+        std::fmt::Debug,
+        std::fmt::Display,
+        PartialEq,
+        Eq,
+        std::hash::Hash,
+        serde::Serialize
+);
 assert_not_impl_any!(
     ProviderVisiblePayloadV1: AsRef<[u8]>, Eq, std::hash::Hash, Into<Vec<u8>>
 );

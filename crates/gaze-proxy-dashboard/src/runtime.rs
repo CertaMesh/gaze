@@ -1,12 +1,9 @@
-// Runtime activation is intentionally unreachable until gaze-inspection exposes identity proof.
-#![allow(dead_code)]
-
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, SyncSender, TrySendError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use gaze_inspection::ActivatedInspectionConsumerV1;
+use gaze_inspection::BoundActivatedInspectionConsumerV1;
 
 use crate::collector::WriterHandle;
 use crate::sink::Admission;
@@ -40,10 +37,26 @@ enum RuntimeCommand {
 }
 
 pub(crate) struct RuntimeParts {
-    pub(crate) activated: ActivatedInspectionConsumerV1,
-    pub(crate) admission: Arc<Admission>,
-    pub(crate) writer: WriterHandle,
-    pub(crate) child: SpawnedDashboardChild,
+    activated: BoundActivatedInspectionConsumerV1,
+    admission: Arc<Admission>,
+    writer: WriterHandle,
+    child: SpawnedDashboardChild,
+}
+
+impl RuntimeParts {
+    pub(crate) fn new(
+        activated: BoundActivatedInspectionConsumerV1,
+        admission: Arc<Admission>,
+        writer: WriterHandle,
+        child: SpawnedDashboardChild,
+    ) -> Self {
+        Self {
+            activated,
+            admission,
+            writer,
+            child,
+        }
+    }
 }
 
 /// Host control for purge, rotation, shutdown, and sanitized status.
@@ -297,6 +310,16 @@ fn lifecycle_epoch(lifecycle: &Mutex<DashboardLifecycle>) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn runtime_parts_constructor_requires_bound_activation_proof() {
+        let _: fn(
+            BoundActivatedInspectionConsumerV1,
+            Arc<Admission>,
+            WriterHandle,
+            SpawnedDashboardChild,
+        ) -> RuntimeParts = RuntimeParts::new;
+    }
 
     #[test]
     fn serialized_control_queue_accepts_exactly_sixteen_pending_commands() {

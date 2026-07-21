@@ -20,7 +20,7 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, TryLockError, Weak};
 use zeroize::Zeroize;
 
 const MAX_QUEUE_ITEMS_V1: usize = 4_096;
@@ -483,6 +483,7 @@ pub struct PendingInspectionConsumerV1 {
     descriptor: DashboardCaptureDescriptorV1,
     sink: Arc<dyn InspectionSink>,
     limits: InspectionQueueLimitsV1,
+    binding: Option<Arc<InspectionConsumerBindingSharedV1>>,
 }
 
 impl PendingInspectionConsumerV1 {
@@ -496,9 +497,81 @@ impl PendingInspectionConsumerV1 {
             descriptor,
             sink,
             limits,
+            binding: None,
         }
     }
+
+    /// Seals a gated pending half and returns its inspection-owned one-shot binding capability.
+    pub fn new_with_binding(
+        descriptor: DashboardCaptureDescriptorV1,
+        sink: Arc<dyn InspectionSink>,
+        limits: InspectionQueueLimitsV1,
+    ) -> (Self, InspectionConsumerBindingV1) {
+        let shared = Arc::new(InspectionConsumerBindingSharedV1 {
+            state: Mutex::new(InspectionConsumerBindingStateV1::Pending),
+        });
+        (
+            Self {
+                descriptor,
+                sink,
+                limits,
+                binding: Some(Arc::clone(&shared)),
+            },
+            InspectionConsumerBindingV1 {
+                shared: Some(shared),
+            },
+        )
+    }
 }
+
+enum InspectionConsumerBindingStateV1 {
+    Pending,
+    Installed(Weak<RegistrationState>),
+    Bound,
+    Cancelled,
+}
+
+struct InspectionConsumerBindingSharedV1 {
+    state: Mutex<InspectionConsumerBindingStateV1>,
+}
+
+/// Inspection-owned, one-shot proof capability for one gated pending consumer.
+///
+/// It exposes no identity, comparison, formatting, serialization, cloning, or dereferencing
+/// surface. Dropping it cancels a pending installation or disables its exact installed
+/// registration.
+///
+/// ```compile_fail
+/// use gaze_inspection::InspectionConsumerBindingV1;
+///
+/// fn forge() -> InspectionConsumerBindingV1 {
+///     InspectionConsumerBindingV1 { shared: None }
+/// }
+/// ```
+#[must_use]
+pub struct InspectionConsumerBindingV1 {
+    shared: Option<Arc<InspectionConsumerBindingSharedV1>>,
+}
+
+/// Closed binding failure without pointer, descriptor, or source text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum InspectionConsumerBindErrorV1 {
+    NotInstalled,
+    RegistrationMismatch,
+    Cancelled,
+}
+
+impl fmt::Display for InspectionConsumerBindErrorV1 {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::NotInstalled => "inspection_consumer_not_installed",
+            Self::RegistrationMismatch => "inspection_consumer_registration_mismatch",
+            Self::Cancelled => "inspection_consumer_binding_cancelled",
+        })
+    }
+}
+
+impl std::error::Error for InspectionConsumerBindErrorV1 {}
 
 /// Closed installation failure without source text.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -632,6 +705,65 @@ fn next_bounded_id(counter: &AtomicU64) -> Option<u64> {
         .ok()
 }
 
+fn associate_consumer_binding(
+    binding: &InspectionConsumerBindingSharedV1,
+    registration: &Arc<RegistrationState>,
+) -> Result<(), Option<Arc<RegistrationState>>> {
+    let mut state = lock_without_recovery(&binding.state);
+    if matches!(*state, InspectionConsumerBindingStateV1::Pending) {
+        *state = InspectionConsumerBindingStateV1::Installed(Arc::downgrade(registration));
+        return Ok(());
+    }
+    let prior = std::mem::replace(&mut *state, InspectionConsumerBindingStateV1::Cancelled);
+    drop(state);
+    let prior_registration = match prior {
+        InspectionConsumerBindingStateV1::Installed(expected) => expected.upgrade(),
+        InspectionConsumerBindingStateV1::Pending
+        | InspectionConsumerBindingStateV1::Bound
+        | InspectionConsumerBindingStateV1::Cancelled => None,
+    };
+    Err(prior_registration)
+}
+
+fn cancel_consumer_binding(
+    binding: &InspectionConsumerBindingSharedV1,
+) -> Option<Arc<RegistrationState>> {
+    let mut state = lock_without_recovery(&binding.state);
+    let prior = std::mem::replace(&mut *state, InspectionConsumerBindingStateV1::Cancelled);
+    let registration = match prior {
+        InspectionConsumerBindingStateV1::Installed(expected) => expected.upgrade(),
+        InspectionConsumerBindingStateV1::Bound => {
+            *state = InspectionConsumerBindingStateV1::Bound;
+            None
+        }
+        InspectionConsumerBindingStateV1::Pending | InspectionConsumerBindingStateV1::Cancelled => {
+            None
+        }
+    };
+    drop(state);
+    registration
+}
+
+#[cfg(test)]
+thread_local! {
+    static FORCE_DISPATCHER_SPAWN_FAILURE: Cell<bool> = const { Cell::new(false) };
+}
+
+fn spawn_dispatcher(
+    state: Arc<RegistrationState>,
+    sink: Arc<dyn InspectionSink>,
+) -> Result<(), InspectionInstallErrorV1> {
+    #[cfg(test)]
+    if FORCE_DISPATCHER_SPAWN_FAILURE.with(|forced| forced.replace(false)) {
+        return Err(InspectionInstallErrorV1::DispatcherUnavailable);
+    }
+    std::thread::Builder::new()
+        .name("gaze-inspection".to_owned())
+        .spawn(move || dispatcher_loop(state, sink))
+        .map(|_| ())
+        .map_err(|_| InspectionInstallErrorV1::DispatcherUnavailable)
+}
+
 /// Sole consuming atomic installation operation for the matched pending halves.
 pub fn install_inspection_v1(
     producer: PendingInspectionProducerV1,
@@ -641,6 +773,12 @@ pub fn install_inspection_v1(
     if producer.descriptor != consumer.descriptor {
         return Err(InspectionInstallErrorV1::DescriptorMismatch);
     }
+    let PendingInspectionConsumerV1 {
+        descriptor: _,
+        sink,
+        limits,
+        binding,
+    } = consumer;
     let registration_id = next_bounded_id(&NEXT_REGISTRATION_ID)
         .ok_or(InspectionInstallErrorV1::RegistrationIdentityExhausted)?;
     let state = Arc::new(RegistrationState {
@@ -648,7 +786,7 @@ pub fn install_inspection_v1(
             _nonce: registration_id,
         },
         descriptor: producer.descriptor,
-        limits: consumer.limits,
+        limits,
         inner: Mutex::new(RuntimeInner {
             lifecycle: LifecycleStateV1::Running(0),
             queue: VecDeque::new(),
@@ -665,12 +803,24 @@ pub fn install_inspection_v1(
         #[cfg(test)]
         hooks: Mutex::new(DispatchHooks::default()),
     });
-    let dispatcher_state = state.clone();
-    let sink = consumer.sink;
-    std::thread::Builder::new()
-        .name("gaze-inspection".to_owned())
-        .spawn(move || dispatcher_loop(dispatcher_state, sink))
-        .map_err(|_| InspectionInstallErrorV1::DispatcherUnavailable)?;
+    if let Some(binding) = &binding {
+        if let Err(prior_registration) = associate_consumer_binding(binding, &state) {
+            if let Some(prior_registration) = prior_registration {
+                prior_registration.disable();
+            }
+            state.disable();
+            return Err(InspectionInstallErrorV1::DispatcherUnavailable);
+        }
+    }
+    if let Err(error) = spawn_dispatcher(state.clone(), sink) {
+        if let Some(binding) = &binding {
+            if let Some(registration) = cancel_consumer_binding(binding) {
+                registration.disable();
+            }
+        }
+        state.disable();
+        return Err(error);
+    }
     Ok((
         InstalledInspectionProducerV1 {
             state: state.clone(),
@@ -1072,6 +1222,113 @@ impl Drop for ActivatedInspectionConsumerV1 {
     }
 }
 
+enum InspectionConsumerBindOutcomeV1 {
+    Bound,
+    Rejected {
+        error: InspectionConsumerBindErrorV1,
+        expected: Option<Arc<RegistrationState>>,
+    },
+}
+
+impl InspectionConsumerBindingV1 {
+    /// Consumes this capability and one raw candidate, returning a proof-carrying bound authority
+    /// only when both originate from the exact same private registration allocation.
+    pub fn bind(
+        mut self,
+        mut activated: ActivatedInspectionConsumerV1,
+    ) -> Result<BoundActivatedInspectionConsumerV1, InspectionConsumerBindErrorV1> {
+        let shared = self
+            .shared
+            .take()
+            .expect("inspection binding capability is consumed exactly once");
+        let outcome = {
+            let mut state = lock_without_recovery(&shared.state);
+            let prior = std::mem::replace(&mut *state, InspectionConsumerBindingStateV1::Cancelled);
+            match prior {
+                InspectionConsumerBindingStateV1::Installed(expected) => match expected.upgrade() {
+                    Some(expected) if Arc::ptr_eq(&expected, &activated.state) => {
+                        *state = InspectionConsumerBindingStateV1::Bound;
+                        InspectionConsumerBindOutcomeV1::Bound
+                    }
+                    Some(expected) => InspectionConsumerBindOutcomeV1::Rejected {
+                        error: InspectionConsumerBindErrorV1::RegistrationMismatch,
+                        expected: Some(expected),
+                    },
+                    None => InspectionConsumerBindOutcomeV1::Rejected {
+                        error: InspectionConsumerBindErrorV1::Cancelled,
+                        expected: None,
+                    },
+                },
+                InspectionConsumerBindingStateV1::Pending => {
+                    InspectionConsumerBindOutcomeV1::Rejected {
+                        error: InspectionConsumerBindErrorV1::NotInstalled,
+                        expected: None,
+                    }
+                }
+                InspectionConsumerBindingStateV1::Bound
+                | InspectionConsumerBindingStateV1::Cancelled => {
+                    InspectionConsumerBindOutcomeV1::Rejected {
+                        error: InspectionConsumerBindErrorV1::Cancelled,
+                        expected: None,
+                    }
+                }
+            }
+        };
+        match outcome {
+            InspectionConsumerBindOutcomeV1::Bound => {
+                Ok(BoundActivatedInspectionConsumerV1 { activated })
+            }
+            InspectionConsumerBindOutcomeV1::Rejected { error, expected } => {
+                if let Some(expected) = expected {
+                    expected.disable();
+                }
+                let _ = activated.disable();
+                Err(error)
+            }
+        }
+    }
+}
+
+impl Drop for InspectionConsumerBindingV1 {
+    fn drop(&mut self) {
+        let Some(shared) = self.shared.take() else {
+            return;
+        };
+        if let Some(registration) = cancel_consumer_binding(&shared) {
+            registration.disable();
+        }
+    }
+}
+
+/// Proof-carrying activated consumer authority bound to its exact gated pending consumer.
+///
+/// The wrapper exposes only the lifecycle operations required by a dashboard runtime. It cannot
+/// be constructed from a raw activated handle outside this crate.
+///
+/// ```compile_fail
+/// use gaze_inspection::{ActivatedInspectionConsumerV1, BoundActivatedInspectionConsumerV1};
+///
+/// fn forge(raw: ActivatedInspectionConsumerV1) -> BoundActivatedInspectionConsumerV1 {
+///     BoundActivatedInspectionConsumerV1 { activated: raw }
+/// }
+/// ```
+#[must_use]
+pub struct BoundActivatedInspectionConsumerV1 {
+    activated: ActivatedInspectionConsumerV1,
+}
+
+impl BoundActivatedInspectionConsumerV1 {
+    /// Begins a reusable purge on the exact bound registration.
+    pub fn begin_purge(&mut self) -> Result<InspectionPurgeGuardV1, InspectionPurgeErrorV1> {
+        self.activated.begin_purge()
+    }
+
+    /// Performs the idempotent one-way disable transition on the exact bound registration.
+    pub fn disable(&mut self) -> InspectionDisableOutcomeV1 {
+        self.activated.disable()
+    }
+}
+
 /// Registration-bound purge completion guard.
 #[must_use]
 pub struct InspectionPurgeGuardV1 {
@@ -1454,6 +1711,188 @@ mod tests {
         assert!(matches!(
             install_inspection_v1(producer, consumer),
             Err(InspectionInstallErrorV1::DescriptorMismatch)
+        ));
+    }
+
+    #[test]
+    fn gated_binding_rejects_descriptor_equal_swap_and_disables_both_registrations() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
+        let (consumer_a, binding_a) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (consumer_b, binding_b) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (producer_a, activated_a) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer_a)
+                .unwrap();
+        let (producer_b, activated_b) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer_b)
+                .unwrap();
+
+        assert!(matches!(
+            binding_a.bind(activated_b),
+            Err(InspectionConsumerBindErrorV1::RegistrationMismatch)
+        ));
+        assert!(matches!(
+            producer_a.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        assert!(matches!(
+            producer_b.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+
+        drop(activated_a);
+        drop(binding_b);
+    }
+
+    #[test]
+    fn gated_binding_matches_exact_registration_and_preserves_isolated_epoch_authority() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::ProviderVisible);
+        let (consumer_a, binding_a) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (consumer_b, binding_b) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (producer_a, activated_a) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer_a)
+                .unwrap();
+        let (producer_b, activated_b) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer_b)
+                .unwrap();
+        let mut bound_a = binding_a.bind(activated_a).unwrap();
+
+        let guard = bound_a.begin_purge().unwrap();
+        assert_eq!(guard.next_epoch().get(), 1);
+        assert!(matches!(
+            producer_a.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Purging)
+        ));
+        assert!(producer_b.begin_logical().is_ok());
+        assert_eq!(guard.complete().unwrap().get(), 1);
+        assert!(producer_a.begin_logical().is_ok());
+        assert_eq!(bound_a.disable(), InspectionDisableOutcomeV1::Disabled);
+        assert!(matches!(
+            producer_a.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        assert!(producer_b.begin_logical().is_ok());
+
+        drop(activated_b);
+        drop(binding_b);
+    }
+
+    #[test]
+    fn dropping_binding_before_install_prevents_a_usable_registration() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::MetadataOnly);
+        let (consumer, binding) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        drop(binding);
+
+        assert!(matches!(
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer),
+            Err(InspectionInstallErrorV1::DispatcherUnavailable)
+        ));
+    }
+
+    #[test]
+    fn dropping_binding_after_install_disables_its_exact_registration() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::MetadataOnly);
+        let (consumer, binding) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (producer, activated) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer).unwrap();
+        drop(binding);
+
+        assert!(matches!(
+            producer.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        drop(activated);
+    }
+
+    #[test]
+    fn legacy_ungated_activated_handle_cannot_satisfy_gated_binding() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::MetadataOnly);
+        let (gated_consumer, binding) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        let (gated_producer, gated_activated) =
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), gated_consumer)
+                .unwrap();
+        let (legacy_producer, legacy_activated) = install_inspection_v1(
+            PendingInspectionProducerV1::new(descriptor),
+            PendingInspectionConsumerV1::new(
+                descriptor,
+                Arc::new(RecordingSink::default()),
+                InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            ),
+        )
+        .unwrap();
+
+        assert!(matches!(
+            binding.bind(legacy_activated),
+            Err(InspectionConsumerBindErrorV1::RegistrationMismatch)
+        ));
+        assert!(matches!(
+            gated_producer.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        assert!(matches!(
+            legacy_producer.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
+        ));
+        drop(gated_activated);
+    }
+
+    #[test]
+    fn dispatcher_spawn_failure_cancels_binding_without_a_usable_registration() {
+        let descriptor = DashboardCaptureDescriptorV1::new(CaptureDomainsV1::MetadataOnly);
+        let (consumer, binding) = PendingInspectionConsumerV1::new_with_binding(
+            descriptor,
+            Arc::new(RecordingSink::default()),
+            InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+        );
+        FORCE_DISPATCHER_SPAWN_FAILURE.with(|forced| forced.set(true));
+        assert!(matches!(
+            install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer),
+            Err(InspectionInstallErrorV1::DispatcherUnavailable)
+        ));
+
+        let (candidate_producer, candidate) = install_inspection_v1(
+            PendingInspectionProducerV1::new(descriptor),
+            PendingInspectionConsumerV1::new(
+                descriptor,
+                Arc::new(RecordingSink::default()),
+                InspectionQueueLimitsV1::new(4, 1024).unwrap(),
+            ),
+        )
+        .unwrap();
+        assert!(matches!(
+            binding.bind(candidate),
+            Err(InspectionConsumerBindErrorV1::Cancelled)
+        ));
+        assert!(matches!(
+            candidate_producer.begin_logical(),
+            Err(InspectionBeginLogicalErrorV1::Disabled)
         ));
     }
 

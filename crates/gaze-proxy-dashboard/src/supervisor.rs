@@ -1,6 +1,3 @@
-// Post-pair runtime methods remain unreachable until gaze-inspection provides identity proof.
-#![allow(dead_code)]
-
 use std::io::{self, Read, Write};
 use std::net::SocketAddrV4;
 use std::os::unix::fs::PermissionsExt;
@@ -13,13 +10,15 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use gaze_inspection::{
-    ActivatedInspectionConsumerV1, InspectionQueueLimitsV1, PendingInspectionConsumerV1,
+    ActivatedInspectionConsumerV1, InspectionConsumerBindingV1, InspectionQueueLimitsV1,
+    PendingInspectionConsumerV1,
 };
 use gaze_types::inspection::DashboardCaptureDescriptorV1;
 use zeroize::Zeroize;
 
+use crate::collector::WriterHandle;
 use crate::ipc::reject_immediate_trailing;
-use crate::runtime::DashboardLaunch;
+use crate::runtime::{DashboardLaunch, RuntimeParts};
 use crate::sink::{Admission, DashboardInspectionSink};
 use crate::{
     DashboardError, DashboardErrorCode, DashboardStartupConfig, DeliveredAckV1, PairingEnvelopeV1,
@@ -408,18 +407,19 @@ impl PairedDashboard {
         let queue_limits =
             InspectionQueueLimitsV1::new(self.ipc.ingress_items(), self.ipc.frame_bytes())
                 .map_err(|_| DashboardError::new(DashboardErrorCode::ConsumerUnavailable))?;
-        let consumer = PendingInspectionConsumerV1::new(
+        let (consumer, binding) = PendingInspectionConsumerV1::new_with_binding(
             self.descriptor,
             Arc::clone(&sink) as Arc<dyn gaze_inspection::InspectionSink>,
             queue_limits,
         );
         Ok((
             PendingDashboardActivation {
-                _authority: self.authority,
+                authority: self.authority,
                 child: Some(child),
                 receiver: Some(receiver),
                 admission,
-                _frame_cap: self.ipc.frame_bytes(),
+                binding,
+                frame_cap: self.ipc.frame_bytes(),
                 _config: self.config,
             },
             consumer,
@@ -430,29 +430,47 @@ impl PairedDashboard {
 
 /// One-shot activation half retained by Track B while master atomically installs inspection.
 pub struct PendingDashboardActivation {
-    _authority: SocketAddrV4,
+    authority: SocketAddrV4,
     child: Option<SpawnedDashboardChild>,
     receiver: Option<Receiver<gaze_inspection::InspectionEventV1>>,
     admission: Arc<Admission>,
-    _frame_cap: usize,
+    binding: InspectionConsumerBindingV1,
+    frame_cap: usize,
     _config: DashboardStartupConfig,
 }
 
 impl PendingDashboardActivation {
-    /// Fails closed until `gaze-inspection` exposes an unforgeable registration identity receipt.
-    ///
-    /// The current `ActivatedInspectionConsumerV1` has no identity/provenance observation, so no
-    /// dashboard-owned comparison can distinguish descriptor-equal registrations. This method
-    /// deliberately disables the supplied handle, tears down the child, and rejects activation.
+    /// Commits only when the raw activated candidate matches this dashboard's retained one-shot
+    /// inspection binding proof. Binding precedes every socket, writer, runtime, and admission
+    /// side effect.
     pub fn commit(
         mut self,
-        mut activated: ActivatedInspectionConsumerV1,
+        activated: ActivatedInspectionConsumerV1,
     ) -> Result<DashboardLaunch, DashboardError> {
-        let _ = activated.disable();
-        let _ = self.admission.disable();
-        drop(self.receiver.take());
-        drop(self.child.take());
-        Err(DashboardError::new(DashboardErrorCode::ActivationFailed))
+        let bound = self
+            .binding
+            .bind(activated)
+            .map_err(|_| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
+        let mut child = self
+            .child
+            .take()
+            .ok_or_else(|| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
+        let receiver = self
+            .receiver
+            .take()
+            .ok_or_else(|| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
+        let inspection = child.take_inspection()?;
+        let writer = WriterHandle::spawn(receiver, inspection, self.frame_cap)?;
+        let admission = self.admission.clone();
+        let launch = DashboardLaunch::start(
+            RuntimeParts::new(bound, admission.clone(), writer, child),
+            self.authority,
+        )?;
+        if !admission.activate() {
+            let _ = launch.control().shutdown();
+            return Err(DashboardError::new(DashboardErrorCode::ActivationFailed));
+        }
+        Ok(launch)
     }
 }
 
