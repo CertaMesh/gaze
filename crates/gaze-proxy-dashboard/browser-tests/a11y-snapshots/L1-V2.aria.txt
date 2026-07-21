@@ -1,0 +1,69 @@
+- link "Skip to main content":
+  - /url: "#main"
+- main:
+  - group "Safety state":
+    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean RING 5/64 · TTL 300 S · CONNECTED · EPOCH 1
+    - button "Purge now"
+  - region "EVENTS — NEWEST FIRST":
+    - heading "EVENTS — NEWEST FIRST" [level=2]
+    - text: FOLLOW PAUSED — 0 BUFFERED
+    - button "Resume live follow (0 buffered events)": Resume
+    - paragraph: "QUEUE TELEMETRY: UNAVAILABLE — NOT MEASURED"
+    - list:
+      - listitem:
+        - 'button "LOG #5 ANTHROPIC MESSAGES HTTP 2XX ANTHROPIC MESSAGES DIRECT OS-ASSIGNED LOOPBACK PORT: OS ASSIGNED UNDER 1 S · RETRY 0 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+      - listitem:
+        - 'button "LOG #4 ANTHROPIC MESSAGES HTTP 4XX OPENAI COMPATIBLE DYNAMICALLY DISCOVERED LOOPBACK PORT: DYNAMICALLY DISCOVERED · SELECTION CHANGE 2 UNDER 10 S · RETRY 0 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+      - listitem:
+        - 'button "LOG #3 ANTHROPIC MESSAGES HTTP 2XX GEMINI COMPATIBLE REVALIDATED LOOPBACK PORT: CHANGED AND REVALIDATED · SELECTION CHANGE 1 OVER 10 S · RETRY 1 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+      - listitem:
+        - 'button "LOG #2 ANTHROPIC MESSAGES HTTP 5XX ⚠ HTTP 5XX GENERIC LOCAL ANTHROPIC COMPATIBLE CONFIGURED HTTPS ORIGIN PORT: FIXED CONFIGURED UNDER 1 S · RETRY 0 PII PERSON NAME 2/2 · EMAIL 1/1 TTL 300 S"'
+      - listitem:
+        - 'button "LOG #1 REJECTED REJECTED ⚠ REJECTED · REJECTED · UNAVAILABLE FAIL-CLOSED · UNAVAILABLE FAIL-CLOSED OTHER REVIEWED UNAVAILABLE FAIL-CLOSED PORT: UNAVAILABLE FAIL-CLOSED UNKNOWN · RETRY 0 PII OMITTED (PROJECTION FAILED CLOSED) TTL 300 S"'
+  - 'region "LOG #5 — ANTHROPIC MESSAGES"':
+    - 'heading "LOG #5 — ANTHROPIC MESSAGES" [level=2]'
+    - tablist "Event detail sections":
+      - tab "OVERVIEW"
+      - tab "DOMAINS"
+      - tab "STRUCTURE"
+      - tab "STREAM"
+      - tab "TRACE" [selected]
+    - tabpanel "TRACE":
+      - table "DECISION TRACE — engines, outcomes, and bounded counts only.":
+        - caption: DECISION TRACE — engines, outcomes, and bounded counts only.
+        - rowgroup:
+          - row "ORDINAL ENGINE OUTCOME PII CLASS DETECTED / PSEUDONYMIZED":
+            - columnheader "ORDINAL"
+            - columnheader "ENGINE"
+            - columnheader "OUTCOME"
+            - columnheader "PII CLASS"
+            - columnheader "DETECTED / PSEUDONYMIZED"
+        - rowgroup:
+          - row "#0 DETERMINISTIC RECOGNIZER RAN — NO FINDINGS (not a verified-clean claim) — —":
+            - cell "#0"
+            - cell "DETERMINISTIC RECOGNIZER"
+            - cell "RAN — NO FINDINGS (not a verified-clean claim)"
+            - cell "—"
+            - cell "—"
+          - row "#1 NER FINDINGS PERSON NAME 2 / 2":
+            - cell "#1"
+            - cell "NER"
+            - cell "FINDINGS"
+            - cell "PERSON NAME"
+            - cell "2 / 2"
+          - row "#2 NEURAL SAFETY NET NOT APPLICABLE — —":
+            - cell "#2"
+            - cell "NEURAL SAFETY NET"
+            - cell "NOT APPLICABLE"
+            - cell "—"
+            - cell "—"
+          - row "#3 RESIDUAL SCAN FAIL-CLOSED — UNAVAILABLE — —":
+            - cell "#3"
+            - cell "RESIDUAL SCAN"
+            - cell "FAIL-CLOSED — UNAVAILABLE"
+            - cell "—"
+            - cell "—"
+      - term: ATTESTATION
+      - definition: EXACT HIT
+      - paragraph: Attestation is informational. EXACT HIT is not a verification or success claim.
+- status: Paired. Loading captured events.
