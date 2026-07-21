@@ -56,7 +56,7 @@ fn activated_consumer_owns_serialized_purge_rotation_and_shutdown() {
     let acceptance = DashboardPayloadAcceptance::provider_visible();
     let config = DashboardStartupConfig::Enabled {
         acceptance,
-        bind: LoopbackBind::fresh_ephemeral_v4().unwrap(),
+        bind: LoopbackBind::configured("127.0.0.1:0".parse().unwrap()).unwrap(),
         retention: RetentionLimits::new(4, 64 * 1024, Duration::from_secs(30)).unwrap(),
         clients: ClientLimits::conservative(),
         ipc: IpcLimits::new(4, 64 * 1024).unwrap(),

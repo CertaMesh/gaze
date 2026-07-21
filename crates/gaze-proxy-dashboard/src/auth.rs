@@ -179,6 +179,13 @@ struct SessionDigest {
     csrf: [u8; 32],
 }
 
+impl Drop for SessionDigest {
+    fn drop(&mut self) {
+        self.page.zeroize();
+        self.csrf.zeroize();
+    }
+}
+
 impl AuthRegistry {
     pub(crate) fn new(secret: &PairingSecret, max_sessions: usize) -> Self {
         Self {
@@ -217,6 +224,10 @@ impl AuthRegistry {
         })
     }
 
+    pub(crate) fn validate_authorization(&self, authorization: &CanonicalAuthorizationV1) -> bool {
+        authorization.validates(&self.launch_digest)
+    }
+
     pub(crate) const fn generation(&self) -> u64 {
         self.generation
     }
@@ -228,7 +239,15 @@ impl AuthRegistry {
 
     pub(crate) fn rotate(&mut self, secret: &PairingSecret) {
         self.purge();
+        self.launch_digest.zeroize();
         self.launch_digest = secret.with_bytes(|bytes| digest(bytes));
+    }
+}
+
+impl Drop for AuthRegistry {
+    fn drop(&mut self) {
+        self.launch_digest.zeroize();
+        self.sessions.clear();
     }
 }
 

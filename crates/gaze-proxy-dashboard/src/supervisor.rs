@@ -48,6 +48,7 @@ pub struct SpawnedDashboardChild {
     child: Option<Child>,
     control: UnixStream,
     inspection: Option<UnixStream>,
+    paired_authority: Option<SocketAddrV4>,
 }
 
 impl SpawnedDashboardChild {
@@ -73,6 +74,7 @@ impl SpawnedDashboardChild {
             child: Some(child),
             control,
             inspection: Some(inspection),
+            paired_authority: None,
         })
     }
 
@@ -123,7 +125,13 @@ impl SpawnedDashboardChild {
             .write_all(&[PARENT_ROTATE])
             .and_then(|()| self.control.flush())
             .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-        acknowledge_pairing(&mut self.control, delivery).map(|_| ())
+        let expected = self
+            .paired_authority
+            .ok_or_else(|| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+        acknowledge_pairing(&mut self.control, delivery, |authority| {
+            authority == expected
+        })
+        .map(|_| ())
     }
 
     pub(crate) fn shutdown_terminate_reap(&mut self) -> Result<(), DashboardError> {
@@ -184,7 +192,7 @@ impl DashboardSupervisor {
     ) -> Result<PairedDashboard, DashboardError> {
         let DashboardStartupConfig::Enabled {
             acceptance,
-            bind: _,
+            bind,
             retention: _,
             clients: _,
             ipc,
@@ -195,7 +203,10 @@ impl DashboardSupervisor {
                 DashboardErrorCode::DisabledByConfiguration,
             ));
         };
-        let authority = acknowledge_pairing(&mut child.control, &mut delivery)?;
+        let authority = acknowledge_pairing(&mut child.control, &mut delivery, |authority| {
+            bind.matches_authority(authority)
+        })?;
+        child.paired_authority = Some(authority);
         Ok(PairedDashboard {
             config,
             descriptor: acceptance.descriptor(),
@@ -209,9 +220,14 @@ impl DashboardSupervisor {
 fn acknowledge_pairing(
     control: &mut UnixStream,
     delivery: &mut dyn PairingDelivery,
+    authority_matches: impl FnOnce(SocketAddrV4) -> bool,
 ) -> Result<SocketAddrV4, DashboardError> {
     let envelope = PairingEnvelopeV1::read_exact(control)?;
+    reject_immediate_trailing(control)?;
     let authority = envelope.authority();
+    if !authority_matches(authority) {
+        return Err(DashboardError::new(DashboardErrorCode::PairingFailed));
+    }
     let nonce = envelope.nonce();
     let secret = envelope.secret();
     let mut token = secret.canonical_token();
@@ -224,6 +240,21 @@ fn acknowledge_pairing(
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
     Ok(authority)
+}
+
+fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
+    control
+        .set_nonblocking(true)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    let mut trailing = [0_u8; 1];
+    let read = control.read(&mut trailing);
+    control
+        .set_nonblocking(false)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    match read {
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
+        _ => Err(DashboardError::new(DashboardErrorCode::PairingFailed)),
+    }
 }
 
 /// Acknowledged one-shot pairing state. It exposes no sink.

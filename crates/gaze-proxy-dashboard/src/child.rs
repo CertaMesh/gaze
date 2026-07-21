@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{self, Read, Write};
 use std::net::{SocketAddr, SocketAddrV4, TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -190,7 +190,7 @@ impl DashboardChildEntrypoint {
             })
             .map_err(|_| DashboardError::new(DashboardErrorCode::ActivationFailed))?;
 
-        let result = child_control_loop(&mut control, authority, &state);
+        let result = child_control_loop(&mut control, authority, &state, &active_responses);
         stop.store(true, Ordering::Release);
         state
             .lock()
@@ -228,7 +228,23 @@ fn child_pair(
         .write_to(control)
         .and_then(|()| control.flush())
         .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
-    crate::DeliveredAckV1::read_from(control, nonce).map(|_| ())
+    crate::DeliveredAckV1::read_from(control, nonce)?;
+    reject_immediate_trailing(control)
+}
+
+fn reject_immediate_trailing(control: &mut UnixStream) -> Result<(), DashboardError> {
+    control
+        .set_nonblocking(true)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    let mut trailing = [0_u8; 1];
+    let read = control.read(&mut trailing);
+    control
+        .set_nonblocking(false)
+        .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+    match read {
+        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
+        _ => Err(DashboardError::new(DashboardErrorCode::PairingFailed)),
+    }
 }
 
 fn inspection_loop(
@@ -275,6 +291,7 @@ fn child_control_loop(
     control: &mut UnixStream,
     authority: SocketAddrV4,
     state: &Arc<Mutex<ChildState>>,
+    active_responses: &AtomicUsize,
 ) -> Result<(), DashboardError> {
     loop {
         let mut command = [0_u8; 1];
@@ -292,6 +309,7 @@ fn child_control_loop(
                     .lock()
                     .unwrap_or_else(|poison| poison.into_inner())
                     .purge_all(epoch);
+                wait_for_responses(active_responses)?;
                 let mut ack = [0_u8; 9];
                 ack[0] = CHILD_PURGED;
                 ack[1..9].copy_from_slice(&epoch.get().to_be_bytes());
@@ -314,6 +332,7 @@ fn child_control_loop(
                     .lock()
                     .unwrap_or_else(|poison| poison.into_inner())
                     .purge_all(InspectionEpochV1::new(u64::MAX));
+                wait_for_responses(active_responses)?;
                 control
                     .write_all(&[CHILD_STOPPED])
                     .and_then(|()| control.flush())
@@ -323,6 +342,17 @@ fn child_control_loop(
             _ => return Err(DashboardError::new(DashboardErrorCode::FatalDisabled)),
         }
     }
+}
+
+fn wait_for_responses(active_responses: &AtomicUsize) -> Result<(), DashboardError> {
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while active_responses.load(Ordering::Acquire) != 0 {
+        if Instant::now() >= deadline {
+            return Err(DashboardError::new(DashboardErrorCode::PurgeFailed));
+        }
+        thread::sleep(Duration::from_millis(5));
+    }
+    Ok(())
 }
 
 fn server_loop(
@@ -378,7 +408,7 @@ fn handle_connection(
 ) {
     let _ = stream.set_read_timeout(Some(Duration::from_millis(150)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(1)));
-    let mut request = Vec::with_capacity(1024);
+    let mut request = Zeroizing::new(Vec::with_capacity(1024));
     let mut chunk = [0_u8; 1024];
     loop {
         match stream.read(&mut chunk) {
@@ -403,7 +433,8 @@ fn handle_connection(
     }
     let host = authority.to_string();
     let origin = format!("http://{authority}");
-    let Ok(validated) = DashboardHttp1Gate::validate(&request, host.as_bytes(), origin.as_bytes())
+    let Ok(validated) =
+        DashboardHttp1Gate::validate(request.as_slice(), host.as_bytes(), origin.as_bytes())
     else {
         let _ = stream.write_all(crate::CONSTANT_REJECTION_RESPONSE);
         return;
@@ -486,14 +517,13 @@ fn authenticate(
     request: &crate::server::ValidatedRequest,
     state: &Arc<Mutex<ChildState>>,
 ) -> Option<AuthenticatedSession> {
+    let authorization = CanonicalAuthorizationV1::parse(request.authorization()?).ok()?;
     let page = decode_secondary_header(request.page_session()?)?;
     let csrf = decode_secondary_header(request.csrf()?)?;
-    let auth = &state
-        .lock()
-        .unwrap_or_else(|poison| poison.into_inner())
-        .auth;
-    auth.validate_session(page.as_ref(), csrf.as_ref())
-        .then_some((page, csrf, auth.generation()))
+    let child = state.lock().unwrap_or_else(|poison| poison.into_inner());
+    (child.auth.validate_authorization(&authorization)
+        && child.auth.validate_session(page.as_ref(), csrf.as_ref()))
+    .then_some((page, csrf, child.auth.generation()))
 }
 
 fn serve_sensitive(
@@ -559,14 +589,17 @@ fn serve_sensitive(
     };
     let Some(payload) = child
         .store
-        .with_payload(&lease, auth_generation, now, |bytes| {
-            Zeroizing::new(bytes.to_vec())
-        })
+        .copy_payload_for_response(&lease, auth_generation, now)
     else {
         let _ = write_constant(stream, 404, b"request rejected\n");
         return;
     };
+    let response_bytes = payload.len();
     drop(child);
+    let _reservation = ResponseByteReservation {
+        state: state.clone(),
+        bytes: response_bytes,
+    };
     let encoded = match route {
         ValidatedDashboardRequestV1::ProviderVisible => encode_provider(payload.as_ref()),
         ValidatedDashboardRequestV1::RevealOwnerRaw => encode_owner_raw(payload.as_ref()),
@@ -660,6 +693,21 @@ fn acquire_response_slot(active: &AtomicUsize, max: usize) -> bool {
 
 struct ResponseSlot {
     active: Arc<AtomicUsize>,
+}
+
+struct ResponseByteReservation {
+    state: Arc<Mutex<ChildState>>,
+    bytes: usize,
+}
+
+impl Drop for ResponseByteReservation {
+    fn drop(&mut self) {
+        self.state
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner())
+            .store
+            .release_response_bytes(self.bytes);
+    }
 }
 
 impl Drop for ResponseSlot {

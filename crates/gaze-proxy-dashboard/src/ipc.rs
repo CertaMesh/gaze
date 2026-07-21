@@ -11,7 +11,7 @@ use gaze_types::inspection::{
     LogicalInspectionIdV1, PiiSummaryV1, ProjectionAvailabilityV1, SseTimelineMetaV1,
 };
 use serde::Serialize;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::auth::PairingSecret;
 use crate::{DashboardError, DashboardErrorCode};
@@ -41,13 +41,15 @@ impl PairingEnvelopeV1 {
     }
 
     /// Parses only the exact canonical frame.
-    pub fn decode(bytes: [u8; 59]) -> Result<Self, DashboardError> {
+    pub fn decode(mut bytes: [u8; 59]) -> Result<Self, DashboardError> {
         if &bytes[0..4] != PAIR_MAGIC || bytes[4] != VERSION {
+            bytes.zeroize();
             return Err(DashboardError::new(DashboardErrorCode::PairingFailed));
         }
         let ip = Ipv4Addr::new(bytes[21], bytes[22], bytes[23], bytes[24]);
         let port = u16::from_be_bytes([bytes[25], bytes[26]]);
         if !ip.is_loopback() || port == 0 {
+            bytes.zeroize();
             return Err(DashboardError::new(DashboardErrorCode::PairingFailed));
         }
         Ok(Self {
@@ -58,9 +60,10 @@ impl PairingEnvelopeV1 {
     /// Reads exactly one fixed 59-byte frame. Callers own the persistent stream boundary.
     pub fn read_exact(reader: &mut impl Read) -> Result<Self, DashboardError> {
         let mut bytes = [0_u8; 59];
-        reader
-            .read_exact(&mut bytes)
-            .map_err(|_| DashboardError::new(DashboardErrorCode::PairingFailed))?;
+        if reader.read_exact(&mut bytes).is_err() {
+            bytes.zeroize();
+            return Err(DashboardError::new(DashboardErrorCode::PairingFailed));
+        }
         Self::decode(bytes)
     }
 

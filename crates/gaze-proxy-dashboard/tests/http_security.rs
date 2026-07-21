@@ -24,6 +24,8 @@ fn smuggling_rebinding_cors_and_ambient_auth_all_fail_closed() {
         b"OPTIONS /api/v1/events/snapshot HTTP/1.1\r\nHost: 127.99.88.77:43123\r\nOrigin: http://127.99.88.77:43123\r\n\r\n",
         b"GET /?secret=x HTTP/1.1\r\nHost: 127.99.88.77:43123\r\n\r\n",
         b"GET / HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        b"GET / HTTP/1.1\nHost: 127.99.88.77:43123\n\n",
+        b"GET / HTTP/1.1\r\nHost: 127.99.88.77:43123\rX-Test: no\r\n\r\n",
     ];
     for request in cases {
         let Err(error) = DashboardHttp1Gate::validate(request, HOST, ORIGIN) else {

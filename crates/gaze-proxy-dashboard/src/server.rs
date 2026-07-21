@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+use zeroize::Zeroizing;
+
 use crate::assets::DATA_FREE_SHELL;
 use crate::security_headers::SECURITY_HEADERS;
 use crate::{DashboardError, DashboardErrorCode};
@@ -62,10 +64,10 @@ pub enum ValidatedDashboardRequestV1 {
 /// Validated request information containing only a closed route and fixed-body bytes.
 pub struct ValidatedRequest {
     route: ValidatedDashboardRequestV1,
-    body: Vec<u8>,
-    authorization: Option<Vec<u8>>,
-    page_session: Option<Vec<u8>>,
-    csrf: Option<Vec<u8>>,
+    body: Zeroizing<Vec<u8>>,
+    authorization: Option<Zeroizing<Vec<u8>>>,
+    page_session: Option<Zeroizing<Vec<u8>>>,
+    csrf: Option<Zeroizing<Vec<u8>>>,
 }
 
 impl ValidatedRequest {
@@ -82,15 +84,15 @@ impl ValidatedRequest {
     }
 
     pub(crate) fn authorization(&self) -> Option<&[u8]> {
-        self.authorization.as_deref()
+        self.authorization.as_ref().map(|value| value.as_slice())
     }
 
     pub(crate) fn page_session(&self) -> Option<&[u8]> {
-        self.page_session.as_deref()
+        self.page_session.as_ref().map(|value| value.as_slice())
     }
 
     pub(crate) fn csrf(&self) -> Option<&[u8]> {
-        self.csrf.as_deref()
+        self.csrf.as_ref().map(|value| value.as_slice())
     }
 }
 
@@ -104,7 +106,10 @@ impl DashboardHttp1Gate {
         expected_host: &[u8],
         expected_origin: &[u8],
     ) -> Result<ValidatedRequest, DashboardError> {
-        if input.is_empty() || input.len() > MAX_HTTP_REQUEST_BYTES || has_forbidden_control(input)
+        if input.is_empty()
+            || input.len() > MAX_HTTP_REQUEST_BYTES
+            || has_forbidden_control(input)
+            || !has_canonical_crlf(input)
         {
             return rejected();
         }
@@ -178,9 +183,9 @@ impl DashboardHttp1Gate {
             match lower.as_slice() {
                 b"host" => host = Some(value),
                 b"origin" => origin = Some(value),
-                b"authorization" => authorization = Some(value.to_vec()),
-                b"x-gaze-page-session" => page_session = Some(value.to_vec()),
-                b"x-gaze-csrf" => csrf = Some(value.to_vec()),
+                b"authorization" => authorization = Some(Zeroizing::new(value.to_vec())),
+                b"x-gaze-page-session" => page_session = Some(Zeroizing::new(value.to_vec())),
+                b"x-gaze-csrf" => csrf = Some(Zeroizing::new(value.to_vec())),
                 b"content-length" => {
                     let text = std::str::from_utf8(value).map_err(|_| rejected_error())?;
                     if text.starts_with('+')
@@ -223,7 +228,7 @@ impl DashboardHttp1Gate {
         }
         Ok(ValidatedRequest {
             route,
-            body: body.to_vec(),
+            body: Zeroizing::new(body.to_vec()),
             authorization,
             page_session,
             csrf,
@@ -266,6 +271,14 @@ fn has_forbidden_control(input: &[u8]) -> bool {
     input
         .iter()
         .any(|byte| *byte == 0 || (*byte < 0x09) || (*byte > 0x0d && *byte < 0x20) || *byte == 0x7f)
+}
+
+fn has_canonical_crlf(input: &[u8]) -> bool {
+    input.iter().enumerate().all(|(index, byte)| match byte {
+        b'\r' => input.get(index + 1) == Some(&b'\n'),
+        b'\n' => index > 0 && input[index - 1] == b'\r',
+        _ => true,
+    })
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {

@@ -239,6 +239,10 @@ impl LoopbackBind {
         SocketAddrV4::new(self.address, 0)
     }
 
+    pub(crate) const fn matches_authority(self, authority: SocketAddrV4) -> bool {
+        authority.ip().to_bits() == self.address.to_bits() && authority.port() != 0
+    }
+
     /// Reports whether origin reuse was explicitly configured.
     #[must_use]
     pub const fn origin_reuse_warning(self) -> bool {

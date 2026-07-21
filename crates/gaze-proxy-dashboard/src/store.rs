@@ -5,6 +5,7 @@ use gaze_types::inspection::{
     InspectionEmissionIdV1, InspectionEpochV1, InspectionSequenceV1, InspectionStageDomainV1,
     LogicalInspectionIdV1,
 };
+use zeroize::Zeroizing;
 
 use crate::ipc::DecodedInspectionFrame;
 use crate::RetentionLimits;
@@ -31,6 +32,7 @@ pub(crate) enum AdmissionOutcome {
 
 struct StoredEmission {
     frame: DecodedInspectionFrame,
+    accounted_bytes: usize,
     insertion_generation: u64,
     deadline: Instant,
 }
@@ -47,6 +49,7 @@ pub(crate) struct EventStore {
     logical: HashMap<LogicalInspectionIdV1, StoredLogical>,
     oldest: VecDeque<(LogicalInspectionIdV1, u64, Instant)>,
     retained_bytes: usize,
+    active_response_bytes: usize,
     next_generation: u64,
     accepted_epoch: InspectionEpochV1,
     limits: RetentionLimits,
@@ -60,6 +63,7 @@ impl EventStore {
             logical: HashMap::new(),
             oldest: VecDeque::new(),
             retained_bytes: 0,
+            active_response_bytes: 0,
             next_generation: 1,
             accepted_epoch: epoch,
             limits,
@@ -86,8 +90,16 @@ impl EventStore {
             self.counters.duplicate_conflict = self.counters.duplicate_conflict.saturating_add(1);
             return AdmissionOutcome::DuplicateConflict;
         }
-        let frame_bytes = frame.retained_bytes();
-        if frame_bytes > self.limits.max_bytes() {
+        let is_new_logical = !self.logical.contains_key(&frame.logical_id);
+        let accounted_bytes = frame
+            .retained_bytes()
+            .saturating_add(std::mem::size_of::<StoredEmission>() + 128)
+            .saturating_add(if is_new_logical {
+                std::mem::size_of::<StoredLogical>() + 128
+            } else {
+                0
+            });
+        if accounted_bytes > self.limits.max_bytes() {
             self.counters.oversize = self.counters.oversize.saturating_add(1);
             return AdmissionOutcome::Oversize;
         }
@@ -99,11 +111,12 @@ impl EventStore {
             }
         }
 
-        let is_new_logical = !self.logical.contains_key(&frame.logical_id);
-        while (is_new_logical && self.logical.len() >= self.limits.max_events())
+        while self.global.len() >= self.limits.max_events()
+            || (is_new_logical && self.logical.len() >= self.limits.max_events())
             || self
                 .retained_bytes
-                .checked_add(frame_bytes)
+                .checked_add(self.active_response_bytes)
+                .and_then(|bytes| bytes.checked_add(accounted_bytes))
                 .is_none_or(|bytes| bytes > self.limits.max_bytes())
         {
             if !self.evict_oldest() {
@@ -125,11 +138,12 @@ impl EventStore {
         let generation = self.next_generation;
         self.next_generation = self.next_generation.saturating_add(1);
 
-        self.retained_bytes += frame_bytes;
+        self.retained_bytes += accounted_bytes;
         self.global.insert(
             emission_id,
             StoredEmission {
                 frame,
+                accounted_bytes,
                 insertion_generation: generation,
                 deadline,
             },
@@ -232,19 +246,30 @@ impl EventStore {
         })
     }
 
-    pub(crate) fn with_payload<R>(
+    pub(crate) fn copy_payload_for_response(
         &mut self,
         lease: &ResponseLease,
         auth_generation: u64,
         now: Instant,
-        callback: impl for<'a> FnOnce(&'a [u8]) -> R,
-    ) -> Option<R> {
+    ) -> Option<Zeroizing<Vec<u8>>> {
         if !self.lease_valid(lease, auth_generation, now) {
             return None;
         }
-        self.global
-            .get(&lease.emission_id)
-            .map(|stored| callback(stored.frame.payload.as_slice()))
+        let stored = self.global.get(&lease.emission_id)?;
+        let payload_len = stored.frame.payload.len();
+        let total = self
+            .retained_bytes
+            .checked_add(self.active_response_bytes)?
+            .checked_add(payload_len)?;
+        if total > self.limits.max_bytes() {
+            return None;
+        }
+        self.active_response_bytes += payload_len;
+        Some(Zeroizing::new(stored.frame.payload.to_vec()))
+    }
+
+    pub(crate) fn release_response_bytes(&mut self, bytes: usize) {
+        self.active_response_bytes = self.active_response_bytes.saturating_sub(bytes);
     }
 
     pub(crate) fn retained_bytes(&self) -> usize {
@@ -285,9 +310,7 @@ impl EventStore {
         };
         for emission_id in logical.emissions {
             if let Some(stored) = self.global.remove(&emission_id) {
-                self.retained_bytes = self
-                    .retained_bytes
-                    .saturating_sub(stored.frame.retained_bytes());
+                self.retained_bytes = self.retained_bytes.saturating_sub(stored.accounted_bytes);
             }
         }
     }
