@@ -157,7 +157,10 @@ fn app_js_carries_exact_closed_label_vocabulary() {
         "QUEUE TELEMETRY: UNAVAILABLE — NOT MEASURED",
     ];
     for needle in labels {
-        assert!(js.contains(needle), "app.js must carry exact label {needle:?}");
+        assert!(
+            js.contains(needle),
+            "app.js must carry exact label {needle:?}"
+        );
     }
 }
 
@@ -170,8 +173,17 @@ fn app_js_states_sse_no_byte_no_timing_rule() {
     assert!(js.contains("SSE_KIND_LABELS"));
     assert!(js.contains("SSE_DELTA_LABELS"));
     // No per-entry byte or timing field is ever read from a timeline entry.
-    for needle in ["entry.bytes", "entry.timing", "entry.timestamp", "entry.latency", "entry.elapsed"] {
-        assert!(!js.contains(needle), "SSE entry field {needle:?} must not exist");
+    for needle in [
+        "entry.bytes",
+        "entry.timing",
+        "entry.timestamp",
+        "entry.latency",
+        "entry.elapsed",
+    ] {
+        assert!(
+            !js.contains(needle),
+            "SSE entry field {needle:?} must not exist"
+        );
     }
 }
 
@@ -188,10 +200,22 @@ fn provider_visible_lane_cannot_express_not_captured() {
 fn stylesheet_has_no_success_token() {
     let css = asset("app.css").to_lowercase();
     for needle in [
-        "--success", ".success", "--ok", "--safe", "--good", "--green",
-        "--verified", "--pass", "--healthy", "--positive", "--affirmative",
+        "--success",
+        ".success",
+        "--ok",
+        "--safe",
+        "--good",
+        "--green",
+        "--verified",
+        "--pass",
+        "--healthy",
+        "--positive",
+        "--affirmative",
     ] {
-        assert!(!css.contains(needle), "success/affirmative token {needle:?} must not exist");
+        assert!(
+            !css.contains(needle),
+            "success/affirmative token {needle:?} must not exist"
+        );
     }
     // Lane border grammar is contractual and survives forced colors.
     assert!(css.contains("double"));
@@ -200,7 +224,10 @@ fn stylesheet_has_no_success_token() {
     assert!(css.contains("prefers-reduced-motion: reduce"));
     assert!(css.contains("prefers-color-scheme: dark"));
     assert!(!css.contains("@import"));
-    assert!(!css.contains("url("), "stylesheet must reference no resource at all");
+    assert!(
+        !css.contains("url("),
+        "stylesheet must reference no resource at all"
+    );
 }
 
 #[test]
@@ -234,10 +261,15 @@ fn token_input_matches_frozen_pairing_contract() {
     assert!(html.contains(r#"autocorrect="off""#));
     assert!(html.contains(r#"maxlength="43""#));
     // The token input element carries no name attribute (meta name= is fine).
-    let input_start = html.find("<input id=\"token-input\"").expect("token input exists");
+    let input_start = html
+        .find("<input id=\"token-input\"")
+        .expect("token input exists");
     let input_end = input_start + html[input_start..].find('>').expect("input tag closes");
     let input_tag = &html[input_start..input_end];
-    assert!(!input_tag.contains("name="), "token input must have no name attribute");
+    assert!(
+        !input_tag.contains("name="),
+        "token input must have no name attribute"
+    );
     // The status/alert surfaces exist for accessible announcements.
     assert!(html.contains(r#"role="alert""#));
     assert!(html.contains(r#"role="status""#));
@@ -251,9 +283,18 @@ fn token_input_matches_frozen_pairing_contract() {
 fn assets_contain_no_real_pii_shapes() {
     for name in ["index.html", "app.css", "app.js"] {
         let content = asset(name);
-        assert!(!content.contains("@gmail."), "{name} must not carry real mail domains");
-        assert!(!content.contains("@example.com"), "{name}: use .invalid fixtures only");
-        assert!(!content.contains("+1-202"), "{name}: only documented synthetic phone ranges");
+        assert!(
+            !content.contains("@gmail."),
+            "{name} must not carry real mail domains"
+        );
+        assert!(
+            !content.contains("@example.com"),
+            "{name}: use .invalid fixtures only"
+        );
+        assert!(
+            !content.contains("+1-202"),
+            "{name}: only documented synthetic phone ranges"
+        );
     }
 }
 
@@ -264,7 +305,12 @@ fn disconnected_copy_preserves_provider_continuity_claim() {
     let js = asset("app.js");
     assert!(js.contains("The proxy is unaffected and continues running without capture."));
     assert!(js.contains("DASHBOARD DISABLED ("));
-    for needle in ["proxy failed", "proxy down", "provider failed", "provider down"] {
+    for needle in [
+        "proxy failed",
+        "proxy down",
+        "provider failed",
+        "provider down",
+    ] {
         assert!(
             !js.to_lowercase().contains(needle),
             "must never imply provider impairment: {needle:?}"
