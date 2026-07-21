@@ -96,7 +96,9 @@ fn binding_precedes_socket_writer_runtime_and_admission_activation_in_commit() {
         ("runtime start", "DashboardLaunch::start"),
         ("admission activation", "admission.activate()"),
     ] {
-        let side_effect = body.find(needle).unwrap_or_else(|| panic!("missing {name}"));
+        let side_effect = body
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing {name}"));
         assert!(binding < side_effect, "binding must precede {name}");
     }
 }
