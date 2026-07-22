@@ -97,6 +97,9 @@ base: captured payloads become visible to the paired browser session.
 Pairing prints exactly one `http://<origin>/` line and one
 `GazeDashboardV1 <token>` authorization line to the controlling terminal (or
 the validated pairing descriptor) — never to stdout, stderr, or a log file.
+On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
+promptly open) the read end of the pairing FIFO — otherwise `gaze proxy serve`
+blocks in the write-only open before provider startup.
 Any flag-validation or activation failure — including a missing controlling
 terminal without a pairing descriptor — prints one sanitized
 `gaze dashboard disabled: <reason>` line, and the proxy starts or continues
