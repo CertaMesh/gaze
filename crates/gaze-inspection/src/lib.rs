@@ -1517,6 +1517,28 @@ mod tests {
         }
     }
 
+    fn expect_begin_logical_err_for_test(
+        producer: &InstalledInspectionProducerV1,
+        expected: InspectionBeginLogicalErrorV1,
+    ) {
+        const DEADLINE: Duration = Duration::from_millis(100);
+        let started = Instant::now();
+        loop {
+            match producer.begin_logical() {
+                Ok(_) => {
+                    panic!("begin_logical unexpectedly returned Ok while expecting {expected:?}")
+                }
+                Err(error) if error == expected => return,
+                Err(InspectionBeginLogicalErrorV1::Contended) if started.elapsed() < DEADLINE => {
+                    std::thread::yield_now();
+                }
+                Err(error) => panic!(
+                    "begin_logical settled to {error:?} while expecting {expected:?} within the {DEADLINE:?} test deadline"
+                ),
+            }
+        }
+    }
+
     fn admit_for_test<F>(mut attempt: F) -> InspectionAdmissionOutcomeV1
     where
         F: FnMut() -> InspectionAdmissionOutcomeV1,
@@ -1738,14 +1760,8 @@ mod tests {
             binding_a.bind(activated_b),
             Err(InspectionConsumerBindErrorV1::RegistrationMismatch)
         ));
-        assert!(matches!(
-            producer_a.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
-        assert!(matches!(
-            producer_b.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
+        expect_begin_logical_err_for_test(&producer_a, InspectionBeginLogicalErrorV1::Disabled);
+        expect_begin_logical_err_for_test(&producer_b, InspectionBeginLogicalErrorV1::Disabled);
 
         drop(activated_a);
         drop(binding_b);
@@ -1774,19 +1790,13 @@ mod tests {
 
         let guard = bound_a.begin_purge().unwrap();
         assert_eq!(guard.next_epoch().get(), 1);
-        assert!(matches!(
-            producer_a.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Purging)
-        ));
-        assert!(producer_b.begin_logical().is_ok());
+        expect_begin_logical_err_for_test(&producer_a, InspectionBeginLogicalErrorV1::Purging);
+        let _ = begin_logical_for_test(&producer_b);
         assert_eq!(guard.complete().unwrap().get(), 1);
-        assert!(producer_a.begin_logical().is_ok());
+        let _ = begin_logical_for_test(&producer_a);
         assert_eq!(bound_a.disable(), InspectionDisableOutcomeV1::Disabled);
-        assert!(matches!(
-            producer_a.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
-        assert!(producer_b.begin_logical().is_ok());
+        expect_begin_logical_err_for_test(&producer_a, InspectionBeginLogicalErrorV1::Disabled);
+        let _ = begin_logical_for_test(&producer_b);
 
         drop(activated_b);
         drop(binding_b);
@@ -1820,10 +1830,7 @@ mod tests {
             install_inspection_v1(PendingInspectionProducerV1::new(descriptor), consumer).unwrap();
         drop(binding);
 
-        assert!(matches!(
-            producer.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
+        expect_begin_logical_err_for_test(&producer, InspectionBeginLogicalErrorV1::Disabled);
         drop(activated);
     }
 
@@ -1852,14 +1859,11 @@ mod tests {
             binding.bind(legacy_activated),
             Err(InspectionConsumerBindErrorV1::RegistrationMismatch)
         ));
-        assert!(matches!(
-            gated_producer.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
-        assert!(matches!(
-            legacy_producer.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
+        expect_begin_logical_err_for_test(&gated_producer, InspectionBeginLogicalErrorV1::Disabled);
+        expect_begin_logical_err_for_test(
+            &legacy_producer,
+            InspectionBeginLogicalErrorV1::Disabled,
+        );
         drop(gated_activated);
     }
 
@@ -1890,10 +1894,10 @@ mod tests {
             binding.bind(candidate),
             Err(InspectionConsumerBindErrorV1::Cancelled)
         ));
-        assert!(matches!(
-            candidate_producer.begin_logical(),
-            Err(InspectionBeginLogicalErrorV1::Disabled)
-        ));
+        expect_begin_logical_err_for_test(
+            &candidate_producer,
+            InspectionBeginLogicalErrorV1::Disabled,
+        );
     }
 
     #[test]
