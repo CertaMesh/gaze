@@ -19,8 +19,12 @@ The docs in this repository are plain Markdown and follow conventions that work 
 - Code blocks always carry an explicit language tag (` ```rust `, ` ```toml `, ` ```bash `) so syntax highlighters and assistive tools can parse them correctly.
 - Tables are kept simple (no merged cells, header row always present).
 
+## Dashboard UI
+
+The opt-in `gaze proxy --dashboard` inspection dashboard is the first end-user UI surface in the core repository. It targets **WCAG 2.2 AA conformance**; its verification protocol, 44-state visual matrix, and committed evidence live in [Dashboard accessibility and visual verification](dashboard/accessibility-and-visual-verification.md), with the browser-facing security posture in [Dashboard browser security](dashboard/browser-security.md).
+
 ## Future UI surfaces
 
-Gaze is a CLI-and-library project; there is no end-user UI in the core repository. The companion marketing site (`gaze-website`) and any future dashboard or audit-viewer UI built on top of `gaze-audit` will target **WCAG 2.1 AA conformance** as their accessibility baseline. This includes keyboard-only navigation, sufficient color contrast, focus indicators, and ARIA labels on interactive controls.
+The companion marketing site (`gaze-website`) and any future audit-viewer UI built on top of `gaze-audit` will target at least **WCAG 2.1 AA conformance** as their accessibility baseline. This includes keyboard-only navigation, sufficient color contrast, focus indicators, and ARIA labels on interactive controls.
 
 Accessibility regressions are treated like security regressions: they should not ship.

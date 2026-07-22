@@ -1,0 +1,1945 @@
+{
+  "generatedBy": "dashboard.spec.mjs",
+  "states": [
+    {
+      "assertions": [
+        {
+          "name": "shell is data-free (no capture/event/token state)",
+          "result": "PASS"
+        },
+        {
+          "name": "token input contract (password, no name/form, autofill off, paste allowed)",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow at V2",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L0-SHELL-V2.png",
+      "id": "L0-SHELL-V2",
+      "layer": 0,
+      "viewport": "V2",
+      "tier": "preauth",
+      "content": "shell",
+      "condition": "light",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "shell is data-free (no capture/event/token state)",
+          "result": "PASS"
+        },
+        {
+          "name": "token input contract (password, no name/form, autofill off, paste allowed)",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow at V7",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L0-SHELL-V7.png",
+      "id": "L0-SHELL-V7",
+      "layer": 0,
+      "viewport": "V7",
+      "tier": "preauth",
+      "content": "shell",
+      "condition": "light",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "shell is data-free (no capture/event/token state)",
+          "result": "PASS"
+        },
+        {
+          "name": "token input contract (password, no name/form, autofill off, paste allowed)",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow at V9",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L0-SHELL-V9.png",
+      "id": "L0-SHELL-V9",
+      "layer": 0,
+      "viewport": "V9",
+      "tier": "preauth",
+      "content": "shell",
+      "condition": "light",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "wrong token yields one constant alert with no hint",
+          "result": "PASS"
+        },
+        {
+          "name": "input is cleared after the attempt",
+          "result": "PASS"
+        },
+        {
+          "name": "page remains data-free preauth",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L0-AUTHERR-V2.png",
+      "id": "L0-AUTHERR-V2",
+      "layer": 0,
+      "viewport": "V2",
+      "tier": "preauth",
+      "content": "auth-error",
+      "condition": "light",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V1",
+          "result": "PASS"
+        },
+        {
+          "name": "side-by-side: list left of detail",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V1",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V1.png",
+      "id": "L1-V1",
+      "layer": 1,
+      "viewport": "V1",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V2",
+          "result": "PASS"
+        },
+        {
+          "name": "side-by-side: list left of detail",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "V2 Trace: all four engines with representative outcomes",
+          "result": "PASS"
+        },
+        {
+          "name": "V2 Trace: EXACT HIT attestation rendered neutral, not caution",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V2",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V2.png",
+      "id": "L1-V2",
+      "layer": 1,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V3",
+          "result": "PASS"
+        },
+        {
+          "name": "side-by-side: list left of detail",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "V3 Overview + list cover profile/endpoint/port categories without numeric values",
+          "result": "PASS"
+        },
+        {
+          "name": "V3 list covers dynamic/revalidated categories",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V3",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V3.png",
+      "id": "L1-V3",
+      "layer": 1,
+      "viewport": "V3",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V4",
+          "result": "PASS"
+        },
+        {
+          "name": "side-by-side: list left of detail",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V4",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V4.png",
+      "id": "L1-V4",
+      "layer": 1,
+      "viewport": "V4",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V5",
+          "result": "PASS"
+        },
+        {
+          "name": "stacked: list above detail, both visible",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V5",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V5.png",
+      "id": "L1-V5",
+      "layer": 1,
+      "viewport": "V5",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V6",
+          "result": "PASS"
+        },
+        {
+          "name": "P1/P2 mutually exclusive in single-column",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V6",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V6.png",
+      "id": "L1-V6",
+      "layer": 1,
+      "viewport": "V6",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V7",
+          "result": "PASS"
+        },
+        {
+          "name": "P1/P2 mutually exclusive in single-column",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V7",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V7.png",
+      "id": "L1-V7",
+      "layer": 1,
+      "viewport": "V7",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V8",
+          "result": "PASS"
+        },
+        {
+          "name": "P1/P2 mutually exclusive in single-column",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V8",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V8.png",
+      "id": "L1-V8",
+      "layer": 1,
+      "viewport": "V8",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "capture badge exact and never truncated/hidden",
+          "result": "PASS"
+        },
+        {
+          "name": "no owner badge and no VIEW INCOMPLETE at zero drops",
+          "result": "PASS"
+        },
+        {
+          "name": "queue snapshot renders unavailable/not measured",
+          "result": "PASS"
+        },
+        {
+          "name": "expected pane layout for V9",
+          "result": "PASS"
+        },
+        {
+          "name": "P1/P2 mutually exclusive in single-column",
+          "result": "PASS"
+        },
+        {
+          "name": "both owner lanes NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent from DOM",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow (reflow) at V9",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and never obscured by sticky bar",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L1-V9.png",
+      "id": "L1-V9",
+      "layer": 1,
+      "viewport": "V9",
+      "tier": "provider-visible-default",
+      "content": "default",
+      "condition": "light-motion-normal",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: OWNER RAW CAPTURE ENABLED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerraw CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "uncaptured lane ownerrestored NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "attestation representative: MISS — NO RECORD",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-RAW-V2.png",
+      "id": "L2-RAW-V2",
+      "layer": 2,
+      "viewport": "V2",
+      "tier": "owner-raw",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: OWNER RAW CAPTURE ENABLED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerraw CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "uncaptured lane ownerrestored NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-RAW-V9.png",
+      "id": "L2-RAW-V9",
+      "layer": 2,
+      "viewport": "V9",
+      "tier": "owner-raw",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: OWNER RESTORED CAPTURE ENABLED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerrestored CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "uncaptured lane ownerraw NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "attestation representative: INVALIDATED — POLICY OR RULEPACK",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-RESTORED-V2.png",
+      "id": "L2-RESTORED-V2",
+      "layer": 2,
+      "viewport": "V2",
+      "tier": "owner-restored",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-restored"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: OWNER RESTORED CAPTURE ENABLED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerrestored CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "uncaptured lane ownerraw NOT CAPTURED with no reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-RESTORED-V9.png",
+      "id": "L2-RESTORED-V9",
+      "layer": 2,
+      "viewport": "V9",
+      "tier": "owner-restored",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-restored"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: BOTH OWNER DOMAINS CAPTURED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerraw CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerrestored CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "attestation representative: AMBIGUOUS FAIL-CLOSED",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-BOTH-V2.png",
+      "id": "L2-BOTH-V2",
+      "layer": 2,
+      "viewport": "V2",
+      "tier": "owner-both",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-both"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner tier badge exact: BOTH OWNER DOMAINS CAPTURED",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerraw CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "captured lane ownerrestored CONCEALED with exact-domain reveal control",
+          "result": "PASS"
+        },
+        {
+          "name": "concealed sentinels absent (DOM byte absence)",
+          "result": "PASS"
+        },
+        {
+          "name": "V9 worst case: badge + VIEW INCOMPLETE + Purge all present",
+          "result": "PASS"
+        },
+        {
+          "name": "bar wraps instead of truncating at 320px",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "focus visible and unobscured",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L2-BOTH-V9.png",
+      "id": "L2-BOTH-V9",
+      "layer": 2,
+      "viewport": "V9",
+      "tier": "owner-both",
+      "content": "owner-tier",
+      "condition": "light",
+      "fixture": "fx-owner-both"
+    },
+    {
+      "assertions": [
+        {
+          "name": "ProviderVisible response PAYLOAD OMITTED with exact closed code",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge remains selected (capture unchanged)",
+          "result": "PASS"
+        },
+        {
+          "name": "no invented byte count or reason",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-PVOMIT-V2.png",
+      "id": "L3-PVOMIT-V2",
+      "layer": 3,
+      "viewport": "V2",
+      "tier": "content-pv-omitted",
+      "content": "pv-omitted",
+      "condition": "light",
+      "fixture": "fx-content-pv-omitted"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner lane PAYLOAD OMITTED with exact closed code, no reveal, no show-more",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-OWNEROMIT-V2.png",
+      "id": "L3-OWNEROMIT-V2",
+      "layer": 3,
+      "viewport": "V2",
+      "tier": "content-owner-omitted",
+      "content": "owner-omitted",
+      "condition": "light",
+      "fixture": "fx-content-owner-omitted"
+    },
+    {
+      "assertions": [
+        {
+          "name": "sentinel absent before reveal",
+          "result": "PASS"
+        },
+        {
+          "name": "reveal displays synthetic payload with stage/emission/domain sentinel line",
+          "result": "PASS"
+        },
+        {
+          "name": "payload appears only as text nodes, never in attributes",
+          "result": "PASS"
+        },
+        {
+          "name": "manual conceal removes payload bytes from DOM and restores focus",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-REVEALRAW-V2-revealed.png",
+      "id": "L3-REVEALRAW-V2",
+      "layer": 3,
+      "viewport": "V2",
+      "tier": "owner-raw",
+      "content": "reveal-raw",
+      "condition": "light",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "sentinel absent before reveal",
+          "result": "PASS"
+        },
+        {
+          "name": "reveal displays synthetic payload with stage/emission/domain sentinel line",
+          "result": "PASS"
+        },
+        {
+          "name": "payload appears only as text nodes, never in attributes",
+          "result": "PASS"
+        },
+        {
+          "name": "manual conceal removes payload bytes from DOM and restores focus",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-REVEALRESTORED-V2-revealed.png",
+      "id": "L3-REVEALRESTORED-V2",
+      "layer": 3,
+      "viewport": "V2",
+      "tier": "owner-restored",
+      "content": "reveal-restored",
+      "condition": "light",
+      "fixture": "fx-owner-restored"
+    },
+    {
+      "assertions": [
+        {
+          "name": "ProviderVisible response PAYLOAD OMITTED with exact closed code",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge remains selected (capture unchanged)",
+          "result": "PASS"
+        },
+        {
+          "name": "no invented byte count or reason",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-PVOMIT-V7.png",
+      "id": "L3-PVOMIT-V7",
+      "layer": 3,
+      "viewport": "V7",
+      "tier": "content-pv-omitted",
+      "content": "pv-omitted",
+      "condition": "light",
+      "fixture": "fx-content-pv-omitted"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner lane PAYLOAD OMITTED with exact closed code, no reveal, no show-more",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-OWNEROMIT-V7.png",
+      "id": "L3-OWNEROMIT-V7",
+      "layer": 3,
+      "viewport": "V7",
+      "tier": "content-owner-omitted",
+      "content": "owner-omitted",
+      "condition": "light",
+      "fixture": "fx-content-owner-omitted"
+    },
+    {
+      "assertions": [
+        {
+          "name": "sentinel absent before reveal",
+          "result": "PASS"
+        },
+        {
+          "name": "reveal displays synthetic payload with stage/emission/domain sentinel line",
+          "result": "PASS"
+        },
+        {
+          "name": "payload appears only as text nodes, never in attributes",
+          "result": "PASS"
+        },
+        {
+          "name": "manual conceal removes payload bytes from DOM and restores focus",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-REVEALRAW-V7-revealed.png",
+      "id": "L3-REVEALRAW-V7",
+      "layer": 3,
+      "viewport": "V7",
+      "tier": "owner-raw",
+      "content": "reveal-raw",
+      "condition": "light",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "sentinel absent before reveal",
+          "result": "PASS"
+        },
+        {
+          "name": "reveal displays synthetic payload with stage/emission/domain sentinel line",
+          "result": "PASS"
+        },
+        {
+          "name": "payload appears only as text nodes, never in attributes",
+          "result": "PASS"
+        },
+        {
+          "name": "manual conceal removes payload bytes from DOM and restores focus",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L3-REVEALRESTORED-V7-revealed.png",
+      "id": "L3-REVEALRESTORED-V7",
+      "layer": 3,
+      "viewport": "V7",
+      "tier": "owner-restored",
+      "content": "reveal-restored",
+      "condition": "light",
+      "fixture": "fx-owner-restored"
+    },
+    {
+      "assertions": [
+        {
+          "name": "OS dark scheme renders dark surfaces with intact labels",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-DARK-V2.png",
+      "id": "L4-DARK-V2",
+      "layer": 4,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "dark",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "forced colors preserve lane border grammar and labels",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-FORCED-V2.png",
+      "id": "L4-FORCED-V2",
+      "layer": 4,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "forced-colors",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "every element computes zero animation/transition duration",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-REDUCED-V2.png",
+      "id": "L4-REDUCED-V2",
+      "layer": 4,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "reduced-motion",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "WCAG text-spacing override causes no clipping or overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-TEXTSPACE-V2.png",
+      "id": "L4-TEXTSPACE-V2",
+      "layer": 4,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "text-spacing",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "OS dark scheme renders dark surfaces with intact labels",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-DARK-V9.png",
+      "id": "L4-DARK-V9",
+      "layer": 4,
+      "viewport": "V9",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "dark",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "forced colors preserve lane border grammar and labels",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-FORCED-V9.png",
+      "id": "L4-FORCED-V9",
+      "layer": 4,
+      "viewport": "V9",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "forced-colors",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "every element computes zero animation/transition duration",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-REDUCED-V9.png",
+      "id": "L4-REDUCED-V9",
+      "layer": 4,
+      "viewport": "V9",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "reduced-motion",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "WCAG text-spacing override causes no clipping or overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "capture badge and lane labels persist under condition",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L4-TEXTSPACE-V9.png",
+      "id": "L4-TEXTSPACE-V9",
+      "layer": 4,
+      "viewport": "V9",
+      "tier": "provider-visible-default",
+      "content": "default-selected",
+      "condition": "text-spacing",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "64 skeleton rows render with clamped indent and no keys/values",
+          "result": "PASS"
+        },
+        {
+          "name": "depth truncation renders exact caution label",
+          "result": "PASS"
+        },
+        {
+          "name": "no page-level horizontal overflow (table scrolls internally)",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-JSON-DEEP.png",
+      "id": "L5-JSON-DEEP",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "json-depth-64",
+      "condition": "light",
+      "fixture": "fx-structure-deep"
+    },
+    {
+      "assertions": [
+        {
+          "name": "wide skeleton renders bounded with NODE LIMIT caution",
+          "result": "PASS"
+        },
+        {
+          "name": "no horizontal overflow",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-JSON-WIDE.png",
+      "id": "L5-JSON-WIDE",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "json-wide",
+      "condition": "light",
+      "fixture": "fx-structure-wide"
+    },
+    {
+      "assertions": [
+        {
+          "name": "malformed structure renders exact closed omission, no fabricated tree",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-JSON-MALFORMED.png",
+      "id": "L5-JSON-MALFORMED",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "json-malformed",
+      "condition": "light",
+      "fixture": "fx-structure-malformed"
+    },
+    {
+      "assertions": [
+        {
+          "name": "windowing states entries 1–200 of 10000 with true positions",
+          "result": "PASS"
+        },
+        {
+          "name": "next window advances to 201–400",
+          "result": "PASS"
+        },
+        {
+          "name": "SSE rows expose no per-entry byte count, timestamp, or timing",
+          "result": "PASS"
+        },
+        {
+          "name": "explicit no-byte/no-timing limitation is stated",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-SSE-10K.png",
+      "id": "L5-SSE-10K",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "sse-10000",
+      "condition": "light",
+      "fixture": "fx-sse-10k"
+    },
+    {
+      "assertions": [
+        {
+          "name": "VIEW INCOMPLETE promotes with distinct counters",
+          "result": "PASS"
+        },
+        {
+          "name": "badge never truncates",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-DROPS.png",
+      "id": "L5-DROPS",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "drops",
+      "condition": "light",
+      "fixture": "fx-drops"
+    },
+    {
+      "assertions": [
+        {
+          "name": "zero-event state is honest, never healthy/clean",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-ZERO.png",
+      "id": "L5-ZERO",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "zero-events",
+      "condition": "light",
+      "fixture": "fx-zero"
+    },
+    {
+      "assertions": [
+        {
+          "name": "states purged data + unaffected proxy with sanitized code only",
+          "result": "PASS"
+        },
+        {
+          "name": "no stale events, no capture retry control",
+          "result": "PASS"
+        },
+        {
+          "name": "never implies provider impairment",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-DISCONNECTED.png",
+      "id": "L5-DISCONNECTED",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "disabled",
+      "content": "disconnected",
+      "condition": "light",
+      "fixture": "fx-disconnected"
+    },
+    {
+      "assertions": [
+        {
+          "name": "shutdown terminal is data-free with purge statement",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-SHUTDOWN.png",
+      "id": "L5-SHUTDOWN",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "shutdown",
+      "content": "shutdown-purged",
+      "condition": "light",
+      "fixture": "fx-shutdown"
+    },
+    {
+      "assertions": [
+        {
+          "name": "purged terminal is data-free and reusable-framed",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "L5-PURGED.png",
+      "id": "L5-PURGED",
+      "layer": 5,
+      "viewport": "V2",
+      "tier": "provider-visible-default",
+      "content": "purged",
+      "condition": "light",
+      "fixture": "fx-purged"
+    },
+    {
+      "assertions": [
+        {
+          "name": "CSP and companion headers are exact on every asset",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-HEADERS",
+      "layer": "security",
+      "viewport": "-",
+      "tier": "-",
+      "content": "headers",
+      "condition": "-",
+      "fixture": "-"
+    },
+    {
+      "assertions": [
+        {
+          "name": "snapshot and follow responses exclude concealed payload bytes",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-SAFE-META",
+      "layer": "security",
+      "viewport": "-",
+      "tier": "-",
+      "content": "safe-meta",
+      "condition": "-",
+      "fixture": "fx-owner-both"
+    },
+    {
+      "assertions": [
+        {
+          "name": "owner reveal against uncaptured domain yields no payload bytes",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-NONMATCH",
+      "layer": "security",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "nonmatching-reveal",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "hostile payload displays as text only, no element/script injection",
+          "result": "PASS"
+        },
+        {
+          "name": "bidi/control characters render as visible code-point placeholders",
+          "result": "PASS"
+        },
+        {
+          "name": "prototype pollution did not occur",
+          "result": "PASS"
+        },
+        {
+          "name": "no token/secret in DOM/console/requests/storage",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "SEC-HOSTILE.png",
+      "id": "SEC-HOSTILE",
+      "layer": "security",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "hostile-payload",
+      "condition": "-",
+      "fixture": "fx-hostile"
+    },
+    {
+      "assertions": [
+        {
+          "name": "storage/cookie/cache/service-worker surfaces are empty after full use",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-FRESH-ORIGIN",
+      "layer": "security",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "fresh-origin",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "registration enumeration rejection keeps input disabled and pairing impossible",
+          "result": "PASS"
+        },
+        {
+          "name": "service-worker API unavailability keeps input disabled and pairing impossible",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "SEC-SW-FAILCLOSED",
+      "layer": "security",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "sw-fail-closed",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "reload lands on data-free preauth",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-RELOAD",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "reload",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "hidden visibility restores data-free preauth and removes payload",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-HIDDEN",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "visibility-hidden",
+      "condition": "-",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "hidden on preauth clears and disables the typed token; no canary in DOM/JS state",
+          "result": "PASS"
+        },
+        {
+          "name": "returning visible re-proves service-worker absence and re-enables entry",
+          "result": "PASS"
+        },
+        {
+          "name": "freeze on preauth clears and disables token entry",
+          "result": "PASS"
+        },
+        {
+          "name": "pagehide on preauth clears and disables token entry",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PREAUTH-HIDDEN",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "preauth-hidden",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "pairing in flight when hidden is aborted and never completes into a paired app",
+          "result": "PASS"
+        },
+        {
+          "name": "pairing request carried omit/no-store/no-referrer credential discipline",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PREAUTH-ABORT",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "preauth-abort",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "pagehide tears down; persisted pageshow discards restored state",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PAGEHIDE-BFCACHE",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "pagehide-bfcache",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "server 401 on follow returns page to data-free preauth",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-AUTHLOSS",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "auth-loss",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "reveal announces and auto-conceals at exactly the 30s window",
+          "result": "PASS"
+        },
+        {
+          "name": "unconditional expiry announcement was made",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-REVEAL-EXPIRY",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "reveal-expiry",
+      "condition": "-",
+      "fixture": "fx-owner-raw"
+    },
+    {
+      "assertions": [
+        {
+          "name": "focus in list pauses follow",
+          "result": "PASS"
+        },
+        {
+          "name": "new events buffer while paused; resume applies them",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-FOLLOW-PAUSE",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "follow-pause",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "the actual rendered scroll container is the document and it overflows",
+          "result": "PASS"
+        },
+        {
+          "name": "downward real-wheel scroll keeps follow live",
+          "result": "PASS"
+        },
+        {
+          "name": "upward real-wheel scroll of the document pauses follow with buffered count",
+          "result": "PASS"
+        },
+        {
+          "name": "rows never silently change while scroll-paused; explicit resume applies them",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": "LC-SCROLL-PAUSE.png",
+      "id": "LC-SCROLL-PAUSE",
+      "layer": "lifecycle",
+      "viewport": "V7",
+      "tier": "-",
+      "content": "scroll-pause",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "back returns focus to the originating row and creates no history entry",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-BACK",
+      "layer": "lifecycle",
+      "viewport": "V7",
+      "tier": "-",
+      "content": "back-navigation",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "purge leads to data-free PURGED terminal",
+          "result": "PASS"
+        }
+      ],
+      "screenshot": null,
+      "id": "LC-PURGE",
+      "layer": "lifecycle",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "purge",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "axe reports no serious/critical violations on the paired app",
+          "result": "PASS"
+        },
+        {
+          "name": "axe reports no serious/critical violations on preauth shell",
+          "result": "PASS"
+        },
+        {
+          "name": "axe executed under a CSP variant without Trusted Types directives",
+          "result": "CONDITIONAL",
+          "detail": "axe-core cannot be injected under trusted-types 'none'; every other assertion in this suite runs under the full production CSP."
+        }
+      ],
+      "screenshot": null,
+      "id": "A11Y-AXE",
+      "layer": "a11y",
+      "viewport": "V2",
+      "tier": "-",
+      "content": "axe",
+      "condition": "-",
+      "fixture": "fx-default"
+    },
+    {
+      "assertions": [
+        {
+          "name": "VoiceOver + Safari manual pass",
+          "result": "CONDITIONAL",
+          "detail": "NOT PERFORMED in this automated environment. Required once per release by plan §12; environment prerequisite: macOS with VoiceOver, human operator."
+        },
+        {
+          "name": "NVDA + Windows high-contrast manual pass",
+          "result": "CONDITIONAL",
+          "detail": "NOT PERFORMED in this automated environment. Required once per release by plan §12; environment prerequisite: Windows with NVDA, human operator."
+        },
+        {
+          "name": "browser/OS credential-store write probe",
+          "result": "CONDITIONAL",
+          "detail": "NOT PERFORMED: headless Chromium exposes no password-manager UI. Static contract holds (type=password, autocomplete=off, no name, no form). Manual browser matrix required for the release gate."
+        }
+      ],
+      "screenshot": null,
+      "id": "A11Y-MANUAL",
+      "layer": "a11y",
+      "viewport": "-",
+      "tier": "-",
+      "content": "manual-conditionals",
+      "condition": "-",
+      "fixture": "-"
+    }
+  ]
+}

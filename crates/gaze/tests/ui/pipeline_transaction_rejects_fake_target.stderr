@@ -1,0 +1,15 @@
+error[E0308]: mismatched types
+ --> tests/ui/pipeline_transaction_rejects_fake_target.rs:9:9
+  |
+8 |     let _ = pipeline.pseudonymize_transaction_with_detect_context(
+  |                      -------------------------------------------- arguments to this method are incorrect
+9 |         &mut fake,
+  |         ^^^^^^^^^ expected `&mut SessionTransaction<'_>`, found `&mut FakeTarget`
+  |
+  = note: expected mutable reference `&mut SessionTransaction<'_>`
+             found mutable reference `&mut FakeTarget`
+note: method defined here
+ --> src/pipeline.rs
+  |
+  |     pub fn pseudonymize_transaction_with_detect_context(
+  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

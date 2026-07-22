@@ -10,6 +10,11 @@ schemas, see the [reference](../reference/README.md).
 - **[Set up the proxy](proxy/set-up-proxy.md)** — route OpenAI, Anthropic, or Gemini SDK
   traffic through Gaze's API-key HTTP chokepoint so PII is tokenized in flight.
 
+## Dashboard
+
+- **[Run the local dashboard](dashboard/run-local-dashboard.md)** — pair the opt-in,
+  memory-only inspection dashboard child with a running `gaze proxy serve`.
+
 ## MCP
 
 - **[Set up the MCP adapter](mcp/set-up-mcp-adapter.md)** — expose Gaze's document tools to

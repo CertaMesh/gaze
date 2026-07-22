@@ -1,0 +1,47 @@
+error[E0277]: the trait bound `InstalledInspectionProducerV1: Clone` is not satisfied
+ --> tests/ui/handles_no_clone_or_debug.rs:7:21
+  |
+7 |     require_clone::<InstalledInspectionProducerV1>();
+  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `InstalledInspectionProducerV1`
+  |
+note: required by a bound in `require_clone`
+ --> tests/ui/handles_no_clone_or_debug.rs:3:21
+  |
+3 | fn require_clone<T: Clone>() {}
+  |                     ^^^^^ required by this bound in `require_clone`
+
+error[E0277]: `InstalledInspectionProducerV1` doesn't implement `Debug`
+ --> tests/ui/handles_no_clone_or_debug.rs:8:21
+  |
+8 |     require_debug::<InstalledInspectionProducerV1>();
+  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `InstalledInspectionProducerV1`
+  |
+note: required by a bound in `require_debug`
+ --> tests/ui/handles_no_clone_or_debug.rs:4:21
+  |
+4 | fn require_debug<T: std::fmt::Debug>() {}
+  |                     ^^^^^^^^^^^^^^^ required by this bound in `require_debug`
+
+error[E0277]: the trait bound `ActivatedInspectionConsumerV1: Clone` is not satisfied
+ --> tests/ui/handles_no_clone_or_debug.rs:9:21
+  |
+9 |     require_clone::<ActivatedInspectionConsumerV1>();
+  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Clone` is not implemented for `ActivatedInspectionConsumerV1`
+  |
+note: required by a bound in `require_clone`
+ --> tests/ui/handles_no_clone_or_debug.rs:3:21
+  |
+3 | fn require_clone<T: Clone>() {}
+  |                     ^^^^^ required by this bound in `require_clone`
+
+error[E0277]: `ActivatedInspectionConsumerV1` doesn't implement `Debug`
+  --> tests/ui/handles_no_clone_or_debug.rs:10:21
+   |
+10 |     require_debug::<ActivatedInspectionConsumerV1>();
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Debug` is not implemented for `ActivatedInspectionConsumerV1`
+   |
+note: required by a bound in `require_debug`
+  --> tests/ui/handles_no_clone_or_debug.rs:4:21
+   |
+ 4 | fn require_debug<T: std::fmt::Debug>() {}
+   |                     ^^^^^^^^^^^^^^^ required by this bound in `require_debug`

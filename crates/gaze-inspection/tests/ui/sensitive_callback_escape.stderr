@@ -1,0 +1,8 @@
+error: lifetime may not live long enough
+ --> tests/ui/sensitive_callback_escape.rs:5:67
+  |
+5 |     let _escaped: &[u8] = payload.with_declassified_bytes(|bytes| bytes);
+  |                                                            ------ ^^^^^ returning this value requires that `'1` must outlive `'2`
+  |                                                            |    |
+  |                                                            |    return type of closure is &'2 [u8]
+  |                                                            has type `&'1 [u8]`

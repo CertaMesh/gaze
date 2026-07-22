@@ -73,7 +73,23 @@ pidfiles are revalidated with process liveness checks and cleaned before start.
 
 ## Security Notes
 
-Authentication headers are forwarded unchanged. The proxy does not own provider
-API keys and does not add an auth boundary around the local listener. Bind to
-loopback unless you are deliberately placing it behind a separate local access
-control layer.
+The strict Anthropic Messages profile rebuilds its outbound headers from a closed
+allowlist: `content-type`, `x-api-key`, `anthropic-version`, and an optional,
+explicitly allowlisted `anthropic-beta`. Unconfigured `Authorization`, bearer
+credentials, cookies, and unknown SDK headers are accepted at ingress and
+dropped. If an embedding host configures `Authorization` as local listener
+authentication, it is a singleton consumed only by the trusted principal
+resolver and is still never forwarded.
+
+`AnthropicAdapter::new` is an ephemeral, single-request profile and rejects
+`x-gaze-session-id`. Session continuity is an explicit builder/configuration
+choice and then requires that header with a canonical lowercase UUIDv4 value.
+The SDK base URL is the proxy root, while the only direct route is exactly
+`POST /v1/messages`.
+
+The listener does not become an access-control boundary merely because provider
+credentials pass through it. Bind to loopback unless an explicit trusted
+principal resolver protects a non-loopback listener. See the
+[strict Anthropic Messages contract](../../docs/explanation/proxy/anthropic-messages-contract.md)
+for the complete wire, proof, inspection, migration, and manual SDK-test
+contract.

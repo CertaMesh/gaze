@@ -1,0 +1,37 @@
+error[E0451]: fields `version`, `logical_id`, `emission_id`, `sequence`, `epoch`, `stage_domain`, `route`, `profile`, `endpoint`, `port`, `status`, `error`, `drop`, `delivery`, `duration` and `queue` of struct `gaze_types::inspection::InspectionEventMetaV1` are private
+  --> tests/ui/metadata_fields_are_private.rs:5:9
+   |
+ 4 |     let _meta = InspectionEventMetaV1 {
+   |                 --------------------- in this type
+ 5 |         version: InspectionMetadataVersionV1::V1,
+   |         ^^^^^^^ private field
+ 6 |         logical_id: LogicalInspectionIdV1::new(1),
+   |         ^^^^^^^^^^ private field
+ 7 |         emission_id: InspectionEmissionIdV1::new(1),
+   |         ^^^^^^^^^^^ private field
+ 8 |         sequence: InspectionSequenceV1::new(1),
+   |         ^^^^^^^^ private field
+ 9 |         epoch: InspectionEpochV1::new(0),
+   |         ^^^^^ private field
+10 |         stage_domain: InspectionStageDomainV1::OwnerRequest,
+   |         ^^^^^^^^^^^^ private field
+11 |         route: RouteCodeV1::Unknown,
+   |         ^^^^^ private field
+12 |         profile: ProviderProfileCodeV1::OtherReviewed,
+   |         ^^^^^^^ private field
+13 |         endpoint: EndpointSelectionCodeV1::UnavailableFailClosed,
+   |         ^^^^^^^^ private field
+14 |         port: PortSelectionCodeV1::UnavailableFailClosed,
+   |         ^^^^ private field
+15 |         status: InspectionOperationalStatusV1::FailedClosed,
+   |         ^^^^^^ private field
+16 |         error: InspectionErrorCodeV1::InternalFailClosed,
+   |         ^^^^^ private field
+17 |         drop: InspectionDropCodeV1::PartialEvent,
+   |         ^^^^ private field
+18 |         delivery: InspectionDeliveryCodeV1::Dropped,
+   |         ^^^^^^^^ private field
+19 |         duration: CoarseDurationBucketV1::NotMeasured,
+   |         ^^^^^^^^ private field
+20 |         queue: InspectionQueueSnapshotV1::default(),
+   |         ^^^^^ private field

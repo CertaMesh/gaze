@@ -36,6 +36,7 @@ mcp = [
     "gaze-document/mcp",
 ]
 proxy = ["dep:gaze-proxy", "dep:tokio"]
+dashboard = ["proxy", "dep:gaze-proxy-dashboard", "dep:getrandom"]
 
 [[bin]]
 name = "gaze"
@@ -56,9 +57,11 @@ gaze-mcp-core = { path = "../gaze-mcp-core", version = "0.12.0", optional = true
 gaze-mcp-rmcp = { path = "../gaze-mcp-rmcp", version = "0.12.0", optional = true }
 gaze-model-setup = { workspace = true, optional = true }
 gaze-proxy = { workspace = true, optional = true }
+gaze-proxy-dashboard = { workspace = true, optional = true }
 gaze-recognizers = { path = "../gaze-recognizers", version = "0.12.0" }
 gaze-token-bridge = { path = "../gaze-token-bridge", version = "0.12.0", optional = true }
 gaze-types = { workspace = true }
+getrandom = { version = "0.3", optional = true }
 pdfium-render = { version = "0.9", optional = true }
 regex = "1"
 serde = { version = "1", features = ["derive"] }

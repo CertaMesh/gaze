@@ -1,0 +1,7 @@
+error[E0277]: the trait bound `SseEntryOrdinalV1: From<JsonNodeOrdinalV1>` is not satisfied
+ --> tests/ui/typed_ordinals_do_not_convert.rs:5:40
+  |
+5 |     let _sse: SseEntryOrdinalV1 = json.into();
+  |                                        ^^^^ the trait `From<JsonNodeOrdinalV1>` is not implemented for `SseEntryOrdinalV1`
+  |
+  = note: required for `JsonNodeOrdinalV1` to implement `Into<SseEntryOrdinalV1>`

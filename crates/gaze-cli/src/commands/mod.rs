@@ -9,6 +9,8 @@ mod index;
 mod mcp;
 #[cfg(feature = "proxy")]
 mod proxy;
+#[cfg(feature = "dashboard")]
+mod proxy_dashboard;
 mod restore;
 #[cfg(feature = "setup")]
 mod setup;
@@ -429,6 +431,46 @@ enum ProxyCmd {
         session_ttl: String,
         #[arg(long = "_foreground-daemon", hide = true)]
         foreground_daemon: bool,
+        /// Launch the isolated memory-only inspection dashboard child.
+        #[cfg(feature = "dashboard")]
+        #[arg(long)]
+        dashboard: bool,
+        /// Capture OwnerRaw payloads (requires the matching acknowledgement).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-capture-owner-raw")]
+        dashboard_capture_owner_raw: bool,
+        /// Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-acknowledge-owner-raw-risk")]
+        dashboard_acknowledge_owner_raw_risk: bool,
+        /// Capture OwnerRestored payloads (requires the matching acknowledgement).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-capture-owner-restored")]
+        dashboard_capture_owner_restored: bool,
+        /// Acknowledge that OwnerRestored capture exposes re-identified text.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-acknowledge-owner-restored-risk")]
+        dashboard_acknowledge_owner_restored_risk: bool,
+        /// Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-bind")]
+        dashboard_bind: Option<std::net::SocketAddrV4>,
+        /// Dashboard retention TTL such as `5m` (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-ttl")]
+        dashboard_ttl: Option<String>,
+        /// Dashboard retained logical-event cap (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-max-events")]
+        dashboard_max_events: Option<usize>,
+        /// Dashboard retained byte cap (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-max-bytes")]
+        dashboard_max_bytes: Option<usize>,
+        /// Inherited FIFO descriptor for noninteractive pairing-token delivery.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-pairing-fd")]
+        dashboard_pairing_fd: Option<i32>,
     },
     /// Start proxy as a detached daemon.
     Start {
@@ -446,6 +488,46 @@ enum ProxyCmd {
         rulepack: Option<String>,
         #[arg(long)]
         session_ttl: Option<String>,
+        /// Launch the isolated memory-only inspection dashboard child (relayed to the daemon).
+        #[cfg(feature = "dashboard")]
+        #[arg(long)]
+        dashboard: bool,
+        /// Capture OwnerRaw payloads (requires the matching acknowledgement).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-capture-owner-raw")]
+        dashboard_capture_owner_raw: bool,
+        /// Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-acknowledge-owner-raw-risk")]
+        dashboard_acknowledge_owner_raw_risk: bool,
+        /// Capture OwnerRestored payloads (requires the matching acknowledgement).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-capture-owner-restored")]
+        dashboard_capture_owner_restored: bool,
+        /// Acknowledge that OwnerRestored capture exposes re-identified text.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-acknowledge-owner-restored-risk")]
+        dashboard_acknowledge_owner_restored_risk: bool,
+        /// Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-bind")]
+        dashboard_bind: Option<std::net::SocketAddrV4>,
+        /// Dashboard retention TTL such as `5m` (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-ttl")]
+        dashboard_ttl: Option<String>,
+        /// Dashboard retained logical-event cap (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-max-events")]
+        dashboard_max_events: Option<usize>,
+        /// Dashboard retained byte cap (crate-ceiling capped).
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-max-bytes")]
+        dashboard_max_bytes: Option<usize>,
+        /// Inherited FIFO descriptor for noninteractive pairing-token delivery.
+        #[cfg(feature = "dashboard")]
+        #[arg(long = "dashboard-pairing-fd")]
+        dashboard_pairing_fd: Option<i32>,
     },
     /// Stop the detached proxy daemon.
     Stop {
@@ -476,6 +558,19 @@ enum ProxyCmd {
     InstallSystemdUser,
     /// Uninstall Linux systemd user auto-start integration.
     UninstallSystemdUser,
+    /// Internal dashboard child runtime.
+    #[cfg(feature = "dashboard")]
+    #[command(name = "_dashboard-child", hide = true)]
+    DashboardChild {
+        #[arg(long = "bind-addr")]
+        bind_addr: std::net::Ipv4Addr,
+        #[arg(long = "ttl-secs")]
+        ttl_secs: u64,
+        #[arg(long = "max-events")]
+        max_events: usize,
+        #[arg(long = "max-bytes")]
+        max_bytes: usize,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1045,6 +1140,26 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 rulepack,
                 session_ttl,
                 foreground_daemon,
+                #[cfg(feature = "dashboard")]
+                dashboard,
+                #[cfg(feature = "dashboard")]
+                dashboard_capture_owner_raw,
+                #[cfg(feature = "dashboard")]
+                dashboard_acknowledge_owner_raw_risk,
+                #[cfg(feature = "dashboard")]
+                dashboard_capture_owner_restored,
+                #[cfg(feature = "dashboard")]
+                dashboard_acknowledge_owner_restored_risk,
+                #[cfg(feature = "dashboard")]
+                dashboard_bind,
+                #[cfg(feature = "dashboard")]
+                dashboard_ttl,
+                #[cfg(feature = "dashboard")]
+                dashboard_max_events,
+                #[cfg(feature = "dashboard")]
+                dashboard_max_bytes,
+                #[cfg(feature = "dashboard")]
+                dashboard_pairing_fd,
             } => proxy::serve(proxy::ServeArgs {
                 bind,
                 upstream_openai,
@@ -1054,6 +1169,19 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 rulepack,
                 session_ttl,
                 foreground_daemon,
+                #[cfg(feature = "dashboard")]
+                dashboard: proxy_dashboard::DashboardArgs {
+                    dashboard,
+                    capture_owner_raw: dashboard_capture_owner_raw,
+                    acknowledge_owner_raw_risk: dashboard_acknowledge_owner_raw_risk,
+                    capture_owner_restored: dashboard_capture_owner_restored,
+                    acknowledge_owner_restored_risk: dashboard_acknowledge_owner_restored_risk,
+                    bind: dashboard_bind,
+                    ttl: dashboard_ttl,
+                    max_events: dashboard_max_events,
+                    max_bytes: dashboard_max_bytes,
+                    pairing_fd: dashboard_pairing_fd,
+                },
             }),
             ProxyCmd::Start {
                 bind,
@@ -1063,6 +1191,26 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 policy,
                 rulepack,
                 session_ttl,
+                #[cfg(feature = "dashboard")]
+                dashboard,
+                #[cfg(feature = "dashboard")]
+                dashboard_capture_owner_raw,
+                #[cfg(feature = "dashboard")]
+                dashboard_acknowledge_owner_raw_risk,
+                #[cfg(feature = "dashboard")]
+                dashboard_capture_owner_restored,
+                #[cfg(feature = "dashboard")]
+                dashboard_acknowledge_owner_restored_risk,
+                #[cfg(feature = "dashboard")]
+                dashboard_bind,
+                #[cfg(feature = "dashboard")]
+                dashboard_ttl,
+                #[cfg(feature = "dashboard")]
+                dashboard_max_events,
+                #[cfg(feature = "dashboard")]
+                dashboard_max_bytes,
+                #[cfg(feature = "dashboard")]
+                dashboard_pairing_fd,
             } => proxy::start(proxy::StartArgs {
                 bind,
                 upstream_openai,
@@ -1071,6 +1219,19 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 policy,
                 rulepack,
                 session_ttl,
+                #[cfg(feature = "dashboard")]
+                dashboard: proxy_dashboard::DashboardArgs {
+                    dashboard,
+                    capture_owner_raw: dashboard_capture_owner_raw,
+                    acknowledge_owner_raw_risk: dashboard_acknowledge_owner_raw_risk,
+                    capture_owner_restored: dashboard_capture_owner_restored,
+                    acknowledge_owner_restored_risk: dashboard_acknowledge_owner_restored_risk,
+                    bind: dashboard_bind,
+                    ttl: dashboard_ttl,
+                    max_events: dashboard_max_events,
+                    max_bytes: dashboard_max_bytes,
+                    pairing_fd: dashboard_pairing_fd,
+                },
             }),
             ProxyCmd::Stop { force, timeout } => proxy::stop(proxy::StopArgs { force, timeout }),
             ProxyCmd::Status => proxy::status(),
@@ -1082,6 +1243,18 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             ProxyCmd::UninstallLaunchd => proxy::uninstall_launchd(),
             ProxyCmd::InstallSystemdUser => proxy::install_systemd_user(),
             ProxyCmd::UninstallSystemdUser => proxy::uninstall_systemd_user(),
+            #[cfg(feature = "dashboard")]
+            ProxyCmd::DashboardChild {
+                bind_addr,
+                ttl_secs,
+                max_events,
+                max_bytes,
+            } => proxy_dashboard::run_child(proxy_dashboard::ChildModeArgs {
+                bind_addr,
+                ttl_secs,
+                max_events,
+                max_bytes,
+            }),
         },
     }
 }

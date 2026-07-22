@@ -45,6 +45,11 @@ axis in practice.
 ## Proxy
 
 - **[Proxy runtime](proxy/proxy-runtime.md)** — the API-key chokepoint design for the OpenAI, Anthropic, and Gemini base-URL paths.
+- **[Strict Anthropic Messages contract](proxy/anthropic-messages-contract.md)** — the exact direct route, headers, admitted JSON/SSE surfaces, proof boundary, inspection trust model, migration, and retained official-SDK gate.
+
+## Dashboard
+
+- **[Dashboard trust boundary](dashboard/trust-boundary.md)** — the opt-in, default-off inspection dashboard's process isolation, capture-domain acknowledgements, pairing protocol, and fail-closed activation contract.
 
 ## MCP
 

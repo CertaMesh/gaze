@@ -75,6 +75,44 @@ proxy.
 | `--force` | For `stop` / `restart`, send the hard stop after the bounded wait. |
 | `--timeout <duration>` | Stop / restart wait before force. Default: `10s`. |
 
+#### Dashboard flags (opt-in, `dashboard` cargo feature)
+
+`serve` and `start` accept the dashboard opt-in flags when the binary is built
+with the default-off `dashboard` cargo feature. `--dashboard` launches an
+isolated, memory-only inspection dashboard as a killable child process before
+provider traffic starts. Enabling it expands the local trusted computing
+base: captured payloads become visible to the paired browser session.
+
+| Option | Purpose |
+|--------|---------|
+| `--dashboard` | Launch the dashboard child; the capture baseline is always ProviderVisible plus safe metadata. |
+| `--dashboard-capture-owner-raw` + `--dashboard-acknowledge-owner-raw-risk` | Independently opt into OwnerRaw capture. The capture flag without its acknowledgement — or the acknowledgement without the flag — disables only the dashboard before provider startup. |
+| `--dashboard-capture-owner-restored` + `--dashboard-acknowledge-owner-restored-risk` | Independently opt into OwnerRestored capture under the same pairing rule. Capturing both owner domains requires both acknowledgements. |
+| `--dashboard-bind <ipv4:0>` | Literal loopback address with port 0. Default: a fresh CSPRNG-selected `127.0.0.0/8` literal per launch. Configuring a fixed literal prints an origin-reuse warning. |
+| `--dashboard-ttl <duration>` | Retention TTL. Default `5m`; crate hard ceiling one hour. |
+| `--dashboard-max-events <n>` | Retained logical-event cap. Default 64; crate hard ceiling 1024. |
+| `--dashboard-max-bytes <n>` | Retained byte cap. Default 4 MiB; crate hard ceiling 64 MiB. |
+| `--dashboard-pairing-fd <fd>` | Inherited FIFO descriptor for noninteractive pairing-token delivery. Descriptors 0/1/2, terminals and other character devices, regular files, directories, sockets, and unwritable descriptors are rejected. |
+
+Pairing prints exactly one `http://<origin>/` line and one
+`GazeDashboardV1 <token>` authorization line to the controlling terminal (or
+the validated pairing descriptor) — never to stdout, stderr, or a log file.
+On Linux, the launcher that supplies `--dashboard-pairing-fd` must hold (or
+promptly open) the read end of the pairing FIFO — otherwise `gaze proxy serve`
+blocks in the write-only open before provider startup.
+Any flag-validation or activation failure — including a missing controlling
+terminal without a pairing descriptor — prints one sanitized
+`gaze dashboard disabled: <reason>` line, and the proxy starts or continues
+without any capture. `start` relays the dashboard flags verbatim to the
+daemon serve process; `restart` intentionally does not — dashboard activation
+is per-invocation and never persisted into the daemon config. The dashboard
+child requires verified no-crash-dump readiness (`RLIMIT_CORE=0`), which
+currently limits successful activation to non-macOS Unix hosts; on other
+hosts the dashboard disables itself and the proxy continues.
+
+See [Run the local dashboard](../how-to/dashboard/run-local-dashboard.md) and
+the [dashboard trust boundary](../explanation/dashboard/trust-boundary.md).
+
 SafetyNet activation follows the normal policy and CLI behavior: use policy
 configuration for the deterministic floor and activate observer-only safety-net
 backends with the same `safety_tier` posture used by the pipeline. Locale

@@ -1,0 +1,13 @@
+- link "Skip to main content":
+  - /url: "#main"
+- region "GAZE DASHBOARD":
+  - heading "GAZE DASHBOARD" [level=1]
+  - paragraph: LOCAL INSPECTION CONSOLE — LOOPBACK ONLY
+  - heading "Pair this page" [level=2]
+  - paragraph: Enter the one-time launch token shown in your controlling terminal. The token stays in this page’s memory only. It is never stored, logged, or sent anywhere except this local dashboard.
+  - text: Launch token
+  - textbox "Launch token"
+  - button "Unlock"
+  - alert
+  - paragraph: No data is shown before pairing. Reloading this page always requires a new pairing.
+- status

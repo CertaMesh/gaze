@@ -30,7 +30,8 @@ everything in full.
 | CLI (`gaze clean` / `restore`) | [Getting Started](tutorials/getting-started.md) | — | [CLI reference](reference/cli.md) | — |
 | Policy & recognizers | — | [Custom recognizers](how-to/policy/custom-recognizers.md) | [Policy schema](reference/policy.md) | [Locale chain](explanation/policy/locale-chain.md) · [detection contracts](explanation/README.md#detection--conflict-resolution) |
 | Safety nets / NER / Kiji | — | [Set up the Kiji safety net](how-to/safety-net/set-up-kiji-safetynet.md) | [Benchmarks](reference/benchmarks/README.md) | [Safety nets](explanation/safety-net/safety-nets.md) · [Modes](explanation/safety-net/safety-net-modes.md) |
-| Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) |
+| Proxy (OpenAI / Anthropic / Gemini) | — | [Set up the proxy](how-to/proxy/set-up-proxy.md) | — | [Proxy runtime](explanation/proxy/proxy-runtime.md) · [Strict Anthropic Messages contract](explanation/proxy/anthropic-messages-contract.md) |
+| Inspection dashboard (opt-in) | — | [Run the local dashboard](how-to/dashboard/run-local-dashboard.md) | [Accessibility & visual verification](reference/dashboard/accessibility-and-visual-verification.md) · [Browser security](reference/dashboard/browser-security.md) | [Dashboard trust boundary](explanation/dashboard/trust-boundary.md) |
 | MCP adapter & runtime | — | [Set up the MCP adapter](how-to/mcp/set-up-mcp-adapter.md) | — | [MCP runtime](explanation/mcp/mcp-runtime.md) |
 | MCP bridge | — | [Set up the MCP bridge](how-to/mcp/set-up-mcp-bridge.md) | — | [MCP bridge](explanation/mcp/mcp-bridge.md) |
 | Daemon mode | — | [Run the daemon](how-to/daemon/run-daemon.md) | — | [Daemon mode](explanation/daemon/daemon-mode.md) |

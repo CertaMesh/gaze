@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>Gaze Dashboard</title>
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- Preauth shell: static, data-free, byte-invariant. No form element by contract. -->
+<section id="preauth" class="preauth" aria-labelledby="preauth-title">
+  <header class="preauth-mast">
+    <h1 id="preauth-title" class="wordmark">GAZE DASHBOARD</h1>
+    <p class="preauth-tier">LOCAL INSPECTION CONSOLE — LOOPBACK ONLY</p>
+  </header>
+  <div class="preauth-card">
+    <h2 id="pair-title" class="pair-title">Pair this page</h2>
+    <p id="pair-hint" class="pair-hint">
+      Enter the one-time launch token shown in your controlling terminal.
+      The token stays in this page&rsquo;s memory only. It is never stored,
+      logged, or sent anywhere except this local dashboard.
+    </p>
+    <div class="pair-row">
+      <label class="pair-label" for="token-input">Launch token</label>
+      <input id="token-input" class="token-input" type="password"
+             autocomplete="off" spellcheck="false" autocapitalize="off"
+             autocorrect="off" inputmode="text" maxlength="43"
+             aria-describedby="pair-hint" disabled>
+      <button id="pair-button" class="btn btn-primary" type="button" disabled>Unlock</button>
+    </div>
+    <p id="preauth-alert" class="pair-alert" role="alert"></p>
+  </div>
+  <footer class="preauth-foot">
+    <p>No data is shown before pairing. Reloading this page always requires a new pairing.</p>
+  </footer>
+</section>
+
+<!-- Authenticated application root: empty until built by trusted script after pairing. -->
+<main id="main" class="app" hidden></main>
+
+<!-- Bounded status announcements. Payload regions are never live. -->
+<p id="live-status" class="visually-hidden" role="status" aria-live="polite"></p>
+
+<script src="/assets/app.js" defer></script>
+</body>
+</html>

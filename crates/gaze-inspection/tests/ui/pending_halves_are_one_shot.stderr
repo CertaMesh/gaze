@@ -1,0 +1,10 @@
+error[E0382]: use of moved value: `producer`
+  --> tests/ui/pending_halves_are_one_shot.rs:17:18
+   |
+10 |     let producer = PendingInspectionProducerV1::new(descriptor);
+   |         -------- move occurs because `producer` has type `PendingInspectionProducerV1`, which does not implement the `Copy` trait
+...
+16 |     let _installed = install_inspection_v1(producer, consumer);
+   |                                            -------- value moved here
+17 |     let _reuse = producer;
+   |                  ^^^^^^^^ value used here after move

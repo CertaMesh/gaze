@@ -191,11 +191,15 @@ jobs:
         run: cargo run -p xtask -- locale-cue-bundle-coherence
       - name: xtask fixture-citation-lint
         run: cargo run -p xtask -- fixture-citation-lint
+      - name: xtask trybuild-fixture-hygiene
+        run: cargo run -p xtask -- trybuild-fixture-hygiene
       - name: xtask cargo-metadata-audit-isolation
         run: cargo run -p xtask -- cargo-metadata-audit-isolation
       - name: xtask readme-version-check
         run: cargo run -p xtask -- readme-version-check
       - name: xtask safety-net-sanity
         run: cargo run -p xtask -- safety-net-sanity
+      - name: xtask dashboard-isolation
+        run: cargo run -p xtask -- dashboard-isolation
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix

@@ -1,0 +1,33 @@
+- link "Skip to main content":
+  - /url: "#main"
+- main:
+  - group "Safety state":
+    - text: PROVIDER-VISIBLE CAPTURE — confidential pseudonymized payload, not verified clean BOTH OWNER DOMAINS CAPTURED VIEW INCOMPLETE — DROPPED 16 (FULL 7 · CLOSED 2 · OVERSIZE 1 · EVICTED 3 · STALE EPOCH 2 · CONFLICT 1) RING 12/64 · TTL 300 S · CONNECTED · EPOCH 1
+    - button "Purge now"
+  - 'region "LOG #12 — ANTHROPIC MESSAGES"':
+    - button "← Back to event list"
+    - 'heading "LOG #12 — ANTHROPIC MESSAGES" [level=2]'
+    - tablist "Event detail sections":
+      - tab "OVERVIEW"
+      - tab "DOMAINS" [selected]
+      - tab "STRUCTURE"
+      - tab "STREAM"
+      - tab "TRACE"
+    - tabpanel "DOMAINS":
+      - region "OWNER RAW — PII may be present":
+        - heading "OWNER RAW — PII may be present" [level=4]
+        - paragraph: CONCEALED — captured and retained. Reveal below displays it for 30 seconds.
+        - button "Reveal owner raw (30 s window)"
+      - region "PROVIDER VISIBLE — pseudonymized, not verified":
+        - heading "PROVIDER VISIBLE — pseudonymized, not verified" [level=4]
+        - heading "PROVIDER REQUEST" [level=5]
+        - paragraph: AVAILABLE
+        - button "Show pseudonymized payload"
+        - heading "PROVIDER RESPONSE" [level=5]
+        - paragraph: AVAILABLE
+        - button "Show pseudonymized payload"
+      - region "OWNER RESTORED — re-identified PII may be present":
+        - heading "OWNER RESTORED — re-identified PII may be present" [level=4]
+        - paragraph: CONCEALED — captured and retained. Reveal below displays it for 30 seconds.
+        - button "Reveal owner restored (30 s window)"
+- status: Paired. Loading captured events.
