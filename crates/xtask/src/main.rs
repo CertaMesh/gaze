@@ -9,6 +9,7 @@ mod cargo_metadata_audit_isolation;
 mod ci_feature_matrix;
 mod class_map_override_safety;
 mod coverage_corpus;
+mod dashboard_isolation;
 mod dylint_gate;
 mod family_policy_coherence;
 mod fixture_citation;
@@ -39,6 +40,7 @@ enum Command {
     FixtureCitationLint,
     FamilyPolicyTableCoherence,
     CargoMetadataAuditIsolation,
+    DashboardIsolation,
     DylintGate,
     BundleTokenizationDrift(bundle_tokenization_drift::Args),
     LocaleCueBundleCoherence,
@@ -64,6 +66,7 @@ fn main() -> Result<()> {
         Command::FixtureCitationLint => fixture_citation::run(),
         Command::FamilyPolicyTableCoherence => family_policy_coherence::run(),
         Command::CargoMetadataAuditIsolation => cargo_metadata_audit_isolation::run(),
+        Command::DashboardIsolation => dashboard_isolation::run(),
         Command::DylintGate => dylint_gate::run(),
         Command::BundleTokenizationDrift(args) => bundle_tokenization_drift::run(args),
         Command::LocaleCueBundleCoherence => locale_cue_bundle_coherence::run(),

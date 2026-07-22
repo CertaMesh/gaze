@@ -93,6 +93,21 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         program: "cargo",
         args: &["test", "-p", "gaze-cli", "--features", "mcp"],
     },
+    MatrixCommand {
+        label: "cargo test -p gaze-cli --features dashboard",
+        program: "cargo",
+        args: &["test", "-p", "gaze-cli", "--features", "dashboard"],
+    },
+    MatrixCommand {
+        label: "cargo test -p gaze-proxy-dashboard",
+        program: "cargo",
+        args: &["test", "-p", "gaze-proxy-dashboard"],
+    },
+    MatrixCommand {
+        label: "cargo run -p xtask -- dashboard-isolation",
+        program: "cargo",
+        args: &["run", "-p", "xtask", "--", "dashboard-isolation"],
+    },
     // The removed hook called `xtask ci-feature-matrix`; omit it here to avoid
     // recursive self-execution while preserving the actual gate coverage.
     MatrixCommand {
@@ -178,6 +193,7 @@ const REQUIRED_SAFETY_NET_SANITY_TASK: &str = "safety-net-sanity";
 const REQUIRED_README_VERSION_CHECK_TASK: &str = "readme-version-check";
 const REQUIRED_TOKENBRIDGE_ENCRYPTED_INDEX_TASK: &str = "tokenbridge-encrypted-index";
 const REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK: &str = "trybuild-fixture-hygiene";
+const REQUIRED_DASHBOARD_ISOLATION_TASK: &str = "dashboard-isolation";
 const NO_PHONE_PARSER_FAIL_CLOSED_GUARD: MatrixCommand = MatrixCommand {
     label:
         "cargo test -p gaze-recognizers --no-default-features --test no_phone_parser_fail_closed",
@@ -270,6 +286,16 @@ fn ensure_matrix_contract() -> Result<()> {
         bail!(
             "ci_feature_matrix: feature matrix must run xtask {}",
             REQUIRED_TRYBUILD_FIXTURE_HYGIENE_TASK
+        );
+    }
+
+    if !FEATURE_MATRIX
+        .iter()
+        .any(|command| command.args.contains(&REQUIRED_DASHBOARD_ISOLATION_TASK))
+    {
+        bail!(
+            "ci_feature_matrix: feature matrix must run xtask {}",
+            REQUIRED_DASHBOARD_ISOLATION_TASK
         );
     }
 
