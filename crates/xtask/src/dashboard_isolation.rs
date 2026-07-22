@@ -175,6 +175,7 @@ pub fn run() -> Result<()> {
 fn run_cargo_test(args: &[&str]) -> Result<()> {
     let status = ProcessCommand::new("cargo")
         .args(args)
+        .arg("--locked")
         .status()
         .with_context(|| format!("failed to spawn cargo {args:?}"))?;
     if !status.success() {
