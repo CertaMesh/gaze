@@ -468,12 +468,15 @@ const GEMINI_PATH: &str = "/v1beta/models/gemini-test:generateContent";
 /// Was: the Generative Language API is a protobuf-JSON surface accepting both
 /// `systemInstruction` and `system_instruction`, but the adapter matched the camelCase literal
 /// only — so the snake_case spelling of a COVERED field got zero detection.
+///
+/// Now both spellings are recognized as the same field and BOTH are tokenized, rather than the
+/// request merely failing closed. `snake_case_parts_are_also_recognized` covers the nested
+/// spelling; this test pins the top-level one.
 #[tokio::test]
 async fn proof_gemini_snake_case_field_alias_bypasses_allowlist() {
     let (upstream, proxy) = spawn_gemini().await;
-    post_rejected(
+    post_accepted(
         &proxy,
-        &upstream,
         GEMINI_PATH,
         json!({
             "systemInstruction": {"parts": [{"text": format!("camel {EMAIL}")}]},
@@ -482,6 +485,37 @@ async fn proof_gemini_snake_case_field_alias_bypasses_allowlist() {
         }),
     )
     .await;
+
+    let forwarded = upstream.first_forwarded().await;
+    assert_tokenized(&forwarded["systemInstruction"]["parts"][0]["text"], EMAIL);
+    assert_tokenized(&forwarded["system_instruction"]["parts"][0]["text"], EMAIL);
+}
+
+/// The snake_case aliases nested below the top level are recognized too: `function_call` and
+/// `function_response` are the protobuf spellings of part kinds the adapter walks, and
+/// `system_instruction.parts` may itself be spelled either way.
+#[tokio::test]
+async fn snake_case_parts_are_also_recognized() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_accepted(
+        &proxy,
+        GEMINI_PATH,
+        json!({
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"function_call": {"name": "lookup", "args": {"email": EMAIL}}},
+                    {"function_response": {"name": "lookup", "response": {"email": EMAIL}}}
+                ]
+            }]
+        }),
+    )
+    .await;
+
+    let forwarded = upstream.first_forwarded().await;
+    let parts = &forwarded["contents"][0]["parts"];
+    assert_tokenized(&parts[0]["function_call"]["args"]["email"], EMAIL);
+    assert_tokenized(&parts[1]["function_response"]["response"]["email"], EMAIL);
 }
 
 /// Was: `tools[].functionDeclarations[].description`, its numeric schema `const`,
