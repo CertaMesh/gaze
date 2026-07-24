@@ -318,6 +318,40 @@ impl PrincipalResolver for ProcessLocalLoopbackResolver {
     }
 }
 
+/// Test-only serialization for the process-global panic hook.
+///
+/// [`invoke_resolver`] swaps the global panic hook for the duration of the trusted
+/// resolver call, so *every* caller of it is a global-hook writer. A test that
+/// installs its own hook and then observes whether it fires therefore races any
+/// concurrent `invoke_resolver` in the same test binary: the concurrent boundary
+/// window can mask the installed hook (observed hit count too low) or restore a
+/// stale hook over it.
+///
+/// [`RESOLVER_PANIC_HOOK_BOUNDARY`] cannot be reused for this -- `invoke_resolver`
+/// takes it internally and [`Mutex`] is not reentrant. This second lock is always
+/// acquired strictly *outside* that boundary and is never taken by production code,
+/// so the ordering cannot deadlock.
+///
+/// Every test that touches [`std::panic::set_hook`] / [`std::panic::take_hook`],
+/// directly or through [`invoke_resolver`], MUST hold this guard across its whole
+/// hook window. That includes tests in `tests/session_registry.rs`, which
+/// `#[path]`-includes this module and so shares this exact lock.
+///
+/// `#[cfg(test)]` keeps this out of every non-test build; production behavior is
+/// unchanged.
+#[cfg(test)]
+pub(crate) static PANIC_HOOK_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+/// Acquires [`PANIC_HOOK_TEST_LOCK`], tolerating poisoning from an unrelated
+/// failing test so the real assertion failure is what gets reported.
+#[cfg(test)]
+pub(crate) fn lock_panic_hook_for_test() -> MutexGuard<'static, ()> {
+    match PANIC_HOOK_TEST_LOCK.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,6 +374,7 @@ mod tests {
 
     #[test]
     fn loopback_identity_is_stable_for_one_resolver() -> Result<(), PrincipalResolveError> {
+        let _panic_hook_guard = lock_panic_hook_for_test();
         let resolver = ProcessLocalLoopbackResolver::new()?;
         let context =
             || PrincipalContext::new(ListenerScope::Loopback, PeerScope::Loopback, None, None);

@@ -24,8 +24,8 @@ mod principal;
 mod session_registry;
 
 use principal::{
-    invoke_resolver, AuthenticatedPrincipal, ListenerScope, PeerScope, PrincipalContext,
-    PrincipalResolveError, PrincipalResolver, ProcessLocalLoopbackResolver,
+    invoke_resolver, lock_panic_hook_for_test, AuthenticatedPrincipal, ListenerScope, PeerScope,
+    PrincipalContext, PrincipalResolveError, PrincipalResolver, ProcessLocalLoopbackResolver,
     MAX_AUTHENTICATED_PRINCIPAL_BYTES, MAX_LOCAL_AUTH_CREDENTIAL_BYTES,
 };
 use session_registry::{
@@ -164,6 +164,9 @@ impl PrincipalResolver for ContextResolver {
 
 #[test]
 fn resolver_boundary_handles_success_empty_oversized_and_panic_without_raw_sources() {
+    // Held across the whole test: the counting hook installed below is only
+    // observable if no concurrent `invoke_resolver` swaps the global hook.
+    let _panic_hook_guard = lock_panic_hook_for_test();
     let resolved = invoke_resolver(
         &StaticResolver(b"tenant-a".to_vec()),
         loopback_context(None, None).unwrap(),
@@ -215,6 +218,7 @@ fn resolver_boundary_handles_success_empty_oversized_and_panic_without_raw_sourc
 
 #[test]
 fn context_exposes_only_closed_scopes_and_optional_nonprinting_borrowed_inputs() {
+    let _panic_hook_guard = lock_panic_hook_for_test();
     let certificate_hash = [0x42; 32];
     let local_auth = b"synthetic-local-auth";
     let resolved = invoke_resolver(
@@ -244,6 +248,7 @@ fn context_exposes_only_closed_scopes_and_optional_nonprinting_borrowed_inputs()
 
 #[test]
 fn process_local_loopback_resolver_is_stable_per_launch_and_rejects_remote_scope() {
+    let _panic_hook_guard = lock_panic_hook_for_test();
     let first = ProcessLocalLoopbackResolver::new().unwrap();
     let second = ProcessLocalLoopbackResolver::new().unwrap();
     let first_a = invoke_resolver(&first, loopback_context(None, None).unwrap()).unwrap();
