@@ -1312,6 +1312,19 @@ fn numeric_schema_literals_flagged_by_recognizer_fail_closed() {
             "input_schema": {"type": "object", "minimum": 7001234}
         }]
     }));
+    // `maximum` — bounds are carriers too. `minimum`/`maximum` share one match arm,
+    // so this case pins the deliberate decision that a numeric schema BOUND carrying
+    // an ID-shaped value fails closed exactly like `const`/`enum` values. It is not
+    // an accidental over-reach: narrowing the fix to values-only must go red here.
+    assert_numeric_schema_literal_rejected(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [],
+        "tools": [{
+            "name": "lookup",
+            "input_schema": {"type": "object", "maximum": 7001234}
+        }]
+    }));
 
     // MUTATION PROBE: revert request_number_literal_control back to the old
     // request_number_control (mark-only, no detection) at the `const`/`enum`
@@ -1329,29 +1342,20 @@ fn numeric_schema_literals_not_flagged_pass_unchanged() {
     // path must not reject numbers no recognizer cares about.
     let codec = AnthropicMessagesCodec;
     let cases = [
-        (
-            serde_json::json!({
-                "model": "claude-test", "max_tokens": 32, "messages": [],
-                "tools": [{"name": "lookup", "input_schema": {"type": "object", "const": 42}}]
-            }),
-            "42",
-        ),
-        (
-            serde_json::json!({
-                "model": "claude-test", "max_tokens": 32, "messages": [],
-                "tools": [{"name": "lookup", "input_schema": {"type": "object", "enum": [111, 222]}}]
-            }),
-            "222",
-        ),
-        (
-            serde_json::json!({
-                "model": "claude-test", "max_tokens": 32, "messages": [],
-                "tools": [{"name": "lookup", "input_schema": {"type": "object", "minimum": 5, "maximum": 900}}]
-            }),
-            "900",
-        ),
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "const": 42}}]
+        }),
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "enum": [111, 222]}}]
+        }),
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "minimum": 5, "maximum": 900}}]
+        }),
     ];
-    for (request, needle) in cases {
+    for request in cases {
         let input = serde_json::to_vec(&request).unwrap();
         // AllDigitOrderIdPseudonymizer only flags ORDER_ID (7001234); every numeric
         // literal here is passed through unchanged, so the request must be accepted.
@@ -1359,10 +1363,14 @@ fn numeric_schema_literals_not_flagged_pass_unchanged() {
         let proved = codec
             .protect_request(&input, &mut request_context(&mut pseudonymizer))
             .expect("un-flagged numeric schema literals must pass unchanged");
-        let output = std::str::from_utf8(proved.bytes()).unwrap();
-        assert!(
-            output.contains(needle),
-            "expected {needle} preserved unchanged in {output}"
+        // Byte identity, not substring containment: the no-over-rejection property is
+        // that the body is forwarded untouched. A containment check would also pass if
+        // an un-flagged literal were rewritten (e.g. 42 -> <Order_42>).
+        assert_eq!(
+            proved.bytes(),
+            input.as_slice(),
+            "un-flagged numeric schema literals must be forwarded byte-identical; got {}",
+            std::str::from_utf8(proved.bytes()).unwrap()
         );
     }
 }
