@@ -147,9 +147,9 @@ async fn spawn_openai() -> (MockUpstream, ProxyServer) {
 }
 
 async fn spawn_gemini() -> (MockUpstream, ProxyServer) {
-    let upstream = spawn_upstream(|_| {
-        json!({"candidates": [{"content": {"parts": [{"text": "ok"}], "role": "model"}}]})
-    })
+    let upstream = spawn_upstream(
+        |_| json!({"candidates": [{"content": {"parts": [{"text": "ok"}], "role": "model"}}]}),
+    )
     .await;
     let proxy = spawn_proxy(Arc::new(GeminiAdapter::new(upstream.base_url.clone()))).await;
     (upstream, proxy)
