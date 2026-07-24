@@ -1231,3 +1231,146 @@ fn tiny_json_limits_fail_with_closed_codes() {
         .unwrap_err();
     assert_eq!(error.code(), CodecErrorCode::GrowthLimitExceeded);
 }
+
+// ---- Regression: numeric JSON-Schema literals must be PII-detected (fail closed) ----
+// Audit scratchpad #6161 Finding 1: numeric `const` / `enum` members / `minimum` /
+// `maximum` inside tools[].input_schema were accepted verbatim (marked as covered
+// control numbers by request_number_control, never routed through detection, and
+// dropped from the residual carrier views), so an N-only (all-digit) recognizer never
+// saw them and a real order/customer ID reached the provider un-tokenized. They must
+// now be probed and fail closed exactly like string schema literals
+// (request_string_control), via request_number_literal_control.
+
+const ORDER_ID: &str = "7001234";
+
+/// Mirrors an adopter's all-digit (N-only) recognizer for e.g. 7-digit order IDs:
+/// any occurrence of ORDER_ID is treated as PII and would be tokenized.
+struct AllDigitOrderIdPseudonymizer;
+
+impl RequestPseudonymizer for AllDigitOrderIdPseudonymizer {
+    fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
+        Ok(input.replace(ORDER_ID, "<Order_1>"))
+    }
+
+    fn protect_with_prefix_cache_write_mode(
+        &mut self,
+        input: &str,
+        _mode: PrefixCacheWriteMode,
+    ) -> Result<String, CodecErrorCode> {
+        self.protect(input)
+    }
+
+    fn validate_token_shapes(&mut self, _input: &str) -> Result<(), CodecErrorCode> {
+        Ok(())
+    }
+}
+
+fn assert_numeric_schema_literal_rejected(request: &serde_json::Value) {
+    let codec = AnthropicMessagesCodec;
+    let input = serde_json::to_vec(request).unwrap();
+    let mut pseudonymizer = AllDigitOrderIdPseudonymizer;
+    let error = match codec.protect_request(&input, &mut request_context(&mut pseudonymizer)) {
+        Ok(proved) => panic!(
+            "numeric schema literal leaked un-tokenized: {}",
+            std::str::from_utf8(proved.bytes()).unwrap()
+        ),
+        Err(error) => error,
+    };
+    assert_eq!(error.code(), CodecErrorCode::ControlWouldMutate);
+    assert_eq!(error.phase(), CodecPhase::RequestProtection);
+}
+
+#[test]
+fn numeric_schema_literals_flagged_by_recognizer_fail_closed() {
+    // `const`
+    assert_numeric_schema_literal_rejected(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [],
+        "tools": [{
+            "name": "lookup",
+            "input_schema": {"type": "object", "const": 7001234}
+        }]
+    }));
+    // `enum` member
+    assert_numeric_schema_literal_rejected(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [],
+        "tools": [{
+            "name": "lookup",
+            "input_schema": {"type": "object", "enum": [7001234]}
+        }]
+    }));
+    // `minimum`
+    assert_numeric_schema_literal_rejected(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [],
+        "tools": [{
+            "name": "lookup",
+            "input_schema": {"type": "object", "minimum": 7001234}
+        }]
+    }));
+    // `maximum` — bounds are carriers too. `minimum`/`maximum` share one match arm,
+    // so this case pins the deliberate decision that a numeric schema BOUND carrying
+    // an ID-shaped value fails closed exactly like `const`/`enum` values. It is not
+    // an accidental over-reach: narrowing the fix to values-only must go red here.
+    assert_numeric_schema_literal_rejected(&serde_json::json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [],
+        "tools": [{
+            "name": "lookup",
+            "input_schema": {"type": "object", "maximum": 7001234}
+        }]
+    }));
+
+    // MUTATION PROBE: revert request_number_literal_control back to the old
+    // request_number_control (mark-only, no detection) at the `const`/`enum`
+    // (transform_schema_literal Number arm) and `minimum`/`maximum` call sites, and
+    // each request above is accepted with 7001234 forwarded verbatim — every
+    // assert_numeric_schema_literal_rejected then trips its Ok(...) panic
+    // ("numeric schema literal leaked un-tokenized: ..."). That is the coherence
+    // assertion this fix restores.
+}
+
+#[test]
+fn numeric_schema_literals_not_flagged_pass_unchanged() {
+    // A recognizer that flags nothing relevant (the common case) must leave
+    // legitimate numeric schema literals byte-identical — the detect-and-fail-closed
+    // path must not reject numbers no recognizer cares about.
+    let codec = AnthropicMessagesCodec;
+    let cases = [
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "const": 42}}]
+        }),
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "enum": [111, 222]}}]
+        }),
+        serde_json::json!({
+            "model": "claude-test", "max_tokens": 32, "messages": [],
+            "tools": [{"name": "lookup", "input_schema": {"type": "object", "minimum": 5, "maximum": 900}}]
+        }),
+    ];
+    for request in cases {
+        let input = serde_json::to_vec(&request).unwrap();
+        // AllDigitOrderIdPseudonymizer only flags ORDER_ID (7001234); every numeric
+        // literal here is passed through unchanged, so the request must be accepted.
+        let mut pseudonymizer = AllDigitOrderIdPseudonymizer;
+        let proved = codec
+            .protect_request(&input, &mut request_context(&mut pseudonymizer))
+            .expect("un-flagged numeric schema literals must pass unchanged");
+        // Byte identity, not substring containment: the no-over-rejection property is
+        // that the body is forwarded untouched. A containment check would also pass if
+        // an un-flagged literal were rewritten (e.g. 42 -> <Order_42>).
+        assert_eq!(
+            proved.bytes(),
+            input.as_slice(),
+            "un-flagged numeric schema literals must be forwarded byte-identical; got {}",
+            std::str::from_utf8(proved.bytes()).unwrap()
+        );
+    }
+}
