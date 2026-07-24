@@ -4,9 +4,13 @@
 //! capturing mock upstream and assert on the bytes that would reach the provider.
 //!
 //! They began as an executed leak PROOF against `origin/main` d32ae07 (Solo todo #2400
-//! comment 1435 item 2), where every `proof_` test asserted raw PII surviving to the wire.
-//! Each one now asserts the fixed behavior — fail closed, or tokenized — so the file doubles
-//! as the regression contract for the fix.
+//! comment 1435 item 2), where each one asserted raw PII surviving to the wire. Every such
+//! test now asserts the fixed behavior — fail closed, or tokenized — and carries a
+//! `regression_` prefix naming both the defect it came from and the invariant it now guards,
+//! so the file doubles as the regression contract for the fix.
+//!
+//! `proof_openai_numeric_controls_are_forwarded_unprobed` keeps its original name: it did not
+//! flip. Sampling controls were forwarded unprobed before the fix and still are, by design.
 //!
 //! Two independent leak sub-classes were confirmed and are covered here:
 //!
@@ -347,7 +351,7 @@ async fn control_gemini_allowlisted_surfaces_are_tokenized() {
 /// element beside it was tokenized. `push_text_blocks` falls through `_ => {}` for any
 /// non-string item, and a number can never become a `PiiSurface`.
 #[tokio::test]
-async fn proof_openai_numeric_bypass_inside_allowlisted_prompt_array() {
+async fn regression_openai_numeric_bypass_inside_allowlisted_prompt_array_now_fails_closed() {
     let (upstream, proxy) = spawn_openai().await;
     post_rejected(
         &proxy,
@@ -364,7 +368,7 @@ async fn proof_openai_numeric_bypass_inside_allowlisted_prompt_array() {
 /// Was: the OpenAI analogue of the Anthropic `{"description": ..., "const": 7001234}` finding —
 /// both the schema description string and the numeric literal egressed raw.
 #[tokio::test]
-async fn proof_openai_tool_schema_numeric_and_string_literals_leak() {
+async fn regression_openai_tool_schema_numeric_and_string_literals_now_fail_closed() {
     let (upstream, proxy) = spawn_openai().await;
     post_rejected(
         &proxy,
@@ -400,7 +404,7 @@ async fn proof_openai_tool_schema_numeric_and_string_literals_leak() {
 /// while the string beside it was tokenized. The cleanest isolation of the numeric sub-class:
 /// nothing differs between the two keys but the JSON type.
 #[tokio::test]
-async fn proof_gemini_numeric_bypass_inside_walked_function_call_args() {
+async fn regression_gemini_numeric_bypass_inside_walked_function_call_args_now_fails_closed() {
     let (upstream, proxy) = spawn_gemini().await;
     post_rejected(
         &proxy,
@@ -429,7 +433,7 @@ async fn proof_gemini_numeric_bypass_inside_walked_function_call_args() {
 /// All three are free-text carriers the model or the provider reads back verbatim, so they are
 /// now surfaced and pseudonymized rather than merely rejected.
 #[tokio::test]
-async fn proof_openai_user_identifier_field_leaks_raw() {
+async fn regression_openai_user_identifier_field_no_longer_leaks_raw() {
     let (upstream, proxy) = spawn_openai().await;
     post_accepted(
         &proxy,
@@ -456,7 +460,7 @@ async fn proof_openai_user_identifier_field_leaks_raw() {
 ///
 /// `name` is a participant name read by the model, so it is now surfaced and pseudonymized.
 #[tokio::test]
-async fn proof_openai_message_child_keys_leak_raw() {
+async fn regression_openai_message_child_keys_no_longer_leak_raw() {
     let (upstream, proxy) = spawn_openai().await;
     post_accepted(
         &proxy,
@@ -504,7 +508,7 @@ const GEMINI_PATH: &str = "/v1beta/models/gemini-test:generateContent";
 /// request merely failing closed. `snake_case_parts_are_also_recognized` covers the nested
 /// spelling; this test pins the top-level one.
 #[tokio::test]
-async fn proof_gemini_snake_case_field_alias_bypasses_allowlist() {
+async fn regression_gemini_snake_case_field_alias_no_longer_bypasses_allowlist() {
     let (upstream, proxy) = spawn_gemini().await;
     post_accepted(
         &proxy,
@@ -552,7 +556,7 @@ async fn snake_case_parts_are_also_recognized() {
 /// Was: `tools[].functionDeclarations[].description`, its numeric schema `const`,
 /// `generationConfig.stopSequences`, and `cachedContent` all egressed raw.
 #[tokio::test]
-async fn proof_gemini_request_level_fields_leak_raw() {
+async fn regression_gemini_request_level_fields_no_longer_leak_raw() {
     let (upstream, proxy) = spawn_gemini().await;
     post_rejected(
         &proxy,
@@ -577,7 +581,7 @@ async fn proof_gemini_request_level_fields_leak_raw() {
 /// Was: a `fileData.fileUri` part egressed raw despite its `contents[]` parent being
 /// allowlisted — `collect_content` matches only three part kinds.
 #[tokio::test]
-async fn proof_gemini_non_text_part_kinds_leak_raw() {
+async fn regression_gemini_non_text_part_kinds_no_longer_leak_raw() {
     let (upstream, proxy) = spawn_gemini().await;
     post_rejected(
         &proxy,
