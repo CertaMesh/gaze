@@ -77,6 +77,16 @@ impl ProviderAdapter for GeminiAdapter {
     }
 }
 
+/// Surfaces the free-text carriers of a Gemini request, or the model-authored text of a response.
+///
+/// The request allowlist enumerates positions whose contents the MODEL reads, and which are
+/// therefore safe to pseudonymize.
+///
+/// Resource identifiers and opaque blobs are deliberately NOT surfaced — `cachedContent` is a
+/// provider-side resource name, `fileData.fileUri` is fetched by the provider, and
+/// `inlineData.data` is base64 payload. Substituting a token in any of them would silently break
+/// the request rather than protect it, so PII there is caught by the outbound residual re-scan and
+/// fails closed.
 fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_>> {
     let mut surfaces = Vec::new();
     if let Value::Object(root) = body {
@@ -92,6 +102,17 @@ fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_
                     }
                     "systemInstruction" => {
                         collect_content(&mut surfaces, key.clone(), value);
+                    }
+                    // Tool and schema declarations: names, descriptions, and enum members are
+                    // all read by the model.
+                    "tools" | "toolConfig" => {
+                        walk_all_strings(&mut surfaces, key.clone(), value);
+                    }
+                    // Covers `stopSequences`, which is matched against generated text. Numeric
+                    // members of this subtree are untouched here and are classified by the
+                    // outbound residual re-scan's non-carrier declaration instead.
+                    "generationConfig" => {
+                        walk_all_strings(&mut surfaces, key.clone(), value);
                     }
                     _ => {}
                 }

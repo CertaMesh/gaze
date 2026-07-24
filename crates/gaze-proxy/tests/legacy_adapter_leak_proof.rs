@@ -425,12 +425,14 @@ async fn proof_gemini_numeric_bypass_inside_walked_function_call_args() {
 
 /// Was: `user` (OpenAI's documented end-user identifier), `metadata`, and `stop` all egressed
 /// raw in the same request whose `messages` content was correctly tokenized.
+///
+/// All three are free-text carriers the model or the provider reads back verbatim, so they are
+/// now surfaced and pseudonymized rather than merely rejected.
 #[tokio::test]
 async fn proof_openai_user_identifier_field_leaks_raw() {
     let (upstream, proxy) = spawn_openai().await;
-    post_rejected(
+    post_accepted(
         &proxy,
-        &upstream,
         "/v1/chat/completions",
         json!({
             "model": "gpt-test",
@@ -441,12 +443,42 @@ async fn proof_openai_user_identifier_field_leaks_raw() {
         }),
     )
     .await;
+
+    let forwarded = upstream.first_forwarded().await;
+    assert_tokenized(&forwarded["messages"][0]["content"], EMAIL);
+    assert_tokenized(&forwarded["user"], EMAIL);
+    assert_tokenized(&forwarded["metadata"]["customer_email"], EMAIL);
+    assert_tokenized(&forwarded["stop"][0], EMAIL);
 }
 
 /// Was: `messages[].name` and `messages[].tool_call_id` egressed raw despite `messages` being
 /// allowlisted — the nested-inside-a-covered-parent shape, which is the easiest to miss.
+///
+/// `name` is a participant name read by the model, so it is now surfaced and pseudonymized.
 #[tokio::test]
 async fn proof_openai_message_child_keys_leak_raw() {
+    let (upstream, proxy) = spawn_openai().await;
+    post_accepted(
+        &proxy,
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-test",
+            "messages": [{"role": "user", "name": EMAIL, "content": format!("ping {EMAIL}")}]
+        }),
+    )
+    .await;
+
+    let forwarded = upstream.first_forwarded().await;
+    assert_tokenized(&forwarded["messages"][0]["name"], EMAIL);
+    assert_tokenized(&forwarded["messages"][0]["content"], EMAIL);
+}
+
+/// A resource identifier stays UNSURFACED on purpose: `tool_call_id` is correlated provider-side,
+/// so substituting a token would silently break tool calling. PII there fails closed instead,
+/// which tells the adopter their identifier carries PII rather than handing them a broken
+/// request that looks fine.
+#[tokio::test]
+async fn openai_resource_identifiers_fail_closed_rather_than_being_rewritten() {
     let (upstream, proxy) = spawn_openai().await;
     post_rejected(
         &proxy,
@@ -455,8 +487,7 @@ async fn proof_openai_message_child_keys_leak_raw() {
         json!({
             "model": "gpt-test",
             "messages": [
-                {"role": "user", "name": EMAIL, "content": format!("ping {EMAIL}")},
-                {"role": "tool", "tool_call_id": format!("call_{ORDER_ID_DIGITS}"), "content": "ok"}
+                {"role": "tool", "tool_call_id": format!("call-{ORDER_ID_DIGITS}"), "content": "ok"}
             ]
         }),
     )
