@@ -23,7 +23,7 @@ use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 use url::{Host, Url};
 
-use crate::adapter::{ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
+use crate::adapter::{CoveragePolicy, ProtocolContract, ProviderAdapter, SessionPolicy, SseEvent};
 use crate::adapters::anthropic::{AnthropicAdapter, DEFAULT_ANTHROPIC_VERSION};
 use crate::codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
@@ -1814,7 +1814,19 @@ async fn proxy_inner(
         &session,
         adapter.request_pii_surfaces(&mut json),
     )?;
-    residual_scan_request(&state.pipeline, &json, &surfaced)?;
+    // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
+    // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
+    // request path never acts on.
+    match contract.coverage_policy() {
+        // Legacy adapters carry no codec proof, so coverage is established right here, by
+        // re-scanning the outbound body and failing closed on anything left unprotected.
+        CoveragePolicy::LegacySurfaces => {
+            residual_scan_request(&state.pipeline, &json, &surfaced)?;
+        }
+        // A codec-proved adapter must have been routed to the codec branch above. Reaching this
+        // point means the contract and the router disagree and no proof has been established.
+        CoveragePolicy::CodecProved => return Err(ProxyError::UnprovenCoverage),
+    }
 
     let upstream_url = upstream_url(adapter.upstream_base(), &uri)?;
     let mut request = state
@@ -2761,6 +2773,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::InvalidJson { .. } => "InvalidJson",
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
         ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
+        ProxyError::UnprovenCoverage => "UnprovenCoverage",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",

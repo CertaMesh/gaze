@@ -42,7 +42,7 @@ use axum::routing::post;
 use axum::{Json, Router};
 use gaze::{Action, ClassRule, DefaultRule, PiiClass, Pipeline};
 use gaze_proxy::adapters::{GeminiAdapter, OpenAiAdapter};
-use gaze_proxy::{ProviderAdapter, ProxyConfig, ProxyError};
+use gaze_proxy::{CoveragePolicy, ProviderAdapter, ProxyConfig, ProxyError};
 use gaze_recognizers::RegexDetector;
 use reqwest::{Client, Response, StatusCode};
 use serde_json::{json, Value};
@@ -757,6 +757,45 @@ async fn control_named_property_inside_a_schema_stays_a_carrier() {
                     "seed": {"type": "integer", "const": 12345}
                 }}
             }}]
+        }),
+    )
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Coverage policy is load-bearing
+// ---------------------------------------------------------------------------
+
+/// Both legacy adapters declare `CoveragePolicy::LegacySurfaces`, and the legacy request path
+/// READS that declaration to choose how coverage is established — the residual re-scan.
+///
+/// The declaration was previously inert: it was set, exported, and asserted in a contract test,
+/// but the server never consulted it, so it asserted nothing about runtime behavior. Pairing the
+/// declaration with the fail-closed behavior it now selects is what keeps it honest.
+#[tokio::test]
+async fn legacy_coverage_policy_selects_the_residual_rescan() {
+    let openai = OpenAiAdapter::new(Url::parse("https://api.openai.com").unwrap());
+    let gemini =
+        GeminiAdapter::new(Url::parse("https://generativelanguage.googleapis.com").unwrap());
+    assert_eq!(
+        openai.contract().coverage_policy(),
+        CoveragePolicy::LegacySurfaces
+    );
+    assert_eq!(
+        gemini.contract().coverage_policy(),
+        CoveragePolicy::LegacySurfaces
+    );
+
+    // ... and under that declaration an unsurfaced carrier is refused rather than forwarded.
+    let (upstream, proxy) = spawn_openai().await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "unknown_future_field": EMAIL
         }),
     )
     .await;
