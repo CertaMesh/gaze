@@ -27,6 +27,14 @@ pub enum ProxyError {
     },
     #[error("sse partial frame: {reason}")]
     SsePartialFrame { reason: String },
+    /// A legacy-path request carried PII in a position no adapter surface covered.
+    ///
+    /// Raised by the outbound request residual re-scan, which fails closed rather than
+    /// silently rewriting provider-owned fields. The variant carries the JSON field path
+    /// ONLY -- never the detected value, nor any substring of it -- so neither `Display`,
+    /// `Debug`, nor any log line derived from them can egress protected bytes.
+    #[error("unsurfaced pii at {field_path}")]
+    UnsurfacedPii { field_path: String },
     #[error("pipeline failed")]
     Pipeline {
         #[source]

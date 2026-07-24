@@ -1,20 +1,33 @@
-//! Executed leak proof for the legacy (non-codec) OpenAI and Gemini adapter path.
+//! Leak contract for the legacy (non-codec) OpenAI and Gemini adapter path.
 //!
 //! These tests drive the real public proxy request path (`gaze_proxy::serve`) against a
-//! capturing mock upstream and assert on the bytes that would reach the provider. They
-//! document CURRENT behavior at `origin/main` d32ae07 for zero-leak scoping (Solo todo
-//! #2400 comment 1435 item 2). Every `proof_` test asserts a leak that is present today
-//! and MUST start failing once the corresponding fix lands.
+//! capturing mock upstream and assert on the bytes that would reach the provider.
 //!
-//! Two independent leak sub-classes are isolated:
+//! They began as an executed leak PROOF against `origin/main` d32ae07 (Solo todo #2400
+//! comment 1435 item 2), where every `proof_` test asserted raw PII surviving to the wire.
+//! Each one now asserts the fixed behavior — fail closed, or tokenized — so the file doubles
+//! as the regression contract for the fix.
+//!
+//! Two independent leak sub-classes were confirmed and are covered here:
 //!
 //! * NUMERIC BYPASS — `PiiSurface.text` is `&mut String` (`adapter.rs:432`) and
 //!   `walk_all_strings` no-ops on `Value::Number` (`adapter.rs:488`), so a JSON number can
 //!   never become a detection surface even inside a fully walked subtree.
-//! * FIELD-ALLOWLIST BYPASS — `OpenAiAdapter::request_pii_surfaces` (`adapters/openai.rs:38`)
-//!   and `collect_gemini_surfaces` (`adapters/gemini.rs:49`) match a hardcoded set of
-//!   top-level keys with a `_ => {}` catch-all, and `server.rs:1812` forwards the whole
-//!   original body (`.json(&json)` at `server.rs:1817`) after mutating only those surfaces.
+//! * FIELD-ALLOWLIST BYPASS — `OpenAiAdapter::request_pii_surfaces` and
+//!   `collect_gemini_surfaces` match hardcoded key sets with a `_ => {}` catch-all, and
+//!   `server.rs` forwards the whole original body after mutating only those surfaces.
+//!
+//! Both are closed by `residual_scan_request` (F1), which fails closed on any PII outside an
+//! adapter surface.
+//!
+//! ## Locale note
+//!
+//! `Pipeline::redact` pins `[LocaleTag::Global]` (`gaze/src/pipeline.rs:350`), and the residual
+//! re-scan uses the same chain deliberately, so the residual can be neither weaker nor stronger
+//! than the primary pass. Consequence: locale-gated recognizers (`postal.us`, `postal.de`,
+//! national phone) never activate on proxied traffic at all. The en-US / de-DE corpora below
+//! therefore use locale-agnostic five-digit stand-in recognizers, which is what makes the
+//! carrier / non-carrier boundary observable on this path.
 //!
 //! Fixtures are synthetic-only per AGENTS.md rule 2.
 
@@ -29,9 +42,9 @@ use axum::routing::post;
 use axum::{Json, Router};
 use gaze::{Action, ClassRule, DefaultRule, PiiClass, Pipeline};
 use gaze_proxy::adapters::{GeminiAdapter, OpenAiAdapter};
-use gaze_proxy::{ProviderAdapter, ProxyConfig};
+use gaze_proxy::{ProviderAdapter, ProxyConfig, ProxyError};
 use gaze_recognizers::RegexDetector;
-use reqwest::Client;
+use reqwest::{Client, Response, StatusCode};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use url::Url;
@@ -60,6 +73,26 @@ fn leak_probe_pipeline() -> Pipeline {
         .unwrap()
 }
 
+/// Locale-agnostic five-digit stand-in for a national postal recognizer.
+///
+/// The real `postal.us` / `postal.de` recognizers are locale-gated and therefore never active
+/// on the proxy path (see the module-level locale note). This stand-in reproduces their
+/// detection shape under `LocaleTag::Global` so the numeric carrier / non-carrier boundary is
+/// observable. `class_label` distinguishes the en-US and de-DE corpus runs.
+fn postal_probe_pipeline(class_label: &str) -> Pipeline {
+    Pipeline::builder()
+        .detector(
+            RegexDetector::new(r"\b\d{5}\b", PiiClass::Custom(class_label.to_string())).unwrap(),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom(class_label.to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap()
+}
+
 #[derive(Clone)]
 struct UpstreamState {
     forwarded: Arc<Mutex<Vec<Value>>>,
@@ -77,6 +110,16 @@ impl MockUpstream {
         let forwarded = self.forwarded.lock().await.clone();
         assert_eq!(forwarded.len(), 1, "exactly one upstream request expected");
         forwarded[0].clone()
+    }
+
+    /// Asserts the proxy failed closed: nothing at all reached the provider.
+    async fn assert_nothing_forwarded(&self) {
+        let forwarded = self.forwarded.lock().await.clone();
+        assert!(
+            forwarded.is_empty(),
+            "fail-closed expected, but {} request(s) reached the provider",
+            forwarded.len()
+        );
     }
 }
 
@@ -126,10 +169,10 @@ async fn capture_upstream(
     Json((state.response)(body))
 }
 
-async fn spawn_proxy(adapter: Arc<dyn ProviderAdapter>) -> ProxyServer {
+async fn spawn_proxy(adapter: Arc<dyn ProviderAdapter>, pipeline: Pipeline) -> ProxyServer {
     let bind = unused_local_addr();
     let config = ProxyConfig::new(bind, vec![adapter]);
-    let pipeline = Arc::new(leak_probe_pipeline());
+    let pipeline = Arc::new(pipeline);
     let handle = tokio::spawn(async move {
         gaze_proxy::serve(config, pipeline).await.unwrap();
     });
@@ -141,17 +184,33 @@ async fn spawn_proxy(adapter: Arc<dyn ProviderAdapter>) -> ProxyServer {
 }
 
 async fn spawn_openai() -> (MockUpstream, ProxyServer) {
+    spawn_openai_with(leak_probe_pipeline()).await
+}
+
+async fn spawn_openai_with(pipeline: Pipeline) -> (MockUpstream, ProxyServer) {
     let upstream = spawn_upstream(|_| json!({"choices": [{"text": "ok"}]})).await;
-    let proxy = spawn_proxy(Arc::new(OpenAiAdapter::new(upstream.base_url.clone()))).await;
+    let proxy = spawn_proxy(
+        Arc::new(OpenAiAdapter::new(upstream.base_url.clone())),
+        pipeline,
+    )
+    .await;
     (upstream, proxy)
 }
 
 async fn spawn_gemini() -> (MockUpstream, ProxyServer) {
+    spawn_gemini_with(leak_probe_pipeline()).await
+}
+
+async fn spawn_gemini_with(pipeline: Pipeline) -> (MockUpstream, ProxyServer) {
     let upstream = spawn_upstream(
         |_| json!({"candidates": [{"content": {"parts": [{"text": "ok"}], "role": "model"}}]}),
     )
     .await;
-    let proxy = spawn_proxy(Arc::new(GeminiAdapter::new(upstream.base_url.clone()))).await;
+    let proxy = spawn_proxy(
+        Arc::new(GeminiAdapter::new(upstream.base_url.clone())),
+        pipeline,
+    )
+    .await;
     (upstream, proxy)
 }
 
@@ -178,18 +237,42 @@ async fn wait_for_proxy(bind: SocketAddr) {
     }
 }
 
-async fn post_json(proxy: &ProxyServer, path: &str, body: Value) {
-    let response = Client::new()
+async fn post_json(proxy: &ProxyServer, path: &str, body: Value) -> Response {
+    Client::new()
         .post(format!("{}{path}", proxy.base_url))
         .json(&body)
         .send()
         .await
-        .unwrap();
+        .unwrap()
+}
+
+/// Asserts the proxy accepted and forwarded the request.
+async fn post_accepted(proxy: &ProxyServer, path: &str, body: Value) {
+    let response = post_json(proxy, path, body).await;
     assert!(
         response.status().is_success(),
-        "proxy rejected the request: {}",
+        "expected the request to be forwarded, got {}",
         response.status()
     );
+}
+
+/// Asserts the proxy failed closed with `UnsurfacedPii`, and that the client-facing body
+/// discloses only the error name — never the field path and never the detected value.
+async fn post_rejected(proxy: &ProxyServer, upstream: &MockUpstream, path: &str, body: Value) {
+    let response = post_json(proxy, path, body).await;
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "expected a fail-closed rejection"
+    );
+    let rendered = response.text().await.unwrap();
+    assert_eq!(rendered, json!({"error": "UnsurfacedPii"}).to_string());
+    assert!(!rendered.contains(EMAIL), "client body leaked the fixture");
+    assert!(
+        !rendered.contains(ORDER_ID_DIGITS),
+        "client body leaked the fixture"
+    );
+    upstream.assert_nothing_forwarded().await;
 }
 
 /// Asserts a string field was tokenized: marker gone, a gaze token present.
@@ -206,14 +289,14 @@ fn assert_tokenized(value: &Value, marker: &str) {
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI — controls (covered surfaces behave correctly)
+// Controls — covered surfaces still behave correctly (must stay green, unchanged)
 // ---------------------------------------------------------------------------
 
 /// CONTROL: an allowlisted, string-valued surface IS redacted. Calibrates every proof below.
 #[tokio::test]
 async fn control_openai_allowlisted_string_surface_is_tokenized() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_accepted(
         &proxy,
         "/v1/chat/completions",
         json!({
@@ -229,22 +312,46 @@ async fn control_openai_allowlisted_string_surface_is_tokenized() {
     assert_tokenized(content, ORDER_ID_DIGITS);
 }
 
+/// CONTROL: `contents[].parts[].text` and `functionCall.args` string values ARE redacted.
+#[tokio::test]
+async fn control_gemini_allowlisted_surfaces_are_tokenized() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_accepted(
+        &proxy,
+        GEMINI_PATH,
+        json!({
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"text": format!("contact {EMAIL}")},
+                    {"functionCall": {"name": "lookup", "args": {"email": EMAIL}}}
+                ]
+            }]
+        }),
+    )
+    .await;
+
+    let forwarded = upstream.first_forwarded().await;
+    assert_tokenized(&forwarded["contents"][0]["parts"][0]["text"], EMAIL);
+    assert_tokenized(
+        &forwarded["contents"][0]["parts"][1]["functionCall"]["args"]["email"],
+        EMAIL,
+    );
+}
+
 // ---------------------------------------------------------------------------
-// OpenAI — sub-class (i): NUMERIC BYPASS
+// Sub-class (i): NUMERIC BYPASS — now fails closed
 // ---------------------------------------------------------------------------
 
-/// PROOF (numeric bypass, isolated): `prompt` IS an allowlisted surface walked by
-/// `push_text_blocks` (`adapters/openai.rs:44`), yet within the SAME array the string element
-/// is tokenized and the numeric element is forwarded raw. `push_text_blocks` falls through
-/// `_ => {}` (`adapter.rs:513`) for any non-string, non-text-block item.
-///
-/// The OpenAI Completions API documents `prompt` as `string | array of strings | array of
-/// tokens | array of token arrays`, so a numeric array element is a legal wire shape.
+/// Was: the numeric element of an allowlisted `prompt` array egressed raw while the string
+/// element beside it was tokenized. `push_text_blocks` falls through `_ => {}` for any
+/// non-string item, and a number can never become a `PiiSurface`.
 #[tokio::test]
 async fn proof_openai_numeric_bypass_inside_allowlisted_prompt_array() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_rejected(
         &proxy,
+        &upstream,
         "/v1/completions",
         json!({
             "model": "gpt-test",
@@ -252,27 +359,16 @@ async fn proof_openai_numeric_bypass_inside_allowlisted_prompt_array() {
         }),
     )
     .await;
-
-    let forwarded = upstream.first_forwarded().await;
-    // Same field, same walk: the string element was detected and tokenized ...
-    assert_tokenized(&forwarded["prompt"][0], ORDER_ID_DIGITS);
-    // ... and the numeric element reached the provider verbatim.
-    assert_eq!(
-        forwarded["prompt"][1],
-        json!(ORDER_ID_NUMBER),
-        "LEAK: numeric array element bypassed detection entirely"
-    );
 }
 
-/// PROOF (numeric bypass, JSON-Schema literal shape): the OpenAI analogue of the Anthropic
-/// `{"description": "order id of the customer", "const": 7001234}` finding. Here the bypass is
-/// compound — `tools` is not allowlisted at all — so BOTH the schema description string and the
-/// numeric literal egress raw.
+/// Was: the OpenAI analogue of the Anthropic `{"description": ..., "const": 7001234}` finding —
+/// both the schema description string and the numeric literal egressed raw.
 #[tokio::test]
 async fn proof_openai_tool_schema_numeric_and_string_literals_leak() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_rejected(
         &proxy,
+        &upstream,
         "/v1/chat/completions",
         json!({
             "model": "gpt-test",
@@ -298,40 +394,43 @@ async fn proof_openai_tool_schema_numeric_and_string_literals_leak() {
         }),
     )
     .await;
+}
 
-    let forwarded = upstream.first_forwarded().await;
-    let function = &forwarded["tools"][0]["function"];
-    assert_eq!(
-        function["description"].as_str().unwrap(),
-        format!("look up the order placed by {EMAIL}"),
-        "LEAK: tools[].function.description egressed raw (field-allowlist bypass)"
-    );
-    let order_id = &function["parameters"]["properties"]["order_id"];
-    assert_eq!(
-        order_id["const"],
-        json!(ORDER_ID_NUMBER),
-        "LEAK: numeric schema const egressed raw"
-    );
-    assert_eq!(
-        order_id["enum"][0],
-        json!(ORDER_ID_NUMBER),
-        "LEAK: numeric schema enum member egressed raw"
-    );
+/// Was: a sibling numeric value inside a fully walked `functionCall.args` object egressed raw
+/// while the string beside it was tokenized. The cleanest isolation of the numeric sub-class:
+/// nothing differs between the two keys but the JSON type.
+#[tokio::test]
+async fn proof_gemini_numeric_bypass_inside_walked_function_call_args() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        GEMINI_PATH,
+        json!({
+            "contents": [{
+                "role": "user",
+                "parts": [{"functionCall": {"name": "lookup", "args": {
+                    "order_id_as_string": ORDER_ID_DIGITS,
+                    "order_id_as_number": ORDER_ID_NUMBER
+                }}}]
+            }]
+        }),
+    )
+    .await;
 }
 
 // ---------------------------------------------------------------------------
-// OpenAI — sub-class (ii): FIELD-ALLOWLIST BYPASS (real PII strings)
+// Sub-class (ii): FIELD-ALLOWLIST BYPASS — now fails closed
 // ---------------------------------------------------------------------------
 
-/// PROOF (allowlist bypass, top level): `user` is OpenAI's documented end-user identifier
-/// field. It is a first-class PII carrier in practice and is not in the allowlist
-/// (`adapters/openai.rs:41-59`, `_ => {}`), so it egresses raw in the SAME request whose
-/// `messages` content was correctly tokenized.
+/// Was: `user` (OpenAI's documented end-user identifier), `metadata`, and `stop` all egressed
+/// raw in the same request whose `messages` content was correctly tokenized.
 #[tokio::test]
 async fn proof_openai_user_identifier_field_leaks_raw() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_rejected(
         &proxy,
+        &upstream,
         "/v1/chat/completions",
         json!({
             "model": "gpt-test",
@@ -342,36 +441,16 @@ async fn proof_openai_user_identifier_field_leaks_raw() {
         }),
     )
     .await;
-
-    let forwarded = upstream.first_forwarded().await;
-    assert_tokenized(&forwarded["messages"][0]["content"], EMAIL);
-    assert_eq!(
-        forwarded["user"].as_str().unwrap(),
-        EMAIL,
-        "LEAK: `user` end-user identifier egressed raw"
-    );
-    assert_eq!(
-        forwarded["metadata"]["customer_email"].as_str().unwrap(),
-        EMAIL,
-        "LEAK: `metadata` string values egressed raw"
-    );
-    assert_eq!(
-        forwarded["stop"][0].as_str().unwrap(),
-        format!("{EMAIL}:"),
-        "LEAK: `stop` sequences egressed raw"
-    );
 }
 
-/// PROOF (allowlist bypass, nested inside an allowlisted parent):
-/// `collect_message_surfaces` (`adapters/openai.rs:111`) matches only `content`,
-/// `tool_results`, and `tool_calls`. OpenAI's per-message `name` (participant name) and a
-/// tool message's `tool_call_id` fall through `_ => {}` and egress raw even though their
-/// parent `messages` IS allowlisted.
+/// Was: `messages[].name` and `messages[].tool_call_id` egressed raw despite `messages` being
+/// allowlisted — the nested-inside-a-covered-parent shape, which is the easiest to miss.
 #[tokio::test]
 async fn proof_openai_message_child_keys_leak_raw() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_rejected(
         &proxy,
+        &upstream,
         "/v1/chat/completions",
         json!({
             "model": "gpt-test",
@@ -382,28 +461,90 @@ async fn proof_openai_message_child_keys_leak_raw() {
         }),
     )
     .await;
-
-    let forwarded = upstream.first_forwarded().await;
-    assert_tokenized(&forwarded["messages"][0]["content"], EMAIL);
-    assert_eq!(
-        forwarded["messages"][0]["name"].as_str().unwrap(),
-        EMAIL,
-        "LEAK: messages[].name egressed raw"
-    );
-    assert_eq!(
-        forwarded["messages"][1]["tool_call_id"].as_str().unwrap(),
-        format!("call_{ORDER_ID_DIGITS}"),
-        "LEAK: messages[].tool_call_id egressed raw"
-    );
 }
 
-/// MINOR-3 analogue on the legacy path: numeric sampling controls are forwarded verbatim and
-/// are never marked, range-checked, or probed — the legacy path has no coverage machinery at
-/// all, so this is the default for the whole body rather than a special case.
+const GEMINI_PATH: &str = "/v1beta/models/gemini-test:generateContent";
+
+/// Was: the Generative Language API is a protobuf-JSON surface accepting both
+/// `systemInstruction` and `system_instruction`, but the adapter matched the camelCase literal
+/// only — so the snake_case spelling of a COVERED field got zero detection.
+#[tokio::test]
+async fn proof_gemini_snake_case_field_alias_bypasses_allowlist() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        GEMINI_PATH,
+        json!({
+            "systemInstruction": {"parts": [{"text": format!("camel {EMAIL}")}]},
+            "system_instruction": {"parts": [{"text": format!("snake {EMAIL}")}]},
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}]
+        }),
+    )
+    .await;
+}
+
+/// Was: `tools[].functionDeclarations[].description`, its numeric schema `const`,
+/// `generationConfig.stopSequences`, and `cachedContent` all egressed raw.
+#[tokio::test]
+async fn proof_gemini_request_level_fields_leak_raw() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        GEMINI_PATH,
+        json!({
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "tools": [{"functionDeclarations": [{
+                "name": "lookup_order",
+                "description": format!("look up the order placed by {EMAIL}"),
+                "parameters": {"type": "object", "properties": {
+                    "order_id": {"type": "integer", "const": ORDER_ID_NUMBER}
+                }}
+            }]}],
+            "generationConfig": {"stopSequences": [EMAIL], "maxOutputTokens": ORDER_ID_NUMBER},
+            "cachedContent": format!("cachedContents/{EMAIL}")
+        }),
+    )
+    .await;
+}
+
+/// Was: a `fileData.fileUri` part egressed raw despite its `contents[]` parent being
+/// allowlisted — `collect_content` matches only three part kinds.
+#[tokio::test]
+async fn proof_gemini_non_text_part_kinds_leak_raw() {
+    let (upstream, proxy) = spawn_gemini().await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        GEMINI_PATH,
+        json!({
+            "contents": [{
+                "role": "user",
+                "parts": [
+                    {"text": format!("see attachment for {EMAIL}")},
+                    {"fileData": {"mimeType": "text/plain",
+                                  "fileUri": format!("https://files.example.invalid/{EMAIL}/invoice.pdf")}}
+                ]
+            }]
+        }),
+    )
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Numeric carrier scope — the D2 boundary
+// ---------------------------------------------------------------------------
+
+/// Sampling and generation controls are declared non-carriers and are forwarded unprobed.
+///
+/// `max_tokens` here carries the same digits as the `OrderId` fixture: if the non-carrier
+/// declaration were removed, this request would be rejected. That makes this test part of the
+/// mutation probe for `NON_CARRIER_NUMERIC_KEYS`.
 #[tokio::test]
 async fn proof_openai_numeric_controls_are_forwarded_unprobed() {
     let (upstream, proxy) = spawn_openai().await;
-    post_json(
+    post_accepted(
         &proxy,
         "/v1/chat/completions",
         json!({
@@ -422,193 +563,164 @@ async fn proof_openai_numeric_controls_are_forwarded_unprobed() {
     assert_eq!(forwarded["top_p"], json!(0.9));
 }
 
-// ---------------------------------------------------------------------------
-// Gemini — controls
-// ---------------------------------------------------------------------------
-
-const GEMINI_PATH: &str = "/v1beta/models/gemini-test:generateContent";
-
-/// CONTROL: `contents[].parts[].text` and `functionCall.args` string values ARE redacted.
+/// FALSE-REJECT CORPUS (en-US): ordinary sampling-control values in the 4- and 5-digit range
+/// must NOT be rejected, even with a five-digit postal-shaped recognizer active.
+///
+/// This is the precision half of the D2 boundary. Delete `NON_CARRIER_NUMERIC_KEYS` and this
+/// goes red.
 #[tokio::test]
-async fn control_gemini_allowlisted_surfaces_are_tokenized() {
-    let (upstream, proxy) = spawn_gemini().await;
-    post_json(
+async fn ordinary_sampling_controls_are_not_rejected_en_us() {
+    let (upstream, proxy) = spawn_openai_with(postal_probe_pipeline("PostalUs")).await;
+    post_accepted(
         &proxy,
-        GEMINI_PATH,
+        "/v1/chat/completions",
         json!({
-            "contents": [{
-                "role": "user",
-                "parts": [
-                    {"text": format!("contact {EMAIL}")},
-                    {"functionCall": {"name": "lookup", "args": {"email": EMAIL}}}
-                ]
-            }]
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "max_tokens": 20000,
+            "max_completion_tokens": 16384,
+            "seed": 12345,
+            "n": 1,
+            "top_p": 0.9,
+            "temperature": 0.7,
+            "presence_penalty": 0,
+            "frequency_penalty": 0
         }),
     )
     .await;
 
     let forwarded = upstream.first_forwarded().await;
-    assert_tokenized(&forwarded["contents"][0]["parts"][0]["text"], EMAIL);
-    assert_tokenized(
-        &forwarded["contents"][0]["parts"][1]["functionCall"]["args"]["email"],
-        EMAIL,
-    );
+    assert_eq!(forwarded["max_tokens"], json!(20000));
+    assert_eq!(forwarded["seed"], json!(12345));
 }
 
-// ---------------------------------------------------------------------------
-// Gemini — sub-class (i): NUMERIC BYPASS (fully isolated)
-// ---------------------------------------------------------------------------
-
-/// PROOF (numeric bypass, fully isolated): `functionCall.args` is walked generically by
-/// `walk_all_strings` (`adapters/gemini.rs:108`). Two sibling keys in the SAME walked object:
-/// the string is tokenized, the number is forwarded raw because `walk_all_strings` no-ops on
-/// `Value::Number` (`adapter.rs:488`) and `PiiSurface.text` is `&mut String`
-/// (`adapter.rs:432`). Nothing about the detector changes between the two — only the JSON type.
+/// FALSE-REJECT CORPUS (de-DE): the Gemini spellings of the same controls, under a de-DE
+/// five-digit postal-shaped recognizer.
 #[tokio::test]
-async fn proof_gemini_numeric_bypass_inside_walked_function_call_args() {
-    let (upstream, proxy) = spawn_gemini().await;
-    post_json(
+async fn ordinary_sampling_controls_are_not_rejected_de_de() {
+    let (upstream, proxy) = spawn_gemini_with(postal_probe_pipeline("PostalDe")).await;
+    post_accepted(
         &proxy,
         GEMINI_PATH,
         json!({
-            "contents": [{
-                "role": "user",
-                "parts": [{"functionCall": {"name": "lookup", "args": {
-                    "order_id_as_string": ORDER_ID_DIGITS,
-                    "order_id_as_number": ORDER_ID_NUMBER
-                }}}]
-            }]
+            "contents": [{"role": "user", "parts": [{"text": "hallo"}]}],
+            "generationConfig": {
+                "maxOutputTokens": 99999,
+                "candidateCount": 1,
+                "topP": 0.9,
+                "topK": 40,
+                "seed": 54321
+            }
         }),
     )
     .await;
 
     let forwarded = upstream.first_forwarded().await;
-    let args = &forwarded["contents"][0]["parts"][0]["functionCall"]["args"];
-    assert_tokenized(&args["order_id_as_string"], ORDER_ID_DIGITS);
     assert_eq!(
-        args["order_id_as_number"],
-        json!(ORDER_ID_NUMBER),
-        "LEAK: sibling numeric value in the same walked object bypassed detection"
+        forwarded["generationConfig"]["maxOutputTokens"],
+        json!(99999)
     );
+    assert_eq!(forwarded["generationConfig"]["seed"], json!(54321));
 }
 
-// ---------------------------------------------------------------------------
-// Gemini — sub-class (ii): FIELD-ALLOWLIST BYPASS
-// ---------------------------------------------------------------------------
-
-/// PROOF (allowlist bypass, protobuf-JSON snake_case alias): `collect_gemini_surfaces`
-/// (`adapters/gemini.rs:53-70`) matches the literal key `"systemInstruction"` only. The
-/// Google Generative Language API is a protobuf-JSON surface, which accepts BOTH the
-/// lowerCamelCase name and the original snake_case field name. A client sending
-/// `system_instruction` therefore gets zero detection while the camelCase spelling in the
-/// SAME request is tokenized.
+/// BOUNDS ARE CARRIERS (en-US): a five-digit schema `maximum` DOES fail closed.
+///
+/// This pins an intentional decision so a later reader cannot mistake it for an oversight.
+/// Numeric schema bounds stay carriers to match the Anthropic codec's ruling on numeric schema
+/// literals; a proxy that answered differently for the same input shape would be an axis-4
+/// determinism regression. The values-vs-bounds question is recorded as an open user decision
+/// to be resolved once, across both paths.
 #[tokio::test]
-async fn proof_gemini_snake_case_field_alias_bypasses_allowlist() {
-    let (upstream, proxy) = spawn_gemini().await;
-    post_json(
+async fn schema_numeric_bounds_fail_closed_en_us() {
+    let (upstream, proxy) = spawn_openai_with(postal_probe_pipeline("PostalUs")).await;
+    post_rejected(
         &proxy,
-        GEMINI_PATH,
+        &upstream,
+        "/v1/chat/completions",
         json!({
-            "systemInstruction": {"parts": [{"text": format!("camel {EMAIL}")}]},
-            "system_instruction": {"parts": [{"text": format!("snake {EMAIL}")}]},
-            "contents": [{"role": "user", "parts": [{"text": "hi"}]}]
-        }),
-    )
-    .await;
-
-    let forwarded = upstream.first_forwarded().await;
-    assert_tokenized(&forwarded["systemInstruction"]["parts"][0]["text"], EMAIL);
-    assert_eq!(
-        forwarded["system_instruction"]["parts"][0]["text"]
-            .as_str()
-            .unwrap(),
-        format!("snake {EMAIL}"),
-        "LEAK: snake_case protobuf-JSON alias bypassed the camelCase-only allowlist"
-    );
-}
-
-/// PROOF (allowlist bypass, request-level fields): `tools[].functionDeclarations`,
-/// `generationConfig.stopSequences`, `cachedContent`, and `toolConfig` are all absent from the
-/// two-key request allowlist and egress raw.
-#[tokio::test]
-async fn proof_gemini_request_level_fields_leak_raw() {
-    let (upstream, proxy) = spawn_gemini().await;
-    post_json(
-        &proxy,
-        GEMINI_PATH,
-        json!({
-            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
-            "tools": [{"functionDeclarations": [{
-                "name": "lookup_order",
-                "description": format!("look up the order placed by {EMAIL}"),
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "function", "function": {
+                "name": "lookup", "description": "lookup",
                 "parameters": {"type": "object", "properties": {
-                    "order_id": {"type": "integer", "const": ORDER_ID_NUMBER}
+                    "code": {"type": "integer", "minimum": 10000, "maximum": 99999}
                 }}
-            }]}],
-            "generationConfig": {"stopSequences": [EMAIL], "maxOutputTokens": ORDER_ID_NUMBER},
-            "cachedContent": format!("cachedContents/{EMAIL}")
+            }}]
         }),
     )
     .await;
-
-    let forwarded = upstream.first_forwarded().await;
-    assert_eq!(
-        forwarded["tools"][0]["functionDeclarations"][0]["description"]
-            .as_str()
-            .unwrap(),
-        format!("look up the order placed by {EMAIL}"),
-        "LEAK: tools[].functionDeclarations[].description egressed raw"
-    );
-    assert_eq!(
-        forwarded["tools"][0]["functionDeclarations"][0]["parameters"]["properties"]["order_id"]
-            ["const"],
-        json!(ORDER_ID_NUMBER),
-        "LEAK: numeric schema const egressed raw"
-    );
-    assert_eq!(
-        forwarded["generationConfig"]["stopSequences"][0]
-            .as_str()
-            .unwrap(),
-        EMAIL,
-        "LEAK: generationConfig.stopSequences egressed raw"
-    );
-    assert_eq!(
-        forwarded["cachedContent"].as_str().unwrap(),
-        format!("cachedContents/{EMAIL}"),
-        "LEAK: cachedContent egressed raw"
-    );
 }
 
-/// PROOF (allowlist bypass, inside an allowlisted parent): `collect_content`
-/// (`adapters/gemini.rs:86`) matches only the `text`, `functionCall`, and `functionResponse`
-/// part kinds. A `fileData.fileUri` part — a documented Gemini part kind — falls through
-/// `_ => {}` and egresses raw even though its `contents[]` parent IS allowlisted.
+/// BOUNDS ARE CARRIERS (de-DE): the same decision on the Gemini declaration shape.
 #[tokio::test]
-async fn proof_gemini_non_text_part_kinds_leak_raw() {
-    let (upstream, proxy) = spawn_gemini().await;
-    post_json(
+async fn schema_numeric_bounds_fail_closed_de_de() {
+    let (upstream, proxy) = spawn_gemini_with(postal_probe_pipeline("PostalDe")).await;
+    post_rejected(
         &proxy,
+        &upstream,
         GEMINI_PATH,
         json!({
-            "contents": [{
-                "role": "user",
-                "parts": [
-                    {"text": format!("see attachment for {EMAIL}")},
-                    {"fileData": {"mimeType": "text/plain",
-                                  "fileUri": format!("https://files.example.invalid/{EMAIL}/invoice.pdf")}}
-                ]
-            }]
+            "contents": [{"role": "user", "parts": [{"text": "hallo"}]}],
+            "tools": [{"functionDeclarations": [{
+                "name": "lookup", "description": "lookup",
+                "parameters": {"type": "object", "properties": {
+                    "code": {"type": "integer", "maximum": 99999}
+                }}
+            }]}]
         }),
     )
     .await;
+}
 
-    let forwarded = upstream.first_forwarded().await;
-    assert_tokenized(&forwarded["contents"][0]["parts"][0]["text"], EMAIL);
-    assert_eq!(
-        forwarded["contents"][0]["parts"][1]["fileData"]["fileUri"]
-            .as_str()
-            .unwrap(),
-        format!("https://files.example.invalid/{EMAIL}/invoice.pdf"),
-        "LEAK: fileData.fileUri part egressed raw"
+/// A tool schema may legitimately declare a property NAMED like a sampling control. A numeric
+/// literal there is tool-declared data, not a decoding knob, so `CARRIER_SUBTREE_KEYS` keeps it
+/// probed. Without that guard the non-carrier list would punch holes in exactly the schema
+/// positions the Anthropic `const` finding proved exploitable.
+#[tokio::test]
+async fn control_named_property_inside_a_schema_stays_a_carrier() {
+    let (upstream, proxy) = spawn_openai_with(postal_probe_pipeline("PostalUs")).await;
+    post_rejected(
+        &proxy,
+        &upstream,
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": "hi"}],
+            "tools": [{"type": "function", "function": {
+                "name": "weather", "description": "weather",
+                "parameters": {"type": "object", "properties": {
+                    "seed": {"type": "integer", "const": 12345}
+                }}
+            }}]
+        }),
+    )
+    .await;
+}
+
+// ---------------------------------------------------------------------------
+// Error disclosure contract
+// ---------------------------------------------------------------------------
+
+/// The typed error carries the field path ONLY — never the detected value.
+///
+/// `Display` and `Debug` both feed logs, so both are checked. The client-facing body is
+/// covered separately by every `post_rejected` call, which asserts it discloses only the
+/// error name.
+#[test]
+fn unsurfaced_pii_error_discloses_the_field_path_but_never_the_value() {
+    let error = ProxyError::UnsurfacedPii {
+        field_path: "tools[0].function.description".to_string(),
+    };
+
+    let rendered = error.to_string();
+    assert!(
+        rendered.contains("tools[0].function.description"),
+        "the field path is the actionable part of the error: {rendered}"
     );
+    assert!(!rendered.contains(EMAIL), "Display leaked the value");
+    assert!(!rendered.contains(ORDER_ID_DIGITS), "Display leaked digits");
+
+    let debugged = format!("{error:?}");
+    assert!(!debugged.contains(EMAIL), "Debug leaked the value");
+    assert!(!debugged.contains(ORDER_ID_DIGITS), "Debug leaked digits");
 }

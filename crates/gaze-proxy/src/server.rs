@@ -1809,11 +1809,12 @@ async fn proxy_inner(
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
-    redact_surfaces(
+    let surfaced = redact_surfaces(
         &state.pipeline,
         &session,
         adapter.request_pii_surfaces(&mut json),
     )?;
+    residual_scan_request(&state.pipeline, &json, &surfaced)?;
 
     let upstream_url = upstream_url(adapter.upstream_base(), &uri)?;
     let mut request = state
@@ -2432,11 +2433,74 @@ async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Sessio
     Ok(session)
 }
 
+/// Numeric request positions that are caller-authored generation controls rather than data
+/// supplied by the data owner.
+///
+/// [`residual_scan_request`] treats every JSON number in a legacy request as a potential PII
+/// carrier EXCEPT numbers whose immediate key appears here. Each entry is a sampling or
+/// generation knob: the CALLER picks the value to shape decoding, a data owner's identifier
+/// can never arrive in it, and probing it would reject ordinary traffic — `max_tokens: 20000`
+/// is a five-digit numeral indistinguishable from a postal code to a digit recognizer.
+///
+/// Schema BOUNDS (`minimum`, `maximum`, `exclusiveMinimum`, `exclusiveMaximum`, `multipleOf`)
+/// are deliberately absent: they remain carriers and fail closed. That matches the Anthropic
+/// codec's ruling on numeric schema literals, and a proxy that answered differently from the
+/// codec for the same input shape would be an axis-4 determinism and traceability regression.
+///
+/// The list is exact and exhaustive — no wildcards, no prefix or suffix matching — so every
+/// position exempt from probing is visible to a reviewer. Entries cover both the snake_case
+/// (OpenAI, Anthropic) and lowerCamelCase (Gemini) spellings of the same control.
+const NON_CARRIER_NUMERIC_KEYS: &[&str] = &[
+    "budget_tokens",
+    "candidateCount",
+    "frequencyPenalty",
+    "frequency_penalty",
+    "logprobs",
+    "maxOutputTokens",
+    "max_completion_tokens",
+    "max_tokens",
+    "n",
+    "presencePenalty",
+    "presence_penalty",
+    "seed",
+    "temperature",
+    "topK",
+    "topP",
+    "top_k",
+    "top_logprobs",
+    "top_p",
+];
+
+/// Path segments whose subtrees keep numeric-carrier status even when a leaf key name collides
+/// with [`NON_CARRIER_NUMERIC_KEYS`].
+///
+/// A tool's JSON Schema may legitimately declare a property named `seed`, `n`, or
+/// `temperature`; a numeric literal in that position is tool-declared DATA, not a sampling
+/// control, and must stay probed. Without this guard the non-carrier list would punch holes in
+/// exactly the schema positions the Anthropic `const` finding proved exploitable.
+const CARRIER_SUBTREE_KEYS: &[&str] = &[
+    "functionDeclarations",
+    "functions",
+    "input_schema",
+    "json_schema",
+    "parameters",
+    "properties",
+    "response_format",
+    "schema",
+    "tools",
+];
+
+/// Redacts every surface an adapter claims and returns the field paths it covered.
+///
+/// The returned set is the authorization input for [`residual_scan_request`]: a position the
+/// adapter surfaced has already been through the pipeline and whatever it decided there
+/// (tokenize, or preserve by policy) is authorized. Every other position is not.
 fn redact_surfaces(
     pipeline: &Pipeline,
     session: &Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
-) -> Result<(), ProxyError> {
+) -> Result<HashSet<String>, ProxyError> {
+    let mut surfaced = HashSet::new();
     for surface in surfaces {
         let clean = pipeline
             .redact(session, RawDocument::Text(surface.text.clone()))
@@ -2444,8 +2508,119 @@ fn redact_surfaces(
         if let CleanDocument::Text(text) = clean {
             *surface.text = text;
         }
+        surfaced.insert(surface.field_path);
     }
-    Ok(())
+    Ok(surfaced)
+}
+
+/// Fails closed when the outbound legacy request body carries PII outside every adapter surface.
+///
+/// The legacy path forwards the whole original body after mutating only the surfaces an adapter
+/// returned, so any position the adapter's allowlist does not enumerate egresses verbatim. This
+/// re-scan states the missing invariant directly: everything we did not redact must be PII-free.
+///
+/// It REJECTS rather than rewriting. Silently mutating provider-owned fields would break the
+/// provider API contract and the restore round-trip (axis 2); refusing the request preserves
+/// axis 1 and leaves the adapter allowlist as the place to add genuine carriers.
+///
+/// Detection runs under [`LocaleTag::Global`], the same chain [`Pipeline::redact`] pins for the
+/// surface path, so the residual can never be weaker OR stronger than the primary pass.
+fn residual_scan_request(
+    pipeline: &Pipeline,
+    body: &Value,
+    surfaced: &HashSet<String>,
+) -> Result<(), ProxyError> {
+    let session =
+        Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
+    let scan = RequestResidualScan {
+        pipeline,
+        session,
+        surfaced,
+    };
+    scan.walk("", "", body, false, true)
+}
+
+/// Walk state for the outbound request residual re-scan.
+struct RequestResidualScan<'a> {
+    pipeline: &'a Pipeline,
+    session: Session,
+    surfaced: &'a HashSet<String>,
+}
+
+impl RequestResidualScan<'_> {
+    fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
+        let (_, spans, _) = self
+            .pipeline
+            .clean_with_safety_net(
+                &self.session,
+                RawDocument::Text(text.to_owned()),
+                &[LocaleTag::Global],
+            )
+            .map_err(|source| ProxyError::Pipeline { source })?;
+        if spans.is_empty() {
+            return Ok(());
+        }
+        Err(ProxyError::UnsurfacedPii {
+            field_path: field_path.to_string(),
+        })
+    }
+
+    /// Recurses the outbound body probing every scalar the adapter did not surface.
+    ///
+    /// `unambiguous` tracks whether the constructed path can still be compared against adapter
+    /// field paths. A JSON key containing `.` or `[` could make two distinct nodes render the
+    /// same path string, so once such a key is seen the subtree stops trusting path equality and
+    /// probes unconditionally. Extra probing is always safe: a surfaced position is already clean.
+    fn walk(
+        &self,
+        path: &str,
+        leaf_key: &str,
+        value: &Value,
+        in_carrier_subtree: bool,
+        unambiguous: bool,
+    ) -> Result<(), ProxyError> {
+        match value {
+            Value::String(text) => {
+                if !(unambiguous && self.surfaced.contains(path)) {
+                    self.probe(path, text)?;
+                }
+            }
+            Value::Number(number) => {
+                if in_carrier_subtree || !NON_CARRIER_NUMERIC_KEYS.contains(&leaf_key) {
+                    self.probe(path, &number.to_string())?;
+                }
+            }
+            Value::Array(items) => {
+                for (index, item) in items.iter().enumerate() {
+                    self.walk(
+                        &format!("{path}[{index}]"),
+                        leaf_key,
+                        item,
+                        in_carrier_subtree,
+                        unambiguous,
+                    )?;
+                }
+            }
+            Value::Object(map) => {
+                for (key, child) in map {
+                    let child_path = if path.is_empty() {
+                        key.clone()
+                    } else {
+                        format!("{path}.{key}")
+                    };
+                    self.walk(
+                        &child_path,
+                        key,
+                        child,
+                        in_carrier_subtree || CARRIER_SUBTREE_KEYS.contains(&key.as_str()),
+                        unambiguous && !key.contains('.') && !key.contains('['),
+                    )?;
+                }
+            }
+            Value::Null | Value::Bool(_) => {}
+        }
+        Ok(())
+    }
 }
 
 fn restore_surfaces(session: &Session, surfaces: Vec<crate::adapter::PiiSurface<'_>>) {
@@ -2560,6 +2735,7 @@ fn proxy_error_response(err: ProxyError) -> Response {
         ProxyError::AdapterNotFound { .. } => StatusCode::NOT_FOUND,
         ProxyError::BodyTooLarge { .. } => StatusCode::PAYLOAD_TOO_LARGE,
         ProxyError::InvalidJson { .. } => StatusCode::BAD_REQUEST,
+        ProxyError::UnsurfacedPii { .. } => StatusCode::UNPROCESSABLE_ENTITY,
         ProxyError::UpstreamUnreachable { .. } => StatusCode::BAD_GATEWAY,
         _ => StatusCode::INTERNAL_SERVER_ERROR,
     };
@@ -2584,6 +2760,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::BodyTooLarge { .. } => "BodyTooLarge",
         ProxyError::InvalidJson { .. } => "InvalidJson",
         ProxyError::SsePartialFrame { .. } => "SsePartialFrame",
+        ProxyError::UnsurfacedPii { .. } => "UnsurfacedPii",
         ProxyError::Pipeline { .. } => "Pipeline",
         ProxyError::Server { .. } => "Server",
         ProxyError::DaemonAlreadyRunning { .. } => "DaemonAlreadyRunning",
