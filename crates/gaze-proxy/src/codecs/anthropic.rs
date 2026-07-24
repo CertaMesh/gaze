@@ -2631,7 +2631,9 @@ fn transform_request_schema(
                     }
                     "const" => transform_schema_literal(&mut member.value, ctx, ledger)?,
                     "enum" => transform_schema_enum(&mut member.value, ctx, ledger)?,
-                    "minimum" | "maximum" => request_number_control(&member.value, ledger)?,
+                    "minimum" | "maximum" => {
+                        request_number_literal_control(&member.value, ctx, ledger)?
+                    }
                     _ => return Err(CodecErrorCode::UnsupportedRequestSurface),
                 }
             }
@@ -2987,7 +2989,7 @@ fn transform_schema_literal(
 ) -> Result<(), CodecErrorCode> {
     match &node.kind {
         JsonKind::String(_) => request_string_control(node, ctx, ledger),
-        JsonKind::Number(_) => request_number_control(node, ledger),
+        JsonKind::Number(_) => request_number_literal_control(node, ctx, ledger),
         JsonKind::Bool(_) | JsonKind::Null => ledger.mark(node.occurrence),
         JsonKind::Object(_) | JsonKind::Array(_) => Err(CodecErrorCode::UnsupportedRequestSurface),
     }
@@ -3020,6 +3022,29 @@ fn request_number_control(
         Ok(())
     } else {
         Err(CodecErrorCode::UnsupportedRequestSurface)
+    }
+}
+
+/// Numeric schema-literal control: the numeric analogue of `request_string_control`
+/// for `const` / `enum` members / `minimum` / `maximum` inside `tools[].input_schema`.
+///
+/// Marks coverage and shape-checks the node via `request_number_control`, then probes
+/// the raw digit text through detection and fails closed if it would be tokenized.
+/// Without this, an N-only (all-digit) recognizer never sees a numeric schema literal
+/// and a real order/customer ID reaches the provider un-tokenized (audit finding 1).
+fn request_number_literal_control(
+    node: &JsonNode,
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    request_number_control(node, ledger)?;
+    let JsonKind::Number(raw) = &node.kind else {
+        return Err(CodecErrorCode::UnsupportedRequestSurface);
+    };
+    if ctx.probe_without_prefix_cache_write(raw)? == *raw {
+        Ok(())
+    } else {
+        Err(CodecErrorCode::ControlWouldMutate)
     }
 }
 
