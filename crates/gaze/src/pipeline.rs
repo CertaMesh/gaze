@@ -242,6 +242,31 @@ impl ProtectionTarget<'_, '_> {
         }
     }
 
+    /// Restores a single token against the state this run is writing into.
+    ///
+    /// Integrity checks must ask the target, not the session: in `Staged` mode the tokens this
+    /// run just emitted live in an uncommitted transaction and are invisible to the session.
+    fn restore(&self, token: &str) -> Option<String> {
+        match self {
+            Self::Live(session) => session.restore(token),
+            Self::Staged(transaction, _) => transaction.restore(token),
+        }
+    }
+
+    fn contains_token(&self, token: &str) -> bool {
+        match self {
+            Self::Live(session) => session.contains_token(token),
+            Self::Staged(transaction, _) => transaction.contains_token(token),
+        }
+    }
+
+    fn restore_strict_text(&self, text: &str) -> std::result::Result<String, crate::RestoreError> {
+        match self {
+            Self::Live(session) => session.restore_strict_text(text),
+            Self::Staged(transaction, _) => transaction.restore_strict_text(text),
+        }
+    }
+
     fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
         match self {
             Self::Live(session) => session.lookup_prefix_cache(text),
@@ -1011,8 +1036,13 @@ impl Pipeline {
                             field_path,
                             SafetyNetMode::Resolve,
                         )?;
-                        (follow_up.stats.uncovered_count + follow_up.stats.partial_bleed_count > 0)
-                            .then_some(FallbackReason::ResidualSuspect)
+                        self.post_resolution_fallback_reason(
+                            target,
+                            clean,
+                            &follow_up,
+                            document_kind,
+                            field_path,
+                        )?
                     }
                 };
                 if let Some(reason) = reason {
@@ -1039,23 +1069,83 @@ impl Pipeline {
         document_kind: DocumentKind,
         field_path: Option<&str>,
     ) -> Result<Option<FallbackReason>> {
-        if report
-            .suspects
-            .iter()
-            .any(|suspect| matches!(suspect.kind, LeakKind::ClassMismatch { .. }))
-        {
-            return Ok(Some(FallbackReason::OverlapConflict));
+        if report.suspects.is_empty() {
+            return Ok(None);
         }
-        for suspect in actionable_suspects(report).into_iter().rev() {
+        validate_clean_manifest(clean)?;
+
+        // Phase 1: classify. A suspect that lies wholly inside a live token is already
+        // protected — acting on it would re-tokenize a token and destroy restore.
+        let mut protected = Vec::new();
+        let mut actionable = Vec::new();
+        for suspect in &report.suspects {
+            if suspect_is_inside_live_token(target, clean, suspect) {
+                protected.push(suspect);
+            } else if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+                return Ok(Some(FallbackReason::OverlapConflict));
+            } else {
+                actionable.push(suspect);
+            }
+        }
+        sort_safety_net_suspects(&mut protected);
+        sort_safety_net_suspects(&mut actionable);
+
+        // Phase 2: plan every resolution against the UNMUTATED clean text, so each plan's
+        // coordinates are established before any of them is applied.
+        let mut plans = Vec::with_capacity(actionable.len());
+        for suspect in actionable {
             let span = suspect_action_span(suspect);
             if !is_char_boundary_range(&clean.text, &span) {
                 return Ok(Some(FallbackReason::ResidualSuspect));
+            }
+            if !suspect_action_span_matches_manifest(clean, suspect) {
+                return Ok(Some(FallbackReason::OverlapConflict));
             }
             // Establish the ORIGINAL-request interval before tokenization mutates the
             // session or any clean-text / manifest state.
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             let raw = clean.text[span.clone()].to_string();
-            let replacement = target.tokenize_with_family("safety_net", &suspect.class, &raw)?;
+            plans.push(PlannedSafetyNetResolution {
+                suspect,
+                clean_span: span,
+                raw_span,
+                raw,
+            });
+        }
+        // `plans` is sorted by clean-span start, so pairwise adjacency is sufficient.
+        if plans
+            .windows(2)
+            .any(|pair| ranges_overlap(&pair[0].clean_span, &pair[1].clean_span))
+        {
+            return Ok(Some(FallbackReason::OverlapConflict));
+        }
+
+        for suspect in protected {
+            self.log_safety_net_entry(
+                target,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
+        }
+        if plans.is_empty() {
+            return Ok(None);
+        }
+
+        // Baseline for the restore-integrity check. `None` means the clean text was already
+        // un-restorable before this pass (e.g. the source document quotes a foreign token);
+        // exact-restore preservation is undefined there, so it is not this pass's invariant.
+        let restore_baseline = target.restore_strict_text(&clean.text).ok();
+
+        // Phase 3: apply right-to-left, so an applied plan never shifts an unapplied one.
+        for plan in plans.into_iter().rev() {
+            let suspect = plan.suspect;
+            let replacement =
+                target.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
             self.log_safety_net_entry(
                 target,
                 suspect,
@@ -1068,14 +1158,69 @@ impl Pipeline {
             )?;
             replace_clean_span(
                 clean,
-                span.clone(),
+                plan.clean_span.clone(),
                 &replacement,
                 Some(EmittedTokenSpan::new(
-                    span.start..span.start + replacement.len(),
-                    raw_span,
+                    plan.clean_span.start..plan.clean_span.start + replacement.len(),
+                    plan.raw_span,
                     suspect.class.clone(),
                 )),
             );
+        }
+
+        validate_clean_manifest(clean)?;
+        if let Some(baseline) = restore_baseline {
+            let restored = target
+                .restore_strict_text(&clean.text)
+                .map_err(|_| manifest_integrity_error("resolution left unrestorable clean text"))?;
+            assert_resolution_preserved_restore(&baseline, &restored)?;
+        }
+        Ok(None)
+    }
+
+    /// Post-resolution verdict: replaces the bare `uncovered + partial_bleed > 0` count.
+    ///
+    /// Any residual suspect that is not already protected by a live token means the resolve pass
+    /// did not converge, so the document takes the configured fallback. Residual suspects that
+    /// *are* inside a live token are audited as no-ops rather than counted as residue — the net
+    /// is re-flagging text the pipeline already tokenized.
+    fn post_resolution_fallback_reason(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &CleanText,
+        report: &LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+    ) -> Result<Option<FallbackReason>> {
+        if report.suspects.is_empty() {
+            return Ok(None);
+        }
+        validate_clean_manifest(clean)?;
+        let mut protected = Vec::new();
+        for suspect in &report.suspects {
+            if suspect_is_inside_live_token(target, clean, suspect) {
+                protected.push(suspect);
+                continue;
+            }
+            let reason = if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
+                FallbackReason::OverlapConflict
+            } else {
+                FallbackReason::ResidualSuspect
+            };
+            return Ok(Some(reason));
+        }
+        sort_safety_net_suspects(&mut protected);
+        for suspect in protected {
+            self.log_safety_net_entry(
+                target,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
         }
         Ok(None)
     }
@@ -1129,6 +1274,12 @@ impl Pipeline {
         fallback_reason: Option<FallbackReason>,
         log_entries: bool,
     ) -> Result<()> {
+        // Redaction spans are derived from manifest coordinates via
+        // `expand_span_to_overlapping_manifest_entries`. A manifest that misdescribes the
+        // document would make the redactor delete the wrong bytes and can leave the flagged
+        // PII in place, so a proven-inconsistent manifest must fail closed here rather than
+        // produce a "degraded but safe" document.
+        validate_clean_manifest(clean)?;
         for suspect in redaction_suspects(report).into_iter().rev() {
             let span =
                 round_span_outward_to_char_boundaries(&clean.text, suspect_action_span(suspect))?;
@@ -1452,21 +1603,6 @@ struct CleanText {
     manifest: Vec<EmittedTokenSpan>,
 }
 
-fn actionable_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
-    let mut suspects = report
-        .suspects
-        .iter()
-        .filter(|suspect| {
-            matches!(
-                suspect.kind,
-                LeakKind::Uncovered | LeakKind::PartialBleed { .. }
-            )
-        })
-        .collect::<Vec<_>>();
-    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
-    suspects
-}
-
 fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
     let mut suspects = report.suspects.iter().collect::<Vec<_>>();
     suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
@@ -1485,6 +1621,152 @@ fn fallback_action(fallback: SafetyNetFallback) -> Action {
         SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
         SafetyNetFallback::Redact => Action::Redact,
     }
+}
+
+struct PlannedSafetyNetResolution<'a> {
+    suspect: &'a LeakSuspect,
+    clean_span: Range<usize>,
+    raw_span: Range<usize>,
+    raw: String,
+}
+
+/// Provable manifest corruption. Reached only when the manifest contradicts the document it
+/// describes, which no pipeline-produced manifest can do; see `validate_clean_manifest`.
+///
+/// This is deliberately the same closed error variant the rest of the safety-net surface uses:
+/// the `manifest-integrity:` message prefix names the class without widening `Error`.
+fn manifest_integrity_error(message: &'static str) -> Error {
+    Error::SafetyNet(SafetyNetError::InvalidOutput {
+        message: format!("manifest-integrity: {message}"),
+    })
+}
+
+/// Every manifest entry must sit in a monotonic, gap-preserving clean/raw alignment: walking the
+/// manifest from the document start must reach each entry's own clean span unambiguously.
+///
+/// Defense in depth. `redact_text_with_manifest` emits an entry for every replacing action, so a
+/// pipeline-produced manifest satisfies this by construction and the check cannot fire from the
+/// public surface. It guards the manifest-derived decisions that follow — span/manifest agreement,
+/// live-token classification, redaction-span expansion — against a path that breaks the invariant,
+/// instead of letting those decisions silently read a manifest that lies. The corruption shape it
+/// rejects is an entry whose clean span was rewritten while its `raw_span` kept its old length.
+fn validate_clean_manifest(clean: &CleanText) -> Result<()> {
+    for emitted in &clean.manifest {
+        map_clean_span_to_raw(clean, &emitted.clean_span).map_err(|_| {
+            manifest_integrity_error("manifest entry has no unambiguous original span")
+        })?;
+    }
+    Ok(())
+}
+
+/// A safety-net resolution replaces raw bytes with a token that restores to exactly those bytes,
+/// so the restored document must be byte-identical before and after.
+fn assert_resolution_preserved_restore(baseline: &str, restored: &str) -> Result<()> {
+    if restored != baseline {
+        return Err(manifest_integrity_error(
+            "safety-net resolution broke exact restore",
+        ));
+    }
+    Ok(())
+}
+
+/// True when the suspect span lies wholly inside exactly one live token.
+///
+/// Such a suspect is the net re-flagging text the pipeline already protected. Acting on it would
+/// tokenize a token and permanently break restore, so it is audited as a no-op instead.
+fn suspect_is_inside_live_token(
+    target: &ProtectionTarget<'_, '_>,
+    clean: &CleanText,
+    suspect: &LeakSuspect,
+) -> bool {
+    let span = &suspect.span;
+    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
+        return false;
+    }
+    let mut containing = clean.manifest.iter().filter(|emitted| {
+        emitted.clean_span.start <= span.start && span.end <= emitted.clean_span.end
+    });
+    let Some(emitted) = containing.next() else {
+        return false;
+    };
+    if containing.next().is_some() {
+        return false;
+    }
+    let Some(token) = clean.text.get(emitted.clean_span.clone()) else {
+        return false;
+    };
+    let Some(restored) = target.restore(token) else {
+        return false;
+    };
+    target.contains_token(token)
+        && emitted.raw_span.start < emitted.raw_span.end
+        && restored.len() == emitted.raw_span.end - emitted.raw_span.start
+}
+
+/// True when the suspect's own coverage claim matches what the manifest actually covers.
+///
+/// `Uncovered` must touch no emitted token, and `PartialBleed { uncovered }` must name the single
+/// gap the manifest leaves inside the suspect span. A suspect that disagrees with the manifest is
+/// stale or wrong; resolving it would tokenize across live tokens.
+fn suspect_action_span_matches_manifest(clean: &CleanText, suspect: &LeakSuspect) -> bool {
+    if suspect.span.start >= suspect.span.end || !is_char_boundary_range(&clean.text, &suspect.span)
+    {
+        return false;
+    }
+    match &suspect.kind {
+        LeakKind::Uncovered => !clean
+            .manifest
+            .iter()
+            .any(|emitted| ranges_overlap(&emitted.clean_span, &suspect.span)),
+        LeakKind::PartialBleed { uncovered } => {
+            if uncovered.start >= uncovered.end
+                || !is_char_boundary_range(&clean.text, uncovered)
+                || uncovered.start < suspect.span.start
+                || uncovered.end > suspect.span.end
+            {
+                return false;
+            }
+            let mut cursor = suspect.span.start;
+            let mut gaps = Vec::new();
+            for emitted in clean
+                .manifest
+                .iter()
+                .filter(|emitted| ranges_overlap(&emitted.clean_span, &suspect.span))
+            {
+                let covered_start = emitted.clean_span.start.max(suspect.span.start);
+                let covered_end = emitted.clean_span.end.min(suspect.span.end);
+                if cursor < covered_start {
+                    gaps.push(cursor..covered_start);
+                }
+                cursor = cursor.max(covered_end);
+            }
+            if cursor < suspect.span.end {
+                gaps.push(cursor..suspect.span.end);
+            }
+            gaps.as_slice() == [uncovered.clone()]
+        }
+        LeakKind::ClassMismatch { .. } => false,
+        _ => false,
+    }
+}
+
+/// Total order over suspects. The pairwise overlap check below is only correct on a sorted list,
+/// and the tie-breakers keep audit-row order independent of safety-net iteration order.
+fn sort_safety_net_suspects(suspects: &mut [&LeakSuspect]) {
+    suspects.sort_by(|left, right| {
+        (
+            left.span.start,
+            left.span.end,
+            left.class.to_canonical_str(),
+            left.safety_net_id.as_str(),
+        )
+            .cmp(&(
+                right.span.start,
+                right.span.end,
+                right.class.to_canonical_str(),
+                right.safety_net_id.as_str(),
+            ))
+    });
 }
 
 fn clean_to_raw_mapping_error(message: &'static str) -> Error {
@@ -2661,6 +2943,56 @@ mod tests {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(Vec::new())
         }
+    }
+
+    /// `validate_clean_manifest` is defense in depth: `redact_text_with_manifest` emits an entry
+    /// for every replacing action, so a pipeline-produced manifest is gap-preserving and this
+    /// cannot fire from the public surface. Probe it directly so the check is not unfalsifiable.
+    #[test]
+    fn validate_clean_manifest_rejects_a_manifest_that_contradicts_its_own_alignment() {
+        // "<tok> tail" where the entry claims to stand for 21 raw bytes.
+        let sound = CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email)],
+        };
+        validate_clean_manifest(&sound).expect("a gap-preserving manifest must validate");
+
+        // Same document, but the second entry's raw_span cannot follow the first: one clean byte
+        // separates the entries while four raw bytes do, so the manifest describes a document
+        // that cannot exist. This is the shape a rewritten clean span leaves behind.
+        let corrupt = CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
+                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
+            ],
+        };
+        let error = validate_clean_manifest(&corrupt)
+            .expect_err("a manifest that contradicts its own alignment must fail closed");
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "manifest corruption must surface as the manifest-integrity class, got {error}"
+        );
+    }
+
+    /// A resolution replaces raw bytes with a token restoring to exactly those bytes, so the
+    /// restored document is byte-identical before and after. Probed directly for the same reason.
+    #[test]
+    fn assert_resolution_preserved_restore_rejects_a_changed_restore() {
+        assert_resolution_preserved_restore(
+            "alice@example.invalid tail",
+            "alice@example.invalid tail",
+        )
+        .expect("an unchanged restore must pass");
+        let error = assert_resolution_preserved_restore(
+            "alice@example.invalid tail",
+            "alice@example.invalid",
+        )
+        .expect_err("a resolution that changed the restored document must fail closed");
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "broken restore must surface as the manifest-integrity class, got {error}"
+        );
     }
 
     #[test]
