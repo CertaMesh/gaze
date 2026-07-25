@@ -115,6 +115,12 @@ impl Detector for FixedDetector {
     }
 }
 
+/// One primary-pass detection. Named because a bare `vec![a..b]` of ranges is ambiguous enough
+/// that clippy rejects it.
+fn detected(span: Range<usize>) -> Vec<Range<usize>> {
+    Vec::from([span])
+}
+
 fn text(clean: CleanDocument) -> String {
     match clean {
         CleanDocument::Text(text) => text,
@@ -235,11 +241,11 @@ fn overlapping_resolutions_under_redact_fallback_still_deliver_a_document() {
 #[test]
 fn uncovered_suspect_overlapping_a_live_token_fails_closed_with_overlap_conflict() {
     let raw = format!("{EMAIL} tail");
-    let clean_len = primary_clean(vec![0..EMAIL.len()], &raw).len();
+    let clean_len = primary_clean(detected(0..EMAIL.len()), &raw).len();
     // The net claims the WHOLE clean document is uncovered — a claim the manifest contradicts,
     // yet whose boundaries both map cleanly, so span arithmetic alone cannot catch it.
     let pipeline = pipeline_with(
-        vec![0..EMAIL.len()],
+        detected(0..EMAIL.len()),
         vec![vec![ScriptedSuspect::uncovered(0..clean_len)]],
     );
     let session = Session::new(Scope::Ephemeral).expect("session");
@@ -285,7 +291,7 @@ fn follow_up_class_mismatch_outside_a_token_fails_closed() {
     let raw = format!("{EMAIL} tail");
     // Pass 1 reports nothing; the follow-up pass reports a mismatch over untokenized text.
     let pipeline = pipeline_with(
-        vec![0..EMAIL.len()],
+        detected(0..EMAIL.len()),
         vec![Vec::new(), vec![ScriptedSuspect::class_mismatch(19..23)]],
     );
     let session = Session::new(Scope::Ephemeral).expect("session");
@@ -304,11 +310,11 @@ fn follow_up_class_mismatch_outside_a_token_fails_closed() {
 #[test]
 fn suspect_inside_a_live_token_is_a_reversible_noop() {
     let raw = format!("{EMAIL} tail");
-    let baseline = primary_clean(vec![0..EMAIL.len()], &raw);
+    let baseline = primary_clean(detected(0..EMAIL.len()), &raw);
     let token_end = baseline.find(" tail").expect("token suffix");
 
     let pipeline = pipeline_with(
-        vec![0..EMAIL.len()],
+        detected(0..EMAIL.len()),
         vec![vec![ScriptedSuspect::uncovered(2..token_end - 1)]],
     );
     let session = Session::new(Scope::Ephemeral).expect("session");
@@ -324,6 +330,9 @@ fn suspect_inside_a_live_token_is_a_reversible_noop() {
         raw
     );
 }
+
+/// One corpus row: raw document, primary-pass detections, scripted net passes.
+type CorpusDocument = (String, Vec<Range<usize>>, Vec<Vec<ScriptedSuspect>>);
 
 /// AVAILABILITY REGRESSION CORPUS.
 ///
@@ -341,22 +350,26 @@ fn availability_corpus_has_no_new_failed_closed_outcomes() {
         EMAIL.len() + 5..EMAIL.len() + 5 + OTHER.len(),
     ];
 
-    let corpus: Vec<(&str, Vec<Range<usize>>, Vec<Vec<ScriptedSuspect>>)> = vec![
+    let corpus: Vec<CorpusDocument> = vec![
         // No detections, no suspects.
-        ("plain text with no pii at all", Vec::new(), Vec::new()),
+        (
+            "plain text with no pii at all".to_string(),
+            Vec::new(),
+            Vec::new(),
+        ),
         // Primary tokenization, net silent.
-        (tail.as_str(), vec![0..EMAIL.len()], Vec::new()),
+        (tail.clone(), detected(0..EMAIL.len()), Vec::new()),
         // Two primary tokens, net silent.
-        (two.as_str(), both, Vec::new()),
+        (two.clone(), both, Vec::new()),
         // A single promotion of untokenized text.
         (
-            tail.as_str(),
+            tail.clone(),
             Vec::new(),
             vec![vec![ScriptedSuspect::uncovered(0..EMAIL.len())]],
         ),
         // Two non-overlapping promotions.
         (
-            two.as_str(),
+            two.clone(),
             Vec::new(),
             vec![vec![
                 ScriptedSuspect::uncovered(0..EMAIL.len()),
@@ -365,21 +378,21 @@ fn availability_corpus_has_no_new_failed_closed_outcomes() {
         ),
         // A promotion of trailing text alongside an existing token.
         (
-            tail.as_str(),
-            vec![0..EMAIL.len()],
+            tail.clone(),
+            detected(0..EMAIL.len()),
             vec![vec![ScriptedSuspect::uncovered(0..0)]], // replaced below with real offsets
         ),
         // A document quoting a FOREIGN gaze token: its clean text is not restorable, so the
         // restore-integrity baseline is undefined. It must still complete.
         (
-            foreign.as_str(),
-            vec![foreign_at..foreign_at + EMAIL.len()],
+            foreign.clone(),
+            detected(foreign_at..foreign_at + EMAIL.len()),
             Vec::new(),
         ),
     ];
 
     // Fill in the one fixture whose suspect span depends on the emitted token length.
-    let tail_clean = primary_clean(vec![0..EMAIL.len()], &tail);
+    let tail_clean = primary_clean(detected(0..EMAIL.len()), &tail);
     let tail_token_end = tail_clean.find(" tail").expect("token suffix");
     let promotion_next_to_token = vec![vec![ScriptedSuspect::uncovered(
         tail_token_end + 1..tail_clean.len(),

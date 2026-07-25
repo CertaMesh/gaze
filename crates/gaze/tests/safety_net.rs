@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 
 use gaze::{
     Action, ClassRule, CleanDocument, ConflictTier, DefaultRule, Detection, Detector, DocumentKind,
-    EmittedTokenSpan, FallbackReason, LeakKind, LeakReportTelemetry, LeakSuspect, PiiClass,
-    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, SafetyNet,
-    SafetyNetContext, SafetyNetError, Scope, Session, Value,
+    EmittedTokenSpan, LeakKind, LeakReportTelemetry, LeakSuspect, PiiClass, Pipeline, RawDocument,
+    RedactionEntry, RedactionLogError, RedactionLogger, SafetyNet, SafetyNetContext,
+    SafetyNetError, Scope, Session, Value,
 };
 
 #[derive(Clone)]
