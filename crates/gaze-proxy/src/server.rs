@@ -1809,10 +1809,15 @@ async fn proxy_inner(
     let session = session_for(&state, &headers).await?;
     let mut json: Value =
         serde_json::from_slice(&body).map_err(|source| ProxyError::InvalidJson { source })?;
+    // One source of truth for both passes below: widening or narrowing detection on this
+    // path is a configuration decision, and it must land on the primary pass and the residual
+    // re-scan identically or the two disagree about what counts as PII.
+    let locale_chain = state.config.locale_chain();
     let surfaced = redact_surfaces(
         &state.pipeline,
         &session,
         adapter.request_pii_surfaces(&mut json),
+        locale_chain,
     )?;
     // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
     // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
@@ -1821,7 +1826,7 @@ async fn proxy_inner(
         // Legacy adapters carry no codec proof, so coverage is established right here, by
         // re-scanning the outbound body and failing closed on anything left unprotected.
         CoveragePolicy::LegacySurfaces => {
-            residual_scan_request(&state.pipeline, &json, &surfaced)?;
+            residual_scan_request(&state.pipeline, &json, &surfaced, locale_chain)?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
         // point means the contract and the router disagree and no proof has been established.
@@ -2507,15 +2512,26 @@ const CARRIER_SUBTREE_KEYS: &[&str] = &[
 /// The returned set is the authorization input for [`residual_scan_request`]: a position the
 /// adapter surfaced has already been through the pipeline and whatever it decided there
 /// (tokenize, or preserve by policy) is authorized. Every other position is not.
+///
+/// `locale_chain` is the adopter-configured chain from
+/// [`crate::ProxyConfig::with_locale_chain`], NOT the `[LocaleTag::Global]` that
+/// [`Pipeline::redact`] pins. Passing it is what lets locale-gated recognizers
+/// (`postal.de`, `postal.us`, the national phone recognizers) run on proxied traffic at all.
+/// [`residual_scan_request`] MUST be given the same slice.
 fn redact_surfaces(
     pipeline: &Pipeline,
     session: &Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
+    locale_chain: &[LocaleTag],
 ) -> Result<HashSet<String>, ProxyError> {
     let mut surfaced = HashSet::new();
     for surface in surfaces {
         let clean = pipeline
-            .redact(session, RawDocument::Text(surface.text.clone()))
+            .pseudonymize_with_context(
+                session,
+                RawDocument::Text(surface.text.clone()),
+                locale_chain,
+            )
             .map_err(|source| ProxyError::Pipeline { source })?;
         if let CleanDocument::Text(text) = clean {
             *surface.text = text;
@@ -2535,12 +2551,16 @@ fn redact_surfaces(
 /// provider API contract and the restore round-trip (axis 2); refusing the request preserves
 /// axis 1 and leaves the adapter allowlist as the place to add genuine carriers.
 ///
-/// Detection runs under [`LocaleTag::Global`], the same chain [`Pipeline::redact`] pins for the
-/// surface path, so the residual can never be weaker OR stronger than the primary pass.
+/// Detection runs under the caller-supplied `locale_chain`, which MUST be the same slice
+/// [`redact_surfaces`] was given — both read [`crate::ProxyConfig::locale_chain`]. That shared
+/// source is what keeps the residual neither weaker NOR stronger than the primary pass: a
+/// chain that activated a recognizer for the surface pass but not here would forward PII the
+/// primary would have tokenized, and the reverse would reject traffic the primary accepts.
 fn residual_scan_request(
     pipeline: &Pipeline,
     body: &Value,
     surfaced: &HashSet<String>,
+    locale_chain: &[LocaleTag],
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -2548,6 +2568,7 @@ fn residual_scan_request(
         pipeline,
         session,
         surfaced,
+        locale_chain,
     };
     scan.walk("", "", body, false, true)
 }
@@ -2557,6 +2578,8 @@ struct RequestResidualScan<'a> {
     pipeline: &'a Pipeline,
     session: Session,
     surfaced: &'a HashSet<String>,
+    /// The same chain the primary pass ran under. See [`residual_scan_request`].
+    locale_chain: &'a [LocaleTag],
 }
 
 impl RequestResidualScan<'_> {
@@ -2566,7 +2589,7 @@ impl RequestResidualScan<'_> {
             .clean_with_safety_net(
                 &self.session,
                 RawDocument::Text(text.to_owned()),
-                &[LocaleTag::Global],
+                self.locale_chain,
             )
             .map_err(|source| ProxyError::Pipeline { source })?;
         if spans.is_empty() {

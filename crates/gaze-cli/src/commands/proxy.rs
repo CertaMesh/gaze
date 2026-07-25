@@ -81,7 +81,12 @@ pub(crate) fn serve(args: ServeArgs) -> Result<(), CliError> {
             },
         }
     }
-    let pipeline = build_pipeline(args.policy, &args.rulepack)?;
+    // The locale chain the pipeline was assembled under must also reach the proxy: assembly
+    // decides which recognizers are registered, `ProxyConfig` decides which may fire. Dropping
+    // it here is what pinned proxied traffic to `[LocaleTag::Global]` and left locale-gated
+    // recognizers inert for adopters who had configured a locale (solo todo #2403).
+    let (pipeline, locale_chain) = build_pipeline(args.policy, &args.rulepack)?;
+    config = config.with_locale_chain(locale_chain);
     let runtime = tokio::runtime::Runtime::new()
         .map_err(|err| CliError::ProxyDetail(format!("runtime: {err}")))?;
     runtime
@@ -191,7 +196,17 @@ pub(crate) fn uninstall_systemd_user() -> Result<(), CliError> {
     ))
 }
 
-fn build_pipeline(policy: Option<PathBuf>, rulepack: &str) -> Result<gaze::Pipeline, CliError> {
+/// Builds the proxy pipeline and returns the locale chain it was assembled under.
+///
+/// The chain is the canonical 4-tier resolution (CLI > policy > rulepack default > system
+/// default). `gaze proxy` has no `--locale` flag, so the CLI tier is empty and a policy
+/// `locale = [...]` is the adopter's lever; with no policy the bundled defaults resolve to
+/// `[LocaleTag::Global]`. Both values are returned together because the proxy needs them
+/// together — see [`gaze_proxy::ProxyConfig::with_locale_chain`].
+fn build_pipeline(
+    policy: Option<PathBuf>,
+    rulepack: &str,
+) -> Result<(gaze::Pipeline, gaze::LocaleChain), CliError> {
     if let Some(path) = policy {
         let policy = gaze::Policy::load_for_cli(&path).map_err(map_policy_error)?;
         let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
@@ -201,22 +216,24 @@ fn build_pipeline(policy: Option<PathBuf>, rulepack: &str) -> Result<gaze::Pipel
             policy.locale.as_deref(),
             Some(&rulepack_default_locales),
         );
-        return build_pipeline_from_policy(
+        let pipeline = build_pipeline_from_policy(
             &policy,
             &rulepacks,
             None,
             &locale_chain,
             resolve_ner_threshold(None, Some(&policy)),
-        );
+        )?;
+        return Ok((pipeline, locale_chain));
     }
     let mut config = gaze_assembly::CorePipelineConfig::new();
     if rulepack != "core" {
         config = config.with_bundled_rulepack(rulepack);
     }
-    config
+    let core = config
         .build()
-        .map(gaze_assembly::CorePipeline::into_pipeline)
-        .map_err(|err| CliError::ProxyDetail(format!("pipeline: {err}")))
+        .map_err(|err| CliError::ProxyDetail(format!("pipeline: {err}")))?;
+    let locale_chain = core.locale_chain().clone();
+    Ok((core.into_pipeline(), locale_chain))
 }
 
 fn proxy_config(
