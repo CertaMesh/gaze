@@ -1,8 +1,38 @@
+use std::borrow::Cow;
+
 use http::Method;
 use serde_json::Value;
 use url::Url;
 
 use crate::adapter::{walk_all_strings, PiiSurface, ProviderAdapter, SseEvent};
+
+/// Canonicalizes a protobuf-JSON field name to its lowerCamelCase spelling.
+///
+/// The Generative Language API is a protobuf-JSON surface, and protobuf JSON parsers accept
+/// BOTH the lowerCamelCase name and the original snake_case field name for every field. Matching
+/// the camelCase spelling literally therefore left `system_instruction` — the same field, spelled
+/// the other legal way — with no detection at all, while `systemInstruction` was covered.
+///
+/// Callers match on the canonical form but keep the caller's ORIGINAL key in field paths, so a
+/// path still names the bytes actually on the wire.
+fn canonical_field_name(key: &str) -> Cow<'_, str> {
+    if !key.contains('_') {
+        return Cow::Borrowed(key);
+    }
+    let mut canonical = String::with_capacity(key.len());
+    let mut capitalize_next = false;
+    for character in key.chars() {
+        if character == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            canonical.extend(character.to_uppercase());
+            capitalize_next = false;
+        } else {
+            canonical.push(character);
+        }
+    }
+    Cow::Owned(canonical)
+}
 
 #[derive(Clone, Debug)]
 #[non_exhaustive]
@@ -47,25 +77,42 @@ impl ProviderAdapter for GeminiAdapter {
     }
 }
 
+/// Surfaces the free-text carriers of a Gemini request, or the model-authored text of a response.
+///
+/// The request allowlist enumerates positions whose contents the MODEL reads, and which are
+/// therefore safe to pseudonymize.
+///
+/// Resource identifiers and opaque blobs are deliberately NOT surfaced — `cachedContent` is a
+/// provider-side resource name, `fileData.fileUri` is fetched by the provider, and
+/// `inlineData.data` is base64 payload. Substituting a token in any of them would silently break
+/// the request rather than protect it, so PII there is caught by the outbound residual re-scan and
+/// fails closed.
 fn collect_gemini_surfaces(body: &mut Value, request: bool) -> Vec<PiiSurface<'_>> {
     let mut surfaces = Vec::new();
     if let Value::Object(root) = body {
         if request {
             for (key, value) in root {
-                match key.as_str() {
+                match canonical_field_name(key).as_ref() {
                     "contents" => {
                         if let Value::Array(contents) = value {
                             for (index, content) in contents.iter_mut().enumerate() {
-                                collect_content(
-                                    &mut surfaces,
-                                    format!("contents[{index}]"),
-                                    content,
-                                );
+                                collect_content(&mut surfaces, format!("{key}[{index}]"), content);
                             }
                         }
                     }
                     "systemInstruction" => {
-                        collect_content(&mut surfaces, "systemInstruction".to_string(), value);
+                        collect_content(&mut surfaces, key.clone(), value);
+                    }
+                    // Tool and schema declarations: names, descriptions, and enum members are
+                    // all read by the model.
+                    "tools" | "toolConfig" => {
+                        walk_all_strings(&mut surfaces, key.clone(), value);
+                    }
+                    // Covers `stopSequences`, which is matched against generated text. Numeric
+                    // members of this subtree are untouched here and are classified by the
+                    // outbound residual re-scan's non-carrier declaration instead.
+                    "generationConfig" => {
+                        walk_all_strings(&mut surfaces, key.clone(), value);
                     }
                     _ => {}
                 }
@@ -91,46 +138,49 @@ fn collect_content<'a>(surfaces: &mut Vec<PiiSurface<'a>>, prefix: String, value
     let Value::Object(content) = value else {
         return;
     };
-    if let Some(Value::Array(parts)) = content.get_mut("parts") {
-        for (index, part) in parts.iter_mut().enumerate() {
-            let Value::Object(part) = part else {
-                continue;
-            };
-            for (key, value) in part {
-                match key.as_str() {
-                    "text" => {
-                        if let Value::String(text) = value {
-                            surfaces.push(PiiSurface {
-                                field_path: format!("{prefix}.parts[{index}].text"),
-                                text,
-                            });
-                        }
+    let Some((parts_key, Value::Array(parts))) = content
+        .iter_mut()
+        .find(|(key, _)| canonical_field_name(key) == "parts")
+    else {
+        return;
+    };
+    let parts_prefix = format!("{prefix}.{parts_key}");
+    for (index, part) in parts.iter_mut().enumerate() {
+        let Value::Object(part) = part else {
+            continue;
+        };
+        for (key, value) in part {
+            let part_prefix = format!("{parts_prefix}[{index}].{key}");
+            match canonical_field_name(key).as_ref() {
+                "text" => {
+                    if let Value::String(text) = value {
+                        surfaces.push(PiiSurface {
+                            field_path: part_prefix,
+                            text,
+                        });
                     }
-                    "functionCall" => {
-                        if let Some(args) =
-                            value.as_object_mut().and_then(|call| call.get_mut("args"))
-                        {
-                            walk_all_strings(
-                                surfaces,
-                                format!("{prefix}.parts[{index}].functionCall.args"),
-                                args,
-                            );
-                        }
-                    }
-                    "functionResponse" => {
-                        if let Some(response) = value
-                            .as_object_mut()
-                            .and_then(|call| call.get_mut("response"))
-                        {
-                            walk_all_strings(
-                                surfaces,
-                                format!("{prefix}.parts[{index}].functionResponse.response"),
-                                response,
-                            );
-                        }
-                    }
-                    _ => {}
                 }
+                "functionCall" => {
+                    if let Some((args_key, args)) = value
+                        .as_object_mut()
+                        .and_then(|call| call.iter_mut().find(|(key, _)| *key == "args"))
+                    {
+                        walk_all_strings(surfaces, format!("{part_prefix}.{args_key}"), args);
+                    }
+                }
+                "functionResponse" => {
+                    if let Some((response_key, response)) = value
+                        .as_object_mut()
+                        .and_then(|call| call.iter_mut().find(|(key, _)| *key == "response"))
+                    {
+                        walk_all_strings(
+                            surfaces,
+                            format!("{part_prefix}.{response_key}"),
+                            response,
+                        );
+                    }
+                }
+                _ => {}
             }
         }
     }

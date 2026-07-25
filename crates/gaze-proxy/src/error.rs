@@ -27,6 +27,21 @@ pub enum ProxyError {
     },
     #[error("sse partial frame: {reason}")]
     SsePartialFrame { reason: String },
+    /// A legacy-path request carried PII in a position no adapter surface covered.
+    ///
+    /// Raised by the outbound request residual re-scan, which fails closed rather than
+    /// silently rewriting provider-owned fields. The variant carries the JSON field path
+    /// ONLY -- never the detected value, nor any substring of it -- so neither `Display`,
+    /// `Debug`, nor any log line derived from them can egress protected bytes.
+    #[error("unsurfaced pii at {field_path}")]
+    UnsurfacedPii { field_path: String },
+    /// A request reached the legacy path under a contract that claims codec-proved coverage.
+    ///
+    /// The contract and the router disagree, so no coverage mechanism is known to have run.
+    /// Proxying under an unproven coverage claim is exactly the failure this policy exists to
+    /// prevent, so the request is refused.
+    #[error("adapter coverage contract is unproven on the legacy path")]
+    UnprovenCoverage,
     #[error("pipeline failed")]
     Pipeline {
         #[source]
