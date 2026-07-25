@@ -2975,6 +2975,61 @@ mod tests {
         );
     }
 
+    /// The redact path derives its deletion spans from manifest coordinates
+    /// (`expand_span_to_overlapping_manifest_entries`), so it must refuse a manifest that is
+    /// already proven inconsistent: expanding against a manifest that misdescribes the document
+    /// can delete the wrong bytes and leave the flagged PII in place.
+    ///
+    /// No public-API fixture can present a corrupt manifest to this path — the primary pass is
+    /// gap-preserving by construction — so the precondition is probed here, at the call site, to
+    /// keep it falsifiable rather than unverifiable.
+    #[test]
+    fn redact_safety_net_suspects_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        // One clean byte separates the entries while four raw bytes do: an alignment no document
+        // can have.
+        let mut clean = CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
+                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
+            ],
+        };
+        let report = LeakReport::from_parts(
+            vec![LeakSuspect::new(
+                19..23,
+                PiiClass::Email,
+                "probe",
+                Some(0.99),
+                LeakKind::Uncovered,
+                "private_email",
+                None,
+            )],
+            Vec::new(),
+        );
+
+        let error = pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &report,
+                DocumentKind::Text,
+                None,
+                None,
+                false,
+            )
+            .expect_err("redaction on a proven-inconsistent manifest must fail closed");
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "expected the manifest-integrity class, got {error}"
+        );
+    }
+
     /// A resolution replaces raw bytes with a token restoring to exactly those bytes, so the
     /// restored document is byte-identical before and after. Probed directly for the same reason.
     #[test]
