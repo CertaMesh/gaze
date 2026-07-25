@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
+  (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
+  tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
+  `custom:url`, covering the whole span rather than a fragment. It is
+  `safety_tier = "safe_default"` with `locales = ["global"]`, so it is active for
+  every adopter of the default bundle, not only for configurations that
+  auto-activate locale-gated recognizers.
+
+  Measured against the EN/DE benchmark holdout: those two anchors carry 232 of
+  276 gold URL spans and 6,385 of 7,209 leaked URL bytes (88.6%), while matching
+  nothing at all across the 1,024 documents of the committed A4 negative corpus.
+  Before this recognizer the deterministic rule floor was completely blind to
+  URLs — 0 of 276 spans covered and 0 overlapped.
+
+  **Bare-host URLs are deliberately out of scope.** Shapes with no scheme and no
+  `www.` prefix (`example.invalid/orders`) are the remaining 47 spans / 887 bytes
+  / 12.3% of the bucket, and 97 of the 1,024 committed negative documents contain
+  bare-host shapes, so no bare-host rule can clear the negative gate.
+
+  **Documentation, repository, and example URLs are tokenized.** This is
+  intentional: 16 of the 232 gold spans the rule covers are themselves
+  reference-host shaped, so the corpus treats a reference URL inside a
+  data-owner document as PII to protect. Tokens stay restorable through the
+  manifest, so an over-tokenized public URL is a recoverable ergonomics cost
+  (axis 5) while an under-tokenized private one is a leak (axis 1).
+
+### Changed
+
+- `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
+  `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
+  (11 -> 12 detections). No existing detection changed class, span, or shape.
+
 ## [0.12.0] - 2026-07-06
 
 ### Added
