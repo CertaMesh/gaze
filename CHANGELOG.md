@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **A provably corrupt clean-text manifest now hard-errors in every safety-net
+  fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
+  that the manifest describes a monotonic, gap-preserving clean/raw alignment
+  before it makes any manifest-derived decision. A manifest that fails that check
+  contradicts the document it describes, so it fails closed as
+  `SafetyNetError::InvalidOutput` with a `manifest-integrity:` message prefix
+  rather than taking the configured fallback — `Tolerant` no longer returns
+  `Ok(())` and `Redact` does not attempt redaction. This is deliberate: redaction
+  derives its deletion spans from manifest coordinates, so a manifest that
+  misdescribes the document makes the redactor delete the wrong bytes and can
+  leave the flagged PII in place. That is a leak, not a degraded-but-safe
+  document, and `Tolerant` was contracted to tolerate residual suspects, never an
+  internally inconsistent manifest. Axis 1 (never leak) over axis 5 (adopter
+  ergonomics).
+
+  **Not reachable from the public surface today.** `redact_text_with_manifest`
+  emits an `EmittedTokenSpan` for every replacing action — `Tokenize`, `Redact`,
+  `Generalize`, `FormatPreserve` — so every clean/raw divergence is described by a
+  manifest entry and a pipeline-produced manifest satisfies the check by
+  construction. The checks are defense in depth against a future change to the
+  primary pass, not a response to a reachable failure. No new `Error` or
+  `FallbackReason` variant; `gaze-types` is unchanged.
+
+### Fixed
+
+- **Safety-net RESOLVE no longer returns `Ok` on a result it cannot verify**
+  (#403). The mode's only post-condition used to be a follow-up net scan, so any
+  net whose second pass disagreed with its first — an ML net, a cached net, a
+  sampled net — could leave a raw PII fragment in the clean text and emit a
+  permanently unrestorable manifest while the call succeeded. Resolutions are now
+  planned against the unmutated clean text and rejected as a typed
+  `FallbackReason` when they overlap each other, when a suspect's coverage claim
+  contradicts the manifest, or when a residual suspect survives the follow-up
+  pass; suspects lying wholly inside a live token are audited as reversible
+  no-ops instead of destroying the token. `SafetyNetFallback::Redact` keeps its
+  existing redact-and-deliver meaning for every fallback reason.
+
 ## [0.12.0] - 2026-07-06
 
 ### Added
