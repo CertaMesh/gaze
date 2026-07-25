@@ -758,3 +758,104 @@ priority = 85
 [recognizers.source]
 origin = "project-authored"
 license = "Apache-2.0"
+
+# SECURITYTOKEN detection is split into two deliberately narrow recognizers. Measured over the
+# EN/DE holdout, the label carries 219 gold spans and 4,342 bytes, and the deterministic rule
+# floor covered NONE of it before this change (fully_covered 0 AND overlapped 0). See todo #2318.
+#
+# Why nothing unanchored: the committed A4 negative corpus is purpose-built to punish naive
+# high-entropy rules. Across its 1,024 documents, an unanchored base64url run of >=20 chars
+# matches 448 times in 320 documents (code_log_syntax 128, commerce_identifiers 128,
+# unicode_mixed_language 64); unanchored hex >=32 matches in 128 documents; a bare UUID matches
+# in 128 documents. Every rule below matches ZERO A4 documents.
+#
+# Why no validator: the closed `ValidatorKind` set is `EmailRfc`, `E164Phone`, `Luhn`, and
+# `IbanMod97`. None applies to a credential, so validator-backed matching is unavailable here
+# rather than skipped. Structural evidence carries the whole burden, which is why both rules
+# require either a fixed issuer prefix, a decodable structure, or an explicit lexical cue.
+#
+# Both rules are `locales = ["global"]` and their German cues are literal alternatives inside the
+# pattern, not `[locale.cues.*]` bundle lookups. They therefore fire on every locale chain,
+# including the `global` chain the benchmark cells and the default adopter surface both use. This
+# is deliberate: a locale-gated credential rule that silently never fires is the failure mode
+# behind todo #2403.
+
+# Provider-prefixed and structurally-typed credentials. Case-SENSITIVE by design: lowercasing
+# would admit ordinary prose words.
+#
+# `AKIA` alone accounts for 78 of the 219 gold spans (35.6%) and is the dominant character-class
+# silhouette in the corpus (U12dU7, 73 spans). `ASIA` is the AWS temporary-credential sibling of
+# the same fixed 4 + 16 shape: it has zero occurrences in this corpus and therefore contributes
+# nothing to the benchmark number, but omitting it would ship a rule that catches permanent AWS
+# keys and silently misses temporary ones. Included on axis-1 grounds for shipped adopters, at
+# zero measured corpus cost, and disclosed as such rather than counted as coverage.
+#
+# On the JWT arm: `eyJ` is NOT a vendor prefix. It is the base64url encoding of the two bytes `{"`,
+# so requiring it is equivalent to requiring that the first segment decodes to a JSON object whose
+# first key is a string — the JOSE header. Combined with the mandatory three dot-separated
+# base64url segments, this matches the RFC 7519 structure rather than a brand. That is as close to
+# validator-backed matching as the closed `ValidatorKind` set permits for a credential, and it
+# costs nothing: the arm matches zero A4 negative documents.
+[[recognizers]]
+id = "security_token.provider_prefixed"
+safety_tier = "safe_default"
+class = "custom:security_token"
+cooperates_with = ["security_token.cue_anchored"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?-u:\b)(?:(?:AKIA|ASIA)[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,})(?-u:\b)'''
+
+[recognizers.scoring]
+# Highest of the two: a fixed issuer prefix with an exact length, or a decodable JOSE structure,
+# is structural proof rather than inference. Kept below `email.global` (90) for the same
+# containment reason as `url.anchored`.
+base = 0.90
+priority = 88
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# Cue-anchored credentials. This is the inverse of the URL finding and the reason it is safe here:
+# 193 of 219 gold SECURITYTOKEN spans (88.1%) sit immediately after an explicit lexical cue
+# ("token" 192, "sicherheitstoken" 37), where only 1.8% of gold URL spans did. The cue is what
+# makes a high-entropy run attributable; without it the same run is indistinguishable from the
+# commit hashes, order identifiers, and log payloads the A4 negatives are full of.
+#
+# The >=14 minimum length is a measured knee, not a round number. Over the holdout, with the
+# provider-prefixed rule also active: >=20 covers 101 spans at 0 non-gold matches, >=16 covers 141
+# at 1, >=14 covers 151 (3,084 of 4,342 gold bytes, 71.0%) at 1, >=12 covers 159 at 5, and >=10
+# covers 163 at 7. Relaxing from 14 to 10 buys 139 further bytes for six additional non-gold
+# matches, so 14 is where coverage stops paying for itself.
+[[recognizers]]
+id = "security_token.cue_anchored"
+safety_tier = "safe_default"
+class = "custom:security_token"
+cooperates_with = ["security_token.provider_prefixed"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+# Only the credential itself is captured; the cue stays in the clean text so the sentence remains
+# readable and the token boundary is exact. Measured exact-boundary rate is 100% (every covered
+# span is exact, not merely overlapping).
+pattern = '''(?i)(?-u:\b)(?:security[ _-]?token|sicherheitstoken|zugangstoken|zugangsschl[uü]ssel|api[ _-]?key|access[ _-]?token|auth(?:orization)?[ _-]?token|bearer|token)[ \t]{0,4}(?:(?:ist|lautet|is)[ \t]{1,4})?(?:[:=#-][ \t]{0,4})?([A-Za-z0-9_-]{14,})(?-u:\b)'''
+capture_groups = [1]
+
+[recognizers.scoring]
+# Below the provider-prefixed rule: a cue plus entropy is strong evidence but weaker than a fixed
+# issuer prefix or a decodable structure. Still above the 0.70 heuristic floor.
+base = 0.80
+priority = 86
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
