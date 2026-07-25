@@ -26,12 +26,17 @@
 //!
 //! ## Locale note
 //!
-//! `Pipeline::redact` pins `[LocaleTag::Global]` (`gaze/src/pipeline.rs:350`), and the residual
-//! re-scan uses the same chain deliberately, so the residual can be neither weaker nor stronger
-//! than the primary pass. Consequence: locale-gated recognizers (`postal.us`, `postal.de`,
-//! national phone) never activate on proxied traffic at all. The en-US / de-DE corpora below
-//! therefore use locale-agnostic five-digit stand-in recognizers, which is what makes the
-//! carrier / non-carrier boundary observable on this path.
+//! Both proxy passes read one adopter-configured chain, `ProxyConfig::locale_chain` (solo
+//! todo #2403), so the residual is still neither weaker nor stronger than the primary pass.
+//! The tests below construct their proxies without configuring a locale, which leaves that
+//! chain at its default `[LocaleTag::Global]`; locale-gated recognizers (`postal.us`,
+//! `postal.de`, national phone) are therefore inert HERE by construction rather than
+//! unconditionally. The en-US / de-DE corpora accordingly use locale-agnostic five-digit
+//! stand-in recognizers, which is what makes the carrier / non-carrier boundary observable
+//! on this path without depending on locale activation.
+//!
+//! Activation and primary/residual agreement under a configured locale are covered in
+//! `proxy_locale_chain.rs`.
 //!
 //! Fixtures are synthetic-only per AGENTS.md rule 2.
 
@@ -79,10 +84,10 @@ fn leak_probe_pipeline() -> Pipeline {
 
 /// Locale-agnostic five-digit stand-in for a national postal recognizer.
 ///
-/// The real `postal.us` / `postal.de` recognizers are locale-gated and therefore never active
-/// on the proxy path (see the module-level locale note). This stand-in reproduces their
-/// detection shape under `LocaleTag::Global` so the numeric carrier / non-carrier boundary is
-/// observable. `class_label` distinguishes the en-US and de-DE corpus runs.
+/// The real `postal.us` / `postal.de` recognizers are locale-gated and these proxies configure
+/// no locale (see the module-level locale note), so they are inert here. This stand-in
+/// reproduces their detection shape under `LocaleTag::Global` so the numeric carrier /
+/// non-carrier boundary is observable. `class_label` distinguishes the en-US and de-DE runs.
 fn postal_probe_pipeline(class_label: &str) -> Pipeline {
     Pipeline::builder()
         .detector(

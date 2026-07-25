@@ -198,11 +198,7 @@ async fn unconfigured_locale_default_is_unchanged() {
 #[tokio::test]
 async fn regression_residual_rescan_agrees_with_primary_under_configured_locale() {
     // (fixture, expected to carry PII under the configured de-DE chain)
-    let fixtures = [
-        (DE_POSTAL_CONTEXT, true),
-        (EMAIL, true),
-        (INERT, false),
-    ];
+    let fixtures = [(DE_POSTAL_CONTEXT, true), (EMAIL, true), (INERT, false)];
 
     for (fixture, expected_pii) in fixtures {
         // Primary pass: a surfaced position.
@@ -242,7 +238,8 @@ async fn regression_residual_rescan_agrees_with_primary_under_configured_locale(
         let residual_saw_pii = response.status() == StatusCode::UNPROCESSABLE_ENTITY;
 
         assert_eq!(
-            primary_saw_pii, residual_saw_pii,
+            primary_saw_pii,
+            residual_saw_pii,
             "primary and residual disagreed on {fixture:?}: primary_saw_pii={primary_saw_pii}, \
              residual_saw_pii={residual_saw_pii} (residual status {})",
             response.status()

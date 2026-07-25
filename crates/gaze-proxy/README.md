@@ -47,6 +47,36 @@ upstream = "https://api.anthropic.com/"
 upstream = "https://generativelanguage.googleapis.com/"
 ```
 
+## Locale
+
+Recognizers that declare `locales = [...]` — `postal.de`, `postal.us`, the national phone
+recognizers — only run when the active locale chain intersects that list. The proxy resolves
+that chain once and uses it for both the primary surface pass and the outbound residual
+re-scan, so the two can never disagree about what counts as PII.
+
+`gaze proxy` has no `--locale` flag; the chain comes from the policy you pass:
+
+```toml
+locale = ["de-DE"]
+```
+
+```bash
+gaze proxy serve --policy ./gaze.toml
+```
+
+With no policy the chain is `["global"]` and locale-gated recognizers stay inert. Library
+adopters set it explicitly, passing the same chain the pipeline was assembled under:
+
+```rust,ignore
+let core = gaze_assembly::CorePipelineConfig::new()
+    .with_bundled_rulepack("core-extended")
+    .with_locale(&[gaze::LocaleTag::DeDe])
+    .build()?;
+let config = ProxyConfig::new(bind, adapters).with_locale_chain(core.locale_chain().clone());
+```
+
+A locale chain always ends in `global`, so configuring one can only widen detection.
+
 ## Providers
 
 - OpenAI: `POST /v1/chat/completions`, `/v1/completions`, `/v1/responses`
