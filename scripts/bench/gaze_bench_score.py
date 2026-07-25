@@ -1737,6 +1737,119 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
     return {"passed": not failures, "failures": failures}
 
 
+CLASS_COVERAGE_LOSS_GATE = "class_coverage_loss"
+CLASS_POPULATION_EVALUABILITY_GATE = "class_population_evaluability"
+
+
+def _label_coverage(
+    run: Mapping[str, object], context: str
+) -> dict[str, tuple[int, int, int, int]] | None:
+    """Returns {label: (entities, fully_covered, overlapped, leaked_utf8_bytes)}.
+
+    Returns None when the block is ABSENT, so that two scorecards which both lack
+    it stay comparable; a PRESENT but malformed block still fails closed. Whether
+    an absent block on only one side is acceptable is decided by the caller, which
+    treats that asymmetry as a non-pass.
+    """
+    labels = run.get("per_label_recall")
+    if labels is None:
+        return None
+    if not isinstance(labels, Mapping):
+        raise ValueError(f"{context}: per_label_recall is not a table")
+    out: dict[str, tuple[int, int, int, int]] = {}
+    for name, payload in labels.items():
+        if not isinstance(payload, Mapping):
+            raise ValueError(f"{context}.per_label_recall[{name}]: not a table")
+        values = []
+        for field in ("entities", "fully_covered", "overlapped", "leaked_utf8_bytes"):
+            value = payload.get(field)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise ValueError(
+                    f"{context}.per_label_recall[{name}].{field}: expected an integer"
+                )
+            values.append(value)
+        out[str(name)] = (values[0], values[1], values[2], values[3])
+    return out
+
+
+def _class_coverage_failures(
+    config: str,
+    candidate_run: Mapping[str, object],
+    baseline_run: Mapping[str, object],
+) -> list[dict[str, object]]:
+    """Flags any class that LOST coverage on an unchanged population.
+
+    The discriminator is deliberately narrow: for a given class, if the gold
+    entity count is IDENTICAL between baseline and candidate, then any decrease
+    in `fully_covered` or `overlapped` means protection that existed before does
+    not exist now. Because the scorer merges every prediction class-agnostically
+    before computing coverage, an entity leaving `overlapped` means NO prediction
+    of ANY class intersects it any more -- the bytes are raw, not merely
+    mislabelled. That is an axis-1 leak introduced by a change, and it is exactly
+    the condition that three manual reviews missed.
+
+    Where the entity count DIFFERS the comparison is not like-for-like, and this
+    gate emits a NON-PASS `class_population_evaluability` entry rather than
+    staying silent. Silence there would let a change hide a coverage loss by also
+    perturbing the population -- the precise shape that disqualified an earlier
+    candidate whose leak "win" came from denominator shrinkage.
+
+    Depends on the scored population being identifiable at all (todo #2414) and
+    is the companion of typed failure reporting (todo #2413).
+    """
+    failures: list[dict[str, object]] = []
+    candidate_labels = _label_coverage(candidate_run, f"candidate {config}")
+    baseline_labels = _label_coverage(baseline_run, f"baseline {config}")
+    if candidate_labels is None and baseline_labels is None:
+        # Neither side carries per-label telemetry: nothing to compare, and the
+        # symmetry means a candidate cannot dodge the gate by dropping the block.
+        return failures
+    if candidate_labels is None or baseline_labels is None:
+        # Asymmetric telemetry IS a dodge, so it is a non-pass rather than a skip.
+        failures.append(
+            {
+                "config": config,
+                "gate": CLASS_COVERAGE_LOSS_GATE,
+                "reason": "per_label_recall present on only one side, cannot evaluate",
+                "candidate_has_per_label_recall": candidate_labels is not None,
+                "baseline_has_per_label_recall": baseline_labels is not None,
+            }
+        )
+        return failures
+    for label in sorted(set(candidate_labels) & set(baseline_labels)):
+        c_entities, c_full, c_overlap, c_leaked = candidate_labels[label]
+        b_entities, b_full, b_overlap, b_leaked = baseline_labels[label]
+        if c_entities != b_entities:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": CLASS_POPULATION_EVALUABILITY_GATE,
+                    "label": label,
+                    "reason": "population_moved, cannot evaluate",
+                    "candidate_entities": c_entities,
+                    "baseline_entities": b_entities,
+                }
+            )
+            continue
+        if c_full < b_full or c_overlap < b_overlap:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": CLASS_COVERAGE_LOSS_GATE,
+                    "label": label,
+                    "entities": c_entities,
+                    "baseline_fully_covered": b_full,
+                    "candidate_fully_covered": c_full,
+                    "fully_covered_delta": c_full - b_full,
+                    "baseline_overlapped": b_overlap,
+                    "candidate_overlapped": c_overlap,
+                    "overlapped_delta": c_overlap - b_overlap,
+                    "leaked_utf8_bytes_delta": c_leaked - b_leaked,
+                }
+            )
+    return failures
+
+
 def compare_scorecards(
     candidate: Mapping[str, object], baseline: Mapping[str, object]
 ) -> dict[str, object]:
@@ -1883,6 +1996,20 @@ def compare_scorecards(
                             "baseline": baseline_values[gate],
                         }
                     )
+            try:
+                regression_failures.extend(
+                    _class_coverage_failures(
+                        config, candidate_runs[config], baseline_runs[config]
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                regression_failures.append(
+                    {
+                        "config": config,
+                        "gate": CLASS_COVERAGE_LOSS_GATE,
+                        "reason": str(error),
+                    }
+                )
 
     return {
         "schema_version": SCORECARD_SCHEMA_VERSION,
