@@ -1051,6 +1051,9 @@ impl Pipeline {
             if !is_char_boundary_range(&clean.text, &span) {
                 return Ok(Some(FallbackReason::ResidualSuspect));
             }
+            // Establish the ORIGINAL-request interval before tokenization mutates the
+            // session or any clean-text / manifest state.
+            let raw_span = map_clean_span_to_raw(clean, &span)?;
             let raw = clean.text[span.clone()].to_string();
             let replacement = target.tokenize_with_family("safety_net", &suspect.class, &raw)?;
             self.log_safety_net_entry(
@@ -1069,7 +1072,7 @@ impl Pipeline {
                 &replacement,
                 Some(EmittedTokenSpan::new(
                     span.start..span.start + replacement.len(),
-                    span,
+                    raw_span,
                     suspect.class.clone(),
                 )),
             );
@@ -1482,6 +1485,75 @@ fn fallback_action(fallback: SafetyNetFallback) -> Action {
         SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
         SafetyNetFallback::Redact => Action::Redact,
     }
+}
+
+fn clean_to_raw_mapping_error(message: &'static str) -> Error {
+    Error::SafetyNet(SafetyNetError::InvalidOutput {
+        message: message.to_string(),
+    })
+}
+
+/// Translate a CLEAN-text span into the ORIGINAL-request byte interval it covers.
+///
+/// `EmittedTokenSpan::raw_span` is an original-document coordinate by contract: downstream
+/// consumers slice the original request bytes with it (`gaze-token-bridge` ingest) and compare
+/// it against authorized original-coordinate ranges (`gaze-proxy` residual validation). The
+/// safety-net RESOLVE path only ever sees clean coordinates, so it must map them back through
+/// the manifest emitted by the primary pass before recording a manifest entry.
+///
+/// Fails closed when the mapping is ambiguous — a clean boundary that lands strictly inside an
+/// already-emitted token has no single original counterpart, and a manifest that is not a
+/// monotonic, gap-preserving clean/raw alignment cannot be walked at all.
+fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range<usize>> {
+    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: clean.text.len(),
+        });
+    }
+    let start = map_clean_boundary_to_raw(&clean.manifest, span.start)
+        .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw start mapping failed"))?;
+    let end = map_clean_boundary_to_raw(&clean.manifest, span.end)
+        .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw end mapping failed"))?;
+    if start >= end {
+        return Err(clean_to_raw_mapping_error("empty clean-to-raw mapping"));
+    }
+    Ok(start..end)
+}
+
+/// Map a single clean-text byte boundary to its original-request byte boundary.
+///
+/// Walks the manifest in clean order, carrying a clean cursor and a raw cursor: untokenized
+/// runs advance both by the same amount, and each emitted token jumps them to its own
+/// clean/raw ends. Returns `None` (caller fails closed) when the offset falls strictly inside
+/// an emitted token, or when the manifest is not monotonic / not gap-preserving.
+fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Option<usize> {
+    let mut clean_cursor = 0usize;
+    let mut raw_cursor = 0usize;
+    for emitted in manifest {
+        if emitted.clean_span.start < clean_cursor
+            || emitted.raw_span.start < raw_cursor
+            || emitted.clean_span.start - clean_cursor != emitted.raw_span.start - raw_cursor
+        {
+            return None;
+        }
+        if offset < emitted.clean_span.start {
+            return raw_cursor.checked_add(offset.checked_sub(clean_cursor)?);
+        }
+        if offset == emitted.clean_span.start {
+            return Some(emitted.raw_span.start);
+        }
+        if offset < emitted.clean_span.end {
+            return None;
+        }
+        if offset == emitted.clean_span.end {
+            return Some(emitted.raw_span.end);
+        }
+        clean_cursor = emitted.clean_span.end;
+        raw_cursor = emitted.raw_span.end;
+    }
+    raw_cursor.checked_add(offset.checked_sub(clean_cursor)?)
 }
 
 fn is_char_boundary_range(text: &str, span: &Range<usize>) -> bool {
