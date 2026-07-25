@@ -1072,6 +1072,9 @@ impl Pipeline {
         if report.suspects.is_empty() {
             return Ok(None);
         }
+        // Precondition for every manifest-derived decision below. Unreachable from the public
+        // surface (the primary pass is gap-preserving by construction) but driven directly by
+        // `resolve_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
 
         // Phase 1: classify. A suspect that lies wholly inside a live token is already
@@ -1168,6 +1171,11 @@ impl Pipeline {
             );
         }
 
+        // UNREACHABLE DEFENSE IN DEPTH — no test drives these two, at any level. They verify
+        // output that the phase-2 checks above have already proven sound, so the only thing that
+        // can trip them is a future bug in phase 3 itself. Their bodies are covered by
+        // `validate_clean_manifest_rejects_*` and `assert_resolution_preserved_restore_rejects_*`;
+        // this PLACEMENT is not covered. Do not read it as a tested guard.
         validate_clean_manifest(clean)?;
         if let Some(baseline) = restore_baseline {
             let restored = target
@@ -1195,6 +1203,9 @@ impl Pipeline {
         if report.suspects.is_empty() {
             return Ok(None);
         }
+        // Precondition for the live-token classification below. Unreachable from the public
+        // surface; driven directly by
+        // `post_resolution_fallback_reason_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
         let mut protected = Vec::new();
         for suspect in &report.suspects {
@@ -1278,7 +1289,8 @@ impl Pipeline {
         // `expand_span_to_overlapping_manifest_entries`. A manifest that misdescribes the
         // document would make the redactor delete the wrong bytes and can leave the flagged
         // PII in place, so a proven-inconsistent manifest must fail closed here rather than
-        // produce a "degraded but safe" document.
+        // produce a "degraded but safe" document. Unreachable from the public surface; driven
+        // directly by `redact_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
         for suspect in redaction_suspects(report).into_iter().rev() {
             let span =
@@ -2975,6 +2987,95 @@ mod tests {
         );
     }
 
+    /// A `CleanText` whose entries cannot both be true: one clean byte separates them while four
+    /// raw bytes do. No document has this shape, which is exactly why only a direct call can
+    /// present it to the checks.
+    fn inconsistent_clean_text() -> CleanText {
+        CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
+                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
+            ],
+        }
+    }
+
+    fn probe_report() -> LeakReport {
+        LeakReport::from_parts(
+            vec![LeakSuspect::new(
+                19..23,
+                PiiClass::Email,
+                "probe",
+                Some(0.99),
+                LeakKind::Uncovered,
+                "private_email",
+                None,
+            )],
+            Vec::new(),
+        )
+    }
+
+    fn assert_manifest_integrity(error: Error) {
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "expected the manifest-integrity class, got {error}"
+        );
+    }
+
+    /// Call-site coverage for the resolve-entry precondition.
+    ///
+    /// Everything after it — live-token classification, suspect/manifest agreement, clean-to-raw
+    /// mapping — reads the manifest as ground truth, so the entry check is what makes those
+    /// decisions trustworthy. Driven directly because no reachable input can corrupt the manifest.
+    #[test]
+    fn resolve_safety_net_suspects_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = inconsistent_clean_text();
+
+        let error = pipeline
+            .resolve_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &probe_report(),
+                DocumentKind::Text,
+                None,
+            )
+            .expect_err("resolution on a proven-inconsistent manifest must fail closed");
+        assert_manifest_integrity(error);
+    }
+
+    /// Call-site coverage for the follow-up-verdict precondition.
+    ///
+    /// This one classifies residual suspects as protected-or-not by asking the manifest which
+    /// spans are live tokens, so a manifest that lies would silently downgrade real residue to a
+    /// no-op.
+    #[test]
+    fn post_resolution_fallback_reason_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let clean = inconsistent_clean_text();
+
+        let error = pipeline
+            .post_resolution_fallback_reason(
+                &mut target,
+                &clean,
+                &probe_report(),
+                DocumentKind::Text,
+                None,
+            )
+            .expect_err("a follow-up verdict on a proven-inconsistent manifest must fail closed");
+        assert_manifest_integrity(error);
+    }
+
     /// The redact path derives its deletion spans from manifest coordinates
     /// (`expand_span_to_overlapping_manifest_entries`), so it must refuse a manifest that is
     /// already proven inconsistent: expanding against a manifest that misdescribes the document
@@ -2991,43 +3092,20 @@ mod tests {
             .expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
         let mut target = ProtectionTarget::Live(&session);
-        // One clean byte separates the entries while four raw bytes do: an alignment no document
-        // can have.
-        let mut clean = CleanText {
-            text: "<aabbccdd:Email_1> tail".to_string(),
-            manifest: vec![
-                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
-                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
-            ],
-        };
-        let report = LeakReport::from_parts(
-            vec![LeakSuspect::new(
-                19..23,
-                PiiClass::Email,
-                "probe",
-                Some(0.99),
-                LeakKind::Uncovered,
-                "private_email",
-                None,
-            )],
-            Vec::new(),
-        );
+        let mut clean = inconsistent_clean_text();
 
         let error = pipeline
             .redact_safety_net_suspects(
                 &mut target,
                 &mut clean,
-                &report,
+                &probe_report(),
                 DocumentKind::Text,
                 None,
                 None,
                 false,
             )
             .expect_err("redaction on a proven-inconsistent manifest must fail closed");
-        assert!(
-            format!("{error}").contains("manifest-integrity"),
-            "expected the manifest-integrity class, got {error}"
-        );
+        assert_manifest_integrity(error);
     }
 
     /// A resolution replaces raw bytes with a token restoring to exactly those bytes, so the
