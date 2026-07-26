@@ -769,10 +769,11 @@ license = "Apache-2.0"
 # unicode_mixed_language 64); unanchored hex >=32 matches in 128 documents; a bare UUID matches
 # in 128 documents. Both arms below match ZERO A4 documents.
 #
-# Why no validator: the closed `ValidatorKind` set is `EmailRfc`, `E164Phone`, `Luhn`, and
-# `IbanMod97`. None applies to a credential, so validator-backed matching is unavailable here
-# rather than skipped. Structural evidence carries the whole burden, which is why each arm
-# requires a fixed issuer prefix, a decodable structure, or an explicit lexical cue.
+# Why no validator: the built-in `ValidatorKind` set covers email, phone, payment, network, and
+# government-ID shapes, but none applies to a bearer credential. Validator-backed matching is
+# therefore unavailable here rather than skipped. Structural evidence carries the whole burden,
+# which is why each arm requires a fixed issuer prefix, a decodable structure, or an explicit
+# lexical cue.
 #
 # Why ONE recognizer with two arms rather than two cooperating recognizers: two same-class
 # recognizers must declare `cooperates_with` (`RulepackError::SameClassWithoutCooperation`), and
@@ -807,7 +808,7 @@ kind = "regex"
 # bytes `{"`, so requiring it is equivalent to requiring that the first segment decodes to a JSON
 # object whose first key is a string -- the JOSE header. With the mandatory three dot-separated
 # base64url segments this matches RFC 7519 structure rather than a brand, which is as close to
-# validator-backed matching as the closed `ValidatorKind` set permits for a credential.
+# validator-backed matching as the built-in `ValidatorKind` set permits for a credential.
 #
 # Arm 2 (group 2), case-insensitive: cue-anchored credentials. This is the inverse of the URL
 # finding and the reason it is safe here: 193 of 219 gold spans (88.1%) sit immediately after an
