@@ -104,6 +104,32 @@ DEFAULT_CONFIGS = (
     "full-stack-kiji-resolve",
 )
 PRODUCTION_CONFIG = "full-stack-kiji-resolve"
+VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION = 1
+VALIDATOR_PROBE_MANIFEST = Path("scripts/bench/validator_recall_probe/Cargo.toml")
+VALIDATOR_PROBE_TARGET = Path("target/validator-recall-probe")
+
+# Corpus labels describe source-dataset semantics, while validator-backed
+# recognizers emit canonical Gaze classes. Keep this mapping narrow: an absent
+# label is explicitly not applicable, never silently treated as zero recall.
+VALIDATOR_CLASSES_BY_LABEL: dict[str, tuple[str, ...]] = {
+    "ACCOUNTNUM": ("custom:iban",),
+    "AADHAAR": ("custom:aadhaar",),
+    "BSN": ("custom:bsn",),
+    "CNPJ": ("custom:cnpj",),
+    "CPF": ("custom:cpf",),
+    "CREDITCARDNUMBER": ("custom:credit_card",),
+    "EMAIL": ("email",),
+    "ETHADDRESS": ("custom:eth_address",),
+    "IBAN": ("custom:iban",),
+    "IPADDRESS": ("custom:ip_address",),
+    "IPV4": ("custom:ip_address",),
+    "IPV6": ("custom:ip_address",),
+    "NHSNUMBER": ("custom:nhs_number",),
+    "NIR": ("custom:nir",),
+    "PHONENUMBER": ("custom:phone",),
+    "TAXNUM": ("custom:steuer_id",),
+    "TELEPHONENUM": ("custom:phone",),
+}
 
 
 @dataclass(frozen=True)
@@ -1176,6 +1202,497 @@ def final_trace_predictions(
     return [validate_prediction(document, item) for item in trace]
 
 
+def validator_probe_binary(repo_root: Path) -> Path:
+    return (
+        repo_root
+        / VALIDATOR_PROBE_TARGET
+        / "debug"
+        / "validator-recall-probe"
+    )
+
+
+def build_validator_probe(repo_root: Path) -> Path:
+    manifest = repo_root / VALIDATOR_PROBE_MANIFEST
+    target_dir = repo_root / VALIDATOR_PROBE_TARGET
+    subprocess.run(
+        [
+            "rustup",
+            "run",
+            "1.96.0",
+            "cargo",
+            "build",
+            "--locked",
+            "--manifest-path",
+            str(manifest),
+            "--target-dir",
+            str(target_dir),
+        ],
+        cwd=repo_root,
+        check=True,
+    )
+    binary = validator_probe_binary(repo_root)
+    if not binary.is_file():
+        raise FileNotFoundError(f"validator recall probe is missing: {binary}")
+    return binary
+
+
+def _validate_validator_probe_handshake(value: object) -> dict[str, object]:
+    payload = _expect_exact_keys(
+        value,
+        frozenset(
+            {
+                "schema_version",
+                "validator_kinds_by_class",
+                "validator_recognizers",
+            }
+        ),
+        "validator probe handshake",
+    )
+    schema_version = _expect_int(
+        payload["schema_version"], "validator probe handshake.schema_version", minimum=1
+    )
+    if schema_version != VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION:
+        raise ResponseValidationError(
+            "validator probe handshake.schema_version must be "
+            f"{VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION}, got {schema_version}"
+        )
+    raw_inventory = _expect_object(
+        payload["validator_kinds_by_class"],
+        "validator probe handshake.validator_kinds_by_class",
+    )
+    inventory: dict[str, list[str]] = {}
+    for class_name, raw_kinds in raw_inventory.items():
+        canonical_class = _expect_string(
+            class_name, "validator probe handshake validator class"
+        )
+        kinds = [
+            _expect_string(
+                item,
+                f"validator probe handshake.validator_kinds_by_class[{canonical_class}]",
+            )
+            for item in _expect_list(
+                raw_kinds,
+                f"validator probe handshake.validator_kinds_by_class[{canonical_class}]",
+            )
+        ]
+        if not kinds or kinds != sorted(set(kinds)):
+            raise ResponseValidationError(
+                "validator probe handshake validator kinds must be non-empty, "
+                f"sorted, and unique for {canonical_class}"
+            )
+        inventory[canonical_class] = kinds
+    recognizers: list[dict[str, str]] = []
+    for index, raw_recognizer in enumerate(
+        _expect_list(
+            payload["validator_recognizers"],
+            "validator probe handshake.validator_recognizers",
+        )
+    ):
+        context = f"validator probe handshake.validator_recognizers[{index}]"
+        recognizer = _expect_exact_keys(
+            raw_recognizer,
+            frozenset({"id", "class", "validator_kind"}),
+            context,
+        )
+        item = {
+            key: _expect_string(recognizer[key], f"{context}.{key}")
+            for key in ("id", "class", "validator_kind")
+        }
+        if item["validator_kind"] not in inventory.get(item["class"], []):
+            raise ResponseValidationError(
+                f"{context} is inconsistent with validator_kinds_by_class"
+            )
+        recognizers.append(item)
+    recognizer_ids = [item["id"] for item in recognizers]
+    if not recognizers or recognizer_ids != sorted(set(recognizer_ids)):
+        raise ResponseValidationError(
+            "validator probe recognizers must be non-empty, sorted, and unique"
+        )
+    return {
+        "schema_version": schema_version,
+        "validator_kinds_by_class": inventory,
+        "validator_recognizers": recognizers,
+    }
+
+
+def _validate_probe_prediction(
+    document: Document, value: object, context: str
+) -> dict[str, object]:
+    prediction = _expect_exact_keys(
+        value,
+        frozenset({"start", "end", "class", "source_ids"}),
+        context,
+    )
+    start = _expect_int(prediction["start"], f"{context}.start")
+    end = _expect_int(prediction["end"], f"{context}.end")
+    text_bytes = len(document.text.encode("utf-8"))
+    if end <= start or end > text_bytes:
+        raise ResponseValidationError(f"{context} has invalid raw bounds")
+    class_name = _expect_string(prediction["class"], f"{context}.class")
+    source_ids = [
+        _expect_string(item, f"{context}.source_ids")
+        for item in _expect_list(prediction["source_ids"], f"{context}.source_ids")
+    ]
+    if not source_ids or source_ids != sorted(set(source_ids)):
+        raise ResponseValidationError(
+            f"{context}.source_ids must be non-empty, sorted, and unique"
+        )
+    return {
+        "start": start,
+        "end": end,
+        "class": class_name,
+        "source_ids": source_ids,
+    }
+
+
+def _validate_validator_probe_response(
+    document: Document, value: object, *, predictions_expected: bool
+) -> dict[str, object]:
+    payload = _expect_exact_keys(
+        value,
+        frozenset({"fixture_id", "gold_validation", "predictions"}),
+        f"validator probe response for {document.uid}",
+    )
+    fixture_id = _expect_string(
+        payload["fixture_id"], f"validator probe response for {document.uid}.fixture_id"
+    )
+    if fixture_id != document.uid:
+        raise ResponseValidationError(
+            f"validator probe fixture mismatch: expected {document.uid}, got {fixture_id}"
+        )
+    gold_validation: list[dict[str, object]] = []
+    for index, raw_validation in enumerate(
+        _expect_list(
+            payload["gold_validation"],
+            f"validator probe response for {document.uid}.gold_validation",
+        )
+    ):
+        context = (
+            f"validator probe response for {document.uid}.gold_validation[{index}]"
+        )
+        validation = _expect_exact_keys(
+            raw_validation,
+            frozenset(
+                {
+                    "start",
+                    "end",
+                    "label",
+                    "applicable",
+                    "validator_passed",
+                }
+            ),
+            context,
+        )
+        applicable = _expect_bool(validation["applicable"], f"{context}.applicable")
+        raw_passed = validation["validator_passed"]
+        if applicable:
+            validator_passed: bool | None = _expect_bool(
+                raw_passed, f"{context}.validator_passed"
+            )
+        elif raw_passed is None:
+            validator_passed = None
+        else:
+            raise ResponseValidationError(
+                f"{context}.validator_passed must be null when not applicable"
+            )
+        gold_validation.append(
+            {
+                "start": _expect_int(validation["start"], f"{context}.start"),
+                "end": _expect_int(validation["end"], f"{context}.end"),
+                "label": _expect_string(validation["label"], f"{context}.label"),
+                "applicable": applicable,
+                "validator_passed": validator_passed,
+            }
+        )
+    expected_gold = [
+        {"start": span.start, "end": span.end, "label": span.label}
+        for span in document.spans
+    ]
+    observed_gold = [
+        {key: item[key] for key in ("start", "end", "label")}
+        for item in gold_validation
+    ]
+    if observed_gold != expected_gold:
+        raise ResponseValidationError(
+            f"validator probe gold span mismatch for {document.uid}"
+        )
+
+    raw_predictions = payload["predictions"]
+    predictions: dict[str, list[dict[str, object]]] | None
+    if predictions_expected:
+        prediction_pair = _expect_exact_keys(
+            raw_predictions,
+            frozenset({"validator_backed", "shape_only"}),
+            f"validator probe response for {document.uid}.predictions",
+        )
+        predictions = {}
+        for mode in ("validator_backed", "shape_only"):
+            predictions[mode] = [
+                _validate_probe_prediction(
+                    document,
+                    item,
+                    (
+                        f"validator probe response for {document.uid}."
+                        f"predictions.{mode}[{index}]"
+                    ),
+                )
+                for index, item in enumerate(
+                    _expect_list(
+                        prediction_pair[mode],
+                        (
+                            f"validator probe response for {document.uid}."
+                            f"predictions.{mode}"
+                        ),
+                    )
+                )
+            ]
+    elif raw_predictions is None:
+        predictions = None
+    else:
+        raise ResponseValidationError(
+            f"validator probe response for {document.uid}.predictions must be null"
+        )
+    return {
+        "fixture_id": fixture_id,
+        "gold_validation": gold_validation,
+        "predictions": predictions,
+    }
+
+
+def collect_validator_measurements(
+    probe_binary: Path,
+    documents: Sequence[Document],
+    measured_document_ids: Iterable[str],
+) -> dict[str, object]:
+    measured_ids = frozenset(measured_document_ids)
+    document_ids = {document.uid for document in documents}
+    unknown_ids = measured_ids - document_ids
+    if unknown_ids:
+        raise ValueError(
+            "validator measurement IDs are outside the document population: "
+            + ", ".join(sorted(unknown_ids))
+        )
+    process = subprocess.Popen(
+        [str(probe_binary)],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        bufsize=1,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    assert process.stderr is not None
+    handshake_line = process.stdout.readline()
+    if not handshake_line:
+        stderr = process.stderr.read()
+        raise RuntimeError(
+            "validator recall probe exited before its handshake"
+            + (f": {stderr.strip()}" if stderr.strip() else "")
+        )
+    handshake = _validate_validator_probe_handshake(json.loads(handshake_line))
+    responses: dict[str, dict[str, object]] = {}
+    try:
+        for document in documents:
+            request = {
+                "fixture_id": document.uid,
+                "locale_chain": document.locale_chain,
+                "text": document.text,
+                "gold_spans": [
+                    {
+                        "start": span.start,
+                        "end": span.end,
+                        "label": span.label,
+                        "applicable_classes": list(
+                            VALIDATOR_CLASSES_BY_LABEL.get(span.label, ())
+                        ),
+                    }
+                    for span in document.spans
+                ],
+                "measure_predictions": document.uid in measured_ids,
+            }
+            process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
+            process.stdin.flush()
+            response_line = process.stdout.readline()
+            if not response_line:
+                stderr = process.stderr.read()
+                raise RuntimeError(
+                    f"validator recall probe exited before {document.uid}"
+                    + (f": {stderr.strip()}" if stderr.strip() else "")
+                )
+            responses[document.uid] = _validate_validator_probe_response(
+                document,
+                json.loads(response_line),
+                predictions_expected=document.uid in measured_ids,
+            )
+    finally:
+        process.stdin.close()
+        return_code = process.wait(timeout=30)
+        stderr = process.stderr.read()
+        process.stdout.close()
+        process.stderr.close()
+        if return_code != 0:
+            raise RuntimeError(
+                f"validator recall probe failed with status {return_code}"
+                + (f": {stderr.strip()}" if stderr.strip() else "")
+            )
+    return {**handshake, "documents": responses}
+
+
+def _validator_applicability(
+    label: str, validator_measurements: Mapping[str, object]
+) -> tuple[str, list[str], tuple[str, ...]]:
+    classes = VALIDATOR_CLASSES_BY_LABEL.get(label)
+    if classes is None:
+        return "not_applicable", [], ()
+    inventory = validator_measurements["validator_kinds_by_class"]
+    assert isinstance(inventory, dict)
+    validator_kinds = sorted(
+        {
+            kind
+            for class_name in classes
+            for kind in inventory.get(class_name, [])
+            if isinstance(kind, str)
+        }
+    )
+    if not validator_kinds:
+        return "validator_not_configured", [], classes
+    return "applicable", validator_kinds, classes
+
+
+def validator_gold_census(
+    documents: Sequence[Document], validator_measurements: Mapping[str, object]
+) -> dict[str, dict[str, object]]:
+    responses = validator_measurements["documents"]
+    assert isinstance(responses, dict)
+    labels = sorted({span.label for document in documents for span in document.spans})
+    census: dict[str, dict[str, object]] = {}
+    for label in labels:
+        status, validator_kinds, _ = _validator_applicability(
+            label, validator_measurements
+        )
+        validations = [
+            validation
+            for document in documents
+            for validation in responses[document.uid]["gold_validation"]
+            if validation["label"] == label
+        ]
+        expected_applicable = status == "applicable"
+        if any(
+            validation["applicable"] is not expected_applicable
+            for validation in validations
+        ):
+            raise ResponseValidationError(
+                f"validator applicability mismatch for corpus label {label}"
+            )
+        if status == "applicable":
+            validator_passed = sum(
+                validation["validator_passed"] is True for validation in validations
+            )
+            validator_failed = len(validations) - validator_passed
+        else:
+            validator_passed = None
+            validator_failed = None
+        census[label] = {
+            "applicability": status,
+            "validator_kinds": validator_kinds,
+            "gold_spans": len(validations),
+            "validator_passed_gold_spans": validator_passed,
+            "validator_failed_gold_spans": validator_failed,
+        }
+    return census
+
+
+def validator_recall_by_label(
+    documents: Sequence[Document],
+    scored_document_ids: Iterable[str],
+    validator_measurements: Mapping[str, object],
+) -> dict[str, dict[str, object]]:
+    scored_ids = frozenset(scored_document_ids)
+    responses = validator_measurements["documents"]
+    assert isinstance(responses, dict)
+    scored_documents = [document for document in documents if document.uid in scored_ids]
+    labels = sorted(
+        {span.label for document in scored_documents for span in document.spans}
+    )
+    result: dict[str, dict[str, object]] = {}
+    for label in labels:
+        status, validator_kinds, applicable_classes = _validator_applicability(
+            label, validator_measurements
+        )
+        label_spans = [
+            span
+            for document in scored_documents
+            for span in document.spans
+            if span.label == label
+        ]
+        validations = [
+            validation
+            for document in scored_documents
+            for validation in responses[document.uid]["gold_validation"]
+            if validation["label"] == label
+        ]
+        expected_applicable = status == "applicable"
+        if any(
+            validation["applicable"] is not expected_applicable
+            for validation in validations
+        ):
+            raise ResponseValidationError(
+                f"validator applicability mismatch for scored label {label}"
+            )
+        if status == "applicable":
+            validator_passed = sum(
+                validation["validator_passed"] is True for validation in validations
+            )
+            validator_failed = len(validations) - validator_passed
+            accumulators = {
+                "validator_backed": RecallAccumulator(),
+                "shape_only": RecallAccumulator(),
+            }
+            for document in scored_documents:
+                spans = [span for span in document.spans if span.label == label]
+                if not spans:
+                    continue
+                predictions = responses[document.uid]["predictions"]
+                if not isinstance(predictions, dict):
+                    raise ResponseValidationError(
+                        f"validator predictions missing for {document.uid}"
+                    )
+                for mode, accumulator in accumulators.items():
+                    relevant = [
+                        Span(
+                            start=int(prediction["start"]),
+                            end=int(prediction["end"]),
+                            label=str(prediction["class"]),
+                        )
+                        for prediction in predictions[mode]
+                        if prediction["class"] in applicable_classes
+                    ]
+                    accumulator.add(spans, relevant)
+            validator_backed_recall: dict[str, object] | None = accumulators[
+                "validator_backed"
+            ].result()
+            shape_only_recall: dict[str, object] | None = accumulators[
+                "shape_only"
+            ].result()
+        else:
+            validator_passed = None
+            validator_failed = None
+            validator_backed_recall = None
+            shape_only_recall = None
+        result[label] = {
+            "applicability": status,
+            "validator_kinds": validator_kinds,
+            "gold_spans": len(label_spans),
+            "validator_passed_gold_spans": validator_passed,
+            "validator_failed_gold_spans": validator_failed,
+            "validator_backed_recall": validator_backed_recall,
+            "shape_only_recall": shape_only_recall,
+        }
+    return result
+
+
 def run_config(
     repo_root: Path,
     binary: Path,
@@ -1190,6 +1707,7 @@ def run_config(
     diagnostics_dir: Path,
     base_environment: Mapping[str, str] | None = None,
     warmup_count: int = 0,
+    validator_measurements: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
@@ -1415,6 +1933,17 @@ def run_config(
         "per_label_recall": {
             key: value.result() for key, value in sorted(per_label.items())
         },
+        **(
+            {
+                "validator_recall_by_label": validator_recall_by_label(
+                    documents,
+                    scored_document_ids,
+                    validator_measurements,
+                )
+            }
+            if validator_measurements is not None
+            else {}
+        ),
         "per_negative_category": {
             key: value.result() for key, value in sorted(per_negative_category.items())
         },
@@ -1478,6 +2007,8 @@ SCORING_METADATA: dict[str, object] = {
         "Final protection evidence contains offsets, classes, counts, and stable IDs only; never PII values.",
         "Per-cell scored and failed-closed populations are sorted synthetic document-ID sets with SHA-256 digests.",
         "Failed-closed reason and stage counts reconcile exactly to the identified excluded documents.",
+        "Validator-backed and validator-bypassed shape-only recall are additive diagnostics and do not alter existing counters.",
+        "Labels without an applicable validator are explicitly not_applicable; null pass/fail and recall fields are never numeric zero.",
         "Latency is considered only after correctness gates pass.",
     ],
     "comparison_gates": {
