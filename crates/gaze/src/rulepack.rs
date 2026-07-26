@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{CollisionMembership, LocaleTag, PiiClass, SafetyTier};
+use crate::{CollisionMembership, LocaleBasis, LocaleTag, PiiClass, SafetyTier};
 
 const SUPPORTED_SCHEMA_MAJOR_MINOR: &str = "0.1.";
 
@@ -29,6 +29,7 @@ pub struct RecognizerSpec {
     pub enabled: bool,
     pub safety_tier: SafetyTier,
     pub locales: Vec<LocaleTag>,
+    pub locale_basis: LocaleBasis,
     pub matcher: RawMatch,
     pub context: Option<ContextSpec>,
     pub validator: Option<ValidatorSpec>,
@@ -191,6 +192,10 @@ pub enum RulepackError {
     UnknownClass(String),
     #[error("unknown locale: {0}")]
     UnknownLocale(String),
+    #[error("unsupported locale_basis: {value}")]
+    UnsupportedLocaleBasis { value: String },
+    #[error("bundled recognizer '{recognizer_id}' must declare locale_basis explicitly")]
+    MissingBundledLocaleBasis { recognizer_id: String },
     #[error("unsupported matcher kind: {0}")]
     UnsupportedMatcher(String),
     #[error("unsupported anchored_match field '{field}' value '{value}'")]
@@ -299,7 +304,27 @@ impl Rulepack {
     pub fn parse(raw: &str) -> Result<Rulepack, RulepackError> {
         let (raw, lint) = extract_recognizer_lint_config(raw);
         let raw: RawRulepack = toml::from_str(&raw).map_err(RulepackError::Toml)?;
-        RawRulepackWithLint { raw, lint }.try_into()
+        RawRulepackWithLint {
+            raw,
+            lint,
+            require_explicit_locale_basis: false,
+        }
+        .try_into()
+    }
+
+    /// Parses an official bundled rulepack and rejects ambiguous locale-basis omission.
+    ///
+    /// Adopter rulepacks should use [`Self::parse`], whose legacy default remains
+    /// [`LocaleBasis::Document`].
+    pub fn parse_bundled(raw: &str) -> Result<Rulepack, RulepackError> {
+        let (raw, lint) = extract_recognizer_lint_config(raw);
+        let raw: RawRulepack = toml::from_str(&raw).map_err(RulepackError::Toml)?;
+        RawRulepackWithLint {
+            raw,
+            lint,
+            require_explicit_locale_basis: true,
+        }
+        .try_into()
     }
 
     pub fn activated_classes(&self) -> BTreeSet<PiiClass> {
@@ -351,6 +376,7 @@ struct RawRecognizerLintConfig {
 struct RawRulepackWithLint {
     raw: RawRulepack,
     lint: RawRecognizerLintConfig,
+    require_explicit_locale_basis: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -390,6 +416,8 @@ struct RawRecognizerSpec {
     safety_tier: Option<String>,
     #[serde(default)]
     locales: Vec<String>,
+    #[serde(default)]
+    locale_basis: Option<String>,
     #[serde(rename = "match")]
     matcher: RawMatch,
     #[serde(default)]
@@ -477,6 +505,7 @@ impl TryFrom<RawRulepack> for Rulepack {
         RawRulepackWithLint {
             raw,
             lint: RawRecognizerLintConfig::default(),
+            require_explicit_locale_basis: false,
         }
         .try_into()
     }
@@ -492,6 +521,18 @@ impl TryFrom<RawRulepackWithLint> for Rulepack {
                 found: raw.schema_version,
                 supported: "~0.1.x".to_string(),
             });
+        }
+
+        if raw_with_lint.require_explicit_locale_basis {
+            if let Some(recognizer) = raw
+                .recognizers
+                .iter()
+                .find(|recognizer| recognizer.locale_basis.is_none())
+            {
+                return Err(RulepackError::MissingBundledLocaleBasis {
+                    recognizer_id: recognizer.id.clone(),
+                });
+            }
         }
 
         let default_locales = parse_locales(raw.default_locales)?;
@@ -599,6 +640,15 @@ fn parse_recognizer(
             value: err.value().to_string(),
         })?
         .unwrap_or_default();
+    let locale_basis = raw
+        .locale_basis
+        .as_deref()
+        .map(LocaleBasis::parse)
+        .transpose()
+        .map_err(|err| RulepackError::UnsupportedLocaleBasis {
+            value: err.value().to_string(),
+        })?
+        .unwrap_or_default();
 
     Ok(RecognizerSpec {
         id: raw.id,
@@ -608,6 +658,7 @@ fn parse_recognizer(
         enabled: raw.enabled,
         safety_tier,
         locales,
+        locale_basis,
         matcher: raw.matcher,
         context: raw.context.map(|context| ContextSpec {
             hotwords: context.hotwords,
