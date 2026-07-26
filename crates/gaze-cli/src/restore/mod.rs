@@ -2,16 +2,11 @@ mod manifest;
 mod session;
 
 use std::path::Path;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 
-use gaze::{
-    Action, ConflictTier, DocumentKind, PiiClass, Pipeline, RedactionEntry, RestorePolicy,
-    RestoreTelemetry, SensitiveSnapshot, Session,
-};
-use gaze_audit::SqliteLogger;
+use gaze::{Pipeline, RestorePolicy, RestoreTelemetry, SensitiveSnapshot, Session};
 
 use crate::error::{CliError, RestoreMode};
 use crate::io::{read_stdin_bytes, require_json_format};
@@ -24,6 +19,11 @@ pub(crate) fn run_restore(
     telemetry_enabled: bool,
     audit_db: Option<&Path>,
     max_bytes: u64,
+    persist_restore_telemetry: fn(
+        &Path,
+        &Session,
+        RestoreTelemetry,
+    ) -> std::result::Result<(), CliError>,
 ) -> std::result::Result<(), CliError> {
     require_json_format(format)?;
     let stdin_bytes = read_stdin_bytes(max_bytes)?;
@@ -81,32 +81,4 @@ fn restore_policy(mode: RestoreMode) -> RestorePolicy {
         RestoreMode::Strict => RestorePolicy::Strict,
         RestoreMode::Tolerant => RestorePolicy::Lenient,
     }
-}
-
-fn persist_restore_telemetry(
-    audit_db: &Path,
-    session: &Session,
-    telemetry: RestoreTelemetry,
-) -> std::result::Result<(), CliError> {
-    let logger = SqliteLogger::new(audit_db).map_err(|_| CliError::Pipeline)?;
-    let entry = RedactionEntry::new(
-        "restore",
-        PiiClass::Custom("restore.telemetry".to_string()),
-        Action::Preserve,
-        None,
-        DocumentKind::Text,
-        false,
-        ConflictTier::None,
-        current_epoch_ms(),
-        Some(session.audit_session_id().to_string()),
-    )
-    .with_restore_telemetry(telemetry);
-    logger.log(&entry).map_err(|_| CliError::Pipeline)
-}
-
-fn current_epoch_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
-        .unwrap_or(0)
 }

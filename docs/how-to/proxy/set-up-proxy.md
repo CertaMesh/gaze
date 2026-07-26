@@ -3,6 +3,8 @@
 This page is an adopter setup guide for `gaze proxy`, the HTTP chokepoint for
 API-key-authenticated SDK traffic. For the full runtime contract, see
 [`docs/explanation/proxy/proxy-runtime.md`](../../explanation/proxy/proxy-runtime.md).
+Anthropic adopters must also follow the
+[strict Anthropic Messages contract](../../explanation/proxy/anthropic-messages-contract.md).
 
 ## When To Use
 
@@ -72,6 +74,20 @@ Anthropic SDKs usually expect the provider root:
 export ANTHROPIC_API_KEY=sk-ant-test-api-key
 export ANTHROPIC_BASE_URL=http://127.0.0.1:8787
 ```
+
+Do not append `/v1`: the strict Anthropic client base URL is the proxy root and
+the SDK must issue exactly `POST /v1/messages`. The direct constructor is
+ephemeral and rejects `x-gaze-session-id`. If the embedding host explicitly
+enables session continuity, send `x-gaze-session-id` on every request with a
+canonical lowercase UUIDv4 value. The proxy requires `x-api-key` and
+`anthropic-version`; the default version allowlist contains only `2023-06-01`.
+`anthropic-beta` is denied until its complete value is explicitly allowlisted.
+
+Only `content-type`, `x-api-key`, `anthropic-version`, and the optional
+allowlisted beta header can reach the Anthropic upstream. Unconfigured
+`Authorization`, cookies, and other SDK headers are dropped. A configured local
+`Authorization` credential is consumed as singleton principal input and is
+also never forwarded.
 
 Gemini clients use the Google API key and a Gemini base URL override:
 
@@ -157,8 +173,8 @@ Consumer subscription tiers are not part of this surface:
 - Gemini Advanced
 
 Those products use browser sessions, cookie auth, and web endpoints instead of
-provider SDK base URLs. A separate browser-MITM project will cover that surface
-at a high level when it is public.
+provider SDK base URLs. They are outside the public proxy contract documented
+here.
 
 ## Five-Axis Pitch
 
@@ -177,6 +193,9 @@ at a high level when it is public.
 
 - [`docs/explanation/proxy/proxy-runtime.md`](../../explanation/proxy/proxy-runtime.md) —
   adapter matrix, session TTL, and daemon lifecycle.
+- [`docs/explanation/proxy/anthropic-messages-contract.md`](../../explanation/proxy/anthropic-messages-contract.md) —
+  strict Anthropic setup, wire surfaces, limits, errors, inspection boundary,
+  migration, and manual official-SDK gate.
 - [`crates/gaze-proxy/README.md`](../../../crates/gaze-proxy/README.md) — crate
   README and provider endpoint list.
 - [`docs/reference/cli.md#gaze-proxy`](../../reference/cli.md#gaze-proxy) — CLI guide and flag

@@ -42,7 +42,7 @@ pub use gaze_types::{
 pub use locale::{LocaleChain, LocaleError, LocaleTag};
 pub use pipeline::{
     Error, GazeLocalProtectionTraceItem, Pipeline, PipelineBuilder, PipelineOptimizationConfig,
-    Result, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    PrefixCacheWriteMode, Result, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
 };
 pub use policy::{
     validate_ner_locale, DetectorKind, DetectorSpec, NerPolicy, Policy, PolicyError, RuleSpec,
@@ -65,7 +65,8 @@ pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
 };
 pub use session::{
-    RestoreError, RestoreEvent, RestoreEventKind, Scope, SensitiveSnapshot, Session,
-    SessionSnapshotEntry,
+    CommittedSessionSnapshot, RestoreError, RestoreEvent, RestoreEventKind,
+    RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session, SessionSnapshotEntry,
+    SessionTransaction, SessionTransactionError,
 };
 pub use types::{CleanDocument, RawDocument, Value};

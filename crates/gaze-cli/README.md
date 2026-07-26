@@ -63,6 +63,7 @@ Current subcommands in [`src/commands/mod.rs`](src/commands/mod.rs):
 | `mcp doctor` | Diagnoses MCP runtime dependencies, client config, and AGENTS.md guidance. Requires `--features mcp`. |
 | `mcp serve` | Runs the stdio MCP server exposing `gaze_read_file` and `gaze_read_text`. Requires `--features mcp`. |
 | `proxy serve/start/stop/status/restart` | Runs or manages the local LLM API proxy. Included in the default build. |
+| `proxy serve --dashboard` | Launches the opt-in, memory-only inspection dashboard child alongside the proxy. Requires `--features dashboard` (default-off); owner-domain capture additionally requires explicit per-domain risk-acknowledgement flags, and any activation failure disables only the dashboard while the proxy keeps serving. On Linux the launcher must hold (or promptly open) the read end of the pairing FIFO, otherwise `gaze proxy serve` blocks in the write-only open before provider startup. Exact flags, pairing display, and failure behavior: [`docs/reference/cli.md`](../../docs/reference/cli.md#dashboard-flags-opt-in-dashboard-cargo-feature). |
 
 Audit logging is captured on `clean` via `--audit-db <path>`; the
 `audit query` and `audit export` subcommands read the same database back.

@@ -1,0 +1,13 @@
+{
+  "name": "gaze-proxy-dashboard-browser-tests",
+  "private": true,
+  "description": "Dev-only browser contract for the gaze-proxy-dashboard production assets. Never shipped; production assets have zero dependencies.",
+  "type": "module",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.0",
+    "axe-core": "^4.10.0"
+  }
+}

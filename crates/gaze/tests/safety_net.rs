@@ -491,7 +491,7 @@ fn safety_net_trace_residual_utf8_suspect_fails_closed() {
             &gaze::DictionaryBundle::default(),
             gaze::SafetyNetPolicy::new(
                 gaze::SafetyNetMode::Resolve,
-                gaze::SafetyNetFallback::Redact,
+                gaze::SafetyNetFallback::Strict,
             ),
         )
         .expect_err("invalid UTF-8 residual must fail closed");
@@ -510,7 +510,7 @@ fn safety_net_trace_residual_utf8_suspect_fails_closed() {
             &gaze::DictionaryBundle::default(),
             gaze::SafetyNetPolicy::new(
                 gaze::SafetyNetMode::Resolve,
-                gaze::SafetyNetFallback::Redact,
+                gaze::SafetyNetFallback::Strict,
             ),
         )
         .expect_err("invalid UTF-8 residual must also fail closed without tracing");
@@ -748,8 +748,14 @@ fn safety_net_redact_mode_keeps_aligned_span_redaction_behavior() {
     assert_eq!(report.stats.uncovered_count, 1);
 }
 
+/// A class-mismatch suspect that lies wholly inside a live token is the net re-flagging text the
+/// pipeline already protected. Resolving or redacting it would destroy a live token (and with it
+/// the restore path) to remove nothing, so it is audited as a conflict-loser no-op.
+///
+/// Before the fail-closed integrity work this fell back to redaction: the clean text became
+/// `" ok"`, the manifest was emptied, and the document was permanently irreversible.
 #[test]
-fn safety_net_resolve_live_token_mismatch_is_audited_noop() {
+fn safety_net_resolve_class_mismatch_inside_live_token_is_audited_noop() {
     let session = session();
     let raw = RawDocument::Text("alice@example.invalid ok".to_string());
     let baseline = text(
@@ -780,15 +786,18 @@ fn safety_net_resolve_live_token_mismatch_is_audited_noop() {
             &gaze::DictionaryBundle::default(),
             gaze::SafetyNetPolicy::default(),
         )
-        .expect("protected mismatch");
+        .expect("protected mismatch must not fail closed");
 
     assert_eq!(report.stats.class_mismatch_count, 1);
     let clean = text(clean);
-    assert!(clean.ends_with(" ok"));
+    assert_eq!(
+        clean, baseline,
+        "protected mismatch must not alter the document"
+    );
     assert_eq!(
         session
             .restore_strict_text(&clean)
-            .expect("protected mismatch restores"),
+            .expect("protected mismatch stays restorable"),
         "alice@example.invalid ok"
     );
     assert!(logger.entries().iter().any(|entry| {

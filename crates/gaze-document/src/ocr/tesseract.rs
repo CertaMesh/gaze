@@ -77,6 +77,13 @@ impl TesseractBackend {
             .map(AsRef::as_ref)
             .unwrap_or_else(|| "tesseract".as_ref());
 
+        #[cfg(target_os = "macos")]
+        path.metadata()?;
+        #[cfg(target_os = "macos")]
+        let normalized_path = normalize_tesseract_input_path(path);
+        #[cfg(target_os = "macos")]
+        let path = normalized_path.as_path();
+
         let output = Command::new(binary)
             .arg(path)
             .arg("stdout")
@@ -289,6 +296,13 @@ fn truncate_stderr(bytes: &[u8]) -> String {
     out
 }
 
+#[cfg(target_os = "macos")]
+fn normalize_tesseract_input_path(path: &Path) -> std::path::PathBuf {
+    path.strip_prefix("/tmp")
+        .map(|suffix| Path::new("/private/tmp").join(suffix))
+        .unwrap_or_else(|_| path.to_path_buf())
+}
+
 fn install_hint() -> String {
     if cfg!(target_os = "macos") {
         "Install via `brew install tesseract` (or `port install tesseract`).".to_string()
@@ -308,6 +322,30 @@ fn install_hint() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn normalizes_only_the_macos_tmp_prefix() {
+        let cases = [
+            ("/tmp", "/private/tmp"),
+            ("/tmp/synthetic.png", "/private/tmp/synthetic.png"),
+            ("/private/tmp/synthetic.png", "/private/tmp/synthetic.png"),
+            ("relative/synthetic.png", "relative/synthetic.png"),
+            ("/tmpfoo/synthetic.png", "/tmpfoo/synthetic.png"),
+            ("/var/tmp/synthetic.png", "/var/tmp/synthetic.png"),
+            (
+                "/tmp/synthetic-root/safe-alias/synthetic.png",
+                "/private/tmp/synthetic-root/safe-alias/synthetic.png",
+            ),
+        ];
+
+        for (input, expected) in cases {
+            assert_eq!(
+                normalize_tesseract_input_path(Path::new(input)),
+                Path::new(expected)
+            );
+        }
+    }
 
     #[test]
     fn parse_tsv_groups_words_into_lines() {

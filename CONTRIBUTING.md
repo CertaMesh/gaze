@@ -68,7 +68,8 @@ As of v0.7.2, the workspace has **nine** published-shape crates plus `xtask`. Th
 | `crates/gaze-mcp-core` | Transport-free MCP-shaped chokepoint runtime: `Tool` trait, sealed `ToolCtx`, `ToolRegistry`, `PiiEnvelope::dispatch`, `Frontend`/`DispatchHost`, `ManifestStore`, `AuthHook`, `SessionIdPolicy`. New in v0.7.0. |
 | `crates/gaze-mcp-rmcp` | rmcp transport sink: `RmcpFrontend`, stdio default transport, opt-in streamable HTTP transport, adopter-supplied `PrincipalResolver`. New in v0.7.0. |
 | `crates/gaze-document` | OSS document ingestion: PNG/JPG/PDF → Tesseract OCR → gaze redact → `SafeBundle` (`clean.md`, `manifest.json`, `report.json`). Ships a `gaze document clean` CLI verb under the `gaze-cli` `document` feature. `BundleReport` schema versioned via `bundle_version = 1`. New in v0.7.1. |
-| `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D). |
+| `crates/gaze-proxy-dashboard` | Opt-in, memory-only inspection dashboard runtime for `gaze proxy`: a killable child process owns listener/auth/store/rendering while the parent owns bounded ingress and the registration-bound activation. Among Gaze crates it depends on exactly `gaze-types` + `gaze-inspection`; shipped behind the default-off `gaze-cli` `dashboard` feature and enforced by the `dashboard-isolation` xtask gate. |
+| `crates/xtask` | Internal repository gate runner: `bundle-tokenization-drift`, `fixture-citation-lint`, `trybuild-fixture-hygiene`, `ci-feature-matrix`, `class-map-override-safety`, `symmetric-potemkin`, `no-tenant-knowledge`, `cargo-metadata-audit-isolation` (Phase C), `dylint-gate` (Phase D), `dashboard-isolation`. |
 | `lint/dylint/` | Dylint lint crate hosting `gaze_module_isolation`. Detached workspace pinned to `nightly-2025-09-18`. New in v0.5 Phase D. |
 
 ## Tenant class names in tests
@@ -153,6 +154,7 @@ cargo run -p xtask -- bundle-tokenization-drift
 cargo run -p xtask -- family-policy-table-coherence
 cargo run -p xtask -- locale-cue-bundle-coherence
 cargo run -p xtask -- fixture-citation-lint
+cargo run -p xtask -- trybuild-fixture-hygiene
 cargo run -p xtask -- cargo-metadata-audit-isolation
 cargo run -p xtask -- readme-version-check
 cargo run -p xtask -- safety-net-sanity
@@ -166,6 +168,40 @@ tests import concrete audit sinks from `gaze-audit` directly.
 The `cargo-metadata-audit-isolation` gate (v0.5 Phase C) parses
 `cargo metadata` and fails closed if any non-audit-responsible workspace
 member has a normal-dependency path to `gaze-audit`.
+
+### Trybuild compiler and blessing ritual
+
+The three root trybuild drivers verify the compiler Cargo will actually invoke,
+not only the Cargo or shell toolchain identity. When the workspace
+`rust-toolchain.toml` is present, each driver honors `RUSTC` when set (otherwise
+PATH `rustc`), reads `rustc --version --verbose`, and requires its `release:` to
+match the pinned channel before any fixture runs. A mismatch is an execution
+error, not a snapshot change; bind Cargo and both child compiler tools
+explicitly:
+
+```bash
+GAZE_TOOLCHAIN=1.96.0
+GAZE_CARGO="$(rustup which --toolchain "$GAZE_TOOLCHAIN" cargo)"
+GAZE_RUSTC="$(rustup which --toolchain "$GAZE_TOOLCHAIN" rustc)"
+GAZE_RUSTDOC="$(rustup which --toolchain "$GAZE_TOOLCHAIN" rustdoc)"
+RUSTC="$GAZE_RUSTC" RUSTDOC="$GAZE_RUSTDOC" "$GAZE_CARGO" test --workspace --all-features --locked
+```
+
+Bless trybuild output only in a clean disposable checkout using those same
+explicit bindings. Set `TRYBUILD=overwrite` for the smallest affected test
+target, inspect every changed `.stderr`, then run the target normally and run:
+
+```bash
+RUSTC="$GAZE_RUSTC" RUSTDOC="$GAZE_RUSTDOC" TRYBUILD=overwrite "$GAZE_CARGO" test -p <package> --test <driver> --locked
+RUSTC="$GAZE_RUSTC" RUSTDOC="$GAZE_RUSTDOC" "$GAZE_CARGO" test -p <package> --test <driver> --locked
+RUSTC="$GAZE_RUSTC" RUSTDOC="$GAZE_RUSTDOC" "$GAZE_CARGO" run -p xtask --locked -- trybuild-fixture-hygiene
+```
+
+The hygiene gate fixes the root inventory at 19 expectations (13 inspection,
+3 core, 3 MCP core), separately inventories the detached Dylint UI surface at
+18 fixtures (16 fail, 2 pass), and rejects sysroot placeholders or raw
+compiler/Homebrew/user paths. Do not add root `rust-src` or bless under a
+sources-bundled compiler to work around the guard.
 
 The `dylint-gate` (v0.5 Phase D) is the canonical audit-sink protected-path
 enforcer. It supersedes the legacy `audit-metadata-only` syn walker, which was

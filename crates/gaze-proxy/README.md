@@ -47,6 +47,36 @@ upstream = "https://api.anthropic.com/"
 upstream = "https://generativelanguage.googleapis.com/"
 ```
 
+## Locale
+
+Recognizers that declare `locales = [...]` — `postal.de`, `postal.us`, the national phone
+recognizers — only run when the active locale chain intersects that list. The proxy resolves
+that chain once and uses it for both the primary surface pass and the outbound residual
+re-scan, so the two can never disagree about what counts as PII.
+
+`gaze proxy` has no `--locale` flag; the chain comes from the policy you pass:
+
+```toml
+locale = ["de-DE"]
+```
+
+```bash
+gaze proxy serve --policy ./gaze.toml
+```
+
+With no policy the chain is `["global"]` and locale-gated recognizers stay inert. Library
+adopters set it explicitly, passing the same chain the pipeline was assembled under:
+
+```rust,ignore
+let core = gaze_assembly::CorePipelineConfig::new()
+    .with_bundled_rulepack("core-extended")
+    .with_locale(&[gaze::LocaleTag::DeDe])
+    .build()?;
+let config = ProxyConfig::new(bind, adapters).with_locale_chain(core.locale_chain().clone());
+```
+
+A locale chain always ends in `global`, so configuring one can only widen detection.
+
 ## Providers
 
 - OpenAI: `POST /v1/chat/completions`, `/v1/completions`, `/v1/responses`
@@ -73,7 +103,23 @@ pidfiles are revalidated with process liveness checks and cleaned before start.
 
 ## Security Notes
 
-Authentication headers are forwarded unchanged. The proxy does not own provider
-API keys and does not add an auth boundary around the local listener. Bind to
-loopback unless you are deliberately placing it behind a separate local access
-control layer.
+The strict Anthropic Messages profile rebuilds its outbound headers from a closed
+allowlist: `content-type`, `x-api-key`, `anthropic-version`, and an optional,
+explicitly allowlisted `anthropic-beta`. Unconfigured `Authorization`, bearer
+credentials, cookies, and unknown SDK headers are accepted at ingress and
+dropped. If an embedding host configures `Authorization` as local listener
+authentication, it is a singleton consumed only by the trusted principal
+resolver and is still never forwarded.
+
+`AnthropicAdapter::new` is an ephemeral, single-request profile and rejects
+`x-gaze-session-id`. Session continuity is an explicit builder/configuration
+choice and then requires that header with a canonical lowercase UUIDv4 value.
+The SDK base URL is the proxy root, while the only direct route is exactly
+`POST /v1/messages`.
+
+The listener does not become an access-control boundary merely because provider
+credentials pass through it. Bind to loopback unless an explicit trusted
+principal resolver protects a non-loopback listener. See the
+[strict Anthropic Messages contract](../../docs/explanation/proxy/anthropic-messages-contract.md)
+for the complete wire, proof, inspection, migration, and manual SDK-test
+contract.

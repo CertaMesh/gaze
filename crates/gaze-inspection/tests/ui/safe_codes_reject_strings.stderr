@@ -1,0 +1,7 @@
+error[E0277]: the trait bound `RouteCodeV1: From<&str>` is not satisfied
+ --> tests/ui/safe_codes_reject_strings.rs:4:55
+  |
+4 |     let _route: RouteCodeV1 = "caller supplied route".into();
+  |                                                       ^^^^ the trait `From<&str>` is not implemented for `RouteCodeV1`
+  |
+  = note: required for `&str` to implement `Into<RouteCodeV1>`

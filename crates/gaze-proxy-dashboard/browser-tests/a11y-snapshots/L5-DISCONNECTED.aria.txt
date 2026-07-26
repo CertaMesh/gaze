@@ -1,0 +1,8 @@
+- link "Skip to main content":
+  - /url: "#main"
+- main:
+  - region "DASHBOARD DISABLED (CHILD EXIT)":
+    - heading "DASHBOARD DISABLED (CHILD EXIT)" [level=2]
+    - paragraph: Dashboard data was purged. The proxy is unaffected and continues running without capture.
+    - paragraph: Relaunch the proxy with --dashboard to start a new dashboard.
+- status: Paired. Loading captured events.

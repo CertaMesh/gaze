@@ -22,7 +22,7 @@ use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
-use crate::session::{RestoreEvent, Session};
+use crate::session::{PrefixCacheHit, RestoreEvent, Session, SessionTransaction};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
 
@@ -138,6 +138,17 @@ impl PipelineOptimizationConfig {
     }
 }
 
+/// Controls whether one transactional protection call may reuse or populate the prefix cache.
+///
+/// [`Self::Suppress`] bypasses both prefix-cache lookup and publication while retaining all
+/// detector, mapping, and manifest behavior. It is intended for mutation probes whose output is
+/// inspected but never emitted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrefixCacheWriteMode {
+    Allow,
+    Suppress,
+}
+
 impl Default for SafetyNetPolicy {
     fn default() -> Self {
         Self {
@@ -194,6 +205,87 @@ pub struct Pipeline {
     optimization_config: PipelineOptimizationConfig,
     restore_boundary_dlp_audit: bool,
     rules: Vec<Arc<dyn Rule>>,
+}
+
+enum ProtectionTarget<'target, 'session> {
+    Live(&'target Session),
+    Staged(
+        &'target mut SessionTransaction<'session>,
+        PrefixCacheWriteMode,
+    ),
+}
+
+impl ProtectionTarget<'_, '_> {
+    fn tokenize_with_family(
+        &mut self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+    ) -> Result<String> {
+        match self {
+            Self::Live(session) => session.tokenize_with_family(family, class, raw),
+            Self::Staged(transaction, _) => transaction.tokenize_with_family(family, class, raw),
+        }
+    }
+
+    fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        match self {
+            Self::Live(session) => session.format_preserving_fake(class, raw),
+            Self::Staged(transaction, _) => transaction.format_preserving_fake(class, raw),
+        }
+    }
+
+    fn audit_session_id(&self) -> &str {
+        match self {
+            Self::Live(session) => session.audit_session_id(),
+            Self::Staged(transaction, _) => transaction.audit_session_id(),
+        }
+    }
+
+    /// Restores a single token against the state this run is writing into.
+    ///
+    /// Integrity checks must ask the target, not the session: in `Staged` mode the tokens this
+    /// run just emitted live in an uncommitted transaction and are invisible to the session.
+    fn restore(&self, token: &str) -> Option<String> {
+        match self {
+            Self::Live(session) => session.restore(token),
+            Self::Staged(transaction, _) => transaction.restore(token),
+        }
+    }
+
+    fn contains_token(&self, token: &str) -> bool {
+        match self {
+            Self::Live(session) => session.contains_token(token),
+            Self::Staged(transaction, _) => transaction.contains_token(token),
+        }
+    }
+
+    fn restore_strict_text(&self, text: &str) -> std::result::Result<String, crate::RestoreError> {
+        match self {
+            Self::Live(session) => session.restore_strict_text(text),
+            Self::Staged(transaction, _) => transaction.restore_strict_text(text),
+        }
+    }
+
+    fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+        match self {
+            Self::Live(session) => session.lookup_prefix_cache(text),
+            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
+                transaction.lookup_prefix_cache(text)
+            }
+            Self::Staged(_, PrefixCacheWriteMode::Suppress) => None,
+        }
+    }
+
+    fn store_prefix_cache(&mut self, raw: &str, clean_text: &str, manifest: &[EmittedTokenSpan]) {
+        match self {
+            Self::Live(session) => session.store_prefix_cache(raw, clean_text, manifest),
+            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
+                transaction.store_prefix_cache(raw, clean_text, manifest);
+            }
+            Self::Staged(_, PrefixCacheWriteMode::Suppress) => {}
+        }
+    }
 }
 
 /// Observer-only safety-net scan result.
@@ -363,17 +455,67 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanDocument> {
+        let mut target = ProtectionTarget::Live(session);
+        self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
+    }
+
+    /// Runs the detector/rule pipeline against isolated transaction state.
+    ///
+    /// Mapping and prefix-cache publication occurs only when the caller commits
+    /// the transaction. Configured [`RedactionLogger`] sinks still receive
+    /// trusted-side attempt rows synchronously; discarding the transaction does
+    /// not retract those metadata-only audit attempts.
+    pub fn pseudonymize_transaction_with_detect_context(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<CleanDocument> {
+        self.pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+            transaction,
+            raw,
+            locale_chain,
+            dictionaries,
+            PrefixCacheWriteMode::Allow,
+        )
+    }
+
+    /// Runs transactional protection with an explicit prefix-cache mode.
+    ///
+    /// Suppression bypasses cache lookup and publication without disabling detection,
+    /// tokenization, or manifest staging. The caller still owns the transaction and decides
+    /// whether any staged mapping is committed.
+    pub fn pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        prefix_cache_write_mode: PrefixCacheWriteMode,
+    ) -> Result<CleanDocument> {
+        let mut target = ProtectionTarget::Staged(transaction, prefix_cache_write_mode);
+        self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
+    }
+
+    fn pseudonymize_target_with_detect_context(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<CleanDocument> {
         match raw {
             RawDocument::Structured(structured_fields) => redact_structured(
                 self,
-                session,
+                target,
                 structured_fields,
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
             ),
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
-                session,
+                target,
                 &text,
                 None,
                 DocumentKind::Text,
@@ -418,12 +560,52 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         policy: SafetyNetPolicy,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        let mut target = ProtectionTarget::Live(session);
+        self.clean_target_with_safety_net_policy_detect_context(
+            &mut target,
+            raw,
+            locale_chain,
+            dictionaries,
+            policy,
+        )
+    }
+
+    /// Runs detector and safety-net protection against isolated transaction state.
+    ///
+    /// Mapping/cache publication and trusted-side audit-attempt behavior match
+    /// [`Self::pseudonymize_transaction_with_detect_context`].
+    pub fn clean_transaction_with_safety_net_policy_detect_context(
+        &self,
+        transaction: &mut SessionTransaction<'_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Allow);
+        self.clean_target_with_safety_net_policy_detect_context(
+            &mut target,
+            raw,
+            locale_chain,
+            dictionaries,
+            policy,
+        )
+    }
+
+    fn clean_target_with_safety_net_policy_detect_context(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        raw: RawDocument,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+        policy: SafetyNetPolicy,
+    ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
         match raw {
             RawDocument::Structured(structured_fields) => {
                 let mut report = LeakReport::default();
                 let clean = redact_structured_with_safety_net(
                     self,
-                    session,
+                    target,
                     structured_fields,
                     locale_chain,
                     dictionaries,
@@ -434,7 +616,7 @@ impl Pipeline {
             }
             RawDocument::Text(text) => {
                 let mut clean = self.redact_text_with_manifest(
-                    session,
+                    target,
                     &text,
                     None,
                     DocumentKind::Text,
@@ -442,7 +624,7 @@ impl Pipeline {
                     dictionaries,
                 )?;
                 let report = self.run_safety_nets(
-                    session,
+                    target,
                     &clean.text,
                     &Manifest::from_spans(clean.manifest.clone()),
                     DocumentKind::Text,
@@ -451,7 +633,7 @@ impl Pipeline {
                     policy.mode,
                 )?;
                 self.apply_safety_net_policy(
-                    session,
+                    target,
                     &mut clean,
                     &report,
                     DocumentKind::Text,
@@ -481,9 +663,10 @@ impl Pipeline {
         LeakReport,
         Vec<GazeLocalProtectionTraceItem>,
     )> {
+        let mut target = ProtectionTarget::Live(session);
         let mut protection_trace = ProtectionTraceCollector::new(text);
         let mut clean = self.redact_text_with_manifest_uncached(
-            session,
+            &mut target,
             text,
             None,
             DocumentKind::Text,
@@ -492,7 +675,7 @@ impl Pipeline {
             Some(&mut protection_trace),
         )?;
         let report = self.run_safety_nets(
-            session,
+            &mut target,
             &clean.text,
             &Manifest::from_spans(clean.manifest.clone()),
             DocumentKind::Text,
@@ -501,7 +684,7 @@ impl Pipeline {
             policy.mode,
         )?;
         self.apply_safety_net_policy(
-            session,
+            &mut target,
             &mut clean,
             &report,
             DocumentKind::Text,
@@ -533,8 +716,9 @@ impl Pipeline {
             });
         }
 
+        let mut target = ProtectionTarget::Live(session);
         let report = self.run_safety_nets(
-            session,
+            &mut target,
             clean_text,
             &Manifest::default(),
             DocumentKind::Text,
@@ -560,8 +744,16 @@ impl Pipeline {
         }
 
         let mut report = LeakReport::default();
+        let mut target = ProtectionTarget::Live(session);
         for (key, value) in document {
-            walk_value_for_safety_net_scan(self, session, value, key, locale_chain, &mut report)?;
+            walk_value_for_safety_net_scan(
+                self,
+                &mut target,
+                value,
+                key,
+                locale_chain,
+                &mut report,
+            )?;
         }
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -593,7 +785,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn pseudonymize_text(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -602,7 +794,7 @@ impl Pipeline {
     ) -> Result<String> {
         Ok(self
             .redact_text_with_manifest(
-                session,
+                target,
                 text,
                 field_name,
                 document_kind,
@@ -615,7 +807,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn redact_text_with_manifest(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -623,13 +815,13 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanText> {
         if self.optimization_config.prefix_cache {
-            if let Some(hit) = session
+            if let Some(hit) = target
                 .lookup_prefix_cache(text)
                 .filter(|hit| hit.raw_len < text.len())
             {
                 let suffix = &text[hit.raw_len..];
                 let suffix_clean = self.redact_text_with_manifest_uncached(
-                    session,
+                    target,
                     suffix,
                     field_name,
                     document_kind,
@@ -650,13 +842,13 @@ impl Pipeline {
                 let mut clean_text = hit.clean_text;
                 clean_text.push_str(&suffix_clean.text);
                 self.log_prefix_cache_entries(
-                    session,
+                    target,
                     &hit.manifest,
                     field_name,
                     document_kind,
                     locale_chain,
                 )?;
-                session.store_prefix_cache(text, &clean_text, &manifest);
+                target.store_prefix_cache(text, &clean_text, &manifest);
                 return Ok(CleanText {
                     text: clean_text,
                     manifest,
@@ -665,7 +857,7 @@ impl Pipeline {
         }
 
         let clean = self.redact_text_with_manifest_uncached(
-            session,
+            target,
             text,
             field_name,
             document_kind,
@@ -674,7 +866,7 @@ impl Pipeline {
             None,
         )?;
         if self.optimization_config.prefix_cache {
-            session.store_prefix_cache(text, &clean.text, &clean.manifest);
+            target.store_prefix_cache(text, &clean.text, &clean.manifest);
         }
         Ok(clean)
     }
@@ -682,7 +874,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn redact_text_with_manifest_uncached(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         text: &str,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -709,7 +901,7 @@ impl Pipeline {
             .collect::<Vec<_>>();
         for loser in &losers {
             self.log_entry(
-                session,
+                target,
                 loser,
                 field_name,
                 document_kind,
@@ -718,7 +910,7 @@ impl Pipeline {
             )?;
         }
         for vetoed in &vetoed {
-            self.log_vetoed_entry(session, vetoed, field_name, document_kind)?;
+            self.log_vetoed_entry(target, vetoed, field_name, document_kind)?;
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
@@ -734,24 +926,17 @@ impl Pipeline {
             {
                 return Err(Error::UnsupportedActionVariant);
             }
-            self.log_entry(
-                session,
-                &detection,
-                field_name,
-                document_kind,
-                action,
-                false,
-            )?;
+            self.log_entry(target, &detection, field_name, document_kind, action, false)?;
 
             let replacement = match action {
-                Action::Tokenize => Some(session.tokenize_with_family(
+                Action::Tokenize => Some(target.tokenize_with_family(
                     &detection.family,
                     &detection.detection.class,
                     &raw,
                 )?),
                 Action::Redact => Some("[REDACTED]".to_string()),
                 Action::FormatPreserve => {
-                    Some(session.format_preserving_fake(&detection.detection.class, &raw)?)
+                    Some(target.format_preserving_fake(&detection.detection.class, &raw)?)
                 }
                 Action::Generalize => Some(generalize_token(&detection.detection.class)),
                 Action::Preserve => None,
@@ -801,7 +986,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn run_safety_nets(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean_text: &str,
         manifest: &Manifest,
         document_kind: DocumentKind,
@@ -833,7 +1018,7 @@ impl Pipeline {
                 manifest,
                 locale_chain,
                 document_kind,
-                Some(session.audit_session_id()),
+                Some(target.audit_session_id()),
                 field_path,
             );
             let mut reported = net.check(clean_text, context)?;
@@ -868,7 +1053,7 @@ impl Pipeline {
                     "locale-aware safety-net registry resolved multiple backends; using first"
                 );
                 self.log_backend_silently_dropped(
-                    session,
+                    target,
                     document_kind,
                     field_path,
                     selected_backend,
@@ -948,7 +1133,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_policy(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -960,7 +1145,7 @@ impl Pipeline {
         match policy.mode {
             SafetyNetMode::Strict | SafetyNetMode::Tolerant => Ok(()),
             SafetyNetMode::Redact => self.redact_safety_net_suspects(
-                session,
+                target,
                 clean,
                 report,
                 document_kind,
@@ -970,9 +1155,8 @@ impl Pipeline {
                 protection_trace,
             ),
             SafetyNetMode::Resolve => {
-                let raw_before_resolution = session.restore_strict_text(&clean.text)?;
                 let reason = match self.resolve_safety_net_suspects(
-                    session,
+                    target,
                     clean,
                     report,
                     document_kind,
@@ -982,7 +1166,7 @@ impl Pipeline {
                     Some(reason) => Some(reason),
                     None => {
                         let follow_up = self.run_safety_nets(
-                            session,
+                            target,
                             &clean.text,
                             &Manifest::from_spans(clean.manifest.clone()),
                             document_kind,
@@ -991,7 +1175,7 @@ impl Pipeline {
                             SafetyNetMode::Resolve,
                         )?;
                         self.post_resolution_fallback_reason(
-                            session,
+                            target,
                             clean,
                             &follow_up,
                             document_kind,
@@ -1001,7 +1185,7 @@ impl Pipeline {
                 };
                 if let Some(reason) = reason {
                     self.apply_safety_net_fallback(
-                        session,
+                        target,
                         clean,
                         report,
                         document_kind,
@@ -1010,14 +1194,6 @@ impl Pipeline {
                         reason,
                         protection_trace,
                     )?;
-                } else {
-                    validate_clean_manifest(clean)?;
-                    let restored = session.restore_strict_text(&clean.text)?;
-                    if restored != raw_before_resolution {
-                        return Err(protection_trace_error(
-                            "safety-net resolution broke exact restore",
-                        ));
-                    }
                 }
                 Ok(())
             }
@@ -1026,18 +1202,27 @@ impl Pipeline {
 
     fn resolve_safety_net_suspects(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<Option<FallbackReason>> {
+        if report.suspects.is_empty() {
+            return Ok(None);
+        }
+        // Precondition for every manifest-derived decision below. Unreachable from the public
+        // surface (the primary pass is gap-preserving by construction) but driven directly by
+        // `resolve_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
+
+        // Phase 1: classify. A suspect that lies wholly inside a live token is already
+        // protected — acting on it would re-tokenize a token and destroy restore.
         let mut protected = Vec::new();
         let mut actionable = Vec::new();
         for suspect in &report.suspects {
-            if suspect_is_inside_live_token(session, clean, suspect) {
+            if suspect_is_inside_live_token(target, clean, suspect) {
                 protected.push(suspect);
             } else if matches!(suspect.kind, LeakKind::ClassMismatch { .. }) {
                 return Ok(Some(FallbackReason::OverlapConflict));
@@ -1048,6 +1233,8 @@ impl Pipeline {
         sort_safety_net_suspects(&mut protected);
         sort_safety_net_suspects(&mut actionable);
 
+        // Phase 2: plan every resolution against the UNMUTATED clean text, so each plan's
+        // coordinates are established before any of them is applied.
         let mut plans = Vec::with_capacity(actionable.len());
         for suspect in actionable {
             let span = suspect_action_span(suspect);
@@ -1057,6 +1244,8 @@ impl Pipeline {
             if !suspect_action_span_matches_manifest(clean, suspect) {
                 return Ok(Some(FallbackReason::OverlapConflict));
             }
+            // Establish the ORIGINAL-request interval before tokenization mutates the
+            // session or any clean-text / manifest state.
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             let raw = clean.text[span.clone()].to_string();
             plans.push(PlannedSafetyNetResolution {
@@ -1066,6 +1255,7 @@ impl Pipeline {
                 raw,
             });
         }
+        // `plans` is sorted by clean-span start, so pairwise adjacency is sufficient.
         if plans
             .windows(2)
             .any(|pair| ranges_overlap(&pair[0].clean_span, &pair[1].clean_span))
@@ -1075,7 +1265,7 @@ impl Pipeline {
 
         for suspect in protected {
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -1085,12 +1275,22 @@ impl Pipeline {
                 None,
             )?;
         }
+        if plans.is_empty() {
+            return Ok(None);
+        }
+
+        // Baseline for the restore-integrity check. `None` means the clean text was already
+        // un-restorable before this pass (e.g. the source document quotes a foreign token);
+        // exact-restore preservation is undefined there, so it is not this pass's invariant.
+        let restore_baseline = target.restore_strict_text(&clean.text).ok();
+
+        // Phase 3: apply right-to-left, so an applied plan never shifts an unapplied one.
         for plan in plans.into_iter().rev() {
             let suspect = plan.suspect;
             let replacement =
-                session.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
+                target.tokenize_with_family("safety_net", &suspect.class, &plan.raw)?;
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -1118,21 +1318,42 @@ impl Pipeline {
                 )?;
             }
         }
+        // UNREACHABLE DEFENSE IN DEPTH — the phase-2 checks above already prove these
+        // postconditions. Keep main's #403 verification after trace-aware application.
+        validate_clean_manifest(clean)?;
+        if let Some(baseline) = restore_baseline {
+            let restored = target
+                .restore_strict_text(&clean.text)
+                .map_err(|_| manifest_integrity_error("resolution left unrestorable clean text"))?;
+            assert_resolution_preserved_restore(&baseline, &restored)?;
+        }
         Ok(None)
     }
 
+    /// Post-resolution verdict: replaces the bare `uncovered + partial_bleed > 0` count.
+    ///
+    /// Any residual suspect that is not already protected by a live token means the resolve pass
+    /// did not converge, so the document takes the configured fallback. Residual suspects that
+    /// *are* inside a live token are audited as no-ops rather than counted as residue — the net
+    /// is re-flagging text the pipeline already tokenized.
     fn post_resolution_fallback_reason(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
         field_path: Option<&str>,
     ) -> Result<Option<FallbackReason>> {
+        if report.suspects.is_empty() {
+            return Ok(None);
+        }
+        // Precondition for the live-token classification below. Unreachable from the public
+        // surface; driven directly by
+        // `post_resolution_fallback_reason_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
         let mut protected = Vec::new();
         for suspect in &report.suspects {
-            if suspect_is_inside_live_token(session, clean, suspect) {
+            if suspect_is_inside_live_token(target, clean, suspect) {
                 protected.push(suspect);
                 continue;
             }
@@ -1146,7 +1367,7 @@ impl Pipeline {
         sort_safety_net_suspects(&mut protected);
         for suspect in protected {
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -1162,18 +1383,18 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_fallback(
         &self,
-        session: &Session,
-        _clean: &mut CleanText,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         fallback: SafetyNetFallback,
         reason: FallbackReason,
-        _protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+        protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
         for suspect in redaction_suspects(report) {
             self.log_safety_net_entry(
-                session,
+                target,
                 suspect,
                 document_kind,
                 field_path,
@@ -1186,14 +1407,23 @@ impl Pipeline {
         match fallback {
             SafetyNetFallback::Strict => Err(Error::SafetyNetFallback(reason)),
             SafetyNetFallback::Tolerant => Ok(()),
-            SafetyNetFallback::Redact => Err(Error::SafetyNetFallback(reason)),
+            SafetyNetFallback::Redact => self.redact_safety_net_suspects(
+                target,
+                clean,
+                report,
+                document_kind,
+                field_path,
+                Some(reason),
+                false,
+                protection_trace,
+            ),
         }
     }
 
     #[allow(clippy::too_many_arguments)]
     fn redact_safety_net_suspects(
         &self,
-        session: &Session,
+        target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
         report: &LeakReport,
         document_kind: DocumentKind,
@@ -1202,6 +1432,12 @@ impl Pipeline {
         log_entries: bool,
         mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
+        // Redaction spans are derived from manifest coordinates via
+        // `expand_span_to_overlapping_manifest_entries`. A manifest that misdescribes the
+        // document would make the redactor delete the wrong bytes and can leave the flagged
+        // PII in place, so a proven-inconsistent manifest must fail closed here rather than
+        // produce a "degraded but safe" document. Unreachable from the public surface; driven
+        // directly by `redact_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
         let mut plans = Vec::new();
         for suspect in redaction_suspects(report) {
@@ -1239,7 +1475,7 @@ impl Pipeline {
             }
             if log_entries {
                 self.log_safety_net_entry(
-                    session,
+                    target,
                     suspect,
                     document_kind,
                     field_path,
@@ -1273,7 +1509,7 @@ impl Pipeline {
     #[allow(clippy::too_many_arguments)]
     fn log_safety_net_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         suspect: &LeakSuspect,
         document_kind: DocumentKind,
         field_path: Option<&str>,
@@ -1294,7 +1530,7 @@ impl Pipeline {
             conflict_loser,
             decided_by,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(Some(source), None);
         if let Some(reason) = fallback_reason {
@@ -1308,7 +1544,7 @@ impl Pipeline {
 
     fn log_backend_silently_dropped(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         document_kind: DocumentKind,
         field_path: Option<&str>,
         selected_backend: &str,
@@ -1323,7 +1559,7 @@ impl Pipeline {
             true,
             ConflictTier::None,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_backend_silently_dropped(dropped);
         for logger in &self.redaction_loggers {
@@ -1341,7 +1577,7 @@ impl Pipeline {
 
     fn log_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         detection: &IndexedDetection,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1357,7 +1593,7 @@ impl Pipeline {
             conflict_loser,
             detection.decided_by,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(
             detection.recognizer_id.clone(),
@@ -1382,7 +1618,7 @@ impl Pipeline {
 
     fn log_prefix_cache_entries(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         manifest: &[EmittedTokenSpan],
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1403,7 +1639,7 @@ impl Pipeline {
                 false,
                 ConflictTier::None,
                 crate::redaction_log::current_epoch_ms(),
-                Some(session.audit_session_id().to_string()),
+                Some(target.audit_session_id().to_string()),
             )
             .with_recognizer_metadata(Some("prefix_cache".to_string()), None)
             .with_provenance_metadata(
@@ -1502,7 +1738,7 @@ impl Pipeline {
 
     fn log_vetoed_entry(
         &self,
-        session: &Session,
+        target: &ProtectionTarget<'_, '_>,
         vetoed: &crate::validator_veto::VetoedCandidate,
         field_name: Option<&str>,
         document_kind: DocumentKind,
@@ -1523,7 +1759,7 @@ impl Pipeline {
             true,
             ConflictTier::ValidatorVeto,
             crate::redaction_log::current_epoch_ms(),
-            Some(session.audit_session_id().to_string()),
+            Some(target.audit_session_id().to_string()),
         )
         .with_recognizer_metadata(
             Some(vetoed.candidate.recognizer_id.clone()),
@@ -1555,13 +1791,6 @@ struct IndexedDetection {
 struct CleanText {
     text: String,
     manifest: Vec<EmittedTokenSpan>,
-}
-
-struct PlannedSafetyNetResolution<'a> {
-    suspect: &'a LeakSuspect,
-    clean_span: Range<usize>,
-    raw_span: Range<usize>,
-    raw: String,
 }
 
 struct PlannedSafetyNetRedaction<'a> {
@@ -1685,38 +1914,79 @@ fn protection_trace_error(message: &'static str) -> Error {
     })
 }
 
-fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range<usize>> {
-    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
-        return Err(Error::SafetyNetSpanInvalid {
-            start: span.start,
-            end: span.end,
-            text_len: clean.text.len(),
-        });
-    }
-    let start = map_clean_boundary_to_raw(&clean.manifest, span.start)
-        .ok_or_else(|| protection_trace_error("clean-to-raw start mapping failed"))?;
-    let end = map_clean_boundary_to_raw(&clean.manifest, span.end)
-        .ok_or_else(|| protection_trace_error("clean-to-raw end mapping failed"))?;
-    if start >= end {
-        return Err(protection_trace_error("empty clean-to-raw mapping"));
-    }
-    Ok(start..end)
+fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
+    let mut suspects = report.suspects.iter().collect::<Vec<_>>();
+    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
+    suspects
 }
 
+fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
+    match &suspect.kind {
+        LeakKind::PartialBleed { uncovered } => uncovered.clone(),
+        _ => suspect.span.clone(),
+    }
+}
+
+fn fallback_action(fallback: SafetyNetFallback) -> Action {
+    match fallback {
+        SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
+        SafetyNetFallback::Redact => Action::Redact,
+    }
+}
+
+struct PlannedSafetyNetResolution<'a> {
+    suspect: &'a LeakSuspect,
+    clean_span: Range<usize>,
+    raw_span: Range<usize>,
+    raw: String,
+}
+
+/// Provable manifest corruption. Reached only when the manifest contradicts the document it
+/// describes, which no pipeline-produced manifest can do; see `validate_clean_manifest`.
+///
+/// This is deliberately the same closed error variant the rest of the safety-net surface uses:
+/// the `manifest-integrity:` message prefix names the class without widening `Error`.
+fn manifest_integrity_error(message: &'static str) -> Error {
+    Error::SafetyNet(SafetyNetError::InvalidOutput {
+        message: format!("manifest-integrity: {message}"),
+    })
+}
+
+/// Every manifest entry must sit in a monotonic, gap-preserving clean/raw alignment: walking the
+/// manifest from the document start must reach each entry's own clean span unambiguously.
+///
+/// Defense in depth. `redact_text_with_manifest` emits an entry for every replacing action, so a
+/// pipeline-produced manifest satisfies this by construction and the check cannot fire from the
+/// public surface. It guards the manifest-derived decisions that follow — span/manifest agreement,
+/// live-token classification, redaction-span expansion — against a path that breaks the invariant,
+/// instead of letting those decisions silently read a manifest that lies. The corruption shape it
+/// rejects is an entry whose clean span was rewritten while its `raw_span` kept its old length.
 fn validate_clean_manifest(clean: &CleanText) -> Result<()> {
     for emitted in &clean.manifest {
-        let mapped = map_clean_span_to_raw(clean, &emitted.clean_span)?;
-        if mapped != emitted.raw_span {
-            return Err(protection_trace_error(
-                "manifest clean-to-raw mapping mismatch",
-            ));
-        }
+        map_clean_span_to_raw(clean, &emitted.clean_span).map_err(|_| {
+            manifest_integrity_error("manifest entry has no unambiguous original span")
+        })?;
     }
     Ok(())
 }
 
+/// A safety-net resolution replaces raw bytes with a token that restores to exactly those bytes,
+/// so the restored document must be byte-identical before and after.
+fn assert_resolution_preserved_restore(baseline: &str, restored: &str) -> Result<()> {
+    if restored != baseline {
+        return Err(manifest_integrity_error(
+            "safety-net resolution broke exact restore",
+        ));
+    }
+    Ok(())
+}
+
+/// True when the suspect span lies wholly inside exactly one live token.
+///
+/// Such a suspect is the net re-flagging text the pipeline already protected. Acting on it would
+/// tokenize a token and permanently break restore, so it is audited as a no-op instead.
 fn suspect_is_inside_live_token(
-    session: &Session,
+    target: &ProtectionTarget<'_, '_>,
     clean: &CleanText,
     suspect: &LeakSuspect,
 ) -> bool {
@@ -1736,14 +2006,19 @@ fn suspect_is_inside_live_token(
     let Some(token) = clean.text.get(emitted.clean_span.clone()) else {
         return false;
     };
-    let Some(restored) = session.restore(token) else {
+    let Some(restored) = target.restore(token) else {
         return false;
     };
-    session.contains_token(token)
+    target.contains_token(token)
         && emitted.raw_span.start < emitted.raw_span.end
         && restored.len() == emitted.raw_span.end - emitted.raw_span.start
 }
 
+/// True when the suspect's own coverage claim matches what the manifest actually covers.
+///
+/// `Uncovered` must touch no emitted token, and `PartialBleed { uncovered }` must name the single
+/// gap the manifest leaves inside the suspect span. A suspect that disagrees with the manifest is
+/// stale or wrong; resolving it would tokenize across live tokens.
 fn suspect_action_span_matches_manifest(clean: &CleanText, suspect: &LeakSuspect) -> bool {
     if suspect.span.start >= suspect.span.end || !is_char_boundary_range(&clean.text, &suspect.span)
     {
@@ -1786,7 +2061,9 @@ fn suspect_action_span_matches_manifest(clean: &CleanText, suspect: &LeakSuspect
     }
 }
 
-fn sort_safety_net_suspects(suspects: &mut Vec<&LeakSuspect>) {
+/// Total order over suspects. The pairwise overlap check below is only correct on a sorted list,
+/// and the tie-breakers keep audit-row order independent of safety-net iteration order.
+fn sort_safety_net_suspects(suspects: &mut [&LeakSuspect]) {
     suspects.sort_by(|left, right| {
         (
             left.span.start,
@@ -1803,6 +2080,47 @@ fn sort_safety_net_suspects(suspects: &mut Vec<&LeakSuspect>) {
     });
 }
 
+fn clean_to_raw_mapping_error(message: &'static str) -> Error {
+    Error::SafetyNet(SafetyNetError::InvalidOutput {
+        message: message.to_string(),
+    })
+}
+
+/// Translate a CLEAN-text span into the ORIGINAL-request byte interval it covers.
+///
+/// `EmittedTokenSpan::raw_span` is an original-document coordinate by contract: downstream
+/// consumers slice the original request bytes with it (`gaze-token-bridge` ingest) and compare
+/// it against authorized original-coordinate ranges (`gaze-proxy` residual validation). The
+/// safety-net RESOLVE path only ever sees clean coordinates, so it must map them back through
+/// the manifest emitted by the primary pass before recording a manifest entry.
+///
+/// Fails closed when the mapping is ambiguous — a clean boundary that lands strictly inside an
+/// already-emitted token has no single original counterpart, and a manifest that is not a
+/// monotonic, gap-preserving clean/raw alignment cannot be walked at all.
+fn map_clean_span_to_raw(clean: &CleanText, span: &Range<usize>) -> Result<Range<usize>> {
+    if span.start >= span.end || !is_char_boundary_range(&clean.text, span) {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: clean.text.len(),
+        });
+    }
+    let start = map_clean_boundary_to_raw(&clean.manifest, span.start)
+        .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw start mapping failed"))?;
+    let end = map_clean_boundary_to_raw(&clean.manifest, span.end)
+        .ok_or_else(|| clean_to_raw_mapping_error("clean-to-raw end mapping failed"))?;
+    if start >= end {
+        return Err(clean_to_raw_mapping_error("empty clean-to-raw mapping"));
+    }
+    Ok(start..end)
+}
+
+/// Map a single clean-text byte boundary to its original-request byte boundary.
+///
+/// Walks the manifest in clean order, carrying a clean cursor and a raw cursor: untokenized
+/// runs advance both by the same amount, and each emitted token jumps them to its own
+/// clean/raw ends. Returns `None` (caller fails closed) when the offset falls strictly inside
+/// an emitted token, or when the manifest is not monotonic / not gap-preserving.
 fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Option<usize> {
     let mut clean_cursor = 0usize;
     let mut raw_cursor = 0usize;
@@ -1829,26 +2147,6 @@ fn map_clean_boundary_to_raw(manifest: &[EmittedTokenSpan], offset: usize) -> Op
         raw_cursor = emitted.raw_span.end;
     }
     raw_cursor.checked_add(offset.checked_sub(clean_cursor)?)
-}
-
-fn redaction_suspects(report: &LeakReport) -> Vec<&LeakSuspect> {
-    let mut suspects = report.suspects.iter().collect::<Vec<_>>();
-    suspects.sort_by_key(|suspect| suspect_action_span(suspect).start);
-    suspects
-}
-
-fn suspect_action_span(suspect: &LeakSuspect) -> Range<usize> {
-    match &suspect.kind {
-        LeakKind::PartialBleed { uncovered } => uncovered.clone(),
-        _ => suspect.span.clone(),
-    }
-}
-
-fn fallback_action(fallback: SafetyNetFallback) -> Action {
-    match fallback {
-        SafetyNetFallback::Strict | SafetyNetFallback::Tolerant => Action::Preserve,
-        SafetyNetFallback::Redact => Action::Redact,
-    }
 }
 
 fn is_char_boundary_range(text: &str, span: &Range<usize>) -> bool {
@@ -2218,7 +2516,7 @@ fn model_error_to_safety_net_error(error: ModelError) -> SafetyNetError {
 
 fn redact_structured(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     fields: BTreeMap<String, Value>,
     document_kind: DocumentKind,
     locale_chain: &[crate::LocaleTag],
@@ -2231,7 +2529,7 @@ fn redact_structured(
             key.clone(),
             redact_structured_value(
                 pipeline,
-                session,
+                target,
                 value,
                 &key,
                 &path,
@@ -2247,7 +2545,7 @@ fn redact_structured(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_value(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: Value,
     field_name: &str,
     field_path: &str,
@@ -2257,7 +2555,7 @@ fn redact_structured_value(
 ) -> Result<Value> {
     match value {
         Value::String(text) => Ok(Value::String(pipeline.pseudonymize_text(
-            session,
+            target,
             &text,
             Some(field_name),
             document_kind,
@@ -2270,7 +2568,7 @@ fn redact_structured_value(
             .map(|(idx, value)| {
                 redact_structured_value(
                     pipeline,
-                    session,
+                    target,
                     value,
                     field_name,
                     &format!("{field_path}[{idx}]"),
@@ -2289,7 +2587,7 @@ fn redact_structured_value(
                     key.clone(),
                     redact_structured_value(
                         pipeline,
-                        session,
+                        target,
                         value,
                         &key,
                         &child_path,
@@ -2309,7 +2607,7 @@ fn redact_structured_value(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_with_safety_net(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     fields: BTreeMap<String, Value>,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
@@ -2323,7 +2621,7 @@ fn redact_structured_with_safety_net(
             key.clone(),
             redact_structured_value_with_safety_net(
                 pipeline,
-                session,
+                target,
                 value,
                 &key,
                 &path,
@@ -2340,7 +2638,7 @@ fn redact_structured_with_safety_net(
 #[allow(clippy::too_many_arguments)]
 fn redact_structured_value_with_safety_net(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: Value,
     field_name: &str,
     field_path: &str,
@@ -2355,7 +2653,7 @@ fn redact_structured_value_with_safety_net(
                 return Ok(Value::String(text));
             }
             let clean = pipeline.redact_text_with_manifest(
-                session,
+                target,
                 &text,
                 Some(field_name),
                 DocumentKind::Structured,
@@ -2365,7 +2663,7 @@ fn redact_structured_value_with_safety_net(
             // For RawDocument::Structured, locale gating uses the session-level
             // locale chain across all fields; fields have no locale annotations.
             let field_report = pipeline.run_safety_nets(
-                session,
+                target,
                 &clean.text,
                 &Manifest::from_spans(clean.manifest),
                 DocumentKind::Structured,
@@ -2382,7 +2680,7 @@ fn redact_structured_value_with_safety_net(
             .map(|(idx, value)| {
                 redact_structured_value_with_safety_net(
                     pipeline,
-                    session,
+                    target,
                     value,
                     field_name,
                     &format!("{field_path}[{idx}]"),
@@ -2402,7 +2700,7 @@ fn redact_structured_value_with_safety_net(
                     key.clone(),
                     redact_structured_value_with_safety_net(
                         pipeline,
-                        session,
+                        target,
                         value,
                         &key,
                         &child_path,
@@ -2418,7 +2716,7 @@ fn redact_structured_value_with_safety_net(
         Value::Null | Value::Bool(_) | Value::I64(_) => {
             if let Some(scalar) = value.scalar_to_safety_net_string() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     &scalar,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -2436,7 +2734,7 @@ fn redact_structured_value_with_safety_net(
 
 fn walk_value_for_safety_net_scan(
     pipeline: &Pipeline,
-    session: &Session,
+    target: &mut ProtectionTarget<'_, '_>,
     value: &Value,
     field_path: &str,
     locale_chain: &[crate::LocaleTag],
@@ -2446,7 +2744,7 @@ fn walk_value_for_safety_net_scan(
         Value::String(text) => {
             if !text.is_empty() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     text,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -2461,7 +2759,7 @@ fn walk_value_for_safety_net_scan(
         Value::Bool(_) | Value::I64(_) => {
             if let Some(scalar) = value.scalar_to_safety_net_string() {
                 let field_report = pipeline.run_safety_nets(
-                    session,
+                    target,
                     &scalar,
                     &Manifest::default(),
                     DocumentKind::Structured,
@@ -2476,7 +2774,7 @@ fn walk_value_for_safety_net_scan(
             for (idx, value) in values.iter().enumerate() {
                 walk_value_for_safety_net_scan(
                     pipeline,
-                    session,
+                    target,
                     value,
                     &format!("{field_path}[{idx}]"),
                     locale_chain,
@@ -2488,7 +2786,7 @@ fn walk_value_for_safety_net_scan(
             for (key, value) in fields {
                 walk_value_for_safety_net_scan(
                     pipeline,
-                    session,
+                    target,
                     value,
                     &format!("{field_path}.{key}"),
                     locale_chain,
@@ -2724,6 +3022,142 @@ mod tests {
         fn token_family(&self) -> &str {
             "counter"
         }
+    }
+
+    struct NeedleDetector {
+        needle: &'static str,
+        class: PiiClass,
+        source: &'static str,
+    }
+
+    impl Detector for NeedleDetector {
+        fn detect(&self, input: &str) -> Vec<Detection> {
+            input
+                .match_indices(self.needle)
+                .map(|(start, matched)| {
+                    Detection::new(
+                        start..start + matched.len(),
+                        self.class.clone(),
+                        self.source,
+                    )
+                })
+                .collect()
+        }
+    }
+
+    struct DictionaryRecognizer {
+        class: PiiClass,
+    }
+
+    impl Recognizer for DictionaryRecognizer {
+        fn id(&self) -> &str {
+            "dictionary.synthetic_ids"
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            &self.class
+        }
+
+        fn detect(
+            &self,
+            input: &str,
+            ctx: &DetectContext<'_>,
+        ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+            let Some(dictionary) = ctx.dictionaries.get("synthetic_ids") else {
+                return Ok(Vec::new());
+            };
+            Ok(dictionary
+                .terms()
+                .iter()
+                .flat_map(|term| input.match_indices(term))
+                .map(|(start, matched)| {
+                    Candidate::new(
+                        start..start + matched.len(),
+                        self.class.clone(),
+                        self.id(),
+                        1.0,
+                        0,
+                        None,
+                        self.token_family(),
+                        self.id(),
+                        ConflictTier::None,
+                        Vec::new(),
+                    )
+                })
+                .collect())
+        }
+
+        fn token_family(&self) -> &str {
+            "dictionary"
+        }
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    struct DeterministicNerDetector;
+
+    #[cfg(feature = "bundled-recognizers")]
+    impl Detector for DeterministicNerDetector {
+        fn detect(&self, input: &str) -> Vec<Detection> {
+            let Some(start) = input.find("Dr. Schmidt") else {
+                return Vec::new();
+            };
+            let labels =
+                gaze_recognizers::LabelMap(BTreeMap::from([("PER".to_string(), PiiClass::Name)]));
+            gaze_recognizers::NerDetector::merge_bio_spans(
+                &labels,
+                &[
+                    (start, start + "Dr.".len()),
+                    (start + "Dr. ".len(), start + "Dr. Schmidt".len()),
+                ],
+                &["B-PER", "I-PER"],
+                "ner/deterministic",
+            )
+        }
+    }
+
+    struct ResolveSafetyNet;
+
+    impl SafetyNet for ResolveSafetyNet {
+        fn id(&self) -> &str {
+            "resolve-fixture"
+        }
+
+        fn supported_locales(&self) -> &[crate::LocaleTag] {
+            &[crate::LocaleTag::Global]
+        }
+
+        fn check(
+            &self,
+            clean_text: &str,
+            _context: SafetyNetContext<'_>,
+        ) -> std::result::Result<Vec<LeakSuspect>, SafetyNetError> {
+            Ok(clean_text
+                .find("Dr. Schmidt")
+                .map(|start| {
+                    LeakSuspect::new(
+                        start..start + "Dr. Schmidt".len(),
+                        PiiClass::Name,
+                        self.id(),
+                        Some(1.0),
+                        LeakKind::Uncovered,
+                        "PER",
+                        None,
+                    )
+                })
+                .into_iter()
+                .collect())
+        }
+    }
+
+    fn normalized_log_entries(entries: &[RedactionEntry]) -> Vec<RedactionEntry> {
+        entries
+            .iter()
+            .cloned()
+            .map(|mut entry| {
+                entry.created_at = 0;
+                entry
+            })
+            .collect()
     }
 
     fn detector_with_detections(source: &str, detections: Vec<Detection>) -> FixedDetector {
@@ -3119,9 +3553,10 @@ mod tests {
 
         let (traced_session, mut traced_clean, traced_report, raw_text) =
             fallback_redact_parity_fixture();
+        let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(&raw_text);
         let traced_result = pipeline.apply_safety_net_policy(
-            &traced_session,
+            &mut traced_target,
             &mut traced_clean,
             &traced_report,
             DocumentKind::Text,
@@ -3133,8 +3568,9 @@ mod tests {
 
         let (untraced_session, mut untraced_clean, untraced_report, _) =
             fallback_redact_parity_fixture();
+        let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_result = pipeline.apply_safety_net_policy(
-            &untraced_session,
+            &mut untraced_target,
             &mut untraced_clean,
             &untraced_report,
             DocumentKind::Text,
@@ -3196,14 +3632,15 @@ mod tests {
             })
             .build()
             .expect("pipeline");
-        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Strict);
         let raw = "Dr. Schmidt tail";
 
         let (traced_session, mut traced_clean, traced_report) = fixture();
+        let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(raw);
         let traced_error = pipeline
             .apply_safety_net_policy(
-                &traced_session,
+                &mut traced_target,
                 &mut traced_clean,
                 &traced_report,
                 DocumentKind::Text,
@@ -3215,9 +3652,10 @@ mod tests {
             .expect_err("genuine traced residual must fail closed");
 
         let (untraced_session, mut untraced_clean, untraced_report) = fixture();
+        let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_error = pipeline
             .apply_safety_net_policy(
-                &untraced_session,
+                &mut untraced_target,
                 &mut untraced_clean,
                 &untraced_report,
                 DocumentKind::Text,
@@ -3278,10 +3716,11 @@ mod tests {
         let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
         let (traced_session, mut traced_clean, traced_report, raw) = fixture();
         let traced_before = (traced_clean.text.clone(), traced_clean.manifest.clone());
+        let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(&raw);
         let traced_error = pipeline
             .apply_safety_net_policy(
-                &traced_session,
+                &mut traced_target,
                 &mut traced_clean,
                 &traced_report,
                 DocumentKind::Text,
@@ -3294,9 +3733,10 @@ mod tests {
 
         let (untraced_session, mut untraced_clean, untraced_report, _) = fixture();
         let untraced_before = (untraced_clean.text.clone(), untraced_clean.manifest.clone());
+        let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_error = pipeline
             .apply_safety_net_policy(
-                &untraced_session,
+                &mut untraced_target,
                 &mut untraced_clean,
                 &untraced_report,
                 DocumentKind::Text,
@@ -3311,7 +3751,8 @@ mod tests {
             assert!(matches!(
                 error,
                 Error::SafetyNet(SafetyNetError::InvalidOutput { message })
-                    if message == "clean-to-raw start mapping failed"
+                    if message
+                        == "manifest-integrity: manifest entry has no unambiguous original span"
             ));
         }
         assert_eq!((traced_clean.text, traced_clean.manifest), traced_before);
@@ -3355,11 +3796,12 @@ mod tests {
             Vec::new(),
         );
         let pipeline = Pipeline::builder().build().expect("pipeline");
+        let mut target = ProtectionTarget::Live(&session);
         let mut trace = ProtectionTraceCollector::new(&raw);
 
         let reason = pipeline
             .resolve_safety_net_suspects(
-                &session,
+                &mut target,
                 &mut clean,
                 &report,
                 DocumentKind::Text,
@@ -3400,10 +3842,11 @@ mod tests {
             Vec::new(),
         );
         let pipeline = Pipeline::builder().build().expect("pipeline");
+        let mut target = ProtectionTarget::Live(&session);
 
         let reason = pipeline
             .resolve_safety_net_suspects(
-                &session,
+                &mut target,
                 &mut clean,
                 &report,
                 DocumentKind::Text,
@@ -3452,11 +3895,12 @@ mod tests {
                 Vec::new(),
             );
             let pipeline = Pipeline::builder().build().expect("pipeline");
+            let mut target = ProtectionTarget::Live(&session);
             let mut trace = ProtectionTraceCollector::new(raw);
 
             let reason = pipeline
                 .resolve_safety_net_suspects(
-                    &session,
+                    &mut target,
                     &mut clean,
                     &report,
                     DocumentKind::Text,
@@ -3501,11 +3945,12 @@ mod tests {
         let before_manifest = clean.manifest.clone();
         let pipeline = Pipeline::builder().build().expect("pipeline");
         let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
         let mut trace = ProtectionTraceCollector::new(raw_text);
 
         let reason = pipeline
             .resolve_safety_net_suspects(
-                &session,
+                &mut target,
                 &mut clean,
                 &report,
                 DocumentKind::Text,
@@ -3572,6 +4017,179 @@ mod tests {
         assert_eq!(
             fallback_trace[0].source_ids(),
             &["email.fixture".to_string()]
+        );
+    }
+
+    /// `validate_clean_manifest` is defense in depth: `redact_text_with_manifest` emits an entry
+    /// for every replacing action, so a pipeline-produced manifest is gap-preserving and this
+    /// cannot fire from the public surface. Probe it directly so the check is not unfalsifiable.
+    #[test]
+    fn validate_clean_manifest_rejects_a_manifest_that_contradicts_its_own_alignment() {
+        // "<tok> tail" where the entry claims to stand for 21 raw bytes.
+        let sound = CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email)],
+        };
+        validate_clean_manifest(&sound).expect("a gap-preserving manifest must validate");
+
+        // Same document, but the second entry's raw_span cannot follow the first: one clean byte
+        // separates the entries while four raw bytes do, so the manifest describes a document
+        // that cannot exist. This is the shape a rewritten clean span leaves behind.
+        let corrupt = CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
+                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
+            ],
+        };
+        let error = validate_clean_manifest(&corrupt)
+            .expect_err("a manifest that contradicts its own alignment must fail closed");
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "manifest corruption must surface as the manifest-integrity class, got {error}"
+        );
+    }
+
+    /// A `CleanText` whose entries cannot both be true: one clean byte separates them while four
+    /// raw bytes do. No document has this shape, which is exactly why only a direct call can
+    /// present it to the checks.
+    fn inconsistent_clean_text() -> CleanText {
+        CleanText {
+            text: "<aabbccdd:Email_1> tail".to_string(),
+            manifest: vec![
+                EmittedTokenSpan::new(0..18, 0..21, PiiClass::Email),
+                EmittedTokenSpan::new(19..23, 25..29, PiiClass::Email),
+            ],
+        }
+    }
+
+    fn probe_report() -> LeakReport {
+        LeakReport::from_parts(
+            vec![LeakSuspect::new(
+                19..23,
+                PiiClass::Email,
+                "probe",
+                Some(0.99),
+                LeakKind::Uncovered,
+                "private_email",
+                None,
+            )],
+            Vec::new(),
+        )
+    }
+
+    fn assert_manifest_integrity(error: Error) {
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "expected the manifest-integrity class, got {error}"
+        );
+    }
+
+    /// Call-site coverage for the resolve-entry precondition.
+    ///
+    /// Everything after it — live-token classification, suspect/manifest agreement, clean-to-raw
+    /// mapping — reads the manifest as ground truth, so the entry check is what makes those
+    /// decisions trustworthy. Driven directly because no reachable input can corrupt the manifest.
+    #[test]
+    fn resolve_safety_net_suspects_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = inconsistent_clean_text();
+
+        let error = pipeline
+            .resolve_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &probe_report(),
+                DocumentKind::Text,
+                None,
+                None,
+            )
+            .expect_err("resolution on a proven-inconsistent manifest must fail closed");
+        assert_manifest_integrity(error);
+    }
+
+    /// Call-site coverage for the follow-up-verdict precondition.
+    ///
+    /// This one classifies residual suspects as protected-or-not by asking the manifest which
+    /// spans are live tokens, so a manifest that lies would silently downgrade real residue to a
+    /// no-op.
+    #[test]
+    fn post_resolution_fallback_reason_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let clean = inconsistent_clean_text();
+
+        let error = pipeline
+            .post_resolution_fallback_reason(
+                &mut target,
+                &clean,
+                &probe_report(),
+                DocumentKind::Text,
+                None,
+            )
+            .expect_err("a follow-up verdict on a proven-inconsistent manifest must fail closed");
+        assert_manifest_integrity(error);
+    }
+
+    /// The redact path derives its deletion spans from manifest coordinates
+    /// (`expand_span_to_overlapping_manifest_entries`), so it must refuse a manifest that is
+    /// already proven inconsistent: expanding against a manifest that misdescribes the document
+    /// can delete the wrong bytes and leave the flagged PII in place.
+    ///
+    /// No public-API fixture can present a corrupt manifest to this path — the primary pass is
+    /// gap-preserving by construction — so the precondition is probed here, at the call site, to
+    /// keep it falsifiable rather than unverifiable.
+    #[test]
+    fn redact_safety_net_suspects_refuses_a_proven_inconsistent_manifest() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = inconsistent_clean_text();
+
+        let error = pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &probe_report(),
+                DocumentKind::Text,
+                None,
+                None,
+                false,
+                None,
+            )
+            .expect_err("redaction on a proven-inconsistent manifest must fail closed");
+        assert_manifest_integrity(error);
+    }
+
+    /// A resolution replaces raw bytes with a token restoring to exactly those bytes, so the
+    /// restored document is byte-identical before and after. Probed directly for the same reason.
+    #[test]
+    fn assert_resolution_preserved_restore_rejects_a_changed_restore() {
+        assert_resolution_preserved_restore(
+            "alice@example.invalid tail",
+            "alice@example.invalid tail",
+        )
+        .expect("an unchanged restore must pass");
+        let error = assert_resolution_preserved_restore(
+            "alice@example.invalid tail",
+            "alice@example.invalid",
+        )
+        .expect_err("a resolution that changed the restored document must fail closed");
+        assert!(
+            format!("{error}").contains("manifest-integrity"),
+            "broken restore must surface as the manifest-integrity class, got {error}"
         );
     }
 
@@ -4144,5 +4762,371 @@ mod tests {
         );
         assert_eq!(session.restore(&token).as_deref(), Some("Dr. Schmidt"));
         assert_eq!(session.restore(&beta).as_deref(), Some("Dr. Schmidt"));
+    }
+
+    #[test]
+    fn transaction_pipeline_detector_rule_dictionary_parity_without_publish() {
+        let custom_class = PiiClass::Custom("synthetic_id".to_string());
+        let dictionaries = DictionaryBundle::from_entries([(
+            "synthetic_ids".to_string(),
+            gaze_types::DictionaryEntry::new(
+                "synthetic_ids",
+                vec!["SYN-0001".to_string()],
+                true,
+                gaze_types::DictionarySource::Cli,
+            )
+            .expect("synthetic dictionary"),
+        )]);
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "alice@example.invalid",
+                class: PiiClass::Email,
+                source: "email.fixture",
+            })
+            .recognizer(DictionaryRecognizer {
+                class: custom_class.clone(),
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(ClassRule::new(custom_class, Action::FormatPreserve))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let raw = RawDocument::Structured(BTreeMap::from([
+            (
+                "contact".to_string(),
+                Value::String("alice@example.invalid".to_string()),
+            ),
+            (
+                "reference".to_string(),
+                Value::String("SYN-0001".to_string()),
+            ),
+        ]));
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("staged protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(transaction.tokens().len(), 2);
+        let staged_logs = {
+            let captured = entries.lock().unwrap();
+            assert_eq!(captured.len(), 2);
+            normalized_log_entries(&captured)
+        };
+        drop(transaction);
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(
+            entries.lock().unwrap().len(),
+            2,
+            "trusted attempt rows survive discard"
+        );
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("live protection");
+        let live_logs = normalized_log_entries(&entries.lock().unwrap());
+        let (CleanDocument::Structured(staged), CleanDocument::Structured(live)) = (staged, live)
+        else {
+            panic!("expected structured outputs");
+        };
+        assert_eq!(staged, live);
+        assert_eq!(staged_logs, live_logs);
+    }
+
+    #[cfg(feature = "bundled-recognizers")]
+    #[test]
+    fn transaction_pipeline_bundled_deterministic_ner_parity_without_publish() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(DeterministicNerDetector)
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let raw = RawDocument::Text("Assigned to Dr. Schmidt".to_string());
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("staged NER protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        let staged_logs = normalized_log_entries(&entries.lock().unwrap());
+        drop(transaction);
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .pseudonymize_with_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("live NER protection");
+        let (CleanDocument::Text(staged), CleanDocument::Text(live)) = (staged, live) else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(staged, live);
+        assert_eq!(
+            staged_logs,
+            normalized_log_entries(&entries.lock().unwrap())
+        );
+    }
+
+    #[test]
+    fn transaction_pipeline_safety_net_resolve_parity_without_publish() {
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(ResolveSafetyNet)
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let raw = RawDocument::Text("Assigned to Dr. Schmidt".to_string());
+        let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
+
+        let mut transaction = session.begin_transaction();
+        let staged = pipeline
+            .clean_transaction_with_safety_net_policy_detect_context(
+                &mut transaction,
+                raw.clone(),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                policy,
+            )
+            .expect("staged safety-net protection");
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        assert_eq!(transaction.tokens().len(), 1);
+        let staged_logs = normalized_log_entries(&entries.lock().unwrap());
+        drop(transaction);
+        assert_eq!(session.tokens(), Vec::<String>::new());
+        entries.lock().unwrap().clear();
+
+        let live = pipeline
+            .clean_with_safety_net_policy_detect_context(
+                &session,
+                raw,
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                policy,
+            )
+            .expect("live safety-net protection");
+        let (staged_document, staged_spans, staged_report) = staged;
+        let (live_document, live_spans, live_report) = live;
+        let (CleanDocument::Text(staged_text), CleanDocument::Text(live_text)) =
+            (staged_document, live_document)
+        else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(staged_text, live_text);
+        assert_eq!(staged_spans, live_spans);
+        assert_eq!(staged_report, live_report);
+        assert_eq!(
+            staged_logs,
+            normalized_log_entries(&entries.lock().unwrap())
+        );
+    }
+
+    #[test]
+    fn transaction_pipeline_prefix_cache_is_staged_and_drop_discards() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "Dr. Schmidt",
+                class: PiiClass::Name,
+                source: "name.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+
+        let mut transaction = session.begin_transaction();
+        let first = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime staged cache");
+        let extended = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt reports".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("hit staged cache");
+        let (CleanDocument::Text(first), CleanDocument::Text(extended)) = (first, extended) else {
+            panic!("expected text outputs");
+        };
+        assert_eq!(extended, format!("{first} reports"));
+        assert_eq!(transaction.tokens().len(), 1);
+        assert!(session.tokens().is_empty());
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        drop(transaction);
+        assert!(session.tokens().is_empty());
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime committed cache");
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt reports".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("hit committed cache");
+        let staged_tokens = transaction.tokens();
+        let snapshot = transaction.commit().expect("atomic commit");
+        assert_eq!(snapshot.tokens(), staged_tokens);
+        assert_eq!(session.tokens(), staged_tokens);
+        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_some());
+    }
+
+    #[test]
+    fn transaction_pipeline_suppression_bypasses_prefix_cache_lookup_and_store() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "alice@example.invalid",
+                class: PiiClass::Email,
+                source: "email.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let mut transaction = session.begin_transaction();
+
+        let cached_prefix = pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("alice@".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("prime staged prefix cache");
+        let CleanDocument::Text(cached_prefix) = cached_prefix else {
+            panic!("expected text output");
+        };
+        assert_eq!(cached_prefix, "alice@");
+        assert_eq!(
+            transaction
+                .lookup_prefix_cache("alice@example.invalid")
+                .expect("preseeded prefix cache hit")
+                .raw_len,
+            "alice@".len()
+        );
+        #[cfg(feature = "test-support")]
+        let staged_cache_entries = transaction.prefix_cache_entry_count();
+        #[cfg(feature = "test-support")]
+        let live_cache_entries = session.prefix_cache_entry_count();
+
+        let protected = pipeline
+            .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
+                &mut transaction,
+                RawDocument::Text("alice@example.invalid".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+                PrefixCacheWriteMode::Suppress,
+            )
+            .expect("suppression probe");
+        let CleanDocument::Text(protected) = protected else {
+            panic!("expected text output");
+        };
+        assert_ne!(protected, "alice@example.invalid");
+        assert_eq!(transaction.tokens().len(), 1);
+        #[cfg(feature = "test-support")]
+        {
+            assert_eq!(transaction.prefix_cache_entry_count(), staged_cache_entries);
+            assert_eq!(session.prefix_cache_entry_count(), live_cache_entries);
+        }
+
+        drop(transaction);
+        assert!(session.tokens().is_empty());
+        assert!(session
+            .lookup_prefix_cache("alice@example.invalid")
+            .is_none());
+    }
+
+    #[test]
+    fn transaction_pipeline_generation_conflict_publishes_no_staged_mapping() {
+        let pipeline = Pipeline::builder()
+            .detector(NeedleDetector {
+                needle: "Dr. Schmidt",
+                class: PiiClass::Name,
+                source: "name.fixture",
+            })
+            .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let dictionaries = DictionaryBundle::default();
+        let mut transaction = session.begin_transaction();
+        pipeline
+            .pseudonymize_transaction_with_detect_context(
+                &mut transaction,
+                RawDocument::Text("Dr. Schmidt".to_string()),
+                &[crate::LocaleTag::Global],
+                &dictionaries,
+            )
+            .expect("stage mapping");
+        let staged_token = transaction.tokens().pop().expect("staged token");
+        let winner = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("winning live mutation");
+
+        assert!(matches!(
+            transaction.commit(),
+            Err(crate::session::SessionTransactionError::GenerationConflict)
+        ));
+        assert!(session.contains_token(&winner));
+        assert!(!session.contains_token(&staged_token));
+        assert!(session.lookup_prefix_cache("Dr. Schmidt").is_none());
     }
 }

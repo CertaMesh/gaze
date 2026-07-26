@@ -1,12 +1,11 @@
 use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::ops::Range;
-use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use dashmap::mapref::entry::Entry;
-use dashmap::DashMap;
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::RngCore;
 use regex::Regex;
@@ -176,6 +175,105 @@ struct PrefixCacheEntry {
     manifest: Vec<gaze_types::EmittedTokenSpan>,
 }
 
+#[derive(Clone)]
+struct SessionState {
+    generation: u64,
+    next_by_class: HashMap<PiiClass, usize>,
+    token_by_value: HashMap<TokenKey, String>,
+    value_by_token: HashMap<String, String>,
+    prefix_cache: HashMap<u64, PrefixCacheEntry>,
+    restore_regex_cache: Option<(u64, Arc<Regex>)>,
+}
+
+impl SessionState {
+    fn empty() -> Self {
+        Self {
+            generation: 0,
+            next_by_class: HashMap::new(),
+            token_by_value: HashMap::new(),
+            value_by_token: HashMap::new(),
+            prefix_cache: HashMap::new(),
+            restore_regex_cache: None,
+        }
+    }
+
+    fn advance_generation(&mut self) {
+        self.generation = self
+            .generation
+            .checked_add(1)
+            .expect("session generation exhausted");
+    }
+}
+
+struct SessionIdentity {
+    scope: Scope,
+    session_hex: [u8; 4],
+    audit_session_id: String,
+    signing_key: SessionKey,
+}
+
+/// A strict restoration result with manifest-authorized output coordinates.
+///
+/// Each range is a UTF-8 byte range in `text` produced by one or more adjacent
+/// known manifest replacements. Ranges never authorize provider-origin bytes.
+/// The type intentionally has no `Debug`, `Display`, or serialization surface
+/// because `text` may contain restored owner PII.
+#[derive(Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct RestoredTextWithProvenance {
+    pub text: String,
+    pub authorized_output_ranges: Vec<Range<usize>>,
+}
+
+/// Closed failures produced while committing a staged session transaction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum SessionTransactionError {
+    GenerationConflict,
+}
+
+impl fmt::Display for SessionTransactionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::GenerationConflict => "session_generation_conflict",
+        })
+    }
+}
+
+impl std::error::Error for SessionTransactionError {}
+
+/// Mutable, isolated staging state captured from one [`Session`] generation.
+///
+/// Fields are private so callers cannot substitute an unrelated session state
+/// or protected identity. Dropping without [`Self::commit`] publishes nothing.
+pub struct SessionTransaction<'session> {
+    session: &'session Session,
+    identity: Arc<SessionIdentity>,
+    captured_generation: u64,
+    staged: SessionState,
+}
+
+/// Immutable restore-only state returned by a successful transaction commit.
+///
+/// The snapshot has no tokenization, cache, manifest, export, or commit API.
+/// Later mutation of the live [`Session`] cannot change this snapshot.
+///
+/// ```compile_fail
+/// use gaze::{PiiClass, Scope, Session};
+///
+/// let session = Session::new(Scope::Ephemeral)?;
+/// let mut transaction = session.begin_transaction();
+/// transaction.tokenize(&PiiClass::Name, "Dr. Schmidt")?; // fixture-cited(crates/gaze/src/session.rs:session::tests::committed_snapshot_is_stable_after_later_live_mutation)
+/// let snapshot = transaction.commit()?;
+/// snapshot.tokenize(&PiiClass::Name, "Another Synthetic Name")?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+#[derive(Clone)]
+pub struct CommittedSessionSnapshot {
+    identity: Arc<SessionIdentity>,
+    state: Arc<SessionState>,
+}
+
 /// Owns the token manifest for one pseudonym namespace.
 ///
 /// A `Session` holds the bidirectional map between PII values and their pseudonymous tokens.
@@ -280,29 +378,20 @@ struct PrefixCacheEntry {
 /// [`Pipeline::redact`]: crate::Pipeline::redact
 // intentionally not Debug: contains session signing key and token manifest
 pub struct Session {
-    scope: Scope,
-    session_hex: [u8; 4],
-    audit_session_id: String,
-    next_by_class: DashMap<PiiClass, usize>,
-    token_by_value: DashMap<TokenKey, String>,
-    value_by_token: DashMap<String, String>,
-    prefix_cache: DashMap<u64, PrefixCacheEntry>,
-    restore_regex_cache: RwLock<Option<(usize, Arc<Regex>)>>,
-    signing_key: SessionKey,
+    identity: Arc<SessionIdentity>,
+    state: RwLock<Arc<SessionState>>,
 }
 
 impl Session {
     pub fn new(scope: Scope) -> Result<Self> {
         Ok(Self {
-            scope,
-            session_hex: random_session_hex(),
-            audit_session_id: new_audit_session_id(),
-            next_by_class: DashMap::new(),
-            token_by_value: DashMap::new(),
-            value_by_token: DashMap::new(),
-            prefix_cache: DashMap::new(),
-            restore_regex_cache: RwLock::new(None),
-            signing_key: SessionKey::generate()?,
+            identity: Arc::new(SessionIdentity {
+                scope,
+                session_hex: random_session_hex(),
+                audit_session_id: new_audit_session_id(),
+                signing_key: SessionKey::generate()?,
+            }),
+            state: RwLock::new(Arc::new(SessionState::empty())),
         })
     }
 
@@ -314,15 +403,13 @@ impl Session {
     /// [`Session::new`] so session unlinkability continues to use fresh randomness.
     pub fn new_with_session_hex_for_tests(scope: Scope, session_hex: [u8; 4]) -> Result<Self> {
         Ok(Self {
-            scope,
-            session_hex,
-            audit_session_id: new_audit_session_id(),
-            next_by_class: DashMap::new(),
-            token_by_value: DashMap::new(),
-            value_by_token: DashMap::new(),
-            prefix_cache: DashMap::new(),
-            restore_regex_cache: RwLock::new(None),
-            signing_key: SessionKey::generate()?,
+            identity: Arc::new(SessionIdentity {
+                scope,
+                session_hex,
+                audit_session_id: new_audit_session_id(),
+                signing_key: SessionKey::generate()?,
+            }),
+            state: RwLock::new(Arc::new(SessionState::empty())),
         })
     }
 
@@ -348,6 +435,40 @@ impl Session {
         };
 
         Self::new(scope)
+    }
+
+    /// Capture the current complete immutable state for isolated mutation.
+    pub fn begin_transaction(&self) -> SessionTransaction<'_> {
+        let state = self.state_snapshot();
+        SessionTransaction {
+            session: self,
+            identity: Arc::clone(&self.identity),
+            captured_generation: state.generation,
+            staged: (*state).clone(),
+        }
+    }
+
+    fn state_snapshot(&self) -> Arc<SessionState> {
+        Arc::clone(
+            &self
+                .state
+                .read()
+                .unwrap_or_else(|poisoned| poisoned.into_inner()),
+        )
+    }
+
+    fn mutate_state<R>(&self, update: impl FnOnce(&mut SessionState) -> (R, bool)) -> R {
+        let mut boundary = self
+            .state
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut next = (**boundary).clone();
+        let (output, changed) = update(&mut next);
+        if changed {
+            next.advance_generation();
+            *boundary = Arc::new(next);
+        }
+        output
     }
 
     pub fn tokenize(&self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -391,25 +512,11 @@ impl Session {
         F: FnOnce(usize) -> String,
     {
         let family_key = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
-        let key = TokenKey {
-            family: family_key.to_string(),
-            class: class.clone(),
-            raw: raw.to_string(),
-        };
-        match self.token_by_value.entry(key) {
-            Entry::Occupied(existing) => Ok(existing.get().clone()),
-            Entry::Vacant(vacant) => {
-                let token = {
-                    let mut next = self.next_by_class.entry(class.clone()).or_insert(0);
-                    *next += 1;
-                    build(*next)
-                };
-
-                vacant.insert(token.clone());
-                self.value_by_token.insert(token.clone(), raw.to_string());
-                Ok(token)
-            }
-        }
+        Ok(
+            self.mutate_state(|state| {
+                intern_mapping_in_state(state, family_key, class, raw, build)
+            }),
+        )
     }
 
     /// Enumerate every live token string emitted by this session.
@@ -425,86 +532,67 @@ impl Session {
     /// Returned order is unspecified — callers that rely on longest-first
     /// matching must sort the returned vector themselves.
     pub fn tokens(&self) -> Vec<String> {
-        self.value_by_token
-            .iter()
-            .map(|entry| entry.key().clone())
+        self.state_snapshot()
+            .value_by_token
+            .keys()
+            .cloned()
             .collect()
     }
 
-    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
-        let token_count = self.value_by_token.len();
-        if token_count == 0 {
-            return Ok(None);
-        }
+    /// Returns only the prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.state_snapshot().prefix_cache.len()
+    }
 
-        {
-            let cache = self.restore_regex_cache_read();
-            if let Some((cached_count, cached_regex)) = cache.as_ref() {
-                if *cached_count == token_count {
-                    return Ok(Some(Arc::clone(cached_regex)));
-                }
+    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
+        let captured = self.state_snapshot();
+        if let Some((cache_generation, regex)) = &captured.restore_regex_cache {
+            if *cache_generation == captured.generation {
+                return Ok(Some(Arc::clone(regex)));
             }
         }
 
-        let mut tokens = self.tokens();
-        if tokens.is_empty() {
+        let Some(regex) = build_restore_regex(&captured)? else {
             return Ok(None);
+        };
+
+        let mut boundary = self
+            .state
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if boundary.generation == captured.generation {
+            let mut next = (**boundary).clone();
+            next.restore_regex_cache = Some((next.generation, Arc::clone(&regex)));
+            *boundary = Arc::new(next);
         }
-        tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
-        let pattern = tokens
-            .iter()
-            .map(|token| {
-                let escaped = regex::escape(token);
-                if token.starts_with('<') && token.ends_with('>') {
-                    escaped
-                } else {
-                    format!(r"\b(?:{escaped})\b")
-                }
-            })
-            .collect::<Vec<_>>()
-            .join("|");
-        let regex = Arc::new(Regex::new(&pattern).map_err(Error::InvalidRegex)?);
-        let cached_count = tokens.len();
-        *self.restore_regex_cache_write() = Some((cached_count, Arc::clone(&regex)));
         Ok(Some(regex))
     }
 
-    fn restore_regex_cache_read(&self) -> RwLockReadGuard<'_, Option<(usize, Arc<Regex>)>> {
-        self.restore_regex_cache
-            .read()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn restore_regex_cache_write(&self) -> RwLockWriteGuard<'_, Option<(usize, Arc<Regex>)>> {
-        self.restore_regex_cache
-            .write()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
     pub fn contains_token(&self, token: &str) -> bool {
-        self.value_by_token.contains_key(token)
+        self.state_snapshot().value_by_token.contains_key(token)
     }
 
     pub fn session_hex(&self) -> String {
-        hex::encode(self.session_hex)
+        hex::encode(self.identity.session_hex)
     }
 
     pub fn audit_session_id(&self) -> &str {
-        &self.audit_session_id
+        &self.identity.audit_session_id
     }
 
     pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        self.prefix_cache
-            .iter()
-            .filter_map(|entry| {
-                let cached = entry.value();
-                (text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())).then(
-                    || PrefixCacheHit {
-                        raw_len: cached.raw.len(),
-                        clean_text: cached.clean_text.clone(),
-                        manifest: cached.manifest.clone(),
-                    },
-                )
+        self.state_snapshot()
+            .prefix_cache
+            .values()
+            .filter(|cached| {
+                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
+            })
+            .map(|cached| PrefixCacheHit {
+                raw_len: cached.raw.len(),
+                clean_text: cached.clean_text.clone(),
+                manifest: cached.manifest.clone(),
             })
             .max_by_key(|hit| hit.raw_len)
     }
@@ -518,80 +606,54 @@ impl Session {
         if raw.is_empty() {
             return;
         }
-        if self.prefix_cache.len() >= 64 {
-            self.prefix_cache.clear();
-        }
-        self.prefix_cache.insert(
-            prefix_cache_hash(raw),
-            PrefixCacheEntry {
-                raw: raw.to_string(),
-                clean_text: clean_text.to_string(),
-                manifest: manifest.to_vec(),
-            },
-        );
+        self.mutate_state(|state| {
+            let changed = store_prefix_cache_in_state(state, raw, clean_text, manifest);
+            ((), changed)
+        });
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
-        self.token_by_value
-            .iter()
-            .map(|entry| SessionSnapshotEntry {
-                family: entry.key().family.clone(),
-                class: entry.key().class.clone(),
-                raw: entry.key().raw.clone(),
-                token: entry.value().clone(),
-            })
-            .collect()
+        snapshot_entries_from_state(&self.state_snapshot())
     }
 
     // Original byte spans are preserved by recognizer normalizers per
     // research-855 §Rulepack > Normalization (axis-2 invariant).
     pub fn restore_strict(&self, token: &str) -> Result<String> {
-        self.value_by_token
-            .get(token)
-            .map(|value| value.value().clone())
-            .ok_or_else(|| unknown_token_error(token))
+        restore_strict_from_state(&self.state_snapshot(), token)
     }
 
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
-        let tokens = strict_restore_tokens(text)?;
-        for token in &tokens {
-            if !self.value_by_token.contains_key(token.parsed.raw.as_str()) {
-                return Err(unknown_token_error(token.parsed.raw.as_str()));
-            }
-        }
+        restore_strict_text_with_provenance_from_state(&self.state_snapshot(), text)
+            .map(|restored| restored.text)
+    }
 
-        let mut restored = String::with_capacity(text.len());
-        let mut cursor = 0usize;
-        for token in tokens {
-            restored.push_str(&text[cursor..token.start]);
-            let raw = self
-                .value_by_token
-                .get(token.parsed.raw.as_str())
-                .expect("validated manifest token must remain present");
-            restored.push_str(raw.value());
-            cursor = token.end;
-        }
-        restored.push_str(&text[cursor..]);
-        Ok(restored)
+    pub fn restore_strict_text_with_provenance(
+        &self,
+        text: &str,
+    ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+        restore_strict_text_with_provenance_from_state(&self.state_snapshot(), text)
     }
 
     pub fn restore_strict_text_with_events(
         &self,
         text: &str,
     ) -> std::result::Result<(String, Vec<RestoreEvent>), RestoreError> {
-        let events = self.restore_boundary_events(text);
-        let restored = self.restore_strict_text(text)?;
+        let state = self.state_snapshot();
+        let events =
+            restore_boundary_events(text, &authorized_structural_values_from_state(&state));
+        let restored = restore_strict_text_with_provenance_from_state(&state, text)?.text;
         Ok((restored, events))
     }
 
     pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
-        restore_boundary_events(text, &authorized_structural_values(self))
+        restore_boundary_events(
+            text,
+            &authorized_structural_values_from_state(&self.state_snapshot()),
+        )
     }
 
     pub fn restore(&self, token: &str) -> Option<String> {
-        self.value_by_token
-            .get(token)
-            .map(|value| value.value().clone())
+        self.state_snapshot().value_by_token.get(token).cloned()
     }
 
     pub fn export(&self) -> Result<SensitiveSnapshot> {
@@ -657,9 +719,10 @@ impl Session {
     }
 
     fn export_payload(&self, document: Option<DocumentExtension>) -> Result<SensitiveSnapshot> {
-        if matches!(self.scope, Scope::Ephemeral) {
+        if matches!(&self.identity.scope, Scope::Ephemeral) {
             return Err(Error::ExportForbidden);
         }
+        let state = self.state_snapshot();
 
         // If the host clock is before the Unix epoch, preserve compatibility by
         // exporting `issued_at = 0` rather than failing snapshot export.
@@ -669,10 +732,9 @@ impl Session {
             .unwrap_or(0);
 
         let payload = SnapshotPayload {
-            scope: snapshot_scope(&self.scope),
+            scope: snapshot_scope(&self.identity.scope),
             session_hex: self.session_hex(),
-            entries: self
-                .snapshot_entries()
+            entries: snapshot_entries_from_state(&state)
                 .into_iter()
                 .map(|entry| SnapshotEntry {
                     family: entry.family,
@@ -681,17 +743,17 @@ impl Session {
                     token: entry.token,
                 })
                 .collect(),
-            next_by_class: self
+            next_by_class: state
                 .next_by_class
                 .iter()
-                .map(|entry| (entry.key().clone(), *entry.value()))
+                .map(|(class, index)| (class.clone(), *index))
                 .collect(),
             issued_at,
             document,
         };
         let payload_bytes = serde_json::to_vec(&payload).map_err(Error::SnapshotDecode)?;
         let version = SNAPSHOT_VERSION_V5;
-        let signing_key = self.signing_key.signing_key();
+        let signing_key = self.identity.signing_key.signing_key();
         let verifying_key = signing_key.verifying_key();
         let verifying_key_bytes = verifying_key.to_bytes();
         let signing_preimage =
@@ -771,19 +833,9 @@ impl Session {
             }
         }
 
-        let session = Self {
-            scope,
-            session_hex,
-            audit_session_id: new_audit_session_id(),
-            next_by_class: DashMap::new(),
-            token_by_value: DashMap::new(),
-            value_by_token: DashMap::new(),
-            prefix_cache: DashMap::new(),
-            restore_regex_cache: RwLock::new(None),
-            signing_key: SessionKey::generate()?,
-        };
+        let mut state = SessionState::empty();
         for entry in payload.entries {
-            session.token_by_value.insert(
+            state.token_by_value.insert(
                 TokenKey {
                     family: entry.family,
                     class: entry.class.clone(),
@@ -791,11 +843,9 @@ impl Session {
                 },
                 entry.token.clone(),
             );
-            session
-                .value_by_token
-                .insert(entry.token.clone(), entry.raw);
+            state.value_by_token.insert(entry.token.clone(), entry.raw);
             if let Some(index) = parse_token_index(&entry.token) {
-                let mut next = session.next_by_class.entry(entry.class).or_insert(0);
+                let next = state.next_by_class.entry(entry.class).or_insert(0);
                 if *next < index {
                     *next = index;
                 }
@@ -806,13 +856,383 @@ impl Session {
         // that format-preserving tokens (e.g. `email1.<session>@gaze-fake.invalid`)
         // also round-trip safely.
         for (class, index) in payload.next_by_class {
-            let mut next = session.next_by_class.entry(class).or_insert(0);
+            let next = state.next_by_class.entry(class).or_insert(0);
             if *next < index {
                 *next = index;
             }
         }
-        Ok(session)
+        Ok(Self {
+            identity: Arc::new(SessionIdentity {
+                scope,
+                session_hex,
+                audit_session_id: new_audit_session_id(),
+                signing_key: SessionKey::generate()?,
+            }),
+            state: RwLock::new(Arc::new(state)),
+        })
     }
+}
+
+impl<'session> SessionTransaction<'session> {
+    pub fn tokenize(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        self.tokenize_with_family(DEFAULT_COUNTER_FAMILY, class, raw)
+    }
+
+    pub fn tokenize_with_family(
+        &mut self,
+        family: &str,
+        class: &PiiClass,
+        raw: &str,
+    ) -> Result<String> {
+        let prefix = hex::encode(self.identity.session_hex);
+        Ok(
+            intern_mapping_in_state(&mut self.staged, family, class, raw, |index| {
+                format!("<{prefix}:{}_{}>", class.class_name(), index)
+            })
+            .0,
+        )
+    }
+
+    pub fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        let prefix = hex::encode(self.identity.session_hex);
+        Ok(intern_mapping_in_state(
+            &mut self.staged,
+            DEFAULT_COUNTER_FAMILY,
+            class,
+            raw,
+            |index| match class {
+                PiiClass::Email => format!("email{index}.{prefix}@gaze-fake.invalid"),
+                PiiClass::Name | PiiClass::Location | PiiClass::Organization => {
+                    format!(
+                        "{prefix}:{}_{}",
+                        class.class_name().to_ascii_lowercase(),
+                        index
+                    )
+                }
+                PiiClass::Custom(name) => format!("{prefix}:custom:{name}_{index}"),
+            },
+        )
+        .0)
+    }
+
+    pub fn tokens(&self) -> Vec<String> {
+        self.staged.value_by_token.keys().cloned().collect()
+    }
+
+    /// Returns only the staged prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.staged.prefix_cache.len()
+    }
+
+    pub fn contains_token(&self, token: &str) -> bool {
+        self.staged.value_by_token.contains_key(token)
+    }
+
+    pub fn session_hex(&self) -> String {
+        hex::encode(self.identity.session_hex)
+    }
+
+    pub fn audit_session_id(&self) -> &str {
+        &self.identity.audit_session_id
+    }
+
+    /// Validates every Gaze token-shaped substring against staged manifest state.
+    ///
+    /// This performs shape and membership validation only. It does not build a
+    /// restored string or otherwise materialize mapped owner PII.
+    pub fn validate_token_shapes(&self, text: &str) -> std::result::Result<(), RestoreError> {
+        validate_token_shapes_from_state(&self.staged, text)
+    }
+
+    // Kept crate-private: the Pipeline is the sole cache reader/writer, so
+    // adopters cannot bypass its trusted prefix-cache population contract.
+    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+        self.staged
+            .prefix_cache
+            .values()
+            .filter(|cached| {
+                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
+            })
+            .map(|cached| PrefixCacheHit {
+                raw_len: cached.raw.len(),
+                clean_text: cached.clean_text.clone(),
+                manifest: cached.manifest.clone(),
+            })
+            .max_by_key(|hit| hit.raw_len)
+    }
+
+    pub(crate) fn store_prefix_cache(
+        &mut self,
+        raw: &str,
+        clean_text: &str,
+        manifest: &[gaze_types::EmittedTokenSpan],
+    ) {
+        store_prefix_cache_in_state(&mut self.staged, raw, clean_text, manifest);
+    }
+
+    pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
+        snapshot_entries_from_state(&self.staged)
+    }
+
+    pub fn restore_strict(&self, token: &str) -> Result<String> {
+        restore_strict_from_state(&self.staged, token)
+    }
+
+    pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
+        restore_strict_text_with_provenance_from_state(&self.staged, text)
+            .map(|restored| restored.text)
+    }
+
+    pub fn restore_strict_text_with_provenance(
+        &self,
+        text: &str,
+    ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+        restore_strict_text_with_provenance_from_state(&self.staged, text)
+    }
+
+    pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
+        restore_boundary_events(text, &authorized_structural_values_from_state(&self.staged))
+    }
+
+    pub fn restore(&self, token: &str) -> Option<String> {
+        self.staged.value_by_token.get(token).cloned()
+    }
+
+    /// Atomically publish the entire staged state if the captured generation is current.
+    pub fn commit(
+        mut self,
+    ) -> std::result::Result<CommittedSessionSnapshot, SessionTransactionError> {
+        let mut boundary = self
+            .session
+            .state
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if boundary.generation != self.captured_generation {
+            return Err(SessionTransactionError::GenerationConflict);
+        }
+
+        self.staged.generation = self
+            .captured_generation
+            .checked_add(1)
+            .expect("session generation exhausted");
+        self.staged.restore_regex_cache = None;
+        let committed = Arc::new(self.staged);
+        *boundary = Arc::clone(&committed);
+        Ok(CommittedSessionSnapshot {
+            identity: self.identity,
+            state: committed,
+        })
+    }
+}
+
+impl CommittedSessionSnapshot {
+    pub fn tokens(&self) -> Vec<String> {
+        self.state.value_by_token.keys().cloned().collect()
+    }
+
+    /// Returns only the committed prefix-cache cardinality for cross-crate regression tests.
+    #[cfg(feature = "test-support")]
+    #[doc(hidden)]
+    pub fn prefix_cache_entry_count(&self) -> usize {
+        self.state.prefix_cache.len()
+    }
+
+    pub fn contains_token(&self, token: &str) -> bool {
+        self.state.value_by_token.contains_key(token)
+    }
+
+    pub fn session_hex(&self) -> String {
+        hex::encode(self.identity.session_hex)
+    }
+
+    pub fn audit_session_id(&self) -> &str {
+        &self.identity.audit_session_id
+    }
+
+    pub fn restore_strict(&self, token: &str) -> Result<String> {
+        restore_strict_from_state(&self.state, token)
+    }
+
+    pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
+        restore_strict_text_with_provenance_from_state(&self.state, text)
+            .map(|restored| restored.text)
+    }
+
+    pub fn restore_strict_text_with_provenance(
+        &self,
+        text: &str,
+    ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+        restore_strict_text_with_provenance_from_state(&self.state, text)
+    }
+
+    pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
+        restore_boundary_events(text, &authorized_structural_values_from_state(&self.state))
+    }
+
+    pub fn restore(&self, token: &str) -> Option<String> {
+        self.state.value_by_token.get(token).cloned()
+    }
+}
+
+fn intern_mapping_in_state<F>(
+    state: &mut SessionState,
+    family: &str,
+    class: &PiiClass,
+    raw: &str,
+    build: F,
+) -> (String, bool)
+where
+    F: FnOnce(usize) -> String,
+{
+    let key = TokenKey {
+        family: family.to_string(),
+        class: class.clone(),
+        raw: raw.to_string(),
+    };
+    if let Some(existing) = state.token_by_value.get(&key) {
+        return (existing.clone(), false);
+    }
+
+    let next = state.next_by_class.entry(class.clone()).or_insert(0);
+    *next = next
+        .checked_add(1)
+        .expect("session token counter exhausted");
+    let token = build(*next);
+    state.token_by_value.insert(key, token.clone());
+    state.value_by_token.insert(token.clone(), raw.to_string());
+    state.restore_regex_cache = None;
+    (token, true)
+}
+
+fn build_restore_regex(state: &SessionState) -> Result<Option<Arc<Regex>>> {
+    let mut tokens = state.value_by_token.keys().cloned().collect::<Vec<_>>();
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+    tokens.sort_by(|a, b| b.len().cmp(&a.len()).then_with(|| a.cmp(b)));
+    let pattern = tokens
+        .iter()
+        .map(|token| {
+            let escaped = regex::escape(token);
+            if token.starts_with('<') && token.ends_with('>') {
+                escaped
+            } else {
+                format!(r"\b(?:{escaped})\b")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    Regex::new(&pattern)
+        .map(Arc::new)
+        .map(Some)
+        .map_err(Error::InvalidRegex)
+}
+
+fn store_prefix_cache_in_state(
+    state: &mut SessionState,
+    raw: &str,
+    clean_text: &str,
+    manifest: &[gaze_types::EmittedTokenSpan],
+) -> bool {
+    if raw.is_empty() {
+        return false;
+    }
+    if state.prefix_cache.len() >= 64 {
+        state.prefix_cache.clear();
+    }
+    let hash = prefix_cache_hash(raw);
+    let entry = PrefixCacheEntry {
+        raw: raw.to_string(),
+        clean_text: clean_text.to_string(),
+        manifest: manifest.to_vec(),
+    };
+    let changed = state.prefix_cache.get(&hash).is_none_or(|existing| {
+        existing.raw != entry.raw
+            || existing.clean_text != entry.clean_text
+            || existing.manifest != entry.manifest
+    });
+    state.prefix_cache.insert(hash, entry);
+    changed
+}
+
+fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
+    state
+        .token_by_value
+        .iter()
+        .map(|(key, token)| SessionSnapshotEntry {
+            family: key.family.clone(),
+            class: key.class.clone(),
+            raw: key.raw.clone(),
+            token: token.clone(),
+        })
+        .collect()
+}
+
+fn restore_strict_from_state(state: &SessionState, token: &str) -> Result<String> {
+    state
+        .value_by_token
+        .get(token)
+        .cloned()
+        .ok_or_else(|| unknown_token_error(token))
+}
+
+fn restore_strict_text_with_provenance_from_state(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
+    let tokens = validated_restore_tokens(state, text)?;
+    let mut restored = String::with_capacity(text.len());
+    let mut authorized_output_ranges = Vec::<Range<usize>>::with_capacity(tokens.len());
+    let mut cursor = 0usize;
+    for token in tokens {
+        restored.push_str(&text[cursor..token.start]);
+        let raw = state
+            .value_by_token
+            .get(token.parsed.raw.as_str())
+            .expect("validated immutable manifest token must remain present");
+        let start = restored.len();
+        restored.push_str(raw);
+        let end = restored.len();
+        if start < end {
+            if let Some(previous) = authorized_output_ranges.last_mut() {
+                if start <= previous.end {
+                    previous.end = previous.end.max(end);
+                } else {
+                    authorized_output_ranges.push(start..end);
+                }
+            } else {
+                authorized_output_ranges.push(start..end);
+            }
+        }
+        cursor = token.end;
+    }
+    restored.push_str(&text[cursor..]);
+    Ok(RestoredTextWithProvenance {
+        text: restored,
+        authorized_output_ranges,
+    })
+}
+
+fn validate_token_shapes_from_state(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<(), RestoreError> {
+    validated_restore_tokens(state, text).map(|_| ())
+}
+
+fn validated_restore_tokens(
+    state: &SessionState,
+    text: &str,
+) -> std::result::Result<Vec<StrictRestoreToken>, RestoreError> {
+    let tokens = strict_restore_tokens(text)?;
+    for token in &tokens {
+        if !state.value_by_token.contains_key(token.parsed.raw.as_str()) {
+            return Err(unknown_token_error(token.parsed.raw.as_str()));
+        }
+    }
+    Ok(tokens)
 }
 
 fn default_counter_family() -> String {
@@ -981,9 +1401,9 @@ struct StructuralFinding {
     location: Range<usize>,
 }
 
-fn authorized_structural_values(session: &Session) -> BTreeSet<(PiiClass, String)> {
+fn authorized_structural_values_from_state(state: &SessionState) -> BTreeSet<(PiiClass, String)> {
     let mut authorized = BTreeSet::new();
-    for entry in session.snapshot_entries() {
+    for entry in snapshot_entries_from_state(state) {
         for finding in structural_findings(&entry.raw) {
             authorized.insert((finding.class, finding.canonical));
         }
@@ -1265,6 +1685,13 @@ pub(crate) struct StrictRestoreToken {
 pub(crate) fn strict_restore_tokens(text: &str) -> Result<Vec<StrictRestoreToken>> {
     let mut tokens = Vec::new();
     for matched in crate::token_shape::pattern().find_iter(text) {
+        let nested_start = matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'<';
+        let nested_end = matched.end() < text.len() && text.as_bytes()[matched.end()] == b'>';
+        if nested_start || nested_end {
+            let start = matched.start().saturating_sub(usize::from(nested_start));
+            let end = matched.end() + usize::from(nested_end);
+            return Err(unknown_token_error(&text[start..end]));
+        }
         tokens.push(StrictRestoreToken {
             start: matched.start(),
             end: matched.end(),
@@ -1404,9 +1831,23 @@ fn decode_snapshot_payload(payload_bytes: &[u8]) -> Result<SnapshotPayload> {
 }
 
 fn validate_entry_prefixes(payload: &SnapshotPayload) -> Result<()> {
+    let mut tokens_by_value = HashMap::<TokenKey, String>::new();
+    let mut values_by_token = HashMap::<String, TokenKey>::new();
     for entry in &payload.entries {
         if !entry_token_matches_session(&entry.token, &payload.session_hex)
             || !crate::token_shape::starts_with_session_prefix(&entry.token)
+        {
+            return Err(Error::InvalidSnapshotPayload);
+        }
+        let key = TokenKey {
+            family: entry.family.clone(),
+            class: entry.class.clone(),
+            raw: entry.raw.clone(),
+        };
+        if tokens_by_value
+            .insert(key.clone(), entry.token.clone())
+            .is_some()
+            || values_by_token.insert(entry.token.clone(), key).is_some()
         {
             return Err(Error::InvalidSnapshotPayload);
         }
@@ -1620,6 +2061,44 @@ mod tests {
             Session::import(snapshot),
             Err(Error::InvalidSnapshotPayload)
         ));
+    }
+
+    #[test]
+    fn import_rejects_non_bijective_manifest_directions() {
+        let first = SnapshotEntry {
+            family: DEFAULT_COUNTER_FAMILY.to_string(),
+            class: PiiClass::Name,
+            raw: "Dr. Schmidt".to_string(),
+            token: "<a7f3b8e2:Name_1>".to_string(),
+        };
+        let duplicate_token = SnapshotEntry {
+            family: "tool".to_string(),
+            class: PiiClass::Name,
+            raw: "Synthetic Colleague".to_string(),
+            token: first.token.clone(),
+        };
+        let duplicate_value = SnapshotEntry {
+            token: "<a7f3b8e2:Name_2>".to_string(),
+            ..first.clone()
+        };
+
+        for entries in [
+            vec![first.clone(), duplicate_token],
+            vec![first.clone(), duplicate_value],
+        ] {
+            let snapshot = signed_snapshot(SnapshotPayload {
+                scope: SnapshotScope::Persistent { ttl_secs: 300 },
+                session_hex: "a7f3b8e2".to_string(),
+                entries,
+                issued_at: 0,
+                next_by_class: Vec::new(),
+                document: None,
+            });
+            assert!(matches!(
+                Session::import(snapshot),
+                Err(Error::InvalidSnapshotPayload)
+            ));
+        }
     }
 
     #[test]
@@ -2199,5 +2678,388 @@ mod tests {
             event.kind == RestoreEventKind::FreshPiiDetected
                 && event.class == PiiClass::custom("api_key")
         }));
+    }
+
+    #[test]
+    fn transaction_discard_then_commit_swaps_complete_state_and_shares_identity() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let initial_entries = session.snapshot_entries();
+        let initial_state = session.state_snapshot();
+
+        {
+            let mut discarded = session.begin_transaction();
+            let discarded_token = discarded
+                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                .expect("staged token");
+            discarded.store_prefix_cache("alice", &discarded_token, &[]);
+        }
+        assert_eq!(session.snapshot_entries(), initial_entries);
+        assert!(Arc::ptr_eq(&initial_state, &session.state_snapshot()));
+
+        let mut transaction = session.begin_transaction();
+        assert!(Arc::ptr_eq(&session.identity, &transaction.identity));
+        let token = transaction
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("staged token");
+        assert_eq!(
+            transaction.restore_strict(&token).expect("staged restore"),
+            "alice@example.invalid"
+        );
+        transaction.store_prefix_cache("alice", &token, &[]);
+        let snapshot = transaction.commit().expect("commit");
+
+        assert_eq!(
+            session.restore_strict(&token).expect("live restore"),
+            "alice@example.invalid"
+        );
+        assert_eq!(
+            snapshot.restore_strict(&token).expect("snapshot restore"),
+            "alice@example.invalid"
+        );
+        let snapshot_restored = snapshot
+            .restore_strict_text_with_provenance(&format!("owner={token}"))
+            .expect("snapshot provenance");
+        assert_eq!(snapshot_restored.text, "owner=alice@example.invalid");
+        assert_eq!(snapshot_restored.authorized_output_ranges.len(), 1);
+        assert_eq!(
+            snapshot_restored.authorized_output_ranges[0],
+            "owner=".len().."owner=alice@example.invalid".len()
+        );
+        assert_eq!(
+            session
+                .lookup_prefix_cache("alice and more")
+                .expect("committed prefix cache")
+                .clean_text,
+            token
+        );
+        assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
+
+        let regex = session
+            .restore_regex()
+            .expect("restore regex")
+            .expect("non-empty restore regex");
+        assert!(regex.is_match(&token));
+        let state = session.state_snapshot();
+        assert_eq!(state.token_by_value.len(), state.value_by_token.len());
+        for (key, mapped_token) in &state.token_by_value {
+            assert_eq!(
+                state.value_by_token.get(mapped_token),
+                Some(&key.raw),
+                "manifest directions must remain reciprocal"
+            );
+        }
+        assert_eq!(state.next_by_class.get(&PiiClass::Email), Some(&1));
+        assert_eq!(
+            state
+                .restore_regex_cache
+                .as_ref()
+                .map(|(generation, _)| *generation),
+            Some(state.generation)
+        );
+        assert!(state.generation > 0);
+    }
+
+    #[test]
+    fn generation_conflicts_never_publish_partial_transaction_state() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut transaction = session.begin_transaction();
+        let staged = transaction
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("staged token");
+
+        let live = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("live token");
+        let before_conflict = session.snapshot_entries();
+        let error = match transaction.commit() {
+            Err(error) => error,
+            Ok(_) => panic!("generation conflict must fail closed"),
+        };
+
+        assert_eq!(error, SessionTransactionError::GenerationConflict);
+        assert_eq!(session.snapshot_entries(), before_conflict);
+        assert!(session.contains_token(&live));
+        assert!(!session.contains_token(&staged));
+    }
+
+    #[test]
+    fn every_existing_session_mutation_route_conflicts_after_capture() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let transaction = session.begin_transaction();
+        session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("tokenize");
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
+
+        let transaction = session.begin_transaction();
+        session
+            .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
+            .expect("family tokenize");
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
+
+        let transaction = session.begin_transaction();
+        session
+            .format_preserving_fake(&PiiClass::Location, "München")
+            .expect("format preserving fake");
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
+
+        let transaction = session.begin_transaction();
+        session.store_prefix_cache("prefix", "clean", &[]);
+        assert!(matches!(
+            transaction.commit(),
+            Err(SessionTransactionError::GenerationConflict)
+        ));
+    }
+
+    #[test]
+    fn concurrent_existing_mutation_routes_serialize_or_conflict_without_partial_state() {
+        #[derive(Clone, Copy)]
+        enum MutationRoute {
+            Tokenize,
+            TokenizeWithFamily,
+            FormatPreserving,
+            PrefixCache,
+        }
+
+        enum MutationOutcome {
+            Token(String),
+            PrefixCache,
+        }
+
+        for route in [
+            MutationRoute::Tokenize,
+            MutationRoute::TokenizeWithFamily,
+            MutationRoute::FormatPreserving,
+            MutationRoute::PrefixCache,
+        ] {
+            let session = Session::new(Scope::Ephemeral).expect("session");
+            let mut transaction = session.begin_transaction();
+            let staged = transaction
+                .tokenize(&PiiClass::Organization, "Synthetic Workshop")
+                .expect("staged token");
+            let barrier = Arc::new(std::sync::Barrier::new(2));
+            let mutator_barrier = Arc::clone(&barrier);
+
+            let (commit_result, mutation) = std::thread::scope(|scope| {
+                let mutator = scope.spawn(|| {
+                    mutator_barrier.wait();
+                    match route {
+                        MutationRoute::Tokenize => MutationOutcome::Token(
+                            session
+                                .tokenize(&PiiClass::Email, "alice@example.invalid")
+                                .expect("tokenize"),
+                        ),
+                        MutationRoute::TokenizeWithFamily => MutationOutcome::Token(
+                            session
+                                .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
+                                .expect("family tokenize"),
+                        ),
+                        MutationRoute::FormatPreserving => MutationOutcome::Token(
+                            session
+                                .format_preserving_fake(&PiiClass::Location, "München")
+                                .expect("format preserving fake"),
+                        ),
+                        MutationRoute::PrefixCache => {
+                            session.store_prefix_cache("prefix", "clean", &[]);
+                            MutationOutcome::PrefixCache
+                        }
+                    }
+                });
+                barrier.wait();
+                let commit_result = transaction.commit();
+                let mutation = mutator.join().expect("mutator join");
+                (commit_result, mutation)
+            });
+
+            match commit_result {
+                Ok(snapshot) => {
+                    assert!(snapshot.contains_token(&staged));
+                    assert!(session.contains_token(&staged));
+                }
+                Err(SessionTransactionError::GenerationConflict) => {
+                    assert!(!session.contains_token(&staged));
+                }
+            }
+            match mutation {
+                MutationOutcome::Token(token) => assert!(session.contains_token(&token)),
+                MutationOutcome::PrefixCache => assert_eq!(
+                    session
+                        .lookup_prefix_cache("prefix suffix")
+                        .expect("prefix cache")
+                        .clean_text,
+                    "clean"
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn two_same_generation_commits_have_exactly_one_winner() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut left = session.begin_transaction();
+        let mut right = session.begin_transaction();
+        let left_token = left
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("left token");
+        let right_token = right
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("right token");
+
+        let (left_result, right_result) = std::thread::scope(|scope| {
+            let left = scope.spawn(move || left.commit());
+            let right = scope.spawn(move || right.commit());
+            (
+                left.join().expect("left join"),
+                right.join().expect("right join"),
+            )
+        });
+
+        assert_ne!(left_result.is_ok(), right_result.is_ok());
+        assert_ne!(
+            session.contains_token(&left_token),
+            session.contains_token(&right_token)
+        );
+    }
+
+    #[test]
+    fn committed_snapshot_is_stable_after_later_live_mutation() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut transaction = session.begin_transaction();
+        let first = transaction
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("first token");
+        let snapshot = transaction.commit().expect("commit");
+
+        let later = session
+            .tokenize(&PiiClass::Email, "alice@example.invalid")
+            .expect("later token");
+
+        assert_eq!(
+            snapshot.restore_strict(&first).expect("old restore"),
+            "Dr. Schmidt"
+        );
+        assert!(snapshot.restore_strict(&later).is_err());
+        assert_eq!(
+            session.restore_strict(&later).expect("live restore"),
+            "alice@example.invalid"
+        );
+    }
+
+    #[test]
+    fn restoration_provenance_uses_utf8_output_coordinates_and_coalesces_adjacency() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let name = session
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("name token");
+        let location = session
+            .tokenize(&PiiClass::Location, "München")
+            .expect("location token");
+        let input = format!("π/{name}{location};{name}");
+
+        let restored = session
+            .restore_strict_text_with_provenance(&input)
+            .expect("restore with provenance");
+        let first_start = "π/".len();
+        let first_end = first_start + "Dr. SchmidtMünchen".len();
+        let second_start = first_end + ";".len();
+
+        assert_eq!(restored.text, "π/Dr. SchmidtMünchen;Dr. Schmidt");
+        assert_eq!(
+            restored.authorized_output_ranges,
+            vec![
+                first_start..first_end,
+                second_start..second_start + "Dr. Schmidt".len()
+            ]
+        );
+
+        assert!(session
+            .restore_strict_text_with_provenance("prefix <deadbeef:Email_999> suffix")
+            .is_err());
+        assert!(session
+            .restore_strict_text_with_provenance("prefix <Email_> suffix")
+            .is_err());
+        assert!(session
+            .restore_strict_text_with_provenance("prefix <deadbeef:Email_1 suffix")
+            .is_err());
+        assert!(session
+            .restore_strict_text_with_provenance(&format!("prefix <{name}> suffix"))
+            .is_err());
+
+        let other = Session::new(Scope::Ephemeral).expect("other session");
+        let cross_session = other
+            .tokenize(&PiiClass::Email, "bob@example.invalid")
+            .expect("cross-session token");
+        assert!(session
+            .restore_strict_text_with_provenance(&cross_session)
+            .is_err());
+    }
+
+    #[test]
+    fn transaction_token_shape_validation_rejects_unknown_malformed_nested_and_cross_session() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut transaction = session.begin_transaction();
+        let ordinary = transaction
+            .tokenize(&PiiClass::Name, "Dr. Schmidt")
+            .expect("ordinary token");
+        let format_preserving = transaction
+            .format_preserving_fake(&PiiClass::Email, "alice@example.invalid")
+            .expect("format-preserving token");
+
+        transaction
+            .validate_token_shapes(&format!("known {ordinary} and {format_preserving}"))
+            .expect("known staged tokens");
+        assert!(transaction.validate_token_shapes("trap <Email_1>").is_err());
+        assert!(transaction
+            .validate_token_shapes("trap email1@gaze-fake.invalid")
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!(
+                "unknown <{}:Email_999>",
+                transaction.session_hex()
+            ))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!(
+                "unknown email999.{}@gaze-fake.invalid",
+                transaction.session_hex()
+            ))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes(&format!("nested <{ordinary}>"))
+            .is_err());
+        assert!(transaction
+            .validate_token_shapes("malformed <deadbeef:Email_>")
+            .is_err());
+
+        let other = Session::new(Scope::Ephemeral).expect("other session");
+        let cross_ordinary = other
+            .tokenize(&PiiClass::Location, "München")
+            .expect("cross ordinary");
+        let cross_format = other
+            .format_preserving_fake(&PiiClass::Name, "Synthetic Colleague")
+            .expect("cross format-preserving");
+        assert!(transaction.validate_token_shapes(&cross_ordinary).is_err());
+        assert!(transaction.validate_token_shapes(&cross_format).is_err());
+    }
+
+    #[test]
+    fn transaction_token_shape_validation_rejects_degenerate_shadow_shape_before_mapping() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let transaction = session.begin_transaction();
+        let would_be_fake = format!("{}:name_1", transaction.session_hex());
+
+        assert!(transaction.validate_token_shapes(&would_be_fake).is_err());
+        assert!(transaction.tokens().is_empty());
+        assert!(session.tokens().is_empty());
     }
 }

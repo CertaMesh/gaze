@@ -1,0 +1,29 @@
+[package]
+name = "gaze-inspection"
+version = "0.12.0"
+edition = "2021"
+rust-version = "1.89"
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Provider-neutral inspection runtime for Gaze"
+readme = "README.md"
+keywords = ["pii", "inspection", "gaze"]
+categories = ["data-structures"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+gaze-types = { workspace = true }
+zeroize = "1"
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+static_assertions = "1"
+trybuild = "1"
+
+[features]
+default = []
