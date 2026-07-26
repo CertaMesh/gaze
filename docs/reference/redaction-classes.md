@@ -19,6 +19,8 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
+The shared payload currently contains exactly 29 recognizer specs
+(`crates/gaze-recognizers/src/lib.rs:62-106`).
 
 ## PII classes and resolver priority
 
@@ -71,7 +73,7 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `iban.structural` | `regex` | Space-tolerant IBAN shapes that pass MOD-97 after canonicalization | `custom:iban` | `global` | `iban_mod97` | `iban_canonical` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:280-308` |
 | `core, core-extended` | `card.structural` | `regex` | 13 to 19 digit payment-card shapes with optional spaces or dashes that pass Luhn | `custom:credit_card` | `global` | `luhn` | `none` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:310-333` |
 | `core, core-extended` | `ip.v4` | `regex` | Decimal dotted-quad IPv4 addresses with octets from 0 through 255 | `custom:ip_address` | `global` | `ipv4_parse` | `none` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:335-354` |
-| `core, core-extended` | `ip.v6` | `regex` | Full, compressed, and IPv4-embedded IPv6 textual forms | `custom:ip_address` | `global` | `ipv6_parse` | `none` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:356-405` |
+| `core, core-extended` | `ip.v6` | `regex` | Full, compressed (including bare `::`), and IPv4-embedded IPv6 textual forms; bare `::` also matches the scope separator inside Rust and C++ paths at every locale (todo #2402) | `custom:ip_address` | `global` | `ipv6_parse` | `none` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:356-405` |
 | `core, core-extended` | `eth.address` | `regex` | Forty-hex-digit Ethereum addresses prefixed by 0x and accepted by EIP-55 rules | `custom:eth_address` | `global` | `eth_eip55` | `none` | `safe_default` | yes | 0.70 | 80 | `crates/gaze-recognizers/embedded/core.toml:407-425` |
 | `core, core-extended` | `aadhaar.in` | `regex` | Cue-anchored Indian Aadhaar or UID values containing 12 digits and passing Verhoeff | `custom:aadhaar` | `en-IN, hi-IN` | `aadhaar_verhoeff` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:427-446` |
 | `core, core-extended` | `nir.fr` | `regex` | Cue-anchored French NIR social-security values with 15 digits and a valid MOD-97 key | `custom:nir` | `fr-FR` | `fr_nir_mod97` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:448-467` |
@@ -93,7 +95,8 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 
 ### `ValidatorKind`
 
-`ValidatorKind` is owned by `gaze-types`
+`ValidatorKind` is owned by `gaze-types`; the source currently contains 15 Rust
+variants
 (`crates/gaze-types/src/lib.rs:505-553`). `E164Phone` and the parameterized
 `E164PhoneNational(Region)` variant are compiled only with `phone-parser`; the
 current closed `Region` set is Germany and the United States
@@ -247,11 +250,18 @@ depends on its shape, cues, and validator outcome.
 
 The plain `core` default locale chain is `global`
 (`crates/gaze-recognizers/embedded/core.toml:1-4`), so only global
-`safe_default` recognizers activate. The deprecated `core-extended` alias sets
-`auto_activate_locale_gated = true` and adds `en-US`, `de-DE`, `de-AT`, and
-`de-CH` to the compatibility locale chain
-(`crates/gaze-assembly/src/defaults.rs:45-76`;
-`crates/gaze-cli/src/pipeline/run.rs:137-158,718-733`).
+`safe_default` recognizers activate. For the CLI, `normalize_rulepack_bundles`
+rewrites the deprecated `core-extended` selection to `core` while returning an
+`auto_activate_locale_gated` bit
+(`crates/gaze-cli/src/pipeline/run.rs:700-733`). `CleanOverrides::apply_to`
+carries that bit into `Policy::rulepacks`
+(`crates/gaze-cli/src/clean_overrides.rs:48-63`). Pipeline construction then
+adds `en-US`, `de-DE`, `de-AT`, and `de-CH` to the compatibility locale chain
+(`crates/gaze-cli/src/pipeline/run.rs:137-158`), and recognizer wiring admits
+locale-gated rows under that policy and locale intersection
+(`crates/gaze-assembly/src/detector_wiring.rs:251-285`). The library's
+`CorePipelineConfig` implements the same compatibility behavior directly from
+the requested bundle name (`crates/gaze-assembly/src/defaults.rs:45-76`).
 
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
