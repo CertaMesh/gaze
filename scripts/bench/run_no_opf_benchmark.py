@@ -23,9 +23,7 @@ DEFAULT_WARMUPS = 1
 DEFAULT_MEASURED_REPETITIONS = 1
 DEFAULT_PERFORMANCE_TOLERANCE_PERCENT = 20.0
 BASELINE_CONFIRMATION = "I_HAVE_REVIEWED_FULL_RESULTS"
-NEGATIVE_CORPUS = Path(
-    "crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl"
-)
+NEGATIVE_CORPUS = Path("crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl")
 MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
 NO_OPF_MODEL_CONFIG = Path("scripts/bench/no_opf_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
@@ -106,9 +104,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--kiji-model-dir",
         type=Path,
         default=Path(
-            os.environ.get(
-                "GAZE_KIJI_DISTILBERT_MODEL_DIR", str(DEFAULT_KIJI_MODEL)
-            )
+            os.environ.get("GAZE_KIJI_DISTILBERT_MODEL_DIR", str(DEFAULT_KIJI_MODEL))
         ).expanduser(),
     )
     parser.add_argument("--threshold", type=float, default=0.3)
@@ -361,7 +357,9 @@ def load_negative_documents(
     documents: list[score.Document] = []
     languages: dict[str, int] = {}
     categories: dict[str, int] = {}
-    for line_number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for line_number, line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(), 1
+    ):
         try:
             row = json.loads(line)
         except json.JSONDecodeError as error:
@@ -519,16 +517,28 @@ def execute_measurements(
         )
     canonical = repetition_runs[0]
     canonical_counts = {
-        str(run["config"]): score._run_correctness_counts(run) for run in canonical
+        str(run["config"]): {
+            "counts": score._run_correctness_counts(run),
+            "scored_population": copy.deepcopy(run["scored_population"]),
+            "failed_closed_population": copy.deepcopy(run["failed_closed_population"]),
+        }
+        for run in canonical
     }
     for repetition, runs in enumerate(repetition_runs[1:], start=2):
         counts = {
-            str(run["config"]): score._run_correctness_counts(run) for run in runs
+            str(run["config"]): {
+                "counts": score._run_correctness_counts(run),
+                "scored_population": copy.deepcopy(run["scored_population"]),
+                "failed_closed_population": copy.deepcopy(
+                    run["failed_closed_population"]
+                ),
+            }
+            for run in runs
         }
         if counts != canonical_counts:
             raise RepetitionMismatchError(
                 f"measured repetition {repetition} disagrees with repetition 1 "
-                "on integer correctness counts"
+                "on integer correctness counts or identified populations"
             )
     return canonical, provenance
 
@@ -561,6 +571,8 @@ def diagnostics(scorecard: Mapping[str, object]) -> dict[str, object]:
         "runs": [
             {
                 "config": run["config"],
+                "scored_population": run["scored_population"],
+                "failed_closed_population": run["failed_closed_population"],
                 "per_language": run["per_language"],
                 "per_label": run["per_label_recall"],
                 "per_negative_category": run["per_negative_category"],
@@ -628,7 +640,9 @@ def accept_baseline(
             )
         return
     if args.profile != "full":
-        raise BaselineAcceptanceError("only a full-profile result may become a baseline")
+        raise BaselineAcceptanceError(
+            "only a full-profile result may become a baseline"
+        )
     if args.accept_baseline_confirm != BASELINE_CONFIRMATION:
         raise BaselineAcceptanceError(
             "baseline acceptance requires --accept-baseline-confirm "
@@ -663,7 +677,9 @@ def validate_cli_guards(args: argparse.Namespace) -> None:
             )
         return
     if args.profile != "full":
-        raise BaselineAcceptanceError("only a full-profile result may become a baseline")
+        raise BaselineAcceptanceError(
+            "only a full-profile result may become a baseline"
+        )
     if args.accept_baseline_confirm != BASELINE_CONFIRMATION:
         raise BaselineAcceptanceError(
             "baseline acceptance requires --accept-baseline-confirm "
@@ -694,9 +710,7 @@ def run(args: argparse.Namespace) -> int:
     davlan_model = args.model_dir.expanduser().resolve()
     kiji_model = args.kiji_model_dir.expanduser().resolve()
 
-    model_provenance = validate_required_models(
-        repo_root, davlan_model, kiji_model
-    )
+    model_provenance = validate_required_models(repo_root, davlan_model, kiji_model)
     if dataset_path.is_file():
         dataiku.verify_dataset(dataset_path)
     elif args.no_download:
@@ -733,9 +747,7 @@ def run(args: argparse.Namespace) -> int:
         warmup_count=args.warmups,
         measured_repetitions=args.measured_repetitions,
     )
-    metadata, dataset_report = composite_dataset_report(
-        dataiku_report, negative_report
-    )
+    metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     candidate = score.assemble_scorecard(
         repo_root=repo_root,
         dataset_metadata=metadata,

@@ -92,7 +92,7 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 
 | Artifact | Purpose |
 | --- | --- |
-| `scorecard-v3.json` | full schema-v3 scorecard and runner provenance |
+| `scorecard-v3.json` | full schema-v3 scorecard, runner provenance, and identified scored/failed-closed populations per cell |
 | `summary.md` | concise human-readable result |
 | `diagnostics.json` | per-language, per-label, and per-negative-category diagnostics |
 | `regression-status.json` | baseline-relative integer-count ratchet verdict |
@@ -107,6 +107,20 @@ cell to have no pipeline, restore, manifest, telemetry-agreement, or strict
 rejection failures. The production candidate cell must additionally have no
 leaked labeled bytes, uncovered entities, unscanned documents, residual suspects,
 or redact actions. A full command exits nonzero for either correctness failure.
+
+Every cell records sorted `scored_population.document_ids` and
+`failed_closed_population.document_ids` plus a SHA-256 digest over each list.
+Failed-closed entries also name the synthetic document ID, closed failure reason,
+and closed stage; their reason/stage counts must reconcile exactly to the
+failed-closed total. Regression comparison requires scored-set identity before
+emitting any metric or per-label delta. A mismatch names the IDs added to and
+removed from the scored set even when cardinality and gold counts are unchanged.
+
+These fields are an additive schema-v3 extension. Older schema-v3 artifacts
+remain readable as historical evidence, but because they do not identify each
+cell's scored set they cannot pass the current like-for-like population or
+per-label evaluability gates. Generate a new baseline with the current harness
+before using those gates; the committed historical artifact is not rewritten.
 
 A quick result is always marked not release-ready because it samples the
 population. Quick exits successfully when that incompleteness is its only

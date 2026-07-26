@@ -87,6 +87,7 @@ class OffsetTests(unittest.TestCase):
             [(0, 9), (12, 14)],
         )
 
+
 class MetricTests(unittest.TestCase):
     def document(self) -> benchmark.Document:
         text = "alice@example.invalid is synthetic"
@@ -201,8 +202,8 @@ class ContractTests(unittest.TestCase):
         )
         response = {
             "fixture_id": document.uid,
-            "pipeline_error_code": "POLICY_REJECTED",
-            "pipeline_error_stage": "safety_net",
+            "pipeline_error_code": "safety_net_fallback_residual_suspect",
+            "pipeline_error_stage": "clean",
             "timing": {"total_ms": 1.25},
         }
         process = mock.Mock()
@@ -241,9 +242,20 @@ class ContractTests(unittest.TestCase):
                 "completed_documents": 0,
                 "completion_rate": 0.0,
                 "failed_closed_documents": 1,
-                "errors": {"POLICY_REJECTED": 1},
-                "error_stages": {"safety_net": 1},
+                "errors": {"safety_net_fallback_residual_suspect": 1},
+                "error_stages": {"clean": 1},
             },
+        )
+        self.assertEqual(result["scored_population"]["document_ids"], [])
+        self.assertEqual(
+            result["failed_closed_population"]["excluded_documents"],
+            [
+                {
+                    "document_id": "synthetic-failure",
+                    "reason": "safety_net_fallback_residual_suspect",
+                    "stage": "clean",
+                }
+            ],
         )
         self.assertEqual(result["latency_ms"], {})
         self.assertIsNone(result["process"]["documents_per_second"])
@@ -343,31 +355,41 @@ class ResponseValidationTests(unittest.TestCase):
     def test_missing_required_field_fails_closed(self) -> None:
         response = self.success_response()
         response.pop("restore")
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "missing fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_missing_final_trace_fails_closed(self) -> None:
         response = self.success_response()
         response.pop("final_protection_trace")
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "missing fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_unknown_field_fails_closed(self) -> None:
         response = self.success_response()
         response["unratified_wire_field"] = 1
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_wrong_typed_nested_field_fails_closed(self) -> None:
         response = self.success_response()
         response["manifest_integrity"]["spans"] = True
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "expected an integer"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "expected an integer"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_success_timing_requires_the_exact_ratified_fields(self) -> None:
         response = self.success_response()
         response["timing"]["total_ms"] = 1.0
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
         for field in ("pass1_ms", "pass2_ms", "pass3_ms"):
@@ -381,7 +403,9 @@ class ResponseValidationTests(unittest.TestCase):
 
         response = self.success_response()
         response["timing"].pop("clean_ms")
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "missing fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_success_timing_only_allows_null_for_post_policy_scan(self) -> None:
@@ -415,6 +439,7 @@ class ResponseValidationTests(unittest.TestCase):
             "post_policy_scan_ms": None,
         }
         second = self.success_response()
+        second["fixture_id"] = "synthetic-response-2"
         second["timing"] = {
             "clean_ms": 3.0,
             "restore_ms": 20.0,
@@ -427,6 +452,14 @@ class ResponseValidationTests(unittest.TestCase):
         )
         process.wait.return_value = 0
         repo_root = Path(benchmark.__file__).resolve().parents[2]
+        second_document = benchmark.Document(
+            uid="synthetic-response-2",
+            text="synthetic text",
+            language="en",
+            region="US",
+            source_dataset="unit-test",
+            spans=(),
+        )
 
         with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
             with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
@@ -434,7 +467,7 @@ class ResponseValidationTests(unittest.TestCase):
                     repo_root=repo_root,
                     binary=Path(temporary) / "synthetic-runner",
                     config="production-full-stack",
-                    documents=[self.document(), self.document()],
+                    documents=[self.document(), second_document],
                     model_dir=Path(temporary),
                     kiji_model_dir=Path(temporary),
                     opf_command=None,
@@ -446,9 +479,7 @@ class ResponseValidationTests(unittest.TestCase):
 
         self.assertEqual(result["latency_ms"]["clean_ms"]["mean"], 2.5)
         self.assertEqual(result["latency_ms"]["restore_ms"]["mean"], 15.0)
-        self.assertEqual(
-            result["latency_ms"]["post_policy_scan_ms"]["mean"], 7.0
-        )
+        self.assertEqual(result["latency_ms"]["post_policy_scan_ms"]["mean"], 7.0)
         self.assertNotIn("total_ms", result["latency_ms"])
         self.assertNotIn("pass1_ms", result["latency_ms"])
         self.assertNotIn("pass2_ms", result["latency_ms"])
@@ -461,8 +492,8 @@ class ResponseValidationTests(unittest.TestCase):
         document = self.document()
         warmup_error = {
             "fixture_id": document.uid,
-            "pipeline_error_stage": "safety_net",
-            "pipeline_error_code": "POLICY_REJECTED",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "safety_net_fallback_residual_suspect",
             "timing": {"total_ms": 1.25},
         }
         warmup_rejection = self.success_response()
@@ -520,19 +551,50 @@ class ResponseValidationTests(unittest.TestCase):
         self.assertEqual(result["pipeline_availability"]["failed_closed_documents"], 0)
         discarded = result["process"]["discarded_warmup_samples"]
         self.assertEqual(len(discarded), 2)
-        self.assertEqual(discarded[0]["pipeline_error_code"], "POLICY_REJECTED")
-        self.assertEqual(discarded[0]["pipeline_error_stage"], "safety_net")
+        self.assertEqual(
+            discarded[0]["pipeline_error_code"],
+            "safety_net_fallback_residual_suspect",
+        )
+        self.assertEqual(discarded[0]["pipeline_error_stage"], "clean")
         self.assertEqual(discarded[1]["correctness"]["strict_rejections"], 1)
 
     def test_unknown_pipeline_error_timing_field_fails_closed(self) -> None:
         response = {
             "fixture_id": "synthetic-response",
             "pipeline_error_stage": "clean",
-            "pipeline_error_code": "pipeline_error",
+            "pipeline_error_code": "safety_net_runtime_other",
             "timing": {"total_ms": 1.0, "extra_ms": 0.1},
         }
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.document(), response)
+
+    def test_pipeline_error_reason_and_stage_are_closed_sets(self) -> None:
+        response = {
+            "fixture_id": "synthetic-response",
+            "pipeline_error_stage": "clean",
+            "pipeline_error_code": "safety_net_runtime_subprocess_timeout",
+            "timing": {"total_ms": 1.0},
+        }
+        self.assertEqual(
+            benchmark.validate_response(self.document(), copy.deepcopy(response)),
+            response,
+        )
+
+        unknown_reason = copy.deepcopy(response)
+        unknown_reason["pipeline_error_code"] = "synthetic_unknown_reason"
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown closed reason"
+        ):
+            benchmark.validate_response(self.document(), unknown_reason)
+
+        unknown_stage = copy.deepcopy(response)
+        unknown_stage["pipeline_error_stage"] = "synthetic_unknown_stage"
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown closed stage"
+        ):
+            benchmark.validate_response(self.document(), unknown_stage)
 
     def test_tokenize_trace_must_match_final_manifest_one_to_one(self) -> None:
         response = self.tokenize_response()
@@ -543,33 +605,47 @@ class ResponseValidationTests(unittest.TestCase):
     def test_trace_rejects_unknown_item_and_provenance_fields(self) -> None:
         response = self.tokenize_response()
         response["final_protection_trace"][0]["raw_value"] = "synthetic"
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
         response = self.tokenize_response()
         response["final_protection_trace"][0]["provenance"].pop("source_ids")
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "missing fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "missing fields"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
         response = self.tokenize_response()
         response["final_protection_trace"][0]["provenance"]["extra"] = "metadata"
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
-    def test_trace_rejects_wrong_types_and_invalid_closed_enum_combinations(self) -> None:
+    def test_trace_rejects_wrong_types_and_invalid_closed_enum_combinations(
+        self,
+    ) -> None:
         response = self.tokenize_response()
         response["final_protection_trace"][0]["raw_start"] = False
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "expected an integer"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "expected an integer"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
         response = self.tokenize_response()
         response["final_protection_trace"][0]["action"] = "mask"
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown action"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown action"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
         response = self.tokenize_response()
         response["final_protection_trace"][0]["provenance"]["decision"] = "resolve"
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "invalid.*combination"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "invalid.*combination"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
     def test_trace_source_ids_are_non_empty_sorted_and_duplicate_free(self) -> None:
@@ -581,13 +657,15 @@ class ResponseValidationTests(unittest.TestCase):
         ):
             with self.subTest(source_ids=source_ids):
                 response = self.tokenize_response()
-                response["final_protection_trace"][0]["provenance"][
-                    "source_ids"
-                ] = source_ids
+                response["final_protection_trace"][0]["provenance"]["source_ids"] = (
+                    source_ids
+                )
                 with self.assertRaises(benchmark.ResponseValidationError):
                     benchmark.validate_response(self.trace_document(), response)
 
-    def test_trace_rejects_noncanonical_classes_and_pii_bearing_source_ids(self) -> None:
+    def test_trace_rejects_noncanonical_classes_and_pii_bearing_source_ids(
+        self,
+    ) -> None:
         response = self.tokenize_response()
         response["manifest_spans"][0]["class"] = "not-canonical"
         response["final_protection_trace"][0]["class"] = "not-canonical"
@@ -599,9 +677,9 @@ class ResponseValidationTests(unittest.TestCase):
         for source_id in ("alice@example.invalid", "+1-555-0142", "Dr. Schmidt"):
             with self.subTest(source_id=source_id):
                 response = self.tokenize_response()
-                response["final_protection_trace"][0]["provenance"][
-                    "source_ids"
-                ] = [source_id]
+                response["final_protection_trace"][0]["provenance"]["source_ids"] = [
+                    source_id
+                ]
                 with self.assertRaisesRegex(
                     benchmark.ResponseValidationError, "metadata-only stable identifier"
                 ):
@@ -611,9 +689,7 @@ class ResponseValidationTests(unittest.TestCase):
         self,
     ) -> None:
         response = self.tokenize_response()
-        response["manifest_spans"][0][
-            "class"
-        ] = "custom:family:payment-card-or-iban"
+        response["manifest_spans"][0]["class"] = "custom:family:payment-card-or-iban"
         item = response["final_protection_trace"][0]
         item["class"] = "custom:family:payment-card-or-iban"
         item["provenance"]["source_ids"] = [
@@ -751,7 +827,9 @@ class ResponseValidationTests(unittest.TestCase):
     def test_trace_spans_use_original_utf8_boundaries_and_are_disjoint(self) -> None:
         response = self.tokenize_response()
         response["final_protection_trace"][0]["raw_end"] = 1
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "char boundaries"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "char boundaries"
+        ):
             benchmark.validate_response(self.trace_document(), response)
 
         response = self.tokenize_response()
@@ -788,7 +866,9 @@ class ResponseValidationTests(unittest.TestCase):
             "timing": {"total_ms": 1.0},
             "final_protection_trace": [],
         }
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "unknown fields"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "unknown fields"
+        ):
             benchmark.validate_response(self.document(), response)
 
     def test_telemetry_output_disagreement_fails_closed(self) -> None:
@@ -834,7 +914,9 @@ class ResponseValidationTests(unittest.TestCase):
         self.assertEqual(contract.result()["restore_exact_rate"], 0.0)
 
         response["restore"]["exact"] = True
-        with self.assertRaisesRegex(benchmark.ResponseValidationError, "cannot be exactly"):
+        with self.assertRaisesRegex(
+            benchmark.ResponseValidationError, "cannot be exactly"
+        ):
             benchmark.validate_response(document, response)
 
     def test_predictions_ignore_pre_safety_manifests_and_leak_suspects(self) -> None:
@@ -943,7 +1025,9 @@ class SamplingTests(unittest.TestCase):
         second, second_report = benchmark.stratified_sample(
             list(reversed(documents)), 3, seed=41
         )
-        self.assertEqual([document.uid for document in first], [document.uid for document in second])
+        self.assertEqual(
+            [document.uid for document in first], [document.uid for document in second]
+        )
         self.assertEqual(
             first_report["evaluated_document_ids_digest"],
             second_report["evaluated_document_ids_digest"],
@@ -1017,11 +1101,16 @@ class ScorecardComparisonTests(unittest.TestCase):
         documents = len(ids)
         fully_covered = documents if leaked == 0 else documents - 1
         digest = hashlib.sha256(
-            json.dumps(ids, ensure_ascii=False, separators=(",", ":")).encode(
-                "utf-8"
-            )
+            json.dumps(ids, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
         run = {
+            "scored_population": benchmark.identified_document_population(ids),
+            "failed_closed_population": {
+                **benchmark.identified_document_population([]),
+                "excluded_documents": [],
+                "reason_counts": {},
+                "stage_counts": {},
+            },
             "metrics": {
                 "documents": documents,
                 "zero_leak_document_rate": recall,
@@ -1109,7 +1198,9 @@ class ScorecardComparisonTests(unittest.TestCase):
         self.assertFalse(comparison["regression"]["passed"])
         self.assertFalse(comparison["release_readiness"]["passed"])
 
-    def test_mismatched_population_fails_regression_not_candidate_readiness(self) -> None:
+    def test_mismatched_population_fails_regression_not_candidate_readiness(
+        self,
+    ) -> None:
         baseline = self.scorecard(leaked=0)
         candidate = self.scorecard(leaked=0, evaluated_ids=["synthetic-other-1"])
         comparison = benchmark.compare_scorecards(candidate, baseline)

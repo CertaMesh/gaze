@@ -4,10 +4,10 @@ use std::path::PathBuf;
 use std::time::Instant;
 
 use gaze::{
-    Action, CleanDocument, Context, EmittedTokenSpan, GazeLocalProtectionTraceItem, LeakKind,
-    LeakReportStats, LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RuleSpec, Rulepack,
-    RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy, Scope,
-    Session,
+    Action, CleanDocument, Context, EmittedTokenSpan, FallbackReason, GazeLocalProtectionTraceItem,
+    LeakKind, LeakReportStats, LocaleChain, LocaleTag, NerPolicy, PiiClass, Pipeline, RuleSpec,
+    Rulepack, RulepackSource, SafetyNetError, SafetyNetFallback, SafetyNetMode, SafetyNetPolicy,
+    Scope, Session,
 };
 use gaze_recognizers::embedded;
 use serde::{Deserialize, Serialize};
@@ -176,7 +176,7 @@ enum Outcome {
     PipelineError {
         fixture_id: String,
         stage: &'static str,
-        code: &'static str,
+        reason: PipelineFailureReason,
         total_ms: f64,
     },
 }
@@ -202,10 +202,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Outcome::PipelineError {
                 fixture_id,
                 stage,
-                code,
+                reason,
                 total_ms,
             } => {
-                write_pipeline_error(&mut stdout, &fixture_id, stage, code, total_ms)?;
+                write_pipeline_error(&mut stdout, &fixture_id, stage, reason, total_ms)?;
             }
         }
     }
@@ -239,10 +239,12 @@ fn handle_request(
         Ok(result) => result,
         Err(error) => {
             emit_invalid_output_diagnostic("clean", &error);
+            let reason = pipeline_failure_reason(&error)
+                .ok_or("unclassified clean-stage pipeline error variant")?;
             return Ok(Outcome::PipelineError {
                 fixture_id: request.fixture_id,
                 stage: "clean",
-                code: pipeline_error_code(&error),
+                reason,
                 total_ms: clean_ms,
             });
         }
@@ -274,10 +276,12 @@ fn handle_request(
             Ok(result) => result,
             Err(error) => {
                 emit_invalid_output_diagnostic("post_policy_scan", &error);
+                let reason = pipeline_failure_reason(&error)
+                    .ok_or("unclassified post-policy pipeline error variant")?;
                 return Ok(Outcome::PipelineError {
                     fixture_id: request.fixture_id,
                     stage: "post_policy_scan",
-                    code: pipeline_error_code(&error),
+                    reason,
                     total_ms: clean_ms,
                 });
             }
@@ -376,7 +380,7 @@ fn write_pipeline_error(
     stdout: &mut impl Write,
     fixture_id: &str,
     stage: &str,
-    code: &str,
+    reason: PipelineFailureReason,
     total_ms: f64,
 ) -> Result<(), Box<dyn std::error::Error>> {
     serde_json::to_writer(
@@ -384,7 +388,7 @@ fn write_pipeline_error(
         &PipelineErrorResponse {
             fixture_id,
             pipeline_error_stage: stage,
-            pipeline_error_code: code,
+            pipeline_error_code: reason.as_str(),
             timing: PipelineErrorTiming { total_ms },
         },
     )?;
@@ -393,12 +397,210 @@ fn write_pipeline_error(
     Ok(())
 }
 
-fn pipeline_error_code(error: &gaze::Error) -> &'static str {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PipelineFailureReason {
+    InvalidRegex,
+    UnknownToken,
+    ExportForbidden,
+    EmptyDocumentIntegrity,
+    InvalidSnapshotVersion,
+    InvalidSnapshotSignature,
+    BlobExpired,
+    SnapshotDecode,
+    InvalidSnapshotPayload,
+    Sqlite,
+    Policy,
+    Rulepack,
+    RecognizerDetect,
+    RedactionLog,
+    SafetyNetUnavailable,
+    SafetyNetWeightsMissing,
+    SafetyNetModelUnavailable,
+    SafetyNetModelIntegrityMismatch,
+    SafetyNetInputTooLarge,
+    SafetyNetRuntimeSubprocessTimeout,
+    SafetyNetRuntimeSubprocessNonZeroExit,
+    SafetyNetRuntimeOther,
+    SafetyNetInvalidOutputMalformedBackendOutput,
+    SafetyNetInvalidOutputLabelDecodeMismatch,
+    SafetyNetInvalidOutputCleanToRawMapping,
+    SafetyNetInvalidOutputTraceManifestMismatch,
+    SafetyNetInvalidOutputOther,
+    SafetyNetFallbackOverlapConflict,
+    SafetyNetFallbackValidatorVeto,
+    SafetyNetFallbackAnchorMissing,
+    SafetyNetFallbackResidualSuspect,
+    SafetyNetSpanInvalid,
+    UnsupportedCapitalHeuristicLocale,
+    UnsupportedRawDocumentVariant,
+    UnsupportedStructuredValueVariant,
+    UnsupportedPolicyActionVariant,
+}
+
+impl PipelineFailureReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidRegex => "invalid_regex",
+            Self::UnknownToken => "unknown_token",
+            Self::ExportForbidden => "export_forbidden",
+            Self::EmptyDocumentIntegrity => "empty_document_integrity",
+            Self::InvalidSnapshotVersion => "invalid_snapshot_version",
+            Self::InvalidSnapshotSignature => "invalid_snapshot_signature",
+            Self::BlobExpired => "blob_expired",
+            Self::SnapshotDecode => "snapshot_decode",
+            Self::InvalidSnapshotPayload => "invalid_snapshot_payload",
+            Self::Sqlite => "sqlite",
+            Self::Policy => "policy",
+            Self::Rulepack => "rulepack",
+            Self::RecognizerDetect => "recognizer_detect",
+            Self::RedactionLog => "redaction_log",
+            Self::SafetyNetUnavailable => "safety_net_unavailable",
+            Self::SafetyNetWeightsMissing => "safety_net_weights_missing",
+            Self::SafetyNetModelUnavailable => "safety_net_model_unavailable",
+            Self::SafetyNetModelIntegrityMismatch => "safety_net_model_integrity_mismatch",
+            Self::SafetyNetInputTooLarge => "safety_net_input_too_large",
+            Self::SafetyNetRuntimeSubprocessTimeout => "safety_net_runtime_subprocess_timeout",
+            Self::SafetyNetRuntimeSubprocessNonZeroExit => {
+                "safety_net_runtime_subprocess_non_zero_exit"
+            }
+            Self::SafetyNetRuntimeOther => "safety_net_runtime_other",
+            Self::SafetyNetInvalidOutputMalformedBackendOutput => {
+                "safety_net_invalid_output_malformed_backend_output"
+            }
+            Self::SafetyNetInvalidOutputLabelDecodeMismatch => {
+                "safety_net_invalid_output_label_decode_mismatch"
+            }
+            Self::SafetyNetInvalidOutputCleanToRawMapping => {
+                "safety_net_invalid_output_clean_to_raw_mapping"
+            }
+            Self::SafetyNetInvalidOutputTraceManifestMismatch => {
+                "safety_net_invalid_output_trace_manifest_mismatch"
+            }
+            Self::SafetyNetInvalidOutputOther => "safety_net_invalid_output_other",
+            Self::SafetyNetFallbackOverlapConflict => "safety_net_fallback_overlap_conflict",
+            Self::SafetyNetFallbackValidatorVeto => "safety_net_fallback_validator_veto",
+            Self::SafetyNetFallbackAnchorMissing => "safety_net_fallback_anchor_missing",
+            Self::SafetyNetFallbackResidualSuspect => "safety_net_fallback_residual_suspect",
+            Self::SafetyNetSpanInvalid => "safety_net_span_invalid",
+            Self::UnsupportedCapitalHeuristicLocale => "unsupported_capital_heuristic_locale",
+            Self::UnsupportedRawDocumentVariant => "unsupported_raw_document_variant",
+            Self::UnsupportedStructuredValueVariant => "unsupported_structured_value_variant",
+            Self::UnsupportedPolicyActionVariant => "unsupported_policy_action_variant",
+        }
+    }
+}
+
+fn pipeline_failure_reason(error: &gaze::Error) -> Option<PipelineFailureReason> {
     match error {
-        gaze::Error::SafetyNet(SafetyNetError::InvalidOutput { .. }) => "safety_net_invalid_output",
-        gaze::Error::SafetyNet(SafetyNetError::Runtime { .. }) => "safety_net_runtime",
-        gaze::Error::SafetyNet(_) => "safety_net_error",
-        _ => "pipeline_error",
+        gaze::Error::InvalidRegex(_) => Some(PipelineFailureReason::InvalidRegex),
+        gaze::Error::UnknownToken { .. } => Some(PipelineFailureReason::UnknownToken),
+        gaze::Error::ExportForbidden => Some(PipelineFailureReason::ExportForbidden),
+        gaze::Error::EmptyDocumentIntegrity => Some(PipelineFailureReason::EmptyDocumentIntegrity),
+        gaze::Error::InvalidSnapshotVersion(_) => {
+            Some(PipelineFailureReason::InvalidSnapshotVersion)
+        }
+        gaze::Error::InvalidSnapshotSignature => {
+            Some(PipelineFailureReason::InvalidSnapshotSignature)
+        }
+        gaze::Error::BlobExpired { .. } => Some(PipelineFailureReason::BlobExpired),
+        gaze::Error::SnapshotDecode(_) => Some(PipelineFailureReason::SnapshotDecode),
+        gaze::Error::InvalidSnapshotPayload => Some(PipelineFailureReason::InvalidSnapshotPayload),
+        gaze::Error::Sqlite(_) => Some(PipelineFailureReason::Sqlite),
+        gaze::Error::Policy(_) => Some(PipelineFailureReason::Policy),
+        gaze::Error::Rulepack(_) => Some(PipelineFailureReason::Rulepack),
+        gaze::Error::SafetyNet(error) => safety_net_failure_reason(error),
+        gaze::Error::RecognizerDetect(_) => Some(PipelineFailureReason::RecognizerDetect),
+        gaze::Error::RedactionLog(_) => Some(PipelineFailureReason::RedactionLog),
+        gaze::Error::SafetyNetFallback(reason) => Some(match reason {
+            FallbackReason::OverlapConflict => {
+                PipelineFailureReason::SafetyNetFallbackOverlapConflict
+            }
+            FallbackReason::ValidatorVeto => PipelineFailureReason::SafetyNetFallbackValidatorVeto,
+            FallbackReason::AnchorMissing => PipelineFailureReason::SafetyNetFallbackAnchorMissing,
+            FallbackReason::ResidualSuspect => {
+                PipelineFailureReason::SafetyNetFallbackResidualSuspect
+            }
+            _ => return None,
+        }),
+        gaze::Error::SafetyNetSpanInvalid { .. } => {
+            Some(PipelineFailureReason::SafetyNetSpanInvalid)
+        }
+        gaze::Error::UnsupportedCapitalHeuristicLocale { .. } => {
+            Some(PipelineFailureReason::UnsupportedCapitalHeuristicLocale)
+        }
+        gaze::Error::UnsupportedRawDocumentVariant => {
+            Some(PipelineFailureReason::UnsupportedRawDocumentVariant)
+        }
+        gaze::Error::UnsupportedValueVariant => {
+            Some(PipelineFailureReason::UnsupportedStructuredValueVariant)
+        }
+        gaze::Error::UnsupportedActionVariant => {
+            Some(PipelineFailureReason::UnsupportedPolicyActionVariant)
+        }
+        _ => None,
+    }
+}
+
+fn safety_net_failure_reason(error: &SafetyNetError) -> Option<PipelineFailureReason> {
+    Some(match error {
+        SafetyNetError::Unavailable { .. } => PipelineFailureReason::SafetyNetUnavailable,
+        SafetyNetError::WeightsMissing { .. } => PipelineFailureReason::SafetyNetWeightsMissing,
+        SafetyNetError::ModelUnavailable { .. } => PipelineFailureReason::SafetyNetModelUnavailable,
+        SafetyNetError::ModelIntegrityMismatch { .. } => {
+            PipelineFailureReason::SafetyNetModelIntegrityMismatch
+        }
+        SafetyNetError::InputTooLarge { .. } => PipelineFailureReason::SafetyNetInputTooLarge,
+        SafetyNetError::Runtime { message } => runtime_failure_reason(message),
+        SafetyNetError::InvalidOutput { message } => invalid_output_failure_reason(message),
+        _ => return None,
+    })
+}
+
+fn runtime_failure_reason(message: &str) -> PipelineFailureReason {
+    if message.ends_with("subprocess timed out and was killed") {
+        PipelineFailureReason::SafetyNetRuntimeSubprocessTimeout
+    } else if message.starts_with("kiji subprocess exited with status ")
+        || message.starts_with("opf subprocess exited with status ")
+    {
+        PipelineFailureReason::SafetyNetRuntimeSubprocessNonZeroExit
+    } else {
+        PipelineFailureReason::SafetyNetRuntimeOther
+    }
+}
+
+fn invalid_output_failure_reason(message: &str) -> PipelineFailureReason {
+    match message {
+        "kiji returned invalid label"
+        | "kiji returned unsupported label"
+        | "opf returned invalid label"
+        | "opf returned unsupported label" => {
+            PipelineFailureReason::SafetyNetInvalidOutputLabelDecodeMismatch
+        }
+        "clean-to-raw start mapping failed"
+        | "clean-to-raw end mapping failed"
+        | "empty clean-to-raw mapping" => {
+            PipelineFailureReason::SafetyNetInvalidOutputCleanToRawMapping
+        }
+        "overlapping protection trace" | "trace-manifest mismatch" | "manifest-trace mismatch" => {
+            PipelineFailureReason::SafetyNetInvalidOutputTraceManifestMismatch
+        }
+        "kiji stdout was not valid UTF-8"
+        | "kiji stdout was not valid JSON"
+        | "kiji returned non-finite score"
+        | "kiji returned out-of-bounds span"
+        | "kiji returned overlapping spans"
+        | "kiji candle returned no outputs"
+        | "kiji candle returned invalid logits shape"
+        | "kiji ort returned invalid logits shape"
+        | "kiji tract returned invalid logits shape"
+        | "opf stdout was not valid UTF-8"
+        | "opf stdout was not valid JSON"
+        | "opf returned non-finite score"
+        | "opf returned out-of-bounds span"
+        | "opf returned overlapping spans" => {
+            PipelineFailureReason::SafetyNetInvalidOutputMalformedBackendOutput
+        }
+        _ => PipelineFailureReason::SafetyNetInvalidOutputOther,
     }
 }
 
@@ -1220,31 +1422,57 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_error_codes_cover_each_mapping_arm() {
+    fn pipeline_failure_reasons_cover_required_clean_stage_classes() {
         let cases = [
             (
                 gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
-                    message: "synthetic invalid output".to_string(),
+                    message: "kiji stdout was not valid JSON".to_string(),
                 }),
-                "safety_net_invalid_output",
+                "safety_net_invalid_output_malformed_backend_output",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::InvalidOutput {
+                    message: "kiji returned unsupported label".to_string(),
+                }),
+                "safety_net_invalid_output_label_decode_mismatch",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::InputTooLarge {
+                    limit: 1024,
+                    actual: 2048,
+                }),
+                "safety_net_input_too_large",
             ),
             (
                 gaze::Error::SafetyNet(SafetyNetError::Runtime {
-                    message: "synthetic runtime failure".to_string(),
+                    message: "kiji subprocess timed out and was killed".to_string(),
                 }),
-                "safety_net_runtime",
+                "safety_net_runtime_subprocess_timeout",
+            ),
+            (
+                gaze::Error::SafetyNet(SafetyNetError::Runtime {
+                    message: "kiji subprocess exited with status exit status: 2".to_string(),
+                }),
+                "safety_net_runtime_subprocess_non_zero_exit",
             ),
             (
                 gaze::Error::SafetyNet(SafetyNetError::Unavailable {
                     reason: "synthetic unavailable backend".to_string(),
                 }),
-                "safety_net_error",
+                "safety_net_unavailable",
             ),
-            (gaze::Error::ExportForbidden, "pipeline_error"),
+            (
+                gaze::Error::SafetyNetFallback(FallbackReason::ResidualSuspect),
+                "safety_net_fallback_residual_suspect",
+            ),
+            (gaze::Error::ExportForbidden, "export_forbidden"),
         ];
 
         for (error, expected) in cases {
-            assert_eq!(pipeline_error_code(&error), expected);
+            assert_eq!(
+                pipeline_failure_reason(&error).map(PipelineFailureReason::as_str),
+                Some(expected)
+            );
         }
     }
 
@@ -1272,13 +1500,13 @@ mod tests {
         let response = PipelineErrorResponse {
             fixture_id: "failure-1",
             pipeline_error_stage: "clean",
-            pipeline_error_code: "safety_net_runtime",
+            pipeline_error_code: "safety_net_runtime_subprocess_timeout",
             timing: PipelineErrorTiming { total_ms: 12.5 },
         };
         let serialized = serde_json::to_string(&response).expect("error response should serialize");
         assert_eq!(
             serialized,
-            r#"{"fixture_id":"failure-1","pipeline_error_stage":"clean","pipeline_error_code":"safety_net_runtime","timing":{"total_ms":12.5}}"#
+            r#"{"fixture_id":"failure-1","pipeline_error_stage":"clean","pipeline_error_code":"safety_net_runtime_subprocess_timeout","timing":{"total_ms":12.5}}"#
         );
 
         let value = serde_json::to_value(&response).expect("error response should serialize");
@@ -1306,7 +1534,7 @@ mod tests {
             &mut output,
             "failure-1",
             "clean",
-            "safety_net_runtime",
+            PipelineFailureReason::SafetyNetRuntimeSubprocessTimeout,
             12.5,
         )
         .expect("error response should be written");
@@ -1406,12 +1634,12 @@ mod tests {
                 Outcome::PipelineError {
                     fixture_id,
                     stage,
-                    code,
+                    reason,
                     ..
                 } => serde_json::json!({
                     "fixture_id": fixture_id,
                     "pipeline_error_stage": stage,
-                    "pipeline_error_code": code,
+                    "pipeline_error_code": reason.as_str(),
                 }),
             };
             println!(
