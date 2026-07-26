@@ -46,8 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rule floor and 2,985 with pass2 NER. Each deterministic cell added 17
   false-positive bytes, ratios of about 180:1 and 176:1, while the rule matched
   0 of all 1,024 committed A4 negative documents. Cue anchoring is supported by
-  the corpus asymmetry: 88.1% of SECURITYTOKEN spans are cue-adjacent, versus
-  only 1.8% of URL spans.
+  the corpus asymmetry: 88.1% of SECURITYTOKEN spans have `token` or `secret`
+  in the preceding 64 characters, versus only 1.8% cue context for URL.
+
+  Arm 2 requires at least one unambiguous delimiter between cue and value.
+  Whitespace and `:`, `=`, or `#` qualify; `_` and a directly abutting `-` do
+  not. The holdout has 0 of 193 cue-context spans with no delimiter and 0 using
+  direct hyphen alone, so the requirement costs no measured gold coverage.
+  This prevents the safe default from splitting cue-prefixed snake_case
+  identifiers such as tokenization helper names. A4 does not contain this
+  identifier class; post-fix dogfooding across project documentation and Rust
+  source produced zero SECURITYTOKEN detections.
 
   **The shipped no-policy `CorePipelineConfig` default now tokenizes
   credential-shaped strings in ordinary adopter text.** Git tokens in logs,

@@ -811,18 +811,26 @@ kind = "regex"
 # validator-backed matching as the built-in `ValidatorKind` set permits for a credential.
 #
 # Arm 2 (group 2), case-insensitive: cue-anchored credentials. This is the inverse of the URL
-# finding and the reason it is safe here: 193 of 219 gold spans (88.1%) sit immediately after an
-# explicit lexical cue ("token" 192, "sicherheitstoken" 37), where only 1.8% of gold URL spans did.
-# The cue is what makes a high-entropy run attributable; without it the same run is
+# finding and the reason it is safe here: 193 of 219 gold spans (88.1%) have "token" or "secret"
+# in the preceding 64 characters, where only 1.8% of gold URL spans carry their proposed cues.
+# The immediate shipping grammar is narrower: 126 spans have a supported cue directly before the
+# value, and 113 of those meet the >=14 value shape. All 193 broad cue-context spans contain a
+# delimiter other than `_` or `-`; zero abut their cue and zero use a direct hyphen as their only
+# delimiter. Requiring a real delimiter therefore keeps the 113 value-eligible gold spans.
+#
+# A direct `cue-credential` form is deliberately rejected: `-` is both plausible punctuation and
+# a legal credential/identifier character, and the holdout contains zero direct-hyphen-only gold
+# gaps. A spaced `cue - credential` form remains accepted because the whitespace is the required
+# unambiguous delimiter. The cue makes a high-entropy run attributable; without it the same run is
 # indistinguishable from the commit hashes, order identifiers, and log payloads the A4 negatives
-# are full of. Only the credential is captured, so the cue stays in the clean text.
+# are full of. Only the credential is captured, so the cue and delimiter stay in the clean text.
 #
 # The >=14 minimum length is a measured knee, not a round number. Over the holdout, with arm 1 also
 # active: >=20 covers 101 spans at 0 non-gold matches, >=16 covers 141 at 1, >=14 covers 151
 # (3,084 of 4,342 gold bytes, 71.0%) at 1, >=12 covers 159 at 5, and >=10 covers 163 at 7.
 # Relaxing from 14 to 10 buys 139 further bytes for six additional non-gold matches, so 14 is where
 # coverage stops paying for itself.
-pattern = '''(?i)(?:(?-i:(?-u:\b)((?:AKIA|ASIA)[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,})(?-u:\b))|(?-u:\b)(?:security[ _-]?token|sicherheitstoken|zugangstoken|zugangsschl[uü]ssel|api[ _-]?key|access[ _-]?token|auth(?:orization)?[ _-]?token|bearer|token)[ \t]{0,4}(?:(?:ist|lautet|is)[ \t]{1,4})?(?:[:=#-][ \t]{0,4})?([A-Za-z0-9_-]{14,})(?-u:\b))'''
+pattern = '''(?i)(?:(?-i:(?-u:\b)((?:AKIA|ASIA)[0-9A-Z]{16}|eyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,})(?-u:\b))|(?-u:\b)(?:security[ _-]?token|sicherheitstoken|zugangstoken|zugangsschl[uü]ssel|api[ _-]?key|access[ _-]?token|auth(?:orization)?[ _-]?token|bearer|token)(?:[ \t]{1,4}(?:(?:ist|lautet|is)[ \t]{1,4})?(?:[:=#-][ \t]{0,4})?|[ \t]{0,4}[:=#][ \t]{0,4})([A-Za-z0-9_-]{14,})(?-u:\b))'''
 capture_groups = [1, 2]
 
 [recognizers.scoring]

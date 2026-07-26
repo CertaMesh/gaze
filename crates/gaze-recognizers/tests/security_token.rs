@@ -13,10 +13,12 @@
 //! | entropy proxy    | >=0.7 on 204 of 219 (93%)                                  |
 //! | utf8 length      | min 10, p25 16, median 20, p90 29, max 55                  |
 //! | fixed prefix     | `AKIA` 78 (35.6%), JWT `eyJ` 6, `sk_` 1, none 134          |
-//! | cue adjacency    | 193 of 219 (88.1%) — "token" 192, "sicherheitstoken" 37    |
+//! | cue context      | 193 of 219 (88.1%) have "token" or "secret" in prior 64 chars |
 //!
-//! The cue-adjacency row is the inverse of URL's (1.8%) and is why a cue-anchored rule is correct
-//! here and was wrong there. Only measurement distinguishes the two cases.
+//! The cue-context row is the inverse of URL's (1.8%) and is why a cue-anchored rule is correct
+//! here and was wrong there. The shipping grammar is narrower: 126 gold spans have a supported
+//! cue directly before the value, 113 meet the >=14 value shape, and all 193 broad cue-context
+//! spans contain a delimiter other than `_` or `-`. Only measurement distinguishes the cases.
 //!
 //! Fixture values are synthetic. The AWS shapes use the key IDs published in AWS's own
 //! documentation as non-functional examples; the JWT and cue-anchored payloads are hand-built
@@ -44,8 +46,8 @@ fn security_token_class() -> PiiClass {
 /// Builds the core bundle under an explicit locale chain with locale-gated auto-activation OFF.
 ///
 /// `auto_activate_locale_gated = false` is the weakest configuration a default adopter can have.
-/// Both `security_token.*` recognizers are declared `safety_tier = "safe_default"` with
-/// `locales = ["global"]`, so `recognizer_activates` admits them unconditionally. If either were
+/// The `security_token.anchored` recognizer is declared `safety_tier = "safe_default"` with
+/// `locales = ["global"]`, so `recognizer_activates` admits it unconditionally. If it were
 /// declared `locale_gated` instead, these tests would still pass under the benchmark's
 /// configuration (all three cells set `auto_activate_locale_gated = true`) while a default adopter
 /// got no credential protection at all. That is exactly the silent-inertness failure behind todo
@@ -214,6 +216,54 @@ fn cue_anchored_minimum_length_is_fourteen() {
         "Rk9PQkFSLXNhbQ",
         &["api key: ", " now active."],
     );
+}
+
+#[test]
+fn supported_real_delimiter_forms_are_tokenized() {
+    let credential = "Rk9PQkFSLXNhbXBsZQ";
+    for text in [
+        format!("token: {credential}"),
+        format!("token = {credential}"),
+        format!("token {credential}"),
+        format!("token ist {credential}"),
+        format!("token lautet {credential}"),
+        format!("token is {credential}"),
+        format!("token - {credential}"),
+    ] {
+        assert_token_removed(&text, credential, &[]);
+    }
+}
+
+// ---------------------------------------------------------- identifier-splitting hard negatives
+
+#[test]
+fn tokenization_helper_registry_is_not_split() {
+    assert_unchanged("Case A: the tokenization_helper_registry module was refactored.");
+}
+
+#[test]
+fn bearer_authentication_handler_impl_is_not_split() {
+    assert_unchanged("Case B: see bearer_authentication_handler_impl for details.");
+}
+
+#[test]
+fn api_key_rotation_schedule_v2_is_not_split() {
+    assert_unchanged("Case C: api_key_rotation_schedule_v2 is documented elsewhere.");
+}
+
+#[test]
+fn access_token_refresh_coordinator_is_not_split() {
+    assert_unchanged("Case D: access_token_refresh_coordinator handles retries.");
+}
+
+#[test]
+fn authorization_token_provider_factory_is_not_split() {
+    assert_unchanged("Case G: authorization_token_provider_factory implements the trait.");
+}
+
+#[test]
+fn tokenizer_vocabulary_builder_test_is_not_split() {
+    assert_unchanged("Case J: tokenizer_vocabulary_builder_test passed.");
 }
 
 // ----------------------------------------------------------------------- hard negatives (A4)
