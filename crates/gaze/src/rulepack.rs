@@ -1291,6 +1291,7 @@ window_chars = 48
                 PiiClass::custom("credit_card"),
                 PiiClass::custom("ip_address"),
                 PiiClass::custom("eth_address"),
+                PiiClass::custom("url"),
                 PiiClass::custom("aadhaar"),
                 PiiClass::custom("nir"),
                 PiiClass::custom("steuer_id"),

@@ -124,17 +124,29 @@
       "family": "session_custom_counter",
       "token_shape": "<session:Custom:ip_address_{N}>",
       "count": 1
+    },
+    {
+      "recognizer_id": "url.anchored",
+      "class": "custom:url",
+      "byte_span": {
+        "start": 1245,
+        "len": 38
+      },
+      "family": "session_custom_counter",
+      "token_shape": "<session:Custom:url_{N}>",
+      "count": 1
     }
   ],
   "stats": {
-    "detections": 11,
+    "detections": 12,
     "classes": {
       "Email": 3,
       "Name": 1,
       "custom:credit_card": 1,
       "custom:eth_address": 1,
       "custom:family:payment-card-or-iban": 1,
-      "custom:ip_address": 4
+      "custom:ip_address": 4,
+      "custom:url": 1
     }
   }
 }

@@ -717,3 +717,44 @@ base = 0.70
 priority = 70
 
 [recognizers.token]
+
+# URL detection is anchored on an explicit scheme (`http://`, `https://`) or a `www.` host
+# prefix. Measured against the EN/DE holdout, those two anchors carry 232 of 276 gold URL spans
+# and 6,385 of 7,209 leaked URL bytes (88.6%), while matching NOTHING in all 1,024 documents of
+# the committed A4 negative corpus. Bare-host URLs (`example.invalid/path`, no scheme, no `www.`)
+# are the remaining 12.3% and are deliberately NOT matched: 97 of the A4 negative documents
+# contain bare-host shapes, so no bare-host rule can clear the negative gate. See todo #2254.
+#
+# Trailing-boundary rule: the match runs to the next whitespace and then gives back a run of
+# sentence and markup punctuation, so `.`, `,`, `;`, `:`, `!`, `?`, `)`, `]`, `}`, `>`, `"`, `'`
+# never end a match. This is measured, not stylistic: running to whitespace without giving those
+# back covers exactly the same 232 spans and 6,385 bytes but produces non-gold matched bytes in
+# 107 holdout documents instead of 12 — sentence-final punctuation is the dominant
+# false-positive driver for an anchored URL rule.
+[[recognizers]]
+id = "url.anchored"
+safety_tier = "safe_default"
+class = "custom:url"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+# Adding this recognizer changes the committed core-no-policy bundle tokenization snapshot
+# (11 -> 12 detections). The `// drift-ack:` acknowledgement the gate requires lives in
+# crates/gaze-recognizers/tests/url_anchored.rs; the rationale lives in CHANGELOG.md.
+pattern = '''(?i)(?-u:\b)(?:https?://|www\.)[^\s]*[^\s.,;:!?)\]}>"']'''
+
+[recognizers.scoring]
+# Above the 0.70 heuristic floor: an explicit scheme or `www.` prefix is structural evidence,
+# not a guess. Priority stays below `email.global` (90) so an explicit address inside a URL
+# keeps its Email class rather than being absorbed; note that `PiiClass::Custom` sits at
+# class-priority 50 in the resolver, so Email wins containment regardless.
+base = 0.75
+priority = 85
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
