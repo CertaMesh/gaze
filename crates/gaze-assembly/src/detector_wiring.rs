@@ -236,6 +236,15 @@ pub(crate) fn register_rulepack_recognizers(
                 };
                 let source_short_label = derive_source_short_label(&recognizer.id);
                 let min_components = anchored_match_min_components(&recognizer.id);
+                // Document eligibility and cue selection have already been lowered
+                // into this assembled recognizer. Keep its runtime locale universal
+                // so `Pipeline::redact` retains the assembled policy locale instead
+                // of re-gating against its default `[global]` detect context.
+                let runtime_locales = if recognizer.locale_basis == LocaleBasis::Document {
+                    vec![LocaleTag::Global]
+                } else {
+                    recognizer.locales
+                };
                 builder = builder.recognizer(
                     AnchoredMatchRecognizer::new(
                         recognizer.id,
@@ -249,7 +258,7 @@ pub(crate) fn register_rulepack_recognizers(
                         recognizer.scoring.base,
                         recognizer.scoring.priority,
                     )
-                    .with_locale_metadata(recognizer.locales, recognizer.locale_basis),
+                    .with_locale_metadata(runtime_locales, recognizer.locale_basis),
                 );
             }
             _ => return Err(RulepackError::UnsupportedMatcher("unknown".to_string()).into()),
@@ -264,6 +273,9 @@ pub(crate) fn recognizer_activates(
     policy: &gaze::Policy,
     active_locales: &LocaleChain,
 ) -> bool {
+    if !recognizer.enabled {
+        return false;
+    }
     if recognizer.locale_basis == LocaleBasis::Document
         && !recognizer_matches_active_locale(&recognizer.locales, active_locales)
     {
