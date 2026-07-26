@@ -1,8 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, LocaleChain, LocaleTag, PiiClass, PipelineBuilder, PolicyError,
-    RawMatch, Rulepack, RulepackError, SafetyTier,
+    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PipelineBuilder,
+    PolicyError, RawMatch, Rulepack, RulepackError, SafetyTier,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
@@ -137,19 +137,22 @@ pub(crate) fn register_rulepack_recognizers(
                     .as_ref()
                     .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
                     .transpose()?;
-                builder = builder.recognizer(RegexDetector::with_rulepack_fields(
-                    &pattern,
-                    recognizer.class,
-                    &recognizer.id,
-                    recognizer.locales,
-                    recognizer.scoring.base,
-                    recognizer.scoring.priority,
-                    recognizer.token.family.as_deref().unwrap_or("counter"),
-                    capture_groups,
-                    exclusions,
-                    validator_kind,
-                    normalizer_kind,
-                )?);
+                builder = builder.recognizer(
+                    RegexDetector::with_rulepack_fields(
+                        &pattern,
+                        recognizer.class,
+                        &recognizer.id,
+                        recognizer.locales,
+                        recognizer.scoring.base,
+                        recognizer.scoring.priority,
+                        recognizer.token.family.as_deref().unwrap_or("counter"),
+                        capture_groups,
+                        exclusions,
+                        validator_kind,
+                        normalizer_kind,
+                    )?
+                    .with_locale_basis(recognizer.locale_basis),
+                );
             }
             RawMatch::Dictionary {
                 terms,
@@ -182,16 +185,19 @@ pub(crate) fn register_rulepack_recognizers(
                 registered_dictionaries.insert(dictionary_name.clone());
                 let class =
                     class_for_dictionary(policy, context, &dictionary_name, recognizer.class)?;
-                builder = builder.recognizer(DictionaryRecognizer::with_rulepack_fields(
-                    id,
-                    class,
-                    dictionary_name,
-                    case_sensitive,
-                    token_family,
-                    locales,
-                    base_score,
-                    priority,
-                ));
+                builder = builder.recognizer(
+                    DictionaryRecognizer::with_rulepack_fields(
+                        id,
+                        class,
+                        dictionary_name,
+                        case_sensitive,
+                        token_family,
+                        locales,
+                        base_score,
+                        priority,
+                    )
+                    .with_locale_basis(recognizer.locale_basis),
+                );
             }
             RawMatch::Ner { .. } => {
                 return Err(RulepackError::UnsupportedMatcher("Ner".to_string()).into())
@@ -203,7 +209,9 @@ pub(crate) fn register_rulepack_recognizers(
                 name_shape,
                 cue_position,
             } => {
-                if !recognizer_matches_active_locale(&recognizer.locales, active_locales) {
+                if recognizer.locale_basis == LocaleBasis::Document
+                    && !recognizer_matches_active_locale(&recognizer.locales, active_locales)
+                {
                     continue;
                 }
                 let Some(cues) = locale_vocab.get(&cues_bucket) else {
@@ -228,18 +236,21 @@ pub(crate) fn register_rulepack_recognizers(
                 };
                 let source_short_label = derive_source_short_label(&recognizer.id);
                 let min_components = anchored_match_min_components(&recognizer.id);
-                builder = builder.recognizer(AnchoredMatchRecognizer::new(
-                    recognizer.id,
-                    cues.clone(),
-                    convert_boundary(&boundary),
-                    right_window_chars,
-                    convert_name_shape(&name_shape),
-                    convert_cue_position(&cue_position),
-                    source_short_label,
-                    min_components,
-                    recognizer.scoring.base,
-                    recognizer.scoring.priority,
-                ));
+                builder = builder.recognizer(
+                    AnchoredMatchRecognizer::new(
+                        recognizer.id,
+                        cues.clone(),
+                        convert_boundary(&boundary),
+                        right_window_chars,
+                        convert_name_shape(&name_shape),
+                        convert_cue_position(&cue_position),
+                        source_short_label,
+                        min_components,
+                        recognizer.scoring.base,
+                        recognizer.scoring.priority,
+                    )
+                    .with_locale_metadata(recognizer.locales, recognizer.locale_basis),
+                );
             }
             _ => return Err(RulepackError::UnsupportedMatcher("unknown".to_string()).into()),
         }
@@ -248,12 +259,14 @@ pub(crate) fn register_rulepack_recognizers(
     Ok(builder)
 }
 
-fn recognizer_activates(
+pub(crate) fn recognizer_activates(
     recognizer: &gaze::RecognizerSpec,
     policy: &gaze::Policy,
     active_locales: &LocaleChain,
 ) -> bool {
-    if !recognizer_matches_active_locale(&recognizer.locales, active_locales) {
+    if recognizer.locale_basis == LocaleBasis::Document
+        && !recognizer_matches_active_locale(&recognizer.locales, active_locales)
+    {
         return false;
     }
 
@@ -261,13 +274,14 @@ fn recognizer_activates(
         SafetyTier::SafeDefault => true,
         SafetyTier::LocaleGated => {
             policy.rulepacks.auto_activate_locale_gated
-                || recognizer.locales.iter().any(|locale| {
-                    *locale != LocaleTag::Global
-                        && active_locales
-                            .as_slice()
-                            .iter()
-                            .any(|active| active == locale)
-                })
+                || (recognizer.locale_basis == LocaleBasis::Document
+                    && recognizer.locales.iter().any(|locale| {
+                        *locale != LocaleTag::Global
+                            && active_locales
+                                .as_slice()
+                                .iter()
+                                .any(|active| active == locale)
+                    }))
         }
         SafetyTier::OptIn => false,
         _ => false,

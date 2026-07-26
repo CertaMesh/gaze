@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::anchor_resolver::AnchorResolver;
 use crate::resolver::resolve_candidates_with_policy_and_anchors;
 pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
-use gaze_types::{CollisionMembership, LocaleChain, LocaleTag, PiiClass};
+use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
 pub trait Validator: Send + Sync {
     fn id(&self) -> &str;
@@ -330,9 +330,11 @@ impl RecognizerRegistry {
         input: &str,
         ctx: &DetectContext<'_>,
     ) -> Result<Vec<Candidate>, DetectError> {
+        let locale_chain = LocaleChain::from(ctx.locale_chain);
         let mut candidates = Vec::new();
         for recognizer in self.entries.iter().filter(|recognizer| {
-            LocaleChain::from(ctx.locale_chain).intersects(recognizer.locales())
+            recognizer.locale_basis() == LocaleBasis::Format
+                || locale_chain.intersects(recognizer.locales())
         }) {
             candidates.extend(recognizer.detect(input, ctx)?);
         }
@@ -353,6 +355,20 @@ impl RecognizerRegistry {
         let mut candidates = Vec::new();
 
         for class in classes {
+            for recognizer in self
+                .entries
+                .iter()
+                .filter(|recognizer| recognizer.supported_class() == &class)
+                .filter(|recognizer| recognizer.locale_basis() == LocaleBasis::Format)
+            {
+                candidates.extend(
+                    recognizer
+                        .detect(input, ctx)?
+                        .into_iter()
+                        .filter(|candidate| candidate.score >= min_score(&class)),
+                );
+            }
+
             for locale in locale_chain.as_slice() {
                 let locale_ctx = DetectContext::new(std::slice::from_ref(locale), ctx.dictionaries);
                 locale_ctx.degraded.set(ctx.degraded.get());
@@ -361,6 +377,7 @@ impl RecognizerRegistry {
                     .entries
                     .iter()
                     .filter(|recognizer| recognizer.supported_class() == &class)
+                    .filter(|recognizer| recognizer.locale_basis() == LocaleBasis::Document)
                     .filter(|recognizer| {
                         LocaleChain::from(locale_ctx.locale_chain).intersects(recognizer.locales())
                     })
