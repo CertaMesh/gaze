@@ -143,6 +143,7 @@ impl Default for FamilyPolicyTable {
 mod tests {
     use super::*;
     use crate::{ConflictTier, DictionaryBundle, LocaleTag, PiiClass};
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
     struct StubRecognizer {
         class: PiiClass,
@@ -268,6 +269,117 @@ mod tests {
             .detect_all("input", &ctx)
             .expect("detect all")
             .is_empty());
+    }
+
+    struct BasisRecognizer {
+        id: &'static str,
+        class: PiiClass,
+        locale: LocaleTag,
+        locale_basis: LocaleBasis,
+        span: std::ops::Range<usize>,
+        calls: Arc<AtomicUsize>,
+    }
+
+    impl Recognizer for BasisRecognizer {
+        fn id(&self) -> &str {
+            self.id
+        }
+
+        fn supported_class(&self) -> &PiiClass {
+            &self.class
+        }
+
+        fn detect(
+            &self,
+            _input: &str,
+            _ctx: &DetectContext<'_>,
+        ) -> Result<Vec<Candidate>, DetectError> {
+            self.calls.fetch_add(1, AtomicOrdering::SeqCst);
+            Ok(vec![Candidate::new(
+                self.span.clone(),
+                self.class.clone(),
+                self.id(),
+                1.0,
+                0,
+                None,
+                "counter",
+                self.id(),
+                ConflictTier::None,
+                Vec::new(),
+            )])
+        }
+
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+
+        fn locales(&self) -> &[LocaleTag] {
+            std::slice::from_ref(&self.locale)
+        }
+
+        fn locale_basis(&self) -> LocaleBasis {
+            self.locale_basis
+        }
+    }
+
+    #[test]
+    fn format_basis_recognizer_ignores_document_locale_in_detect_all() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let registry = RecognizerRegistry::builder()
+            .register(BasisRecognizer {
+                id: "format",
+                class: PiiClass::Email,
+                locale: LocaleTag::DeDe,
+                locale_basis: LocaleBasis::Format,
+                span: 0..5,
+                calls: Arc::clone(&calls),
+            })
+            .build();
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::EnUs, LocaleTag::Global], &dictionaries);
+
+        let candidates = registry.detect_all("input", &ctx).expect("detect all");
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(calls.load(AtomicOrdering::SeqCst), 1);
+    }
+
+    #[test]
+    fn format_basis_runs_once_and_unions_with_document_fallback() {
+        let format_calls = Arc::new(AtomicUsize::new(0));
+        let document_calls = Arc::new(AtomicUsize::new(0));
+        let registry = RecognizerRegistry::builder()
+            .register(BasisRecognizer {
+                id: "format",
+                class: PiiClass::Email,
+                locale: LocaleTag::Other("fr-FR".to_string()),
+                locale_basis: LocaleBasis::Format,
+                span: 0..5,
+                calls: Arc::clone(&format_calls),
+            })
+            .register(BasisRecognizer {
+                id: "document",
+                class: PiiClass::Email,
+                locale: LocaleTag::DeDe,
+                locale_basis: LocaleBasis::Document,
+                span: 5..10,
+                calls: Arc::clone(&document_calls),
+            })
+            .build();
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(
+            &[LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::Global],
+            &dictionaries,
+        );
+
+        let (candidates, vetoed) = registry
+            .detect_all_resolved("abcdefghij", &ctx)
+            .expect("detect all resolved");
+
+        assert_eq!(candidates.len(), 2);
+        assert!(vetoed.is_empty());
+        assert_eq!(format_calls.load(AtomicOrdering::SeqCst), 1);
+        assert_eq!(document_calls.load(AtomicOrdering::SeqCst), 1);
     }
 
     #[test]

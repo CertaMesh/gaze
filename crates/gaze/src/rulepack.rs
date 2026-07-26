@@ -1290,8 +1290,46 @@ license = "Apache-2.0"
         let recognizer = &rulepack.recognizers[0];
         assert_eq!(recognizer.id, "email.global");
         assert_eq!(recognizer.class, PiiClass::Email);
+        assert_eq!(recognizer.locale_basis, LocaleBasis::Document);
         assert_eq!(recognizer.scoring.priority, 90);
         assert!(matches!(recognizer.matcher, RawMatch::Regex { .. }));
+    }
+
+    #[test]
+    fn rulepack_parses_explicit_format_locale_basis() {
+        let raw = CORE.replace(
+            "id = \"email.global\"\nclass = \"Email\"\nenabled = true\nlocales = [\"global\"]",
+            "id = \"email.global\"\nclass = \"Email\"\nenabled = true\nlocales = [\"global\"]\nlocale_basis = \"format\"",
+        );
+        let rulepack = Rulepack::parse(&raw).expect("format locale basis");
+
+        assert_eq!(rulepack.recognizers[0].locale_basis, LocaleBasis::Format);
+    }
+
+    #[test]
+    fn rulepack_rejects_unknown_locale_basis() {
+        let raw = CORE.replace(
+            "id = \"email.global\"\nclass = \"Email\"\nenabled = true\nlocales = [\"global\"]",
+            "id = \"email.global\"\nclass = \"Email\"\nenabled = true\nlocales = [\"global\"]\nlocale_basis = \"request\"",
+        );
+        let err = Rulepack::parse(&raw).expect_err("locale basis is a closed enum");
+
+        assert!(matches!(
+            err,
+            RulepackError::UnsupportedLocaleBasis { value } if value == "request"
+        ));
+    }
+
+    #[test]
+    fn bundled_rulepack_rejects_omitted_locale_basis() {
+        let err = Rulepack::parse_bundled(CORE)
+            .expect_err("official bundles must declare locale basis explicitly");
+
+        assert!(matches!(
+            err,
+            RulepackError::MissingBundledLocaleBasis { recognizer_id }
+                if recognizer_id == "email.global"
+        ));
     }
 
     #[test]

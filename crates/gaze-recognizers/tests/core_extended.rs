@@ -53,6 +53,7 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
             .map(|normalizer| NormalizerKind::parse(&normalizer.kind).expect("normalizer kind")),
     )
     .expect("regex detector")
+    .with_locale_basis(spec.locale_basis)
 }
 
 fn detect_recognizer(
@@ -185,6 +186,55 @@ fn email_global_spec() -> RecognizerSpec {
         .into_iter()
         .find(|recognizer| recognizer.id == "email.global")
         .expect("email.global")
+}
+
+#[test]
+fn embedded_core_mixed_locale_basis_membership_is_explicit() {
+    let core = Rulepack::parse_bundled(embedded("core").expect("core rulepack"))
+        .expect("bundled core declares every locale basis");
+    let format_ids = core
+        .recognizers
+        .iter()
+        .filter(|recognizer| recognizer.locale_basis == gaze::LocaleBasis::Format)
+        .map(|recognizer| recognizer.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+
+    assert_eq!(
+        format_ids,
+        std::collections::BTreeSet::from([
+            "aadhaar.in",
+            "bsn.nl",
+            "cnpj.br",
+            "cpf.br",
+            "nhs.uk",
+            "nino.uk",
+            "nir.fr",
+            "pan.in",
+            "phone.national.us",
+            "ssn.us",
+            "steuer_id.de",
+            "vat.de",
+            "vat.es",
+        ])
+    );
+    assert_eq!(core.recognizers.len(), 30);
+    for id in [
+        "name.forward_marker",
+        "name.agent_recipient",
+        "name.auto_footer",
+        "phone.national.de",
+        "postal.de",
+        "postal.us",
+    ] {
+        assert_eq!(
+            core.recognizers
+                .iter()
+                .find(|recognizer| recognizer.id == id)
+                .map(|recognizer| recognizer.locale_basis),
+            Some(gaze::LocaleBasis::Document),
+            "{id}"
+        );
+    }
 }
 
 fn email_global_pipeline() -> Pipeline {

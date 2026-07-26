@@ -132,6 +132,35 @@ pattern = '''alice@example\.invalid'''
 }
 
 #[test]
+fn format_basis_rulepack_ignores_document_locale() {
+    let policy = name_email_policy(vec![LocaleTag::EnUs]);
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "format-basis"
+rulepack_version = "0.1.0"
+default_locales = ["de-DE"]
+
+[[recognizers]]
+id = "format.email"
+class = "Email"
+enabled = true
+locales = ["de-DE"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#,
+    )
+    .expect("rulepack");
+
+    let text = clean_with_policy_and_rulepacks(&policy, &[rulepack], "Email alice@example.invalid");
+
+    assert!(text.contains(":Email_"), "{text}");
+}
+
+#[test]
 fn build_pipeline_ner_without_model_dir_returns_no_recognizers() {
     let mut policy = empty_policy();
     policy.ner = Some(NerPolicy::default());
