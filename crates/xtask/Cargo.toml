@@ -22,4 +22,5 @@ tempfile = "3"
 
 [dev-dependencies]
 fake = { version = "*", default-features = false }
+syn = { version = "2", features = ["full"] }
 tempfile = "3"
