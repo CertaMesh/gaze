@@ -208,6 +208,7 @@ pub enum ProxyErrorPhase {
 
 /// Structural reason a request header was rejected.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum HeaderRejectionReason {
     NameNotAllowlisted,
     EmptyValue,

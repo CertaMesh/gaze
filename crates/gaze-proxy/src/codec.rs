@@ -75,6 +75,7 @@ pub enum CodecErrorCode {
 
 /// Closed carrier schemes that may safely identify an opaque request carrier.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum OpaqueCarrierScheme {
     Data,
     File,
@@ -97,6 +98,7 @@ impl OpaqueCarrierScheme {
 
 /// Structural location of an opaque carrier, never its bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub struct OpaqueCarrierLocation {
     scheme: OpaqueCarrierScheme,
     byte_offset: usize,
