@@ -292,13 +292,13 @@ pub enum RulepackError {
 
 impl Rulepack {
     pub fn load(source: RulepackSource) -> Result<Rulepack, RulepackError> {
-        let raw = match source {
-            RulepackSource::Embedded(contents) => contents.to_string(),
+        match source {
+            RulepackSource::Embedded(contents) => Self::parse_bundled(contents),
             RulepackSource::Path(path) => {
-                std::fs::read_to_string(path).map_err(RulepackError::Io)?
+                let raw = std::fs::read_to_string(path).map_err(RulepackError::Io)?;
+                Self::parse(&raw)
             }
-        };
-        Self::parse(&raw)
+        }
     }
 
     pub fn parse(raw: &str) -> Result<Rulepack, RulepackError> {
@@ -1322,7 +1322,7 @@ license = "Apache-2.0"
 
     #[test]
     fn bundled_rulepack_rejects_omitted_locale_basis() {
-        let err = Rulepack::parse_bundled(CORE)
+        let err = Rulepack::load(RulepackSource::Embedded(CORE))
             .expect_err("official bundles must declare locale basis explicitly");
 
         assert!(matches!(
