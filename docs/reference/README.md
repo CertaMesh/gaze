@@ -10,6 +10,10 @@ behind a contract, follow through to [explanation](../explanation/README.md).
 - **[CLI](cli.md)** — every `gaze` subcommand, flag, stdin/stdout protocol, and exit code.
 - **[Policy schema](policy.md)** — the full `policy.toml` surface: rulepacks, custom
   recognizers, validators, normalizers, and locale gating.
+- **[Redaction classes and recognizers](redaction-classes.md)** — the canonical,
+  drift-gated inventory of emitted classes, embedded recognizers, validators,
+  normalizers, collision precedence, conflict ordering, deterministic gaps, and
+  shipped default activation.
 - **[Example policy TOML](policy.example.toml)** — a copyable starter policy file.
 - **[Crate map](crates.md)** — the published crates and what each owns; links to every crate README.
 - **[Metrics catalog](metrics.md)** — the SSOT for every observable surface: audit-log
