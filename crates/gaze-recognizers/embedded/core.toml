@@ -823,6 +823,7 @@ safety_tier = "safe_default"
 class = "custom:security_token"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
