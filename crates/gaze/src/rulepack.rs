@@ -1292,6 +1292,7 @@ window_chars = 48
                 PiiClass::custom("ip_address"),
                 PiiClass::custom("eth_address"),
                 PiiClass::custom("url"),
+                PiiClass::custom("security_token"),
                 PiiClass::custom("aadhaar"),
                 PiiClass::custom("nir"),
                 PiiClass::custom("steuer_id"),
