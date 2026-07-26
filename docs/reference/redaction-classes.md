@@ -89,6 +89,8 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `pan.in` | `regex` | Cue-anchored Indian Permanent Account Numbers in the ten-character PAN shape | `custom:pan` | `en-IN, hi-IN` | `none` | `none` | `locale_gated` | no | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:655-671` |
 | `core, core-extended` | `postal.de` | `regex` | Bare five-digit German postal-code shapes | `custom:postal_code` | `de-DE` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:673-695` |
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:697-719` |
+| `core, core-extended` | `url.anchored` | `regex` | URLs beginning with `http://`, `https://`, or `www.` through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 | `crates/gaze-recognizers/embedded/core.toml:721-760` |
+| `core, core-extended` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 | `crates/gaze-recognizers/embedded/core.toml:762-847` |
 <!-- redaction-classes-gate:recognizers:end -->
 
 ## Closed validator and normalizer sets
@@ -266,8 +268,8 @@ the requested bundle name (`crates/gaze-assembly/src/defaults.rs:45-76`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, phone.e164.spaced, phone.structural` | `crates/gaze-recognizers/embedded/core.toml:1-719`; `crates/gaze-assembly/src/defaults.rs:45-76` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, ssn.us, steuer_id.de, vat.de` | `crates/gaze-assembly/src/defaults.rs:45-76`; `crates/gaze-cli/src/pipeline/run.rs:137-158,718-733` |
+| `core` | `global` | no | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, phone.e164.spaced, phone.structural, security_token.anchored, url.anchored` | `crates/gaze-recognizers/embedded/core.toml:1-847`; `crates/gaze-assembly/src/defaults.rs:45-76` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.us, steuer_id.de, url.anchored, vat.de` | `crates/gaze-assembly/src/defaults.rs:45-76`; `crates/gaze-cli/src/pipeline/run.rs:137-158,718-733` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
