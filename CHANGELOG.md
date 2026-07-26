@@ -35,6 +35,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   manifest, so an over-tokenized public URL is a recoverable ergonomics cost
   (axis 5) while an under-tokenized private one is a leak (axis 1).
 
+- **Cue-anchored bearer-credential detection at the deterministic rule floor**
+  (todo #2318). The new `security_token.anchored` recognizer is one two-arm,
+  `safe_default`, global rule in the embedded `core` bundle. It protects
+  structurally typed AWS access-key/JWT shapes and high-entropy values adjacent
+  to explicit English or German credential cues, emitting the reversible
+  `custom:security_token` class.
+
+  A fresh full EN/DE comparison removed 3,065 leaked SECURITYTOKEN bytes at the
+  rule floor and 2,985 with pass2 NER. Each deterministic cell added 17
+  false-positive bytes, ratios of about 180:1 and 176:1, while the rule matched
+  0 of all 1,024 committed A4 negative documents. Cue anchoring is supported by
+  the corpus asymmetry: 88.1% of SECURITYTOKEN spans have `token` or `secret`
+  in the preceding 64 characters, versus only 1.8% cue context for URL.
+
+  Arm 2 requires at least one unambiguous delimiter between cue and value.
+  Whitespace and `:`, `=`, or `#` qualify; `_` and a directly abutting `-` do
+  not. The holdout has 0 of 193 cue-context spans with no delimiter and 0 using
+  direct hyphen alone, so the requirement costs no measured gold coverage.
+  This prevents the safe default from splitting cue-prefixed snake_case
+  identifiers such as tokenization helper names. A4 does not contain this
+  identifier class; post-fix dogfooding across project documentation and Rust
+  source produced zero SECURITYTOKEN detections.
+
+  **The shipped no-policy `CorePipelineConfig` default now tokenizes
+  credential-shaped strings in ordinary adopter text.** Git tokens in logs,
+  API keys in documentation, and similar cue-anchored secrets are protected
+  and remain restorable through the manifest. This is a deliberate,
+  recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
+  separate no-policy stub path is unchanged.
+
 ### Changed
 
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
