@@ -27,9 +27,7 @@ DAVLAN_ARTIFACTS = (
 )
 DAVLAN_HF_REPO = "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX"
 DAVLAN_HF_COMMIT = "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8"
-DAVLAN_BUNDLE_SHA = (
-    "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
-)
+DAVLAN_BUNDLE_SHA = "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
 
 
 def scorecard(leaked: int = 0) -> dict[str, object]:
@@ -39,6 +37,13 @@ def scorecard(leaked: int = 0) -> dict[str, object]:
     ).hexdigest()
     fully_covered = 1 if leaked == 0 else 0
     run = {
+        "scored_population": score.identified_document_population([uid]),
+        "failed_closed_population": {
+            **score.identified_document_population([]),
+            "excluded_documents": [],
+            "reason_counts": {},
+            "stage_counts": {},
+        },
         "metrics": {
             "documents": 1,
             "documents_without_leaks": fully_covered,
@@ -79,7 +84,7 @@ def scorecard(leaked: int = 0) -> dict[str, object]:
         },
     }
     return {
-        "schema_version": 3,
+        "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "dataset": {
             "repository": "synthetic/runner",
             "revision": "synthetic-v1",
@@ -97,21 +102,53 @@ def scorecard(leaked: int = 0) -> dict[str, object]:
             },
         },
         "runs": [
-            {"config": config, **copy.deepcopy(run)}
-            for config in score.DEFAULT_CONFIGS
+            {"config": config, **copy.deepcopy(run)} for config in score.DEFAULT_CONFIGS
         ],
     }
+
+
+def set_population_split(
+    card: dict[str, object], *, scored_id: str, failed_id: str
+) -> None:
+    document_ids = sorted([scored_id, failed_id])
+    card["dataset"]["evaluated_population"]["documents"] = 2
+    sampling = card["dataset"]["sampling"]
+    sampling["evaluated_document_ids"] = document_ids
+    sampling["evaluated_document_ids_digest"] = score.document_ids_digest(document_ids)
+    reason = "safety_net_fallback_residual_suspect"
+    for run in card["runs"]:
+        run["scored_population"] = score.identified_document_population([scored_id])
+        run["failed_closed_population"] = {
+            **score.identified_document_population([failed_id]),
+            "excluded_documents": [
+                {"document_id": failed_id, "reason": reason, "stage": "clean"}
+            ],
+            "reason_counts": {reason: 1},
+            "stage_counts": {"clean": 1},
+        }
+        run["pipeline_availability"] = {
+            "attempted_documents": 2,
+            "completed_documents": 1,
+            "failed_closed_documents": 1,
+            "errors": {reason: 1},
+            "error_stages": {"clean": 1},
+        }
 
 
 class IntegerComparatorTests(unittest.TestCase):
     def test_empty_and_missing_candidates_fail_closed(self) -> None:
         baseline = scorecard()
-        for candidate in ({}, {"schema_version": 3, "runs": []}):
+        for candidate in (
+            {},
+            {"schema_version": score.SCORECARD_SCHEMA_VERSION, "runs": []},
+        ):
             comparison = score.compare_scorecards(candidate, baseline)
             self.assertFalse(comparison["regression"]["passed"])
             self.assertFalse(comparison["release_readiness"]["passed"])
 
-    def test_integer_leak_ratchet_catches_change_even_if_rate_is_unchanged(self) -> None:
+    def test_integer_leak_ratchet_catches_change_even_if_rate_is_unchanged(
+        self,
+    ) -> None:
         baseline = scorecard()
         candidate = copy.deepcopy(baseline)
         candidate["runs"][0]["metrics"]["utf8_bytes"]["leaked"] = 1
@@ -149,14 +186,100 @@ class IntegerComparatorTests(unittest.TestCase):
         self.assertFalse(comparison["regression"]["passed"])
         self.assertFalse(comparison["release_readiness"]["passed"])
 
+    def test_equal_cardinality_scored_membership_swap_names_added_and_removed_ids(
+        self,
+    ) -> None:
+        baseline = scorecard()
+        candidate = copy.deepcopy(baseline)
+        set_population_split(baseline, scored_id="synthetic-a", failed_id="synthetic-b")
+        set_population_split(
+            candidate, scored_id="synthetic-b", failed_id="synthetic-a"
+        )
+
+        comparison = score.compare_scorecards(candidate, baseline)
+        failures = [
+            failure
+            for failure in comparison["regression"]["failures"]
+            if failure.get("gate") == "scored_population_identity_match"
+        ]
+
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertEqual(len(failures), len(score.DEFAULT_CONFIGS), failures)
+        self.assertEqual(failures[0]["added_document_ids"], ["synthetic-b"])
+        self.assertEqual(failures[0]["removed_document_ids"], ["synthetic-a"])
+
+    def test_missing_typed_failure_reason_breaks_reconciliation(self) -> None:
+        card = scorecard()
+        set_population_split(card, scored_id="synthetic-a", failed_id="synthetic-b")
+        run = card["runs"][0]
+        run["failed_closed_population"]["reason_counts"] = {}
+
+        with self.assertRaisesRegex(
+            ValueError, "reason counts do not reconcile to excluded documents"
+        ):
+            score._run_population_provenance(
+                run,
+                context="mutation",
+                expected_document_ids=["synthetic-a", "synthetic-b"],
+            )
+
+    def test_failure_reason_counts_sum_exactly_to_failed_total(self) -> None:
+        card = scorecard()
+        set_population_split(card, scored_id="synthetic-a", failed_id="synthetic-b")
+        run = card["runs"][0]
+
+        score._run_population_provenance(
+            run,
+            context="reconciled",
+            expected_document_ids=["synthetic-a", "synthetic-b"],
+        )
+
+        self.assertEqual(
+            sum(run["failed_closed_population"]["reason_counts"].values()),
+            run["pipeline_availability"]["failed_closed_documents"],
+        )
+
+    def test_diagnostics_carries_reconciled_typed_failure_breakdown(self) -> None:
+        card = scorecard()
+        set_population_split(card, scored_id="synthetic-a", failed_id="synthetic-b")
+
+        emitted = runner.diagnostics(card)
+        failed_population = emitted["runs"][0]["failed_closed_population"]
+
+        self.assertEqual(
+            failed_population["reason_counts"],
+            {"safety_net_fallback_residual_suspect": 1},
+        )
+        self.assertEqual(
+            sum(failed_population["reason_counts"].values()),
+            failed_population["documents"],
+        )
+
+    def test_legacy_schema_v3_without_run_identity_is_readable_but_not_comparable(
+        self,
+    ) -> None:
+        legacy = scorecard()
+        legacy["schema_version"] = 3
+        for run in legacy["runs"]:
+            run.pop("scored_population")
+            run.pop("failed_closed_population")
+
+        comparison = score.compare_scorecards(legacy, copy.deepcopy(legacy))
+
+        self.assertFalse(comparison["regression"]["passed"])
+        self.assertTrue(
+            any(
+                failure.get("gate") == "candidate_run_population_provenance"
+                for failure in comparison["regression"]["failures"]
+            )
+        )
+
     def test_strict_rejections_are_bucketed_ratcheted_and_release_blocking(
         self,
     ) -> None:
         baseline = scorecard()
         candidate = copy.deepcopy(baseline)
-        candidate["runs"][0]["pipeline_contract"][
-            "strict_would_reject_documents"
-        ] = 1
+        candidate["runs"][0]["pipeline_contract"]["strict_would_reject_documents"] = 1
 
         counts = score._run_correctness_counts(candidate["runs"][0])
         comparison = score.compare_scorecards(candidate, baseline)
@@ -177,9 +300,7 @@ class IntegerComparatorTests(unittest.TestCase):
         baseline = scorecard()
         candidate = copy.deepcopy(baseline)
         candidate["runs"][0]["latency_ms"]["clean_ms"]["p95"] = 2.0
-        result = score.compare_performance(
-            candidate, baseline, tolerance_percent=10.0
-        )
+        result = score.compare_performance(candidate, baseline, tolerance_percent=10.0)
         self.assertFalse(result["passed"])
         self.assertFalse(result["gating"])
         self.assertEqual(result["disposition"], "informational")
@@ -256,9 +377,7 @@ class ModelValidationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             bundle = Path(tmp) / "davlan"
             pin = self.write_davlan_bundle(bundle)
-            (bundle / "model.safetensors").write_bytes(
-                b"synthetic alternate weights"
-            )
+            (bundle / "model.safetensors").write_bytes(b"synthetic alternate weights")
             with self.assertRaisesRegex(
                 runner.ModelBundleError, "unexpected bundle surface"
             ):
@@ -307,9 +426,7 @@ class ModelValidationTests(unittest.TestCase):
             target = root / "synthetic-vocab-target.txt"
             target.write_bytes(b"synthetic vocab.txt bytes")
             artifact.symlink_to(target)
-            with self.assertRaisesRegex(
-                runner.ModelBundleError, "symlink"
-            ):
+            with self.assertRaisesRegex(runner.ModelBundleError, "symlink"):
                 runner.validate_model_bundle(pin)
 
     def test_davlan_manifest_digest_mismatch_fails_closed(self) -> None:
@@ -341,9 +458,7 @@ class ModelValidationTests(unittest.TestCase):
                 pin.digest_kind,
                 score.sha256_file(manifest),
             )
-            with self.assertRaisesRegex(
-                runner.ModelBundleError, "must list exactly"
-            ):
+            with self.assertRaisesRegex(runner.ModelBundleError, "must list exactly"):
                 runner.validate_model_bundle(updated_pin)
 
     def test_davlan_malformed_manifest_line_fails_closed(self) -> None:
@@ -477,7 +592,9 @@ class ProfileIsolationTests(unittest.TestCase):
             "GAZE_OPF_DAEMON_SOCKET": "/tmp/fake.sock",
         }
         fake_run = scorecard()["runs"][0]
-        with mock.patch.object(score, "run_config", return_value=fake_run) as run_config:
+        with mock.patch.object(
+            score, "run_config", return_value=fake_run
+        ) as run_config:
             _, provenance = runner.execute_measurements(
                 repo_root=Path("/synthetic/repo"),
                 binary=Path("/synthetic/clean_for_bench"),
@@ -521,9 +638,7 @@ class ProfileIsolationTests(unittest.TestCase):
         )
 
     def test_repetitions_require_exact_strict_rejection_counts(self) -> None:
-        runs_by_config = {
-            run["config"]: run for run in scorecard()["runs"]
-        }
+        runs_by_config = {run["config"]: run for run in scorecard()["runs"]}
         call_count = 0
 
         def fake_run_config(*args: object, **kwargs: object) -> dict[str, object]:

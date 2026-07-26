@@ -26,9 +26,51 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-SCORECARD_SCHEMA_VERSION = 3
+SCORECARD_SCHEMA_VERSION = 4
+READABLE_SCORECARD_SCHEMA_VERSIONS = frozenset({3, SCORECARD_SCHEMA_VERSION})
 DEFAULT_SAMPLE_SEED = 20_260_710
 SAMPLING_STRATEGY = "deterministic-stratified-language-region-v1"
+PIPELINE_FAILURE_STAGES = frozenset({"clean", "post_policy_scan"})
+PIPELINE_FAILURE_REASONS = frozenset(
+    {
+        "invalid_regex",
+        "unknown_token",
+        "export_forbidden",
+        "empty_document_integrity",
+        "invalid_snapshot_version",
+        "invalid_snapshot_signature",
+        "blob_expired",
+        "snapshot_decode",
+        "invalid_snapshot_payload",
+        "sqlite",
+        "policy",
+        "rulepack",
+        "recognizer_detect",
+        "redaction_log",
+        "safety_net_unavailable",
+        "safety_net_weights_missing",
+        "safety_net_model_unavailable",
+        "safety_net_model_integrity_mismatch",
+        "safety_net_input_too_large",
+        "safety_net_runtime_subprocess_timeout",
+        "safety_net_runtime_subprocess_non_zero_exit",
+        "safety_net_runtime_other",
+        "safety_net_invalid_output_malformed_backend_output",
+        "safety_net_invalid_output_label_decode_mismatch",
+        "safety_net_invalid_output_clean_to_raw_mapping",
+        "safety_net_invalid_output_trace_manifest_mismatch",
+        "safety_net_invalid_output_other",
+        "safety_net_fallback_overlap_conflict",
+        "safety_net_fallback_validator_veto",
+        "safety_net_fallback_anchor_missing",
+        "safety_net_fallback_residual_suspect",
+        "safety_net_span_invalid",
+        "unsupported_capital_heuristic_locale",
+        "unsupported_raw_document_variant",
+        "unsupported_structured_value_variant",
+        "unsupported_policy_action_variant",
+    }
+)
 
 # These are direct or account-linked identifiers. The remaining observed
 # labels (date, time, age, gender, sex, title, amount, and currency) are still
@@ -95,6 +137,26 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def document_ids_digest(document_ids: Sequence[str]) -> dict[str, str]:
+    payload = json.dumps(
+        list(document_ids), ensure_ascii=False, separators=(",", ":")
+    ).encode("utf-8")
+    return {"algorithm": "sha256", "value": hashlib.sha256(payload).hexdigest()}
+
+
+def identified_document_population(document_ids: Iterable[str]) -> dict[str, object]:
+    ids = sorted(document_ids)
+    if not all(isinstance(uid, str) and uid for uid in ids):
+        raise ValueError("document IDs must be non-empty strings")
+    if len(set(ids)) != len(ids):
+        raise ValueError("document IDs must be unique")
+    return {
+        "documents": len(ids),
+        "document_ids": ids,
+        "document_ids_digest": document_ids_digest(ids),
+    }
+
+
 def char_to_byte_offsets(text: str) -> list[int]:
     offsets = [0]
     byte_offset = 0
@@ -148,8 +210,7 @@ def _proportional_allocation(
     if budget > capacity_total:
         raise ValueError("sample allocation exceeds available population")
     quotas = {
-        key: budget * capacity / capacity_total
-        for key, capacity in capacities.items()
+        key: budget * capacity / capacity_total for key, capacity in capacities.items()
     }
     for key, quota in quotas.items():
         allocations[key] = min(capacities[key], math.floor(quota))
@@ -205,15 +266,13 @@ def stratified_sample(
     evaluated: list[Document] = []
     for key in sorted(strata):
         ranked = sorted(
-            strata[key], key=lambda document: (_document_rank(seed, document), document.uid)
+            strata[key],
+            key=lambda document: (_document_rank(seed, document), document.uid),
         )
         evaluated.extend(ranked[: allocation[key]])
     evaluated.sort(key=lambda document: (_document_rank(seed, document), document.uid))
 
     evaluated_ids = [document.uid for document in evaluated]
-    digest_payload = json.dumps(
-        evaluated_ids, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
     report: dict[str, object] = {
         "strategy": SAMPLING_STRATEGY,
         "seed": seed,
@@ -221,16 +280,13 @@ def stratified_sample(
         "available_population": population_summary(documents),
         "evaluated_population": population_summary(evaluated),
         "evaluated_document_ids": evaluated_ids,
-        "evaluated_document_ids_digest": {
-            "algorithm": "sha256",
-            "value": hashlib.sha256(digest_payload).hexdigest(),
-        },
+        "evaluated_document_ids_digest": document_ids_digest(evaluated_ids),
     }
     return evaluated, report
 
 
 class ResponseValidationError(RuntimeError):
-    """The Rust benchmark producer violated its closed schema-v3 wire contract."""
+    """The Rust benchmark producer violated its closed wire contract."""
 
 
 class SourceIdVocabularyError(RuntimeError):
@@ -238,9 +294,7 @@ class SourceIdVocabularyError(RuntimeError):
 
 
 def _expect_object(value: object, context: str) -> dict[str, object]:
-    if not isinstance(value, dict) or not all(
-        isinstance(key, str) for key in value
-    ):
+    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise ResponseValidationError(f"{context}: expected an object")
     return value
 
@@ -310,12 +364,8 @@ VALID_TRACE_COMBINATIONS = frozenset(
         ("safety_net", "fallback_redact", "redact"),
     }
 )
-BUILTIN_CANONICAL_CLASSES = frozenset(
-    {"email", "name", "location", "organization"}
-)
-SOURCE_ID_PATTERN = re.compile(
-    r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z"
-)
+BUILTIN_CANONICAL_CLASSES = frozenset({"email", "name", "location", "organization"})
+SOURCE_ID_PATTERN = re.compile(r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z")
 LEAK_SUSPECT_FIELDS = frozenset(
     {
         "clean_start",
@@ -357,9 +407,7 @@ MANIFEST_INTEGRITY_FIELDS = frozenset(
         "raw_value_mismatches",
     }
 )
-SUCCESS_TIMING_FIELDS = frozenset(
-    {"clean_ms", "restore_ms", "post_policy_scan_ms"}
-)
+SUCCESS_TIMING_FIELDS = frozenset({"clean_ms", "restore_ms", "post_policy_scan_ms"})
 SUCCESS_RESPONSE_FIELDS = frozenset(
     {
         "fixture_id",
@@ -549,9 +597,7 @@ def load_committed_source_id_vocabulary(
         if not isinstance(section, dict) or "id" not in section:
             continue
         identifiers.add(
-            _committed_vocabulary_id(
-                section["id"], f"{model_path}: {section_name}.id"
-            )
+            _committed_vocabulary_id(section["id"], f"{model_path}: {section_name}.id")
         )
         model_count += 1
     if model_count == 0:
@@ -599,13 +645,17 @@ def _validate_final_protection_trace(
             provenance["source_ids"], f"{context}.provenance.source_ids"
         )
         source_ids = [
-            _expect_string(source_id, f"{context}.provenance.source_ids[{source_index}]")
+            _expect_string(
+                source_id, f"{context}.provenance.source_ids[{source_index}]"
+            )
             for source_index, source_id in enumerate(source_values)
         ]
 
         _validate_canonical_class(pii_class, f"{context}.class")
         if action not in {"tokenize", "redact"}:
-            raise ResponseValidationError(f"{context}.action: unknown action {action!r}")
+            raise ResponseValidationError(
+                f"{context}.action: unknown action {action!r}"
+            )
         if (stage, decision, action) not in VALID_TRACE_COMBINATIONS:
             raise ResponseValidationError(
                 f"{context}.provenance: invalid stage/decision/action combination"
@@ -616,9 +666,7 @@ def _validate_final_protection_trace(
             )
         for source_index, source_id in enumerate(source_ids):
             source_context = f"{context}.provenance.source_ids[{source_index}]"
-            _validate_source_id(
-                source_id, source_context
-            )
+            _validate_source_id(source_id, source_context)
             source_identifiers.append((source_id, source_context))
         if source_ids != sorted(source_ids) or len(source_ids) != len(set(source_ids)):
             raise ResponseValidationError(
@@ -676,8 +724,16 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
             f"{document.uid}: pipeline error response",
         )
         fixture_id = _expect_string(response["fixture_id"], "fixture_id")
-        _expect_string(response["pipeline_error_stage"], "pipeline_error_stage")
-        _expect_string(response["pipeline_error_code"], "pipeline_error_code")
+        stage = _expect_string(response["pipeline_error_stage"], "pipeline_error_stage")
+        reason = _expect_string(response["pipeline_error_code"], "pipeline_error_code")
+        if stage not in PIPELINE_FAILURE_STAGES:
+            raise ResponseValidationError(
+                f"pipeline_error_stage: unknown closed stage {stage!r}"
+            )
+        if reason not in PIPELINE_FAILURE_REASONS:
+            raise ResponseValidationError(
+                f"pipeline_error_code: unknown closed reason {reason!r}"
+            )
         timing = _expect_exact_keys(
             response["timing"], frozenset({"total_ms"}), "pipeline error timing"
         )
@@ -750,12 +806,16 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
         _validate_final_protection_trace(
             document, response["final_protection_trace"], manifest
         )
-        if any(
-            _expect_object(item, "final_protection_trace item")["action"] == "redact"
-            for item in _expect_list(
-                response["final_protection_trace"], "final_protection_trace"
+        if (
+            any(
+                _expect_object(item, "final_protection_trace item")["action"]
+                == "redact"
+                for item in _expect_list(
+                    response["final_protection_trace"], "final_protection_trace"
+                )
             )
-        ) and _expect_object(response["restore"], "restore")["exact"] is True:
+            and _expect_object(response["restore"], "restore")["exact"] is True
+        ):
             raise ResponseValidationError(
                 "restore.exact: redact protection cannot be exactly reversible"
             )
@@ -765,8 +825,6 @@ def validate_response(document: Document, value: object) -> dict[str, object]:
             f"runner response mismatch: expected {document.uid}, received {fixture_id}"
         )
     return response
-
-
 
 
 def merge_intervals(intervals: Iterable[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -807,14 +865,19 @@ def interval_is_covered(
     interval: tuple[int, int], covering: Sequence[tuple[int, int]]
 ) -> bool:
     start, end = interval
-    return any(cover_start <= start and cover_end >= end for cover_start, cover_end in covering)
+    return any(
+        cover_start <= start and cover_end >= end for cover_start, cover_end in covering
+    )
 
 
 def interval_overlaps(
     interval: tuple[int, int], candidates: Sequence[tuple[int, int]]
 ) -> bool:
     start, end = interval
-    return any(candidate_start < end and start < candidate_end for candidate_start, candidate_end in candidates)
+    return any(
+        candidate_start < end and start < candidate_end
+        for candidate_start, candidate_end in candidates
+    )
 
 
 def safe_ratio(numerator: int | float, denominator: int | float) -> float:
@@ -1012,9 +1075,7 @@ class ContractAccumulator:
         self.strict_would_reject_documents += bool(response["strict_would_reject"])
         trace = response.get("final_protection_trace", [])
         assert isinstance(trace, list)
-        actions = [
-            item["action"] for item in trace if isinstance(item, dict)
-        ]
+        actions = [item["action"] for item in trace if isinstance(item, dict)]
         self.protection_trace_items += len(actions)
         self.tokenize_actions += actions.count("tokenize")
         self.redact_actions += actions.count("redact")
@@ -1095,7 +1156,11 @@ def validate_prediction(document: Document, raw: dict[str, object]) -> Span:
     start = raw["raw_start"]
     end = raw["raw_end"]
     label = raw["class"]
-    if not isinstance(start, int) or not isinstance(end, int) or not isinstance(label, str):
+    if (
+        not isinstance(start, int)
+        or not isinstance(end, int)
+        or not isinstance(label, str)
+    ):
         raise RuntimeError(f"{document.uid}: invalid prediction shape")
     text_bytes = len(document.text.encode("utf-8"))
     if start < 0 or end <= start or end > text_bytes:
@@ -1128,9 +1193,14 @@ def run_config(
 ) -> dict[str, object]:
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
+    attempted_document_ids = [document.uid for document in documents]
+    if len(set(attempted_document_ids)) != len(attempted_document_ids):
+        raise ValueError(f"{config}: document IDs must be unique within a run")
     if warmup_count < 0:
         raise ValueError("warmup_count must be non-negative")
-    environment = dict(base_environment) if base_environment is not None else os.environ.copy()
+    environment = (
+        dict(base_environment) if base_environment is not None else os.environ.copy()
+    )
     environment["GAZE_NER_MODEL_DIR"] = str(model_dir)
     environment["GAZE_NER_THRESHOLD"] = str(threshold)
     environment["GAZE_KIJI_DISTILBERT_MODEL_DIR"] = str(kiji_model_dir)
@@ -1168,8 +1238,8 @@ def run_config(
     direct = RecallAccumulator()
     contextual = RecallAccumulator()
     contract = ContractAccumulator()
-    pipeline_errors: Counter[str] = Counter()
-    pipeline_error_stages: Counter[str] = Counter()
+    scored_document_ids: list[str] = []
+    failed_closed_documents: list[dict[str, str]] = []
     success_timing: defaultdict[str, list[float]] = defaultdict(list)
     first_response_ms: float | None = None
     discarded_warmup_samples: list[dict[str, object]] = []
@@ -1230,13 +1300,10 @@ def run_config(
                     metric_result["entities"]["gold"]
                     - metric_result["entities"]["fully_covered"]
                 ),
-                "restore_failures": 1
-                - contract_result["restore_exact_documents"],
+                "restore_failures": 1 - contract_result["restore_exact_documents"],
                 "manifest_invalid_documents": 1
                 - contract_result["manifest_valid_documents"],
-                "strict_rejections": contract_result[
-                    "strict_would_reject_documents"
-                ],
+                "strict_rejections": contract_result["strict_would_reject_documents"],
                 "residual_suspects": contract_result["post_policy_suspects"],
                 "redact_actions": contract_result["redact_actions"],
             }
@@ -1253,9 +1320,15 @@ def run_config(
         for index, document in enumerate(documents):
             response, _ = exchange(document)
             if "pipeline_error_code" in response:
-                pipeline_errors[str(response["pipeline_error_code"])] += 1
-                pipeline_error_stages[str(response["pipeline_error_stage"])] += 1
+                failed_closed_documents.append(
+                    {
+                        "document_id": document.uid,
+                        "reason": str(response["pipeline_error_code"]),
+                        "stage": str(response["pipeline_error_stage"]),
+                    }
+                )
                 continue
+            scored_document_ids.append(document.uid)
             predictions = final_trace_predictions(document, response)
             overall.add(document, predictions)
             per_language[document.language].add(document, predictions)
@@ -1264,17 +1337,22 @@ def run_config(
                     document, predictions
                 )
             direct_spans = [
-                span for span in document.spans if span.label in DIRECT_IDENTIFIER_LABELS
+                span
+                for span in document.spans
+                if span.label in DIRECT_IDENTIFIER_LABELS
             ]
             contextual_spans = [
-                span for span in document.spans if span.label not in DIRECT_IDENTIFIER_LABELS
+                span
+                for span in document.spans
+                if span.label not in DIRECT_IDENTIFIER_LABELS
             ]
             direct.add(direct_spans, predictions)
             contextual.add(contextual_spans, predictions)
             contract.add(response)
             for label in {span.label for span in document.spans}:
                 per_label[label].add(
-                    [span for span in document.spans if span.label == label], predictions
+                    [span for span in document.spans if span.label == label],
+                    predictions,
                 )
             for key, value in response["timing"].items():
                 if value is not None:
@@ -1299,19 +1377,35 @@ def run_config(
         if clean_ms and measured_clean_seconds > 0.0
         else None
     )
+    failed_closed_documents.sort(key=lambda item: item["document_id"])
+    failed_closed_document_ids = [
+        item["document_id"] for item in failed_closed_documents
+    ]
+    pipeline_errors = Counter(item["reason"] for item in failed_closed_documents)
+    pipeline_error_stages = Counter(item["stage"] for item in failed_closed_documents)
+    scored_population = identified_document_population(scored_document_ids)
+    failed_closed_population = {
+        **identified_document_population(failed_closed_document_ids),
+        "excluded_documents": failed_closed_documents,
+        "reason_counts": dict(sorted(pipeline_errors.items())),
+        "stage_counts": dict(sorted(pipeline_error_stages.items())),
+    }
+    failed_closed_count = len(failed_closed_documents)
     return {
         "config": config,
+        "scored_population": scored_population,
+        "failed_closed_population": failed_closed_population,
         "metrics": overall.result(),
         "direct_identifier_recall": direct.result(),
         "contextual_pii_recall": contextual.result(),
         "pipeline_contract": contract.result(),
         "pipeline_availability": {
             "attempted_documents": len(documents),
-            "completed_documents": len(documents) - sum(pipeline_errors.values()),
+            "completed_documents": len(documents) - failed_closed_count,
             "completion_rate": safe_ratio(
-                len(documents) - sum(pipeline_errors.values()), len(documents)
+                len(documents) - failed_closed_count, len(documents)
             ),
-            "failed_closed_documents": sum(pipeline_errors.values()),
+            "failed_closed_documents": failed_closed_count,
             "errors": dict(sorted(pipeline_errors.items())),
             "error_stages": dict(sorted(pipeline_error_stages.items())),
         },
@@ -1322,12 +1416,10 @@ def run_config(
             key: value.result() for key, value in sorted(per_label.items())
         },
         "per_negative_category": {
-            key: value.result()
-            for key, value in sorted(per_negative_category.items())
+            key: value.result() for key, value in sorted(per_negative_category.items())
         },
         "latency_ms": {
-            key: timing_summary(value)
-            for key, value in sorted(success_timing.items())
+            key: timing_summary(value) for key, value in sorted(success_timing.items())
         },
         "warm_latency_ms": {
             key: timing_summary(value[1:])
@@ -1384,14 +1476,16 @@ SCORING_METADATA: dict[str, object] = {
         "A protected byte counts for safety even when its action is not reversible.",
         "Restore, manifest, pipeline, and telemetry failures remain separate hard failures.",
         "Final protection evidence contains offsets, classes, counts, and stable IDs only; never PII values.",
+        "Per-cell scored and failed-closed populations are sorted synthetic document-ID sets with SHA-256 digests.",
+        "Failed-closed reason and stage counts reconcile exactly to the identified excluded documents.",
         "Latency is considered only after correctness gates pass.",
     ],
     "comparison_gates": {
         "correctness": "zero-tolerance integer-count ratchets; ratios are diagnostics only",
         "release_readiness": "production cell must have zero correctness failures",
         "population": (
-            "candidate and baseline evaluated-population provenance and invariant "
-            "counts must match"
+            "candidate and baseline dataset provenance plus per-cell scored and "
+            "failed-closed document sets must match"
         ),
         "performance": (
             "clean_ms p95 uses a separately configured tolerance and is "
@@ -1445,8 +1539,8 @@ def assemble_scorecard(
 
 def _scorecard_runs(scorecard: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
     if type(scorecard.get("schema_version")) is not int:
-        raise ValueError("scorecard schema_version must be integer 3")
-    if scorecard["schema_version"] != SCORECARD_SCHEMA_VERSION:
+        raise ValueError("scorecard schema_version must be an integer")
+    if scorecard["schema_version"] not in READABLE_SCORECARD_SCHEMA_VERSIONS:
         raise ValueError(
             f"unsupported scorecard schema_version {scorecard['schema_version']}"
         )
@@ -1524,6 +1618,7 @@ def _evaluated_population_provenance(
         "evaluated_population": evaluated,
         "sampling_strategy": strategy,
         "sampling_seed": seed,
+        "evaluated_document_ids": evaluated_ids,
         "evaluated_document_ids_digest": digest,
     }
 
@@ -1537,8 +1632,191 @@ def _count(value: object, context: str) -> int:
 def _count_map(value: object, context: str) -> dict[str, int]:
     if not isinstance(value, dict):
         raise ValueError(f"{context} must be an object")
+    return {str(key): _count(item, f"{context}.{key}") for key, item in value.items()}
+
+
+def _exact_object(
+    value: object, required: frozenset[str], context: str
+) -> dict[str, object]:
+    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
+        raise ValueError(f"{context} must be an object")
+    if set(value) != required:
+        raise ValueError(
+            f"{context} fields disagree: "
+            f"missing={sorted(required - value.keys())}, "
+            f"unknown={sorted(value.keys() - required)}"
+        )
+    return value
+
+
+def _identified_population_ids(value: object, context: str) -> frozenset[str]:
+    population = _exact_object(
+        value,
+        frozenset({"documents", "document_ids", "document_ids_digest"}),
+        context,
+    )
+    documents = _count(population["documents"], f"{context}.documents")
+    raw_ids = population["document_ids"]
+    if not isinstance(raw_ids, list) or not all(
+        isinstance(uid, str) and uid for uid in raw_ids
+    ):
+        raise ValueError(f"{context}.document_ids must be a string array")
+    if raw_ids != sorted(raw_ids) or len(set(raw_ids)) != len(raw_ids):
+        raise ValueError(f"{context}.document_ids must be a sorted duplicate-free set")
+    if len(raw_ids) != documents:
+        raise ValueError(f"{context}.document_ids disagree with documents")
+    digest = population["document_ids_digest"]
+    if not isinstance(digest, dict) or set(digest) != {"algorithm", "value"}:
+        raise ValueError(f"{context}.document_ids_digest has an invalid shape")
+    if digest != document_ids_digest(raw_ids):
+        raise ValueError(f"{context}.document_ids_digest does not match the IDs")
+    return frozenset(raw_ids)
+
+
+def _run_population_provenance(
+    run: Mapping[str, object],
+    *,
+    context: str,
+    expected_document_ids: Iterable[str] | None = None,
+) -> dict[str, frozenset[str]]:
+    availability = run.get("pipeline_availability")
+    if not isinstance(availability, dict):
+        raise ValueError(f"{context}.pipeline_availability must be an object")
+    completed = _count(
+        availability.get("completed_documents"),
+        f"{context}.pipeline_availability.completed_documents",
+    )
+    failed = _count(
+        availability.get("failed_closed_documents"),
+        f"{context}.pipeline_availability.failed_closed_documents",
+    )
+    attempted = _count(
+        availability.get("attempted_documents"),
+        f"{context}.pipeline_availability.attempted_documents",
+    )
+    scored_ids = _identified_population_ids(
+        run.get("scored_population"), f"{context}.scored_population"
+    )
+    raw_failed_population = run.get("failed_closed_population")
+    if not isinstance(raw_failed_population, dict):
+        raise ValueError(f"{context}.failed_closed_population must be an object")
+    failed_population = _exact_object(
+        raw_failed_population,
+        frozenset(
+            {
+                "documents",
+                "document_ids",
+                "document_ids_digest",
+                "excluded_documents",
+                "reason_counts",
+                "stage_counts",
+            }
+        ),
+        f"{context}.failed_closed_population",
+    )
+    failed_ids = _identified_population_ids(
+        {
+            key: failed_population[key]
+            for key in ("documents", "document_ids", "document_ids_digest")
+        },
+        f"{context}.failed_closed_population",
+    )
+    exclusions = failed_population["excluded_documents"]
+    if not isinstance(exclusions, list):
+        raise ValueError(
+            f"{context}.failed_closed_population.excluded_documents must be an array"
+        )
+    excluded_ids: list[str] = []
+    observed_reasons: Counter[str] = Counter()
+    observed_stages: Counter[str] = Counter()
+    for index, raw_exclusion in enumerate(exclusions):
+        exclusion_context = (
+            f"{context}.failed_closed_population.excluded_documents[{index}]"
+        )
+        exclusion = _exact_object(
+            raw_exclusion,
+            frozenset({"document_id", "reason", "stage"}),
+            exclusion_context,
+        )
+        document_id = exclusion["document_id"]
+        reason = exclusion["reason"]
+        stage = exclusion["stage"]
+        if not isinstance(document_id, str) or not document_id:
+            raise ValueError(f"{exclusion_context}.document_id must be a string")
+        if not isinstance(reason, str):
+            raise ValueError(f"{exclusion_context}.reason must be a string")
+        if not isinstance(stage, str):
+            raise ValueError(f"{exclusion_context}.stage must be a string")
+        if reason not in PIPELINE_FAILURE_REASONS:
+            raise ValueError(f"{exclusion_context}.reason is not a closed reason")
+        if stage not in PIPELINE_FAILURE_STAGES:
+            raise ValueError(f"{exclusion_context}.stage is not a closed stage")
+        excluded_ids.append(document_id)
+        observed_reasons[reason] += 1
+        observed_stages[stage] += 1
+    if excluded_ids != sorted(excluded_ids) or len(set(excluded_ids)) != len(
+        excluded_ids
+    ):
+        raise ValueError(
+            f"{context}.failed_closed_population exclusions must be sorted and unique"
+        )
+    if frozenset(excluded_ids) != failed_ids:
+        raise ValueError(
+            f"{context}.failed_closed_population exclusions disagree with document IDs"
+        )
+    reason_counts = _count_map(
+        failed_population["reason_counts"],
+        f"{context}.failed_closed_population.reason_counts",
+    )
+    stage_counts = _count_map(
+        failed_population["stage_counts"],
+        f"{context}.failed_closed_population.stage_counts",
+    )
+    if set(reason_counts) - PIPELINE_FAILURE_REASONS:
+        raise ValueError(
+            f"{context}.failed_closed_population.reason_counts contains an unknown reason"
+        )
+    if set(stage_counts) - PIPELINE_FAILURE_STAGES:
+        raise ValueError(
+            f"{context}.failed_closed_population.stage_counts contains an unknown stage"
+        )
+    if reason_counts != dict(observed_reasons):
+        raise ValueError(
+            f"{context}.failed-closed reason counts do not reconcile to excluded documents"
+        )
+    if stage_counts != dict(observed_stages):
+        raise ValueError(
+            f"{context}.failed-closed stage counts do not reconcile to excluded documents"
+        )
+    availability_reasons = _count_map(
+        availability.get("errors", {}), f"{context}.pipeline_availability.errors"
+    )
+    availability_stages = _count_map(
+        availability.get("error_stages", {}),
+        f"{context}.pipeline_availability.error_stages",
+    )
+    if reason_counts != availability_reasons or stage_counts != availability_stages:
+        raise ValueError(
+            f"{context}.failed-closed breakdown disagrees with pipeline availability"
+        )
+    if len(scored_ids) != completed or len(failed_ids) != failed:
+        raise ValueError(f"{context}.population IDs disagree with availability counts")
+    if scored_ids & failed_ids:
+        raise ValueError(f"{context}.scored and failed-closed populations overlap")
+    attempted_ids = scored_ids | failed_ids
+    if len(attempted_ids) != attempted:
+        raise ValueError(
+            f"{context}.population IDs do not reconcile to attempted total"
+        )
+    if expected_document_ids is not None:
+        expected_ids = frozenset(expected_document_ids)
+        if attempted_ids != expected_ids:
+            raise ValueError(
+                f"{context}.attempted population disagrees with dataset evaluated IDs"
+            )
     return {
-        str(key): _count(item, f"{context}.{key}") for key, item in value.items()
+        "scored_document_ids": scored_ids,
+        "failed_closed_document_ids": failed_ids,
     }
 
 
@@ -1554,9 +1832,7 @@ def _run_correctness_counts(run: Mapping[str, object]) -> dict[str, int]:
         raise ValueError("scorecard metric sections must be objects")
     attempted = _count(availability["attempted_documents"], "attempted_documents")
     completed = _count(availability["completed_documents"], "completed_documents")
-    failed = _count(
-        availability["failed_closed_documents"], "failed_closed_documents"
-    )
+    failed = _count(availability["failed_closed_documents"], "failed_closed_documents")
     errors = _count_map(availability.get("errors", {}), "pipeline errors")
     error_stages = _count_map(
         availability.get("error_stages", {}), "pipeline error stages"
@@ -1655,6 +1931,7 @@ def _run_correctness_counts(run: Mapping[str, object]) -> dict[str, int]:
 
 def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, object]:
     failures: list[dict[str, object]] = []
+    evaluated_document_ids: list[str] | None = None
     try:
         candidate_runs = _scorecard_runs(candidate)
     except (KeyError, TypeError, ValueError) as error:
@@ -1672,7 +1949,8 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
             }
         )
     try:
-        _evaluated_population_provenance(candidate)
+        population_provenance = _evaluated_population_provenance(candidate)
+        evaluated_document_ids = list(population_provenance["evaluated_document_ids"])
     except (KeyError, TypeError, ValueError) as error:
         failures.append(
             {
@@ -1693,6 +1971,21 @@ def evaluate_release_readiness(candidate: Mapping[str, object]) -> dict[str, obj
                 }
             )
             continue
+        if evaluated_document_ids is not None:
+            try:
+                _run_population_provenance(
+                    candidate_runs[config],
+                    context=f"candidate {config}",
+                    expected_document_ids=evaluated_document_ids,
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                failures.append(
+                    {
+                        "config": config,
+                        "gate": "candidate_run_population_provenance",
+                        "reason": str(error),
+                    }
+                )
         cell_counts[config] = counts
         for gate in (
             "failed_closed_documents",
@@ -1772,31 +2065,22 @@ def _label_coverage(
     return out
 
 
+def _optional_scored_document_ids(
+    run: Mapping[str, object], context: str
+) -> frozenset[str] | None:
+    if "scored_population" not in run:
+        return None
+    return _identified_population_ids(
+        run["scored_population"], f"{context}.scored_population"
+    )
+
+
 def _class_coverage_failures(
     config: str,
     candidate_run: Mapping[str, object],
     baseline_run: Mapping[str, object],
 ) -> list[dict[str, object]]:
-    """Flags any class that LOST coverage on an unchanged population.
-
-    The discriminator is deliberately narrow: for a given class, if the gold
-    entity count is IDENTICAL between baseline and candidate, then any decrease
-    in `fully_covered` or `overlapped` means protection that existed before does
-    not exist now. Because the scorer merges every prediction class-agnostically
-    before computing coverage, an entity leaving `overlapped` means NO prediction
-    of ANY class intersects it any more -- the bytes are raw, not merely
-    mislabelled. That is an axis-1 leak introduced by a change, and it is exactly
-    the condition that three manual reviews missed.
-
-    Where the entity count DIFFERS the comparison is not like-for-like, and this
-    gate emits a NON-PASS `class_population_evaluability` entry rather than
-    staying silent. Silence there would let a change hide a coverage loss by also
-    perturbing the population -- the precise shape that disqualified an earlier
-    candidate whose leak "win" came from denominator shrinkage.
-
-    Depends on the scored population being identifiable at all (todo #2414) and
-    is the companion of typed failure reporting (todo #2413).
-    """
+    """Flags any class that lost coverage on an identical scored-document set."""
     failures: list[dict[str, object]] = []
     candidate_labels = _label_coverage(candidate_run, f"candidate {config}")
     baseline_labels = _label_coverage(baseline_run, f"baseline {config}")
@@ -1816,7 +2100,56 @@ def _class_coverage_failures(
             }
         )
         return failures
-    for label in sorted(set(candidate_labels) & set(baseline_labels)):
+    candidate_population = _optional_scored_document_ids(
+        candidate_run, f"candidate {config}"
+    )
+    baseline_population = _optional_scored_document_ids(
+        baseline_run, f"baseline {config}"
+    )
+    labels = sorted(set(candidate_labels) | set(baseline_labels))
+    if candidate_population is None or baseline_population is None:
+        for label in labels:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": CLASS_POPULATION_EVALUABILITY_GATE,
+                    "label": label,
+                    "reason": "scored_population_unidentified, cannot evaluate",
+                    "candidate_entities": candidate_labels.get(label, (0, 0, 0, 0))[0],
+                    "baseline_entities": baseline_labels.get(label, (0, 0, 0, 0))[0],
+                }
+            )
+        return failures
+    if candidate_population != baseline_population:
+        added_document_ids = sorted(candidate_population - baseline_population)
+        removed_document_ids = sorted(baseline_population - candidate_population)
+        for label in labels:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": CLASS_POPULATION_EVALUABILITY_GATE,
+                    "label": label,
+                    "reason": "population_moved, cannot evaluate",
+                    "candidate_entities": candidate_labels.get(label, (0, 0, 0, 0))[0],
+                    "baseline_entities": baseline_labels.get(label, (0, 0, 0, 0))[0],
+                    "added_document_ids": added_document_ids,
+                    "removed_document_ids": removed_document_ids,
+                }
+            )
+        return failures
+    for label in labels:
+        if label not in candidate_labels or label not in baseline_labels:
+            failures.append(
+                {
+                    "config": config,
+                    "gate": CLASS_POPULATION_EVALUABILITY_GATE,
+                    "label": label,
+                    "reason": "label_missing_on_identical_scored_population",
+                    "candidate_entities": candidate_labels.get(label, (0, 0, 0, 0))[0],
+                    "baseline_entities": baseline_labels.get(label, (0, 0, 0, 0))[0],
+                }
+            )
+            continue
         c_entities, c_full, c_overlap, c_leaked = candidate_labels[label]
         b_entities, b_full, b_overlap, b_leaked = baseline_labels[label]
         if c_entities != b_entities:
@@ -1825,13 +2158,13 @@ def _class_coverage_failures(
                     "config": config,
                     "gate": CLASS_POPULATION_EVALUABILITY_GATE,
                     "label": label,
-                    "reason": "population_moved, cannot evaluate",
+                    "reason": "gold_count_mismatch_on_identical_scored_population",
                     "candidate_entities": c_entities,
                     "baseline_entities": b_entities,
                 }
             )
             continue
-        if c_full < b_full or c_overlap < b_overlap:
+        if c_full < b_full or c_overlap < b_overlap or c_leaked > b_leaked:
             failures.append(
                 {
                     "config": config,
@@ -1940,9 +2273,13 @@ def compare_scorecards(
         and baseline_provenance is not None
         and candidate_provenance != baseline_provenance
     ):
+        candidate_ids = frozenset(candidate_provenance["evaluated_document_ids"])
+        baseline_ids = frozenset(baseline_provenance["evaluated_document_ids"])
         failure = {
             "gate": "evaluated_population_provenance_match",
             "reason": "candidate and baseline provenance differ",
+            "added_document_ids": sorted(candidate_ids - baseline_ids),
+            "removed_document_ids": sorted(baseline_ids - candidate_ids),
         }
         regression_failures.append(failure)
 
@@ -1953,7 +2290,10 @@ def compare_scorecards(
         and candidate_provenance == baseline_provenance
     )
     if prerequisites_match:
+        expected_document_ids = candidate_provenance["evaluated_document_ids"]
         for config in sorted(expected_configs):
+            candidate_values: dict[str, int] | None = None
+            baseline_values: dict[str, int] | None = None
             try:
                 candidate_values = _run_correctness_counts(candidate_runs[config])
                 baseline_values = _run_correctness_counts(baseline_runs[config])
@@ -1965,37 +2305,100 @@ def compare_scorecards(
                         "reason": str(error),
                     }
                 )
-                continue
-            for gate in invariant_counts:
-                if candidate_values[gate] != baseline_values[gate]:
+            candidate_population: dict[str, frozenset[str]] | None = None
+            baseline_population: dict[str, frozenset[str]] | None = None
+            try:
+                candidate_population = _run_population_provenance(
+                    candidate_runs[config],
+                    context=f"candidate {config}",
+                    expected_document_ids=expected_document_ids,
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                regression_failures.append(
+                    {
+                        "config": config,
+                        "gate": "candidate_run_population_provenance",
+                        "reason": str(error),
+                    }
+                )
+            try:
+                baseline_population = _run_population_provenance(
+                    baseline_runs[config],
+                    context=f"baseline {config}",
+                    expected_document_ids=expected_document_ids,
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                regression_failures.append(
+                    {
+                        "config": config,
+                        "gate": "baseline_run_population_provenance",
+                        "reason": str(error),
+                    }
+                )
+            populations_match = (
+                candidate_population is not None
+                and baseline_population is not None
+                and candidate_population == baseline_population
+            )
+            if candidate_population is not None and baseline_population is not None:
+                for population_name in (
+                    "scored_document_ids",
+                    "failed_closed_document_ids",
+                ):
+                    candidate_ids = candidate_population[population_name]
+                    baseline_ids = baseline_population[population_name]
+                    if candidate_ids == baseline_ids:
+                        continue
                     regression_failures.append(
                         {
                             "config": config,
-                            "gate": f"{gate}_match",
-                            "candidate": candidate_values[gate],
-                            "baseline": baseline_values[gate],
+                            "gate": (
+                                "scored_population_identity_match"
+                                if population_name == "scored_document_ids"
+                                else "failed_closed_population_identity_match"
+                            ),
+                            "reason": "candidate and baseline document sets differ",
+                            "added_document_ids": sorted(candidate_ids - baseline_ids),
+                            "removed_document_ids": sorted(
+                                baseline_ids - candidate_ids
+                            ),
                         }
                     )
-            for gate in higher_is_better:
-                if candidate_values[gate] < baseline_values[gate]:
-                    regression_failures.append(
-                        {
-                            "config": config,
-                            "gate": gate,
-                            "candidate": candidate_values[gate],
-                            "baseline": baseline_values[gate],
-                        }
-                    )
-            for gate in lower_is_better:
-                if candidate_values[gate] > baseline_values[gate]:
-                    regression_failures.append(
-                        {
-                            "config": config,
-                            "gate": gate,
-                            "candidate": candidate_values[gate],
-                            "baseline": baseline_values[gate],
-                        }
-                    )
+            if (
+                candidate_values is not None
+                and baseline_values is not None
+                and populations_match
+            ):
+                for gate in invariant_counts:
+                    if candidate_values[gate] != baseline_values[gate]:
+                        regression_failures.append(
+                            {
+                                "config": config,
+                                "gate": f"{gate}_match",
+                                "candidate": candidate_values[gate],
+                                "baseline": baseline_values[gate],
+                            }
+                        )
+                for gate in higher_is_better:
+                    if candidate_values[gate] < baseline_values[gate]:
+                        regression_failures.append(
+                            {
+                                "config": config,
+                                "gate": gate,
+                                "candidate": candidate_values[gate],
+                                "baseline": baseline_values[gate],
+                            }
+                        )
+                for gate in lower_is_better:
+                    if candidate_values[gate] > baseline_values[gate]:
+                        regression_failures.append(
+                            {
+                                "config": config,
+                                "gate": gate,
+                                "candidate": candidate_values[gate],
+                                "baseline": baseline_values[gate],
+                            }
+                        )
             try:
                 regression_failures.extend(
                     _class_coverage_failures(
@@ -2036,7 +2439,9 @@ def compare_performance(
         candidate_runs = _scorecard_runs(candidate)
         baseline_runs = _scorecard_runs(baseline)
         for config in sorted(DEFAULT_CONFIGS):
-            candidate_p95 = float(candidate_runs[config]["latency_ms"]["clean_ms"]["p95"])
+            candidate_p95 = float(
+                candidate_runs[config]["latency_ms"]["clean_ms"]["p95"]
+            )
             baseline_p95 = float(baseline_runs[config]["latency_ms"]["clean_ms"]["p95"])
             limit = baseline_p95 * (1.0 + tolerance_percent / 100.0)
             comparison = {
