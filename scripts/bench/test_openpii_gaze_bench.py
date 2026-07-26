@@ -1153,7 +1153,7 @@ class ScorecardComparisonTests(unittest.TestCase):
             "latency_ms": {"clean_ms": {"p95": 1.0}},
         }
         return {
-            "schema_version": 3,
+            "schema_version": benchmark.SCORECARD_SCHEMA_VERSION,
             "dataset": {
                 "repository": "synthetic/comparison",
                 "revision": "synthetic-revision",
@@ -1344,7 +1344,7 @@ class DataikuSelectionTests(unittest.TestCase):
         self.assertEqual(result["dataset"]["selection"]["documents"], 1)
         self.assertEqual(result["dataset"]["available_population"]["documents"], 2)
         self.assertEqual(result["dataset"]["evaluated_population"]["documents"], 1)
-        self.assertEqual(result["schema_version"], 3)
+        self.assertEqual(result["schema_version"], 4)
 
 
 class ConfigTests(unittest.TestCase):

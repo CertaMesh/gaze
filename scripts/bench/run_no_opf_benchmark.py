@@ -824,7 +824,7 @@ def run(args: argparse.Namespace) -> int:
             **performance_result,
         }
 
-    write_json(output_dir / "scorecard-v3.json", candidate)
+    write_json(output_dir / "scorecard-v4.json", candidate)
     write_json(output_dir / "diagnostics.json", diagnostics(candidate))
     write_json(output_dir / "regression-status.json", regression)
     write_json(output_dir / "release-readiness-status.json", readiness)

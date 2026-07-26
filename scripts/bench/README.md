@@ -92,7 +92,7 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 
 | Artifact | Purpose |
 | --- | --- |
-| `scorecard-v3.json` | full schema-v3 scorecard, runner provenance, and identified scored/failed-closed populations per cell |
+| `scorecard-v4.json` | full schema-v4 scorecard, runner provenance, and identified scored/failed-closed populations per cell |
 | `summary.md` | concise human-readable result |
 | `diagnostics.json` | per-language, per-label, and per-negative-category diagnostics |
 | `regression-status.json` | baseline-relative integer-count ratchet verdict |
@@ -116,11 +116,12 @@ failed-closed total. Regression comparison requires scored-set identity before
 emitting any metric or per-label delta. A mismatch names the IDs added to and
 removed from the scored set even when cardinality and gold counts are unchanged.
 
-These fields are an additive schema-v3 extension. Older schema-v3 artifacts
-remain readable as historical evidence, but because they do not identify each
-cell's scored set they cannot pass the current like-for-like population or
-per-label evaluability gates. Generate a new baseline with the current harness
-before using those gates; the committed historical artifact is not rewritten.
+These fields define schema v4. Older schema-v3 artifacts remain readable for
+diagnostic replay and their aggregate evidence is not rewritten. Because v3
+does not identify each cell's scored set, however, it cannot pass the current
+like-for-like population or per-label evaluability gates and cannot serve as a
+v4 comparison baseline. Generate a v4 baseline with the current harness before
+using those gates.
 
 A quick result is always marked not release-ready because it samples the
 population. Quick exits successfully when that incompleteness is its only
@@ -150,7 +151,7 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
   --accept-baseline-confirm I_HAVE_REVIEWED_FULL_RESULTS
 ```
 
-Review `scorecard-v3.json`, all three status files, `diagnostics.json`, and the
+Review `scorecard-v4.json`, all three status files, `diagnostics.json`, and the
 stderr logs before using that command. Quick results and failed candidates can
 never replace a baseline.
 

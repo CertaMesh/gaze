@@ -84,7 +84,7 @@ def scorecard(leaked: int = 0) -> dict[str, object]:
         },
     }
     return {
-        "schema_version": 3,
+        "schema_version": score.SCORECARD_SCHEMA_VERSION,
         "dataset": {
             "repository": "synthetic/runner",
             "revision": "synthetic-v1",
@@ -138,7 +138,10 @@ def set_population_split(
 class IntegerComparatorTests(unittest.TestCase):
     def test_empty_and_missing_candidates_fail_closed(self) -> None:
         baseline = scorecard()
-        for candidate in ({}, {"schema_version": 3, "runs": []}):
+        for candidate in (
+            {},
+            {"schema_version": score.SCORECARD_SCHEMA_VERSION, "runs": []},
+        ):
             comparison = score.compare_scorecards(candidate, baseline)
             self.assertFalse(comparison["regression"]["passed"])
             self.assertFalse(comparison["release_readiness"]["passed"])
@@ -256,6 +259,7 @@ class IntegerComparatorTests(unittest.TestCase):
         self,
     ) -> None:
         legacy = scorecard()
+        legacy["schema_version"] = 3
         for run in legacy["runs"]:
             run.pop("scored_population")
             run.pop("failed_closed_population")

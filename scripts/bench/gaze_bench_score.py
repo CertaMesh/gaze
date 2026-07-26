@@ -26,7 +26,8 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 
-SCORECARD_SCHEMA_VERSION = 3
+SCORECARD_SCHEMA_VERSION = 4
+READABLE_SCORECARD_SCHEMA_VERSIONS = frozenset({3, SCORECARD_SCHEMA_VERSION})
 DEFAULT_SAMPLE_SEED = 20_260_710
 SAMPLING_STRATEGY = "deterministic-stratified-language-region-v1"
 PIPELINE_FAILURE_STAGES = frozenset({"clean", "post_policy_scan"})
@@ -285,7 +286,7 @@ def stratified_sample(
 
 
 class ResponseValidationError(RuntimeError):
-    """The Rust benchmark producer violated its closed schema-v3 wire contract."""
+    """The Rust benchmark producer violated its closed wire contract."""
 
 
 class SourceIdVocabularyError(RuntimeError):
@@ -1538,8 +1539,8 @@ def assemble_scorecard(
 
 def _scorecard_runs(scorecard: Mapping[str, object]) -> dict[str, Mapping[str, object]]:
     if type(scorecard.get("schema_version")) is not int:
-        raise ValueError("scorecard schema_version must be integer 3")
-    if scorecard["schema_version"] != SCORECARD_SCHEMA_VERSION:
+        raise ValueError("scorecard schema_version must be an integer")
+    if scorecard["schema_version"] not in READABLE_SCORECARD_SCHEMA_VERSIONS:
         raise ValueError(
             f"unsupported scorecard schema_version {scorecard['schema_version']}"
         )
