@@ -986,7 +986,7 @@ fn lint_locale_projection_collisions(
         if !is_truly_naked_numeric(&first.matcher) {
             continue;
         }
-        let first_projection = locale_projection(&first.locales, active_locales);
+        let first_projection = locale_projection(first, active_locales);
         if first_projection.is_empty() {
             continue;
         }
@@ -1001,7 +1001,7 @@ fn lint_locale_projection_collisions(
             if regex_structural_shape(&second.matcher).as_ref() != Some(&first_shape) {
                 continue;
             }
-            let second_projection = locale_projection(&second.locales, active_locales);
+            let second_projection = locale_projection(second, active_locales);
             if second_projection.is_empty() {
                 continue;
             }
@@ -1028,7 +1028,10 @@ fn lint_locale_projection_collisions(
 
 fn lint_global_naked_patterns(recognizers: &[RecognizerSpec]) {
     for recognizer in recognizers {
-        if !recognizer.enabled || recognizer.locales != [LocaleTag::Global] {
+        if !recognizer.enabled
+            || (recognizer.locale_basis != LocaleBasis::Format
+                && recognizer.locales != [LocaleTag::Global])
+        {
             continue;
         }
         let Some(shape) = regex_structural_shape(&recognizer.matcher) else {
@@ -1141,9 +1144,13 @@ fn find_digit_quantifier(pattern: &str, needle: &str) -> Option<usize> {
     digits.parse().ok()
 }
 
-fn locale_projection(locales: &[LocaleTag], active_locales: &[LocaleTag]) -> Vec<LocaleTag> {
+fn locale_projection(recognizer: &RecognizerSpec, active_locales: &[LocaleTag]) -> Vec<LocaleTag> {
+    if recognizer.locale_basis == LocaleBasis::Format {
+        return vec![LocaleTag::Global];
+    }
+
     let mut projection = Vec::new();
-    for locale in locales {
+    for locale in &recognizer.locales {
         if *locale == LocaleTag::Global {
             projection.push(LocaleTag::Global);
         } else if active_locales.iter().any(|active| active == locale) {
