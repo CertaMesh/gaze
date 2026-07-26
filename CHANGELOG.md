@@ -70,6 +70,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
   `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
   (11 -> 12 detections). No existing detection changed class, span, or shape.
+- `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated for the
+  mixed locale-basis rulepack version bump (`0.5.1` -> `0.5.2`). Detection count
+  remains 12; no detection changed class, span, or shape.
 - **Bundled identifier recognizers now use explicit mixed locale semantics**
   (todo #2417). Rulepacks gain additive
   `locale_basis = "document" | "format"` metadata. External and adopter
