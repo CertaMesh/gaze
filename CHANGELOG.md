@@ -7,7 +7,69 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
+  (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
+  tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
+  `custom:url`, covering the whole span rather than a fragment. It is
+  `safety_tier = "safe_default"` with `locales = ["global"]`, so it is active for
+  every adopter of the default bundle, not only for configurations that
+  auto-activate locale-gated recognizers.
+
+  Measured against the EN/DE benchmark holdout: those two anchors carry 232 of
+  276 gold URL spans and 6,385 of 7,209 leaked URL bytes (88.6%), while matching
+  nothing at all across the 1,024 documents of the committed A4 negative corpus.
+  Before this recognizer the deterministic rule floor was completely blind to
+  URLs — 0 of 276 spans covered and 0 overlapped.
+
+  **Bare-host URLs are deliberately out of scope.** Shapes with no scheme and no
+  `www.` prefix (`example.invalid/orders`) are the remaining 47 spans / 887 bytes
+  / 12.3% of the bucket, and 97 of the 1,024 committed negative documents contain
+  bare-host shapes, so no bare-host rule can clear the negative gate.
+
+  **Documentation, repository, and example URLs are tokenized.** This is
+  intentional: 16 of the 232 gold spans the rule covers are themselves
+  reference-host shaped, so the corpus treats a reference URL inside a
+  data-owner document as PII to protect. Tokens stay restorable through the
+  manifest, so an over-tokenized public URL is a recoverable ergonomics cost
+  (axis 5) while an under-tokenized private one is a leak (axis 1).
+
+- **Cue-anchored bearer-credential detection at the deterministic rule floor**
+  (todo #2318). The new `security_token.anchored` recognizer is one two-arm,
+  `safe_default`, global rule in the embedded `core` bundle. It protects
+  structurally typed AWS access-key/JWT shapes and high-entropy values adjacent
+  to explicit English or German credential cues, emitting the reversible
+  `custom:security_token` class.
+
+  A fresh full EN/DE comparison removed 3,065 leaked SECURITYTOKEN bytes at the
+  rule floor and 2,985 with pass2 NER. Each deterministic cell added 17
+  false-positive bytes, ratios of about 180:1 and 176:1, while the rule matched
+  0 of all 1,024 committed A4 negative documents. Cue anchoring is supported by
+  the corpus asymmetry: 88.1% of SECURITYTOKEN spans have `token` or `secret`
+  in the preceding 64 characters, versus only 1.8% cue context for URL.
+
+  Arm 2 requires at least one unambiguous delimiter between cue and value.
+  Whitespace and `:`, `=`, or `#` qualify; `_` and a directly abutting `-` do
+  not. The holdout has 0 of 193 cue-context spans with no delimiter and 0 using
+  direct hyphen alone, so the requirement costs no measured gold coverage.
+  This prevents the safe default from splitting cue-prefixed snake_case
+  identifiers such as tokenization helper names. A4 does not contain this
+  identifier class; post-fix dogfooding across project documentation and Rust
+  source produced zero SECURITYTOKEN detections.
+
+  **The shipped no-policy `CorePipelineConfig` default now tokenizes
+  credential-shaped strings in ordinary adopter text.** Git tokens in logs,
+  API keys in documentation, and similar cue-anchored secrets are protected
+  and remain restorable through the manifest. This is a deliberate,
+  recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
+  separate no-policy stub path is unchanged.
+
 ### Changed
+
+- `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
+  `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
+  (11 -> 12 detections). No existing detection changed class, span, or shape.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks

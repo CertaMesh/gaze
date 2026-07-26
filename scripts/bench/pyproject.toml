@@ -1,0 +1,16 @@
+[project]
+name = "gaze-bench"
+version = "0.1.0"
+description = "Locked Python environment for Gaze benchmark adapters and scoring tests"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "pyarrow==20.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.3.5",
+]
+
+[tool.uv]
+package = false

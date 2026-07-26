@@ -1647,6 +1647,7 @@ dependencies = [
  "candle-core",
  "candle-onnx",
  "criterion",
+ "gaze-assembly",
  "gaze-pii",
  "gaze-types",
  "hex",
