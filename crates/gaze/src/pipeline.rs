@@ -1451,14 +1451,6 @@ impl Pipeline {
                 raw_span,
             });
         }
-        if plans
-            .windows(2)
-            .any(|pair| ranges_overlap(&pair[0].clean_span, &pair[1].clean_span))
-        {
-            return Err(protection_trace_error(
-                "overlapping safety-net redaction spans",
-            ));
-        }
         for plan in plans.into_iter().rev() {
             let suspect = plan.suspect;
             for existing in clean
