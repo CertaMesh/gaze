@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use gaze::{PiiClass, RawMatch, Rulepack, RulepackSource};
 use gaze_recognizers::{NormalizerKind, SafetyTier, ValidatorKind};
-use syn::{Expr, Item, Pat, Stmt};
+use syn::{Expr, Item, Lit, Meta, Pat, Stmt};
 
 const DOC_PATH: &str = "docs/reference/redaction-classes.md";
 const CORE_RULEPACK: &str = "core";
@@ -250,6 +250,36 @@ fn parse_rust_file(relative: &str) -> syn::File {
     syn::parse_file(&raw).unwrap_or_else(|error| panic!("parse Rust source {relative}: {error}"))
 }
 
+fn feature_gate(attributes: &[syn::Attribute]) -> String {
+    let mut cfg_attributes = attributes
+        .iter()
+        .filter(|attribute| attribute.path().is_ident("cfg"));
+    let Some(attribute) = cfg_attributes.next() else {
+        return "always".to_string();
+    };
+    assert!(
+        cfg_attributes.next().is_none(),
+        "enum variants with multiple cfg attributes need an explicit gate representation"
+    );
+    let meta = attribute
+        .parse_args::<Meta>()
+        .expect("cfg attribute must contain structured meta");
+    let Meta::NameValue(name_value) = meta else {
+        panic!("enum variant cfg must be a single feature gate");
+    };
+    assert!(
+        name_value.path.is_ident("feature"),
+        "enum variant cfg must gate a Cargo feature"
+    );
+    let Expr::Lit(literal) = name_value.value else {
+        panic!("feature gate value must be a string literal");
+    };
+    let Lit::Str(feature) = literal.lit else {
+        panic!("feature gate value must be a string literal");
+    };
+    feature.value()
+}
+
 fn enum_variants(relative: &str, enum_name: &str) -> BTreeMap<String, String> {
     let syntax = parse_rust_file(relative);
     let item = syntax
@@ -264,24 +294,7 @@ fn enum_variants(relative: &str, enum_name: &str) -> BTreeMap<String, String> {
     item.variants
         .iter()
         .map(|variant| {
-            let feature = variant
-                .attrs
-                .iter()
-                .find_map(|attribute| {
-                    if !attribute.path().is_ident("cfg") {
-                        return None;
-                    }
-                    match &attribute.meta {
-                        syn::Meta::List(list) => {
-                            let tokens = list.tokens.to_string();
-                            tokens
-                                .contains("phone-parser")
-                                .then(|| "phone-parser".to_string())
-                        }
-                        _ => None,
-                    }
-                })
-                .unwrap_or_else(|| "always".to_string());
+            let feature = feature_gate(&variant.attrs);
             (variant.ident.to_string(), feature)
         })
         .collect()
