@@ -1,0 +1,18 @@
+[package]
+name = "validator-recall-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+gaze = { path = "../../../crates/gaze", package = "gaze-pii" }
+gaze-assembly = { path = "../../../crates/gaze-assembly" }
+gaze-recognizers = { path = "../../../crates/gaze-recognizers" }
+gaze-types = { path = "../../../crates/gaze-types", features = ["phone-parser"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints.clippy]
+pedantic = "warn"
