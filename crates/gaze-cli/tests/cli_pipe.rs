@@ -2547,14 +2547,25 @@ fn s3a_cli_bundled_core_extended_tokenizes_valid_e164_phone() {
 
 #[test]
 fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() {
+    let core_input = "Phone +1 555 0100 ZIP 94103";
     let core = clean_json_with_args(
         &["--rulepack-bundled", "core"],
         // Source: NANPA 555-LINE Number Reservation.
         // https://nationalnanpa.com/number_resource_info/555_numbers.html
-        "Phone +1 555 0100 ZIP 94103",
+        core_input,
     );
-    assert_eq!(core["clean_text"], "Phone +1 555 0100 ZIP 94103");
-    assert_eq!(core["stats"]["detections"], 0);
+    let core_clean = core["clean_text"].as_str().unwrap();
+    assert!(
+        Regex::new(r"^Phone <[0-9a-f]{8}:Custom:phone_1> ZIP 94103$")
+            .unwrap()
+            .is_match(core_clean),
+        "unexpected core clean text: {core_clean}"
+    );
+    assert_eq!(core["stats"]["detections"], 1);
+    assert_eq!(
+        restore_success_text(core["session_blob"].as_str().unwrap(), core_clean),
+        core_input
+    );
 
     let alias_out = clean_raw_with_args(
         &["--rulepack-bundled", "core-extended"],
@@ -2823,7 +2834,7 @@ fn s2_core_extended_cli_validator_backed_iban_and_cards_emit_or_drop() {
 }
 
 #[test]
-fn s2_cli_core_validator_locale_entities_tokenize_and_round_trip() {
+fn s2_cli_core_format_entities_ignore_document_locale_and_round_trip() {
     for (locale, wrong_locale, input, class) in [
         ("fr-FR", "en-US", "NIR 190010100100058", "nir"),
         ("nl-NL", "en-US", "BSN 111222333", "bsn"),
@@ -2851,15 +2862,26 @@ fn s2_cli_core_validator_locale_entities_tokenize_and_round_trip() {
             input
         );
 
-        let wrong_locale = clean_json_with_args(
+        let wrong_locale_value = clean_json_with_args(
             &[
                 "--rulepack-bundled=core",
                 &format!("--locale={wrong_locale}"),
             ],
             input,
         );
-        assert_eq!(wrong_locale["clean_text"], input, "{input}");
-        assert_eq!(wrong_locale["stats"]["detections"], 0, "{input}");
+        let wrong_locale_clean = wrong_locale_value["clean_text"].as_str().unwrap();
+        assert!(
+            wrong_locale_clean.ends_with(&format!(":Custom:{class}_1>")),
+            "{wrong_locale} {input}: {wrong_locale_clean}"
+        );
+        assert_eq!(wrong_locale_value["stats"]["detections"], 1, "{input}");
+        assert_eq!(
+            restore_success_text(
+                wrong_locale_value["session_blob"].as_str().unwrap(),
+                wrong_locale_clean
+            ),
+            input
+        );
     }
 }
 
