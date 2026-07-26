@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Locked Python environment for Gaze benchmark adapters and scoring tests"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "pyarrow==20.0.0",
+    "pyarrow==23.0.1",
 ]
 
 [dependency-groups]
