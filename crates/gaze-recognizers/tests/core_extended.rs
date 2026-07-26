@@ -217,7 +217,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 30);
+    assert_eq!(core.recognizers.len(), 31);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -225,6 +225,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "phone.national.de",
         "postal.de",
         "postal.us",
+        "security_token.anchored",
     ] {
         assert_eq!(
             core.recognizers
