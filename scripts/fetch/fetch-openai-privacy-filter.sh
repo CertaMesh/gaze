@@ -4,10 +4,9 @@
 # OPF currently publishes source plus a checkpoint downloaded by the `opf`
 # command. It does not publish GitHub release binaries, so this script pins the
 # source commit and installs the CLI from that content-addressed tree. The
-# checkpoint bundle SHA256 is intentionally unset in Rust until a clean local
-# download is captured and reviewed; when it is populated, the runtime
-# `verify_checkpoint_bundle_sha256` option can enforce the local checkpoint
-# bytes before subprocess execution.
+# checkpoint bundle SHA256 matches the runtime pin in the Rust adapter. The
+# downloader promotes the upstream `original/` subtree, locks permissions, and
+# verifies the same ordered four-file manifest before executing the model.
 #
 # Usage:
 #   scripts/fetch/fetch-openai-privacy-filter.sh [--install-dir <dir>] [--checkpoint-dir <dir>]
@@ -21,7 +20,9 @@ set -euo pipefail
 
 OPF_REPO="openai/privacy-filter"
 OPF_COMMIT_SHA="f7f00ca7fb869683eb732c010299d901457f19c3"
-OPF_CHECKPOINT_BUNDLE_SHA256=""
+OPF_CHECKPOINT_BUNDLE_SHA256="4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae"
+OPF_MODEL_REPO="openai/privacy-filter"
+OPF_REQUIRED_ARTIFACTS="config.json dtypes.json model.safetensors viterbi_calibration.json"
 
 # ---- Destination -------------------------------------------------------------
 
@@ -129,15 +130,66 @@ log "installing pinned OPF package"
 "$VENV_DIR/bin/python" -m pip install --upgrade pip
 "$VENV_DIR/bin/python" -m pip install -e "$SOURCE_DIR"
 
-log "triggering checkpoint availability check"
-printf '%s\n' 'No private data.' \
-  | OPF_CHECKPOINT="$CHECKPOINT_DIR" "$VENV_DIR/bin/opf" --format json --output-mode typed >/dev/null
+missing_checkpoint=0
+for artifact in $OPF_REQUIRED_ARTIFACTS; do
+  if [ ! -f "$CHECKPOINT_DIR/$artifact" ]; then
+    missing_checkpoint=1
+  fi
+done
+if [ "$missing_checkpoint" -eq 1 ]; then
+  if [ -e "$CHECKPOINT_DIR/original" ]; then
+    log "checkpoint is incomplete and original/ already exists; remove or repair ${CHECKPOINT_DIR}"
+    exit 5
+  fi
+  log "downloading pinned-by-digest checkpoint from ${OPF_MODEL_REPO}"
+  "$VENV_DIR/bin/hf" download "$OPF_MODEL_REPO" \
+    --include "original/*" \
+    --local-dir "$CHECKPOINT_DIR"
+  for artifact in $OPF_REQUIRED_ARTIFACTS; do
+    if [ ! -f "$CHECKPOINT_DIR/original/$artifact" ]; then
+      log "downloaded checkpoint is missing original/${artifact}"
+      exit 5
+    fi
+    mv "$CHECKPOINT_DIR/original/$artifact" "$CHECKPOINT_DIR/$artifact"
+  done
+  rmdir "$CHECKPOINT_DIR/original"
+fi
 
-if [ -n "$OPF_CHECKPOINT_BUNDLE_SHA256" ]; then
-  log "checkpoint bundle verification is not yet wired in this script"
+chmod -R u+rwX,go-rwx "$CHECKPOINT_DIR"
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+sha256_stdin() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    shasum -a 256 | awk '{print $1}'
+  fi
+}
+
+bundle_manifest=""
+for artifact in $OPF_REQUIRED_ARTIFACTS; do
+  artifact_sha="$(sha256_file "$CHECKPOINT_DIR/$artifact")"
+  bundle_manifest="${bundle_manifest}${artifact_sha}  ${artifact}
+"
+done
+actual_bundle_sha="$(printf '%s' "$bundle_manifest" | sha256_stdin)"
+if [ "$actual_bundle_sha" != "$OPF_CHECKPOINT_BUNDLE_SHA256" ]; then
+  log "checkpoint bundle SHA mismatch: expected ${OPF_CHECKPOINT_BUNDLE_SHA256} got ${actual_bundle_sha}"
   exit 5
 fi
 
+log "triggering checkpoint availability check"
+printf '%s\n' 'No private data.' \
+  | OPF_CHECKPOINT="$CHECKPOINT_DIR" "$VENV_DIR/bin/opf" \
+      --format json --output-mode typed --device cpu >/dev/null
+
 log "done. opf command: $VENV_DIR/bin/opf"
 log "checkpoint dir: $CHECKPOINT_DIR"
-log "checkpoint bundle SHA256 is not pinned yet; capture a clean download before enabling runtime bundle verification"
+log "checkpoint bundle SHA256: $OPF_CHECKPOINT_BUNDLE_SHA256"

@@ -15,6 +15,7 @@ repository root.
 
 | Script | What it does | Who calls it |
 |---|---|---|
+| `scripts/bench/openpii_gaze_bench.py` | Fetches, verifies, and scores the current pipeline on the pinned synthetic OpenPII holdout. | Maintainers measuring external multilingual leak coverage. |
 | `scripts/bench/gaze-pipeline-bench.py` | Generates the end-to-end Gaze pipeline benchmark snapshot. | Maintainers refreshing benchmark evidence. |
 | `scripts/bench/kiji-bench-scorer.py` | Scores Kiji direct, observer-residual, and latency benchmark cells. | Maintainers running safety-net benchmarks. |
 | `scripts/bench/opf-bench-scorer.py` | Scores OpenAI Privacy Filter direct, observer-residual, and latency cells. | Maintainers running safety-net benchmarks. |

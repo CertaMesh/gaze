@@ -29,13 +29,9 @@ behind a contract, follow through to [explanation](../explanation/README.md).
 
 ## Benchmarks
 
-The reproducibility index and the committed benchmark evidence. Public claims must trace
-back here.
-
-- **[Benchmark methodology](benchmarks/README.md)** — hardware spec template, corpus pins,
-  runnable commands, and the measured claims each surface supports.
-- **[Safety-net benchmark](benchmarks/safety-net-benchmark.md)**
-- **[v0.8 Kiji benchmark](benchmarks/v0.8-kiji-benchmark.md)** · **[v0.8 Kiji class gap](benchmarks/v0.8-kiji-class-gap.md)**
-- **[v0.9 pipeline benchmark](benchmarks/v0.9-gaze-pipeline-benchmark.md)** · **[v0.9 NER model leaderboard](benchmarks/v0.9-ner-model-leaderboard.md)**
-- **[v0.9 runtime comparison](benchmarks/v0.9-runtime-comparison.md)** · **[v0.9 safety-net benchmark](benchmarks/v0.9-safety-net-benchmark.md)**
-- **[v0.9.0-rc1 combined revalidation](benchmarks/v0.9.0-rc1-combined-revalidation.md)**
+Public benchmark claims must trace to the canonical
+**[benchmark index and methodology](benchmarks/README.md)**. It links every
+committed benchmark report and scorecard through v0.12, classifies current,
+supplemental, contractual, and historical evidence, and inventories the
+runners, locked configuration, sources, snapshots, metric directions, and
+production goals.

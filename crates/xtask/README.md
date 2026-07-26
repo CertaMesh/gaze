@@ -26,6 +26,7 @@ $ cargo run -p xtask -- dylint-gate
 $ cargo run -p xtask -- safety-net-sanity
 $ cargo run -p xtask -- tokenbridge-no-raw-index
 $ cargo run -p xtask -- tokenbridge-encrypted-index
+$ cargo run -p xtask -- generate-negative-corpus --verify --seed 0
 ```
 
 Clap converts enum variants to kebab-case command names.
@@ -58,6 +59,31 @@ that list.
 The implementation lives in [`src/main.rs`](src/main.rs). The broader gate
 catalog and gate-authoring rules are in
 [docs/explanation/contributing/xtask-gates.md](../../docs/explanation/contributing/xtask-gates.md).
+
+## English/German negative corpus
+
+`generate-negative-corpus` produces the committed negative-only JSONL benchmark
+fixture at
+[`fixtures/negative_corpus/en_de_negative.jsonl`](fixtures/negative_corpus/en_de_negative.jsonl).
+The canonical corpus uses seed `0`. Regenerate it with:
+
+```console
+$ cargo run -p xtask -- generate-negative-corpus --seed 0
+```
+
+Verification regenerates the full corpus in memory, compares it byte for byte,
+and never writes:
+
+```console
+$ cargo run -p xtask -- generate-negative-corpus --verify --seed 0
+```
+
+Each UTF-8 JSONL record has the fixed fields `id`, `generator_id`, `seed`,
+`language`, `category`, `license_origin`, `text`, and `oracle_spans`. This is a
+negative-only corpus, so every `oracle_spans` value is `[]`; any protection
+emitted by a false-positive scorer for a document is therefore a false
+positive. The full annotation and stability contract is documented in
+[`negative-corpus-annotation-contract.md`](../../docs/reference/benchmarks/negative-corpus-annotation-contract.md).
 
 ## CI integration
 
