@@ -7,7 +7,7 @@ mod codec;
 
 use anthropic::AnthropicMessagesCodec;
 use codec::{
-    BodyCodec, CodecErrorCode, CodecLimits, CodecPhase, RequestPseudonymizer,
+    BodyCodec, CodecErrorCode, CodecLimits, CodecPhase, OpaqueCarrierScheme, RequestPseudonymizer,
     RequestTransformContext, ResponseResidualValidator, ResponseTransformContext, WireFormat,
 };
 use gaze::{PiiClass, PrefixCacheWriteMode, Scope, Session, SessionTransaction};
@@ -720,6 +720,66 @@ fn request_signed_and_opaque_surfaces_are_explicit_and_fail_closed() {
         r#"{"type":"thinking","thinking":"synthetic reasoning","signature":"opaque-signature"}"#
     ));
     assert_eq!(proved.provenance().signed_opaque_ranges().len(), 1);
+}
+
+#[test]
+fn actionable_opaque_reporting_preserves_the_rejected_request_set() {
+    let cases = [
+        ("ordinary synthetic prose", None),
+        (
+            "data:text/plain,SYNTHETIC-CARRIER",
+            Some(OpaqueCarrierScheme::Data),
+        ),
+        ("file:synthetic-carrier", Some(OpaqueCarrierScheme::File)),
+        (
+            "http://synthetic.example.invalid/carrier",
+            Some(OpaqueCarrierScheme::Http),
+        ),
+        (
+            "https://synthetic.example.invalid/carrier",
+            Some(OpaqueCarrierScheme::Https),
+        ),
+    ];
+    let mut rejected = Vec::new();
+
+    for (system_text, expected_scheme) in cases {
+        let request = serde_json::json!({
+            "model": "claude-test",
+            "max_tokens": 32,
+            "system": [{"type": "text", "text": system_text}],
+            "messages": [{"role": "user", "content": "synthetic"}],
+        });
+        let input = serde_json::to_vec(&request).unwrap();
+        let codec = AnthropicMessagesCodec;
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let mut transaction = session.begin_transaction();
+        let mut pseudonymizer = SyntheticPseudonymizer {
+            transaction: &mut transaction,
+        };
+        let result = codec.protect_request(&input, &mut request_context(&mut pseudonymizer));
+        if let Err(error) = &result {
+            assert_eq!(error.code(), CodecErrorCode::OpaqueMediaUninspected);
+            let carrier = error
+                .opaque_carrier()
+                .expect("scheme carrier rejection must retain its structural location");
+            assert_eq!(carrier.scheme(), expected_scheme.unwrap());
+            assert_eq!(carrier.byte_offset(), 0);
+            assert_eq!(
+                carrier.byte_length(),
+                match carrier.scheme() {
+                    OpaqueCarrierScheme::Data | OpaqueCarrierScheme::File => 5,
+                    OpaqueCarrierScheme::Http => 7,
+                    OpaqueCarrierScheme::Https => 8,
+                }
+            );
+            assert_eq!(carrier.content_block_index(), Some(0));
+            assert!(!format!("{error:?}").contains(system_text));
+        }
+        rejected.push(result.is_err());
+        assert_eq!(result.is_err(), expected_scheme.is_some());
+    }
+
+    assert_eq!(rejected, vec![false, true, true, true, true]);
 }
 
 #[test]

@@ -15,8 +15,8 @@ use gaze_types::inspection::{
 
 use crate::codec::{
     BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, InspectionParsedFactsV1,
-    InspectionStructuralProjectionV1, OutputProvenance, ProvedRequestBody, ProvedResponseBody,
-    RequestTransformContext, ResponseTransformContext, WireFormat,
+    InspectionStructuralProjectionV1, OpaqueCarrierScheme, OutputProvenance, ProvedRequestBody,
+    ProvedResponseBody, RequestTransformContext, ResponseTransformContext, WireFormat,
 };
 
 pub const ANTHROPIC_PROXY_PING_FRAME: &[u8] = b"event: ping\ndata: {\"type\":\"ping\"}\n\n";
@@ -73,6 +73,8 @@ impl BodyCodec for AnthropicMessagesCodec {
         input: &[u8],
         ctx: &mut RequestTransformContext<'_>,
     ) -> Result<ProvedRequestBody, CodecError> {
+        ctx.clear_opaque_carrier();
+        ctx.replace_content_block_index(None);
         if ctx.format() != WireFormat::Json {
             return Err(codec_error(
                 CodecErrorCode::InvalidWireFormat,
@@ -93,7 +95,7 @@ impl BodyCodec for AnthropicMessagesCodec {
         let mut document = parse_json(input, ctx.limits(), CodecPhase::RequestParse)?;
         let mut ledger = CoverageLedger::new(document.occurrence_count);
         transform_request_root(&mut document.root, input, ctx, &mut ledger)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProtection))?;
+            .map_err(|code| request_codec_error(code, CodecPhase::RequestProtection, ctx))?;
         ledger
             .finish()
             .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
@@ -126,7 +128,7 @@ impl BodyCodec for AnthropicMessagesCodec {
         let mut reparsed = parse_json(&bytes, ctx.limits(), CodecPhase::RequestProof)?;
         let mut final_ledger = CoverageLedger::new(reparsed.occurrence_count);
         transform_request_root(&mut reparsed.root, &bytes, ctx, &mut final_ledger)
-            .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
+            .map_err(|code| request_codec_error(code, CodecPhase::RequestProof, ctx))?;
         final_ledger
             .finish()
             .map_err(|code| codec_error(code, CodecPhase::RequestProof))?;
@@ -235,6 +237,18 @@ impl AnthropicMessagesCodec {
 
 fn codec_error(code: CodecErrorCode, phase: CodecPhase) -> CodecError {
     CodecError::new(code, phase)
+}
+
+fn request_codec_error(
+    code: CodecErrorCode,
+    phase: CodecPhase,
+    ctx: &RequestTransformContext<'_>,
+) -> CodecError {
+    codec_error(code, phase).with_opaque_carrier(
+        (code == CodecErrorCode::OpaqueMediaUninspected)
+            .then(|| ctx.opaque_carrier())
+            .flatten(),
+    )
 }
 
 fn restore_json_response(
@@ -2031,7 +2045,7 @@ fn probe_request_view(
     view: &str,
     ctx: &mut RequestTransformContext<'_>,
 ) -> Result<RequestViewProbeOutcome, CodecErrorCode> {
-    let contains_opaque_carrier = match guard_mutable_text(view) {
+    let contains_opaque_carrier = match guard_request_mutable_text(view, ctx) {
         Ok(()) => false,
         Err(CodecErrorCode::OpaqueMediaUninspected) => true,
         Err(code) => return Err(code),
@@ -2249,8 +2263,8 @@ fn transform_request_content(
             if blocks.is_empty() {
                 return Err(CodecErrorCode::UnsupportedRequestSurface);
             }
-            for block in blocks {
-                transform_request_block(block, input, ctx, ledger)?;
+            for (index, block) in blocks.iter_mut().enumerate() {
+                transform_request_block_at_index(block, index, input, ctx, ledger)?;
             }
             Ok(())
         }
@@ -2271,16 +2285,29 @@ fn transform_request_system(
             if blocks.is_empty() {
                 return Err(CodecErrorCode::UnsupportedRequestSurface);
             }
-            for block in blocks {
+            for (index, block) in blocks.iter_mut().enumerate() {
                 if object_string(block, "type")? != "text" {
                     return Err(CodecErrorCode::UnsupportedRequestSurface);
                 }
-                transform_request_block(block, input, ctx, ledger)?;
+                transform_request_block_at_index(block, index, input, ctx, ledger)?;
             }
             Ok(())
         }
         _ => Err(CodecErrorCode::UnsupportedRequestSurface),
     }
+}
+
+fn transform_request_block_at_index(
+    node: &mut JsonNode,
+    index: usize,
+    input: &[u8],
+    ctx: &mut RequestTransformContext<'_>,
+    ledger: &mut CoverageLedger,
+) -> Result<(), CodecErrorCode> {
+    let previous = ctx.replace_content_block_index(Some(index));
+    let result = transform_request_block(node, input, ctx, ledger);
+    ctx.replace_content_block_index(previous);
+    result
 }
 
 fn transform_request_block(
@@ -2413,7 +2440,7 @@ fn validate_signed_request_block(
             }
             "thinking" if block_type == "thinking" => {
                 let text = string_value(&member.value)?;
-                guard_mutable_text(text)?;
+                guard_request_mutable_text(text, ctx)?;
                 ctx.validate_token_shapes(text)?;
                 if ctx.probe_without_prefix_cache_write(text)? != text {
                     return Err(CodecErrorCode::SignedMutationRequired);
@@ -2566,7 +2593,7 @@ fn transform_request_schema(
                     return Err(CodecErrorCode::UnsupportedRequestSurface);
                 };
                 for property in properties {
-                    guard_mutable_text(&property.key.value)?;
+                    guard_request_mutable_text(&property.key.value, ctx)?;
                     ctx.validate_token_shapes(&property.key.value)?;
                     let transformed = ctx.protect(&property.key.value)?;
                     if !transformed_property_keys.insert(transformed.clone()) {
@@ -2603,7 +2630,7 @@ fn transform_request_schema(
                         };
                         for definition in definitions {
                             ledger.mark(definition.key_occurrence)?;
-                            guard_mutable_text(&definition.key.value)?;
+                            guard_request_mutable_text(&definition.key.value, ctx)?;
                             ctx.validate_token_shapes(&definition.key.value)?;
                             if ctx.probe_without_prefix_cache_write(&definition.key.value)?
                                 != definition.key.value
@@ -2710,7 +2737,7 @@ fn transform_request_string(
     let JsonKind::String(value) = &mut node.kind else {
         return Err(CodecErrorCode::UnsupportedRequestSurface);
     };
-    guard_mutable_text(&value.value)?;
+    guard_request_mutable_text(&value.value, ctx)?;
     ctx.validate_token_shapes(&value.value)?;
     value.value = ctx.protect(&value.value)?;
     Ok(())
@@ -2720,7 +2747,7 @@ fn protect_key(
     key: &mut JsonString,
     ctx: &mut RequestTransformContext<'_>,
 ) -> Result<(), CodecErrorCode> {
-    guard_mutable_text(&key.value)?;
+    guard_request_mutable_text(&key.value, ctx)?;
     ctx.validate_token_shapes(&key.value)?;
     key.value = ctx.protect(&key.value)?;
     Ok(())
@@ -2735,7 +2762,7 @@ fn request_string_control(
     let JsonKind::String(value) = &node.kind else {
         return Err(CodecErrorCode::UnsupportedRequestSurface);
     };
-    guard_mutable_text(&value.value)?;
+    guard_request_mutable_text(&value.value, ctx)?;
     ctx.validate_token_shapes(&value.value)?;
     if ctx.probe_without_prefix_cache_write(&value.value)? == value.value {
         Ok(())
@@ -2830,7 +2857,7 @@ fn validate_cache_control_probe(
         if !valid {
             return Err(CodecErrorCode::SignedSurfaceMalformed);
         }
-        guard_mutable_text(value)?;
+        guard_request_mutable_text(value, ctx)?;
         ctx.validate_token_shapes(value)?;
         if ctx.probe_without_prefix_cache_write(value)? != value {
             return Err(CodecErrorCode::SignedMutationRequired);
@@ -3126,7 +3153,7 @@ fn guard_mutable_text(value: &str) -> Result<(), CodecErrorCode> {
                     | '\u{202a}'..='\u{202e}'
                     | '\u{2066}'..='\u{2069}'
             )
-    }) || contains_carrier_scheme(&lower)
+    }) || find_carrier_scheme(&lower).is_some()
         || inspected.as_bytes().windows(3).any(|window| {
             window[0] == b'%' && hex_value(window[1]).is_some() && hex_value(window[2]).is_some()
         })
@@ -3141,17 +3168,36 @@ fn guard_mutable_text(value: &str) -> Result<(), CodecErrorCode> {
     Ok(())
 }
 
-fn contains_carrier_scheme(value: &str) -> bool {
-    value.char_indices().any(|(index, _)| {
+fn guard_request_mutable_text(
+    value: &str,
+    ctx: &mut RequestTransformContext<'_>,
+) -> Result<(), CodecErrorCode> {
+    let result = guard_mutable_text(value);
+    if result == Err(CodecErrorCode::OpaqueMediaUninspected) {
+        let lower = value.to_ascii_lowercase();
+        if let Some((scheme, byte_offset, byte_length)) = find_carrier_scheme(&lower) {
+            ctx.record_opaque_carrier(scheme, byte_offset, byte_length);
+        }
+    }
+    result
+}
+
+fn find_carrier_scheme(value: &str) -> Option<(OpaqueCarrierScheme, usize, usize)> {
+    value.char_indices().find_map(|(index, _)| {
         let candidate = &value[index..];
-        let starts_scheme = ["data:", "file:", "http://", "https://"]
-            .iter()
-            .any(|scheme| candidate.starts_with(scheme));
-        starts_scheme
-            && (index == 0
-                || !value[..index].chars().next_back().is_some_and(|character| {
-                    character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
-                }))
+        let (scheme, matched) = [
+            (OpaqueCarrierScheme::Data, "data:"),
+            (OpaqueCarrierScheme::File, "file:"),
+            (OpaqueCarrierScheme::Http, "http://"),
+            (OpaqueCarrierScheme::Https, "https://"),
+        ]
+        .into_iter()
+        .find(|(_, literal)| candidate.starts_with(literal))?;
+        let boundary = index == 0
+            || !value[..index].chars().next_back().is_some_and(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-')
+            });
+        boundary.then_some((scheme, index, matched.len()))
     })
 }
 

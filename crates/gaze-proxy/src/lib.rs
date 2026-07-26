@@ -44,14 +44,17 @@ pub use adapter::{
     SessionRegistryConfigError, SseEvent,
 };
 pub use codec::{
-    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OutputProvenance,
-    ProvedRequestBody, ProvedResponseBody, RequestPseudonymizer, RequestTransformContext,
-    ResponseResidualValidator, ResponseTransformContext, WireFormat,
+    BodyCodec, CodecError, CodecErrorCode, CodecLimits, CodecPhase, OpaqueCarrierLocation,
+    OpaqueCarrierScheme, OutputProvenance, ProvedRequestBody, ProvedResponseBody,
+    RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
+    ResponseTransformContext, WireFormat,
 };
 pub use codecs::anthropic::{
     AnthropicMessagesCodec, ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
 };
-pub use error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+pub use error::{
+    DirectProxyError, HeaderRejectionReason, ProxyError, ProxyErrorCode, ProxyErrorPhase,
+};
 pub use inspection::{install_proxy_inspection_v1, ProxyInspectionProducerV1};
 pub use principal::{
     AuthenticatedPrincipal, ListenerScope, LocalAuthCredential, PeerScope, PrincipalContext,

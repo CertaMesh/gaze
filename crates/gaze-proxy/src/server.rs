@@ -30,7 +30,9 @@ use crate::codec::{
     ProvedRequestBody, RequestPseudonymizer, RequestTransformContext, ResponseResidualValidator,
     ResponseTransformContext, WireFormat,
 };
-use crate::error::{DirectProxyError, ProxyError, ProxyErrorCode, ProxyErrorPhase};
+use crate::error::{
+    DirectProxyError, HeaderRejectionReason, ProxyError, ProxyErrorCode, ProxyErrorPhase,
+};
 use crate::inspection::{ProxyInspectionEndpointCodesV1, ProxyInspectionLogicalV1};
 use crate::principal::{
     invoke_resolver, ListenerScope, PeerScope, PrincipalContext, PrincipalResolver,
@@ -793,15 +795,24 @@ fn validate_outbound_headers(headers: &HeaderMap) -> Result<(), DirectProxyError
     validate_header_space(headers, DirectClientConfig::default())?;
     let mut singleton_names = HashSet::new();
     for (name, value) in headers {
-        if !ALLOWED.contains(&name.as_str()) || value.is_empty() {
-            return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+        if !ALLOWED.contains(&name.as_str()) {
+            return Err(ProxyErrorCode::HeaderRejected
+                .error(ProxyErrorPhase::RequestValidation)
+                .with_header_rejection(name.as_str(), HeaderRejectionReason::NameNotAllowlisted));
+        }
+        if value.is_empty() {
+            return Err(ProxyErrorCode::HeaderRejected
+                .error(ProxyErrorPhase::RequestValidation)
+                .with_header_rejection(name.as_str(), HeaderRejectionReason::EmptyValue));
         }
         if matches!(
             name.as_str(),
             "x-api-key" | "anthropic-version" | "anthropic-beta"
         ) && !singleton_names.insert(name.as_str())
         {
-            return Err(ProxyErrorCode::HeaderRejected.error(ProxyErrorPhase::RequestValidation));
+            return Err(ProxyErrorCode::HeaderRejected
+                .error(ProxyErrorPhase::RequestValidation)
+                .with_header_rejection(name.as_str(), HeaderRejectionReason::DuplicateSingleton));
         }
     }
     Ok(())
@@ -2331,6 +2342,7 @@ fn map_registry_error(error: RegistryError) -> DirectProxyError {
 
 fn map_codec_error(error: CodecError) -> DirectProxyError {
     let codec_phase = error.phase();
+    let opaque_carrier = error.opaque_carrier();
     let request_direction = matches!(
         codec_phase,
         CodecPhase::RequestParse | CodecPhase::RequestProtection | CodecPhase::RequestProof
@@ -2393,17 +2405,40 @@ fn map_codec_error(error: CodecError) -> DirectProxyError {
         CodecPhase::SseDecode | CodecPhase::SseLifecycle => ProxyErrorPhase::ResponseValidation,
         CodecPhase::SseReplay => ProxyErrorPhase::ResponseReplay,
     };
-    code.error(phase)
+    let direct_error = code.error(phase);
+    if let Some(opaque_carrier) = opaque_carrier {
+        direct_error.with_opaque_carrier(opaque_carrier)
+    } else {
+        direct_error
+    }
 }
 
 fn direct_error_response(error: DirectProxyError) -> Response {
+    let mut error_body = serde_json::json!({
+        "type": "api_error",
+        "message": "proxy_validation_failed",
+        "code": format!("{:?}", error.code()),
+        "phase": format!("{:?}", error.phase()),
+    });
+    if let (Some(name), Some(reason)) = (error.header_name(), error.header_rejection_reason()) {
+        error_body["header"] = serde_json::json!({
+            "name": name,
+            "reason": reason.as_str(),
+        });
+    }
+    if let Some(carrier) = error.opaque_carrier() {
+        error_body["carrier"] = serde_json::json!({
+            "scheme": carrier.scheme().as_str(),
+            "span": {
+                "byte_offset": carrier.byte_offset(),
+                "byte_length": carrier.byte_length(),
+            },
+            "content_block_index": carrier.content_block_index(),
+        });
+    }
     let body = serde_json::json!({
         "type": "error",
-        "error": {
-            "type": "api_error",
-            "message": "proxy_validation_failed",
-            "code": format!("{:?}", error.code()),
-        }
+        "error": error_body,
     });
     let mut response = Response::builder()
         .status(error.http_status())
@@ -4034,6 +4069,98 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn header_rejections_name_only_the_header_and_disambiguate_the_cause() {
+        const SECRET_ONE: &str = "synthetic-credential-one";
+        const SECRET_TWO: &str = "synthetic-credential-two";
+
+        let mut not_allowlisted = HeaderMap::new();
+        not_allowlisted.insert("x-synthetic-extra", HeaderValue::from_static(SECRET_ONE));
+
+        let mut empty = HeaderMap::new();
+        empty.insert("anthropic-beta", HeaderValue::from_static(""));
+
+        let mut duplicate = HeaderMap::new();
+        duplicate.append("x-api-key", HeaderValue::from_static(SECRET_ONE));
+        duplicate.append("x-api-key", HeaderValue::from_static(SECRET_TWO));
+
+        let cases = [
+            (
+                not_allowlisted,
+                "x-synthetic-extra",
+                HeaderRejectionReason::NameNotAllowlisted,
+            ),
+            (empty, "anthropic-beta", HeaderRejectionReason::EmptyValue),
+            (
+                duplicate,
+                "x-api-key",
+                HeaderRejectionReason::DuplicateSingleton,
+            ),
+        ];
+
+        for (headers, expected_name, expected_reason) in cases {
+            let error = validate_outbound_headers(&headers).unwrap_err();
+            assert_eq!(error.code(), ProxyErrorCode::HeaderRejected);
+            assert_eq!(error.phase(), ProxyErrorPhase::RequestValidation);
+            assert_eq!(error.header_name().as_deref(), Some(expected_name));
+            assert_eq!(error.header_rejection_reason(), Some(expected_reason));
+
+            let debug = format!("{error:?}");
+            assert!(debug.contains(expected_name));
+            assert!(!debug.contains(SECRET_ONE));
+            assert!(!debug.contains(SECRET_TWO));
+
+            let response = direct_error_response(error);
+            let bytes = to_bytes(response.into_body(), 4 * 1024).await.unwrap();
+            let body: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(body["error"]["phase"], "RequestValidation");
+            assert_eq!(body["error"]["header"]["name"], expected_name);
+            assert_eq!(body["error"]["header"]["reason"], expected_reason.as_str());
+            let rendered = String::from_utf8(bytes.to_vec()).unwrap();
+            assert!(!rendered.contains(SECRET_ONE));
+            assert!(!rendered.contains(SECRET_TWO));
+        }
+
+        let maximum_name = format!("x-{}", "a".repeat(126));
+        let mut maximum_length = HeaderMap::new();
+        maximum_length.insert(
+            HeaderName::from_bytes(maximum_name.as_bytes()).unwrap(),
+            HeaderValue::from_static(SECRET_ONE),
+        );
+        let error = validate_outbound_headers(&maximum_length).unwrap_err();
+        assert_eq!(error.header_name().as_deref(), Some(maximum_name.as_str()));
+        assert_eq!(
+            error.header_rejection_reason(),
+            Some(HeaderRejectionReason::NameNotAllowlisted)
+        );
+    }
+
+    #[test]
+    fn actionable_header_reporting_preserves_the_rejected_request_set() {
+        let mut valid = HeaderMap::new();
+        valid.insert("content-type", HeaderValue::from_static("application/json"));
+        valid.insert("x-api-key", HeaderValue::from_static("synthetic-key"));
+        valid.insert("anthropic-version", HeaderValue::from_static("2023-06-01"));
+
+        let mut not_allowlisted = valid.clone();
+        not_allowlisted.insert(
+            "x-synthetic-extra",
+            HeaderValue::from_static("synthetic-value"),
+        );
+
+        let mut empty = valid.clone();
+        empty.insert("anthropic-version", HeaderValue::from_static(""));
+
+        let mut duplicate = valid.clone();
+        duplicate.append("x-api-key", HeaderValue::from_static("synthetic-key-two"));
+
+        let rejected = [valid, not_allowlisted, empty, duplicate]
+            .iter()
+            .map(|headers| validate_outbound_headers(headers).is_err())
+            .collect::<Vec<_>>();
+        assert_eq!(rejected, vec![false, true, true, true]);
+    }
+
+    #[tokio::test]
     async fn redirects_retries_and_response_overflow_remain_disabled() {
         let target_hits = Arc::new(AtomicUsize::new(0));
         let target_hits_for_handler = Arc::clone(&target_hits);
@@ -4244,7 +4371,8 @@ mod tests {
                 "error": {
                     "type": "api_error",
                     "message": "proxy_validation_failed",
-                    "code": "RequestBodyLimitExceeded"
+                    "code": "RequestBodyLimitExceeded",
+                    "phase": "RequestValidation"
                 }
             })
         );
@@ -4279,7 +4407,8 @@ mod tests {
                 "error": {
                     "type": "api_error",
                     "message": "proxy_validation_failed",
-                    "code": "ResponseBodyLimitExceeded"
+                    "code": "ResponseBodyLimitExceeded",
+                    "phase": "ResponseValidation"
                 }
             })
         );
