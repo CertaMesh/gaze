@@ -236,10 +236,10 @@ check.
 
 | Invocation shape | Active national / postal recognizers | Adopter implication |
 | --- | --- | --- |
-| `core` bundled rulepack | Core global recognizers only. | Use for the narrow default surface. |
-| `core-extended` with no policy | German and US national phone and postal recognizers activate through bundled defaults. | Pass `--locale=global` or a narrower policy if this is not wanted. |
-| Policy with locale gates | Recognizers run only when their locales intersect the active locale chain. | Put activation intent in TOML rather than relying on host locale guesses. |
-| Custom rulepack | Rulepack defaults fill in only below CLI and policy locale choices. | Keep rulepack defaults conservative and documented. |
+| `core` bundled rulepack | Format-basis identifiers, including US national phone, run for every document locale. DE national phone and both postal recognizers remain document-gated. | Disable an unwanted format-basis recognizer outright; locale mismatch is not a suppression mechanism. |
+| `core-extended` with no policy | Compatibility defaults also activate the quarantined DE national phone and postal recognizers. | Prefer `core`; use an explicit policy/rulepack when the compatibility activation is too broad. |
+| Policy with locale gates | Locale gates apply to `locale_basis = "document"` recognizers only. Format-basis recognizers run once outside locale fallback. | Put document-language intent in TOML, but use `enabled = false` for intentional format suppression. |
+| Custom rulepack | Omitted `locale_basis` retains legacy document gating; rulepack defaults fill in only below CLI and policy locale choices. | Opt into format basis only after collision and negative-corpus review. |
 
 Source anchors: [CLAUDE.md](CLAUDE.md),
 [crates/gaze-cli/src/pipeline/run.rs](crates/gaze-cli/src/pipeline/run.rs),
