@@ -1,6 +1,6 @@
 schema_version = "0.1.0"
 rulepack_id = "gaze-core"
-rulepack_version = "0.5.1"
+rulepack_version = "0.5.2"
 default_locales = ["global"]
 
 [locale.email_headers]
@@ -12,6 +12,7 @@ safety_tier = "safe_default"
 class = "Email"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -55,6 +56,7 @@ class = "Name"
 cooperates_with = ["email.header.name.paren", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -72,6 +74,7 @@ class = "Name"
 cooperates_with = ["email.header.name", "name.forward_marker", "name.agent_recipient", "name.auto_footer"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -92,6 +95,7 @@ class = "Name"
 cooperates_with = ["email.header.name", "email.header.name.paren", "name.agent_recipient", "name.auto_footer"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "anchored_match"
@@ -115,6 +119,7 @@ class = "Name"
 cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.auto_footer"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "anchored_match"
@@ -138,6 +143,7 @@ class = "Name"
 cooperates_with = ["email.header.name", "email.header.name.paren", "name.forward_marker", "name.agent_recipient"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH", "en-US", "en-GB", "en-IE", "en-AU", "en-CA"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "anchored_match"
@@ -161,6 +167,7 @@ class = "custom:phone"
 cooperates_with = ["phone.e164.spaced", "phone.national.de", "phone.national.us"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -191,6 +198,7 @@ class = "custom:phone"
 cooperates_with = ["phone.structural", "phone.national.de", "phone.national.us"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -221,6 +229,7 @@ class = "custom:phone"
 cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.us"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -250,11 +259,12 @@ precedence = 10
 
 [[recognizers]]
 id = "phone.national.us"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:phone"
 cooperates_with = ["phone.structural", "phone.e164.spaced", "phone.national.de"]
 enabled = true
 locales = ["en-US"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -283,6 +293,7 @@ safety_tier = "safe_default"
 class = "custom:iban"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -313,6 +324,7 @@ safety_tier = "safe_default"
 class = "custom:credit_card"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -339,6 +351,7 @@ class = "custom:ip_address"
 cooperates_with = ["ip.v6"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -360,6 +373,7 @@ class = "custom:ip_address"
 cooperates_with = ["ip.v4"]
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -410,6 +424,7 @@ safety_tier = "safe_default"
 class = "custom:eth_address"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -430,6 +445,7 @@ safety_tier = "safe_default"
 class = "custom:aadhaar"
 enabled = true
 locales = ["en-IN", "hi-IN"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -451,6 +467,7 @@ safety_tier = "safe_default"
 class = "custom:nir"
 enabled = true
 locales = ["fr-FR"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -472,6 +489,7 @@ safety_tier = "safe_default"
 class = "custom:steuer_id"
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -489,11 +507,12 @@ priority = 86
 
 [[recognizers]]
 id = "vat.de"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:vat_id"
 cooperates_with = ["vat.es"]
 enabled = true
 locales = ["de-DE", "de-AT", "de-CH"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -510,11 +529,12 @@ priority = 86
 
 [[recognizers]]
 id = "vat.es"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:vat_id"
 cooperates_with = ["vat.de"]
 enabled = true
 locales = ["es-ES"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -535,6 +555,7 @@ safety_tier = "safe_default"
 class = "custom:bsn"
 enabled = true
 locales = ["nl-NL"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -556,6 +577,7 @@ safety_tier = "safe_default"
 class = "custom:cpf"
 enabled = true
 locales = ["pt-BR"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -577,6 +599,7 @@ safety_tier = "safe_default"
 class = "custom:cnpj"
 enabled = true
 locales = ["pt-BR"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -598,6 +621,7 @@ safety_tier = "safe_default"
 class = "custom:nhs_number"
 enabled = true
 locales = ["en-GB"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -615,10 +639,11 @@ priority = 86
 
 [[recognizers]]
 id = "ssn.us"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:ssn"
 enabled = true
 locales = ["en-US"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -633,10 +658,11 @@ priority = 86
 
 [[recognizers]]
 id = "nino.uk"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:nino"
 enabled = true
 locales = ["en-GB"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -654,10 +680,11 @@ priority = 86
 
 [[recognizers]]
 id = "pan.in"
-safety_tier = "locale_gated"
+safety_tier = "safe_default"
 class = "custom:pan"
 enabled = true
 locales = ["en-IN", "hi-IN"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -683,6 +710,7 @@ class = "custom:postal_code"
 cooperates_with = ["postal.us"]
 enabled = true
 locales = ["de-DE"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -707,6 +735,7 @@ class = "custom:postal_code"
 cooperates_with = ["postal.de"]
 enabled = true
 locales = ["en-US"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -737,6 +766,7 @@ safety_tier = "safe_default"
 class = "custom:url"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
