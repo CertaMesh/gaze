@@ -73,16 +73,98 @@ pub enum CodecErrorCode {
     ProviderErrorEvent,
 }
 
+/// Closed carrier schemes that may safely identify an opaque request carrier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum OpaqueCarrierScheme {
+    Data,
+    File,
+    Http,
+    Https,
+}
+
+impl OpaqueCarrierScheme {
+    /// Returns the normalized scheme identifier without any carrier payload.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Data => "data:",
+            Self::File => "file:",
+            Self::Http => "http:",
+            Self::Https => "https:",
+        }
+    }
+}
+
+/// Structural location of an opaque carrier, never its bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[non_exhaustive]
+pub struct OpaqueCarrierLocation {
+    scheme: OpaqueCarrierScheme,
+    byte_offset: usize,
+    byte_length: usize,
+    content_block_index: Option<usize>,
+}
+
+impl OpaqueCarrierLocation {
+    pub(crate) const fn new(
+        scheme: OpaqueCarrierScheme,
+        byte_offset: usize,
+        byte_length: usize,
+        content_block_index: Option<usize>,
+    ) -> Self {
+        Self {
+            scheme,
+            byte_offset,
+            byte_length,
+            content_block_index,
+        }
+    }
+
+    #[must_use]
+    pub const fn scheme(self) -> OpaqueCarrierScheme {
+        self.scheme
+    }
+
+    #[must_use]
+    pub const fn byte_offset(self) -> usize {
+        self.byte_offset
+    }
+
+    #[must_use]
+    pub const fn byte_length(self) -> usize {
+        self.byte_length
+    }
+
+    #[must_use]
+    pub const fn content_block_index(self) -> Option<usize> {
+        self.content_block_index
+    }
+}
+
 /// Sanitized codec failure. It never retains parser, body, key, value, or provider error text.
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub struct CodecError {
     code: CodecErrorCode,
     phase: CodecPhase,
+    opaque_carrier: Option<OpaqueCarrierLocation>,
 }
 
 impl CodecError {
     pub(crate) const fn new(code: CodecErrorCode, phase: CodecPhase) -> Self {
-        Self { code, phase }
+        Self {
+            code,
+            phase,
+            opaque_carrier: None,
+        }
+    }
+
+    pub(crate) const fn with_opaque_carrier(
+        mut self,
+        opaque_carrier: Option<OpaqueCarrierLocation>,
+    ) -> Self {
+        self.opaque_carrier = opaque_carrier;
+        self
     }
 
     #[must_use]
@@ -94,15 +176,22 @@ impl CodecError {
     pub const fn phase(self) -> CodecPhase {
         self.phase
     }
+
+    /// Returns only the carrier's structural location, never its bytes.
+    #[must_use]
+    pub const fn opaque_carrier(self) -> Option<OpaqueCarrierLocation> {
+        self.opaque_carrier
+    }
 }
 
 impl fmt::Debug for CodecError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("CodecError")
-            .field("code", &self.code)
-            .field("phase", &self.phase)
-            .finish()
+        let mut debug = formatter.debug_struct("CodecError");
+        debug.field("code", &self.code).field("phase", &self.phase);
+        if let Some(opaque_carrier) = self.opaque_carrier {
+            debug.field("opaque_carrier", &opaque_carrier);
+        }
+        debug.finish()
     }
 }
 
@@ -313,6 +402,8 @@ pub struct RequestTransformContext<'a> {
     format: WireFormat,
     limits: CodecLimits,
     inspection_projection_requested: bool,
+    content_block_index: Option<usize>,
+    opaque_carrier: Option<OpaqueCarrierLocation>,
 }
 
 impl<'a> RequestTransformContext<'a> {
@@ -327,6 +418,8 @@ impl<'a> RequestTransformContext<'a> {
             format,
             limits,
             inspection_projection_requested: false,
+            content_block_index: None,
+            opaque_carrier: None,
         }
     }
 
@@ -346,6 +439,32 @@ impl<'a> RequestTransformContext<'a> {
 
     pub(crate) const fn inspection_projection_requested(&self) -> bool {
         self.inspection_projection_requested
+    }
+
+    pub(crate) fn replace_content_block_index(
+        &mut self,
+        content_block_index: Option<usize>,
+    ) -> Option<usize> {
+        std::mem::replace(&mut self.content_block_index, content_block_index)
+    }
+
+    pub(crate) fn record_opaque_carrier(
+        &mut self,
+        scheme: OpaqueCarrierScheme,
+        byte_offset: usize,
+        byte_length: usize,
+    ) {
+        self.opaque_carrier.get_or_insert_with(|| {
+            OpaqueCarrierLocation::new(scheme, byte_offset, byte_length, self.content_block_index)
+        });
+    }
+
+    pub(crate) fn clear_opaque_carrier(&mut self) {
+        self.opaque_carrier = None;
+    }
+
+    pub(crate) const fn opaque_carrier(&self) -> Option<OpaqueCarrierLocation> {
+        self.opaque_carrier
     }
 
     pub(crate) fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {

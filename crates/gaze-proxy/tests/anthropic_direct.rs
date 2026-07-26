@@ -787,6 +787,46 @@ async fn split_logical_domain_rejects_before_upstream_io() {
 }
 
 #[tokio::test]
+async fn opaque_carrier_error_names_only_structural_location_and_phase() {
+    const CARRIER: &str = "data:text/plain,SYNTHETIC-CARRIER-SECRET";
+    let upstream = spawn_upstream().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "system": [
+            {"type": "text", "text": "synthetic preface"},
+            {"type": "text", "text": format!("ordinary prefix {CARRIER}")},
+        ],
+        "messages": [{"role": "user", "content": "synthetic"}],
+    });
+
+    let response = sdk_client_request(&Client::new(), &proxy, false)
+        .body(serde_json::to_vec(&request).unwrap())
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let bytes = response.bytes().await.unwrap();
+    let error: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(error["error"]["code"], "OpaqueMediaUninspected");
+    assert_eq!(error["error"]["phase"], "RequestTransform");
+    assert_eq!(error["error"]["carrier"]["scheme"], "data:");
+    assert_eq!(
+        error["error"]["carrier"]["span"]["byte_offset"],
+        "ordinary prefix ".len()
+    );
+    assert_eq!(error["error"]["carrier"]["span"]["byte_length"], 5);
+    assert_eq!(error["error"]["carrier"]["content_block_index"], 1);
+    let rendered = String::from_utf8(bytes.to_vec()).unwrap();
+    assert!(!rendered.contains(CARRIER));
+    assert!(!rendered.contains("SYNTHETIC-CARRIER-SECRET"));
+    assert_eq!(upstream.connections.load(Ordering::SeqCst), 0);
+    assert!(upstream.captures.lock().await.is_empty());
+}
+
+#[tokio::test]
 async fn split_opaque_carriers_reject_across_complete_request_views_without_side_effects() {
     let upstream = spawn_upstream().await;
     let logger = CountingRedactionLogger::default();
