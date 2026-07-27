@@ -153,6 +153,130 @@ class MetricTests(unittest.TestCase):
         self.assertEqual(result["documents_without_leaks"], 0)
 
 
+class ValidatorRecallTests(unittest.TestCase):
+    def document(self) -> benchmark.Document:
+        return benchmark.Document(
+            uid="validator-synthetic",
+            text="Card 4111111111111112 belongs to Schmidt",
+            language="en",
+            region="US",
+            source_dataset="synthetic",
+            spans=(
+                benchmark.Span(5, 21, "CREDITCARDNUMBER"),
+                benchmark.Span(33, 40, "SURNAME"),
+            ),
+        )
+
+    def measurements(self) -> dict[str, object]:
+        return {
+            "schema_version": benchmark.VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION,
+            "validator_kinds_by_class": {
+                "custom:credit_card": ["luhn"],
+            },
+            "validator_recognizers": [
+                {
+                    "id": "card.structural",
+                    "class": "custom:credit_card",
+                    "validator_kind": "luhn",
+                }
+            ],
+            "documents": {
+                "validator-synthetic": {
+                    "fixture_id": "validator-synthetic",
+                    "gold_validation": [
+                        {
+                            "start": 5,
+                            "end": 21,
+                            "label": "CREDITCARDNUMBER",
+                            "applicable": True,
+                            "validator_passed": False,
+                        },
+                        {
+                            "start": 33,
+                            "end": 40,
+                            "label": "SURNAME",
+                            "applicable": False,
+                            "validator_passed": None,
+                        },
+                    ],
+                    "predictions": {
+                        "validator_backed": [],
+                        "shape_only": [
+                            {
+                                "start": 5,
+                                "end": 21,
+                                "class": "custom:credit_card",
+                                "source_ids": ["card.structural"],
+                            }
+                        ],
+                    },
+                }
+            },
+        }
+
+    def test_validator_and_shape_only_recall_are_independent(self) -> None:
+        result = benchmark.validator_recall_by_label(
+            [self.document()],
+            ["validator-synthetic"],
+            self.measurements(),
+        )
+
+        card = result["CREDITCARDNUMBER"]
+        self.assertEqual(card["validator_passed_gold_spans"], 0)
+        self.assertEqual(card["validator_failed_gold_spans"], 1)
+        self.assertEqual(
+            card["validator_backed_recall"]["full_coverage_recall"], 0.0
+        )
+        self.assertEqual(card["shape_only_recall"]["full_coverage_recall"], 1.0)
+
+    def test_not_applicable_is_never_rendered_as_zero(self) -> None:
+        result = benchmark.validator_recall_by_label(
+            [self.document()],
+            ["validator-synthetic"],
+            self.measurements(),
+        )
+
+        surname = result["SURNAME"]
+        self.assertEqual(surname["applicability"], "not_applicable")
+        self.assertIsNone(surname["validator_passed_gold_spans"])
+        self.assertIsNone(surname["validator_failed_gold_spans"])
+        self.assertIsNone(surname["validator_backed_recall"])
+        self.assertIsNone(surname["shape_only_recall"])
+
+    def test_full_population_census_preserves_zero_versus_not_applicable(self) -> None:
+        census = benchmark.validator_gold_census(
+            [self.document()], self.measurements()
+        )
+
+        self.assertEqual(
+            census["CREDITCARDNUMBER"]["validator_passed_gold_spans"], 0
+        )
+        self.assertEqual(
+            census["CREDITCARDNUMBER"]["validator_failed_gold_spans"], 1
+        )
+        self.assertIsNone(census["SURNAME"]["validator_passed_gold_spans"])
+        self.assertIsNone(census["SURNAME"]["validator_failed_gold_spans"])
+
+    def test_compiled_probe_vetoes_invalid_luhn_but_shape_match_survives(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        probe = benchmark.validator_probe_binary(repo_root)
+        if not probe.is_file():
+            self.skipTest("validator recall probe has not been built")
+
+        document = self.document()
+        measurements = benchmark.collect_validator_measurements(
+            probe, [document], [document.uid]
+        )
+        result = benchmark.validator_recall_by_label(
+            [document], [document.uid], measurements
+        )["CREDITCARDNUMBER"]
+
+        self.assertEqual(
+            result["validator_backed_recall"]["full_coverage_recall"], 0.0
+        )
+        self.assertEqual(result["shape_only_recall"]["full_coverage_recall"], 1.0)
+
+
 class ContractTests(unittest.TestCase):
     def test_contract_score_does_not_compensate_restore_failure(self) -> None:
         accumulator = benchmark.ContractAccumulator()

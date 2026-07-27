@@ -464,6 +464,7 @@ def execute_measurements(
     diagnostics_dir: Path,
     warmup_count: int,
     measured_repetitions: int,
+    validator_measurements: Mapping[str, object] | None = None,
     source_environment: Mapping[str, str] | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
@@ -493,6 +494,7 @@ def execute_measurements(
                 diagnostics_dir / f"repetition-{repetition}",
                 base_environment=environment,
                 warmup_count=warmup_count,
+                validator_measurements=validator_measurements,
             )
             current.append(run)
         repetition_runs.append(current)
@@ -575,6 +577,15 @@ def diagnostics(scorecard: Mapping[str, object]) -> dict[str, object]:
                 "failed_closed_population": run["failed_closed_population"],
                 "per_language": run["per_language"],
                 "per_label": run["per_label_recall"],
+                **(
+                    {
+                        "validator_recall_by_label": run[
+                            "validator_recall_by_label"
+                        ]
+                    }
+                    if "validator_recall_by_label" in run
+                    else {}
+                ),
                 "per_negative_category": run["per_negative_category"],
                 "pipeline_availability": run["pipeline_availability"],
                 "pipeline_contract": run["pipeline_contract"],
@@ -613,6 +624,38 @@ def markdown_summary(
             f"{counts['residual_suspects']} | "
             f"{clean_display} |"
         )
+    lines.extend(
+        [
+            "",
+            "## Validator-backed versus shape-only recall",
+            "",
+            "| Config | Label | Applicable validator(s) | Gold pass | Gold fail "
+            "| Validator-backed full-coverage recall | Shape-only full-coverage recall |",
+            "| --- | --- | --- | ---: | ---: | ---: | ---: |",
+        ]
+    )
+    for run in scorecard["runs"]:
+        for label, block in run["validator_recall_by_label"].items():
+            if block["applicability"] == "applicable":
+                validators = ", ".join(block["validator_kinds"])
+                passed = str(block["validator_passed_gold_spans"])
+                failed = str(block["validator_failed_gold_spans"])
+                validator_recall = (
+                    f"{block['validator_backed_recall']['full_coverage_recall']:.6f}"
+                )
+                shape_recall = (
+                    f"{block['shape_only_recall']['full_coverage_recall']:.6f}"
+                )
+            else:
+                validators = block["applicability"]
+                passed = "n/a"
+                failed = "n/a"
+                validator_recall = "n/a"
+                shape_recall = "n/a"
+            lines.append(
+                f"| {run['config']} | {label} | {validators} | {passed} | "
+                f"{failed} | {validator_recall} | {shape_recall} |"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -736,6 +779,18 @@ def run(args: argparse.Namespace) -> int:
     )
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
+    validator_probe = (
+        score.validator_probe_binary(repo_root)
+        if args.skip_build
+        else score.build_validator_probe(repo_root)
+    )
+    if not validator_probe.is_file():
+        raise CandidateError(f"validator recall probe is missing: {validator_probe}")
+    validator_measurements = score.collect_validator_measurements(
+        validator_probe,
+        available_documents,
+        (document.uid for document in documents),
+    )
     runs, repetition_provenance = execute_measurements(
         repo_root=repo_root,
         binary=binary,
@@ -746,8 +801,12 @@ def run(args: argparse.Namespace) -> int:
         diagnostics_dir=output_dir / "logs",
         warmup_count=args.warmups,
         measured_repetitions=args.measured_repetitions,
+        validator_measurements=validator_measurements,
     )
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
+    dataset_report["validator_gold_census"] = score.validator_gold_census(
+        available_documents, validator_measurements
+    )
     candidate = score.assemble_scorecard(
         repo_root=repo_root,
         dataset_metadata=metadata,
@@ -774,6 +833,11 @@ def run(args: argparse.Namespace) -> int:
         "repetitions": repetition_provenance,
         "latency_source": "validated response timing.clean_ms",
         "cold_start_metric": "external process start to first validated response",
+        "validator_recall_probe": {
+            "protocol_schema_version": validator_measurements["schema_version"],
+            "manifest": score.VALIDATOR_PROBE_MANIFEST.as_posix(),
+            "validator_recognizers": validator_measurements["validator_recognizers"],
+        },
     }
 
     readiness_result = score.evaluate_release_readiness(candidate)

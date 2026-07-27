@@ -93,8 +93,8 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 | Artifact | Purpose |
 | --- | --- |
 | `scorecard-v4.json` | full schema-v4 scorecard, runner provenance, and identified scored/failed-closed populations per cell |
-| `summary.md` | concise human-readable result |
-| `diagnostics.json` | per-language, per-label, and per-negative-category diagnostics |
+| `summary.md` | concise human-readable result, including side-by-side validator-backed and shape-only recall |
+| `diagnostics.json` | per-language, per-label, validator-split, and per-negative-category diagnostics |
 | `regression-status.json` | baseline-relative integer-count ratchet verdict |
 | `release-readiness-status.json` | candidate-only absolute correctness verdict |
 | `performance-status.json` | separately configured p95 `clean_ms` comparison |
@@ -115,6 +115,17 @@ and closed stage; their reason/stage counts must reconcile exactly to the
 failed-closed total. Regression comparison requires scored-set identity before
 emitting any metric or per-label delta. A mismatch names the IDs added to and
 removed from the scored set even when cardinality and gold counts are unchanged.
+
+Schema v4 also carries additive validator diagnostics. The project-owned
+`scripts/bench/validator_recall_probe` links the production `ValidatorKind`
+implementations, runs the same rule floor with validators intact and with only
+the validator fields removed in memory, and emits offsets/classes rather than
+matched values. Each scored cell reports `validator_recall_by_label` with
+side-by-side `validator_backed_recall` and `shape_only_recall`. The dataset block
+reports a full available-population `validator_gold_census` with validator pass
+and fail counts. Labels without an applicable validator say `not_applicable` and
+use null pass/fail and recall fields, so not-applicable cannot be confused with a
+measured zero.
 
 These fields define schema v4. Older schema-v3 artifacts remain readable for
 diagnostic replay and their aggregate evidence is not rewritten. Because v3
