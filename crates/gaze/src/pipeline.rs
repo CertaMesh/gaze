@@ -1299,7 +1299,7 @@ impl Pipeline {
                 ConflictTier::Resolve,
                 None,
             )?;
-            replace_clean_span(
+            replace_clean_span_checked(
                 clean,
                 plan.clean_span.clone(),
                 &replacement,
@@ -1308,7 +1308,7 @@ impl Pipeline {
                     plan.raw_span.clone(),
                     suspect.class.clone(),
                 )),
-            );
+            )?;
             if let Some(trace) = protection_trace.as_deref_mut() {
                 trace.record(
                     plan.raw_span,
@@ -1439,6 +1439,9 @@ impl Pipeline {
         // produce a "degraded but safe" document. Unreachable from the public surface; driven
         // directly by `redact_safety_net_suspects_refuses_a_proven_inconsistent_manifest`.
         validate_clean_manifest(clean)?;
+        // Phase 1: plan every deletion against the UNMUTATED clean text. `map_clean_span_to_raw`
+        // needs original coordinates, so the raw span of every plan has to be established before
+        // any of them is applied.
         let mut plans = Vec::new();
         for suspect in redaction_suspects(report) {
             let span =
@@ -1446,13 +1449,16 @@ impl Pipeline {
             let span = expand_span_to_overlapping_manifest_entries(clean, span);
             let raw_span = map_clean_span_to_raw(clean, &span)?;
             plans.push(PlannedSafetyNetRedaction {
-                suspect,
+                suspects: vec![suspect],
                 clean_span: span,
                 raw_span,
             });
         }
+        // Phase 2: normalize the plan set into ascending, disjoint regions. Frozen spans may only
+        // be applied right-to-left once that holds; see `merge_overlapping_redaction_plans`.
+        let plans = merge_overlapping_redaction_plans(plans);
+        // Phase 3: apply right-to-left, so an applied region never shifts an unapplied one.
         for plan in plans.into_iter().rev() {
-            let suspect = plan.suspect;
             for existing in clean
                 .manifest
                 .iter()
@@ -1466,32 +1472,46 @@ impl Pipeline {
                 );
             }
             if log_entries {
-                self.log_safety_net_entry(
-                    target,
-                    suspect,
-                    document_kind,
-                    field_path,
-                    Action::Redact,
-                    fallback_reason.is_some(),
-                    if fallback_reason.is_some() {
-                        ConflictTier::Fallback
-                    } else {
-                        ConflictTier::Redact
-                    },
-                    fallback_reason,
-                )?;
+                // One audit row per suspect. Merging deletions must not merge away the record of
+                // which suspects drove them.
+                for suspect in &plan.suspects {
+                    self.log_safety_net_entry(
+                        target,
+                        suspect,
+                        document_kind,
+                        field_path,
+                        Action::Redact,
+                        fallback_reason.is_some(),
+                        if fallback_reason.is_some() {
+                            ConflictTier::Fallback
+                        } else {
+                            ConflictTier::Redact
+                        },
+                        fallback_reason,
+                    )?;
+                }
             }
-            replace_clean_span(clean, plan.clean_span, "", None);
+            replace_clean_span_checked(clean, plan.clean_span, "", None)?;
             if let Some(trace) = protection_trace.as_deref_mut() {
+                // A merged region is one deletion, so it is one trace item: it carries the class
+                // of its lowest-offset suspect and the ids of every suspect that drove it.
+                // Recording per suspect instead would be self-defeating — `record` evicts items
+                // whose raw spans overlap, so all but the last would silently disappear.
+                let region_class = plan.suspects[0].class.clone();
+                let source_ids = plan
+                    .suspects
+                    .iter()
+                    .map(|suspect| suspect.safety_net_id.clone())
+                    .collect();
                 trace.record(
                     plan.raw_span,
-                    suspect.class.clone(),
+                    region_class,
                     if fallback_reason.is_some() {
                         GazeLocalProtectionTraceKind::SafetyNetFallbackRedact
                     } else {
                         GazeLocalProtectionTraceKind::SafetyNetRedact
                     },
-                    vec![suspect.safety_net_id.clone()],
+                    source_ids,
                 )?;
             }
         }
@@ -1785,8 +1805,14 @@ struct CleanText {
     manifest: Vec<EmittedTokenSpan>,
 }
 
+/// One contiguous region the safety net will delete, and every suspect that asked for it.
+///
+/// A region can carry more than one suspect: manifest expansion can widen two nearby suspects
+/// onto the same emitted token, and overlapping deletions are applied as their union. `suspects`
+/// is non-empty and ordered by clean-span start, so `suspects[0]` is the lowest-offset suspect in
+/// the region.
 struct PlannedSafetyNetRedaction<'a> {
-    suspect: &'a LeakSuspect,
+    suspects: Vec<&'a LeakSuspect>,
     clean_span: Range<usize>,
     raw_span: Range<usize>,
 }
@@ -2199,6 +2225,50 @@ fn expand_span_to_overlapping_manifest_entries(
     }
 }
 
+/// Normalize planned deletions into ascending, disjoint regions.
+///
+/// Reverse-applying spans frozen against an unmutated document is sound only while they are
+/// ascending AND disjoint. Neither is guaranteed on the way in: `redaction_suspects` sorts by the
+/// PRE-expansion start, and `expand_span_to_overlapping_manifest_entries` only ever moves a start
+/// left, so two suspects widened onto the same emitted token can arrive overlapping — and out of
+/// order. Applying that plan set right-to-left indexes a frozen span into a document a previous
+/// deletion already shrank, which is the shape that panicked `String::replace_range` in
+/// production.
+///
+/// Merging is not a policy choice about which suspect wins. Redaction only ever removes bytes, so
+/// the result of applying overlapping deletions IS their union: the merged region deletes exactly
+/// what a correct sequential application would have deleted, never less. Each region keeps every
+/// contributing suspect so audit rows and protection-trace source ids stay complete.
+///
+/// The merged raw span is the union of the contributing raw spans, which is exactly the mapping of
+/// the merged clean span: `map_clean_boundary_to_raw` is monotonic, so the lowest contributing raw
+/// start belongs to the lowest clean start and likewise for the ends. Raw coordinates therefore
+/// still describe the UNMUTATED original request, preserving the protection-trace contract.
+fn merge_overlapping_redaction_plans(
+    mut plans: Vec<PlannedSafetyNetRedaction<'_>>,
+) -> Vec<PlannedSafetyNetRedaction<'_>> {
+    plans.sort_by(|left, right| {
+        (left.clean_span.start, left.clean_span.end)
+            .cmp(&(right.clean_span.start, right.clean_span.end))
+    });
+    let mut merged: Vec<PlannedSafetyNetRedaction<'_>> = Vec::with_capacity(plans.len());
+    for plan in plans {
+        match merged.last_mut() {
+            // Sorted by start, so a start before the running region's end is exactly an overlap.
+            // Comparing against the running end rather than the previous plan's end is what makes
+            // a chain of pairwise overlaps collapse into one region in a single pass.
+            Some(region) if plan.clean_span.start < region.clean_span.end => {
+                region.clean_span.end = region.clean_span.end.max(plan.clean_span.end);
+                region.raw_span.start = region.raw_span.start.min(plan.raw_span.start);
+                region.raw_span.end = region.raw_span.end.max(plan.raw_span.end);
+                region.suspects.extend(plan.suspects);
+            }
+            _ => merged.push(plan),
+        }
+    }
+    merged
+}
+
 fn ranges_overlap(left: &Range<usize>, right: &Range<usize>) -> bool {
     left.start < right.end && right.start < left.end
 }
@@ -2272,6 +2342,37 @@ fn replace_clean_span(
         .chain(emitted)
         .collect();
     clean.manifest.sort_by_key(|span| span.clean_span.start);
+}
+
+/// Prove a planned span still fits the LIVE document before applying it.
+///
+/// `replace_clean_span` delegates to `String::replace_range`, which PANICS on a span past the end
+/// of the text or off a char boundary. Both safety-net passes plan their spans against a document
+/// snapshot and apply them afterwards, so a planning mistake reaches this call as a stale span. A
+/// panic is never an acceptable outcome there: a document the runtime cannot redact must surface
+/// the closed `Error::SafetyNetSpanInvalid` its callers already handle, exactly as
+/// `round_span_outward_to_char_boundaries` does at plan time.
+///
+/// Unreachable as the passes stand — resolve proves its plans pairwise-disjoint before applying,
+/// and redact merges overlapping plans into ascending disjoint regions — which is why
+/// `replace_clean_span_checked_refuses_a_span_past_the_live_text` drives it directly rather than
+/// leaving it unfalsifiable. It is the floor that keeps a future planning change from degrading
+/// back into a panic instead of a typed error.
+fn replace_clean_span_checked(
+    clean: &mut CleanText,
+    span: Range<usize>,
+    replacement: &str,
+    emitted: Option<EmittedTokenSpan>,
+) -> Result<()> {
+    if !is_char_boundary_range(&clean.text, &span) {
+        return Err(Error::SafetyNetSpanInvalid {
+            start: span.start,
+            end: span.end,
+            text_len: clean.text.len(),
+        });
+    }
+    replace_clean_span(clean, span, replacement, emitted);
+    Ok(())
 }
 
 fn restore_known_tokens(session: &Session, text: &str) -> Result<String> {
@@ -4163,6 +4264,297 @@ mod tests {
             )
             .expect_err("redaction on a proven-inconsistent manifest must fail closed");
         assert_manifest_integrity(error);
+    }
+
+    /// A 32-byte document holding one emitted token at clean `10..28`. The manifest entry is
+    /// gap-preserving by construction, so every precondition ahead of the apply loop passes and
+    /// the test isolates the apply loop itself.
+    fn overlapping_expansion_clean_text() -> CleanText {
+        CleanText {
+            text: "Dr Schmidt<aabbccdd:Email_1> end".to_string(),
+            manifest: vec![EmittedTokenSpan::new(10..28, 10..24, PiiClass::Email)],
+        }
+    }
+
+    /// The original-request document `overlapping_expansion_clean_text` describes: raw `10..24`
+    /// is the 14 bytes the emitted token stands for.
+    const OVERLAPPING_EXPANSION_RAW: &str = "Dr Schmidtalice@exam.inv end";
+
+    /// Two suspects that each touch the emitted token at clean `10..28`, so
+    /// `expand_span_to_overlapping_manifest_entries` widens them to `0..28` and `5..28` — spans
+    /// that overlap while their pre-expansion starts (0, 5) are ascending.
+    fn overlapping_expansion_report() -> LeakReport {
+        LeakReport::from_parts(
+            vec![
+                LeakSuspect::new(
+                    0..12,
+                    PiiClass::Name,
+                    "probe.a",
+                    Some(0.99),
+                    LeakKind::Uncovered,
+                    "person",
+                    None,
+                ),
+                LeakSuspect::new(
+                    5..15,
+                    PiiClass::Email,
+                    "probe.b",
+                    Some(0.99),
+                    LeakKind::Uncovered,
+                    "private_email",
+                    None,
+                ),
+            ],
+            Vec::new(),
+        )
+    }
+
+    /// Canonical reproducer for the plan-then-apply span-staleness defect.
+    ///
+    /// The pass plans every span against the UNMUTATED document (it must — `map_clean_span_to_raw`
+    /// needs original coordinates) and then applies right-to-left. That is sound only while the
+    /// plans are ascending AND disjoint, and manifest expansion can widen two nearby suspects onto
+    /// the same emitted token, breaking both properties. Applying the later plan first shrinks the
+    /// document, and the earlier plan's frozen `end` then indexes past it: the production panic
+    /// `range end index 260 out of range for slice of length 235`.
+    ///
+    /// Redaction only ever removes bytes, so applying two overlapping deletions means removing
+    /// their union — the merged region is not an approximation, it is the same result a correct
+    /// sequential application would reach. PII-free and deterministic: no corpus, no model, no
+    /// feature gate.
+    #[test]
+    fn redact_safety_net_suspects_merges_overlapping_expanded_spans() {
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = overlapping_expansion_clean_text();
+
+        pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &overlapping_expansion_report(),
+                DocumentKind::Text,
+                None,
+                None,
+                false,
+                None,
+            )
+            .expect("overlapping redaction spans must merge rather than fail, and never panic");
+
+        // Union of 0..28 and 5..28: everything up to the end of the emitted token is gone and only
+        // the untouched tail survives. Both suspects' bytes are removed — merging never redacts
+        // less than applying the plans separately would have.
+        assert_eq!(clean.text, " end");
+        assert!(
+            clean.manifest.is_empty(),
+            "the emitted token was inside the redacted region, so no manifest entry may survive"
+        );
+    }
+
+    /// A merged region must stay auditable: one protection-trace item covering the union, carrying
+    /// EVERY contributing suspect id, and one audit row per suspect.
+    ///
+    /// This is a strict improvement on the pre-fix behaviour. `ProtectionTraceCollector::record`
+    /// evicts items whose raw spans overlap, so two overlapping plans silently dropped the first
+    /// suspect's trace item — a suspect that drove a redaction vanished from the trace.
+    #[test]
+    fn redact_safety_net_suspects_traces_a_merged_region_under_every_source_id() {
+        let entries = Arc::new(Mutex::new(Vec::new()));
+        let pipeline = Pipeline::builder()
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let mut target = ProtectionTarget::Live(&session);
+        let mut clean = overlapping_expansion_clean_text();
+        let mut trace = ProtectionTraceCollector::new(OVERLAPPING_EXPANSION_RAW);
+
+        pipeline
+            .redact_safety_net_suspects(
+                &mut target,
+                &mut clean,
+                &overlapping_expansion_report(),
+                DocumentKind::Text,
+                None,
+                None,
+                true,
+                Some(&mut trace),
+            )
+            .expect("overlapping redaction spans must merge rather than fail, and never panic");
+
+        let items = trace.finish(&clean.manifest).expect("protection trace");
+        assert_eq!(items.len(), 1, "a merged region is one redaction, one item");
+        // Clean 0..28 maps back through the unmutated manifest to original bytes 0..24, so #402's
+        // original-coordinate contract still holds for a merged plan.
+        assert_eq!(items[0].raw_start(), 0);
+        assert_eq!(items[0].raw_end(), 24);
+        assert_eq!(items[0].action(), "redact");
+        assert_eq!(
+            items[0].source_ids(),
+            &["probe.a".to_string(), "probe.b".to_string()],
+            "every suspect that drove the merged deletion must be attributable"
+        );
+        assert_eq!(
+            items[0].class(),
+            &PiiClass::Name,
+            "a merged region carries the class of its lowest-offset contributing suspect"
+        );
+        assert_eq!(
+            entries.lock().unwrap().len(),
+            2,
+            "merging deletions must not merge away audit rows: one per suspect"
+        );
+    }
+
+    /// A chain of pairwise overlaps must collapse into ONE region, not into pairs that still
+    /// overlap each other. Each plan is compared against the running region's end, so `0..10`,
+    /// `8..20`, `18..30` become a single `0..30`.
+    ///
+    /// Merging must also reorder: `expand_span_to_overlapping_manifest_entries` only ever moves a
+    /// start left, so plans can arrive out of ascending order even when they end up disjoint. The
+    /// trailing `40..45` proves a disjoint region survives untouched and lands after the merged
+    /// one, which is what makes the reverse-apply order sound.
+    #[test]
+    fn merge_overlapping_redaction_plans_collapses_chains_and_orders_regions() {
+        let report = LeakReport::from_parts(
+            vec![
+                LeakSuspect::new(
+                    0..1,
+                    PiiClass::Name,
+                    "probe.a",
+                    None,
+                    LeakKind::Uncovered,
+                    "person",
+                    None,
+                ),
+                LeakSuspect::new(
+                    0..1,
+                    PiiClass::Email,
+                    "probe.b",
+                    None,
+                    LeakKind::Uncovered,
+                    "private_email",
+                    None,
+                ),
+                LeakSuspect::new(
+                    0..1,
+                    PiiClass::Email,
+                    "probe.c",
+                    None,
+                    LeakKind::Uncovered,
+                    "private_email",
+                    None,
+                ),
+                LeakSuspect::new(
+                    0..1,
+                    PiiClass::Email,
+                    "probe.d",
+                    None,
+                    LeakKind::Uncovered,
+                    "private_email",
+                    None,
+                ),
+            ],
+            Vec::new(),
+        );
+        let suspects = redaction_suspects(&report);
+        // Deliberately not ascending on the way in.
+        let plans = vec![
+            planned_redaction(suspects[2], 18..30, 18..30),
+            planned_redaction(suspects[0], 0..10, 0..10),
+            planned_redaction(suspects[3], 40..45, 40..45),
+            planned_redaction(suspects[1], 8..20, 8..20),
+        ];
+
+        let merged = merge_overlapping_redaction_plans(plans);
+
+        assert_eq!(merged.len(), 2, "the overlap chain is one region");
+        assert_eq!(merged[0].clean_span, 0..30);
+        assert_eq!(merged[0].raw_span, 0..30);
+        assert_eq!(
+            merged[0]
+                .suspects
+                .iter()
+                .map(|suspect| suspect.safety_net_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["probe.a", "probe.b", "probe.c"],
+            "contributing suspects stay ordered by clean-span start"
+        );
+        assert_eq!(merged[1].clean_span, 40..45);
+        assert_eq!(merged[1].suspects.len(), 1);
+        // The postcondition the reverse-apply loop depends on.
+        assert!(
+            merged
+                .windows(2)
+                .all(|pair| pair[0].clean_span.end <= pair[1].clean_span.start),
+            "regions must come out ascending and disjoint"
+        );
+    }
+
+    fn planned_redaction<'a>(
+        suspect: &'a LeakSuspect,
+        clean_span: Range<usize>,
+        raw_span: Range<usize>,
+    ) -> PlannedSafetyNetRedaction<'a> {
+        PlannedSafetyNetRedaction {
+            suspects: vec![suspect],
+            clean_span,
+            raw_span,
+        }
+    }
+
+    /// `replace_clean_span_checked` is the floor under both safety-net apply loops: a span that no
+    /// longer fits the live document must surface the closed `SafetyNetSpanInvalid` variant, never
+    /// panic out of `String::replace_range`.
+    ///
+    /// Unreachable from either pass today — resolve proves its plans disjoint and redact merges
+    /// overlapping ones — so it is driven directly, the same way `validate_clean_manifest`'s
+    /// call-site preconditions are, to keep the guard falsifiable rather than unverifiable.
+    #[test]
+    fn replace_clean_span_checked_refuses_a_span_past_the_live_text() {
+        let mut clean = CleanText {
+            text: "Dr Schmidt".to_string(),
+            manifest: Vec::new(),
+        };
+
+        let error = replace_clean_span_checked(&mut clean, 0..28, "", None)
+            .expect_err("a span past the live text must fail closed, not panic");
+        assert!(
+            matches!(
+                error,
+                Error::SafetyNetSpanInvalid {
+                    start: 0,
+                    end: 28,
+                    text_len: 10
+                }
+            ),
+            "expected the closed span-invalid variant, got {error}"
+        );
+        assert_eq!(clean.text, "Dr Schmidt", "a refused span must not mutate");
+
+        // A span off a char boundary is the other way `replace_range` panics.
+        let mut multibyte = CleanText {
+            text: "Grüße".to_string(),
+            manifest: Vec::new(),
+        };
+        assert!(
+            matches!(
+                replace_clean_span_checked(&mut multibyte, 0..3, "", None),
+                Err(Error::SafetyNetSpanInvalid { .. })
+            ),
+            "a span splitting a multi-byte char must fail closed"
+        );
+
+        // An in-bounds span still applies.
+        replace_clean_span_checked(&mut clean, 0..3, "", None).expect("an in-bounds span applies");
+        assert_eq!(clean.text, "Schmidt");
     }
 
     /// A resolution replaces raw bytes with a token restoring to exactly those bytes, so the

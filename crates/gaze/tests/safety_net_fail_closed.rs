@@ -209,18 +209,28 @@ fn overlapping_resolutions_fail_closed_with_a_typed_overlap_conflict() {
     );
 }
 
-/// The same overlap under the DEFAULT fallback still delivers a document.
+/// The same overlap shape under the DEFAULT fallback still delivers a document.
 ///
 /// This is the adopter-facing half of the contract: integrity failures route through the existing
 /// fallback path, so `SafetyNetFallback::Redact` keeps meaning redact-and-deliver.
+///
+/// Overlapping deletions remove exactly the UNION of the flagged spans: every flagged byte is
+/// gone, and unflagged text is left alone. The suspects here therefore span both emails, so
+/// "no fixture bytes survive" is a consequence of redacting what was flagged.
+///
+/// They did not before solo todo #2484. Each span used to be re-anchored to a document that the
+/// previous deletion had already shrunk, so an overlap deleted an arbitrary run of UNFLAGGED text
+/// past the flagged region — and once that arithmetic ran off the end, panicked. The trailing
+/// " tail" is the regression guard: it is not flagged, so it must survive.
 #[test]
 fn overlapping_resolutions_under_redact_fallback_still_deliver_a_document() {
-    let raw = format!("{EMAIL} and {OTHER}");
+    let raw = format!("{EMAIL} and {OTHER} tail");
     let pipeline = pipeline_with(
         Vec::new(),
         vec![vec![
             ScriptedSuspect::uncovered(0..EMAIL.len()),
-            ScriptedSuspect::uncovered(10..EMAIL.len() + 5),
+            // Overlaps the first suspect and runs to the end of the second email.
+            ScriptedSuspect::uncovered(10..EMAIL.len() + 5 + OTHER.len()),
         ]],
     );
     let session = Session::new(Scope::Ephemeral).expect("session");
@@ -231,6 +241,10 @@ fn overlapping_resolutions_under_redact_fallback_still_deliver_a_document() {
     assert!(
         !clean.contains("example.invalid"),
         "redact fallback left raw fixture bytes in {clean:?}"
+    );
+    assert_eq!(
+        clean, " tail",
+        "the union of the flagged spans is redacted and unflagged text survives verbatim"
     );
 }
 
