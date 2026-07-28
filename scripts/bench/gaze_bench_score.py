@@ -392,6 +392,7 @@ VALID_TRACE_COMBINATIONS = frozenset(
 )
 BUILTIN_CANONICAL_CLASSES = frozenset({"email", "name", "location", "organization"})
 SOURCE_ID_PATTERN = re.compile(r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z")
+MIN_BOUNDED_PROTECTED_VALUE_LENGTH = 4
 LEAK_SUSPECT_FIELDS = frozenset(
     {
         "clean_start",
@@ -748,9 +749,16 @@ def _validate_final_protection_trace(
     for source_id, context in source_identifiers:
         if source_id not in COMMITTED_SOURCE_ID_VOCABULARY and any(
             raw_value
-            and re.search(
-                rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}(?:$|(?=[._:/-]))",
-                source_id,
+            and (
+                source_id == raw_value
+                or (
+                    len(raw_value) >= MIN_BOUNDED_PROTECTED_VALUE_LENGTH
+                    and re.search(
+                        rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}"
+                        rf"(?:$|(?=[._:/-]))",
+                        source_id,
+                    )
+                )
             )
             for raw_value in protected_raw_values
         ):

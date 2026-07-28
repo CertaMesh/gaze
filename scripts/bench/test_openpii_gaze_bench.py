@@ -826,6 +826,7 @@ class ResponseValidationTests(unittest.TestCase):
         self,
     ) -> None:
         for protected_value, source_id in (
+            ("or", "or"),
             ("order-1234", "order-1234"),
             ("order-1234", "rule-order-1234-source"),
             ("davlan", "ner.davlan"),
@@ -888,27 +889,23 @@ class ResponseValidationTests(unittest.TestCase):
 
         benchmark.validate_response(document, response)
 
-    def test_trace_rejects_novel_id_with_bounded_protected_segment(self) -> None:
-        protected_value = "de"
+    def test_trace_accepts_novel_id_with_short_coincidental_segment(self) -> None:
+        protected_value = "or"
         document = benchmark.Document(
             uid="synthetic-response",
             text=protected_value,
-            language="de",
-            region="DE",
+            language="en",
+            region="US",
             source_dataset="unit-test",
-            spans=(benchmark.Span(0, len(protected_value), "POSTAL"),),
+            spans=(benchmark.Span(0, len(protected_value), "LOCATION"),),
         )
         response = self.tokenize_response()
         response["manifest_spans"][0]["raw_end"] = len(protected_value)
         item = response["final_protection_trace"][0]
         item["raw_end"] = len(protected_value)
-        item["provenance"]["source_ids"] = ["novel.de.source"]
+        item["provenance"]["source_ids"] = ["novel-payment-or-source"]
 
-        with self.assertRaisesRegex(
-            benchmark.ResponseValidationError,
-            "reproduces protected request content",
-        ):
-            benchmark.validate_response(document, response)
+        benchmark.validate_response(document, response)
 
     def test_trace_accepts_unbounded_source_id_substring(self) -> None:
         protected_value = "avl"
