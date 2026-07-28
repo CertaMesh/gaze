@@ -392,6 +392,7 @@ VALID_TRACE_COMBINATIONS = frozenset(
 )
 BUILTIN_CANONICAL_CLASSES = frozenset({"email", "name", "location", "organization"})
 SOURCE_ID_PATTERN = re.compile(r"(?=.{1,128}\Z)[a-z][a-z0-9]*(?:[._:/-][a-z0-9]+)*\Z")
+MIN_BOUNDED_PROTECTED_VALUE_LENGTH = 4
 LEAK_SUSPECT_FIELDS = frozenset(
     {
         "clean_start",
@@ -607,6 +608,25 @@ def load_committed_source_id_vocabulary(
                     recognizer["id"], f"{path}: recognizers[{index}].id"
                 )
             )
+            collision = recognizer.get("collision")
+            if collision is not None:
+                collision_context = f"{path}: recognizers[{index}].collision"
+                if not isinstance(collision, dict) or "family" not in collision:
+                    raise SourceIdVocabularyError(
+                        f"{collision_context} must be a table declaring a family"
+                    )
+                family = collision["family"]
+                if not isinstance(family, str):
+                    raise SourceIdVocabularyError(
+                        f"{collision_context}.family: expected a metadata-only "
+                        "stable identifier"
+                    )
+                identifiers.add(
+                    _committed_vocabulary_id(
+                        f"collision-family:{family}",
+                        f"{collision_context}.family",
+                    )
+                )
             recognizer_count += 1
     if recognizer_count == 0:
         raise SourceIdVocabularyError(
@@ -729,9 +749,16 @@ def _validate_final_protection_trace(
     for source_id, context in source_identifiers:
         if source_id not in COMMITTED_SOURCE_ID_VOCABULARY and any(
             raw_value
-            and re.search(
-                rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}(?:$|(?=[._:/-]))",
-                source_id,
+            and (
+                source_id == raw_value
+                or (
+                    len(raw_value) >= MIN_BOUNDED_PROTECTED_VALUE_LENGTH
+                    and re.search(
+                        rf"(?:^|(?<=[._:/-])){re.escape(raw_value)}"
+                        rf"(?:$|(?=[._:/-]))",
+                        source_id,
+                    )
+                )
             )
             for raw_value in protected_raw_values
         ):
