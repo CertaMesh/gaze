@@ -607,6 +607,25 @@ def load_committed_source_id_vocabulary(
                     recognizer["id"], f"{path}: recognizers[{index}].id"
                 )
             )
+            collision = recognizer.get("collision")
+            if collision is not None:
+                collision_context = f"{path}: recognizers[{index}].collision"
+                if not isinstance(collision, dict) or "family" not in collision:
+                    raise SourceIdVocabularyError(
+                        f"{collision_context} must be a table declaring a family"
+                    )
+                family = collision["family"]
+                if not isinstance(family, str):
+                    raise SourceIdVocabularyError(
+                        f"{collision_context}.family: expected a metadata-only "
+                        "stable identifier"
+                    )
+                identifiers.add(
+                    _committed_vocabulary_id(
+                        f"collision-family:{family}",
+                        f"{collision_context}.family",
+                    )
+                )
             recognizer_count += 1
     if recognizer_count == 0:
         raise SourceIdVocabularyError(

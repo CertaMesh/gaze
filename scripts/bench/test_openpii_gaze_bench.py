@@ -1475,6 +1475,10 @@ class ConfigTests(unittest.TestCase):
     def test_committed_source_id_vocabulary_loads_rulepack_and_model_ids(self) -> None:
         self.assertIn("postal.de", benchmark.COMMITTED_SOURCE_ID_VOCABULARY)
         self.assertIn(
+            "collision-family:payment-card-or-iban",
+            benchmark.COMMITTED_SOURCE_ID_VOCABULARY,
+        )
+        self.assertIn(
             "davlan-mbert-ner-hrl-onnx",
             benchmark.COMMITTED_SOURCE_ID_VOCABULARY,
         )
@@ -1483,6 +1487,66 @@ class ConfigTests(unittest.TestCase):
                 benchmark.COMMITTED_SOURCE_ID_VOCABULARY
             )
         )
+
+    def test_committed_source_id_vocabulary_derives_new_collision_family(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            repo_root = Path(temporary)
+            rulepack_dir = repo_root / "crates/gaze-recognizers/embedded"
+            rulepack_dir.mkdir(parents=True)
+            (rulepack_dir / "synthetic.toml").write_text(
+                '[[recognizers]]\n'
+                'id = "synthetic-rule"\n'
+                '[recognizers.collision]\n'
+                'family = "synthetic-new-family"\n',
+                encoding="utf-8",
+            )
+            model_path = repo_root / "scripts/bench/no_opf_models.toml"
+            model_path.parent.mkdir(parents=True)
+            model_path.write_text(
+                '[builtin_source_ids]\n'
+                'ids = ["synthetic-builtin"]\n'
+                '[synthetic_model]\n'
+                'id = "synthetic-model"\n',
+                encoding="utf-8",
+            )
+
+            vocabulary = benchmark.load_committed_source_id_vocabulary(repo_root)
+
+        self.assertIn("collision-family:synthetic-new-family", vocabulary)
+
+    def test_malformed_collision_family_metadata_fails_closed(self) -> None:
+        malformed_declarations = {
+            "not-a-table": 'collision = "synthetic-family"\n',
+            "missing-family": "collision = {}\n",
+            "non-string-family": "collision = { family = 42 }\n",
+            "invalid-family": 'collision = { family = "Not Canonical" }\n',
+        }
+        for name, declaration in malformed_declarations.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                repo_root = Path(temporary)
+                rulepack_dir = repo_root / "crates/gaze-recognizers/embedded"
+                rulepack_dir.mkdir(parents=True)
+                (rulepack_dir / "synthetic.toml").write_text(
+                    f'[[recognizers]]\nid = "synthetic-rule"\n{declaration}',
+                    encoding="utf-8",
+                )
+                model_path = repo_root / "scripts/bench/no_opf_models.toml"
+                model_path.parent.mkdir(parents=True)
+                model_path.write_text(
+                    '[builtin_source_ids]\n'
+                    'ids = ["synthetic-builtin"]\n'
+                    '[synthetic_model]\n'
+                    'id = "synthetic-model"\n',
+                    encoding="utf-8",
+                )
+
+                with self.assertRaisesRegex(
+                    benchmark.SourceIdVocabularyError,
+                    "collision|metadata-only stable identifier",
+                ):
+                    benchmark.load_committed_source_id_vocabulary(repo_root)
 
     def test_builtin_source_id_declaration_matches_committed_source_literals(
         self,
