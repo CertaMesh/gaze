@@ -126,6 +126,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Pipeline::scan_safety_nets` for a report-only pass. In-tree pipelines that
   register no safety net are unaffected.
 
+- **The three structured-document walkers are one `walk_structured` with a
+  `LeafOp`** (audit 7201 S01-F2, solo todo #2950). The pseudonymize,
+  clean-and-scan, and scan-only traversals of `RawDocument::Structured` were
+  three near-identical recursive copies that had already drifted. They are now
+  one function parameterized by `LeafOp { Pseudonymize, CleanAndScan, ScanOnly }`,
+  with every intentional difference — empty-string skipping, whether scalar
+  leaves are scanned, whether the document is rebuilt, and the root field-path
+  prefix — declared once on the op and documented there. Behaviour is unchanged
+  on all three paths, including the pre-existing divergence where
+  `scan_safety_nets_structured` reports bare-key field paths (`profile.email`)
+  and `clean_with_safety_net*` reports JSONPath-style ones (`$.profile.email`),
+  which is preserved deliberately and tracked as solo todo #2958.
+
 - **`SafetyNetMode` x `SafetyNetFallback` is lowered once to a total
   `SafetyNetDecision`** (audit 7201 S01-F1, solo todo #2949). The two public
   fields spell twelve pairs; the runtime has six behaviours, and seven pairs
@@ -275,6 +288,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FallbackReason` variant; `gaze-types` is unchanged.
 
 ### Fixed
+
+- **Structured documents no longer accept a safety-net enforcement request and
+  silently perform observation** (audit 7201 S01-F2, solo todo #2950). The
+  structured arm of `clean_with_safety_net_policy_detect_context` cleaned each
+  field, ran the nets over the result, and returned `Ok` — with no enforcement
+  stage anywhere on the path. A caller passing `SafetyNetMode::Redact` or
+  `SafetyNetMode::Resolve` with a `RawDocument::Structured` therefore got
+  observer-only behaviour and a success return, with the suspect bytes still in
+  the document. It now fails closed with the new
+  `Error::UnsupportedSafetyNetModeForStructured { mode }` before any field is
+  tokenized. **Adopters passing structured documents with an enforcing mode now
+  get an error** — the intended correction; pass `SafetyNetMode::Strict` (or
+  `Tolerant`) for the observer behaviour they were actually receiving, or use
+  `Pipeline::scan_safety_nets_structured`. Note that the policy-less
+  `clean_with_safety_net*` entry points default to `Resolve`, so structured
+  documents must go through `clean_with_safety_net_policy_detect_context`.
+  Text documents are unaffected. Axis 1.
 
 - **Safety-net `resolve` fallback acted on the primary report instead of the
   residual one, destroying tokens and shipping residual PII under the default

@@ -1001,9 +1001,14 @@ fn structured_safety_net_traverses_nested_fields_and_preserves_shape() {
 
     let raw = RawDocument::Structured(BTreeMap::from([("user".to_string(), Value::Object(user))]));
 
-    let (clean, manifest, report) = pipeline
-        .clean_with_safety_net(&session, raw, &[gaze::LocaleTag::Global])
-        .expect("structured safety net clean");
+    let (clean, manifest, report) = clean_with_policy(
+        &pipeline,
+        &session,
+        raw,
+        &[gaze::LocaleTag::Global],
+        observer_policy(),
+    )
+    .expect("structured safety net clean");
 
     assert!(manifest.is_empty(), "structured manifests stay field-local");
     assert_eq!(report.stats.suspect_count, 1);
@@ -1045,9 +1050,14 @@ fn structured_locale_skip_uses_session_level_locale_chain() {
         Value::String("alice@example.invalid".to_string()),
     )]));
 
-    let (_, _, report) = pipeline
-        .clean_with_safety_net(&session, raw, &[gaze::LocaleTag::DeDe])
-        .expect("structured locale skip");
+    let (_, _, report) = clean_with_policy(
+        &pipeline,
+        &session,
+        raw,
+        &[gaze::LocaleTag::DeDe],
+        observer_policy(),
+    )
+    .expect("structured locale skip");
 
     // For RawDocument::Structured, locale gating uses session-level locale
     // chain across all fields; fields do not carry per-field locale metadata.
@@ -1076,9 +1086,14 @@ fn structured_field_error_fails_closed_at_doc_level() {
         )])),
     )]));
 
-    let err = pipeline
-        .clean_with_safety_net(&session, raw, &[gaze::LocaleTag::Global])
-        .expect_err("field-level safety net errors fail closed");
+    let err = clean_with_policy(
+        &pipeline,
+        &session,
+        raw,
+        &[gaze::LocaleTag::Global],
+        observer_policy(),
+    )
+    .expect_err("field-level safety net errors fail closed");
 
     assert!(matches!(
         err,
@@ -1955,4 +1970,156 @@ fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protect
             "{refusal:?}: the protected suspect keeps its Preserve row"
         );
     }
+}
+
+/// Axis-1 contract hole: a caller asking for enforcement on a structured document was given
+/// observation. The structured arm of `clean_target_with_safety_net_policy_detect_context` ran the
+/// nets per field, collected the report, and returned `Ok` — the suspect bytes were still in the
+/// document, and nothing in the return value said the requested action had not been performed.
+#[test]
+fn structured_documents_do_not_silently_observe_when_enforcement_is_requested() {
+    let raw_email = "alice@example.invalid";
+    for mode in [gaze::SafetyNetMode::Redact, gaze::SafetyNetMode::Resolve] {
+        let net =
+            MockNet::new(Some(0..raw_email.len()), PiiClass::Email).with_field_path("$.email");
+        let pipeline = pipeline_with_net(Some(net));
+        let session = session();
+        let raw = RawDocument::Structured(BTreeMap::from([(
+            "email".to_string(),
+            Value::String(raw_email.to_string()),
+        )]));
+
+        let result = clean_with_policy(
+            &pipeline,
+            &session,
+            raw,
+            &[gaze::LocaleTag::Global],
+            gaze::SafetyNetPolicy::new(mode, gaze::SafetyNetFallback::Redact),
+        );
+
+        match result {
+            // Fail closed: the request is refused with a typed error.
+            Err(err) => assert!(
+                matches!(
+                    err,
+                    gaze::Error::UnsupportedSafetyNetModeForStructured { .. }
+                ),
+                "{mode:?}: unexpected error {err:?}"
+            ),
+            // Or the enforcement actually happened. What must never occur is Ok with the
+            // suspect bytes still present.
+            Ok((clean, _, _)) => {
+                let CleanDocument::Structured(fields) = clean else {
+                    panic!("expected structured output");
+                };
+                let Value::String(email) = &fields["email"] else {
+                    panic!("expected string leaf");
+                };
+                assert!(
+                    !email.contains(raw_email),
+                    "{mode:?}: enforcement requested, observation performed — suspect bytes shipped"
+                );
+            }
+        }
+    }
+}
+
+/// Nested-traversal parity across all three `LeafOp`s.
+///
+/// The three structured walkers were near-identical copies and had already drifted (see the
+/// root-path note below). Folding them into one `walk_structured` makes divergence a compile-time
+/// impossibility for everything except what the op deliberately varies; this pins the parts that
+/// must stay identical.
+#[test]
+fn structured_walk_has_nested_parity_across_every_leaf_op() {
+    fn document() -> BTreeMap<String, Value> {
+        let contact = BTreeMap::from([(
+            "email".to_string(),
+            Value::String("alice@example.invalid".to_string()),
+        )]);
+        let user = BTreeMap::from([
+            (
+                "contacts".to_string(),
+                Value::Array(vec![Value::Object(contact)]),
+            ),
+            ("empty".to_string(), Value::String(String::new())),
+            ("active".to_string(), Value::Bool(true)),
+            ("count".to_string(), Value::I64(7)),
+        ]);
+        BTreeMap::from([("user".to_string(), Value::Object(user))])
+    }
+
+    fn seen_paths(net: &MockNet) -> Vec<String> {
+        let mut paths = net
+            .seen
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|entry| entry.field_path.clone().unwrap_or_default())
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths
+    }
+
+    // Leg 1: Pseudonymize, through the plain structured entry point.
+    let pseudonymize_net = MockNet::new(None, PiiClass::Email);
+    let pseudonymized = pipeline_with_net(Some(pseudonymize_net.clone()))
+        .redact(&session(), RawDocument::Structured(document()))
+        .expect("pseudonymize structured");
+    let CleanDocument::Structured(pseudonymized) = pseudonymized else {
+        panic!("expected structured output");
+    };
+    // Pseudonymize runs no safety net at all — not even over the scalar leaves.
+    assert!(seen_paths(&pseudonymize_net).is_empty());
+
+    // Leg 2: CleanAndScan, through the observer-policy safety-net entry point.
+    let clean_net = MockNet::new(None, PiiClass::Email);
+    let (cleaned, _, _) = clean_with_policy(
+        &pipeline_with_net(Some(clean_net.clone())),
+        &session(),
+        RawDocument::Structured(document()),
+        &[gaze::LocaleTag::Global],
+        observer_policy(),
+    )
+    .expect("clean structured");
+    let CleanDocument::Structured(cleaned) = cleaned else {
+        panic!("expected structured output");
+    };
+
+    // Leg 3: ScanOnly, through the observer scan API.
+    let scan_net = MockNet::new(None, PiiClass::Email);
+    pipeline_with_net(Some(scan_net.clone()))
+        .scan_safety_nets_structured(&session(), &document(), &[gaze::LocaleTag::Global])
+        .expect("scan structured");
+
+    // Both rebuilding ops reconstruct the same document: nested objects, arrays, the empty
+    // string, and both scalar kinds survive the walk under a preserve-only rule set.
+    assert_eq!(pseudonymized, cleaned);
+    assert_eq!(pseudonymized, document());
+
+    // Both scanning ops visit the same leaves, in the same order, skipping the empty string and
+    // covering both scalars.
+    let cleaned_paths = seen_paths(&clean_net);
+    let scanned_paths = seen_paths(&scan_net);
+    assert_eq!(
+        cleaned_paths,
+        vec![
+            "$.user.active".to_string(),
+            "$.user.contacts[0].email".to_string(),
+            "$.user.count".to_string(),
+        ]
+    );
+    // Documented divergence, preserved rather than silently unified: `scan_safety_nets_structured`
+    // reports bare-key roots where the cleaning path reports JSONPath-style ones (todo #2958).
+    assert_eq!(
+        scanned_paths,
+        cleaned_paths
+            .iter()
+            .map(|path| path.trim_start_matches("$.").to_string())
+            .collect::<Vec<_>>()
+    );
+    assert!(
+        !cleaned_paths.iter().any(|path| path.ends_with("empty")),
+        "empty string leaves are skipped by both scanning ops"
+    );
 }

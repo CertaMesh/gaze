@@ -60,6 +60,24 @@ fn tokenizing_pipeline(net: Option<MockSafetyNet>) -> Pipeline {
     builder.build().expect("pipeline")
 }
 
+/// Structured documents accept only an observer policy; the policy-less `clean_with_safety_net`
+/// defaults to `Resolve`, which the structured entry point refuses. See
+/// `Error::UnsupportedSafetyNetModeForStructured`.
+fn clean_structured_observing(
+    pipeline: &Pipeline,
+    session: &gaze::Session,
+    raw: RawDocument,
+    locales: &[LocaleTag],
+) -> gaze::Result<(CleanDocument, Vec<gaze::EmittedTokenSpan>, LeakReport)> {
+    pipeline.clean_with_safety_net_policy_detect_context(
+        session,
+        raw,
+        locales,
+        &gaze::DictionaryBundle::default(),
+        gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Strict, gaze::SafetyNetFallback::Redact),
+    )
+}
+
 fn precomputed_email_report(span: Range<usize>) -> LeakReport {
     LeakReport::from_parts(
         vec![LeakSuspect::new(
@@ -116,9 +134,9 @@ fn field_path_reports_drive_structured_tests() {
         ])),
     )]));
 
-    let (clean, manifest, report) = pipeline
-        .clean_with_safety_net(&session, raw, &[LocaleTag::Global])
-        .expect("structured safety-net clean");
+    let (clean, manifest, report) =
+        clean_structured_observing(&pipeline, &session, raw, &[LocaleTag::Global])
+            .expect("structured safety-net clean");
 
     assert!(manifest.is_empty());
     assert_eq!(report.stats.suspect_count, 1);
@@ -180,8 +198,7 @@ fn locale_skip_still_uses_session_level_locale_chain_for_structured_docs() {
         Value::String("alice@example.invalid".to_string()),
     )]));
 
-    let (_, _, report) = pipeline
-        .clean_with_safety_net(&session, raw, &[LocaleTag::DeDe])
+    let (_, _, report) = clean_structured_observing(&pipeline, &session, raw, &[LocaleTag::DeDe])
         .expect("structured locale skip");
 
     assert_eq!(report.stats.locale_skipped_count, 1);
