@@ -131,51 +131,86 @@ pub trait LeakSuspectLogger: Send + Sync {
     fn log_leak_suspect(&self, entry: &LeakSuspectLogEntry) -> Result<()>;
 }
 
+#[derive(Clone, Copy)]
+enum ColumnConstraint {
+    NotNull,
+    Nullable,
+    Default(&'static str),
+}
+
+struct ColumnSpec {
+    name: &'static str,
+    sql_type: &'static str,
+    constraint: ColumnConstraint,
+    migrate: bool,
+    backfill: Option<&'static str>,
+}
+
+impl ColumnSpec {
+    fn declaration(&self) -> String {
+        match self.constraint {
+            ColumnConstraint::NotNull => format!("{} NOT NULL", self.sql_type),
+            ColumnConstraint::Nullable => format!("{} NULL", self.sql_type),
+            ColumnConstraint::Default(value) => {
+                format!("{} NOT NULL DEFAULT '{value}'", self.sql_type)
+            }
+        }
+    }
+}
+
+const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
+    ColumnSpec { name: "source", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
+    ColumnSpec { name: "recognizer_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: Some("UPDATE redaction_log SET recognizer_id = 'legacy_unversioned' WHERE recognizer_id IS NULL") },
+    ColumnSpec { name: "recognizer_version_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "class", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
+    ColumnSpec { name: "action", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
+    ColumnSpec { name: "field_name", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: false, backfill: None },
+    ColumnSpec { name: "document_kind", sql_type: "TEXT", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
+    ColumnSpec { name: "conflict_loser", sql_type: "INTEGER", constraint: ColumnConstraint::NotNull, migrate: false, backfill: None },
+    ColumnSpec { name: "decided_by", sql_type: "TEXT", constraint: ColumnConstraint::Default("none"), migrate: true, backfill: None },
+    ColumnSpec { name: "created_at", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "session_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "snapshot_scheme", sql_type: "TEXT", constraint: ColumnConstraint::Default(DEFAULT_SNAPSHOT_SCHEME), migrate: true, backfill: None },
+    ColumnSpec { name: "snapshot_alg", sql_type: "TEXT", constraint: ColumnConstraint::Default(DEFAULT_SNAPSHOT_ALG), migrate: true, backfill: None },
+    ColumnSpec { name: "snapshot_key_version", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "validator_fail_reason", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "ambiguity_record", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "collision_family", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "collision_variant", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "fallback_triggered", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "backend_silently_dropped", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_stage", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_model_id", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_model_version", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_artifact_sha256", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_tokenizer_sha256", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_locale_resolved", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_locale_match_kind", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_canonical_class", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_native_class", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_confidence", sql_type: "REAL", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "provenance_merged_from", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_policy", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_decision", sql_type: "TEXT", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_unknown_token_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_manifest_bypass_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_fresh_pii_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_phase_mask", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+];
 impl SqliteLogger {
     pub fn new(path: &Path) -> Result<Self> {
         let conn = Connection::open(path).map_err(|err| AuditError::Sqlite(err.to_string()))?;
+        let redaction_columns = REDACTION_LOG_COLUMNS
+            .iter()
+            .map(|column| format!("{} {}", column.name, column.declaration()))
+            .collect::<Vec<_>>()
+            .join(",\n                ");
+        conn.execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS redaction_log (\n                {redaction_columns}\n            );"
+        ))
+        .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         conn.execute_batch(
             r#"
-            CREATE TABLE IF NOT EXISTS redaction_log (
-                source TEXT NOT NULL,
-                recognizer_id TEXT NULL,
-                recognizer_version_id TEXT NULL,
-                class TEXT NOT NULL,
-                action TEXT NOT NULL,
-                field_name TEXT NULL,
-                document_kind TEXT NOT NULL,
-                conflict_loser INTEGER NOT NULL,
-                decided_by TEXT NOT NULL DEFAULT 'none',
-                created_at INTEGER NULL,
-                session_id TEXT NULL,
-                snapshot_scheme TEXT NOT NULL DEFAULT 'gaze.snapshot.v1.sha256-salted',
-                snapshot_alg TEXT NOT NULL DEFAULT 'SHA-256',
-                snapshot_key_version INTEGER NULL,
-                validator_fail_reason TEXT NULL,
-                ambiguity_record TEXT NULL,
-                collision_family TEXT NULL,
-                collision_variant TEXT NULL,
-                fallback_triggered TEXT NULL,
-                backend_silently_dropped TEXT NULL,
-                provenance_stage TEXT NULL,
-                provenance_model_id TEXT NULL,
-                provenance_model_version TEXT NULL,
-                provenance_artifact_sha256 TEXT NULL,
-                provenance_tokenizer_sha256 TEXT NULL,
-                provenance_locale_resolved TEXT NULL,
-                provenance_locale_match_kind TEXT NULL,
-                provenance_canonical_class TEXT NULL,
-                provenance_native_class TEXT NULL,
-                provenance_confidence REAL NULL,
-                provenance_merged_from TEXT NULL,
-                restore_policy TEXT NULL,
-                restore_decision TEXT NULL,
-                restore_unknown_token_count INTEGER NULL,
-                restore_manifest_bypass_count INTEGER NULL,
-                restore_fresh_pii_count INTEGER NULL,
-                restore_phase_mask INTEGER NULL
-            );
-
             CREATE TABLE IF NOT EXISTS safety_net_log (
                 id INTEGER PRIMARY KEY,
                 safety_net_id TEXT NOT NULL,
@@ -198,167 +233,27 @@ impl SqliteLogger {
             "#,
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        let columns = {
-            let mut stmt = conn
-                .prepare("PRAGMA table_info(redaction_log)")
-                .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-            let columns = stmt
-                .query_map([], |row| row.get::<_, String>(1))
-                .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-            let mut names = Vec::new();
-            for column in columns {
-                names.push(column.map_err(|err| AuditError::Sqlite(err.to_string()))?);
-            }
-            names
-        };
-        if !columns.iter().any(|column| column == "decided_by") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN decided_by TEXT NOT NULL DEFAULT 'none'",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "created_at") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN created_at INTEGER NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "session_id") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN session_id TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "snapshot_scheme") {
+
+        let columns = redaction_log_column_names(&conn)?;
+        for column in REDACTION_LOG_COLUMNS
+            .iter()
+            .filter(|column| column.migrate && !columns.contains(column.name))
+        {
             conn.execute(
                 &format!(
-                    "ALTER TABLE redaction_log ADD COLUMN snapshot_scheme TEXT NOT NULL DEFAULT '{}'",
-                    DEFAULT_SNAPSHOT_SCHEME
+                    "ALTER TABLE redaction_log ADD COLUMN {} {}",
+                    column.name,
+                    column.declaration()
                 ),
                 [],
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "snapshot_alg") {
-            conn.execute(
-                &format!(
-                    "ALTER TABLE redaction_log ADD COLUMN snapshot_alg TEXT NOT NULL DEFAULT '{}'",
-                    DEFAULT_SNAPSHOT_ALG
-                ),
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns
-            .iter()
-            .any(|column| column == "snapshot_key_version")
-        {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN snapshot_key_version INTEGER NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns
-            .iter()
-            .any(|column| column == "validator_fail_reason")
-        {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN validator_fail_reason TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "ambiguity_record") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN ambiguity_record TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "collision_family") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN collision_family TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "collision_variant") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN collision_variant TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "fallback_triggered") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN fallback_triggered TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns
-            .iter()
-            .any(|column| column == "backend_silently_dropped")
-        {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN backend_silently_dropped TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns.iter().any(|column| column == "recognizer_id") {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN recognizer_id TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-            conn.execute(
-                "UPDATE redaction_log SET recognizer_id = 'legacy_unversioned' WHERE recognizer_id IS NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        if !columns
-            .iter()
-            .any(|column| column == "recognizer_version_id")
-        {
-            conn.execute(
-                "ALTER TABLE redaction_log ADD COLUMN recognizer_version_id TEXT NULL",
-                [],
-            )
-            .map_err(|err| AuditError::Sqlite(err.to_string()))?;
-        }
-        for (column, column_type) in [
-            ("provenance_stage", "TEXT"),
-            ("provenance_model_id", "TEXT"),
-            ("provenance_model_version", "TEXT"),
-            ("provenance_artifact_sha256", "TEXT"),
-            ("provenance_tokenizer_sha256", "TEXT"),
-            ("provenance_locale_resolved", "TEXT"),
-            ("provenance_locale_match_kind", "TEXT"),
-            ("provenance_canonical_class", "TEXT"),
-            ("provenance_native_class", "TEXT"),
-            ("provenance_confidence", "REAL"),
-            ("provenance_merged_from", "TEXT"),
-            ("restore_policy", "TEXT"),
-            ("restore_decision", "TEXT"),
-            ("restore_unknown_token_count", "INTEGER"),
-            ("restore_manifest_bypass_count", "INTEGER"),
-            ("restore_fresh_pii_count", "INTEGER"),
-            ("restore_phase_mask", "INTEGER"),
-        ] {
-            if !columns.iter().any(|existing| existing == column) {
-                conn.execute(
-                    &format!("ALTER TABLE redaction_log ADD COLUMN {column} {column_type} NULL"),
-                    [],
-                )
-                .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+            if let Some(backfill) = column.backfill {
+                conn.execute(backfill, [])
+                    .map_err(|err| AuditError::Sqlite(err.to_string()))?;
             }
         }
+
         Ok(Self {
             conn: Mutex::new(conn),
         })
@@ -1038,6 +933,25 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM redaction_log", [], |row| row.get(0))
             .expect("row count");
         assert_eq!(row_count, 1);
+    }
+
+    #[test]
+    fn fresh_and_legacy_migrated_schemas_have_the_same_columns() {
+        let fresh_db = tempfile::NamedTempFile::new().unwrap();
+        let _fresh = SqliteLogger::new(fresh_db.path()).expect("fresh schema");
+
+        let legacy_db = tempfile::NamedTempFile::new().unwrap();
+        create_legacy_redaction_log(legacy_db.path());
+        let _migrated = SqliteLogger::new(legacy_db.path()).expect("migrated schema");
+
+        let fresh_columns = redaction_log_columns(fresh_db.path())
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let migrated_columns = redaction_log_columns(legacy_db.path())
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(migrated_columns, fresh_columns);
     }
 
     #[test]
