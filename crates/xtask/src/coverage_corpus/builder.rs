@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use super::generators::GeneratorRegistry;
 use super::templates::{self, Template};
 use super::COVERAGE_CORPUS_SEED;
+use crate::repo::repo_root;
 
 #[derive(Debug, Parser)]
 pub struct Args {
@@ -293,14 +294,6 @@ fn tmp_path(path: &Path) -> PathBuf {
     let mut tmp = path.as_os_str().to_os_string();
     tmp.push(".tmp");
     PathBuf::from(tmp)
-}
-
-fn repo_root() -> Result<PathBuf> {
-    Ok(PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .and_then(Path::parent)
-        .context("resolve workspace root from xtask manifest dir")?
-        .to_path_buf())
 }
 
 #[derive(Debug, Serialize)]

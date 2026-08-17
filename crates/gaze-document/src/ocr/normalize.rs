@@ -6,6 +6,7 @@
 //! around the `@` of an email address, e.g.:
 //!
 //! ```text
+// fixture-cited(crates/gaze-document/src/ocr/normalize.rs:ocr::normalize::tests::collapses_space_before_at)
 //! jane.doe@example.invalid   →   "jane.doe @example.invalid"
 //! ```
 //!
