@@ -295,7 +295,7 @@ not implemented (see the note at the top of §6). The **default** cell is marked
 | `redact`           | *not consulted* | *not consulted* | *not consulted* |
 | `strict` / `tolerant` | *not consulted* | *not consulted* | *not consulted* |
 
-The `strict` and `redact` defaults preserve axis-1. The `tolerant` cell violates axis-1 by design and is dev-only.
+The `strict` and `redact` cells both preserve axis-1 — `strict` by rejecting the document, `redact` by removing the residual bytes. `redact` is the default. The `tolerant` cell violates axis-1 by design and is dev-only.
 
 **The fallback acts on the residual report, not the primary one.** When the resolve pass converges
 and the post-resolution re-run flags something, the residual lives in the *re-run* report at

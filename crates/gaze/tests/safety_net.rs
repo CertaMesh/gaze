@@ -1791,3 +1791,168 @@ fn returned_report_is_not_inflated_when_resolve_converges() {
 
     assert_eq!(report.stats.suspect_count, 1, "no duplicate suspects");
 }
+
+/// Which up-front refusal the first-pass fixture drives.
+#[derive(Debug, Clone, Copy)]
+enum FirstPassRefusal {
+    /// A class mismatch outside every token: `resolve_safety_net_suspects` refuses in its
+    /// classification loop with `OverlapConflict`.
+    ClassMismatchOutsideTokens,
+    /// An uncovered span slicing a multi-byte character: phase 2's char-boundary check refuses
+    /// with `ResidualSuspect`.
+    NonCharBoundary,
+}
+
+/// Reports on **every** check — no call counter, no statefulness.
+///
+/// This is the shape that makes the first-pass refusal branch reachable with an ordinary
+/// deterministic backend: one span inside the token the primary pass already minted, plus one
+/// span that makes the resolver refuse before it mutates anything.
+#[derive(Clone)]
+struct DeterministicMixedNet {
+    refusal: FirstPassRefusal,
+    residual: &'static str,
+}
+
+impl SafetyNet for DeterministicMixedNet {
+    fn id(&self) -> &str {
+        "deterministic-mixed"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        let suspect = |span: Range<usize>, kind| {
+            LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                "deterministic-mixed",
+                Some(0.99),
+                kind,
+                PiiClass::Name.to_canonical_str(),
+                None,
+            )
+        };
+        let mut suspects = Vec::new();
+        // (a) Inside the minted token: already protected, must survive whatever happens next.
+        if let Some(minted) = context.manifest.spans.first() {
+            let span = minted.clean_span.clone();
+            if let Some(kind) = context.manifest.diff_against(&span, &PiiClass::Name) {
+                suspects.push(suspect(span, kind));
+            }
+        }
+        // (b) The suspect that makes the resolver refuse up front.
+        if let Some(start) = clean_text.find(self.residual) {
+            match self.refusal {
+                FirstPassRefusal::ClassMismatchOutsideTokens => suspects.push(suspect(
+                    start..start + self.residual.len(),
+                    LeakKind::ClassMismatch {
+                        pipeline_class: PiiClass::Email,
+                        safety_net_class: PiiClass::Name,
+                    },
+                )),
+                // Two bytes into "ré" lands mid-character.
+                FirstPassRefusal::NonCharBoundary => {
+                    suspects.push(suspect(start..start + 2, LeakKind::Uncovered))
+                }
+            }
+        }
+        Ok(suspects)
+    }
+}
+
+/// The **first-pass** half of the fallback-filtering contract, reachable with a plain
+/// deterministic net.
+///
+/// When `resolve_safety_net_suspects` refuses up front, it returns from inside its classification
+/// loop — above its own `Preserve` logging. So without filtering, a protected suspect on this path
+/// is both redacted (deleting a minted token, destroying restore) and absent from the audit. This
+/// path needs no stateful backend at all: one net, one pass, one span inside a token and one span
+/// that cannot be honored.
+#[test]
+fn first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protected_one() {
+    let email = "alice@example.invalid";
+    let cases = [
+        (
+            FirstPassRefusal::ClassMismatchOutsideTokens,
+            "residue",
+            format!("{email} residue"),
+            FallbackReason::OverlapConflict,
+        ),
+        (
+            FirstPassRefusal::NonCharBoundary,
+            "rés",
+            format!("{email} rés"),
+            FallbackReason::ResidualSuspect,
+        ),
+    ];
+
+    for (refusal, residual, raw, expected_reason) in cases {
+        let logger = MemoryLogger::new();
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                span: 0..email.len(),
+                class: PiiClass::Email,
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(DeterministicMixedNet { refusal, residual })
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+        let session = session();
+
+        let (clean, manifest, _) = clean_with_policy(
+            &pipeline,
+            &session,
+            RawDocument::Text(raw.clone()),
+            &[gaze::LocaleTag::Global],
+            gaze::SafetyNetPolicy::default(),
+        )
+        .unwrap_or_else(|err| panic!("{refusal:?}: {err:?}"));
+        let clean = text(clean);
+
+        // The protected token survived, so its manifest entry and restore path are intact.
+        assert_eq!(
+            manifest.len(),
+            1,
+            "{refusal:?}: the protected token must survive the fallback"
+        );
+        let restored = session.restore_strict_text(&clean).expect("restore");
+        assert!(
+            restored.starts_with(email),
+            "{refusal:?}: restore must return the protected value byte-exactly, got {restored:?}"
+        );
+
+        // Exactly one row for each disposition, and the redaction names the refusal reason.
+        let rows = logger.entries();
+        let redacted = rows
+            .iter()
+            .filter(|row| row.decided_by == ConflictTier::Fallback && row.action == Action::Redact)
+            .collect::<Vec<_>>();
+        let preserved = rows
+            .iter()
+            .filter(|row| row.action == Action::Preserve)
+            .count();
+        assert_eq!(
+            redacted.len(),
+            1,
+            "{refusal:?}: one redacted actionable row"
+        );
+        assert_eq!(
+            redacted[0].fallback_triggered,
+            Some(expected_reason),
+            "{refusal:?}: the row names the refusal reason"
+        );
+        assert_eq!(
+            preserved, 1,
+            "{refusal:?}: the protected suspect keeps its Preserve row"
+        );
+    }
+}

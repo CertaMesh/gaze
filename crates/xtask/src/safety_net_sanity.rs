@@ -57,6 +57,7 @@ fn suites() -> Vec<Suite> {
                 "resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report",
                 "resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens",
                 "resolve_fallback_does_not_redact_stale_pre_resolve_spans",
+                "first_pass_refusal_redacts_only_the_actionable_suspect_and_audits_the_protected_one",
                 "fallback_redaction_is_traced_as_fallback_redact",
             ],
         },
