@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, Output, Stdio};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -315,12 +315,17 @@ action = "preserve"
     (dir, path)
 }
 
-#[test]
-#[file_serial(gaze_subprocess)]
-fn daemon_processes_jsonl_and_isolates_sessions() {
-    let (_dir, policy) = write_policy();
-    let audit_dir = tempdir().unwrap();
-    let audit_db = audit_dir.path().join("audit.db");
+/// Drives `count` JSONL requests through one `gaze daemon` process, alternating
+/// between two session ids so per-session manifest isolation is exercised.
+///
+/// Returns the wall-clock duration next to the output instead of asserting on
+/// it: throughput is a performance property, and only the opt-in throughput
+/// test below looks at the duration (solo #2981).
+fn run_daemon_batch(
+    policy: &std::path::Path,
+    audit_db: &std::path::Path,
+    count: usize,
+) -> (Duration, Output) {
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
         .args([
             "daemon",
@@ -342,7 +347,7 @@ fn daemon_processes_jsonl_and_isolates_sessions() {
     let started = Instant::now();
     {
         let stdin = child.stdin.as_mut().unwrap();
-        for idx in 0..100 {
+        for idx in 0..count {
             let session_id = if idx % 2 == 0 {
                 "session-a"
             } else {
@@ -357,15 +362,40 @@ fn daemon_processes_jsonl_and_isolates_sessions() {
     }
 
     let output = child.wait_with_output().unwrap();
+    (started.elapsed(), output)
+}
+
+/// Budget for the opt-in throughput test, mirroring the
+/// `GAZE_TEST_SUBPROCESS_TIMEOUT_SECS` helper #430 introduced: generous by
+/// default, tightenable when a run deliberately hunts a perf regression.
+fn daemon_throughput_budget() -> Duration {
+    let seconds = std::env::var("GAZE_TEST_DAEMON_THROUGHPUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("daemon throughput budget must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "daemon throughput budget must be positive");
+    Duration::from_secs(seconds)
+}
+
+// What this guarantees: every one of the 100 JSONL requests is answered, each
+// answer is tokenized and carries a non-empty manifest, `session-a` and
+// `session-b` never share a token (per-session manifest isolation), and every
+// audit row is attributed to the daemon stage. How *fast* the daemon got there
+// is not one of those properties - see the opt-in throughput test below.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_processes_jsonl_and_isolates_sessions() {
+    let (_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+    let (_elapsed, output) = run_daemon_batch(&policy, &audit_db, 100);
     assert!(
         output.status.success(),
         "stderr={}",
         String::from_utf8_lossy(&output.stderr)
-    );
-    let elapsed = started.elapsed();
-    assert!(
-        elapsed < Duration::from_secs(10),
-        "100 daemon requests took {elapsed:?}"
     );
 
     let stdout = String::from_utf8(output.stdout).unwrap();
@@ -410,6 +440,37 @@ fn daemon_processes_jsonl_and_isolates_sessions() {
     assert!(stages
         .iter()
         .all(|stage| stage.as_deref() == Some("daemon")));
+}
+
+// Throughput used to be asserted inside the correctness test above with a hard
+// `elapsed < 10s`. A busy runner measured 10.845s and took main's `xtask gates`
+// run down with it (solo #2981) - the same fixed-budget-loses-its-race class as
+// solo #2404 / #2916, which #430 fixed for subprocess timeouts. A stopwatch
+// proves nothing about correctness, so it lives here instead: `#[ignore]` keeps
+// it out of every CI invocation (`cargo test` never passes `--include-ignored`
+// in this repo) while it stays runnable on demand with
+// `cargo test -p gaze-cli --all-features --test daemon_smoke -- --ignored`.
+#[test]
+#[ignore = "throughput budget, not a correctness property; run explicitly with --ignored"]
+#[file_serial(gaze_subprocess)]
+fn daemon_throughput_stays_within_opt_in_budget() {
+    let (_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let (elapsed, output) = run_daemon_batch(&policy, &audit_dir.path().join("audit.db"), 100);
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let answered = String::from_utf8(output.stdout).unwrap().lines().count();
+    assert_eq!(answered, 100, "throughput run must answer every request");
+
+    let budget = daemon_throughput_budget();
+    assert!(
+        elapsed < budget,
+        "100 daemon requests took {elapsed:?} against a {budget:?} budget; \
+         override with GAZE_TEST_DAEMON_THROUGHPUT_SECS"
+    );
 }
 
 #[test]

@@ -234,8 +234,14 @@ exec sleep 30
 
     assert!(matches!(error, SafetyNetError::Runtime { .. }));
     assert!(error.to_string().contains("timed out"));
+    // The failure mode this bounds is "the write blocked instead of timing
+    // out", which returns only when the child's own `sleep 30` exits - so any
+    // bound comfortably under 30s still discriminates it. The old 17s left the
+    // configured 15s timeout just 2s of slack, which is the same
+    // fixed-budget-loses-its-race shape as solo #2981; sit halfway between the
+    // two instead so a loaded runner cannot turn this into a false red.
     assert!(
-        elapsed < Duration::from_secs(17),
+        elapsed < Duration::from_secs(25),
         "blocked stdin timeout took {elapsed:?}"
     );
 
