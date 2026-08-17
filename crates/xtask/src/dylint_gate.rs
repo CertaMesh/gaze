@@ -18,8 +18,7 @@ pub fn run() -> Result<()> {
         println!("dylint_gate: passed");
         return Ok(());
     }
-    if !cargo_dylint_available() {
-        eprintln!("cargo-dylint not installed; skipping dylint gate. CI installs it explicitly.");
+    if !cargo_dylint_requirement(running_in_ci(), cargo_dylint_available())? {
         return Ok(());
     }
     run_cargo_dylint(&root)?;
@@ -28,7 +27,22 @@ pub fn run() -> Result<()> {
 }
 
 fn should_run_cargo_dylint() -> bool {
-    env_flag("CI") || env_flag("GITHUB_ACTIONS") || env_flag(RUN_DYLINT_ENV)
+    running_in_ci() || env_flag(RUN_DYLINT_ENV)
+}
+
+fn running_in_ci() -> bool {
+    env_flag("CI") || env_flag("GITHUB_ACTIONS")
+}
+
+fn cargo_dylint_requirement(running_in_ci: bool, available: bool) -> Result<bool> {
+    if available {
+        return Ok(true);
+    }
+    if running_in_ci {
+        bail!("dylint_gate: cargo-dylint is required in CI but was not found");
+    }
+    eprintln!("cargo-dylint not installed; skipping dylint gate outside CI.");
+    Ok(false)
 }
 
 fn env_flag(var: &str) -> bool {
@@ -110,4 +124,24 @@ fn run_cargo_dylint(root: &Path) -> Result<()> {
         bail!("dylint_gate: cargo dylint --workspace --all failed");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_cargo_dylint_fails_closed_in_ci() {
+        let error = cargo_dylint_requirement(true, false).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "dylint_gate: cargo-dylint is required in CI but was not found"
+        );
+    }
+
+    #[test]
+    fn missing_cargo_dylint_still_skips_locally() {
+        assert!(!cargo_dylint_requirement(false, false).unwrap());
+    }
 }
