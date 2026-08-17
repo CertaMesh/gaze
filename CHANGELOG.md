@@ -96,6 +96,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The ORT NER backend now hands the BIO decoder the document text, not its
+  provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
+  the constant `"ner/ort"` where `merge_bio_span_results` expected the string
+  the tokenizer offsets index into, so in production (a) joiner bridging read
+  the bytes between tokens from `"ner/ort"` and was dead — hyphenated or dotted
+  names such as `Anne-Marie` / `john.doe` decoded as two spans — and (b) any
+  input of 7 bytes or fewer had its spans boundary-checked against `"ner/ort"`,
+  so short structured field values such as `Anna`, `Alice`, or `Berlin` (the
+  tool-call JSON shape axis 3 is built for) lost their NER span entirely. Both
+  are recall defects (axis 1). The decoder now receives the real input, the
+  decode step is a model-free `decode_logits` seam with red-first tests, and the
+  Kiji safety-net decoders (`ort`/`tract`/`candle`) were checked and already
+  passed the real text.
+
+  The heuristic `enforce_source_boundaries` flag (which guessed whether the
+  argument was text by comparing span ends to its length) and the
+  `is_token_boundary_match` suppression it gated were removed rather than
+  silently activated by the corrected argument: that suppression never ran in
+  production and turning it on is a measured decision (solo todo #2904).
+  Production output changes only by adding spans the decoder was designed to
+  emit; no span the previous decoder emitted is dropped.
+
+  **API:** `NerDetector::merge_bio_spans` now takes `document_text` and
+  `provenance` as separate parameters (was one `source` used for both);
+  `NerDetector::merge_bio_span_results`' last parameter is renamed
+  `document_text` (same position, same type). Callers that passed a provenance
+  string as `source` must pass the tokenizer input instead.
+
 - **Safety-net RESOLVE no longer returns `Ok` on a result it cannot verify**
   (#403). The mode's only post-condition used to be a follow-up net scan, so any
   net whose second pass disagreed with its first — an ML net, a cached net, a

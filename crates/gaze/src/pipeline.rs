@@ -3203,6 +3203,7 @@ mod tests {
                     (start + "Dr. ".len(), start + "Dr. Schmidt".len()),
                 ],
                 &["B-PER", "I-PER"],
+                input,
                 "ner/deterministic",
             )
         }

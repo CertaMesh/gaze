@@ -6,7 +6,7 @@ use super::{NerBackend, NER_CHUNK_TOKEN_BUDGET, NER_CHUNK_TOKEN_OVERLAP};
 use crate::ner::decode::softmax_confidence;
 use crate::ner::detector::NerDetector;
 use crate::ner::error::{NerLoadError, NerRuntimeError};
-use crate::ner::types::{LabelMap, NerBackendKind, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
+use crate::ner::types::{LabelMap, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
 
 /// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
 /// label map, and `id2label` vocab. BIO/IOB2 subword tags are merged via
@@ -149,8 +149,10 @@ fn decode_logits(
         subword_scores.push(softmax_confidence(row, argmax));
     }
 
-    let source = format!("ner/{}", NerBackendKind::Ort.as_str());
-    NerDetector::merge_bio_span_results(labels, offsets, &subword_labels, &subword_scores, &source)
+    // `input` is the text the tokenizer offsets index into; the merge reads
+    // joiner bytes between tokens from it. Provenance (`ner/ort`) is attached
+    // later by `NerRecognizer` / `NerDetector::try_detect`, never here.
+    NerDetector::merge_bio_span_results(labels, offsets, &subword_labels, &subword_scores, input)
         .into_iter()
         .filter(|span| span.span.end <= input.len())
         .collect()

@@ -103,37 +103,50 @@ impl NerDetector {
         }
         Ok(merge_overlapping_spans(spans)
             .into_iter()
-            .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class, false))
+            .filter(|span| decode::is_valid_entity_span(input, &span.span, &span.class))
             .collect())
     }
 
     /// Label/offset reconstruction helper. Public for testing the BIO merge.
-    /// `subword_spans` are byte ranges against the tokenizer input string,
-    /// `subword_labels` are CoNLL-style labels per subword (e.g. `O`, `B-PER`,
-    /// `I-PER`). Returns merged detections, dropping labels absent from the
-    /// label map and subword spans overlapping special tokens (empty ranges).
+    /// `subword_spans` are byte ranges against `document_text` (the tokenizer
+    /// input string), `subword_labels` are CoNLL-style labels per subword
+    /// (e.g. `O`, `B-PER`, `I-PER`), and `provenance` is the detector source
+    /// id recorded on each `Detection` (e.g. `"ner/ort"`). Returns merged
+    /// detections, dropping labels absent from the label map and subword spans
+    /// overlapping special tokens (empty ranges). Joiner bridging (`Anne-Marie`,
+    /// `john.doe`) reads the bytes between tokens from `document_text`, so it
+    /// must be the real text the offsets index into.
     pub fn merge_bio_spans(
         labels: &LabelMap,
         subword_spans: &[(usize, usize)],
         subword_labels: &[&str],
-        source: &str,
+        document_text: &str,
+        provenance: &str,
     ) -> Vec<Detection> {
-        decode::merge_bio_spans(labels, subword_spans, subword_labels, source)
+        decode::merge_bio_spans(
+            labels,
+            subword_spans,
+            subword_labels,
+            document_text,
+            provenance,
+        )
     }
 
+    /// Scored variant of [`Self::merge_bio_spans`]; `document_text` has the
+    /// same contract (the string the offsets index into).
     pub fn merge_bio_span_results(
         labels: &LabelMap,
         subword_spans: &[(usize, usize)],
         subword_labels: &[&str],
         subword_scores: &[f32],
-        source: &str,
+        document_text: &str,
     ) -> Vec<NerSpanResult> {
         decode::merge_bio_span_results(
             labels,
             subword_spans,
             subword_labels,
             subword_scores,
-            source,
+            document_text,
         )
     }
 }
