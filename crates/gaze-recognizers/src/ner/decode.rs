@@ -4,30 +4,44 @@ use gaze_types::{Detection, PiiClass};
 
 use super::types::{LabelMap, NerSpanResult};
 
+/// `document_text` is the string the `subword_spans` byte offsets index into
+/// (the tokenizer input); `provenance` is the detector source id recorded on
+/// each `Detection` (e.g. `"ner/ort"`). Never pass the provenance as the text:
+/// joiner bridging and span validation read the document text.
 pub(crate) fn merge_bio_spans(
     labels: &LabelMap,
     subword_spans: &[(usize, usize)],
     subword_labels: &[&str],
-    source: &str,
+    document_text: &str,
+    provenance: &str,
 ) -> Vec<Detection> {
     let scores = vec![1.0; subword_labels.len()];
-    merge_bio_span_results(labels, subword_spans, subword_labels, &scores, source)
-        .into_iter()
-        .map(|span| Detection::new(span.span, span.class, source))
-        .collect()
+    merge_bio_span_results(
+        labels,
+        subword_spans,
+        subword_labels,
+        &scores,
+        document_text,
+    )
+    .into_iter()
+    .map(|span| Detection::new(span.span, span.class, provenance))
+    .collect()
 }
 
+/// `document_text` is the string the `subword_spans` byte offsets index into
+/// (the tokenizer input, i.e. the chunk handed to the backend). Joiner
+/// bridging reads the bytes between neighbouring tokens from it and span
+/// validation slices it, so it must be the real text, not a provenance label.
 pub(crate) fn merge_bio_span_results(
     labels: &LabelMap,
     subword_spans: &[(usize, usize)],
     subword_labels: &[&str],
     subword_scores: &[f32],
-    source: &str,
+    document_text: &str,
 ) -> Vec<NerSpanResult> {
     let mut out = Vec::new();
     let (effective_labels, effective_scores) =
-        bridge_joiner_tokens(source, subword_spans, subword_labels, subword_scores);
-    let enforce_source_boundaries = subword_spans.iter().all(|(_, end)| *end <= source.len());
+        bridge_joiner_tokens(document_text, subword_spans, subword_labels, subword_scores);
     let mut i = 0usize;
     while i < effective_labels.len() {
         let tag = effective_labels[i].as_str();
@@ -60,7 +74,7 @@ pub(crate) fn merge_bio_span_results(
                 break;
             }
         }
-        if is_valid_entity_span(source, &(start..end), class, enforce_source_boundaries) {
+        if is_valid_entity_span(document_text, &(start..end), class) {
             out.push(NerSpanResult {
                 span: start..end,
                 class: class.clone(),
@@ -72,47 +86,32 @@ pub(crate) fn merge_bio_span_results(
     out
 }
 
+/// Merge-time span validity against `document_text`. Deliberately does NOT
+/// suppress spans that sit inside a larger identifier (`Artist` in
+/// `Artistfy`): that suppression was never active in production and turning
+/// it on is a measured recall/precision decision (solo todo #2904), not a
+/// side effect of passing the right text.
 pub(crate) fn is_valid_entity_span(
-    source: &str,
+    document_text: &str,
     span: &Range<usize>,
     class: &PiiClass,
-    enforce_source_boundaries: bool,
 ) -> bool {
     let start = span.start;
     let end = span.end;
-    if enforce_source_boundaries && !is_token_boundary_match(source, start, end) {
-        return false;
-    }
-    if is_suppressed_single_token_organization(source, start, end, class) {
+    if is_suppressed_single_token_organization(document_text, start, end, class) {
         return false;
     }
     if !matches!(class, PiiClass::Name | PiiClass::Organization) {
         return true;
     }
-    let Some(text) = source.get(span.clone()) else {
+    let Some(text) = document_text.get(span.clone()) else {
         return true;
     };
     !is_command_argv_identifier_span(text)
 }
 
-fn is_token_boundary_match(source: &str, start: usize, end: usize) -> bool {
-    let Some(before) = source.get(..start) else {
-        return true;
-    };
-    let Some(after) = source.get(end..) else {
-        return true;
-    };
-
-    !before.chars().next_back().is_some_and(is_identifier_char)
-        && !after.chars().next().is_some_and(is_identifier_char)
-}
-
-fn is_identifier_char(ch: char) -> bool {
-    ch == '_' || ch.is_alphanumeric()
-}
-
 fn is_suppressed_single_token_organization(
-    source: &str,
+    document_text: &str,
     start: usize,
     end: usize,
     class: &PiiClass,
@@ -120,13 +119,13 @@ fn is_suppressed_single_token_organization(
     if class != &PiiClass::Organization {
         return false;
     }
-    let Some(text) = source.get(start..end) else {
+    let Some(text) = document_text.get(start..end) else {
         return false;
     };
     if text.chars().any(char::is_whitespace) || !text.eq_ignore_ascii_case("workspace") {
         return false;
     }
-    source
+    document_text
         .get(..start)
         .is_some_and(|before| before.ends_with("~/") || before.ends_with("/"))
 }
@@ -185,7 +184,7 @@ fn is_apple_script_literal(text: &str) -> bool {
 }
 
 fn bridge_joiner_tokens(
-    source: &str,
+    document_text: &str,
     subword_spans: &[(usize, usize)],
     subword_labels: &[&str],
     subword_scores: &[f32],
@@ -205,7 +204,7 @@ fn bridge_joiner_tokens(
         }
 
         let (start, end) = subword_spans[index];
-        let Some(token_text) = source.get(start..end) else {
+        let Some(token_text) = document_text.get(start..end) else {
             continue;
         };
         if !is_entity_joiner_token(token_text) {
@@ -285,12 +284,12 @@ mod tests {
         )
     }
 
-    fn token_spans(source: &str, tokens: &[&str]) -> Vec<(usize, usize)> {
+    fn token_spans(document_text: &str, tokens: &[&str]) -> Vec<(usize, usize)> {
         let mut cursor = 0usize;
         tokens
             .iter()
             .map(|token| {
-                let rest = &source[cursor..];
+                let rest = &document_text[cursor..];
                 let offset = rest.find(token).expect("token exists after cursor");
                 let start = cursor + offset;
                 let end = start + token.len();
@@ -301,14 +300,14 @@ mod tests {
     }
 
     fn merge(
-        source: &str,
+        document_text: &str,
         tokens: &[&str],
         tags: &[&str],
         label_map: &LabelMap,
     ) -> Vec<NerSpanResult> {
-        let spans = token_spans(source, tokens);
+        let spans = token_spans(document_text, tokens);
         let scores = vec![0.9; tags.len()];
-        merge_bio_span_results(label_map, &spans, tags, &scores, source)
+        merge_bio_span_results(label_map, &spans, tags, &scores, document_text)
     }
 
     #[test]
@@ -429,16 +428,22 @@ mod tests {
         assert_eq!(out[1].span, 5..8);
     }
 
+    /// Guard against silent activation: partial-identifier spans were never
+    /// suppressed in production (the old check compared against the
+    /// provenance label, not the text). Activating suppression is a measured
+    /// decision tracked in solo todo #2904, so the merge must keep the span.
     #[test]
-    fn drops_entity_span_inside_identifier() {
+    fn does_not_suppress_partial_identifier_span_at_merge() {
         let source = "Artistfy";
         let label_map = labels(&[("ORG", PiiClass::Organization)]);
         let out = merge(source, &["Artist"], &["B-ORG"], &label_map);
 
-        assert!(
-            out.is_empty(),
-            "unexpected partial identifier span: {out:?}"
+        assert_eq!(
+            out.len(),
+            1,
+            "partial identifier span must survive: {out:?}"
         );
+        assert_eq!(out[0].span, 0..6);
     }
 
     #[test]
