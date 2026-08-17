@@ -609,6 +609,107 @@ mod tests {
         }
     }
 
+    #[test]
+    fn cue_offsets_survive_length_changing_case_folds_before_the_cue() {
+        // `İ` (U+0130, 2 bytes) lowercases to `i̇` (`i` + U+0307, 3 bytes) and
+        // `ẞ` (U+1E9E, 3 bytes) lowercases to `ß` (2 bytes). Every byte offset
+        // after such a character differs between the original text and a
+        // lowercased copy; the cue must still anchor the name in ORIGINAL
+        // byte space.
+        let recognizer = test_recognizer(
+            "test.de.forward",
+            vec!["Weitergeleitete Nachricht von"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "forward_marker",
+        );
+        for text in [
+            "İstanbul Büro — Weitergeleitete Nachricht von Anna Müller:",
+            "GRÜẞE AUS BERLIN — Weitergeleitete Nachricht von Anna Müller:",
+            "\u{212A}elvin-Skala (K) — Weitergeleitete Nachricht von Anna Müller:",
+        ] {
+            let hits = recognizer.detect(text, &ctx()).unwrap();
+            assert_eq!(
+                hits.len(),
+                1,
+                "cue after a length-changing case fold must still anchor the name in {text:?}"
+            );
+            let expected = text.find("Anna Müller").unwrap();
+            assert_eq!(hits[0].span, expected..expected + "Anna Müller".len());
+            assert_eq!(&text[hits[0].span.clone()], "Anna Müller");
+        }
+    }
+
+    #[test]
+    fn cue_offsets_never_slice_inside_a_multi_byte_char() {
+        // With `İ` shifting lowercased offsets by +1, a cue that starts with a
+        // two-byte `Ü` puts the shifted start inside `Ü` in the original text.
+        // Slicing there panics; the recognizer must instead return the exact
+        // original span.
+        let recognizer = test_recognizer(
+            "test.de.uebermittelt",
+            vec!["Übermittelt von"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "forward_marker",
+        );
+        let text = "İstanbul: Übermittelt von Anna Müller.";
+        let hits = recognizer.detect(text, &ctx()).unwrap();
+        assert_eq!(
+            hits.len(),
+            1,
+            "expected exactly one anchored name in {text:?}"
+        );
+        assert_eq!(hits[0].span, 28..40);
+        assert_eq!(&text[hits[0].span.clone()], "Anna Müller");
+
+        // Shrinking direction: `ẞ` shifts lowercased offsets by -1, so the
+        // shifted cue start lands inside the em dash before the cue.
+        let recognizer = test_recognizer(
+            "test.de.forward",
+            vec!["Weitergeleitete Nachricht von"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "forward_marker",
+        );
+        let text = "STRAẞE—Weitergeleitete Nachricht von Anna Müller:";
+        let hits = recognizer.detect(text, &ctx()).unwrap();
+        assert_eq!(
+            hits.len(),
+            1,
+            "expected exactly one anchored name in {text:?}"
+        );
+        assert_eq!(&text[hits[0].span.clone()], "Anna Müller");
+    }
+
+    #[test]
+    fn ascii_cue_matching_is_byte_identical() {
+        // Pins the pre-fix ASCII contract: case-insensitive cue, word-bounded,
+        // non-overlapping cue occurrences, original byte offsets.
+        let recognizer = test_recognizer(
+            "test.from",
+            vec!["From"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "from",
+        );
+        for (text, expected) in [
+            ("Hello from Alice Example, please reply.", 11..24),
+            ("Hello FROM Alice Example, please reply.", 11..24),
+            ("fromage from Alice Example.", 13..26),
+            ("from from Alice Example.", 10..23),
+        ] {
+            let hits = recognizer.detect(text, &ctx()).unwrap();
+            assert_eq!(hits.len(), 1, "{text:?}");
+            assert_eq!(hits[0].span, expected, "{text:?}");
+            assert_eq!(&text[hits[0].span.clone()], "Alice Example");
+        }
+        assert!(recognizer
+            .detect("Hello fromAlice Example.", &ctx())
+            .unwrap()
+            .is_empty());
+    }
+
     fn test_recognizer(
         id: &str,
         cues: Vec<&str>,
