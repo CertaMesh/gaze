@@ -6021,6 +6021,7 @@ dependencies = [
  "sha3",
  "syn",
  "tempfile",
+ "toml 0.8.23",
 ]
 
 [[package]]
