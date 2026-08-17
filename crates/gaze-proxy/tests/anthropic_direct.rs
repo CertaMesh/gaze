@@ -10,8 +10,8 @@ use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
 use gaze::{
-    Action, ClassRule, DefaultRule, DictionaryBundle, PiiClass, Pipeline, RedactionEntry,
-    RedactionLogError, RedactionLogger, RulepackDict,
+    Action, ClassRule, DefaultRule, DictionaryBundle, LocaleChain, LocaleTag, PiiClass, Pipeline,
+    RedactionEntry, RedactionLogError, RedactionLogger, RulepackDict,
 };
 use gaze_inspection::{
     ActivatedInspectionConsumerV1, InspectionEventV1, InspectionQueueLimitsV1, InspectionSink,
@@ -35,6 +35,7 @@ use url::Url;
 
 const EMAIL: &str = "alice@example.invalid";
 const DICTIONARY_TERM: &str = "Sonnenlied";
+const LOCALE_TERM: &str = "kennung kundennummer-123";
 
 struct RecordingResolver {
     called: Arc<AtomicBool>,
@@ -157,6 +158,31 @@ fn dictionary_pipeline() -> (Pipeline, DictionaryBundle) {
         true,
     )]);
     (pipeline, dictionaries)
+}
+
+fn document_locale_pipeline() -> Pipeline {
+    let class = PiiClass::custom("locale_identifier");
+    Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\bkundennummer-\d+\b",
+                class.clone(),
+                "locale.synthetic_identifier",
+                vec![LocaleTag::DeDe],
+                1.0,
+                0,
+                "locale_identifier.counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .unwrap(),
+        )
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap()
 }
 
 async fn capture_anthropic_request(
@@ -293,8 +319,14 @@ async fn spawn_upstream_with_mode(
 }
 
 async fn spawn_proxy(adapter: AnthropicAdapter) -> RunningServer {
-    spawn_proxy_with_observability(adapter, email_pipeline(), DictionaryBundle::default(), None)
-        .await
+    spawn_proxy_with_observability(
+        adapter,
+        email_pipeline(),
+        DictionaryBundle::default(),
+        None,
+        None,
+    )
+    .await
 }
 
 fn counting_inspection() -> (
@@ -314,10 +346,14 @@ async fn spawn_proxy_with_observability(
     adapter: AnthropicAdapter,
     pipeline: Pipeline,
     dictionaries: DictionaryBundle,
+    locale_chain: Option<LocaleChain>,
     inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
 ) -> RunningServer {
     let bind = unused_local_addr();
-    let config = ProxyConfig::anthropic_direct(bind, adapter).with_dictionaries(dictionaries);
+    let mut config = ProxyConfig::anthropic_direct(bind, adapter).with_dictionaries(dictionaries);
+    if let Some(locale_chain) = locale_chain {
+        config = config.with_locale_chain(locale_chain);
+    }
     let (config, inspection_consumer) = match inspection {
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
@@ -650,6 +686,7 @@ async fn direct_request_uses_the_configured_dictionary_bundle() {
         pipeline,
         dictionaries,
         None,
+        None,
     )
     .await;
     let request = json!({
@@ -688,6 +725,7 @@ async fn direct_response_residual_rejects_a_dictionary_only_provider_term() {
         pipeline,
         dictionaries,
         None,
+        None,
     )
     .await;
     let request = json!({
@@ -707,6 +745,37 @@ async fn direct_response_residual_rejects_a_dictionary_only_provider_term() {
     assert!(!response.status().is_success());
     let body = response.text().await.unwrap();
     assert!(!body.contains(DICTIONARY_TERM));
+    assert_eq!(upstream.captures.lock().await.len(), 1);
+}
+
+#[tokio::test]
+async fn direct_response_residual_uses_the_configured_document_locale_chain() {
+    let upstream = spawn_upstream_with_provider_text(LOCALE_TERM).await;
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        document_locale_pipeline(),
+        DictionaryBundle::default(),
+        Some(LocaleChain::from_tags(vec![LocaleTag::DeDe])),
+        None,
+    )
+    .await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": "synthetic-safe"}],
+        "stream": false
+    });
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+    let body = response.text().await.unwrap();
+    assert!(!body.contains(LOCALE_TERM));
     assert_eq!(upstream.captures.lock().await.len(), 1);
 }
 
@@ -938,6 +1007,7 @@ async fn split_opaque_carriers_reject_across_complete_request_views_without_side
         AnthropicAdapter::new(upstream.origin.clone()),
         email_pipeline().with_redaction_logger(logger.clone()),
         DictionaryBundle::default(),
+        None,
         Some((inspection, consumer)),
     )
     .await;

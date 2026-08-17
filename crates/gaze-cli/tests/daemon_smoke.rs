@@ -1,11 +1,289 @@
+use std::collections::BTreeSet;
 use std::fs;
-use std::io::Write;
-use std::process::{Command, Stdio};
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
 use serial_test::file_serial;
 use tempfile::tempdir;
+
+const PARITY_INPUT: &str = "id ES-TEST-123456 track Sonnenlied";
+
+fn write_cross_verb_parity_policy() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("cross-verb.toml");
+    fs::write(
+        &rulepack_path,
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "cross-verb"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "es.test_id"
+class = "custom:es_test_id"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["es-ES"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''ES-TEST-[0-9]{6}'''
+
+[[recognizers]]
+id = "dictionary.synthetic_catalog"
+class = "custom:catalog_title"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "dictionary"
+terms = ["Sonnenlied"]
+"#,
+    )
+    .unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core-extended"]
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "custom:es_test_id"
+action = "tokenize"
+
+[[rule]]
+kind = "class"
+class = "custom:catalog_title"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    (dir, policy_path)
+}
+
+fn parity_classes(text: &str) -> BTreeSet<&'static str> {
+    [
+        ("Custom:catalog_title", "Custom:catalog_title_"),
+        ("Custom:es_test_id", "Custom:es_test_id_"),
+    ]
+    .into_iter()
+    .filter_map(|(class, marker)| text.contains(marker).then_some(class))
+    .collect()
+}
+
+fn unused_local_addr() -> SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    listener.local_addr().unwrap()
+}
+
+fn read_http_request(stream: &mut TcpStream) -> Vec<u8> {
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    let mut bytes = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    let mut expected_len = None;
+    loop {
+        let read = stream.read(&mut chunk).unwrap();
+        assert!(read > 0, "HTTP peer closed before request completed");
+        bytes.extend_from_slice(&chunk[..read]);
+        if expected_len.is_none() {
+            if let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..header_end]);
+                let content_length = headers
+                    .lines()
+                    .find_map(|line| {
+                        let (name, value) = line.split_once(':')?;
+                        name.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().unwrap())
+                    })
+                    .unwrap();
+                expected_len = Some(header_end + 4 + content_length);
+            }
+        }
+        if expected_len.is_some_and(|length| bytes.len() >= length) {
+            return bytes;
+        }
+    }
+}
+
+struct ChildGuard(Child);
+
+impl Drop for ChildGuard {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+fn direct_proxy_body(policy: &std::path::Path) -> String {
+    let upstream = TcpListener::bind("127.0.0.1:0").unwrap();
+    let upstream_addr = upstream.local_addr().unwrap();
+    let (capture_tx, capture_rx) = mpsc::sync_channel(1);
+    let upstream_thread = thread::spawn(move || {
+        let (mut stream, _) = upstream.accept().unwrap();
+        let request = read_http_request(&mut stream);
+        capture_tx.send(request).unwrap();
+        let body = r#"{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"text","text":"synthetic-safe"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}"#;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+            body.len(),
+            body
+        )
+        .unwrap();
+    });
+
+    let proxy_addr = unused_local_addr();
+    let upstream_url = format!("http://{upstream_addr}");
+    let child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "proxy",
+            "serve",
+            "--bind",
+            &proxy_addr.to_string(),
+            "--upstream-anthropic",
+            &upstream_url,
+            "--policy",
+            policy.to_str().unwrap(),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let _child = ChildGuard(child);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if TcpStream::connect(proxy_addr).is_ok() {
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "proxy did not start at {proxy_addr}"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+
+    let request_body = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": PARITY_INPUT}],
+        "stream": false
+    })
+    .to_string();
+    let mut stream = TcpStream::connect(proxy_addr).unwrap();
+    write!(
+        stream,
+        "POST /v1/messages HTTP/1.1\r\nhost: {proxy_addr}\r\nx-api-key: synthetic-key\r\nanthropic-version: 2023-06-01\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+        request_body.len(),
+        request_body
+    )
+    .unwrap();
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response).unwrap();
+    assert!(
+        response.starts_with(b"HTTP/1.1 200"),
+        "proxy response was not 200"
+    );
+
+    let captured = capture_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+    upstream_thread.join().unwrap();
+    let body_start = captured
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .unwrap()
+        + 4;
+    String::from_utf8(captured[body_start..].to_vec()).unwrap()
+}
+
+#[test]
+fn clean_daemon_and_direct_proxy_share_auto_activated_locales_and_dictionaries() {
+    let (_dir, policy) = write_cross_verb_parity_policy();
+    let expected = BTreeSet::from(["Custom:catalog_title", "Custom:es_test_id"]);
+
+    let mut clean = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["clean", "--policy", policy.to_str().unwrap()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    clean
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(PARITY_INPUT.as_bytes())
+        .unwrap();
+    drop(clean.stdin.take());
+    let clean = clean.wait_with_output().unwrap();
+    assert!(
+        clean.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+    let clean: Value = serde_json::from_slice(&clean.stdout).unwrap();
+
+    let mut daemon = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--idle-timeout",
+            "30",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    writeln!(
+        daemon.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id": "parity-session", "text": PARITY_INPUT})
+    )
+    .unwrap();
+    drop(daemon.stdin.take());
+    let daemon = daemon.wait_with_output().unwrap();
+    assert!(
+        daemon.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&daemon.stderr)
+    );
+    let daemon: Value = serde_json::from_slice(&daemon.stdout).unwrap();
+
+    let proxy = direct_proxy_body(&policy);
+    assert_eq!(
+        parity_classes(clean["clean_text"].as_str().unwrap()),
+        expected
+    );
+    assert_eq!(
+        parity_classes(daemon["clean_text"].as_str().unwrap()),
+        expected
+    );
+    assert_eq!(parity_classes(&proxy), expected);
+    assert!(!proxy.contains("ES-TEST-123456"));
+    assert!(!proxy.contains("Sonnenlied"));
+}
 
 fn write_policy() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempdir().unwrap();

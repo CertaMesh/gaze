@@ -253,6 +253,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
   response validation plus the legacy primary and residual request passes; the
   residual can no longer know fewer dictionary terms than the primary pass.
+- **`gaze-proxy` direct/codec primary and residual passes now use the resolved
+  locale chain instead of a pinned Global chain** (solo todo #2411). This
+  closes the direct/codec half after #2403 fixed the legacy path, and keeps both
+  passes aligned with the same configured dictionaries and document locales.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
