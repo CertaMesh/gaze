@@ -932,7 +932,8 @@ license = "Apache-2.0"
 # meets #414's bar: this arm replays to ZERO documents / ZERO spans over all 1,024 A4 negatives
 # (512 of them English) when run everywhere. `locales` therefore records provenance, not a gate:
 # the DACH social-insurance-number vocabulary (Sozialversicherungsnummer, SV-Nummer) this arm
-# carries. The native German SVNR (`12 345678 A 123`) and checksummed AHV forms are follow-up work.
+# carries. Native SVNR and checksummed AHV shapes remain follow-up #2926; the DACH provenance here
+# describes cue vocabulary until those native formats ship.
 [[recognizers]]
 id = "ssn.de_cue"
 safety_tier = "safe_default"

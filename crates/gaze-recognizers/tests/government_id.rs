@@ -22,11 +22,12 @@
 
 use gaze::Context;
 use gaze::{
-    Action, CleanDocument, DictionaryBundle, LocaleBasis, LocaleChain, LocaleTag, PiiClass,
-    Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec, Rulepack,
-    RulepackSource, Scope, Session,
+    Action, CleanDocument, ConflictTier, DictionaryBundle, LocaleBasis, LocaleChain, LocaleTag,
+    PiiClass, Pipeline, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, RuleSpec,
+    Rulepack, RulepackSource, Scope, Session,
 };
 use gaze_recognizers::embedded;
+use gaze_types::ValidatorFailReason;
 use std::sync::{Arc, Mutex};
 
 fn empty_context() -> Context {
@@ -37,7 +38,13 @@ fn empty_context() -> Context {
     }
 }
 
-const CLASSES: [&str; 4] = ["ssn", "tax_number", "driver_license", "national_id"];
+const CLASSES: [&str; 5] = [
+    "ssn",
+    "steuer_id",
+    "tax_number",
+    "driver_license",
+    "national_id",
+];
 
 /// Core bundle under an explicit chain with locale-gated auto-activation OFF — the weakest
 /// configuration a default adopter can have. All four recognizers are `safe_default`, and either
@@ -83,7 +90,7 @@ impl RedactionLogger for CapturingLogger {
 
 /// Cleans `text` under `chain` and returns the clean text plus the recognizer ids that WON a
 /// span (conflict losers excluded), in document order.
-fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) {
+fn clean_with_entries(chain: &[LocaleTag], text: &str) -> (String, Vec<RedactionEntry>) {
     let entries = Arc::new(Mutex::new(Vec::new()));
     let pipeline = pipeline_for(chain).with_redaction_logger(CapturingLogger {
         entries: Arc::clone(&entries),
@@ -101,14 +108,47 @@ fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) 
         CleanDocument::Text(text) => text,
         _ => panic!("expected text"),
     };
+    let entries = entries.lock().unwrap().clone();
+    (text, entries)
+}
+
+fn clean_with_winners(chain: &[LocaleTag], text: &str) -> (String, Vec<String>) {
+    let (text, entries) = clean_with_entries(chain, text);
     let winners = entries
-        .lock()
-        .unwrap()
         .iter()
         .filter(|entry| !entry.conflict_loser)
         .filter_map(|entry| entry.recognizer_id.clone())
         .collect();
     (text, winners)
+}
+
+#[test]
+fn steuer_id_validator_veto_precedes_tax_number_fallback() {
+    let invalid = "Steuer-ID 48 954 371 208";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], invalid);
+    assert_eq!(cleaned, invalid, "invalid Steuer-ID must remain raw");
+    assert_eq!(
+        entries.len(),
+        1,
+        "tax-number must not claim the vetoed shape"
+    );
+    assert_eq!(entries[0].recognizer_id.as_deref(), Some("steuer_id.de"));
+    assert!(entries[0].conflict_loser);
+    assert_eq!(entries[0].decided_by, ConflictTier::ValidatorVeto);
+    assert_eq!(
+        entries[0].validator_fail_reason,
+        Some(ValidatorFailReason::DeSteuerIdMod1110Failed)
+    );
+
+    let valid = "Steuer-ID 48 954 371 207";
+    let (cleaned, entries) = clean_with_entries(&[LocaleTag::Global], valid);
+    assert!(!cleaned.contains("48 954 371 207"));
+    let winners = entries
+        .iter()
+        .filter(|entry| !entry.conflict_loser)
+        .filter_map(|entry| entry.recognizer_id.as_deref())
+        .collect::<Vec<_>>();
+    assert_eq!(winners, vec!["steuer_id.de"]);
 }
 
 fn clean_under(chain: &[LocaleTag], text: &str) -> String {

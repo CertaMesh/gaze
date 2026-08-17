@@ -86,16 +86,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the numeric shapes are resolved by the new `government-id` collision family
   (`ssn` 10 beats `tax-number` 20 beats `national-id` 30; lower wins).
 
-  Measured on the pre-#414 basis (fresh scorecard on `main` pending): the
-  deterministic cells removed 3,221 leaked bytes each (SSN -1,085, DRIVERLICENSENUM
-  -682, NATIONALID -493, TAXNUM -442, plus spillover onto IDCARDNUM -464 and
-  PASSPORTID -53 that is not target-class performance), covered 309 more
-  entities fully, and added 9 false-positive bytes in 1 document (about 358:1).
-  **Disclosed regression:** in the full-stack Kiji `resolve` cell the same
-  change lost a few covered bytes on SECURITYTOKEN (+32), PASSWORD (+31), and
-  USERNAME (+27) — the downstream safety-net interaction tracked as todo #2491
-  (mechanism #2420), not a resolver decision, and unaffected by collision
-  precedence.
+  The [shipped scorecard](docs/reference/benchmarks/v0.12-government-id-scorecard.md)
+  measures the deterministic cells at 3,194 fewer leaked bytes each and 9 more
+  false-positive bytes: rule floor adds 1 false-positive document, while pass2
+  adds none. The full-stack Kiji `resolve` cell removes 3,093 leaked bytes and
+  613 false-positive bytes with no change in false-positive documents.
+  **Disclosed regression:** the Kiji cell loses 6 covered `PASSWORD` bytes, the
+  downstream safety-net interaction tracked as todo #2491 (mechanism #2420),
+  not a resolver decision and unaffected by collision precedence.
 
   `tax_number.cue_anchored` deliberately requires a three-digit lead and
   internal separators: it cedes the checksummed 2-3-3-3 Steuer-ID shape to
