@@ -838,25 +838,6 @@ fn sanitize_path(path: &Path) -> String {
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
-    struct CurrentDirGuard(std::path::PathBuf);
-
-    #[cfg(unix)]
-    impl CurrentDirGuard {
-        fn enter(path: &Path) -> Self {
-            let original = std::env::current_dir().unwrap();
-            std::env::set_current_dir(path).unwrap();
-            Self(original)
-        }
-    }
-
-    #[cfg(unix)]
-    impl Drop for CurrentDirGuard {
-        fn drop(&mut self) {
-            std::env::set_current_dir(&self.0).unwrap();
-        }
-    }
-
     #[test]
     fn private_fields_do_not_debug() {
         let span: PrivateOpfSpan = serde_json::from_str(
@@ -934,16 +915,47 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    #[serial_test::serial]
     fn owner_check_uses_process_euid_not_cwd_owner() {
-        let dir = tempfile::tempdir().unwrap();
         let expected = unsafe { libc::geteuid() };
-
-        assert_eq!(current_euid(), expected);
-        {
-            let _guard = CurrentDirGuard::enter(dir.path());
-            assert_eq!(current_euid(), expected);
+        if expected == 0 {
+            eprintln!("skipping different-owner CWD check because the test runner is root");
+            return;
         }
+
+        let module = module_path!()
+            .strip_prefix(concat!(env!("CARGO_CRATE_NAME"), "::"))
+            .unwrap_or(module_path!());
+        let helper = format!("{module}::owner_check_different_owner_cwd_helper");
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", &helper, "--nocapture"])
+            .env("GAZE_EUID_OWNER_CHECK_HELPER", "1")
+            .current_dir("/")
+            .output()
+            .unwrap();
+
+        assert!(
+            output.status.success(),
+            "different-owner CWD helper failed:\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn owner_check_different_owner_cwd_helper() {
+        use std::os::unix::fs::MetadataExt;
+
+        if std::env::var_os("GAZE_EUID_OWNER_CHECK_HELPER").is_none() {
+            return;
+        }
+
+        let expected = unsafe { libc::geteuid() };
+        let cwd_owner = std::fs::metadata(".").unwrap().uid();
+        assert_ne!(
+            cwd_owner, expected,
+            "helper CWD owner must differ from euid"
+        );
         assert_eq!(current_euid(), expected);
     }
 
