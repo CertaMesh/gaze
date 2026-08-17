@@ -174,7 +174,7 @@ const FEATURE_MATRIX: &[MatrixCommand] = &[
         ],
     },
     MatrixCommand {
-        label: "cargo run -p xtask -- dylint-gate",
+        label: "cargo run -p xtask -- dylint-gate  # ui-fixture-shape only in PR CI; cargo-dylint runs in dylint.yml",
         program: "cargo",
         args: &["run", "-p", "xtask", "--", "dylint-gate"],
     },
