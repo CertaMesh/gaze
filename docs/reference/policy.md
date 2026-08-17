@@ -569,9 +569,13 @@ capture_groups = [1]
 
 Bundled rulepacks must state `locale_basis` explicitly for every recognizer.
 The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
-`nhs.uk`, `nino.uk`, `nir.fr`, `pan.in`, `phone.national.us`, `ssn.us`,
-`steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*` recognizers,
-`phone.national.de`, `postal.de`, and `postal.us` remain document-basis.
+`nhs.uk`, `nino.uk`, `nir.fr`, `pan.in`, `phone.national.us`, `ssn.de_cue`,
+`ssn.us`, `steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*`
+recognizers, `phone.national.de`, `postal.de`, and `postal.us` remain
+document-basis, as do the bilingual cue-anchored `global` recognizers
+(`security_token.anchored`, `tax_number.cue_anchored`,
+`driver_license.cue_anchored`, `national_id.cue_anchored`), which are eligible
+under every chain because `global` matches every document locale.
 
 This changes suppression behavior: `--locale=global` and narrow locale chains
 cannot suppress a format-basis recognizer. An adopter that needs the previous

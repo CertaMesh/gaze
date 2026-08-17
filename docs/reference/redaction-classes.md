@@ -19,8 +19,8 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 29 recognizer specs
-(`crates/gaze-recognizers/src/lib.rs:62-106`).
+The shared payload currently contains exactly 35 recognizer specs
+(`crates/gaze-recognizers/src/lib.rs:62-110`).
 
 ## PII classes and resolver priority
 
@@ -91,6 +91,10 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `postal.us` | `regex` | US five-digit ZIP or ZIP+4 shapes | `custom:postal_code` | `en-US` | `none` | `none` | `locale_gated` | no | 0.70 | 70 | `crates/gaze-recognizers/embedded/core.toml:697-719` |
 | `core, core-extended` | `url.anchored` | `regex` | URLs beginning with `http://`, `https://`, or `www.` through the final non-punctuation URL character | `custom:url` | `global` | `none` | `none` | `safe_default` | yes | 0.75 | 85 | `crates/gaze-recognizers/embedded/core.toml:721-760` |
 | `core, core-extended` | `security_token.anchored` | `regex` | Cue-anchored credential values plus structurally prefixed AWS access keys and three-segment JWTs | `custom:security_token` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 87 | `crates/gaze-recognizers/embedded/core.toml:762-847` |
+| `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:937-964` |
+| `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 | `crates/gaze-recognizers/embedded/core.toml:1005-1031` |
+| `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 | `crates/gaze-recognizers/embedded/core.toml:1045-1066` |
+| `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, or 9 to 11 digit identifiers after German or English national-ID cues | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 | `crates/gaze-recognizers/embedded/core.toml:1086-1112` |
 <!-- redaction-classes-gate:recognizers:end -->
 
 ## Closed validator and normalizer sets
@@ -165,7 +169,9 @@ Source: `crates/gaze/src/registry.rs:88-119`. Therefore, when
 `iban.structural` overlaps `card.structural`, IBAN precedence 10 defeats PAN
 precedence 20 even though 10 is numerically smaller. The result is decided by
 `ConflictTier::CollisionPolicy`, before either class reaches the generic
-`Custom(_)` priority tie.
+`Custom(_)` priority tie. The `government-id` family orders its numeric
+variants by cue specificity the same way: an SSN cue (10) beats a tax cue (20),
+which beats the vaguer national-ID cues (30).
 
 <!-- redaction-classes-gate:collisions:start -->
 | Family | Recognizer id | Variant | Precedence | Mandatory anchor | Source |
@@ -176,6 +182,9 @@ precedence 20 even though 10 is numerically smaller. The result is decided by
 | `phone-or-imei` | `phone.e164.spaced` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:212-215` |
 | `phone-or-imei` | `phone.national.de` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:246-249` |
 | `phone-or-imei` | `phone.national.us` | `phone` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:275-278` |
+| `government-id` | `ssn.de_cue` | `ssn` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:957-960` |
+| `government-id` | `tax_number.cue_anchored` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:1024-1027` |
+| `government-id` | `national_id.cue_anchored` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml:1105-1108` |
 <!-- redaction-classes-gate:collisions:end -->
 
 For the full family-level ambiguity contract, including equal-precedence
@@ -251,8 +260,12 @@ eligible to match; whether a particular input produces a candidate still
 depends on its shape, cues, and validator outcome.
 
 The plain `core` default locale chain is `global`
-(`crates/gaze-recognizers/embedded/core.toml:1-4`), so only global
-`safe_default` recognizers activate. For the CLI, `normalize_rulepack_bundles`
+(`crates/gaze-recognizers/embedded/core.toml:1-4`), so the document-basis
+recognizers that activate are exactly the global `safe_default` ones. Every
+`locale_basis = "format"` recognizer activates regardless of the chain
+(`crates/gaze-assembly/src/detector_wiring.rs:271-301`); see
+[Locale Chain](../explanation/policy/locale-chain.md) for the mixed-basis
+model. For the CLI, `normalize_rulepack_bundles`
 rewrites the deprecated `core-extended` selection to `core` while returning an
 `auto_activate_locale_gated` bit
 (`crates/gaze-cli/src/pipeline/run.rs:712-728`). `CleanOverrides::apply_to`
@@ -276,14 +289,18 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, phone.e164.spaced, phone.structural, security_token.anchored, url.anchored` | `crates/gaze-recognizers/embedded/core.toml:1-847`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.us, steuer_id.de, url.anchored, vat.de` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, phone.e164.spaced, phone.national.us, phone.structural, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1112`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
-`phone.national.de`, `phone.national.us`, `postal.us`, and `postal.de` with
+`phone.national.de`, `postal.us`, and `postal.de` with
 `--rulepack-bundled core-extended` and no policy. The complete second row is
 authoritative: the widened US/German compatibility locale chain also makes the
-listed cue-anchored and locale-specific recognizers eligible. Pass
-`--locale=global`, or use an explicit policy with narrower locale gating, to
-avoid that compatibility expansion.
+listed document-basis cue-anchored and locale-specific recognizers eligible.
+Pass `--locale=global`, or use an explicit policy with narrower locale gating,
+to avoid that document-basis compatibility expansion. Format-basis identifiers
+(`ssn.us`, `ssn.de_cue`, `steuer_id.de`, `phone.national.us`, and the other
+format rows in the coverage matrix) are active in both rows; the locale chain
+is not a suppression mechanism for them, so an adopter that must not tokenize
+one of them has to disable that recognizer.

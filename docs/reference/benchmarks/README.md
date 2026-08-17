@@ -61,6 +61,9 @@ not imply that they meet current production targets.
 | [v0.12-locale-basis-drain-scorecard.md](v0.12-locale-basis-drain-scorecard.md) | Mixed locale-basis drain comparison on current main | Current evidence |
 | [v0.12-locale-basis-drain-base-scorecard-v4.json](v0.12-locale-basis-drain-base-scorecard-v4.json) | Schema-v4 BASE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
 | [v0.12-locale-basis-drain-candidate-scorecard-v4.json](v0.12-locale-basis-drain-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
+| [v0.12-government-id-scorecard.md](v0.12-government-id-scorecard.md) | Government-ID recognizer cluster (SSN / NATIONALID / DRIVERLICENSENUM / TAXNUM) comparison on current main | Current evidence |
+| [v0.12-government-id-base-scorecard-v4.json](v0.12-government-id-base-scorecard-v4.json) | Schema-v4 BASE scorecard for the government-ID comparison (not an accepted baseline) | Current evidence |
+| [v0.12-government-id-candidate-scorecard-v4.json](v0.12-government-id-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard for the government-ID comparison (not an accepted baseline) | Current evidence |
 | [v0.12-en-de-whole-pipeline-baseline.md](v0.12-en-de-whole-pipeline-baseline.md) | Human-readable authoritative no-OPF whole-pipeline baseline | Current evidence |
 | [v0.12-no-opf-error-buckets.md](v0.12-no-opf-error-buckets.md) | Prioritized analysis of current no-OPF Kiji error buckets | Current evidence |
 | [v0.12-no-opf-scorecard-v3.json](v0.12-no-opf-scorecard-v3.json) | Normalized machine-readable three-cell schema-v3 scorecard | Current evidence |

@@ -2984,6 +2984,38 @@ fn s2_cli_core_format_entities_ignore_document_locale_and_round_trip() {
 }
 
 #[test]
+fn s2_cli_core_government_id_cluster_fires_under_every_locale_and_round_trips() {
+    // The government-ID cluster under the #414 mixed model: `ssn.de_cue` is format-basis (like
+    // `ssn.us`) and the three bilingual cue-anchored recognizers are document-basis `global`, so
+    // every one of them must fire under `--locale=global`, both English regions and the German
+    // region alike. Locale is not a suppression mechanism for any of them.
+    for (input, class) in [
+        ("Sozialversicherungsnummer 123-45-6789", "ssn"),
+        ("Steuernummer 123 456 789", "tax_number"),
+        ("Driver's license: D1234567", "driver_license"),
+        ("National ID number: AB123456", "national_id"),
+    ] {
+        for locale in ["global", "en-US", "en-GB", "de-DE"] {
+            let value = clean_json_with_args(
+                &["--rulepack-bundled=core", &format!("--locale={locale}")],
+                input,
+            );
+            let clean = value["clean_text"].as_str().unwrap();
+            assert!(
+                clean.ends_with(&format!(":Custom:{class}_1>")),
+                "{locale} {input}: {clean}"
+            );
+            assert_eq!(value["stats"]["detections"], 1, "{locale} {input}");
+            assert_eq!(
+                restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+                input,
+                "{locale} {input}"
+            );
+        }
+    }
+}
+
+#[test]
 fn s1_rulepack_path_override_loads_fixture_rulepack_and_round_trips() {
     let dir = tempdir().unwrap();
     let rulepack_path = dir.path().join("class-alpha.toml");
