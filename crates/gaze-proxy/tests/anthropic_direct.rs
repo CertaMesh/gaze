@@ -10,8 +10,8 @@ use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
 use gaze::{
-    Action, ClassRule, DefaultRule, PiiClass, Pipeline, RedactionEntry, RedactionLogError,
-    RedactionLogger,
+    Action, ClassRule, DefaultRule, DictionaryBundle, PiiClass, Pipeline, RedactionEntry,
+    RedactionLogError, RedactionLogger, RulepackDict,
 };
 use gaze_inspection::{
     ActivatedInspectionConsumerV1, InspectionEventV1, InspectionQueueLimitsV1, InspectionSink,
@@ -26,7 +26,7 @@ use gaze_proxy::{
     ProxyErrorPhase, ProxyInspectionProducerV1, SessionPolicy, SessionRegistryConfig,
     ANTHROPIC_PROXY_ERROR_FRAME, ANTHROPIC_PROXY_PING_FRAME,
 };
-use gaze_recognizers::RegexDetector;
+use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 use gaze_types::inspection::{CaptureDomainsV1, DashboardCaptureDescriptorV1};
 use reqwest::Client;
 use serde_json::{json, Value};
@@ -34,6 +34,7 @@ use tokio::sync::Mutex;
 use url::Url;
 
 const EMAIL: &str = "alice@example.invalid";
+const DICTIONARY_TERM: &str = "Sonnenlied";
 
 struct RecordingResolver {
     called: Arc<AtomicBool>,
@@ -91,6 +92,7 @@ struct UpstreamState {
     rate_limited: bool,
     invalid_stream: bool,
     delayed_stream: bool,
+    provider_text: Option<String>,
 }
 
 struct CapturedRequest {
@@ -135,6 +137,28 @@ fn email_pipeline() -> Pipeline {
         .unwrap()
 }
 
+fn dictionary_pipeline() -> (Pipeline, DictionaryBundle) {
+    let class = PiiClass::custom("catalog_title");
+    let pipeline = Pipeline::builder()
+        .recognizer(DictionaryRecognizer::new(
+            "dictionary.synthetic_catalog",
+            class.clone(),
+            "synthetic_catalog",
+            true,
+            "catalog",
+        ))
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let dictionaries = DictionaryBundle::from_rulepack_terms(&[RulepackDict::new(
+        "synthetic_catalog",
+        vec![DICTIONARY_TERM.to_string()],
+        true,
+    )]);
+    (pipeline, dictionaries)
+}
+
 async fn capture_anthropic_request(
     State(state): State<UpstreamState>,
     request: Request<Body>,
@@ -171,9 +195,11 @@ async fn capture_anthropic_request(
             .unwrap();
     }
 
-    let protected = request_json["messages"][0]["content"]
-        .as_str()
-        .unwrap_or("synthetic");
+    let protected = state.provider_text.as_deref().unwrap_or_else(|| {
+        request_json["messages"][0]["content"]
+            .as_str()
+            .unwrap_or("synthetic")
+    });
     if request_json["stream"].as_bool().unwrap_or(false) {
         let escaped = serde_json::to_string(protected).unwrap();
         let frames = format!(
@@ -211,17 +237,22 @@ async fn capture_anthropic_request(
 }
 
 async fn spawn_upstream() -> MockUpstream {
-    spawn_upstream_with_mode(false, false, false).await
+    spawn_upstream_with_mode(false, false, false, None).await
 }
 
 async fn spawn_upstream_with_rate_limit(rate_limited: bool) -> MockUpstream {
-    spawn_upstream_with_mode(rate_limited, false, false).await
+    spawn_upstream_with_mode(rate_limited, false, false, None).await
+}
+
+async fn spawn_upstream_with_provider_text(provider_text: &str) -> MockUpstream {
+    spawn_upstream_with_mode(false, false, false, Some(provider_text.to_string())).await
 }
 
 async fn spawn_upstream_with_mode(
     rate_limited: bool,
     invalid_stream: bool,
     delayed_stream: bool,
+    provider_text: Option<String>,
 ) -> MockUpstream {
     let captures = Arc::new(Mutex::new(Vec::new()));
     let app = Router::new()
@@ -231,6 +262,7 @@ async fn spawn_upstream_with_mode(
             rate_limited,
             invalid_stream,
             delayed_stream,
+            provider_text,
         });
     let backend_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let backend_addr = backend_listener.local_addr().unwrap();
@@ -261,7 +293,8 @@ async fn spawn_upstream_with_mode(
 }
 
 async fn spawn_proxy(adapter: AnthropicAdapter) -> RunningServer {
-    spawn_proxy_with_observability(adapter, email_pipeline(), None).await
+    spawn_proxy_with_observability(adapter, email_pipeline(), DictionaryBundle::default(), None)
+        .await
 }
 
 fn counting_inspection() -> (
@@ -280,10 +313,11 @@ fn counting_inspection() -> (
 async fn spawn_proxy_with_observability(
     adapter: AnthropicAdapter,
     pipeline: Pipeline,
+    dictionaries: DictionaryBundle,
     inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
 ) -> RunningServer {
     let bind = unused_local_addr();
-    let config = ProxyConfig::anthropic_direct(bind, adapter);
+    let config = ProxyConfig::anthropic_direct(bind, adapter).with_dictionaries(dictionaries);
     let (config, inspection_consumer) = match inspection {
         Some((producer, consumer)) => (config.with_inspection(producer), Some(consumer)),
         None => (config, None),
@@ -608,6 +642,75 @@ async fn official_sdk_shaped_non_stream_flow_uses_exact_route_headers_and_proved
 }
 
 #[tokio::test]
+async fn direct_request_uses_the_configured_dictionary_bundle() {
+    let upstream = spawn_upstream().await;
+    let (pipeline, dictionaries) = dictionary_pipeline();
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        pipeline,
+        dictionaries,
+        None,
+    )
+    .await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": DICTIONARY_TERM}],
+        "stream": false
+    });
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.json::<Value>().await.unwrap()["content"][0]["text"],
+        DICTIONARY_TERM
+    );
+
+    let captures = upstream.captures.lock().await;
+    assert_eq!(captures.len(), 1);
+    let body = std::str::from_utf8(&captures[0].body).unwrap();
+    assert!(!body.contains(DICTIONARY_TERM));
+    assert!(body.contains("catalog_title"));
+}
+
+#[tokio::test]
+async fn direct_response_residual_rejects_a_dictionary_only_provider_term() {
+    let upstream = spawn_upstream_with_provider_text(DICTIONARY_TERM).await;
+    let (pipeline, dictionaries) = dictionary_pipeline();
+    let proxy = spawn_proxy_with_observability(
+        AnthropicAdapter::new(upstream.origin.clone()),
+        pipeline,
+        dictionaries,
+        None,
+    )
+    .await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": "synthetic-safe"}],
+        "stream": false
+    });
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+    let body = response.text().await.unwrap();
+    assert!(!body.contains(DICTIONARY_TERM));
+    assert_eq!(upstream.captures.lock().await.len(), 1);
+}
+
+#[tokio::test]
 async fn official_sdk_shaped_stream_flow_restores_only_after_complete_sse_proof() {
     let upstream = spawn_upstream().await;
     let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
@@ -834,6 +937,7 @@ async fn split_opaque_carriers_reject_across_complete_request_views_without_side
     let proxy = spawn_proxy_with_observability(
         AnthropicAdapter::new(upstream.origin.clone()),
         email_pipeline().with_redaction_logger(logger.clone()),
+        DictionaryBundle::default(),
         Some((inspection, consumer)),
     )
     .await;
@@ -1103,7 +1207,7 @@ async fn closed_errors_and_debug_omit_credentials_pii_and_upstream_text() {
 
 #[tokio::test]
 async fn late_stream_proof_failure_emits_only_the_constant_safe_error_frame() {
-    let upstream = spawn_upstream_with_mode(false, true, false).await;
+    let upstream = spawn_upstream_with_mode(false, true, false, None).await;
     let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
     let response = sdk_client_request(&Client::new(), &proxy, true)
         .send()
@@ -1117,7 +1221,7 @@ async fn late_stream_proof_failure_emits_only_the_constant_safe_error_frame() {
 
 #[tokio::test]
 async fn delayed_stream_emits_only_the_compiled_ping_before_proved_replay() {
-    let upstream = spawn_upstream_with_mode(false, false, true).await;
+    let upstream = spawn_upstream_with_mode(false, false, true, None).await;
     let adapter = AnthropicAdapter::builder(upstream.origin.clone())
         .ping_interval(Duration::from_secs(1))
         .unwrap()
@@ -1144,7 +1248,7 @@ async fn delayed_stream_emits_only_the_compiled_ping_before_proved_replay() {
 async fn unmodified_official_python_sdk_runs_non_stream_and_stream_against_loopback() {
     let python = std::env::var_os("GAZE_OFFICIAL_SDK_PYTHON")
         .expect("GAZE_OFFICIAL_SDK_PYTHON must identify the prepared SDK interpreter");
-    let upstream = spawn_upstream_with_mode(false, false, true).await;
+    let upstream = spawn_upstream_with_mode(false, false, true, None).await;
     let proxy = spawn_proxy(
         AnthropicAdapter::builder(upstream.origin.clone())
             .ping_interval(Duration::from_secs(1))

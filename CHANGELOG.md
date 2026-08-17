@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`gaze_proxy::ProxyConfig::with_dictionaries` installs one immutable
+  dictionary source for every proxy detection pass.** Omitting the builder keeps
+  the existing empty-bundle default. `ProxyConfig` was already
+  `#[non_exhaustive]` and the stored field is private, so this addition does not
+  break external struct construction.
+
 - **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
   (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
   tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
@@ -239,6 +245,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve the original value. `PiiClass::family` and `as_family_name` now model
   that namespace once, and policy and rulepack parsing share the same
   non-normalizing path. The enum and manifest wire shape are unchanged.
+- **`gaze proxy` now resolves the same rulepacks, dictionaries, and
+  auto-activated locales as `gaze clean` for the same policy** (audit 7201
+  S11-F2, solo todo #2937). Previously the proxy assembled a narrower pipeline
+  that skipped dictionary values and locale-gated auto-activation.
+- **Proxy request protection and fail-closed residual validation now read the
+  same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
+  response validation plus the legacy primary and residual request passes; the
+  residual can no longer know fewer dictionary terms than the primary pass.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
