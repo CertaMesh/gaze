@@ -994,7 +994,6 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::pipeline::build::resolve_ner_threshold;
     use gaze::Policy;
 
