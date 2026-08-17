@@ -696,7 +696,7 @@ impl Pipeline {
                     locale_chain,
                     dictionaries,
                 )?;
-                let report = self.run_safety_nets(
+                let mut report = self.run_safety_nets(
                     target,
                     &clean.text,
                     &Manifest::from_spans(clean.manifest.clone()),
@@ -708,7 +708,7 @@ impl Pipeline {
                 self.apply_safety_net_policy(
                     target,
                     &mut clean,
-                    &report,
+                    &mut report,
                     DocumentKind::Text,
                     locale_chain,
                     None,
@@ -748,7 +748,7 @@ impl Pipeline {
             dictionaries,
             Some(&mut protection_trace),
         )?;
-        let report = self.run_safety_nets(
+        let mut report = self.run_safety_nets(
             &mut target,
             &clean.text,
             &Manifest::from_spans(clean.manifest.clone()),
@@ -760,7 +760,7 @@ impl Pipeline {
         self.apply_safety_net_policy(
             &mut target,
             &mut clean,
-            &report,
+            &mut report,
             DocumentKind::Text,
             locale_chain,
             None,
@@ -1208,7 +1208,7 @@ impl Pipeline {
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
-        report: &LeakReport,
+        report: &mut LeakReport,
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         field_path: Option<&str>,
@@ -1217,10 +1217,15 @@ impl Pipeline {
     ) -> Result<()> {
         match decision {
             SafetyNetDecision::Observe { .. } => Ok(()),
+            // Redact mode acts on every suspect the nets reported, including any that lie inside
+            // a live token: the mode's contract is that the flagged bytes go, and the redactor
+            // expands each span to swallow whatever manifest entry it overlaps. That is the
+            // documented axis-2 cost of `Redact`, and it is why the `Resolve` fallback -- which
+            // promises to preserve what resolve already protected -- uses the filtered set above.
             SafetyNetDecision::Redact => self.redact_safety_net_suspects(
                 target,
                 clean,
-                report,
+                &redaction_suspects(report),
                 document_kind,
                 field_path,
                 None,
@@ -1264,16 +1269,44 @@ impl Pipeline {
                     }
                 };
                 if let Some(reason) = reason {
-                    self.apply_safety_net_fallback(
-                        target,
-                        clean,
-                        residual_report.as_ref().unwrap_or(report),
-                        document_kind,
-                        field_path,
-                        on_residual,
-                        reason,
-                        protection_trace,
-                    )?;
+                    let acted_on = {
+                        // Neither producer of `reason` audits its protected suspects: both return
+                        // the moment they find an actionable one. Classify once here, so the
+                        // protected ones get their `Preserve` row and the fallback is handed only
+                        // the suspects it may act on.
+                        let source = residual_report.as_ref().unwrap_or(&*report);
+                        let actionable = self.classify_fallback_suspects(
+                            target,
+                            clean,
+                            source,
+                            document_kind,
+                            field_path,
+                        )?;
+                        let acted_on = actionable
+                            .iter()
+                            .map(|suspect| (*suspect).clone())
+                            .collect::<Vec<_>>();
+                        self.apply_safety_net_fallback(
+                            target,
+                            clean,
+                            &actionable,
+                            document_kind,
+                            field_path,
+                            on_residual,
+                            reason,
+                            protection_trace,
+                        )?;
+                        acted_on
+                    };
+                    // A residual found by the post-resolution re-run is absent from the primary
+                    // report the caller receives. Surfacing it matters beyond tidiness: a boundary
+                    // that decides on the report — the CLI's tolerant-mode warning, an adopter's
+                    // "did anything leak?" check — would otherwise be told nothing was found while
+                    // a residual shipped under `tolerant` or was one-way redacted under `redact`.
+                    // Only the re-run's suspects are merged; first-pass ones are already there.
+                    if residual_report.is_some() {
+                        report.extend(LeakReport::from_parts(acted_on, Vec::new()));
+                    }
                 }
                 Ok(())
             }
@@ -1460,26 +1493,77 @@ impl Pipeline {
         Ok(None)
     }
 
-    /// Applies the `Resolve` residual policy to `residual_report`, the report that produced
-    /// `reason` (see [`Self::apply_safety_net_policy`]).
+    /// Splits the report that produced a fallback reason into the suspects the fallback may act
+    /// on, and audits the rest.
     ///
-    /// One `decided_by: Fallback` audit row per residual suspect, labelled with what the fallback
-    /// does to that suspect's bytes ([`fallback_row_action`]), then the action itself: `Strict`
-    /// rejects the document, `Tolerant` ships it, `Redact` deletes the residual spans (audit rows
+    /// A suspect lying wholly inside a live token is **already protected**: the primary pass, or
+    /// the resolve pass, tokenized those bytes. Redacting it would delete the token, drop its
+    /// manifest entry, and destroy the restore path for a value that was never at risk — an axis-2
+    /// break committed in the name of a leak that does not exist. It is audited as a `Preserve`
+    /// no-op and withheld from the redactor.
+    ///
+    /// This runs *because* neither producer of a fallback reason audits its own protected set:
+    /// both [`Self::resolve_safety_net_suspects`] and [`Self::post_resolution_fallback_reason`]
+    /// return as soon as they find an actionable suspect, before their `Preserve` logging loop.
+    /// Without this, a protected suspect is both redacted and invisible in the audit.
+    fn classify_fallback_suspects<'report>(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean: &CleanText,
+        report: &'report LeakReport,
+        document_kind: DocumentKind,
+        field_path: Option<&str>,
+    ) -> Result<Vec<&'report LeakSuspect>> {
+        // Precondition for the live-token classification: a manifest that misdescribes the
+        // document would misclassify, and a misclassification here is the axis-2 break above.
+        validate_clean_manifest(clean)?;
+        let mut protected = Vec::new();
+        let mut actionable = Vec::new();
+        for suspect in &report.suspects {
+            if suspect_is_inside_live_token(target, clean, suspect) {
+                protected.push(suspect);
+            } else {
+                actionable.push(suspect);
+            }
+        }
+        sort_safety_net_suspects(&mut protected);
+        sort_safety_net_suspects(&mut actionable);
+        for suspect in protected {
+            self.log_safety_net_entry(
+                target,
+                suspect,
+                document_kind,
+                field_path,
+                Action::Preserve,
+                true,
+                ConflictTier::Resolve,
+                None,
+            )?;
+        }
+        Ok(actionable)
+    }
+
+    /// Applies the `Resolve` residual policy to `actionable` — the suspects from the report that
+    /// produced `reason` which the fallback is allowed to touch (see
+    /// [`Self::classify_fallback_suspects`]).
+    ///
+    /// One `decided_by: Fallback` audit row per actionable suspect, labelled with what the
+    /// fallback does to that suspect's bytes ([`fallback_row_action`]), then the action itself:
+    /// `Strict` rejects the document, `Tolerant` ships it, `Redact` deletes the spans (audit rows
     /// already written here, so the redactor is told not to log again).
     #[allow(clippy::too_many_arguments)]
     fn apply_safety_net_fallback(
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
-        residual_report: &LeakReport,
+        actionable: &[&LeakSuspect],
         document_kind: DocumentKind,
         field_path: Option<&str>,
         on_residual: SafetyNetFallback,
         reason: FallbackReason,
         protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<()> {
-        for suspect in redaction_suspects(residual_report) {
+        for suspect in actionable {
             self.log_safety_net_entry(
                 target,
                 suspect,
@@ -1497,7 +1581,7 @@ impl Pipeline {
             SafetyNetFallback::Redact => self.redact_safety_net_suspects(
                 target,
                 clean,
-                residual_report,
+                actionable,
                 document_kind,
                 field_path,
                 Some(reason),
@@ -1512,7 +1596,7 @@ impl Pipeline {
         &self,
         target: &mut ProtectionTarget<'_, '_>,
         clean: &mut CleanText,
-        report: &LeakReport,
+        suspects: &[&LeakSuspect],
         document_kind: DocumentKind,
         field_path: Option<&str>,
         fallback_reason: Option<FallbackReason>,
@@ -1530,7 +1614,7 @@ impl Pipeline {
         // needs original coordinates, so the raw span of every plan has to be established before
         // any of them is applied.
         let mut plans = Vec::new();
-        for suspect in redaction_suspects(report) {
+        for suspect in suspects.iter().copied() {
             let span =
                 round_span_outward_to_char_boundaries(&clean.text, suspect_action_span(suspect))?;
             let span = expand_span_to_overlapping_manifest_entries(clean, span);
@@ -3737,14 +3821,14 @@ mod tests {
         let pipeline = Pipeline::builder().build().expect("pipeline");
         let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
 
-        let (traced_session, mut traced_clean, traced_report, raw_text) =
+        let (traced_session, mut traced_clean, mut traced_report, raw_text) =
             fallback_redact_parity_fixture();
         let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(&raw_text);
         let traced_result = pipeline.apply_safety_net_policy(
             &mut traced_target,
             &mut traced_clean,
-            &traced_report,
+            &mut traced_report,
             DocumentKind::Text,
             &[crate::LocaleTag::Global],
             None,
@@ -3752,13 +3836,13 @@ mod tests {
             Some(&mut trace),
         );
 
-        let (untraced_session, mut untraced_clean, untraced_report, _) =
+        let (untraced_session, mut untraced_clean, mut untraced_report, _) =
             fallback_redact_parity_fixture();
         let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_result = pipeline.apply_safety_net_policy(
             &mut untraced_target,
             &mut untraced_clean,
-            &untraced_report,
+            &mut untraced_report,
             DocumentKind::Text,
             &[crate::LocaleTag::Global],
             None,
@@ -3821,14 +3905,14 @@ mod tests {
         let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Strict);
         let raw = "Dr. Schmidt tail";
 
-        let (traced_session, mut traced_clean, traced_report) = fixture();
+        let (traced_session, mut traced_clean, mut traced_report) = fixture();
         let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(raw);
         let traced_error = pipeline
             .apply_safety_net_policy(
                 &mut traced_target,
                 &mut traced_clean,
-                &traced_report,
+                &mut traced_report,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 None,
@@ -3837,13 +3921,13 @@ mod tests {
             )
             .expect_err("genuine traced residual must fail closed");
 
-        let (untraced_session, mut untraced_clean, untraced_report) = fixture();
+        let (untraced_session, mut untraced_clean, mut untraced_report) = fixture();
         let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_error = pipeline
             .apply_safety_net_policy(
                 &mut untraced_target,
                 &mut untraced_clean,
-                &untraced_report,
+                &mut untraced_report,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 None,
@@ -3900,7 +3984,7 @@ mod tests {
 
         let pipeline = Pipeline::builder().build().expect("pipeline");
         let policy = SafetyNetPolicy::new(SafetyNetMode::Resolve, SafetyNetFallback::Redact);
-        let (traced_session, mut traced_clean, traced_report, raw) = fixture();
+        let (traced_session, mut traced_clean, mut traced_report, raw) = fixture();
         let traced_before = (traced_clean.text.clone(), traced_clean.manifest.clone());
         let mut traced_target = ProtectionTarget::Live(&traced_session);
         let mut trace = ProtectionTraceCollector::new(&raw);
@@ -3908,7 +3992,7 @@ mod tests {
             .apply_safety_net_policy(
                 &mut traced_target,
                 &mut traced_clean,
-                &traced_report,
+                &mut traced_report,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 None,
@@ -3917,14 +4001,14 @@ mod tests {
             )
             .expect_err("traced non-affine manifest must fail closed");
 
-        let (untraced_session, mut untraced_clean, untraced_report, _) = fixture();
+        let (untraced_session, mut untraced_clean, mut untraced_report, _) = fixture();
         let untraced_before = (untraced_clean.text.clone(), untraced_clean.manifest.clone());
         let mut untraced_target = ProtectionTarget::Live(&untraced_session);
         let untraced_error = pipeline
             .apply_safety_net_policy(
                 &mut untraced_target,
                 &mut untraced_clean,
-                &untraced_report,
+                &mut untraced_report,
                 DocumentKind::Text,
                 &[crate::LocaleTag::Global],
                 None,
@@ -4348,7 +4432,7 @@ mod tests {
             .redact_safety_net_suspects(
                 &mut target,
                 &mut clean,
-                &probe_report(),
+                &redaction_suspects(&probe_report()),
                 DocumentKind::Text,
                 None,
                 None,
@@ -4429,7 +4513,7 @@ mod tests {
             .redact_safety_net_suspects(
                 &mut target,
                 &mut clean,
-                &overlapping_expansion_report(),
+                &redaction_suspects(&overlapping_expansion_report()),
                 DocumentKind::Text,
                 None,
                 None,
@@ -4473,7 +4557,7 @@ mod tests {
             .redact_safety_net_suspects(
                 &mut target,
                 &mut clean,
-                &overlapping_expansion_report(),
+                &redaction_suspects(&overlapping_expansion_report()),
                 DocumentKind::Text,
                 None,
                 None,

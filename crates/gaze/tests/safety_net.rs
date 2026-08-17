@@ -1473,3 +1473,321 @@ fn fallback_redaction_is_traced_as_fallback_redact() {
     assert_eq!(fallback.action(), "redact");
     assert_eq!(fallback.source_ids(), &["second-pass".to_string()]);
 }
+
+/// Reports nothing on the first `check`, then a *mixed* residual: one class mismatch lying wholly
+/// inside a minted token (already protected — acting on it destroys restore) plus one genuine
+/// uncovered residual.
+///
+/// The single-suspect residual fixture cannot tell "the fallback acted on the residual report"
+/// apart from "the fallback acted on every suspect in it". This one can.
+#[derive(Clone)]
+struct MixedSecondPassNet {
+    residual_marker: &'static str,
+    /// Kind reported for the actionable residual. `Uncovered` drives the fallback through
+    /// `ResidualSuspect`; `ClassMismatch` drives it through `OverlapConflict`. Both reasons reach
+    /// the same unfiltered redaction path, so both must be covered.
+    residual_kind: LeakKind,
+    calls: Arc<AtomicUsize>,
+}
+
+impl MixedSecondPassNet {
+    fn new(residual_marker: &'static str, residual_kind: LeakKind) -> Self {
+        Self {
+            residual_marker,
+            residual_kind,
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl SafetyNet for MixedSecondPassNet {
+    fn id(&self) -> &str {
+        "mixed-second-pass"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(Vec::new());
+        }
+        let mut suspects = Vec::new();
+        let suspect = |span: Range<usize>, kind| {
+            LeakSuspect::new(
+                span,
+                PiiClass::Name,
+                "mixed-second-pass",
+                Some(0.99),
+                kind,
+                PiiClass::Name.to_canonical_str(),
+                None,
+            )
+        };
+        // (a) A class mismatch covering the token the primary pass minted. It is already
+        //     protected; the resolver audits it as a no-op and must never redact it.
+        if let Some(minted) = context.manifest.spans.first() {
+            let span = minted.clean_span.clone();
+            if let Some(kind) = context.manifest.diff_against(&span, &PiiClass::Name) {
+                suspects.push(suspect(span, kind));
+            }
+        }
+        // (b) The genuine residual, outside every token. Its kind is dictated by the fixture
+        //     rather than by the manifest, so one net can drive both fallback reasons.
+        if let Some(start) = clean_text.find(self.residual_marker) {
+            let span = start..start + self.residual_marker.len();
+            suspects.push(suspect(span, self.residual_kind.clone()));
+        }
+        Ok(suspects)
+    }
+}
+
+/// Axis-2: the `Resolve` fallback must redact the residual **without** touching suspects that are
+/// already protected by a live token.
+///
+/// Handing the fallback the whole residual report is necessary (the residual is only in there) but
+/// not sufficient: `post_resolution_fallback_reason` classifies some of those suspects as
+/// protected precisely because redacting them would delete a minted token and destroy its restore
+/// path. The fallback acts on the actionable subset, and the protected ones still get their
+/// `Preserve` audit row.
+#[test]
+fn resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens() {
+    let cases = [
+        (LeakKind::Uncovered, FallbackReason::ResidualSuspect),
+        (
+            LeakKind::ClassMismatch {
+                pipeline_class: PiiClass::Email,
+                safety_net_class: PiiClass::Name,
+            },
+            FallbackReason::OverlapConflict,
+        ),
+    ];
+
+    for (residual_kind, expected_reason) in cases {
+        let logger = MemoryLogger::new();
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                span: 0.."alice@example.invalid".len(),
+                class: PiiClass::Email,
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .register_safety_net(MixedSecondPassNet::new(RESIDUAL_MARKER, residual_kind))
+            .redaction_logger(logger.clone())
+            .build()
+            .expect("pipeline");
+        let session = session();
+
+        let (clean, manifest, _) = clean_with_policy(
+            &pipeline,
+            &session,
+            RawDocument::Text(RESIDUAL_RAW.to_string()),
+            &[gaze::LocaleTag::Global],
+            gaze::SafetyNetPolicy::default(),
+        )
+        .unwrap_or_else(|err| panic!("{expected_reason:?}: {err:?}"));
+        let clean = text(clean);
+
+        // The residual is gone...
+        assert!(
+            !clean.contains(RESIDUAL_MARKER),
+            "{expected_reason:?}: residual must be redacted"
+        );
+        // ...and the minted token survived intact, so its manifest entry and restore path live.
+        assert_eq!(
+            manifest.len(),
+            1,
+            "{expected_reason:?}: the protected token must survive fallback"
+        );
+        assert_eq!(
+            session.restore_strict_text(&clean).expect("restore"),
+            "alice@example.invalid ",
+            "{expected_reason:?}: restore must round-trip the protected token"
+        );
+
+        // Both dispositions are on the record: the residual was redacted, the protected suspect
+        // was preserved. A protected suspect that vanishes from the audit is an axis-4 hole of
+        // its own — filtering it out of the redaction set is only half the fix.
+        let rows = logger.entries();
+        let redacted = rows
+            .iter()
+            .filter(|row| row.decided_by == ConflictTier::Fallback && row.action == Action::Redact)
+            .collect::<Vec<_>>();
+        let preserved = rows
+            .iter()
+            .filter(|row| row.action == Action::Preserve)
+            .count();
+        assert_eq!(
+            redacted.len(),
+            1,
+            "{expected_reason:?}: one redacted residual"
+        );
+        assert_eq!(
+            redacted[0].fallback_triggered,
+            Some(expected_reason),
+            "{expected_reason:?}: the row names the reason that drove the fallback"
+        );
+        assert_eq!(
+            preserved, 1,
+            "{expected_reason:?}: the protected suspect keeps its Preserve row"
+        );
+    }
+}
+
+/// Reports `first` on the first `check` and `second` on every later one, so the resolve pass
+/// converges on a real suspect before the re-run finds a different residual.
+#[derive(Clone)]
+struct TwoMarkerNet {
+    first: &'static str,
+    second: &'static str,
+    calls: Arc<AtomicUsize>,
+}
+
+impl SafetyNet for TwoMarkerNet {
+    fn id(&self) -> &str {
+        "two-marker"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        let marker = if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            self.first
+        } else {
+            self.second
+        };
+        let Some(start) = clean_text.find(marker) else {
+            return Ok(Vec::new());
+        };
+        let span = start..start + marker.len();
+        let Some(kind) = context.manifest.diff_against(&span, &PiiClass::Name) else {
+            return Ok(Vec::new());
+        };
+        Ok(vec![LeakSuspect::new(
+            span,
+            PiiClass::Name,
+            "two-marker",
+            Some(0.99),
+            kind,
+            PiiClass::Name.to_canonical_str(),
+            None,
+        )])
+    }
+}
+
+/// The other half of the stale-report defect: a **non-empty** primary report.
+///
+/// The resolve pass tokenizes the first-pass suspect, which shifts every later offset. The
+/// primary report still describes pre-resolve coordinates, so a fallback that reads it redacts
+/// bytes that have since become part of a minted token — deleting the token and leaving the actual
+/// residual in place.
+#[test]
+fn resolve_fallback_does_not_redact_stale_pre_resolve_spans() {
+    let pipeline = Pipeline::builder()
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(TwoMarkerNet {
+            first: "Dr. Schmidt",
+            second: "tail",
+            calls: Arc::new(AtomicUsize::new(0)),
+        })
+        .build()
+        .expect("pipeline");
+    let session = session();
+    let raw = "Dr. Schmidt tail";
+
+    let (clean, manifest, _) = clean_with_policy(
+        &pipeline,
+        &session,
+        RawDocument::Text(raw.to_string()),
+        &[gaze::LocaleTag::Global],
+        gaze::SafetyNetPolicy::default(),
+    )
+    .expect("default policy clean");
+    let clean = text(clean);
+
+    // The first-pass suspect was resolved into a token, and that token is intact: the fallback
+    // did not delete it by acting on its pre-resolve span.
+    assert_eq!(manifest.len(), 1, "the resolved name token must survive");
+    assert!(
+        clean.starts_with(&clean[..manifest[0].clean_span.end]),
+        "the minted token must be whole"
+    );
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("restore"),
+        "Dr. Schmidt ",
+        "the resolved name restores; only the residual is gone"
+    );
+    // The second-pass residual is the thing that got removed.
+    assert!(!clean.contains("tail"), "the residual must be redacted");
+}
+
+/// The returned `LeakReport` must mention a residual that only the post-resolution re-run saw.
+///
+/// The report handed back to the caller is the first pass's. When the residual arrives on the
+/// re-run, a boundary that decides on that report — the CLI's tolerant-mode deprecation warning,
+/// an adopter's "did anything leak?" check — was told nothing was found, while under `tolerant`
+/// the residual bytes shipped and under `redact` they were destroyed one-way. Both are outcomes a
+/// caller must be able to see.
+#[test]
+fn returned_report_surfaces_a_residual_that_only_the_re_run_found() {
+    for (on_residual, residual_ships) in [
+        (gaze::SafetyNetFallback::Tolerant, true),
+        (gaze::SafetyNetFallback::Redact, false),
+    ] {
+        let session = session();
+        let (clean, _, report) = clean_with_policy(
+            &residual_pipeline(MemoryLogger::new()),
+            &session,
+            RawDocument::Text(RESIDUAL_RAW.to_string()),
+            &[gaze::LocaleTag::Global],
+            gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Resolve, on_residual),
+        )
+        .unwrap_or_else(|err| panic!("{on_residual:?}: {err:?}"));
+
+        assert_eq!(
+            text(clean).contains(RESIDUAL_MARKER),
+            residual_ships,
+            "{on_residual:?}: fixture must actually exercise the residual path"
+        );
+        assert_eq!(
+            report.stats.suspect_count, 1,
+            "{on_residual:?}: the caller must see the re-run's residual"
+        );
+        assert_eq!(
+            report.stats.uncovered_count, 1,
+            "{on_residual:?}: the CLI's tolerant warning gates on this count"
+        );
+        assert_eq!(report.suspects[0].safety_net_id, "second-pass");
+    }
+}
+
+/// The converse: a converged resolve must not inflate the report with re-run duplicates.
+///
+/// The re-run happens on every `Resolve` pass, and a deterministic net that re-reports a suspect
+/// it already reported would double every entry if the merge were unconditional.
+#[test]
+fn returned_report_is_not_inflated_when_resolve_converges() {
+    let net = MockNet::new(Some(0..5), PiiClass::Email);
+    let session = session();
+    let (_, _, report) = clean_with_policy(
+        &pipeline_with_net(Some(net)),
+        &session,
+        RawDocument::Text("Reach alice@example.invalid".to_string()),
+        &[gaze::LocaleTag::Global],
+        gaze::SafetyNetPolicy::default(),
+    )
+    .expect("converged resolve");
+
+    assert_eq!(report.stats.suspect_count, 1, "no duplicate suspects");
+}

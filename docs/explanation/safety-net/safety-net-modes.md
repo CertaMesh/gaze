@@ -13,7 +13,7 @@ Existing cross-reference: [`docs/explanation/safety-net/safety-nets.md`](safety-
 - Today's CLI only has two outcomes when a safety net flags a suspect: **fail closed** (`strict`, exit 3, empty stdout) or **ship the leak with a warning** (`tolerant`). Both are blunt instruments and `tolerant` is **explicitly not a production mode** (§3).
 - `redact` adds a third outcome: *one-way redact the suspect span and continue*. The cost is reversibility (axis 2) — the redacted bytes are gone for that suspect. The win is axis 1: no leak ships, no exit code, no human-in-the-loop. Available as an explicit opt-in for adopters who want to skip the resolve attempt and strip suspects directly.
 - `resolve` adds a fourth outcome: *promote each suspect into a synthetic custom-recognizer match and let the existing conflict resolver decide*. Manifest stays intact, restore round-trips for every emitted token, no new pipeline re-entry point. **This is the new production default** (§3, §14 Q9). Naming choice and impl-alt comparison in §7 and §8.
-- **New composable flag `--safety-net-fallback {strict|tolerant|redact}`** (§6). Applies when the primary mode is `redact` or `resolve` and the primary action cannot be honored for a specific suspect. Default is `redact`. One-hop cascade only.
+- **New composable flag `--safety-net-fallback {strict|tolerant|redact}`** (§6). *As implemented*, it applies when the primary mode is `resolve` and the resolve pass cannot honor a suspect or the post-resolve re-run still reports one. Default is `redact`. One-hop cascade only. (The original design below also proposed a `redact` cascade; that half was not implemented — see the note at the top of §6.)
 - **Defaults flip:** `--safety-net-mode` default is now `resolve`; `--safety-net-fallback` default is `redact`. The pairing attempts the reversibility-preserving path first and only strips suspect bytes when resolve cannot honor them (validator-veto, missing anchor, residual suspect after re-run). `strict` stays available as an opt-in for "must fail loud" deployments. Existing `strict` users must pass `--safety-net-mode strict` explicitly to retain that behavior on upgrade (§10).
 - The existing `SafetyNetMode` enum (`crates/gaze-cli/src/commands/mod.rs:399`) gains two additive variants. The current strict/tolerant semantics at `crates/gaze-cli/src/pipeline/run.rs:774` are unchanged for adopters who opt back in.
 - **Recommended ship order: `redact` first (with the new default flip and the fallback flag), `resolve` second**, both within v0.8.x. Reasoning in §11.
@@ -248,9 +248,10 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 
 ## 6. Fallback flag
 
-> **Implemented behaviour (v0.9).** The rest of this section is the original design. What shipped
-> is narrower in one respect, and the difference is load-bearing: **the fallback is consulted only
-> under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
+> **Implemented behaviour (v0.9).** §6.2 and §6.3 below have been rewritten to describe what the
+> runtime actually does; §6.1 and §6.4-§6.6 remain the original design with corrections noted
+> inline. What shipped is narrower than the design in one respect, and the difference is
+> load-bearing: **the fallback is consulted only under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
 > total lowering of the `(mode, fallback)` pair, and it is what every runtime arm reads:
 >
 > | `--safety-net-mode` | `--safety-net-fallback` | `SafetyNetDecision`          | runtime behaviour |
@@ -280,7 +281,7 @@ The fallback flag is a per-suspect cascade decision: when the primary `--safety-
 
 - Type: closed enum mirroring three variants of `SafetyNetMode`. No `resolve` value — chaining `resolve → resolve` would re-introduce the multi-iteration loop's auditability cost (§5.2).
 - Default: `redact`.
-- Ignored (with stderr warning if explicitly set) when `--safety-net-mode` is `strict` or `tolerant`.
+- Not consulted by `--safety-net-mode strict`, `tolerant`, or `redact`. No runtime warning is emitted for an unconsulted fallback: which pairs consult it is a property of the documented lowering (§6, `SafetyNetPolicy::decision`), not something to rediscover per invocation.
 - `policy.toml` overridable under `[policy.safety_net] fallback = "redact"`.
 
 ### 6.2 Composition matrix
@@ -335,7 +336,7 @@ If an adopter wants a longer chain in v0.9+, the natural API is a `Vec<SafetyNet
 
 Passing `--safety-net-fallback tolerant` requires the environment variable `GAZE_ALLOW_TOLERANT=1` to be set. Without it, the CLI exits at policy-load time with `CliError::PolicyConfig` and a typed message naming the env var. The env-var gate mirrors the existing `--safety-net-mode tolerant` posture (§3.1) — both opt-in violate axis-1, and both require an explicit operational signal that the operator understands the trade-off.
 
-The same stderr warning that fires on `--safety-net-mode tolerant` (§3.2) also fires on `--safety-net-fallback tolerant`.
+The same stderr warning that fires on `--safety-net-mode tolerant` (§3.2) also fires on `--safety-net-fallback tolerant` — but only where that fallback can actually be reached, i.e. under `--safety-net-mode resolve`, and only when the run has a suspect for it to act on. Under `redact` the fallback is never consulted, so no warning is emitted for it.
 
 ### 6.6 Audit-row delta
 

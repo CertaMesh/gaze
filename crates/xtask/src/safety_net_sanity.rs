@@ -49,6 +49,15 @@ fn suites() -> Vec<Suite> {
             required_tests: &[
                 "byte_equal_invariance_for_leak_kinds_and_locale_skip",
                 "structured_safety_net_traverses_nested_fields_and_preserves_shape",
+                // Regressions for a shipped leak: the `Resolve` fallback acting on the wrong
+                // report shipped residual PII under the default policy, and the fix must not
+                // delete the live tokens resolve had already protected. These are required by
+                // name so a refactor that quietly drops one turns the gate red instead of
+                // silently retiring the proof.
+                "resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report",
+                "resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens",
+                "resolve_fallback_does_not_redact_stale_pre_resolve_spans",
+                "fallback_redaction_is_traced_as_fallback_redact",
             ],
         },
         Suite {

@@ -226,22 +226,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Safety-net `resolve` fallback acted on the primary report instead of the
-  residual one, shipping residual PII under the default policy** (audit 7201
-  S01-F1, solo todo #2949). When the resolve pass converged and the
-  post-resolution re-run flagged a residual suspect, the fallback was handed the
-  *primary* `LeakReport` — which by then described pre-resolve coordinates, and
-  was empty whenever the first pass found nothing. Under the shipped default
-  (`Resolve` + `Redact` fallback) that meant the residual bytes were **left in
-  the clean document** and **no fallback audit row was written**, while the
-  caller received `Ok`; where the primary report was non-empty, the redactor was
-  pointed at stale spans and could delete bytes resolve had already tokenized.
+  residual one, destroying tokens and shipping residual PII under the default
+  policy** (audit 7201 S01-F1, solo todos #2949 and #2956). When the resolve
+  pass converged and the post-resolution re-run flagged a residual suspect, the
+  fallback was handed the *primary* `LeakReport`, which by then described
+  pre-resolve coordinates.
+
+  With a **non-empty** primary report — the broadly reachable case, since any
+  deterministic safety net produces one — the redactor was pointed at stale
+  pre-resolve spans. Those spans had since become part of a token the resolve
+  pass minted, so the fallback deleted the token, dropped its manifest entry,
+  and left the actual residual in the document: an axis-1 leak and an axis-2
+  restore break in the same operation, returned as `Ok`.
+
+  With an **empty** primary report the fallback had nothing to act on at all, so
+  the residual shipped and no fallback audit row was written. (Reaching that
+  shape requires a backend whose verdict differs across byte-identical text,
+  since a converged resolve leaves the document unchanged.)
+
   Only the `strict` fallback was safe, because it rejects the document without
   consulting the report. The fallback now receives the report that produced the
-  reason. Axis 1 (leak) and axis 4 (an audit row that claimed `Redact` while
-  nothing was redacted). Pinned by
-  `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`
-  and by the twelve-pair lowering table; both fail on a mutation that restores
-  the old argument.
+  reason, and acts only on the suspects in it that are not already protected by
+  a live token — a protected suspect is audited as a `Preserve` no-op instead of
+  being redacted, which also closes a gap where such suspects were left out of
+  the audit entirely. Pinned by
+  `resolve_fallback_does_not_redact_stale_pre_resolve_spans`,
+  `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`,
+  `resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens`
+  (both fallback reasons), and the twelve-pair lowering table; the first three
+  are required by name in the `safety-net-sanity` gate.
+
+- **A residual found only by the post-resolution re-run was invisible in the
+  returned `LeakReport`** (solo todo #2959). The report handed back to the
+  caller is the first pass's, so a boundary that decides on it — the CLI's
+  tolerant-mode deprecation warning, or an adopter's "did anything leak?" check
+  — was told nothing was found while the residual shipped under `tolerant` or
+  was destroyed one-way under `redact`. The suspects the fallback acted on are
+  now merged into the returned report. A converged resolve merges nothing, so a
+  deterministic net that re-reports the same suspect does not produce
+  duplicates.
 
 - **Fallback audit rows now state what happened to the suspect's bytes**
   (audit 7201 S01-F1, solo todo #2949). `fallback_action` was renamed to
