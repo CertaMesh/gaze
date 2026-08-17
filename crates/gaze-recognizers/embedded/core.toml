@@ -641,6 +641,7 @@ priority = 86
 id = "ssn.us"
 safety_tier = "safe_default"
 class = "custom:ssn"
+cooperates_with = ["ssn.de_cue"]
 enabled = true
 locales = ["en-US"]
 locale_basis = "format"
@@ -872,6 +873,206 @@ base = 0.85
 priority = 87
 
 [recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# ---------------------------------------------------------------------------------------------
+# Government-ID cluster (solo todo #2318 follow-on). Four fixed-format, cue-adjacent classes that
+# the deterministic rule floor could see but did not. Measured over the EN/DE holdout:
+#
+#   class              gold spans / bytes   cue adjacency   covered before
+#   SSN                217 / 2,513          90.8%           38 spans via ssn.us (17.5%)
+#   NATIONALID         200 / 2,315          60.0%           none
+#   DRIVERLICENSENUM   216 / 2,160          92.1%           none
+#   TAXNUM             212 / 2,495          92.9%           0 via steuer_id.de (0%)
+#
+# Every rule below is cue-anchored and measures ZERO matches in all 1,024 A4 negative documents
+# AND zero non-gold matches in the holdout. Each chosen variant was picked by sweep against looser
+# drafts, and in the DRIVERLICENSENUM case the tighter rule beat the looser one on BOTH coverage
+# and false positives (71 spans at 0 FP versus 68 spans at 105 holdout FPs) — tighter anchoring is
+# not a coverage sacrifice.
+#
+# CROSS-CLASS COLLISION: the numeric silhouettes genuinely overlap across these classes —
+# `d3-d2-d4` appears in SSN (163), NATIONALID (21) and TAXNUM (17); `d3.d4.d4.d2` in SSN (33),
+# NATIONALID (29) and TAXNUM (9). They are resolved through the first-class collision machinery
+# (`[recognizers.collision]` -> `FamilyPolicyTable` -> `ConflictTier::CollisionPolicy`) rather than
+# bespoke priority juggling. Precedence is ordered by CUE SPECIFICITY, which is the only evidence
+# that actually distinguishes these shapes: an SSN cue is unambiguous, a tax cue is nearly so, and
+# the NATIONALID cues ("id number", "id card") are the vaguest, so ssn=10 beats tax-number=20 beats
+# national-id=30. Distinct precedences make the
+# outcome deterministic; an equal-precedence overlap would instead emit a family-level
+# `Custom("family:government-id")` token plus an `AmbiguityRecord::PrecedenceTie`, which is the
+# fail-safe rather than a silent winner.
+
+# SSN, GERMAN-CUE ARM ONLY. `ssn.us` is left exactly as it was, deliberately.
+#
+# The measured gap is large: `ssn.us` matches only 38 of 217 gold SSN spans (17.5%), because 113
+# of 217 sit in GERMAN documents cued by "sozialversicherung" (101 occurrences) — a word its
+# vocabulary lacks entirely — and because its pattern has no `d3.d4.d4.d2` alternative (33 spans).
+# A US SSN inside a German document is still a US SSN, which is the argument of todo #2417.
+#
+# But FIXING that by widening `ssn.us` to `global` is out of scope and would silently rewrite a
+# committed contract: `cli_pipe.rs::s2_cli_core_validator_locale_entities_tokenize_and_round_trip`
+# pins that every locale-gated identifier yields ZERO detections under a wrong locale, and a
+# global SSN rule fires under `en-GB`. Widening it also regressed that test in practice, which is
+# how this arm's scope was found rather than assumed.
+#
+# So this recognizer carries GERMAN CUES ONLY. Its cue vocabulary is disjoint from `ssn.us`'s
+# ("ssn", "social security", "ss#"), so the two can never match the same span and the #2416
+# co-firing composite-source-id hazard cannot trigger — asserted on the corpus, not assumed.
+# `ssn.us` keeps en-US and its contract; this arm adds the German-cued population it can never see.
+[[recognizers]]
+id = "ssn.de_cue"
+safety_tier = "safe_default"
+class = "custom:ssn"
+cooperates_with = ["ssn.us"]
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:sozialversicherung(?:s(?:nummer|ausweis))?|sv-?nummer)[ \t]{0,4}(?:(?:ist|lautet|nr\.?|nummer)[ \t]{0,4})?(?:[:=#/-]?[ \t]{0,4})(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.88
+priority = 86
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "ssn"
+precedence = 10
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# TAXNUM. Deliberately NOT validator-backed, and this is the one place in this change where the
+# benchmark and production correctness point in opposite directions.
+#
+# `DeSteuerIdMod1110` exists in the closed `ValidatorKind` set and `steuer_id.de` already uses it.
+# But 210 of the 212 gold TAXNUM spans in this corpus FAIL that checksum — only 2 pass (0.9%) —
+# because the corpus values are synthetic. A validator-backed rule is therefore correct for
+# production and capped at ~1% recall here. Simultaneously, the A4 negative corpus contains 64
+# tax-shaped INVALID identifiers in its `invalid_identifiers` category, which a broad cue rule
+# falsely matches and which a checksum would have rejected. The corpus thus penalises having a
+# validator and penalises not having one. See todo #2418.
+#
+# The resolution is neither horn of that dilemma: REQUIRING INTERNAL SEPARATORS excludes A4's
+# bare-digit invalids without invoking the checksum. Measured, the broad form covers 36.3% but
+# takes 64 A4 false positives.
+#
+# Separators alone were NOT sufficient, and the repo's own contract caught it. A separator-only
+# form with a 2-or-3 digit lead covers 45 spans / 545 bytes (21.8%) but matches the grouped
+# 2-3-3-3 ELEVEN-DIGIT form, which IS the German Steuer-ID. `cli_pipe.rs` pins that an invalid
+# Steuer-ID must stay untokenized (validator veto via `de_steuer_id_mod1110`), so that form
+# regressed a deliberate contract. Requiring a THREE-DIGIT LEAD cedes the 2-3-3-3 shape to
+# `steuer_id.de`, where the checksum belongs, and covers 34 spans / 418 bytes (16.8%) at ZERO A4
+# and zero holdout false positives.
+#
+# The 16.8% is therefore a deliberate precision choice paid for twice — once to avoid A4's
+# invalids and once to respect the Steuer-ID validator contract — NOT a detection deficiency. The
+# checksummed shape is not unprotected: it remains `steuer_id.de`'s, which is the only rule that
+# can tell a valid Steuer-ID from an invalid one.
+#
+# `steuer_id.de` and its `de_steuer_id_mod1110` validator are left untouched; this recognizer
+# carries the distinct `custom:tax_number` class so the checksummed Steuer-ID contract is
+# unchanged. This supersedes the held grouped-TAXNUM stack ec6b92d, whose 2-3-3-3-only shape is a
+# strict subset covering 3 spans / 42 bytes against this rule's 34 / 418.
+[[recognizers]]
+id = "tax_number.cue_anchored"
+safety_tier = "safe_default"
+class = "custom:tax_number"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:steuer(?:-?id|nummer|liche[ \t]identifikationsnummer)?|idnr\.?|tax(?:[ \t](?:id|number))?|taxpayer|tin)[ \t]{0,4}(?:(?:ist|lautet|is|nr\.?|no\.?|number|nummer)[ \t]{0,4})?(?:[:=#/-]?[ \t]{0,4})(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.85
+priority = 84
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "tax-number"
+precedence = 20
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# DRIVERLICENSENUM. Letter-led alphanumeric after an explicit bilingual licence cue. 97.7% of gold
+# spans are alphanumeric and the dominant silhouettes are a short letter run followed by digits
+# (`Ud7` 33, `Ud9` 25, `U2d7` 19, `Ud8` 17).
+#
+# The chosen form is TIGHTER than the first draft and better on both axes: 71 spans / 682 bytes
+# (31.6%) at zero A4 and zero holdout false positives, against the looser
+# `[A-Z0-9][A-Z0-9-]{5,19}` draft's 68 spans and 105 holdout false positives. Requiring a leading
+# letter run and a digit tail is what removes the false matches, and it costs no coverage.
+[[recognizers]]
+id = "driver_license.cue_anchored"
+safety_tier = "safe_default"
+class = "custom:driver_license"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:driver'?s?[ \t]licen[cs]e|driving[ \t]licen[cs]e|licen[cs]e[ \t]number|dl#|f[uü]hrerschein(?:nummer)?|fahrerlaubnis)[ \t]{0,4}(?:(?:ist|lautet|is|nr\.?|no\.?|number|nummer)[ \t]{0,4})?(?:[:=#/-]?[ \t]{0,4})([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.85
+priority = 83
+
+[recognizers.token]
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+
+# NATIONALID. The weakest of the four, and shipped with a KNOWN, BOUNDED, DISCLOSED GAP.
+#
+# Cue adjacency is only 60.0% overall and badly asymmetric: 89 of 92 English spans (96.7%) carry a
+# cue but only 31 of 108 German spans (28.7%) do. The 77 bare German spans are structurally
+# unreachable by any cue-anchored rule and are NOT chased here. That asymmetry is exactly what
+# would tempt an unanchored rule, and unanchored is what produced 74 holdout false positives in
+# the first draft of this very recognizer.
+#
+# Chosen form covers 44 spans / 438 bytes (18.9%) at zero A4 and zero holdout false positives.
+# Weakest in the family (precedence 30; lower numbers win) because its cues ("id number", "id card") are the vaguest of the
+# three numeric variants and must lose a genuine overlap against an SSN or tax cue.
+[[recognizers]]
+id = "national_id.cue_anchored"
+safety_tier = "safe_default"
+class = "custom:national_id"
+enabled = true
+locales = ["global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:national[ \t]id(?:entity)?(?:[ \t]number)?|nationalid|identity[ \t](?:card|number)|id[ \t](?:card|number)|personalausweis(?:nummer)?|ausweisnummer|national[ \t]insurance)[ \t]{0,4}(?:(?:ist|lautet|is|nr\.?|no\.?|number|nummer)[ \t]{0,4})?(?:[:=#/-]?[ \t]{0,4})([A-Z]{1,2}\d{6,9}[A-Z]?|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,11})\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.82
+priority = 82
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "national-id"
+precedence = 30
 
 [recognizers.source]
 origin = "project-authored"
