@@ -340,3 +340,24 @@ fn lint_disjoint_locales_load_clean() {
         "unexpected postal collision warning in logs: {logs:?}"
     );
 }
+
+#[test]
+fn lint_projects_format_basis_recognizers_globally() {
+    let raw = postal_collision_rulepack(r#""de-DE""#, true).replace(
+        "locales = [\"en-US\"]",
+        "locales = [\"en-US\"]\nlocale_basis = \"format\"",
+    );
+    let err = Rulepack::parse(&raw)
+        .expect_err("format basis must overlap an active document-basis recognizer");
+
+    assert!(matches!(
+        err,
+        RulepackError::ConflictingLocaleProjection {
+            class: PiiClass::Custom(ref class),
+            ref recognizer_ids,
+            ref locale_overlap,
+        } if class == "postal_code"
+            && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
+            && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::Global]
+    ));
+}

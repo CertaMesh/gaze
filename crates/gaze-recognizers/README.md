@@ -135,13 +135,18 @@ Loading failures are policy configuration failures in the CLI path.
 
 | Name | File | Purpose |
 |------|------|---------|
-| `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` to control no-policy activation. |
+| `core` | [`embedded/core.toml`](embedded/core.toml) | Unified bundled recognizer set. Email/name, parser-backed phone, IBAN, payment-card, IP, ETH, and postal recognizers now live in one bundle. Each recognizer declares `safety_tier = "safe_default"`, `"locale_gated"`, or `"opt_in"` and `locale_basis = "document"` or `"format"`. Format-basis recognizers ignore the document locale for eligibility. |
 | `core-extended` | alias of `core` | Deprecated since v0.8.0 and scheduled for removal in v0.10.0. CLI use emits a warning and preserves v0.8.x compatibility by auto-activating locale-gated recognizers. |
 | `locale-de` | [`embedded/locale-de.toml`](embedded/locale-de.toml) | DACH locale metadata such as German email headers. |
 | `locale-en` | [`embedded/locale-en.toml`](embedded/locale-en.toml) | English locale metadata such as English email headers. |
 
 The loader returns `None` for unknown names. Policy/CLI callers should treat
 unknown bundled names as configuration errors.
+
+Official bundled recognizers must declare `locale_basis` explicitly. External
+rulepacks that omit it keep the legacy `document` default. With `format`,
+`locales` records identifier-format provenance; it is not an eligibility gate.
+Disable a format-basis recognizer itself when suppression is intentional.
 
 ## Recognizer-level metadata (v0.7.2)
 

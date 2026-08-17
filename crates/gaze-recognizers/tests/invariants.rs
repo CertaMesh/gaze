@@ -49,6 +49,7 @@ fn regex_from_spec(spec: &RecognizerSpec) -> RegexDetector {
             .map(|normalizer| NormalizerKind::parse(&normalizer.kind).expect("normalizer kind")),
     )
     .expect("regex detector")
+    .with_locale_basis(spec.locale_basis)
 }
 
 fn pipeline_from_rulepack(rulepack: &Rulepack) -> Pipeline {
