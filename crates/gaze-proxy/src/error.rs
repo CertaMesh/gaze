@@ -68,6 +68,20 @@ pub enum ProxyError {
     },
     #[error("daemon config failed: {detail}")]
     DaemonConfig { detail: String },
+    /// The detached daemon child exited before it could serve.
+    ///
+    /// The child resolves the configured policy, so its early exit is normally a
+    /// fail-closed policy load. Reporting that as a successful start is what let
+    /// an unloadable policy look like a running chokepoint.
+    #[error(
+        "daemon exited before serving ({code}); see {stderr_file}",
+        code = code.map_or_else(|| "terminated by signal".to_string(), |code| format!("exit code {code}")),
+        stderr_file = stderr_file.display()
+    )]
+    DaemonExitedEarly {
+        code: Option<i32>,
+        stderr_file: PathBuf,
+    },
 }
 
 /// Closed failure codes used by the direct proxy profile.
