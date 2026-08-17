@@ -1627,6 +1627,11 @@ struct SessionEntry {
     expires_at: Instant,
 }
 
+#[cfg(test)]
+static SESSION_FOR_MISS_BARRIERS: std::sync::LazyLock<
+    std::sync::Mutex<HashMap<String, Arc<tokio::sync::Barrier>>>,
+> = std::sync::LazyLock::new(|| std::sync::Mutex::new(HashMap::new()));
+
 #[derive(Debug, Clone, Serialize)]
 #[non_exhaustive]
 pub struct HealthSnapshot {
@@ -2469,6 +2474,14 @@ async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Sessio
         }
     }
 
+    #[cfg(test)]
+    {
+        let barrier = SESSION_FOR_MISS_BARRIERS.lock().unwrap().get(&id).cloned();
+        if let Some(barrier) = barrier {
+            barrier.wait().await;
+        }
+    }
+
     let session = Arc::new(
         Session::new(Scope::Conversation(id.clone()))
             .map_err(|source| ProxyError::Pipeline { source })?,
@@ -3048,6 +3061,47 @@ mod tests {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             started_at: Instant::now(),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+    async fn concurrent_first_requests_share_one_session() {
+        const TASK_COUNT: usize = 8;
+        const SESSION_ID: &str = "synthetic-concurrent-session";
+
+        let state = Arc::new(AppState {
+            config: Arc::new(ProxyConfig::new("127.0.0.1:0".parse().unwrap(), Vec::new())),
+            pipeline: Arc::new(Pipeline::builder().build().unwrap()),
+            client: Client::new(),
+            direct: None,
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            started_at: Instant::now(),
+        });
+        SESSION_FOR_MISS_BARRIERS.lock().unwrap().insert(
+            SESSION_ID.to_string(),
+            Arc::new(tokio::sync::Barrier::new(TASK_COUNT)),
+        );
+
+        let mut tasks = Vec::with_capacity(TASK_COUNT);
+        for _ in 0..TASK_COUNT {
+            let state = Arc::clone(&state);
+            tasks.push(tokio::spawn(async move {
+                let mut headers = HeaderMap::new();
+                headers.insert(SESSION_HEADER, HeaderValue::from_static(SESSION_ID));
+                session_for(&state, &headers).await.unwrap()
+            }));
+        }
+
+        let mut sessions = Vec::with_capacity(TASK_COUNT);
+        for task in tasks {
+            sessions.push(task.await.unwrap());
+        }
+        SESSION_FOR_MISS_BARRIERS.lock().unwrap().remove(SESSION_ID);
+
+        let first = &sessions[0];
+        assert!(
+            sessions.iter().all(|session| Arc::ptr_eq(first, session)),
+            "concurrent first requests returned orphaned Sessions"
+        );
     }
 
     fn direct_test_ingress(
