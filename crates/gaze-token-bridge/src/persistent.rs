@@ -1226,6 +1226,328 @@ mod tests {
         assert!(!text.contains(RAW_EMAIL));
     }
 
+    // Synthetic re-ingest fixture: two revisions of the same doc_id, distinct raw
+    // values, so stale bytes from revision one are detectable in the payload.
+    const UPSERT_DOC_ID: &str = "doc:synthetic-upsert-fixture";
+    const REV1_MARKER: &str = "SNIPPET-REV1-MARKER-7f3a";
+    const REV2_MARKER: &str = "SNIPPET-REV2-MARKER-9c1e";
+    const REV1_EMAIL: &str = "rev1.stale@example.invalid";
+    const REV2_EMAIL: &str = "rev2.current@example.invalid";
+    const REV2_NAME: &str = "Rev Two Person";
+
+    #[test]
+    fn reingesting_same_doc_id_replaces_document_and_leaves_no_stale_bytes() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("upsert");
+        let mut store =
+            FileCorpusIndexStore::load_or_create(dir.path(), DEFAULT_DOMAIN_ID, &[PiiClass::Email])
+                .expect("create store");
+        let key_id = store
+            .file
+            .projection_keys
+            .first()
+            .expect("projection key")
+            .key_id
+            .clone();
+
+        let rev1_email = synthetic_entity(&key_id, PiiClass::Email, "email", REV1_EMAIL);
+        let rev1_fp = rev1_email.index_ref.fingerprint_hex.clone();
+        store.insert_hit(
+            DEFAULT_DOMAIN_ID.to_string(),
+            IndexSearchHit {
+                doc_id: UPSERT_DOC_ID.to_string(),
+                snippet: format!("{REV1_MARKER} contact {}", rev1_email.domain_alias),
+                entities: vec![rev1_email],
+            },
+        );
+
+        // Revision two carries two entities so per-fingerprint duplication of the
+        // document copy would show up as two REV2_MARKER occurrences.
+        let rev2_email = synthetic_entity(&key_id, PiiClass::Email, "email", REV2_EMAIL);
+        let rev2_name = synthetic_entity(&key_id, PiiClass::Name, "name", REV2_NAME);
+        let rev2_email_fp = rev2_email.index_ref.fingerprint_hex.clone();
+        let rev2_name_fp = rev2_name.index_ref.fingerprint_hex.clone();
+        store.insert_hit(
+            DEFAULT_DOMAIN_ID.to_string(),
+            IndexSearchHit {
+                doc_id: UPSERT_DOC_ID.to_string(),
+                snippet: format!(
+                    "{REV2_MARKER} contact {} and {}",
+                    rev2_email.domain_alias, rev2_name.domain_alias
+                ),
+                entities: vec![rev2_email, rev2_name],
+            },
+        );
+        store.save().expect("save sealed index");
+
+        let domain = DEFAULT_DOMAIN_ID.to_string();
+        for (label, target) in [
+            ("in-memory", &store),
+            (
+                "reloaded",
+                &FileCorpusIndexStore::load(dir.path()).expect("reload"),
+            ),
+        ] {
+            assert!(
+                target.hits_for_entity(&domain, &rev1_fp).is_empty(),
+                "{label}: stale revision-one entity must not be searchable after upsert"
+            );
+            let email_hits = target.hits_for_entity(&domain, &rev2_email_fp);
+            assert_eq!(
+                email_hits.len(),
+                1,
+                "{label}: exactly one document for rev2 email"
+            );
+            assert_eq!(email_hits[0].doc_id, UPSERT_DOC_ID);
+            assert!(email_hits[0].snippet.starts_with(REV2_MARKER));
+            let name_hits = target.hits_for_entity(&domain, &rev2_name_fp);
+            assert_eq!(
+                name_hits.len(),
+                1,
+                "{label}: exactly one document for rev2 name"
+            );
+            assert!(name_hits[0].snippet.starts_with(REV2_MARKER));
+        }
+
+        let plaintext = decrypted_index_plaintext(dir.path());
+        assert_eq!(
+            count_occurrences(&plaintext, REV1_MARKER.as_bytes()),
+            0,
+            "stale revision-one snippet bytes must be absent from the sealed payload"
+        );
+        assert_eq!(
+            count_occurrences(&plaintext, REV1_EMAIL.as_bytes()),
+            0,
+            "stale revision-one raw value must be absent from the sealed payload"
+        );
+        assert_eq!(
+            count_occurrences(&plaintext, REV2_MARKER.as_bytes()),
+            1,
+            "current document snippet must be stored exactly once (not once per fingerprint)"
+        );
+        assert_eq!(
+            count_occurrences(&plaintext, REV2_EMAIL.as_bytes()),
+            1,
+            "current raw value must be stored exactly once"
+        );
+
+        // Erasure reachability: clearing the domain must leave no document bytes behind.
+        store.clear_domain(DEFAULT_DOMAIN_ID);
+        store.save().expect("save cleared index");
+        let cleared = decrypted_index_plaintext(dir.path());
+        assert_eq!(count_occurrences(&cleared, REV2_MARKER.as_bytes()), 0);
+        assert_eq!(count_occurrences(&cleared, REV2_EMAIL.as_bytes()), 0);
+        assert_eq!(count_occurrences(&cleared, REV2_NAME.as_bytes()), 0);
+        assert!(FileCorpusIndexStore::load(dir.path())
+            .expect("reload cleared")
+            .hits_for_entity(&domain, &rev2_email_fp)
+            .is_empty());
+    }
+
+    #[test]
+    fn postings_rebuilt_on_load_match_in_memory_and_documents_persist_once() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("postings-fidelity");
+        let mut store =
+            FileCorpusIndexStore::load_or_create(dir.path(), DEFAULT_DOMAIN_ID, &[PiiClass::Email])
+                .expect("create store");
+        let key_id = store
+            .file
+            .projection_keys
+            .first()
+            .expect("projection key")
+            .key_id
+            .clone();
+
+        // Overlapping fingerprints across four documents:
+        //   fp_a -> docs 0,1,2   fp_b -> docs 1,3   fp_c -> doc 2 only
+        let entity_a = || {
+            synthetic_entity(
+                &key_id,
+                PiiClass::Email,
+                "email",
+                "shared.a@example.invalid",
+            )
+        };
+        let entity_b = || {
+            synthetic_entity(
+                &key_id,
+                PiiClass::Email,
+                "email",
+                "shared.b@example.invalid",
+            )
+        };
+        let entity_c = || synthetic_entity(&key_id, PiiClass::Name, "name", "Only In Doc Two");
+        let docs: Vec<(usize, Vec<IndexEntity>)> = vec![
+            (0, vec![entity_a()]),
+            (1, vec![entity_a(), entity_b()]),
+            (2, vec![entity_a(), entity_c()]),
+            (3, vec![entity_b()]),
+        ];
+        let fingerprints = [
+            entity_a().index_ref.fingerprint_hex,
+            entity_b().index_ref.fingerprint_hex,
+            entity_c().index_ref.fingerprint_hex,
+            "00".repeat(32),
+        ];
+        for (index, entities) in docs {
+            let aliases = entities
+                .iter()
+                .map(|entity| entity.domain_alias.clone())
+                .collect::<Vec<_>>()
+                .join(" ");
+            store.insert_hit(
+                DEFAULT_DOMAIN_ID.to_string(),
+                IndexSearchHit {
+                    doc_id: format!("doc:synthetic-{index}"),
+                    snippet: format!("doc {index} mentions {aliases}"),
+                    entities,
+                },
+            );
+        }
+        let domain = DEFAULT_DOMAIN_ID.to_string();
+        let before = fingerprints
+            .iter()
+            .map(|fingerprint| stored_hits(&store, &domain, fingerprint))
+            .collect::<Vec<_>>();
+        assert_eq!(before[0].len(), 3);
+        assert_eq!(before[1].len(), 2);
+        assert_eq!(before[2].len(), 1);
+        assert!(before[3].is_empty());
+        assert_eq!(store.entity_count_for_domain(DEFAULT_DOMAIN_ID), 6);
+
+        store.save().expect("save sealed index");
+        let loaded = FileCorpusIndexStore::load(dir.path()).expect("load sealed index");
+        let after = fingerprints
+            .iter()
+            .map(|fingerprint| stored_hits(&loaded, &domain, fingerprint))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            after, before,
+            "postings rebuilt on load must be order-stable and identical"
+        );
+        assert_eq!(loaded.entity_count_for_domain(DEFAULT_DOMAIN_ID), 6);
+
+        // On-disk shape: one document record per distinct doc, no persisted postings.
+        let plaintext = decrypted_index_plaintext(dir.path());
+        let value: serde_json::Value =
+            serde_json::from_slice(&plaintext).expect("sealed payload is json");
+        assert_eq!(value["schema_version"], serde_json::json!(SCHEMA_VERSION));
+        assert_eq!(
+            value["documents"]
+                .as_array()
+                .expect("documents array persisted")
+                .len(),
+            4,
+            "sealed payload must hold exactly one record per distinct document"
+        );
+        let mut keys = value
+            .as_object()
+            .expect("top-level object")
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "documents",
+                "domains",
+                "projection_keys",
+                "rules",
+                "schema_version"
+            ],
+            "postings are derived on load and must not be persisted"
+        );
+    }
+
+    #[test]
+    fn schema_v1_index_fails_closed_with_typed_schema_error() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("schema-v1");
+        // The v1 layout: per-fingerprint `entries`, each carrying a full hit copy.
+        let v1_plaintext = format!(
+            concat!(
+                r#"{{"schema_version":1,"domains":[],"projection_keys":[],"rules":[],"#,
+                r#""entries":[{{"domain_id":"{domain}","fingerprint_hex":"{fp}","#,
+                r#""hit":{{"doc_id":"doc:v1","snippet":"legacy","entities":[]}}}}]}}"#
+            ),
+            domain = DEFAULT_DOMAIN_ID,
+            fp = "ab".repeat(32),
+        );
+        let key = env_index_key().expect("env key").expect("env key set");
+        let index_id = [0x5A; INDEX_ID_LEN];
+        let sealed = encrypt_index_file(
+            &IndexKey {
+                source: IndexKeySource::Env,
+                key_id: Vec::new(),
+                material: key,
+            },
+            &index_id,
+            v1_plaintext.as_bytes(),
+        )
+        .expect("seal v1 fixture");
+        fs::write(dir.path().join(INDEX_FILE_NAME), sealed).expect("write v1 fixture");
+
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("schema v1 index must fail closed on a v2 loader");
+        let text = format!("{err:?}");
+        assert!(
+            text.contains("unsupported owner-side index schema 1; supported 2"),
+            "expected typed schema-mismatch error, got: {text}"
+        );
+        assert!(
+            !text.contains("legacy"),
+            "error must not echo payload contents"
+        );
+    }
+
+    fn synthetic_entity(key_id: &str, class: PiiClass, prefix: &str, raw: &str) -> IndexEntity {
+        let fingerprint_hex = sha256_hex(&format!("{prefix}:{raw}"));
+        IndexEntity {
+            class: class.clone(),
+            raw_value: raw.to_string(),
+            index_ref: IndexedEntityRef {
+                domain_id: DEFAULT_DOMAIN_ID.to_string(),
+                key_id: key_id.to_string(),
+                entity_class: class.clone(),
+                fingerprint_hex: fingerprint_hex.clone(),
+            },
+            domain_alias: domain_alias(&class, &fingerprint_hex),
+        }
+    }
+
+    fn stored_hits(
+        store: &FileCorpusIndexStore,
+        domain: &str,
+        fingerprint: &str,
+    ) -> Vec<StoredHit> {
+        store
+            .hits_for_entity(&domain.to_string(), fingerprint)
+            .iter()
+            .map(StoredHit::from)
+            .collect()
+    }
+
+    fn decrypted_index_plaintext(dir: &Path) -> Vec<u8> {
+        let bytes = fs::read(dir.join(INDEX_FILE_NAME)).expect("read sealed index");
+        let envelope = parse_index_envelope(&bytes).expect("parse sealed envelope");
+        let key = env_index_key().expect("env key").expect("env key set");
+        decrypt_index_file(&key, envelope.index_id, &envelope)
+            .expect("decrypt sealed index")
+            .to_vec()
+    }
+
+    fn count_occurrences(haystack: &[u8], needle: &[u8]) -> usize {
+        haystack
+            .windows(needle.len())
+            .filter(|window| *window == needle)
+            .count()
+    }
+
     fn fixture_store(dir: &Path) -> (FileCorpusIndexStore, String) {
         let mut store =
             FileCorpusIndexStore::load_or_create(dir, DEFAULT_DOMAIN_ID, &[PiiClass::Email])
