@@ -4,8 +4,13 @@
 //! serialization for [`crate::model::IndexSearchHit`]. Raw values are sealed
 //! inside the owner-side index file; the frozen agent-visible contract stays
 //! non-serializable for owner hits.
+//!
+//! Layout (schema v2): each document is persisted exactly once, keyed by
+//! `(domain_id, doc_id)`. The fingerprint -> document postings map is derived
+//! on load and never written to disk, so raw PII exists in one place per
+//! document and re-ingesting a `doc_id` replaces (never shadows) its bytes.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::env;
 use std::fs;
 use std::io::Write;
@@ -36,7 +41,7 @@ pub const LOCAL_TOOL_NAME: &str = "gaze_index_search";
 pub const LOCAL_ACTION: &str = "search_documents";
 pub const LOCAL_PURPOSE: &str = "owner_lookup";
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 const DEFAULT_MAX_RESULTS: usize = 20;
 // follow-up: extract shared gaze-crypto seal/open with gaze-mcp-bridge session storage.
 // follow-up: add explicit owner-side index key rotation without plaintext migration fallback.
@@ -57,12 +62,17 @@ const INDEX_AAD_CONTEXT: &[u8] = b"gaze-token-bridge-owner-index-v1";
 static KEYCHAIN_DISABLED_FOR_TESTS: std::sync::atomic::AtomicBool =
     std::sync::atomic::AtomicBool::new(false);
 
+/// Derived inverted index: domain -> fingerprint -> positions into
+/// `PersistentIndexFile::documents`. Rebuilt on load, never persisted.
+type Postings = HashMap<DomainId, HashMap<String, Vec<usize>>>;
+
 /// File-backed owner-side corpus index store.
 #[derive(Debug, Clone)]
 pub struct FileCorpusIndexStore {
     dir: PathBuf,
     file: PersistentIndexFile,
     index_id: [u8; INDEX_ID_LEN],
+    postings: Postings,
 }
 
 impl FileCorpusIndexStore {
@@ -80,23 +90,34 @@ impl FileCorpusIndexStore {
         let key = resolve_index_key_for_load(&dir, &envelope)?;
         let index_id = parsed_index_id(&envelope)?;
         let plaintext = decrypt_index_file(&key.material, envelope.index_id, &envelope)?;
+        // Probe the schema version before the full parse so an older layout
+        // yields the typed schema-mismatch error, not a field-shape parse error.
+        let probe: SchemaProbe = serde_json::from_slice(&plaintext).map_err(|err| {
+            BridgeError::Policy(format!(
+                "failed to parse owner-side index {}: {err}",
+                index_path.display()
+            ))
+        })?;
+        if probe.schema_version != SCHEMA_VERSION {
+            return Err(BridgeError::Policy(format!(
+                "unsupported owner-side index schema {}; supported {}; rebuild with `gaze index ingest ...`",
+                probe.schema_version, SCHEMA_VERSION
+            )));
+        }
         let file: PersistentIndexFile = serde_json::from_slice(&plaintext).map_err(|err| {
             BridgeError::Policy(format!(
                 "failed to parse owner-side index {}: {err}",
                 index_path.display()
             ))
         })?;
-        if file.schema_version != SCHEMA_VERSION {
-            return Err(BridgeError::Policy(format!(
-                "unsupported owner-side index schema {}; supported {}",
-                file.schema_version, SCHEMA_VERSION
-            )));
-        }
-        Ok(Self {
+        let mut store = Self {
             dir,
             file,
             index_id,
-        })
+            postings: Postings::new(),
+        };
+        store.rebuild_postings()?;
+        Ok(store)
     }
 
     /// Load an existing index, or create a new one with `domain_id` registered.
@@ -114,6 +135,7 @@ impl FileCorpusIndexStore {
                 dir,
                 file: PersistentIndexFile::default(),
                 index_id: random_index_id(),
+                postings: Postings::new(),
             }
         };
         store.ensure_domain(domain_id, classes)?;
@@ -178,10 +200,13 @@ impl FileCorpusIndexStore {
             .find(|domain| domain.domain_id == domain_id)
     }
 
+    /// Remove every stored document for `domain_id`. After `save`, none of
+    /// their bytes remain in the sealed payload.
     pub fn clear_domain(&mut self, domain_id: &str) {
         self.file
-            .entries
-            .retain(|entry| entry.domain_id != domain_id);
+            .documents
+            .retain(|document| document.domain_id != domain_id);
+        self.rebuild_postings_unchecked();
     }
 
     pub fn ensure_domain(
@@ -238,55 +263,126 @@ impl FileCorpusIndexStore {
             .map_err(|err| BridgeError::Policy(format!("failed to encode policy: {err}")))
     }
 
-    pub fn hit_count_for_domain(&self, domain_id: &str) -> usize {
-        self.file
-            .entries
-            .iter()
-            .filter(|entry| entry.domain_id == domain_id)
-            .map(|entry| entry.hit.doc_id.as_str())
-            .collect::<HashSet<_>>()
-            .len()
+    /// Number of `(document, fingerprint)` pairs indexed for `domain_id`
+    /// (the `entities: N` metric printed by `gaze index ingest`).
+    pub fn entity_count_for_domain(&self, domain_id: &str) -> usize {
+        self.postings
+            .get(domain_id)
+            .map(|by_fingerprint| by_fingerprint.values().map(Vec::len).sum())
+            .unwrap_or(0)
     }
 
-    pub fn entity_count_for_domain(&self, domain_id: &str) -> usize {
+    fn document_position(&self, domain_id: &str, doc_id: &str) -> Option<usize> {
         self.file
-            .entries
+            .documents
             .iter()
-            .filter(|entry| entry.domain_id == domain_id)
-            .count()
+            .position(|document| document.domain_id == domain_id && document.hit.doc_id == doc_id)
+    }
+
+    /// Rebuild the derived postings from the persisted documents, failing
+    /// closed if the payload violates the one-record-per-`(domain, doc_id)`
+    /// invariant (a hand-edited or corrupted file must not resurrect shadowed
+    /// document copies).
+    fn rebuild_postings(&mut self) -> Result<(), BridgeError> {
+        let mut seen = HashSet::new();
+        for document in &self.file.documents {
+            if !seen.insert((document.domain_id.as_str(), document.hit.doc_id.as_str())) {
+                return Err(BridgeError::Policy(
+                    "owner-side index has duplicate document keys; rebuild with `gaze index ingest ...`"
+                        .to_string(),
+                ));
+            }
+        }
+        self.rebuild_postings_unchecked();
+        Ok(())
+    }
+
+    fn rebuild_postings_unchecked(&mut self) {
+        self.postings.clear();
+        for position in 0..self.file.documents.len() {
+            self.add_postings_for(position);
+        }
+    }
+
+    /// Append `position` to every fingerprint posting list of that document.
+    /// Positions are only ever added in ascending order, so each posting list
+    /// stays sorted by document order and `hits_for_entity` is order-stable
+    /// across save + load.
+    fn add_postings_for(&mut self, position: usize) {
+        let document = &self.file.documents[position];
+        let domain_id = document.domain_id.clone();
+        let fingerprints = document_fingerprints(&domain_id, &document.hit);
+        let by_fingerprint = self.postings.entry(domain_id).or_default();
+        for fingerprint_hex in fingerprints {
+            by_fingerprint
+                .entry(fingerprint_hex)
+                .or_default()
+                .push(position);
+        }
     }
 }
 
+/// Distinct fingerprints of `hit` that live in `domain_id`, in first-seen order.
+fn document_fingerprints(domain_id: &str, hit: &StoredHit) -> Vec<String> {
+    let mut seen = HashSet::new();
+    hit.entities
+        .iter()
+        .filter(|entity| entity.index_ref.domain_id == domain_id)
+        .filter(|entity| seen.insert(entity.index_ref.fingerprint_hex.as_str()))
+        .map(|entity| entity.index_ref.fingerprint_hex.clone())
+        .collect()
+}
+
 impl CorpusIndexStore for FileCorpusIndexStore {
+    /// Upsert on `(domain_id, doc_id)`: a re-ingested document replaces its
+    /// previous copy outright, so stale snippets and raw values never survive.
+    /// A document with no fingerprint in `domain_id` is unreachable through
+    /// `hits_for_entity`, so it is not stored (and any previous copy is erased).
     fn insert_hit(&mut self, domain_id: DomainId, hit: IndexSearchHit) {
         let stored_hit = StoredHit::from(&hit);
-        let mut fingerprints = HashSet::new();
-        for entity in &hit.entities {
-            if entity.index_ref.domain_id == domain_id {
-                fingerprints.insert(entity.index_ref.fingerprint_hex.clone());
+        let reachable = !document_fingerprints(&domain_id, &stored_hit).is_empty();
+        let existing = self.document_position(&domain_id, &hit.doc_id);
+
+        match (existing, reachable) {
+            (Some(position), true) => {
+                self.file.documents[position].hit = stored_hit;
+                self.rebuild_postings_unchecked();
             }
-        }
-        for fingerprint_hex in fingerprints {
-            self.file.entries.push(StoredIndexEntry {
-                domain_id: domain_id.clone(),
-                fingerprint_hex,
-                hit: stored_hit.clone(),
-            });
+            (Some(position), false) => {
+                self.file.documents.remove(position);
+                self.rebuild_postings_unchecked();
+            }
+            (None, true) => {
+                self.file.documents.push(StoredDocument {
+                    domain_id,
+                    hit: stored_hit,
+                });
+                self.add_postings_for(self.file.documents.len() - 1);
+            }
+            (None, false) => {}
         }
     }
 
     fn hits_for_entity(&self, domain_id: &DomainId, fingerprint_hex: &str) -> Vec<IndexSearchHit> {
-        let mut seen_doc_ids = HashSet::new();
-        self.file
-            .entries
-            .iter()
-            .filter(|entry| {
-                &entry.domain_id == domain_id && entry.fingerprint_hex == fingerprint_hex
+        self.postings
+            .get(domain_id)
+            .and_then(|by_fingerprint| by_fingerprint.get(fingerprint_hex))
+            .map(|positions| {
+                positions
+                    .iter()
+                    .filter_map(|position| self.file.documents.get(*position))
+                    .map(|document| document.hit.to_index_hit())
+                    .collect()
             })
-            .filter(|entry| seen_doc_ids.insert(entry.hit.doc_id.clone()))
-            .map(|entry| entry.hit.to_index_hit())
-            .collect()
+            .unwrap_or_default()
     }
+}
+
+/// Minimal shape read before the full parse so schema drift fails closed with
+/// the typed schema-mismatch error instead of a field-shape parse error.
+#[derive(Debug, Deserialize)]
+struct SchemaProbe {
+    schema_version: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -295,7 +391,9 @@ struct PersistentIndexFile {
     domains: Vec<IndexDomain>,
     projection_keys: Vec<StoredProjectionKey>,
     rules: Vec<PolicyRule>,
-    entries: Vec<StoredIndexEntry>,
+    /// One record per `(domain_id, doc_id)`; the searchable postings are
+    /// derived from these on load.
+    documents: Vec<StoredDocument>,
 }
 
 impl Default for PersistentIndexFile {
@@ -305,7 +403,7 @@ impl Default for PersistentIndexFile {
             domains: Vec::new(),
             projection_keys: Vec::new(),
             rules: Vec::new(),
-            entries: Vec::new(),
+            documents: Vec::new(),
         }
     }
 }
@@ -317,9 +415,8 @@ struct StoredProjectionKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-struct StoredIndexEntry {
+struct StoredDocument {
     domain_id: DomainId,
-    fingerprint_hex: String,
     hit: StoredHit,
 }
 
@@ -1503,6 +1600,25 @@ mod tests {
             !text.contains("legacy"),
             "error must not echo payload contents"
         );
+    }
+
+    #[test]
+    fn schema_v2_payload_with_duplicate_document_keys_fails_closed() {
+        let _lock = ENV_LOCK.lock().expect("env lock");
+        let _env = IndexKeyEnvGuard::set(TEST_KEY_1);
+        let dir = TestDir::new("duplicate-doc-keys");
+        let (mut store, _) = fixture_store(dir.path());
+        // Bypass the upsert path to forge a payload that violates the
+        // one-record-per-(domain, doc_id) invariant.
+        let duplicate = store.file.documents[0].clone();
+        store.file.documents.push(duplicate);
+        store.save().expect("save forged payload");
+
+        let err = FileCorpusIndexStore::load(dir.path())
+            .expect_err("duplicate document keys must fail closed on load");
+        let text = format!("{err:?}");
+        assert!(text.contains("duplicate document keys"), "got: {text}");
+        assert!(!text.contains(RAW_EMAIL));
     }
 
     fn synthetic_entity(key_id: &str, class: PiiClass, prefix: &str, raw: &str) -> IndexEntity {
