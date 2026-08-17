@@ -17,7 +17,18 @@ use serial_test::file_serial;
 use tempfile::tempdir;
 
 use gaze::{PiiClass, Scope, Session};
-use gaze_audit::{build_audit_query_sql, AuditFilter, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
+use gaze_audit::{
+    build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
+};
+
+fn all_audit_columns() -> PresentColumns {
+    PresentColumns::new(
+        AUDIT_RESTRICTED_COLUMNS
+            .iter()
+            .map(|column| (*column).to_string())
+            .collect(),
+    )
+}
 
 fn test_subprocess_timeout_ms() -> u64 {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
@@ -1854,39 +1865,8 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) = build_audit_query_sql(
-        &AuditFilter::default(),
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-    );
+    let present_columns = all_audit_columns();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), &present_columns);
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"
@@ -1940,39 +1920,8 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
     // `source` is intentionally present so audit reads can explain the
     // structural family without a schema change.
     assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
-    let (sql, values) = build_audit_query_sql(
-        &AuditFilter::default(),
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-    );
+    let present_columns = all_audit_columns();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), &present_columns);
     let conn = Connection::open(&audit_path).unwrap();
     let mut stmt = conn.prepare(&sql).unwrap();
     let rows = stmt
@@ -2980,6 +2929,38 @@ fn s2_cli_core_format_entities_ignore_document_locale_and_round_trip() {
             ),
             input
         );
+    }
+}
+
+#[test]
+fn s2_cli_core_government_id_cluster_fires_under_every_locale_and_round_trips() {
+    // The government-ID cluster under the #414 mixed model: `ssn.de_cue` is format-basis (like
+    // `ssn.us`) and the three bilingual cue-anchored recognizers are document-basis `global`, so
+    // every one of them must fire under `--locale=global`, both English regions and the German
+    // region alike. Locale is not a suppression mechanism for any of them.
+    for (input, class) in [
+        ("Sozialversicherungsnummer 123-45-6789", "ssn"),
+        ("Steuernummer 123 456 789", "tax_number"),
+        ("Driver's license: D1234567", "driver_license"),
+        ("National ID number: AB123456", "national_id"),
+    ] {
+        for locale in ["global", "en-US", "en-GB", "de-DE"] {
+            let value = clean_json_with_args(
+                &["--rulepack-bundled=core", &format!("--locale={locale}")],
+                input,
+            );
+            let clean = value["clean_text"].as_str().unwrap();
+            assert!(
+                clean.ends_with(&format!(":Custom:{class}_1>")),
+                "{locale} {input}: {clean}"
+            );
+            assert_eq!(value["stats"]["detections"], 1, "{locale} {input}");
+            assert_eq!(
+                restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+                input,
+                "{locale} {input}"
+            );
+        }
     }
 }
 

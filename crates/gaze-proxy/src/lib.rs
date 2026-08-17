@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use adapters::AnthropicAdapter;
-use gaze::{LocaleChain, LocaleTag, Pipeline};
+use gaze::{DictionaryBundle, LocaleChain, LocaleTag, Pipeline};
 
 pub use adapter::{
     AdapterContract, CoveragePolicy, FormatPolicy, HeaderPolicy, PiiSurface, ProtocolContract,
@@ -75,6 +75,7 @@ pub struct ProxyConfig {
     pub session_ttl: Duration,
     pub body_limit_bytes: u64,
     pub(crate) locale_chain: LocaleChain,
+    pub(crate) dictionaries: DictionaryBundle,
     pub(crate) direct_anthropic: Option<Arc<AnthropicAdapter>>,
     pub(crate) inspection: Option<Arc<ProxyInspectionProducerV1>>,
 }
@@ -87,6 +88,7 @@ impl ProxyConfig {
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
             locale_chain: default_locale_chain(),
+            dictionaries: DictionaryBundle::default(),
             direct_anthropic: None,
             inspection: None,
         }
@@ -107,6 +109,7 @@ impl ProxyConfig {
             session_ttl: Duration::from_secs(30 * 60),
             body_limit_bytes: 2 * 1024 * 1024,
             locale_chain: default_locale_chain(),
+            dictionaries: DictionaryBundle::default(),
             direct_anthropic: Some(adapter),
             inspection: None,
         }
@@ -148,6 +151,24 @@ impl ProxyConfig {
     #[must_use]
     pub fn locale_chain(&self) -> &[LocaleTag] {
         self.locale_chain.as_slice()
+    }
+
+    /// Sets the dictionary values every primary and residual detection pass uses.
+    ///
+    /// Omitting this call preserves the pre-existing empty-bundle behavior. The
+    /// same immutable bundle is shared across request protection and residual
+    /// validation so the fail-closed pass cannot know fewer terms than the
+    /// primary pass.
+    #[must_use]
+    pub fn with_dictionaries(mut self, dictionaries: DictionaryBundle) -> Self {
+        self.dictionaries = dictionaries;
+        self
+    }
+
+    /// Returns the dictionary values used by every proxy detection pass.
+    #[must_use]
+    pub fn dictionaries(&self) -> &DictionaryBundle {
+        &self.dictionaries
     }
 
     /// Installs the immutable provider-neutral inspection producer for this launch.

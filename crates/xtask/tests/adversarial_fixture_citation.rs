@@ -4,8 +4,12 @@ use std::{collections::HashSet, fs};
 
 #[path = "../src/fixture_citation.rs"]
 mod fixture_citation;
+#[path = "../src/publish_plan.rs"]
+mod publish_plan;
+#[path = "../src/repo.rs"]
+mod repo;
 
-use fixture_citation::{scan_root_with_tests, FixtureCitationError};
+use fixture_citation::{scan_source_dirs_with_tests, FixtureCitationError};
 
 #[test]
 fn fixture_email_in_production_scope_without_citation_fails_with_file_and_line() {
@@ -19,7 +23,7 @@ fn fixture_email_in_production_scope_without_citation_fails_with_file_and_line()
     )
     .expect("write seeded production fixture");
 
-    let result = scan_root_with_tests(temp.path(), &HashSet::new());
+    let result = scan_source_dirs_with_tests(&[src_dir], &HashSet::new());
     fs::remove_file(&fixture).expect("remove seeded production fixture");
 
     let error = result.expect_err("uncited fixture-shaped literal must fail");
@@ -53,7 +57,7 @@ fn fixture_email_with_exact_existing_test_citation_passes() {
     .expect("write cited production fixture");
     let listed_tests = HashSet::from(["gaze::tests::email_round_trip".to_string()]);
 
-    scan_root_with_tests(temp.path(), &listed_tests)
+    scan_source_dirs_with_tests(&[src_dir], &listed_tests)
         .expect("exact cited test name should satisfy citation gate");
 }
 
@@ -72,7 +76,7 @@ fn fixture_email_with_suffix_only_test_match_fails() {
     .expect("write cited production fixture");
     let listed_tests = HashSet::from(["email_round_trip".to_string()]);
 
-    let error = scan_root_with_tests(temp.path(), &listed_tests)
+    let error = scan_source_dirs_with_tests(&[src_dir], &listed_tests)
         .expect_err("suffix-only test names must not satisfy citation gate");
     let output = error.to_string();
     assert!(
@@ -100,7 +104,7 @@ fn fixture_email_with_renamed_cited_test_fails_adversarially() {
     .expect("write cited production fixture");
     let listed_tests = HashSet::from(["gaze::tests::email_round_trip_renamed".to_string()]);
 
-    let error = scan_root_with_tests(temp.path(), &listed_tests)
+    let error = scan_source_dirs_with_tests(&[src_dir], &listed_tests)
         .expect_err("renaming the cited test must fail the citation gate");
     let output = error.to_string();
     assert!(
@@ -124,6 +128,6 @@ fn fixture_strings_inside_cfg_test_modules_are_outside_production_lint_surface()
     )
     .expect("write cfg-test fixture");
 
-    scan_root_with_tests(temp.path(), &HashSet::new())
+    scan_source_dirs_with_tests(&[src_dir], &HashSet::new())
         .expect("fixture-shaped strings in cfg(test) modules are not production code");
 }

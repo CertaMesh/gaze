@@ -49,10 +49,10 @@ use std::time::Duration;
 use axum::extract::State;
 use axum::routing::post;
 use axum::{Json, Router};
-use gaze::{Action, ClassRule, DefaultRule, PiiClass, Pipeline};
+use gaze::{Action, ClassRule, DefaultRule, DictionaryBundle, PiiClass, Pipeline, RulepackDict};
 use gaze_proxy::adapters::{GeminiAdapter, OpenAiAdapter};
 use gaze_proxy::{CoveragePolicy, ProviderAdapter, ProxyConfig, ProxyError};
-use gaze_recognizers::RegexDetector;
+use gaze_recognizers::{DictionaryRecognizer, RegexDetector};
 use reqwest::{Client, Response, StatusCode};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
@@ -63,6 +63,7 @@ const EMAIL: &str = "alice@example.invalid";
 /// Digit-only order id. Detected as `Custom("OrderId")` when it reaches the pipeline as text.
 const ORDER_ID_DIGITS: &str = "7001234";
 const ORDER_ID_NUMBER: u64 = 7_001_234;
+const DICTIONARY_TERM: &str = "Sonnenlied";
 
 /// Pipeline that CAN detect both markers, so a surviving marker proves the bytes never
 /// reached detection rather than proving a detector miss.
@@ -100,6 +101,28 @@ fn postal_probe_pipeline(class_label: &str) -> Pipeline {
         .rule(DefaultRule::new(Action::Preserve))
         .build()
         .unwrap()
+}
+
+fn dictionary_probe() -> (Pipeline, DictionaryBundle) {
+    let class = PiiClass::custom("catalog_title");
+    let pipeline = Pipeline::builder()
+        .recognizer(DictionaryRecognizer::new(
+            "dictionary.synthetic_catalog",
+            class.clone(),
+            "synthetic_catalog",
+            true,
+            "catalog",
+        ))
+        .rule(ClassRule::new(class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .build()
+        .unwrap();
+    let dictionaries = DictionaryBundle::from_rulepack_terms(&[RulepackDict::new(
+        "synthetic_catalog",
+        vec![DICTIONARY_TERM.to_string()],
+        true,
+    )]);
+    (pipeline, dictionaries)
 }
 
 #[derive(Clone)]
@@ -179,8 +202,16 @@ async fn capture_upstream(
 }
 
 async fn spawn_proxy(adapter: Arc<dyn ProviderAdapter>, pipeline: Pipeline) -> ProxyServer {
+    spawn_proxy_with_dictionaries(adapter, pipeline, DictionaryBundle::default()).await
+}
+
+async fn spawn_proxy_with_dictionaries(
+    adapter: Arc<dyn ProviderAdapter>,
+    pipeline: Pipeline,
+    dictionaries: DictionaryBundle,
+) -> ProxyServer {
     let bind = unused_local_addr();
-    let config = ProxyConfig::new(bind, vec![adapter]);
+    let config = ProxyConfig::new(bind, vec![adapter]).with_dictionaries(dictionaries);
     let pipeline = Arc::new(pipeline);
     let handle = tokio::spawn(async move {
         gaze_proxy::serve(config, pipeline).await.unwrap();
@@ -319,6 +350,56 @@ async fn control_openai_allowlisted_string_surface_is_tokenized() {
     let content = &forwarded["messages"][0]["content"];
     assert_tokenized(content, EMAIL);
     assert_tokenized(content, ORDER_ID_DIGITS);
+}
+
+#[tokio::test]
+async fn legacy_primary_uses_the_configured_dictionary_bundle() {
+    let upstream = spawn_upstream(|_| json!({"choices": [{"text": "ok"}]})).await;
+    let (pipeline, dictionaries) = dictionary_probe();
+    let proxy = spawn_proxy_with_dictionaries(
+        Arc::new(OpenAiAdapter::new(upstream.base_url.clone())),
+        pipeline,
+        dictionaries,
+    )
+    .await;
+    post_accepted(
+        &proxy,
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": DICTIONARY_TERM}]
+        }),
+    )
+    .await;
+    let forwarded = upstream.first_forwarded().await;
+    assert_tokenized(&forwarded["messages"][0]["content"], DICTIONARY_TERM);
+}
+
+#[tokio::test]
+async fn legacy_residual_uses_the_same_configured_dictionary_bundle() {
+    let upstream = spawn_upstream(|_| json!({"choices": [{"text": "ok"}]})).await;
+    let (pipeline, dictionaries) = dictionary_probe();
+    let proxy = spawn_proxy_with_dictionaries(
+        Arc::new(OpenAiAdapter::new(upstream.base_url.clone())),
+        pipeline,
+        dictionaries,
+    )
+    .await;
+    let response = post_json(
+        &proxy,
+        "/v1/chat/completions",
+        json!({
+            "model": "gpt-test",
+            "messages": [{"role": "user", "content": "synthetic-safe"}],
+            "unknown_future_field": DICTIONARY_TERM
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let rendered = response.text().await.unwrap();
+    assert_eq!(rendered, json!({"error": "UnsurfacedPii"}).to_string());
+    assert!(!rendered.contains(DICTIONARY_TERM));
+    upstream.assert_nothing_forwarded().await;
 }
 
 /// CONTROL: `contents[].parts[].text` and `functionCall.args` string values ARE redacted.

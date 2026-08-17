@@ -4,17 +4,15 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 
 use clap::ValueEnum;
-use gaze::{CleanDocument, DictionaryBundle, LocaleChain, Policy, RawDocument, Session};
+use gaze::{CleanDocument, RawDocument, Session};
 use gaze_model_setup::{
     install_kiji_bundle, InstallOptions, InstallOutcome, KijiDistilbertPrecision, SetupError,
 };
 use sha2::{Digest, Sha256};
 
+use crate::clean_overrides::CleanOverrides;
 use crate::error::CliError;
-use crate::pipeline::build::{
-    build_pipeline_from_policy, dictionary_terms_from_rulepacks, load_rulepacks,
-    map_pipeline_error, map_policy_error, resolve_ner_threshold,
-};
+use crate::pipeline::build::resolve_pipeline;
 
 const DEFAULT_POLICY_FILE: &str = "gaze.toml";
 const OPF_UNPINNED_NOTICE: &str = "OPF safety-net is not pinned in this build; defaulting to NER.";
@@ -380,22 +378,18 @@ action = "preserve"
 }
 
 fn doctor_check(policy_path: &Path) -> Result<String, CliError> {
-    let policy = Policy::load_for_cli(policy_path).map_err(map_policy_error)?;
-    let rulepacks = load_rulepacks(&policy).map_err(map_pipeline_error)?;
-    let rulepack_dictionaries =
-        dictionary_terms_from_rulepacks(&rulepacks).map_err(map_pipeline_error)?;
-    let mut dictionary_terms = policy.dictionaries.clone();
-    dictionary_terms.extend(rulepack_dictionaries);
-    let dictionaries = DictionaryBundle::from_rulepack_terms(&dictionary_terms);
-    let locale_chain =
-        LocaleChain::merge_cli_policy_rulepack_default(None, policy.locale.as_deref(), None);
-    let pipeline = build_pipeline_from_policy(
-        &policy,
-        &rulepacks,
+    let resolved = resolve_pipeline(
+        Some(policy_path),
+        &CleanOverrides::default(),
+        &[],
         None,
-        &locale_chain,
-        resolve_ner_threshold(None, Some(&policy)),
+        None,
+        None,
     )?;
+    let policy = resolved.policy.expect("doctor requires a policy path");
+    let pipeline = resolved.pipeline;
+    let locale_chain = resolved.locale_chain;
+    let dictionaries = resolved.dictionaries;
     let session = Session::from_policy(&policy)
         .map_err(|err| setup_error(format!("doctor session init failed: {err}")))?;
     let clean = pipeline

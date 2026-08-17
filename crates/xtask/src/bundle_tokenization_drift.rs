@@ -10,6 +10,8 @@ use gaze::{PiiClass, Rulepack, RulepackSource};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::repo::repo_root;
+
 const SCHEMA_VERSION: u8 = 1;
 const FIXTURE_PATH: &str = "crates/xtask/fixtures/drift-corpus.txt";
 const EMBEDDED_RULEPACK_DIR: &str = "crates/gaze-recognizers/embedded";
@@ -26,7 +28,7 @@ pub struct Args {
 }
 
 pub fn run(args: Args) -> Result<()> {
-    let root = std::env::current_dir().context("failed to resolve workspace root")?;
+    let root = repo_root()?;
     let bundles = discover_bundles(&root)?;
     if bundles.is_empty() {
         bail!("bundle-tokenization-drift: no bundled rulepacks discovered");
@@ -579,28 +581,18 @@ fn verify_ack(root: &Path) -> Result<()> {
 
 fn changed_snapshot_files(root: &Path) -> Result<BTreeSet<String>> {
     let mut files = BTreeSet::new();
+    let snapshot_dir = root.join(SNAPSHOT_DIR);
     for args in [
-        vec!["diff", "--name-only", "--", "crates/xtask/snapshots"],
-        vec![
-            "diff",
-            "--cached",
-            "--name-only",
-            "--",
-            "crates/xtask/snapshots",
-        ],
+        vec!["diff", "--name-only"],
+        vec!["diff", "--cached", "--name-only"],
     ] {
-        collect_changed_snapshot_files(root, &args, &mut files)?;
+        collect_changed_snapshot_files(root, &args, &snapshot_dir, &mut files)?;
     }
     if git_ref_exists(root, "origin/main")? {
         collect_changed_snapshot_files(
             root,
-            &[
-                "diff",
-                "--name-only",
-                "origin/main...HEAD",
-                "--",
-                "crates/xtask/snapshots",
-            ],
+            &["diff", "--name-only", "origin/main...HEAD"],
+            &snapshot_dir,
             &mut files,
         )?;
     }
@@ -610,11 +602,15 @@ fn changed_snapshot_files(root: &Path) -> Result<BTreeSet<String>> {
 fn collect_changed_snapshot_files(
     root: &Path,
     args: &[&str],
+    snapshot_dir: &Path,
     files: &mut BTreeSet<String>,
 ) -> Result<()> {
     let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
         .args(args)
-        .current_dir(root)
+        .arg("--")
+        .arg(snapshot_dir)
         .output()
         .with_context(|| format!("failed to run git {}", args.join(" ")))?;
     if !output.status.success() {
@@ -643,8 +639,9 @@ fn diff_contains_drift_ack(root: &Path) -> Result<bool> {
             continue;
         }
         let output = Command::new("git")
+            .arg("-C")
+            .arg(root)
             .args(&args)
-            .current_dir(root)
             .output()
             .with_context(|| format!("failed to run git {}", args.join(" ")))?;
         if !output.status.success() {
@@ -689,8 +686,9 @@ fn section_between<'a>(text: &'a str, start_marker: &str, next_marker: &str) -> 
 
 fn git_ref_exists(root: &Path, name: &str) -> Result<bool> {
     let output = Command::new("git")
+        .arg("-C")
+        .arg(root)
         .args(["rev-parse", "--verify", "--quiet", name])
-        .current_dir(root)
         .output()
         .with_context(|| format!("failed to check git ref {name}"))?;
     Ok(output.status.success())

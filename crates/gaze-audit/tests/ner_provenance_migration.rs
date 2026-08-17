@@ -1,6 +1,8 @@
 use std::path::Path;
 
-use gaze_audit::{build_audit_query_sql, AuditFilter, SqliteLogger};
+use gaze_audit::{
+    build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
+};
 use rusqlite::types::Value as SqlValue;
 use rusqlite::Connection;
 
@@ -203,11 +205,13 @@ fn ner_provenance_filters_bind_expected_sql() {
 }
 
 fn build_current_audit_query_sql(filter: &AuditFilter) -> (String, Vec<SqlValue>) {
-    build_audit_query_sql(
-        filter, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true,
-    )
+    let present_columns = PresentColumns::new(
+        AUDIT_RESTRICTED_COLUMNS
+            .iter()
+            .map(|column| (*column).to_string())
+            .collect(),
+    );
+    build_audit_query_sql(filter, &present_columns)
 }
 
 fn create_pre_provenance_redaction_log(path: &Path) {

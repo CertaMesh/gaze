@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{bail, Context, Result};
@@ -13,8 +13,13 @@ pub fn run() -> Result<()> {
 }
 
 fn cargo_metadata() -> Result<Metadata> {
+    cargo_metadata_at(Path::new("."))
+}
+
+fn cargo_metadata_at(root: &Path) -> Result<Metadata> {
     let output = Command::new("cargo")
         .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(root)
         .output()
         .context("failed to run cargo metadata")?;
     if !output.status.success() {
@@ -24,6 +29,43 @@ fn cargo_metadata() -> Result<Metadata> {
         );
     }
     serde_json::from_slice(&output.stdout).context("failed to parse cargo metadata")
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct WorkspaceMember {
+    pub name: String,
+    pub manifest_dir: PathBuf,
+}
+
+pub(crate) fn workspace_members(root: &Path) -> Result<Vec<WorkspaceMember>> {
+    workspace_members_from_metadata(&cargo_metadata_at(root)?)
+}
+
+fn workspace_members_from_metadata(metadata: &Metadata) -> Result<Vec<WorkspaceMember>> {
+    let packages_by_id = metadata
+        .packages
+        .iter()
+        .map(|package| (package.id.as_str(), package))
+        .collect::<HashMap<_, _>>();
+    let mut members = metadata
+        .workspace_members
+        .iter()
+        .map(|id| {
+            let package = packages_by_id
+                .get(id.as_str())
+                .with_context(|| format!("workspace member {id} missing from cargo metadata"))?;
+            let manifest_dir = package
+                .manifest_path
+                .parent()
+                .with_context(|| format!("package {} manifest has no parent", package.name))?;
+            Ok(WorkspaceMember {
+                name: package.name.clone(),
+                manifest_dir: manifest_dir.to_path_buf(),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    members.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(members)
 }
 
 fn build_publish_plan(metadata: &Metadata) -> Result<Vec<PublishPackage>> {

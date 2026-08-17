@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`gaze_proxy::ProxyConfig::with_dictionaries` installs one immutable
+  dictionary source for every proxy detection pass.** Omitting the builder keeps
+  the existing empty-bundle default. `ProxyConfig` was already
+  `#[non_exhaustive]` and the stored field is private, so this addition does not
+  break external struct construction.
+
 - **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
   (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
   tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
@@ -64,6 +70,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and remain restorable through the manifest. This is a deliberate,
   recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
   separate no-policy stub path is unchanged.
+
+- **Corpus-informed government-ID recognizers at the deterministic rule floor**
+  (todos #2318 follow-on, #2923). Four cue-anchored `safe_default` recognizers
+  join the embedded `core` bundle: `ssn.de_cue` (German social-insurance cues
+  such as `Sozialversicherungsnummer` and `SV-Nummer` before dashed, dotted, or
+  9 to 11 digit values, class `custom:ssn`), `tax_number.cue_anchored`
+  (`custom:tax_number`), `driver_license.cue_anchored`
+  (`custom:driver_license`), and `national_id.cue_anchored`
+  (`custom:national_id`). Every chosen shape was picked by measured sweep against
+  looser drafts and matches 0 of the 1,024 committed A4 negative documents.
+
+  Locale basis follows the mixed model from #414: `ssn.de_cue` is a
+  format-basis sibling of `ssn.us` (same class, same national identifier
+  shapes, German cue vocabulary, DACH provenance) and is an explicit addition
+  to the ratified format-basis promotion set; the three bilingual cue-anchored
+  recognizers are document-basis `global`, like `security_token.anchored`. All
+  four therefore fire under every locale chain, including `--locale=global`.
+  `ssn.us` keeps its pattern, locales, and basis unchanged; the only edit to it
+  is the symmetric `cooperates_with` metadata line. Cross-class overlaps between
+  the numeric shapes are resolved by the new `government-id` collision family
+  (`ssn` 10 beats `tax-number` 20 beats `national-id` 30; lower wins).
+
+  The [shipped scorecard](docs/reference/benchmarks/v0.12-government-id-scorecard.md)
+  measures the deterministic cells at 3,194 fewer leaked bytes each and 9 more
+  false-positive bytes: rule floor adds 1 false-positive document, while pass2
+  adds none. The full-stack Kiji `resolve` cell removes 3,093 leaked bytes and
+  613 false-positive bytes with no change in false-positive documents.
+  **Disclosed regression:** the Kiji cell loses 6 covered `PASSWORD` bytes, the
+  downstream safety-net interaction tracked as todo #2491 (mechanism #2420),
+  not a resolver decision and unaffected by collision precedence.
+
+  `tax_number.cue_anchored` deliberately requires a three-digit lead and
+  internal separators: it cedes the checksummed 2-3-3-3 Steuer-ID shape to
+  `steuer_id.de` and excludes A4's bare-digit invalid identifiers, so its
+  measured 16.8% coverage is a precision choice, not a detection deficiency.
+  `national_id.cue_anchored` ships with a known, bounded gap: 77 bare German
+  NATIONALID spans carry no cue and are structurally unreachable by any
+  cue-anchored rule.
 
 ### Changed
 
@@ -127,6 +171,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
   was removed (it had no callers). The AEAD/key layer and the sealed-file
   envelope are unchanged.
+- **Audit-row enums now own one canonical string form** (audit S05-F2, solo todo
+  #2935). `Action`, `ConflictTier`, `DocumentKind`, and `FallbackReason` expose
+  matching `as_str` / `from_canonical_str` methods, and SQLite plus CLI consumers
+  delegate to them instead of maintaining panic-prone copies. `FallbackReason`
+  JSON now serializes as snake_case to match SQLite; every former PascalCase
+  spelling remains accepted as a serde alias.
 
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
   actual registration and uses one locale predicate** (audit 7201 S10-F1,
@@ -196,9 +246,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This deliberately trades axis 5 (snapshot compatibility and configuration
   convenience) for axis 1 (never leak a foreign-format identifier merely
   because the surrounding document uses another locale). The known remaining
-  debt is 27 target spans: 14 DE national-phone and 13 postal spans. Todo #2411
-  stays open: direct/codec primary and residual proxy passes still require the
-  shared `ProxyConfig::locale_chain` for every document-basis recognizer.
+  rule-coverage debt is 27 target spans: 14 DE national-phone and 13 postal
+  spans. The proxy transport debt is now closed by #2411: direct/codec primary
+  and residual passes receive the shared `ProxyConfig::locale_chain`; #2403
+  previously fixed the legacy path.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
@@ -282,6 +333,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve the original value. `PiiClass::family` and `as_family_name` now model
   that namespace once, and policy and rulepack parsing share the same
   non-normalizing path. The enum and manifest wire shape are unchanged.
+- **`gaze proxy` now resolves the same rulepacks, dictionaries, and
+  auto-activated locales as `gaze clean` for the same policy** (audit 7201
+  S11-F2, solo todo #2937). Previously the proxy assembled a narrower pipeline
+  that skipped dictionary values and locale-gated auto-activation.
+- **Proxy request protection and fail-closed residual validation now read the
+  same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
+  response validation plus the legacy primary and residual request passes; the
+  residual can no longer know fewer dictionary terms than the primary pass.
+- **`gaze-proxy` direct/codec primary and residual passes now use the resolved
+  locale chain instead of a pinned Global chain** (solo todo #2411). This
+  closes the direct/codec half after #2403 fixed the legacy path, and keeps both
+  passes aligned with the same configured dictionaries and document locales.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed

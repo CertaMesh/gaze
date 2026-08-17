@@ -10,11 +10,9 @@ use base64::Engine;
 use serde::Serialize;
 
 use gaze::{
-    dictionary_bundle_from_context, Action, DictionaryBundle, DictionarySource, DocumentKind,
-    LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, PiiClass, Policy, RawDocument,
-    RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult, RuleSpec, Rulepack,
-    RulepackSource, Scope, SensitiveSnapshot, Session, SessionPolicy, SessionScope,
-    SessionSnapshotEntry, TypedContext,
+    DictionarySource, DocumentKind, LeakKind, LeakReport, LeakReportTelemetry, LocaleTag, PiiClass,
+    RawDocument, RedactionEntry, RedactionLogError, RedactionLogger, Result as GazeResult, Scope,
+    SensitiveSnapshot, Session, SessionScope, SessionSnapshotEntry, TypedContext,
 };
 use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
@@ -27,10 +25,7 @@ use crate::commands::{
 use crate::error::CliError;
 use crate::io::{read_stdin_text, require_json_format};
 use crate::pipeline::build::{
-    build_context_pipeline, build_pipeline_from_policy, build_stub_pipeline,
-    dictionary_terms_from_rulepacks, load_rulepacks, map_pipeline_error, map_policy_error,
-    merged_rulepack_default_locales, resolve_ner_threshold, validate_ner_threshold,
-    warn_uncovered_collision_families, ArcLogger,
+    map_policy_error, resolve_pipeline, validate_ner_threshold, warn_uncovered_collision_families,
 };
 
 const CORE_EXTENDED_DEPRECATION: &str = "`--rulepack-bundled core-extended` is deprecated since v0.8.0; use `--rulepack-bundled core --locale=<lang>` for explicit activation";
@@ -95,91 +90,31 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let raw = read_stdin_text(options.max_bytes)?;
 
     let counter = Arc::new(CountingLogger::new(options.audit_db).map_err(|_| CliError::Pipeline)?);
-    let loaded_policy = match options.policy {
-        Some(path) => {
-            let policy = Policy::load_for_cli(path).map_err(map_policy_error)?;
-            Some(clean_overrides.apply_to(&policy))
-        }
-        None => None,
-    };
-    let cli_rulepack_policy = if loaded_policy.is_none() && has_rulepack_overrides(&options) {
-        Some(policy_for_rulepack_overrides(&clean_overrides)?)
-    } else {
-        None
-    };
-    let effective_policy = loaded_policy.as_ref().or(cli_rulepack_policy.as_ref());
-    let loaded_rulepacks = match (&loaded_policy, &cli_rulepack_policy) {
-        (Some(policy), _) | (None, Some(policy)) => {
-            load_rulepacks(policy).map_err(map_pipeline_error)?
-        }
-        (None, None) => Vec::new(),
-    };
     let context = options
         .context_json
         .map(TypedContext::load)
         .transpose()
         .map_err(|err| CliError::PolicyConfigDetail(format!("context json: {err}")))?;
-    let context_bundle = context
-        .as_ref()
-        .map(dictionary_bundle_from_context)
-        .unwrap_or_default();
-    let rulepack_dictionaries =
-        dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;
-    let policy_bundle = effective_policy
-        .map(|policy| {
-            let mut dictionaries = policy.dictionaries.clone();
-            dictionaries.extend(rulepack_dictionaries);
-            DictionaryBundle::from_rulepack_terms(&dictionaries)
-        })
-        .unwrap_or_default();
-    let dictionaries = DictionaryBundle::merge(policy_bundle, context_bundle);
-    let dictionary_stats = dictionaries.stats();
-    let mut rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
-    if effective_policy.is_some_and(|policy| policy.rulepacks.auto_activate_locale_gated) {
-        // Derived from the loaded packs (audit 7201 S10-F2): every loaded
-        // locale-gated recognizer's locale joins the chain, in a stable order.
-        for locale in gaze_assembly::locale_gated_activation_locales(&loaded_rulepacks) {
-            if !rulepack_default_locales.contains(&locale) {
-                rulepack_default_locales.push(locale);
-            }
-        }
-    }
-    let cli_locales = parse_cli_locales(options.locale)?;
-    let locale_chain = gaze::LocaleChain::merge_cli_policy_rulepack_default(
-        cli_locales.as_deref(),
-        effective_policy.and_then(|policy| policy.locale.as_deref()),
-        Some(&rulepack_default_locales),
-    );
-    let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, effective_policy);
-
-    let pipeline = match effective_policy {
-        Some(policy) => build_pipeline_from_policy(
-            policy,
-            &loaded_rulepacks,
-            context.as_ref(),
-            &locale_chain,
-            resolved_ner_threshold,
-        )?
-        .with_redaction_logger(ArcLogger(Arc::clone(&counter) as Arc<dyn RedactionLogger>)),
-        None if context.is_some() => build_context_pipeline(
-            context.as_ref().expect("checked context"),
-            Arc::clone(&counter) as Arc<dyn RedactionLogger>,
-        )
-        .map_err(|err| CliError::PolicyConfigDetail(format!("context pipeline build: {err}")))?,
-        None => {
-            tracing::warn!("gaze clean running with stub pipeline because --policy was omitted");
-            build_stub_pipeline(Arc::clone(&counter) as Arc<dyn RedactionLogger>).map_err(
-                |err| CliError::PolicyConfigDetail(format!("stub pipeline build: {err}")),
-            )?
-        }
-    };
-    let pipeline = maybe_register_safety_net(pipeline, &options)?;
+    let resolved = resolve_pipeline(
+        options.policy,
+        &clean_overrides,
+        options.locale,
+        cli_ner_threshold,
+        context,
+        Some(Arc::clone(&counter) as Arc<dyn RedactionLogger>),
+    )?;
+    let dictionary_stats = resolved.dictionaries.stats();
+    let effective_policy = resolved.policy;
+    let loaded_rulepacks = resolved.rulepacks;
+    let locale_chain = resolved.locale_chain;
+    let dictionaries = resolved.dictionaries;
+    let pipeline = maybe_register_safety_net(resolved.pipeline, &options)?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
     // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
     // reads it rather than re-deriving which flag is consulted when.
     let policy = safety_net_policy(options.safety_net_mode, options.safety_net_fallback);
 
-    let session = match effective_policy {
+    let session = match effective_policy.as_ref() {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
         None => Session::new(scope_for_cli_without_policy(
             clean_overrides.session_scope.as_ref(),
@@ -255,7 +190,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     // Surface fail-open policy coverage gaps only once the clean succeeded — on
     // an error path there is no output to leak, and the warning must not corrupt
     // the single-line JSON error envelope on stderr (issue #360).
-    if let Some(policy) = effective_policy {
+    if let Some(policy) = effective_policy.as_ref() {
         warn_uncovered_collision_families(policy, &loaded_rulepacks, &locale_chain);
     }
     println!("{json}");
@@ -719,70 +654,6 @@ fn normalize_rulepack_bundles(raw: &[String]) -> (Vec<String>, bool) {
     (bundled, auto_activate_locale_gated)
 }
 
-pub(crate) fn has_rulepack_overrides(options: &CleanOptions<'_>) -> bool {
-    !options.rulepack_bundled.is_empty() || !options.rulepack_paths.is_empty()
-}
-
-pub(crate) fn policy_for_rulepack_overrides(
-    clean_overrides: &CleanOverrides,
-) -> std::result::Result<Policy, CliError> {
-    let mut rules = class_rules_for_bundled_overrides(clean_overrides)?;
-    rules.push(RuleSpec::Default {
-        action: Action::Preserve,
-    });
-    let mut session = SessionPolicy::default();
-    session.scope = SessionScope::Persistent;
-    session.ttl_secs = Some(86_400);
-
-    let mut base = Policy::default();
-    base.session = session;
-    base.rules = rules;
-    Ok(clean_overrides.apply_to(&base))
-}
-
-fn class_rules_for_bundled_overrides(
-    clean_overrides: &CleanOverrides,
-) -> std::result::Result<Vec<RuleSpec>, CliError> {
-    let Some(bundled) = &clean_overrides.rulepack_bundled else {
-        return Ok(Vec::new());
-    };
-    let mut classes = std::collections::BTreeSet::new();
-    for bundle in bundled {
-        let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
-            CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
-        })?;
-        let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
-            CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
-        })?;
-        classes.extend(rulepack.activated_classes());
-        classes.extend(
-            rulepack
-                .recognizers
-                .iter()
-                .filter(|recognizer| recognizer.enabled)
-                .filter_map(|recognizer| {
-                    recognizer
-                        .collision
-                        .as_ref()
-                        .and_then(|collision| {
-                            collision
-                                .mandatory_anchor
-                                .as_ref()
-                                .map(|_| &collision.family)
-                        })
-                        .map(|family| PiiClass::family(family))
-                }),
-        );
-    }
-    Ok(classes
-        .into_iter()
-        .map(|class| RuleSpec::Class {
-            class,
-            action: Action::Tokenize,
-        })
-        .collect())
-}
-
 pub(crate) fn scope_for_cli_without_policy(
     scope: Option<&SessionScope>,
     ttl_secs: Option<u64>,
@@ -797,22 +668,6 @@ pub(crate) fn scope_for_cli_without_policy(
             variant: format!("{:?}", scope.unwrap_or(&SessionScope::Persistent)),
         }),
     }
-}
-
-pub(crate) fn parse_cli_locales(
-    raw: &[String],
-) -> std::result::Result<Option<Vec<LocaleTag>>, CliError> {
-    if raw.is_empty() {
-        return Ok(None);
-    }
-    raw.iter()
-        .map(|locale| {
-            LocaleTag::parse(locale).map_err(|err| {
-                CliError::PolicyConfigDetail(format!("invalid --locale '{locale}': {err}"))
-            })
-        })
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map(Some)
 }
 
 struct CountingLogger {
@@ -1056,11 +911,7 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
 }
 
 fn document_kind_label(kind: DocumentKind) -> &'static str {
-    match kind {
-        DocumentKind::Structured => "structured",
-        DocumentKind::Text => "text",
-        _ => "unknown",
-    }
+    kind.as_str()
 }
 
 /// Applies the boundary half of the safety-net policy: the library mutates the document, the
@@ -1144,8 +995,8 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::pipeline::build::resolve_ner_threshold;
+    use gaze::Policy;
 
     fn policy_with_ner_threshold(threshold: f32) -> Policy {
         let mut session = gaze::SessionPolicy::default();

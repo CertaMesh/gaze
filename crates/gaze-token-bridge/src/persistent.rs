@@ -600,7 +600,6 @@ fn default_classes() -> Vec<PiiClass> {
         PiiClass::Organization,
         PiiClass::custom("customer_id"),
         PiiClass::custom("account_id"),
-        PiiClass::custom("order_id"),
         PiiClass::custom("case_id"),
     ]
 }
