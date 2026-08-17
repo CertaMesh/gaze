@@ -2091,6 +2091,7 @@ async fn direct_proxy_inner(
     response
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stage_and_replay_direct_sse(
     pipeline: Arc<Pipeline>,
     locale_chain: gaze::LocaleChain,
