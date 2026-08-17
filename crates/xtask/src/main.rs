@@ -192,17 +192,17 @@ const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
     },
     BehavioralTest {
         package: "gaze-pii",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "registry::tests::format_basis_runs_once_and_unions_with_document_fallback",
     },
     BehavioralTest {
         package: "gaze-assembly",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "tests::format_basis_rulepack_ignores_document_locale",
     },
     BehavioralTest {
         package: "gaze-recognizers",
-        test_target: None,
+        target: BehavioralTarget::Lib,
         name: "tests::embedded_core_declares_locale_basis_for_every_recognizer",
     },
 ];
