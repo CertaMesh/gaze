@@ -383,11 +383,13 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
+        let text = "Alicia Robert";
         let spans = vec![(0, 6), (7, 13)];
         let tags = vec!["B-PER", "I-PER"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..13);
+        assert_eq!(out[0].source, "ner");
         assert_eq!(out[0].class, PiiClass::Name);
     }
 
@@ -396,9 +398,10 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
+        let text = "Bob Ann";
         let spans = vec![(0, 3), (4, 7)];
         let tags = vec!["B-PER", "B-PER"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner");
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].span, 0..3);
         assert_eq!(out[1].span, 4..7);
@@ -409,9 +412,10 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
+        let text = "Anna";
         let spans = vec![(0, 4)];
         let tags = vec!["B-MISC"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner");
         assert!(out.is_empty());
     }
 
@@ -428,6 +432,7 @@ mod tests {
         map.insert("B-LOC".to_string(), PiiClass::Location);
         map.insert("I-LOC".to_string(), PiiClass::Location);
         let labels = LabelMap(map);
+        let text = "Send mail via Wolfgang who now lives in Berlin";
         let spans = vec![
             (0, 4),
             (5, 9),
@@ -439,8 +444,10 @@ mod tests {
             (37, 39),
             (40, 46),
         ];
+        assert_eq!(&text[14..22], "Wolfgang");
+        assert_eq!(&text[40..46], "Berlin");
         let tags = vec!["O", "O", "O", "B-PER", "O", "O", "O", "O", "B-LOC"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner/ort");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner/ort");
         assert_eq!(out.len(), 2, "both Wolfgang + Berlin must emit: {out:?}");
         assert_eq!(out[0].span, 14..22);
         assert_eq!(out[0].class, PiiClass::Name);
@@ -458,9 +465,10 @@ mod tests {
         map.insert("B-LOC".to_string(), PiiClass::Location);
         map.insert("I-LOC".to_string(), PiiClass::Location);
         let labels = LabelMap(map);
+        let text = "Anna Berlin";
         let spans = vec![(0, 4), (5, 11)];
         let tags = vec!["B-PER", "B-LOC"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner/ort");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner/ort");
         assert_eq!(out.len(), 2);
         assert_eq!(out[0].class, PiiClass::Name);
         assert_eq!(out[1].class, PiiClass::Location);
@@ -471,9 +479,10 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
+        let text = "Alice";
         let spans = vec![(0, 0), (0, 5)];
         let tags = vec!["B-PER", "B-PER"];
-        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, "ner");
+        let out = NerDetector::merge_bio_spans(&labels, &spans, &tags, text, "ner");
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..5);
     }
@@ -483,11 +492,12 @@ mod tests {
         let mut map = BTreeMap::new();
         map.insert("PER".to_string(), PiiClass::Name);
         let labels = LabelMap(map);
+        let text = "Anna Maria Meier";
         let spans = vec![(0, 4), (5, 10), (11, 16)];
         let tags = vec!["B-PER", "I-PER", "I-PER"];
         let scores = vec![0.91, 0.34, 0.88];
 
-        let out = NerDetector::merge_bio_span_results(&labels, &spans, &tags, &scores, "ner");
+        let out = NerDetector::merge_bio_span_results(&labels, &spans, &tags, &scores, text);
 
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..16);

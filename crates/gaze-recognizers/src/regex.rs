@@ -1,6 +1,6 @@
 use gaze_types::{
-    Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleTag, PiiClass, Recognizer,
-    ValidatorKind,
+    Candidate, ConflictTier, DetectContext, Detection, Detector, LocaleBasis, LocaleTag, PiiClass,
+    Recognizer, ValidatorKind,
 };
 use regex::Regex;
 
@@ -47,6 +47,7 @@ pub struct RegexDetector {
     class: PiiClass,
     source: String,
     locales: Vec<LocaleTag>,
+    locale_basis: LocaleBasis,
     base_score: f32,
     priority: i32,
     token_family: String,
@@ -100,6 +101,7 @@ impl RegexDetector {
             class,
             source: source.to_string(),
             locales,
+            locale_basis: LocaleBasis::Document,
             base_score,
             priority,
             token_family: token_family.to_string(),
@@ -118,6 +120,12 @@ impl RegexDetector {
         )?;
         detector.ascii_email_boundary = true;
         Ok(detector)
+    }
+
+    /// Overrides how the recognizer's locale metadata affects eligibility.
+    pub fn with_locale_basis(mut self, locale_basis: LocaleBasis) -> Self {
+        self.locale_basis = locale_basis;
+        self
     }
 }
 
@@ -185,6 +193,10 @@ impl Recognizer for RegexDetector {
 
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
+    }
+
+    fn locale_basis(&self) -> LocaleBasis {
+        self.locale_basis
     }
 }
 

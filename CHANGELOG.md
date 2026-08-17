@@ -70,6 +70,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
   `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
   (11 -> 12 detections). No existing detection changed class, span, or shape.
+- `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated for the
+  mixed locale-basis rulepack version bump (`0.5.1` -> `0.5.2`). Detection count
+  remains 12; no detection changed class, span, or shape.
+- **Bundled identifier recognizers now use explicit mixed locale semantics**
+  (todo #2417). Rulepacks gain additive
+  `locale_basis = "document" | "format"` metadata. External and adopter
+  rulepacks that omit it retain the legacy `document` default. Bundled
+  recognizers declare it explicitly.
+
+  The A4-clean format recognizers `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
+  `nhs.uk`, `nino.uk`, `nir.fr`, `pan.in`, `phone.national.us`, `ssn.us`,
+  `steuer_id.de`, `vat.de`, and `vat.es` now run once regardless of the
+  document locale. Their `locales` values record identifier-format provenance,
+  and their candidates join document-basis candidates before the unchanged
+  conflict resolver runs. Linguistic `name.*` recognizers remain
+  document-basis. `phone.national.de`, `postal.de`, and `postal.us` remain
+  temporarily document-gated pending precision hardening; postal promotion
+  depends on todo #2424.
+
+  **Breaking behavior:** `--locale=global` and narrow locale chains no longer
+  suppress the format-basis identifiers. Adopters relying on that suppression
+  can receive new tokens and changed snapshots. To restore the old output,
+  disable the affected recognizer outright, for example by selecting an
+  adopter rulepack copy with `enabled = false`; locale mismatch is no longer a
+  suppression mechanism.
+
+  This deliberately trades axis 5 (snapshot compatibility and configuration
+  convenience) for axis 1 (never leak a foreign-format identifier merely
+  because the surrounding document uses another locale). The known remaining
+  debt is 27 target spans: 14 DE national-phone and 13 postal spans. Todo #2411
+  stays open: direct/codec primary and residual proxy passes still require the
+  shared `ProxyConfig::locale_chain` for every document-basis recognizer.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
@@ -95,6 +127,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FallbackReason` variant; `gaze-types` is unchanged.
 
 ### Fixed
+
+- **The ORT NER backend now hands the BIO decoder the document text, not its
+  provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
+  the constant `"ner/ort"` where `merge_bio_span_results` expected the string
+  the tokenizer offsets index into, so in production (a) joiner bridging read
+  the bytes between tokens from `"ner/ort"` and was dead — hyphenated or dotted
+  names such as `Anne-Marie` / `john.doe` decoded as two spans — and (b) any
+  input of 7 bytes or fewer had its spans boundary-checked against `"ner/ort"`,
+  so short structured field values such as `Anna`, `Alice`, or `Berlin` (the
+  tool-call JSON shape axis 3 is built for) lost their NER span entirely. Both
+  are recall defects (axis 1). The decoder now receives the real input, the
+  decode step is a model-free `decode_logits` seam with red-first tests, and the
+  Kiji safety-net decoders (`ort`/`tract`/`candle`) were checked and already
+  passed the real text.
+
+  The heuristic `enforce_source_boundaries` flag (which guessed whether the
+  argument was text by comparing span ends to its length) and the
+  `is_token_boundary_match` suppression it gated were removed rather than
+  silently activated by the corrected argument: that suppression never ran in
+  production and turning it on is a measured decision (solo todo #2904).
+  Production output changes only by adding spans the decoder was designed to
+  emit; no span the previous decoder emitted is dropped.
+
+  **API:** `NerDetector::merge_bio_spans` now takes `document_text` and
+  `provenance` as separate parameters (was one `source` used for both);
+  `NerDetector::merge_bio_span_results`' last parameter is renamed
+  `document_text` (same position, same type). Callers that passed a provenance
+  string as `source` must pass the tokenizer input instead.
 
 - **Safety-net RESOLVE no longer returns `Ok` on a result it cannot verify**
   (#403). The mode's only post-condition used to be a follow-up net scan, so any

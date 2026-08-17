@@ -478,10 +478,11 @@ loaded rulepack rather than a separate hand-maintained list.
 
 | Bundle | Recognizers | Classes | Notes |
 |--------|-------------|---------|-------|
-| `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` so low-FPR recognizers can run by default while national phone and postal recognizers require an explicit locale. |
+| `core` | `email.global`, `email.header.name`, `email.header.name.paren`, `name.*`, `phone.*`, `iban.structural`, `card.structural`, `ip.*`, `eth.address`, `postal.*` | `email`, `name`, `custom:phone`, `custom:iban`, `custom:credit_card`, `custom:ip_address`, `custom:eth_address`, `custom:postal_code` | Default bundle when `[policy.rulepacks]` is omitted. Recognizers declare `safety_tier` and `locale_basis`; format-basis identifiers run independently of the document locale, while linguistic names and quarantined national shapes remain document-gated. |
 | `core-extended` | alias of `core` | same as `core` | Deprecated since v0.8.0; scheduled for removal in v0.10.0. The CLI alias emits a warning and auto-activates locale-gated recognizers for v0.8.x compatibility. |
 
-Use `core` with an explicit locale when you want locale-shaped recognizers:
+Use `core` with an explicit locale when you want document-basis,
+locale-shaped recognizers:
 
 ```toml
 [policy.rulepacks]
@@ -502,10 +503,14 @@ gaze clean --rulepack-bundled core --locale=en-US --policy ./policy.toml
 - `phone.structural` matches E.164-only `+\d{6,15}` numbers and emits
   `custom:phone` only when the match passes `e164_phone`. Regex-passing but
   unassigned values such as `+99999999` do not emit detections.
-- `phone.national.de`, `phone.national.us`, `postal.de`, and `postal.us` are
+- `phone.national.us` has `locale_basis = "format"` and is `safe_default`; it
+  runs for every document locale because a US-format phone remains sensitive
+  inside a non-US-language document. Its `locales = ["en-US"]` value records
+  format provenance and is not an eligibility gate.
+- `phone.national.de`, `postal.de`, and `postal.us` remain `document` basis and
   `locale_gated`; pass `--locale=de-DE` or `--locale=en-US`, or set
-  `[locale].active`, to activate them. `global` alone does not activate
-  locale-gated recognizers. The DE phone recognizer
+  `[locale].active`, to activate them. `global` alone does not activate these
+  quarantined recognizers. The DE phone recognizer
   includes Berlin (`30`), Hamburg (`40`), Frankfurt (`69`), Munich (`89`),
   Cologne (`221`), Stuttgart (`711`), and the synthetic mobile fixture shape
   (`151`) while still requiring `e164_phone_national_de` validation. These
@@ -546,6 +551,7 @@ same `class`, at least one must explicitly list the other recognizer id in
 [[recognizers]]
 id = "email.header.name"
 class = "Name"
+locale_basis = "document"
 cooperates_with = ["salutation.name"]
 
 [recognizers.match]
@@ -553,6 +559,26 @@ kind = "regex"
 pattern = '''(?m)^From:\s+([A-Z][a-z]+)\s+<[^>]+>'''
 capture_groups = [1]
 ```
+
+`locale_basis` accepts two values:
+
+| Value | Meaning |
+|-------|---------|
+| `"document"` | `locales` gates eligibility against the resolved document locale chain. This is the legacy default when an external/adopter rulepack omits the field. |
+| `"format"` | `locales` records format provenance only. Assembly registers the recognizer regardless of document locale, and the registry runs it once outside locale fallback before ordinary conflict resolution. |
+
+Bundled rulepacks must state `locale_basis` explicitly for every recognizer.
+The bundled format-basis set is `aadhaar.in`, `bsn.nl`, `cnpj.br`, `cpf.br`,
+`nhs.uk`, `nino.uk`, `nir.fr`, `pan.in`, `phone.national.us`, `ssn.us`,
+`steuer_id.de`, `vat.de`, and `vat.es`. Linguistic `name.*` recognizers,
+`phone.national.de`, `postal.de`, and `postal.us` remain document-basis.
+
+This changes suppression behavior: `--locale=global` and narrow locale chains
+cannot suppress a format-basis recognizer. An adopter that needs the previous
+token stream must disable that recognizer outright, for example by selecting a
+copied rulepack with `enabled = false`, instead of relying on locale mismatch.
+This deliberately trades snapshot compatibility and configuration convenience
+(axis 5) for closing identifier leaks (axis 1).
 
 Missing cooperation fails rulepack load with
 `RulepackError::SameClassWithoutCooperation`. The check is strict by design:

@@ -24,3 +24,4 @@ tempfile = "3"
 fake = { version = "*", default-features = false }
 syn = { version = "2", features = ["full"] }
 tempfile = "3"
+toml = "0.8"

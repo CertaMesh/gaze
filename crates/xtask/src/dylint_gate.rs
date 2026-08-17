@@ -1,3 +1,7 @@
+//! The scheduled `dylint.yml` workflow sets `GAZE_DYLINT_REQUIRED=1` and must
+//! fail closed if cargo-dylint is unavailable. Other callers still verify the
+//! UI fixture shape, but report that the compiled lint run is deferred.
+
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -6,29 +10,36 @@ use std::process::Command;
 use anyhow::{bail, Context, Result};
 
 const EXPECTED_UI_FIXTURES: usize = 18;
-const RUN_DYLINT_ENV: &str = "GAZE_RUN_DYLINT";
+const DYLINT_REQUIRED_ENV: &str = "GAZE_DYLINT_REQUIRED";
+const DEFERRED_MESSAGE: &str = "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the scheduled dylint.yml workflow (solo todo #1870)";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DylintDisposition {
+    Run,
+    Deferred,
+}
 
 pub fn run() -> Result<()> {
     let root = std::env::current_dir().context("failed to resolve current directory")?;
     assert_ui_fixture_shape(&root)?;
-    if !should_run_cargo_dylint() {
-        eprintln!(
-            "dylint_gate: cargo-dylint skipped outside CI; set {RUN_DYLINT_ENV}=1 to run it locally."
-        );
-        println!("dylint_gate: passed");
-        return Ok(());
+    match cargo_dylint_requirement(env_flag(DYLINT_REQUIRED_ENV), cargo_dylint_available())? {
+        DylintDisposition::Run => {
+            run_cargo_dylint(&root)?;
+            println!("dylint_gate: passed");
+        }
+        DylintDisposition::Deferred => println!("{DEFERRED_MESSAGE}"),
     }
-    if !cargo_dylint_available() {
-        eprintln!("cargo-dylint not installed; skipping dylint gate. CI installs it explicitly.");
-        return Ok(());
-    }
-    run_cargo_dylint(&root)?;
-    println!("dylint_gate: passed");
     Ok(())
 }
 
-fn should_run_cargo_dylint() -> bool {
-    env_flag("CI") || env_flag("GITHUB_ACTIONS") || env_flag(RUN_DYLINT_ENV)
+fn cargo_dylint_requirement(required: bool, available: bool) -> Result<DylintDisposition> {
+    if available {
+        return Ok(DylintDisposition::Run);
+    }
+    if required {
+        bail!("dylint_gate: cargo-dylint is required by {DYLINT_REQUIRED_ENV}=1 but was not found");
+    }
+    Ok(DylintDisposition::Deferred)
 }
 
 fn env_flag(var: &str) -> bool {
@@ -110,4 +121,39 @@ fn run_cargo_dylint(root: &Path) -> Result<()> {
         bail!("dylint_gate: cargo dylint --workspace --all failed");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_cargo_dylint_fails_closed_when_required() {
+        let error = cargo_dylint_requirement(true, false).unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "dylint_gate: cargo-dylint is required by GAZE_DYLINT_REQUIRED=1 but was not found"
+        );
+    }
+
+    #[test]
+    fn missing_cargo_dylint_reports_deferred_when_not_required() {
+        assert_eq!(
+            cargo_dylint_requirement(false, false).unwrap(),
+            DylintDisposition::Deferred
+        );
+        assert_eq!(
+            DEFERRED_MESSAGE,
+            "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the scheduled dylint.yml workflow (solo todo #1870)"
+        );
+    }
+
+    #[test]
+    fn available_cargo_dylint_runs_even_when_not_required() {
+        assert_eq!(
+            cargo_dylint_requirement(false, true).unwrap(),
+            DylintDisposition::Run
+        );
+    }
 }

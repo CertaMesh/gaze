@@ -58,6 +58,9 @@ not imply that they meet current production targets.
 | [v0.12-kiji-decoder-scorecard.md](v0.12-kiji-decoder-scorecard.md) | Kiji label-registry and shared fail-closed decoder comparison for PR #425 | Current evidence |
 | [v0.12-kiji-decoder-base-scorecard-v4.json](v0.12-kiji-decoder-base-scorecard-v4.json) | Schema-v4 scorecard for the BASE half of the Kiji decoder comparison (not an accepted baseline) | Current evidence |
 | [v0.12-kiji-decoder-candidate-scorecard-v4.json](v0.12-kiji-decoder-candidate-scorecard-v4.json) | Schema-v4 scorecard for the CANDIDATE half of the Kiji decoder comparison (not an accepted baseline) | Current evidence |
+| [v0.12-locale-basis-drain-scorecard.md](v0.12-locale-basis-drain-scorecard.md) | Mixed locale-basis drain comparison on current main | Current evidence |
+| [v0.12-locale-basis-drain-base-scorecard-v4.json](v0.12-locale-basis-drain-base-scorecard-v4.json) | Schema-v4 BASE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
+| [v0.12-locale-basis-drain-candidate-scorecard-v4.json](v0.12-locale-basis-drain-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
 | [v0.12-en-de-whole-pipeline-baseline.md](v0.12-en-de-whole-pipeline-baseline.md) | Human-readable authoritative no-OPF whole-pipeline baseline | Current evidence |
 | [v0.12-no-opf-error-buckets.md](v0.12-no-opf-error-buckets.md) | Prioritized analysis of current no-OPF Kiji error buckets | Current evidence |
 | [v0.12-no-opf-scorecard-v3.json](v0.12-no-opf-scorecard-v3.json) | Normalized machine-readable three-cell schema-v3 scorecard | Current evidence |

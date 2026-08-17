@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use aho_corasick::{AhoCorasick, AhoCorasickBuilder};
 use gaze_types::{
-    Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleTag, PiiClass, Recognizer,
+    Candidate, ConflictTier, DetectContext, DictionaryEntry, LocaleBasis, LocaleTag, PiiClass,
+    Recognizer,
 };
 
 /// Lookup-based [`Recognizer`] for tenant-specific PII.
@@ -24,6 +25,7 @@ pub struct DictionaryRecognizer {
     case_sensitive: bool,
     token_family: String,
     locales: Vec<LocaleTag>,
+    locale_basis: LocaleBasis,
     score: f32,
     priority: i32,
     compiled_dictionaries: Mutex<HashMap<DictionaryCacheKey, Arc<AhoCorasick>>>,
@@ -67,6 +69,7 @@ impl DictionaryRecognizer {
             case_sensitive,
             token_family: token_family.into(),
             locales,
+            locale_basis: LocaleBasis::Document,
             score,
             priority,
             compiled_dictionaries: Mutex::new(HashMap::new()),
@@ -79,6 +82,12 @@ impl DictionaryRecognizer {
 
     pub fn case_sensitive(&self) -> bool {
         self.case_sensitive
+    }
+
+    /// Overrides how the recognizer's locale metadata affects eligibility.
+    pub fn with_locale_basis(mut self, locale_basis: LocaleBasis) -> Self {
+        self.locale_basis = locale_basis;
+        self
     }
 
     fn automaton_for(&self, entry: &DictionaryEntry) -> Arc<AhoCorasick> {
@@ -164,6 +173,10 @@ impl Recognizer for DictionaryRecognizer {
 
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
+    }
+
+    fn locale_basis(&self) -> LocaleBasis {
+        self.locale_basis
     }
 }
 
