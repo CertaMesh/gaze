@@ -2465,15 +2465,6 @@ async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Sessio
         .map(str::to_string)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    {
-        let sessions = state.sessions.read().await;
-        if let Some(entry) = sessions.get(&id) {
-            if entry.expires_at > now {
-                return Ok(entry.session.clone());
-            }
-        }
-    }
-
     #[cfg(test)]
     {
         let barrier = SESSION_FOR_MISS_BARRIERS.lock().unwrap().get(&id).cloned();
@@ -2482,20 +2473,22 @@ async fn session_for(state: &AppState, headers: &HeaderMap) -> Result<Arc<Sessio
         }
     }
 
-    let session = Arc::new(
-        Session::new(Scope::Conversation(id.clone()))
-            .map_err(|source| ProxyError::Pipeline { source })?,
-    );
     let mut sessions = state.sessions.write().await;
     sessions.retain(|_, entry| entry.expires_at > now);
-    sessions.insert(
-        id,
-        SessionEntry {
-            session: session.clone(),
-            expires_at: now + state.config.session_ttl,
-        },
-    );
-    Ok(session)
+    match sessions.entry(id) {
+        std::collections::hash_map::Entry::Occupied(entry) => Ok(entry.get().session.clone()),
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            let session = Arc::new(
+                Session::new(Scope::Conversation(entry.key().clone()))
+                    .map_err(|source| ProxyError::Pipeline { source })?,
+            );
+            entry.insert(SessionEntry {
+                session: session.clone(),
+                expires_at: now + state.config.session_ttl,
+            });
+            Ok(session)
+        }
+    }
 }
 
 /// Numeric request positions that are caller-authored generation controls rather than data
