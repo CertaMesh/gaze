@@ -750,7 +750,7 @@ fn verify_one_sensitive_path(path: &Path) -> Result<std::fs::Metadata, SafetyNet
         });
     }
 
-    let uid = current_uid();
+    let uid = current_euid();
     if metadata.uid() != uid {
         return Err(SafetyNetError::ModelUnavailable {
             reason: "opf sensitive path owner mismatch".to_string(),
@@ -790,13 +790,10 @@ fn set_private_dir_permissions(path: &Path) -> Result<(), SafetyNetError> {
 }
 
 #[cfg(unix)]
-fn current_uid() -> u32 {
-    std::fs::metadata(".")
-        .map(|metadata| {
-            use std::os::unix::fs::MetadataExt;
-            metadata.uid()
-        })
-        .unwrap_or(0)
+fn current_euid() -> u32 {
+    // Verification must depend on who runs the process, not on the current
+    // directory's owner.
+    unsafe { libc::geteuid() }
 }
 
 #[cfg(windows)]
@@ -840,6 +837,25 @@ fn sanitize_path(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    struct CurrentDirGuard(std::path::PathBuf);
+
+    #[cfg(unix)]
+    impl CurrentDirGuard {
+        fn enter(path: &Path) -> Self {
+            let original = std::env::current_dir().unwrap();
+            std::env::set_current_dir(path).unwrap();
+            Self(original)
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for CurrentDirGuard {
+        fn drop(&mut self) {
+            std::env::set_current_dir(&self.0).unwrap();
+        }
+    }
 
     #[test]
     fn private_fields_do_not_debug() {
@@ -914,6 +930,21 @@ mod tests {
 
         let mode = std::fs::metadata(cache_dir).unwrap().permissions().mode() & 0o777;
         assert_eq!(mode, 0o700);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial_test::serial]
+    fn owner_check_uses_process_euid_not_cwd_owner() {
+        let dir = tempfile::tempdir().unwrap();
+        let expected = unsafe { libc::geteuid() };
+
+        assert_eq!(current_euid(), expected);
+        {
+            let _guard = CurrentDirGuard::enter(dir.path());
+            assert_eq!(current_euid(), expected);
+        }
+        assert_eq!(current_euid(), expected);
     }
 
     #[cfg(unix)]
