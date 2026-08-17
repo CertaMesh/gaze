@@ -4,10 +4,12 @@ use std::fs;
 
 #[path = "../src/no_tenant_knowledge.rs"]
 mod no_tenant_knowledge;
+#[path = "../src/publish_plan.rs"]
+mod publish_plan;
 #[path = "../src/repo.rs"]
 mod repo;
 
-use no_tenant_knowledge::{scan_root, TenantKnowledgeError};
+use no_tenant_knowledge::{scan_source_dirs, TenantKnowledgeError};
 
 #[test]
 fn seeded_order_id_in_production_scope_fails_gate_and_mentions_literal() {
@@ -18,7 +20,7 @@ fn seeded_order_id_in_production_scope_fails_gate_and_mentions_literal() {
     fs::write(&fixture, "fn fixture() {\n    let _ = \"order_id\";\n}\n")
         .expect("write seeded production fixture");
 
-    let result = scan_root(temp.path());
+    let result = scan_source_dirs(&[src_dir.clone()]);
     fs::remove_file(&fixture).expect("remove seeded production fixture");
 
     let error = result.expect_err("seeded tenant literal must fail");
@@ -45,7 +47,7 @@ fn allow_marker_hard_fails_in_production_but_passes_outside_production_scope() {
     )
     .expect("write production allow-marker fixture");
 
-    let result = scan_root(temp.path());
+    let result = scan_source_dirs(&[src_dir.clone()]);
     fs::remove_file(&production_fixture).expect("remove production allow-marker fixture");
 
     let error = result.expect_err("production allow marker must hard-fail");
@@ -73,7 +75,7 @@ fn allow_marker_hard_fails_in_production_but_passes_outside_production_scope() {
     )
     .expect("write tests allow-marker fixture");
 
-    let result = scan_root(temp.path());
+    let result = scan_source_dirs(&[src_dir]);
     fs::remove_file(&test_fixture).expect("remove tests allow-marker fixture");
 
     result.expect("allow marker outside production scope should pass");

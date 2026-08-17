@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use crate::repo::{fixture_citation_file, production_files, PRODUCTION_CRATES};
+use crate::repo::{fixture_citation_file, production_source_dirs, repo_root, source_files};
 const MARKER_PREFIX: &str = "// fixture-cited(";
 const MARKER_SUFFIX: &str = ")";
 const FIXTURE_PATTERNS: &[&str] = &[
@@ -45,26 +45,28 @@ pub type Result<T> = std::result::Result<T, FixtureCitationError>;
 
 pub fn run() -> anyhow::Result<()> {
     let listed_tests = workspace_test_names()?;
-    scan_root_with_tests(".", &listed_tests)?;
+    let root = repo_root()?;
+    let source_dirs = production_source_dirs(&root)?;
+    scan_source_dirs_with_tests(&source_dirs, &listed_tests)?;
     println!("fixture_citation_lint: passed");
     Ok(())
 }
 
-pub fn scan_root_with_tests(root: impl AsRef<Path>, listed_tests: &HashSet<String>) -> Result<()> {
-    let root = root.as_ref();
+pub fn scan_source_dirs_with_tests(
+    source_dirs: &[PathBuf],
+    listed_tests: &HashSet<String>,
+) -> Result<()> {
     let mut missing_citation = Vec::new();
     let mut missing_test = Vec::new();
     let mut invalid_marker = Vec::new();
     let mut cases_checked = 0usize;
 
-    for file in
-        production_files(root, PRODUCTION_CRATES, fixture_citation_file).map_err(|error| {
-            FixtureCitationError::Io {
-                path: error.path,
-                message: error.message,
-            }
-        })?
-    {
+    for file in source_files(source_dirs, fixture_citation_file).map_err(|error| {
+        FixtureCitationError::Io {
+            path: error.path,
+            message: error.message,
+        }
+    })? {
         cases_checked += 1;
         let content = fs::read_to_string(&file).map_err(|error| io_error(&file, error))?;
         let active_lines = active_production_lines(&content);
