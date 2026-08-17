@@ -209,9 +209,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This deliberately trades axis 5 (snapshot compatibility and configuration
   convenience) for axis 1 (never leak a foreign-format identifier merely
   because the surrounding document uses another locale). The known remaining
-  debt is 27 target spans: 14 DE national-phone and 13 postal spans. Todo #2411
-  stays open: direct/codec primary and residual proxy passes still require the
-  shared `ProxyConfig::locale_chain` for every document-basis recognizer.
+  rule-coverage debt is 27 target spans: 14 DE national-phone and 13 postal
+  spans. The proxy transport debt is now closed by #2411: direct/codec primary
+  and residual passes receive the shared `ProxyConfig::locale_chain`; #2403
+  previously fixed the legacy path.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
