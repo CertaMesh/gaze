@@ -73,14 +73,15 @@ and the version each column landed.
 
 ## Audit-query API surface
 
-Adopters building dashboards, exports, or compliance views interact with four
+Adopters building dashboards, exports, or compliance views interact with five
 public items beyond `SqliteLogger`:
 
 | Item | Role |
 |------|------|
 | `AuditFilter` | Plain-struct filter builder. All fields are `Option<_>` and default to `None`, so `AuditFilter::default()` returns every row. Narrow by `class`, `source`, `action`, `document_kind`, `field_path`, `session_id`, `from_epoch_ms` / `to_epoch_ms`, snapshot scheme / alg / key version, plus the v0.7.x ambiguity columns described below. |
 | `AuditLogRow` | Shape returned by `SqliteLogger::query`. Metadata only — `class`, `action`, `field_name`, `document_kind`, `conflict_loser`, `decided_by`, `created_at`, `session_id`, snapshot metadata, and the four v0.7.x ambiguity columns. No raw PII, no token values, no restore material. |
-| `build_audit_query_sql` | Lower-level helper that constructs the `(SQL, params)` pair used by `SqliteLogger::query`. Takes column-presence booleans so callers querying older databases project `NULL AS <missing_column>` rather than failing. Exposed so external readers can run the same projection logic against a read replica without re-implementing the filter compiler. |
+| `PresentColumns` | Column-name set discovered from `PRAGMA table_info(redaction_log)`. It lets cross-version readers describe an older database shape without a positional boolean list. |
+| `build_audit_query_sql` | Lower-level helper that constructs the `(SQL, params)` pair used by `SqliteLogger::query`. Takes `PresentColumns` so callers querying older databases project `NULL AS <missing_column>` rather than failing. Exposed so external readers can run the same projection logic against a read replica without re-implementing the filter compiler. |
 | `AUDIT_RESTRICTED_COLUMNS` | Canonical allowlist of columns the audit-query path may project. `audit export` and `SqliteLogger::query` select only from this set. `redaction_log` may grow columns over time (e.g. snapshot locators, replay hashes); restricting projection here is defense in depth so future schema additions never accidentally leak raw PII, token bytes, or document content. The clean path is forbidden from touching audit storage by the `gaze_module_isolation` Dylint lint; this constant is the matching read-side guard. |
 
 Safety-net writes use the `LeakSuspectLogger` trait:
