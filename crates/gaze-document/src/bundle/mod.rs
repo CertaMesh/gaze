@@ -684,6 +684,7 @@ fn map_ocr_error_to_document_error(err: OcrError) -> DocumentError {
 pub(crate) fn build_document_pipeline() -> Result<GazePipeline, DocumentError> {
     let email = RegexDetector::emails().map_err(|err| pipeline_err("email-regex", err))?;
     // Conservative phone pattern: optional `+CC`, area, exchange, line, with
+    // fixture-cited(crates/gaze-document/src/ocr/normalize.rs:ocr::normalize::tests::already_clean_passthrough)
     // common separators. Synthetic fixture uses `+1-555-0142`-style numbers.
     let phone = RegexDetector::new(
         r"\+?\d{1,3}[-.\s]\(?\d{3}\)?[-.\s]?\d{3,4}[-.\s]?\d{0,4}",
@@ -982,6 +983,7 @@ mod tests {
                 span("Jane", 20, 36, 0.50),
                 span("Doe", 116, 36, 0.50),
                 span("Email:", 360, 10, 0.50),
+                // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_with_mock_backend_flags_low_confidence_and_columns)
                 span("alice@example.invalid", 360, 36, 0.50),
             ],
         };
@@ -1008,6 +1010,7 @@ mod tests {
             bundle.clean_markdown
         );
         assert!(
+            // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_with_mock_backend_flags_low_confidence_and_columns)
             !bundle.clean_markdown.contains("alice@example.invalid"),
             "{}",
             bundle.clean_markdown
@@ -1023,6 +1026,7 @@ mod tests {
                 span("Bill", 20, 40, 0.92),
                 span("Jane", 160, 40, 0.92),
                 span("Email", 20, 70, 0.92),
+                // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_with_mock_backend_preserves_table_cell_context)
                 span("alice@example.invalid", 160, 70, 0.92),
             ],
         };
@@ -1047,6 +1051,7 @@ mod tests {
             bundle.clean_markdown
         );
         assert!(
+            // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_with_mock_backend_preserves_table_cell_context)
             !bundle.clean_markdown.contains("alice@example.invalid"),
             "{}",
             bundle.clean_markdown
@@ -1076,6 +1081,7 @@ mod tests {
                 if decoded.width() <= decoded.height() {
                     return Ok(Vec::new());
                 }
+                // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_preprocesses_rotated_image_before_backend_ocr)
                 Ok(vec![span("alice@example.invalid", 20, 20, 0.91)])
             }
         }
@@ -1109,6 +1115,7 @@ mod tests {
             bundle.clean_markdown
         );
         assert!(
+            // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_preprocesses_rotated_image_before_backend_ocr)
             !bundle.clean_markdown.contains("alice@example.invalid"),
             "{}",
             bundle.clean_markdown
@@ -1156,6 +1163,7 @@ mod tests {
                 if horizontal_score(&image.bytes)? < self.minimum_score {
                     return Ok(Vec::new());
                 }
+                // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_deskews_image_before_backend_ocr)
                 Ok(vec![span("alice@example.invalid", 20, 20, 0.91)])
             }
         }
@@ -1212,6 +1220,7 @@ mod tests {
             bundle.clean_markdown
         );
         assert!(
+            // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_deskews_image_before_backend_ocr)
             !bundle.clean_markdown.contains("alice@example.invalid"),
             "{}",
             bundle.clean_markdown

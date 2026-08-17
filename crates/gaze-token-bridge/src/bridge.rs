@@ -392,13 +392,16 @@ pub fn synthetic_docs() -> Vec<SyntheticDoc> {
         SyntheticDoc {
             id: "cust-001",
             name: "Markus Gottschaue",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             email: "markus@example.invalid",
             customer_id: "91A",
             organization: "Globex GmbH",
         },
         SyntheticDoc {
             id: "cust-002",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             name: "Dr. Schmidt",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             email: "schmidt@example.invalid",
             customer_id: "72B",
             organization: "Initech AG",
@@ -406,6 +409,7 @@ pub fn synthetic_docs() -> Vec<SyntheticDoc> {
         SyntheticDoc {
             id: "cust-003",
             name: "Lena Torres",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             email: "lena@example.invalid",
             customer_id: "48C",
             organization: "Umbrella LLC",
@@ -413,6 +417,7 @@ pub fn synthetic_docs() -> Vec<SyntheticDoc> {
         SyntheticDoc {
             id: "cust-004",
             name: "Prof. Weber",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             email: "weber@example.invalid",
             customer_id: "54D",
             organization: "Soylent GmbH",
@@ -420,6 +425,7 @@ pub fn synthetic_docs() -> Vec<SyntheticDoc> {
         SyntheticDoc {
             id: "cust-005",
             name: "Ana Rossi",
+            // fixture-cited(crates/gaze-token-bridge/src/bridge.rs:bridge::tests::synthetic_docs_are_detected_by_demo_pipeline)
             email: "ana@example.invalid",
             customer_id: "33E",
             organization: "Vehement Capital Partners",
@@ -496,5 +502,24 @@ impl Detector for SyntheticCorpusDetector {
             }
         }
         detections
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn synthetic_docs_are_detected_by_demo_pipeline() {
+        let docs = synthetic_docs();
+        let detector = SyntheticCorpusDetector::from_docs(&docs);
+
+        for doc in docs {
+            assert_eq!(
+                detector.detect(&doc.raw_text(CUSTOMER_DOMAIN)).len(),
+                4,
+                "every synthetic fixture field must remain covered by the demo detector"
+            );
+        }
     }
 }
