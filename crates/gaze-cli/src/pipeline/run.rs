@@ -175,13 +175,9 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     };
     let pipeline = maybe_register_safety_net(pipeline, &options)?;
     validate_safety_net_tolerant_gate(options.safety_net_mode, options.safety_net_fallback)?;
-    if matches!(
-        options.safety_net_mode,
-        SafetyNetMode::Strict | SafetyNetMode::Tolerant
-    ) && options.safety_net_fallback != SafetyNetFallback::Redact
-    {
-        eprintln!("warning: --safety-net-fallback is ignored when --safety-net-mode is terminal");
-    }
+    // Lowered once, here. The library owns the (mode, fallback) -> decision mapping; the CLI
+    // reads it rather than re-deriving which flag is consulted when.
+    let policy = safety_net_policy(options.safety_net_mode, options.safety_net_fallback);
 
     let session = match effective_policy {
         Some(policy) => Session::from_policy_with_ttl_override(policy, options.session_ttl),
@@ -200,7 +196,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
                 RawDocument::Text(raw),
                 locale_chain.as_slice(),
                 &dictionaries,
-                safety_net_policy(options.safety_net_mode, options.safety_net_fallback),
+                policy,
             )
             .map_err(map_safety_net_pipeline_error)?;
         (doc, _report)
@@ -218,11 +214,7 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     counter
         .log_safety_net_report(&leak_report, &session, DocumentKind::Text)
         .map_err(|_| CliError::Pipeline)?;
-    enforce_safety_net_mode(
-        &leak_report,
-        options.safety_net_mode,
-        options.safety_net_fallback,
-    )?;
+    enforce_safety_net_mode(&leak_report, policy)?;
 
     let clean_text = match clean_doc {
         gaze::CleanDocument::Text(text) => text,
@@ -1071,25 +1063,34 @@ fn document_kind_label(kind: DocumentKind) -> &'static str {
     }
 }
 
+/// Applies the boundary half of the safety-net policy: the library mutates the document, the
+/// CLI owns the exit code and the stderr warnings.
+///
+/// Branches on [`gaze::SafetyNetPolicy::decision`] so the CLI cannot drift from the library's
+/// lowering. In particular the tolerant-deprecation warning fires only where a tolerant
+/// disposition is actually reachable: `--safety-net-mode tolerant`, or a tolerant fallback under
+/// `--safety-net-mode resolve`. Under `redact` the fallback is never consulted, so warning about
+/// it would describe something that cannot happen.
 pub(crate) fn enforce_safety_net_mode(
     report: &LeakReport,
-    mode: SafetyNetMode,
-    fallback: SafetyNetFallback,
+    policy: gaze::SafetyNetPolicy,
 ) -> std::result::Result<(), CliError> {
     let suspected_leaks = report.stats.uncovered_count + report.stats.partial_bleed_count;
     if suspected_leaks > 0 {
-        match mode {
-            SafetyNetMode::Strict => {
+        match policy.decision() {
+            gaze::SafetyNetDecision::Observe { strict: true } => {
                 return Err(CliError::SafetyNetFailure {
                     variant: "SuspectedLeak",
                 });
             }
-            SafetyNetMode::Tolerant => emit_tolerant_deprecation_warning(),
-            SafetyNetMode::Redact | SafetyNetMode::Resolve => {
-                if fallback == SafetyNetFallback::Tolerant {
-                    emit_tolerant_deprecation_warning();
-                }
+            gaze::SafetyNetDecision::Observe { strict: false } => {
+                emit_tolerant_deprecation_warning()
             }
+            gaze::SafetyNetDecision::Resolve {
+                on_residual: gaze::SafetyNetFallback::Tolerant,
+            } => emit_tolerant_deprecation_warning(),
+            gaze::SafetyNetDecision::Redact | gaze::SafetyNetDecision::Resolve { .. } => {}
+            _ => {}
         }
     }
     if report.stats.class_mismatch_count > 0 {

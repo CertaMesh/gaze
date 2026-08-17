@@ -248,7 +248,29 @@ Each emits a `decided_by: Fallback` audit row with the corresponding `FallbackRe
 
 ## 6. Fallback flag
 
-The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `redact` or `resolve` and the primary action cannot be honored for a specific suspect, the fallback decides what happens to that suspect. Terminal modes (`strict`, `tolerant`) ignore the flag because their per-suspect action cannot fail in a per-suspect sense — `strict` exits at the boundary regardless and `tolerant` ships the leak regardless.
+> **Implemented behaviour (v0.9).** The rest of this section is the original design. What shipped
+> is narrower in one respect, and the difference is load-bearing: **the fallback is consulted only
+> under `resolve`.** `SafetyNetPolicy::decision()` in `crates/gaze/src/pipeline.rs` is the single,
+> total lowering of the `(mode, fallback)` pair, and it is what every runtime arm reads:
+>
+> | `--safety-net-mode` | `--safety-net-fallback` | `SafetyNetDecision`          | runtime behaviour |
+> |---------------------|-------------------------|------------------------------|-------------------|
+> | `strict`            | any                     | `Observe { strict: true }`   | report only; the CLI boundary exits `3` |
+> | `tolerant`          | any                     | `Observe { strict: false }`  | report only; the CLI boundary warns and ships |
+> | `redact`            | any                     | `Redact`                     | delete every suspect span; **no fallback** |
+> | `resolve`           | `f`                     | `Resolve { on_residual: f }` | tokenize, re-run the nets, apply `f` to the residual |
+>
+> `redact` is **terminal per suspect**: it has no cascade. Its failure paths are typed errors that
+> fail the document closed (`Error::SafetyNetSpanInvalid` for a span outside the text,
+> `Error::ManifestIntegrity` for a manifest that contradicts its own alignment) rather than a
+> hand-off to the fallback. Wiring a fallback into `redact` was considered and rejected: it would
+> soften those fail-closed errors into a "degraded but shipped" document, which axis 1 forbids.
+>
+> The behavioural table for all twelve representable pairs is pinned by
+> `safety_net_policy_lowering_covers_all_twelve_representable_pairs` in
+> `crates/gaze/tests/safety_net.rs`.
+
+The fallback flag is a per-suspect cascade decision: when the primary `--safety-net-mode` is `resolve` and the primary action cannot be honored, the fallback decides what happens to the residual. The other modes (`strict`, `tolerant`, `redact`) ignore the flag: `strict` exits at the boundary regardless, `tolerant` ships the leak regardless, and `redact` has already removed the bytes or failed closed.
 
 ### 6.1 CLI surface
 
@@ -263,22 +285,34 @@ The fallback flag is a per-suspect cascade decision: when the primary `--safety-
 
 ### 6.2 Composition matrix
 
-Six cells. Rows = primary mode; columns = fallback. The **default** column for each row is marked.
+Three live cells. Only `resolve` consults the fallback; the `redact` row of the original design was
+not implemented (see the note at the top of §6). The **default** cell is marked.
 
 | primary \ fallback | `strict`                                       | `tolerant`                                       | `redact`                                                    |
 |--------------------|------------------------------------------------|--------------------------------------------------|-------------------------------------------------------------|
-| `redact`           | Exit 3 with `decided_by: Fallback`, reason in row. | Warn on stderr, ship the original suspect bytes. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Expand the redaction to swallow the overlapping manifest token or the nearest grapheme boundary. Sacrifices one manifest entry; preserves axis-1. |
-| `resolve`          | Exit 3 with `decided_by: Fallback`, reason in row. | Warn on stderr, ship the residual suspect bytes. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Redact the suspect (per §4 contract). Axis-1 preserved; axis-2 lost for that span. |
+| `resolve`          | Reject the document with `Error::SafetyNetFallback(reason)`; the CLI exits 3. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. | Ship the residual bytes. One `decided_by: Fallback` row per residual suspect, `action = Preserve`. Requires `GAZE_ALLOW_TOLERANT=1` (§6.5). | **Default.** Delete the residual spans. One `decided_by: Fallback` row per residual suspect, `action = Redact`. Axis-1 preserved; axis-2 lost for that span. |
+| `redact`           | *not consulted* | *not consulted* | *not consulted* |
+| `strict` / `tolerant` | *not consulted* | *not consulted* | *not consulted* |
 
-Both defaults preserve axis-1. Both `tolerant` cells violate axis-1 by design and are dev-only.
+The `strict` and `redact` defaults preserve axis-1. The `tolerant` cell violates axis-1 by design and is dev-only.
+
+**The fallback acts on the residual report, not the primary one.** When the resolve pass converges
+and the post-resolution re-run flags something, the residual lives in the *re-run* report at
+post-resolve coordinates. The fallback is handed that report. Handing it the primary report would
+point the redactor at stale spans — deleting bytes that resolve had already tokenized while leaving
+the actual residual in the document. Pinned by
+`resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`.
 
 ### 6.3 Failure conditions per primary mode
 
 The fallback flag is invoked only when the primary action's per-suspect failure conditions trigger. The conditions are closed, enumerated, and audited.
 
-**`redact` primary, per-suspect failures (route to fallback):**
-- **`OverlapConflict`** — the suspect span fully overlaps a committed manifest token. Cleanly overwriting it would corrupt manifest validity.
-- (Grapheme-cluster break case is also classified as `OverlapConflict`-family for the purposes of audit; treat as `OverlapConflict` until a separate variant proves useful.)
+**`redact` primary: no fallback route.** A suspect span that overlaps a committed manifest token is
+handled inline — the deletion is expanded to swallow the whole token
+(`expand_span_to_overlapping_manifest_entries`) and overlapping regions are merged before
+application, so there is nothing left to cascade. A span that is misaligned to a character boundary
+is rounded outward; a span outside the text, or a manifest that contradicts its own alignment, is a
+typed error that fails the document closed. The fallback flag is not read on this path.
 
 **`resolve` primary, per-suspect failures (route to fallback):**
 - **`ValidatorVeto`** — the promoted span fails its validator (§5.4).
@@ -325,7 +359,7 @@ When the fallback triggers, gaze emits a **loser-only audit row** for the suspec
 
 - `source` = `"safety_net.<backend>.v<N>"`.
 - `class` = the safety-net-mapped class.
-- `action` = the action that the fallback ultimately performed (`Action::Redact` for the redact-default cascade; `Action::Preserve` for tolerant — the leak shipped untokenized).
+- `action` = what the fallback does to that suspect's bytes, so the row can be read without knowing the flag: `Action::Redact` when the residual span is deleted (`--safety-net-fallback redact`), `Action::Preserve` when the bytes are left in place — under `tolerant` the document then ships, under `strict` it is rejected. Produced by `fallback_row_action` and pinned against the actual mutation by `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
 - `conflict_loser` = `true`. The primary action lost to the fallback.
 - `decided_by` = `ConflictTier::Fallback`.
 - `fallback_triggered` = `Some(FallbackReason::...)`.

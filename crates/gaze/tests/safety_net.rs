@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use std::ops::Range;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use gaze::{
@@ -238,6 +239,28 @@ fn tokenizing_pipeline_with_net(net: MockNet) -> Pipeline {
         .register_safety_net(net)
         .build()
         .expect("pipeline")
+}
+
+/// The observer-only policy. `clean_with_safety_net*` defaults to `Resolve` + `Redact`
+/// (`SafetyNetPolicy::default()`), so a test that wants "report but never mutate" must say so.
+fn observer_policy() -> gaze::SafetyNetPolicy {
+    gaze::SafetyNetPolicy::new(gaze::SafetyNetMode::Strict, gaze::SafetyNetFallback::Redact)
+}
+
+fn clean_with_policy(
+    pipeline: &Pipeline,
+    session: &Session,
+    raw: RawDocument,
+    locales: &[gaze::LocaleTag],
+    policy: gaze::SafetyNetPolicy,
+) -> gaze::Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
+    pipeline.clean_with_safety_net_policy_detect_context(
+        session,
+        raw,
+        locales,
+        &gaze::DictionaryBundle::default(),
+        policy,
+    )
 }
 
 fn traced_clean(
@@ -808,23 +831,59 @@ fn safety_net_resolve_class_mismatch_inside_live_token_is_audited_noop() {
 }
 
 #[test]
-fn clean_with_safety_net_text_path_returns_manifest_and_report() {
+fn observer_text_path_returns_manifest_and_report_without_mutating() {
     let net = MockNet::new(Some(0..5), PiiClass::Email);
     let pipeline = pipeline_with_net(Some(net));
     let session = session();
 
-    let (clean, manifest, report) = pipeline
-        .clean_with_safety_net(
-            &session,
-            RawDocument::Text("Reach alice@example.invalid".to_string()),
-            &[gaze::LocaleTag::Global],
-        )
-        .expect("safety net clean");
+    let (clean, manifest, report) = clean_with_policy(
+        &pipeline,
+        &session,
+        RawDocument::Text("Reach alice@example.invalid".to_string()),
+        &[gaze::LocaleTag::Global],
+        observer_policy(),
+    )
+    .expect("safety net clean");
 
     assert_eq!(text(clean), "Reach alice@example.invalid");
     assert!(manifest.is_empty());
     assert_eq!(report.stats.suspect_count, 1);
     assert_eq!(report.suspects[0].kind, LeakKind::Uncovered);
+}
+
+/// The policy-less convenience entry points are `SafetyNetPolicy::default()`, not a private
+/// observer policy of their own: one documented default across the library surface.
+#[test]
+fn clean_with_safety_net_convenience_api_uses_the_documented_default() {
+    assert_eq!(
+        gaze::SafetyNetPolicy::default(),
+        gaze::SafetyNetPolicy::new(
+            gaze::SafetyNetMode::Resolve,
+            gaze::SafetyNetFallback::Redact
+        )
+    );
+
+    let net = MockNet::new(Some(0..5), PiiClass::Email);
+    let pipeline = pipeline_with_net(Some(net));
+    let session = session();
+    let raw = RawDocument::Text("Reach alice@example.invalid".to_string());
+
+    let (convenience, convenience_manifest, _) = pipeline
+        .clean_with_safety_net(&session, raw.clone(), &[gaze::LocaleTag::Global])
+        .expect("convenience clean");
+    let (explicit, explicit_manifest, _) = clean_with_policy(
+        &pipeline,
+        &session,
+        raw,
+        &[gaze::LocaleTag::Global],
+        gaze::SafetyNetPolicy::default(),
+    )
+    .expect("explicit default clean");
+
+    assert_eq!(text(convenience), text(explicit));
+    assert_eq!(convenience_manifest, explicit_manifest);
+    // Enforcing, not observing: the suspect was promoted into the manifest reversibly.
+    assert_eq!(convenience_manifest.len(), 1);
 }
 
 #[test]
@@ -861,9 +920,14 @@ fn byte_equal_invariance_for_leak_kinds_and_locale_skip() {
 
     for (net, expected_kind) in cases {
         let pipeline = tokenizing_pipeline_with_net(net);
-        let (clean, _, report) = pipeline
-            .clean_with_safety_net(&session, raw.clone(), &[gaze::LocaleTag::Global])
-            .expect("safety net clean");
+        let (clean, _, report) = clean_with_policy(
+            &pipeline,
+            &session,
+            raw.clone(),
+            &[gaze::LocaleTag::Global],
+            observer_policy(),
+        )
+        .expect("safety net clean");
         assert_eq!(text(clean), baseline);
         assert_eq!(
             report.suspects.first().map(|suspect| &suspect.kind),
@@ -873,9 +937,14 @@ fn byte_equal_invariance_for_leak_kinds_and_locale_skip() {
 
     let skipped =
         MockNet::new(Some(0..9), PiiClass::Email).with_locales(vec![gaze::LocaleTag::EnUs]);
-    let (clean, _, report) = tokenizing_pipeline_with_net(skipped)
-        .clean_with_safety_net(&session, raw, &[gaze::LocaleTag::DeDe])
-        .expect("locale-skipped safety net clean");
+    let (clean, _, report) = clean_with_policy(
+        &tokenizing_pipeline_with_net(skipped),
+        &session,
+        raw,
+        &[gaze::LocaleTag::DeDe],
+        observer_policy(),
+    )
+    .expect("locale-skipped safety net clean");
     assert_eq!(text(clean), baseline);
     assert_eq!(report.stats.locale_skipped_count, 1);
     assert!(report.suspects.is_empty());
@@ -1083,4 +1152,324 @@ fn scan_safety_nets_structured_covers_scalar_leaves() {
         result.report.suspects[0].field_path.as_deref(),
         Some("customer_id")
     );
+}
+
+/// Reports a residual only from the second `check` onward.
+///
+/// This is the shape the `Resolve` fallback exists for: the primary pass converges (nothing to
+/// resolve), the post-resolution re-run flags something, and the fallback must act on *that*
+/// report. A net that flags on the first pass cannot distinguish "acted on the primary report"
+/// from "acted on the residual report", so it cannot pin the contract.
+#[derive(Clone)]
+struct SecondPassNet {
+    marker: &'static str,
+    calls: Arc<AtomicUsize>,
+}
+
+impl SecondPassNet {
+    fn new(marker: &'static str) -> Self {
+        Self {
+            marker,
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+}
+
+impl SafetyNet for SecondPassNet {
+    fn id(&self) -> &str {
+        "second-pass"
+    }
+
+    fn supported_locales(&self) -> &[gaze::LocaleTag] {
+        &[gaze::LocaleTag::Global]
+    }
+
+    fn check(
+        &self,
+        clean_text: &str,
+        context: SafetyNetContext<'_>,
+    ) -> Result<Vec<LeakSuspect>, SafetyNetError> {
+        if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+            return Ok(Vec::new());
+        }
+        let Some(start) = clean_text.find(self.marker) else {
+            return Ok(Vec::new());
+        };
+        let span = start..start + self.marker.len();
+        let Some(kind) = context.manifest.diff_against(&span, &PiiClass::Name) else {
+            return Ok(Vec::new());
+        };
+        Ok(vec![LeakSuspect::new(
+            span,
+            PiiClass::Name,
+            self.id(),
+            Some(0.99),
+            kind,
+            PiiClass::Name.to_canonical_str(),
+            context.field_path.map(str::to_string),
+        )])
+    }
+}
+
+const RESIDUAL_MARKER: &str = "residue";
+const RESIDUAL_RAW: &str = "alice@example.invalid residue";
+
+fn residual_pipeline(logger: MemoryLogger) -> Pipeline {
+    Pipeline::builder()
+        .detector(FixedDetector {
+            span: 0.."alice@example.invalid".len(),
+            class: PiiClass::Email,
+        })
+        .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .register_safety_net(SecondPassNet::new(RESIDUAL_MARKER))
+        .redaction_logger(logger)
+        .build()
+        .expect("pipeline")
+}
+
+fn fallback_rows(logger: &MemoryLogger) -> Vec<RedactionEntry> {
+    logger
+        .entries()
+        .into_iter()
+        .filter(|entry| entry.decided_by == ConflictTier::Fallback)
+        .collect()
+}
+
+/// Exhaustive behavioural table over every representable `(mode, fallback)` pair.
+///
+/// The two public fields spell 4 x 3 = 12 pairs; the pipeline has 6 behaviours. This asserts the
+/// lowering is total (every pair maps to a `SafetyNetDecision`) *and* that the mapping is honest
+/// — each pair is run through the public entry point twice and the observable outcome is pinned,
+/// so a pair whose `fallback` is documented as "not consulted" provably ignores it rather than
+/// silently doing something else.
+#[test]
+fn safety_net_policy_lowering_covers_all_twelve_representable_pairs() {
+    let modes = [
+        gaze::SafetyNetMode::Strict,
+        gaze::SafetyNetMode::Tolerant,
+        gaze::SafetyNetMode::Redact,
+        gaze::SafetyNetMode::Resolve,
+    ];
+    let fallbacks = [
+        gaze::SafetyNetFallback::Strict,
+        gaze::SafetyNetFallback::Tolerant,
+        gaze::SafetyNetFallback::Redact,
+    ];
+
+    // Tokens are session-scoped, so every baseline and every case share one session per fixture.
+    let session_a = session();
+    let session_b = session();
+
+    // Fixture A baseline: primary tokenizes the email, "ok" is left uncovered.
+    let first_pass_raw = "alice@example.invalid ok";
+    let baseline_a = text(
+        tokenizing_pipeline()
+            .redact(&session_a, RawDocument::Text(first_pass_raw.to_string()))
+            .expect("baseline"),
+    );
+    let token_len = baseline_a.find(" ok").expect("token suffix");
+    let uncovered = token_len + 1..baseline_a.len();
+
+    // Fixture B baseline: nothing is flagged on the first pass.
+    let baseline_b = text(
+        tokenizing_pipeline()
+            .redact(&session_b, RawDocument::Text(RESIDUAL_RAW.to_string()))
+            .expect("baseline"),
+    );
+    assert!(baseline_b.contains(RESIDUAL_MARKER));
+
+    let mut covered = Vec::new();
+    for mode in modes {
+        for fallback in fallbacks {
+            let policy = gaze::SafetyNetPolicy::new(mode, fallback);
+            let decision = policy.decision();
+            covered.push((mode, fallback));
+
+            // 1. The lowering itself.
+            match mode {
+                gaze::SafetyNetMode::Strict => {
+                    assert_eq!(decision, gaze::SafetyNetDecision::Observe { strict: true })
+                }
+                gaze::SafetyNetMode::Tolerant => {
+                    assert_eq!(decision, gaze::SafetyNetDecision::Observe { strict: false })
+                }
+                gaze::SafetyNetMode::Redact => {
+                    assert_eq!(decision, gaze::SafetyNetDecision::Redact)
+                }
+                gaze::SafetyNetMode::Resolve => assert_eq!(
+                    decision,
+                    gaze::SafetyNetDecision::Resolve {
+                        on_residual: fallback
+                    }
+                ),
+                _ => panic!("unhandled mode {mode:?}"),
+            }
+
+            // 2. Fixture A — the net flags an uncovered span on the first pass.
+            let (clean_a, manifest_a, report_a) = clean_with_policy(
+                &tokenizing_pipeline_with_net(MockNet::new(
+                    Some(uncovered.clone()),
+                    PiiClass::Email,
+                )),
+                &session_a,
+                RawDocument::Text(first_pass_raw.to_string()),
+                &[gaze::LocaleTag::Global],
+                policy,
+            )
+            .unwrap_or_else(|err| panic!("{mode:?}/{fallback:?} fixture A: {err:?}"));
+            let clean_a = text(clean_a);
+            assert_eq!(report_a.stats.suspect_count, 1, "{mode:?}/{fallback:?}");
+            match mode {
+                // Observer modes never mutate, whatever the fallback says.
+                gaze::SafetyNetMode::Strict | gaze::SafetyNetMode::Tolerant => {
+                    assert_eq!(clean_a, baseline_a, "{mode:?}/{fallback:?}");
+                    assert_eq!(manifest_a.len(), 1, "{mode:?}/{fallback:?}");
+                }
+                // Redact deletes the suspect bytes one-way; no fallback is consulted.
+                gaze::SafetyNetMode::Redact => {
+                    assert_eq!(
+                        clean_a,
+                        baseline_a[..uncovered.start],
+                        "{mode:?}/{fallback:?}"
+                    );
+                    assert_eq!(manifest_a.len(), 1, "{mode:?}/{fallback:?}");
+                }
+                // Resolve promotes the suspect reversibly and converges, so the fallback is
+                // never reached and restore still round-trips.
+                gaze::SafetyNetMode::Resolve => {
+                    assert_ne!(clean_a, baseline_a, "{mode:?}/{fallback:?}");
+                    assert_eq!(manifest_a.len(), 2, "{mode:?}/{fallback:?}");
+                    assert_eq!(
+                        session_a.restore_strict_text(&clean_a).expect("restore"),
+                        first_pass_raw,
+                        "{mode:?}/{fallback:?}"
+                    );
+                }
+                _ => panic!("unhandled mode {mode:?}"),
+            }
+
+            // 3. Fixture B — nothing on the first pass, a residual on the re-run. Only
+            //    `Resolve` re-runs the nets, so only `Resolve` can reach the fallback column.
+            let logger = MemoryLogger::new();
+            let result_b = clean_with_policy(
+                &residual_pipeline(logger.clone()),
+                &session_b,
+                RawDocument::Text(RESIDUAL_RAW.to_string()),
+                &[gaze::LocaleTag::Global],
+                policy,
+            );
+            let rows = fallback_rows(&logger);
+            match (mode, fallback) {
+                (
+                    gaze::SafetyNetMode::Strict
+                    | gaze::SafetyNetMode::Tolerant
+                    | gaze::SafetyNetMode::Redact,
+                    _,
+                ) => {
+                    let (clean_b, _, report_b) =
+                        result_b.unwrap_or_else(|err| panic!("{mode:?}/{fallback:?} B: {err:?}"));
+                    assert_eq!(text(clean_b), baseline_b, "{mode:?}/{fallback:?}");
+                    assert_eq!(report_b.stats.suspect_count, 0, "{mode:?}/{fallback:?}");
+                    assert!(rows.is_empty(), "{mode:?}/{fallback:?}");
+                }
+                (gaze::SafetyNetMode::Resolve, gaze::SafetyNetFallback::Strict) => {
+                    let err = result_b.expect_err("residual must fail closed");
+                    assert!(
+                        matches!(
+                            err,
+                            gaze::Error::SafetyNetFallback(FallbackReason::ResidualSuspect)
+                        ),
+                        "{mode:?}/{fallback:?}: {err:?}"
+                    );
+                    assert_eq!(rows.len(), 1, "{mode:?}/{fallback:?}");
+                    assert_eq!(rows[0].action, Action::Preserve, "{mode:?}/{fallback:?}");
+                }
+                (gaze::SafetyNetMode::Resolve, gaze::SafetyNetFallback::Tolerant) => {
+                    let (clean_b, _, _) =
+                        result_b.unwrap_or_else(|err| panic!("{mode:?}/{fallback:?} B: {err:?}"));
+                    let clean_b = text(clean_b);
+                    // Tolerant ships the residual bytes by design, and the row says so.
+                    assert!(clean_b.contains(RESIDUAL_MARKER), "{mode:?}/{fallback:?}");
+                    assert_eq!(rows.len(), 1, "{mode:?}/{fallback:?}");
+                    assert_eq!(rows[0].action, Action::Preserve, "{mode:?}/{fallback:?}");
+                }
+                (gaze::SafetyNetMode::Resolve, gaze::SafetyNetFallback::Redact) => {
+                    let (clean_b, _, _) =
+                        result_b.unwrap_or_else(|err| panic!("{mode:?}/{fallback:?} B: {err:?}"));
+                    let clean_b = text(clean_b);
+                    // The shipped default: the residual is gone, and the row says Redact.
+                    assert!(!clean_b.contains(RESIDUAL_MARKER), "{mode:?}/{fallback:?}");
+                    assert_eq!(rows.len(), 1, "{mode:?}/{fallback:?}");
+                    assert_eq!(rows[0].action, Action::Redact, "{mode:?}/{fallback:?}");
+                }
+                _ => panic!("unhandled pair {mode:?}/{fallback:?}"),
+            }
+        }
+    }
+    assert_eq!(covered.len(), 12, "all representable pairs must be covered");
+}
+
+/// Axis-1 + axis-4: the `Resolve` fallback must act on the report that produced the reason.
+///
+/// When the resolve pass converges and the post-resolution re-run flags a residual, the residual
+/// lives in the *re-run* report at post-resolve coordinates. Acting on the primary report there
+/// redacts stale spans (or, when the primary report was empty, nothing at all) and ships the
+/// residual bytes under a policy that promised to remove them.
+#[test]
+fn resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report() {
+    let logger = MemoryLogger::new();
+    let session = session();
+    let (clean, manifest, _) = clean_with_policy(
+        &residual_pipeline(logger.clone()),
+        &session,
+        RawDocument::Text(RESIDUAL_RAW.to_string()),
+        &[gaze::LocaleTag::Global],
+        gaze::SafetyNetPolicy::default(),
+    )
+    .expect("default policy clean");
+    let clean = text(clean);
+
+    // The residual is gone...
+    assert!(!clean.contains(RESIDUAL_MARKER));
+    // ...and the email token the primary pass minted is intact, so restore still works for it.
+    assert_eq!(manifest.len(), 1);
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("restore"),
+        "alice@example.invalid "
+    );
+
+    // The audit row names the residual suspect and states what was done to its bytes.
+    let rows = fallback_rows(&logger);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].action, Action::Redact);
+    assert_eq!(rows[0].class, PiiClass::Name);
+    assert_eq!(rows[0].source, "safety_net.second-pass");
+    assert!(rows[0].conflict_loser);
+    assert_eq!(
+        rows[0].fallback_triggered,
+        Some(FallbackReason::ResidualSuspect)
+    );
+}
+
+/// `GazeLocalProtectionTraceKind::SafetyNetFallbackRedact` is reachable and distinct from the
+/// primary-redact kind: a fallback deletion is traced as `fallback_redact`, not `redact`. The
+/// benchmark harness asserts on exactly this `(stage, decision, action)` triple.
+#[test]
+fn fallback_redaction_is_traced_as_fallback_redact() {
+    let session = session();
+    let (_, _, _, trace) = traced_clean(
+        &residual_pipeline(MemoryLogger::new()),
+        &session,
+        RESIDUAL_RAW,
+        gaze::SafetyNetPolicy::default(),
+    );
+
+    let fallback = trace
+        .iter()
+        .find(|item| item.decision() == "fallback_redact")
+        .expect("fallback redaction must be traced");
+    assert_eq!(fallback.stage(), "safety_net");
+    assert_eq!(fallback.action(), "redact");
+    assert_eq!(fallback.source_ids(), &["second-pass".to_string()]);
 }

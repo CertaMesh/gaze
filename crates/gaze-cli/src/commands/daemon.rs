@@ -242,6 +242,7 @@ impl Daemon {
             .get(&request.session_id)
             .expect("session inserted")
             .session;
+        let policy = safety_net_policy(self.safety_net_mode, self.safety_net_fallback);
         let (clean_doc, manifest, leak_report) = self
             .pipeline
             .clean_with_safety_net_policy_detect_context(
@@ -249,7 +250,7 @@ impl Daemon {
                 RawDocument::Text(request.text),
                 &self.locale_chain,
                 &self.dictionaries,
-                safety_net_policy(self.safety_net_mode, self.safety_net_fallback),
+                policy,
             )
             .map_err(|err| {
                 let cli_error = if self.safety_net_active {
@@ -267,7 +268,7 @@ impl Daemon {
                     DaemonError::Cli(CliError::Pipeline),
                 )
             })?;
-        enforce_safety_net_mode(&leak_report, self.safety_net_mode, self.safety_net_fallback)
+        enforce_safety_net_mode(&leak_report, policy)
             .map_err(|err| (request.session_id.clone(), DaemonError::Cli(err)))?;
         let clean_text = match clean_doc {
             gaze::CleanDocument::Text(text) => text,

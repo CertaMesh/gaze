@@ -67,6 +67,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One documented safety-net default across the library and the CLI** (audit
+  7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
+  `clean_with_safety_net_detect_context` — the policy-less convenience entry
+  points — previously hard-coded `SafetyNetMode::Strict` + `Redact`, which
+  contradicted `SafetyNetPolicy::default()` (`Resolve` + `Redact`, the shipped
+  production default and the CLI default since v0.8.1). They now use
+  `SafetyNetPolicy::default()`. **Adopters calling these entry points with a
+  registered safety net now get enforcement instead of observation**: suspects
+  are tokenized reversibly and any residual takes the `Redact` fallback, rather
+  than being reported and shipped. This strengthens axis 1 and preserves
+  axis 2 (the promoted spans stay restorable). For the previous behaviour pass
+  an explicit policy to `clean_with_safety_net_policy_detect_context`, or use
+  `Pipeline::scan_safety_nets` for a report-only pass. In-tree pipelines that
+  register no safety net are unaffected.
+
+- **`SafetyNetMode` x `SafetyNetFallback` is lowered once to a total
+  `SafetyNetDecision`** (audit 7201 S01-F1, solo todo #2949). The two public
+  fields spell twelve pairs; the runtime has six behaviours, and seven pairs
+  previously differed only in a field nothing read. `SafetyNetPolicy::decision()`
+  is now the single, total lowering to
+  `SafetyNetDecision { Observe { strict }, Redact, Resolve { on_residual } }`,
+  and every pipeline arm, the skip-gating optimizer, and the CLI boundary read
+  the decision instead of re-deriving the lattice from the pair. `SafetyNetDecision`
+  is exported from `gaze`. The public `mode` and `fallback` fields are unchanged.
+  The full twelve-pair behaviour table is pinned by
+  `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
+
+- **`gaze clean` no longer warns that `--safety-net-fallback` is "ignored when
+  `--safety-net-mode` is terminal"** (audit 7201 S01-F1, solo todo #2949). The
+  lowering documents which pairs consult the fallback, so the runtime warning is
+  redundant. Relatedly, the tolerant-deprecation warning now fires only where a
+  tolerant disposition is reachable — `--safety-net-mode tolerant`, or a tolerant
+  fallback under `--safety-net-mode resolve`. It no longer fires for
+  `--safety-net-mode redact --safety-net-fallback tolerant`, where the fallback
+  is never consulted. The `GAZE_ALLOW_TOLERANT` gate is unchanged and still
+  rejects a tolerant flag in any position.
+
 - **Persistent owner-side corpus index schema v2: each document is stored
   once, postings are derived on load, and re-ingest upserts** (audit 7201
   S17-F1, todo #2936). `gaze_token_bridge::persistent::FileCorpusIndexStore`
@@ -187,6 +224,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `FallbackReason` variant; `gaze-types` is unchanged.
 
 ### Fixed
+
+- **Safety-net `resolve` fallback acted on the primary report instead of the
+  residual one, shipping residual PII under the default policy** (audit 7201
+  S01-F1, solo todo #2949). When the resolve pass converged and the
+  post-resolution re-run flagged a residual suspect, the fallback was handed the
+  *primary* `LeakReport` — which by then described pre-resolve coordinates, and
+  was empty whenever the first pass found nothing. Under the shipped default
+  (`Resolve` + `Redact` fallback) that meant the residual bytes were **left in
+  the clean document** and **no fallback audit row was written**, while the
+  caller received `Ok`; where the primary report was non-empty, the redactor was
+  pointed at stale spans and could delete bytes resolve had already tokenized.
+  Only the `strict` fallback was safe, because it rejects the document without
+  consulting the report. The fallback now receives the report that produced the
+  reason. Axis 1 (leak) and axis 4 (an audit row that claimed `Redact` while
+  nothing was redacted). Pinned by
+  `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`
+  and by the twelve-pair lowering table; both fail on a mutation that restores
+  the old argument.
+
+- **Fallback audit rows now state what happened to the suspect's bytes**
+  (audit 7201 S01-F1, solo todo #2949). `fallback_action` was renamed to
+  `fallback_row_action` and documented as the row's claim about the bytes:
+  `Action::Redact` only when the residual span is actually deleted,
+  `Action::Preserve` when it is left in place (shipped under `tolerant`,
+  rejected under `strict`). With the residual-report fix above, a
+  `decided_by: Fallback` row now also names the residual suspect that drove it
+  rather than a stale primary-pass suspect.
 
 - **`custom:family:*` policy classes now preserve the collision-family namespace**
   (audit S05-F1, solo todo #2934). `PiiClass::from_policy_name` previously
