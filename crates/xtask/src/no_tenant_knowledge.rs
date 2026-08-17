@@ -4,13 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const PRODUCTION_CRATES: &[&str] = &[
-    "gaze-pii",
-    "gaze-types",
-    "gaze-recognizers",
-    "gaze-assembly",
-    "gaze-cli",
-];
+use crate::repo::{production_files, tenant_knowledge_file, PRODUCTION_CRATES};
 const ALLOW_MARKER: &str = "// allow(tenant-fixture)";
 // Denylist literals split via concat!() so this source file does not contain
 // the contiguous strings the gate scans for. This is meta-Potemkin avoidance:
@@ -53,7 +47,14 @@ pub fn scan_root(root: impl AsRef<Path>) -> Result<()> {
     let mut denylist_violations = Vec::new();
     let mut cases_checked = 0usize;
 
-    for file in production_files(root)? {
+    for file in
+        production_files(root, PRODUCTION_CRATES, tenant_knowledge_file).map_err(|error| {
+            TenantKnowledgeError::Io {
+                path: error.path,
+                message: error.message,
+            }
+        })?
+    {
         cases_checked += 1;
         let content = fs::read_to_string(&file).map_err(|error| io_error(&file, error))?;
         for (line_index, line) in content.lines().enumerate() {
@@ -92,42 +93,6 @@ pub fn scan_root(root: impl AsRef<Path>) -> Result<()> {
         });
     }
 
-    Ok(())
-}
-
-fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for crate_name in PRODUCTION_CRATES {
-        let src = root
-            .join("crates")
-            .join(package_source_dir(crate_name))
-            .join("src");
-        if !src.exists() {
-            continue;
-        }
-        collect_rs_files(&src, &mut files)?;
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn package_source_dir(package_name: &str) -> &str {
-    match package_name {
-        "gaze-pii" => "gaze",
-        _ => package_name,
-    }
-}
-
-fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    for entry in fs::read_dir(dir).map_err(|error| io_error(dir, error))? {
-        let entry = entry.map_err(|error| io_error(dir, error))?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_rs_files(&path, files)?;
-        } else if path.extension().is_some_and(|extension| extension == "rs") {
-            files.push(path);
-        }
-    }
     Ok(())
 }
 

@@ -6,13 +6,7 @@ use std::{
     process::Command,
 };
 
-const PRODUCTION_CRATES: &[&str] = &[
-    "gaze-pii",
-    "gaze-types",
-    "gaze-recognizers",
-    "gaze-assembly",
-    "gaze-cli",
-];
+use crate::repo::{fixture_citation_file, production_files, PRODUCTION_CRATES};
 const MARKER_PREFIX: &str = "// fixture-cited(";
 const MARKER_SUFFIX: &str = ")";
 const FIXTURE_PATTERNS: &[&str] = &[
@@ -63,7 +57,14 @@ pub fn scan_root_with_tests(root: impl AsRef<Path>, listed_tests: &HashSet<Strin
     let mut invalid_marker = Vec::new();
     let mut cases_checked = 0usize;
 
-    for file in production_files(root)? {
+    for file in
+        production_files(root, PRODUCTION_CRATES, fixture_citation_file).map_err(|error| {
+            FixtureCitationError::Io {
+                path: error.path,
+                message: error.message,
+            }
+        })?
+    {
         cases_checked += 1;
         let content = fs::read_to_string(&file).map_err(|error| io_error(&file, error))?;
         let active_lines = active_production_lines(&content);
@@ -137,61 +138,6 @@ pub fn parse_test_list(output: &str) -> HashSet<String> {
         .filter_map(|line| line.strip_suffix(": test"))
         .map(str::to_owned)
         .collect()
-}
-
-fn production_files(root: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for crate_name in PRODUCTION_CRATES {
-        let src = root
-            .join("crates")
-            .join(package_source_dir(crate_name))
-            .join("src");
-        if !src.exists() {
-            continue;
-        }
-        collect_rs_files(&src, &mut files)?;
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn package_source_dir(package_name: &str) -> &str {
-    match package_name {
-        "gaze-pii" => "gaze",
-        _ => package_name,
-    }
-}
-
-fn collect_rs_files(dir: &Path, files: &mut Vec<PathBuf>) -> Result<()> {
-    // Prevent path traversal attacks by rejecting paths containing '..'.
-    if dir
-        .components()
-        .any(|c| c == std::path::Component::ParentDir)
-    {
-        return Err(FixtureCitationError::Io {
-            path: dir.to_path_buf(),
-            message: format!("Invalid input: {}", dir.display()),
-        });
-    }
-    for entry in fs::read_dir(dir).map_err(|error| io_error(dir, error))? {
-        let entry = entry.map_err(|error| io_error(dir, error))?;
-        let path = entry.path();
-        if path.is_dir() {
-            collect_rs_files(&path, files)?;
-        } else if path.extension().is_some_and(|extension| extension == "rs")
-            && !is_test_only_file(&path)
-        {
-            files.push(path);
-        }
-    }
-    Ok(())
-}
-
-fn is_test_only_file(path: &Path) -> bool {
-    matches!(
-        path.file_stem().and_then(|stem| stem.to_str()),
-        Some("tests" | "test_support")
-    )
 }
 
 fn active_production_lines(content: &str) -> Vec<String> {

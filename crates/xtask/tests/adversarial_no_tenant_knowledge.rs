@@ -4,6 +4,8 @@ use std::fs;
 
 #[path = "../src/no_tenant_knowledge.rs"]
 mod no_tenant_knowledge;
+#[path = "../src/repo.rs"]
+mod repo;
 
 use no_tenant_knowledge::{scan_root, TenantKnowledgeError};
 

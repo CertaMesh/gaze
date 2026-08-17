@@ -4,6 +4,8 @@ use std::{collections::HashSet, fs};
 
 #[path = "../src/fixture_citation.rs"]
 mod fixture_citation;
+#[path = "../src/repo.rs"]
+mod repo;
 
 use fixture_citation::{scan_root_with_tests, FixtureCitationError};
 
