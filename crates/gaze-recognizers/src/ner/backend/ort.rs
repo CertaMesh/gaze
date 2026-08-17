@@ -9,14 +9,13 @@ use crate::ner::error::{NerLoadError, NerRuntimeError};
 use crate::ner::types::{LabelMap, NerBackendKind, NerSpanResult, MODEL_FILE, TOKENIZER_FILE};
 
 /// BERT-family token-classification backend. Owns its tokenizer, ONNX session,
-/// label map, `id2label` vocab, and pre-computed source tag. BIO/IOB2 subword
-/// tags are merged via `NerDetector::merge_bio_spans`.
+/// label map, and `id2label` vocab. BIO/IOB2 subword tags are merged via
+/// `decode_logits` -> `NerDetector::merge_bio_span_results`.
 pub(crate) struct OrtBackend {
     tokenizer: tokenizers::Tokenizer,
     session: Mutex<ort::session::Session>,
     labels: LabelMap,
     id2label: Vec<String>,
-    source: String,
     has_token_type_ids: bool,
 }
 
@@ -41,7 +40,6 @@ impl OrtBackend {
             session: Mutex::new(session),
             labels,
             id2label,
-            source: format!("ner/{}", NerBackendKind::Ort.as_str()),
             has_token_type_ids,
         })
     }
@@ -55,7 +53,6 @@ impl NerBackend for OrtBackend {
     fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
         let labels = &self.labels;
         let id2label: &[String] = &self.id2label;
-        let source = self.source.as_str();
         let encoded = self
             .tokenizer
             .encode(input, true)
@@ -111,38 +108,52 @@ impl NerBackend for OrtBackend {
             return Ok(Vec::new());
         }
 
-        let num_labels = shape[2];
-        let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
-        let mut subword_scores: Vec<f32> = Vec::with_capacity(seq_len);
-        for pos in 0..seq_len {
-            let base = pos * num_labels;
-            let row = &flat[base..base + num_labels];
-            let (argmax, _) =
-                row.iter()
-                    .enumerate()
-                    .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
-                        if value > acc.1 {
-                            (index, value)
-                        } else {
-                            acc
-                        }
-                    });
-            let label = id2label.get(argmax).map(String::as_str).unwrap_or("O");
-            subword_labels.push(label);
-            subword_scores.push(softmax_confidence(row, argmax));
-        }
+        Ok(decode_logits(
+            labels, id2label, offsets, flat, seq_len, shape[2], input,
+        ))
+    }
+}
 
-        Ok(NerDetector::merge_bio_span_results(
-            labels,
-            offsets,
-            &subword_labels,
-            &subword_scores,
-            source,
-        )
+/// Post-inference decode step: per-subword argmax + softmax confidence, then
+/// BIO merge against the input the tokenizer offsets index into. Kept free of
+/// `ort` types so the production decode contract can be exercised with
+/// synthetic logits and no model.
+///
+/// `logits` is the flat `[1, seq_len, num_labels]` output tensor.
+fn decode_logits(
+    labels: &LabelMap,
+    id2label: &[String],
+    offsets: &[(usize, usize)],
+    logits: &[f32],
+    seq_len: usize,
+    num_labels: usize,
+    input: &str,
+) -> Vec<NerSpanResult> {
+    let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
+    let mut subword_scores: Vec<f32> = Vec::with_capacity(seq_len);
+    for pos in 0..seq_len {
+        let base = pos * num_labels;
+        let row = &logits[base..base + num_labels];
+        let (argmax, _) =
+            row.iter()
+                .enumerate()
+                .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
+                    if value > acc.1 {
+                        (index, value)
+                    } else {
+                        acc
+                    }
+                });
+        let label = id2label.get(argmax).map(String::as_str).unwrap_or("O");
+        subword_labels.push(label);
+        subword_scores.push(softmax_confidence(row, argmax));
+    }
+
+    let source = format!("ner/{}", NerBackendKind::Ort.as_str());
+    NerDetector::merge_bio_span_results(labels, offsets, &subword_labels, &subword_scores, &source)
         .into_iter()
         .filter(|span| span.span.end <= input.len())
-        .collect())
-    }
+        .collect()
 }
 
 fn tokenized_chunk_ranges(
@@ -190,4 +201,141 @@ fn tokenized_chunk_ranges(
     }
 
     Ok(chunks)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use gaze_types::PiiClass;
+
+    use super::*;
+
+    /// `id2label` vocab shared by every fixture: index 0 = `O`, 1 = `B-PER`,
+    /// 2 = `I-PER`, 3 = `B-LOC`, 4 = `I-LOC`.
+    const ID2LABEL: [&str; 5] = ["O", "B-PER", "I-PER", "B-LOC", "I-LOC"];
+
+    fn id2label() -> Vec<String> {
+        ID2LABEL.iter().map(|label| (*label).to_string()).collect()
+    }
+
+    fn labels() -> LabelMap {
+        LabelMap(BTreeMap::from([
+            ("PER".to_string(), PiiClass::Name),
+            ("LOC".to_string(), PiiClass::Location),
+        ]))
+    }
+
+    /// Byte offsets for `tokens` located left-to-right in `input`, mirroring
+    /// what the tokenizer reports (no whitespace tokens).
+    fn offsets(input: &str, tokens: &[&str]) -> Vec<(usize, usize)> {
+        let mut cursor = 0usize;
+        tokens
+            .iter()
+            .map(|token| {
+                let offset = input[cursor..]
+                    .find(token)
+                    .expect("token exists after cursor");
+                let start = cursor + offset;
+                let end = start + token.len();
+                cursor = end;
+                (start, end)
+            })
+            .collect()
+    }
+
+    /// One confident logit row per tag: 10.0 at the tag's vocab index, 0.0
+    /// elsewhere, so argmax picks the tag and softmax confidence is ~1.0.
+    fn logits(tags: &[&str]) -> Vec<f32> {
+        tags.iter()
+            .flat_map(|tag| {
+                let index = ID2LABEL
+                    .iter()
+                    .position(|candidate| candidate == tag)
+                    .expect("tag in vocab");
+                let mut row = vec![0.0f32; ID2LABEL.len()];
+                row[index] = 10.0;
+                row
+            })
+            .collect()
+    }
+
+    fn decode(input: &str, tokens: &[&str], tags: &[&str]) -> Vec<NerSpanResult> {
+        assert_eq!(tokens.len(), tags.len(), "fixture: one tag per token");
+        decode_logits(
+            &labels(),
+            &id2label(),
+            &offsets(input, tokens),
+            &logits(tags),
+            tags.len(),
+            ID2LABEL.len(),
+            input,
+        )
+    }
+
+    /// Axis 1 / axis 3: the joiner between `Anne` and `Marie` is read from the
+    /// document text, so a hyphenated name decodes as ONE span. If the decoder
+    /// looks at anything other than the document text the name splits in two.
+    #[test]
+    fn decode_bridges_hyphenated_name_across_joiner_token() {
+        let input = "Anne-Marie";
+        let out = decode(input, &["Anne", "-", "Marie"], &["B-PER", "O", "I-PER"]);
+
+        assert_eq!(out.len(), 1, "expected one bridged span: {out:?}");
+        assert_eq!(out[0].span, 0..input.len());
+        assert_eq!(out[0].class, PiiClass::Name);
+    }
+
+    /// Axis 3: short structured field values (tool-call JSON values) are
+    /// first-class inputs. A single-token entity that IS the whole document
+    /// must survive decoding regardless of how many bytes the document has.
+    #[test]
+    fn decode_keeps_short_structured_field_span() {
+        for input in ["Anna", "Alice", "Berlin"] {
+            let out = decode(input, &[input], &["B-PER"]);
+
+            assert_eq!(out.len(), 1, "short field {input:?} lost its span: {out:?}");
+            assert_eq!(out[0].span, 0..input.len(), "span for {input:?}");
+            assert_eq!(out[0].class, PiiClass::Name);
+        }
+    }
+
+    /// The text between two entity tokens is read from the document text: a
+    /// comma between two independently tagged names never bridges them into
+    /// one span, whatever bytes happen to sit at those offsets elsewhere.
+    #[test]
+    fn decode_does_not_bridge_comma_separated_names() {
+        let input = "Ann,Bob";
+        let out = decode(input, &["Ann", ",", "Bob"], &["B-PER", "O", "B-PER"]);
+
+        assert_eq!(out.len(), 2, "expected two separate names: {out:?}");
+        assert_eq!(out[0].span, 0..3);
+        assert_eq!(out[1].span, 4..7);
+    }
+
+    /// Span bounds are checked against the document text: a span that ends
+    /// exactly at the end of the document is accepted whatever its length, and
+    /// an offset past the end of the document is dropped without a panic while
+    /// in-range spans survive.
+    #[test]
+    fn decode_bounds_spans_against_document_text() {
+        let input = "Wolfgang Amadeus";
+        let out = decode(input, &["Wolfgang", "Amadeus"], &["B-PER", "I-PER"]);
+        assert_eq!(out.len(), 1, "{out:?}");
+        assert_eq!(out[0].span, 0..input.len());
+
+        let input = "Anna";
+        let out = decode_logits(
+            &labels(),
+            &id2label(),
+            &[(0, 4), (10, 20)],
+            &logits(&["B-PER", "B-LOC"]),
+            2,
+            ID2LABEL.len(),
+            input,
+        );
+        assert_eq!(out.len(), 1, "out-of-range span must be dropped: {out:?}");
+        assert_eq!(out[0].span, 0..4);
+        assert_eq!(out[0].class, PiiClass::Name);
+    }
 }
