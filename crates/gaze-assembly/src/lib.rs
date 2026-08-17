@@ -55,6 +55,7 @@ pub use defaults::CorePipeline;
 /// custom recognizer topology or non-bundled rulepack.
 pub use defaults::CorePipelineConfig;
 pub use error::BuildError;
+pub use locale::locale_gated_activation_locales;
 pub(crate) use locale::{merged_locale_vocab, register_anchor_cue_bundles};
 
 /// Assemble a pipeline from a loaded [`gaze::Policy`], matching the CLI code path.

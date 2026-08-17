@@ -136,16 +136,10 @@ pub(crate) fn run_clean(options: CleanOptions<'_>) -> std::result::Result<(), Cl
     let dictionary_stats = dictionaries.stats();
     let mut rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
     if effective_policy.is_some_and(|policy| policy.rulepacks.auto_activate_locale_gated) {
-        for locale in [
-            LocaleTag::EnUs,
-            LocaleTag::DeDe,
-            LocaleTag::DeAt,
-            LocaleTag::DeCh,
-        ] {
-            if !rulepack_default_locales
-                .iter()
-                .any(|existing| existing == &locale)
-            {
+        // Derived from the loaded packs (audit 7201 S10-F2): every loaded
+        // locale-gated recognizer's locale joins the chain, in a stable order.
+        for locale in gaze_assembly::locale_gated_activation_locales(&loaded_rulepacks) {
+            if !rulepack_default_locales.contains(&locale) {
                 rulepack_default_locales.push(locale);
             }
         }

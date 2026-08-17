@@ -2619,6 +2619,91 @@ fn s2_cli_bundled_core_extended_no_policy_tokenizes_national_de_and_us_phones() 
     assert_eq!(us["stats"]["detections"], 1);
 }
 
+// S10-F2 (audit 7201) drift gate for the `gaze clean` path: the auto-activate
+// locale set must be DERIVED from the loaded rulepacks. An adopter path pack
+// with a document-basis `locale_gated` es-ES recognizer under `global` defaults
+// activates under `core-extended` (auto-activate) with no CLI/policy locale.
+// A literal `[en-US, de-DE, de-AT, de-CH]` list in the CLI fails this test.
+fn write_policy_with_es_locale_gated_path_rulepack() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("es-locale-gated.toml");
+    fs::write(
+        &rulepack_path,
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "es-locale-gated"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "es.test_id"
+class = "custom:es_test_id"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["es-ES"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''ES-TEST-[0-9]{6}'''
+"#,
+    )
+    .unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core-extended"]
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "custom:es_test_id"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    (dir, policy_path)
+}
+
+#[test]
+fn s10f2_auto_activate_derives_locale_gated_locales_from_loaded_rulepacks() {
+    let (_dir, policy) = write_policy_with_es_locale_gated_path_rulepack();
+    let input = "id ES-TEST-123456";
+    let value = clean_json_with_args(&[&format!("--policy={}", policy.display())], input);
+    let clean = value["clean_text"].as_str().unwrap();
+
+    assert!(
+        Regex::new(r"^id <[0-9a-f]{8}:Custom:es_test_id_1>$")
+            .unwrap()
+            .is_match(clean),
+        "es-ES locale-gated recognizer must auto-activate: {clean}"
+    );
+    assert_eq!(value["stats"]["detections"], 1);
+    let chain = value["stats"]["locale_chain"]
+        .as_array()
+        .expect("locale_chain array");
+    assert!(
+        chain.iter().any(|locale| locale == "es-ES"),
+        "auto-activate chain must carry es-ES: {chain:?}"
+    );
+    assert_eq!(
+        restore_success_text(value["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+}
+
 #[test]
 fn s4_cli_bundled_core_extended_round_trips_broadened_de_area_code_phone() {
     let input = "Phone +49 40 0000 0000";

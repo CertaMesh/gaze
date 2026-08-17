@@ -173,16 +173,10 @@ impl Daemon {
         );
         let mut rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
         if loaded_policy.rulepacks.auto_activate_locale_gated {
-            for locale in [
-                LocaleTag::EnUs,
-                LocaleTag::DeDe,
-                LocaleTag::DeAt,
-                LocaleTag::DeCh,
-            ] {
-                if !rulepack_default_locales
-                    .iter()
-                    .any(|existing| existing == &locale)
-                {
+            // Derived from the loaded packs (audit 7201 S10-F2), same source of
+            // truth as `gaze clean` and `CorePipelineConfig`.
+            for locale in gaze_assembly::locale_gated_activation_locales(&loaded_rulepacks) {
+                if !rulepack_default_locales.contains(&locale) {
                     rulepack_default_locales.push(locale);
                 }
             }

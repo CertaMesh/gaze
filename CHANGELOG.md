@@ -86,6 +86,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   NER model loading now runs before the guard; error precedence is unchanged
   for reachable configurations (a configured `model_dir` that fails to load
   still surfaces as `NerLoad`).
+- **Locale-gated auto-activation is derived from the loaded rulepacks**
+  (audit 7201 S10-F2, todo #2929). The `auto_activate_locale_gated` locale set
+  (`core-extended` compatibility alias) is now computed by the new public
+  `gaze_assembly::locale_gated_activation_locales(&[Rulepack])` — the union of
+  `locales` over enabled, document-basis `safety_tier = "locale_gated"`
+  recognizers, minus `global`, ordered compatibility-first
+  (`en-US, de-DE, de-AT, de-CH`) then by canonical tag — instead of a literal
+  `[en-US, de-DE, de-AT, de-CH]` list that was triplicated across
+  `CorePipelineConfig`, `gaze clean`, and `gaze daemon`. For the bundled `core`
+  recognizers the derived set equals the old literal, so shipped behaviour is
+  unchanged (the compatibility chain stays `global, en-US, de-DE, de-AT,
+  de-CH`). Behavioural widening for adopters: a path rulepack whose
+  document-basis locale-gated recognizer declares another locale (for example
+  `es-ES`) now auto-activates under the alias without an explicit `--locale`
+  or policy locale; previously it silently never activated. Any future bundled
+  locale-gated recognizer joins the activation set automatically. The
+  `--locale`/policy locale override precedence is unchanged.
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
   `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
   (11 -> 12 detections). No existing detection changed class, span, or shape.
