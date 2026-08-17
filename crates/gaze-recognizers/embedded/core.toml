@@ -906,30 +906,41 @@ license = "Apache-2.0"
 # `Custom("family:government-id")` token plus an `AmbiguityRecord::PrecedenceTie`, which is the
 # fail-safe rather than a silent winner.
 
-# SSN, GERMAN-CUE ARM ONLY. `ssn.us` is left exactly as it was, deliberately.
+# SSN, GERMAN-CUE ARM ONLY. `ssn.us` keeps its pattern, locales and basis exactly as #414 left
+# them; the only touch is the symmetric `cooperates_with` metadata line the bundle convention asks
+# for.
 #
 # The measured gap is large: `ssn.us` matches only 38 of 217 gold SSN spans (17.5%), because 113
 # of 217 sit in GERMAN documents cued by "sozialversicherung" (101 occurrences) — a word its
 # vocabulary lacks entirely — and because its pattern has no `d3.d4.d4.d2` alternative (33 spans).
-# A US SSN inside a German document is still a US SSN, which is the argument of todo #2417.
+# A US SSN inside a German document is still a US SSN, which is the argument of todo #2417; #414
+# answered the LOCALE half of that argument by moving `ssn.us` to `locale_basis = "format"`, so it
+# now runs under every chain. It did not answer the VOCABULARY half: an English-cued rule cannot
+# see a German-cued number, whatever the chain. This arm is the vocabulary half.
 #
-# But FIXING that by widening `ssn.us` to `global` is out of scope and would silently rewrite a
-# committed contract: `cli_pipe.rs::s2_cli_core_validator_locale_entities_tokenize_and_round_trip`
-# pins that every locale-gated identifier yields ZERO detections under a wrong locale, and a
-# global SSN rule fires under `en-GB`. Widening it also regressed that test in practice, which is
-# how this arm's scope was found rather than assumed.
+# It carries GERMAN CUES ONLY, on purpose. Its cue vocabulary is disjoint from `ssn.us`'s ("ssn",
+# "social security", "ss#") and each rule requires its own cue immediately before the number, so
+# the two can never match the same span and the #2416 co-firing composite-source-id hazard cannot
+# trigger — asserted on the corpus and pinned in `tests/government_id.rs`, not assumed.
 #
-# So this recognizer carries GERMAN CUES ONLY. Its cue vocabulary is disjoint from `ssn.us`'s
-# ("ssn", "social security", "ss#"), so the two can never match the same span and the #2416
-# co-firing composite-source-id hazard cannot trigger — asserted on the corpus, not assumed.
-# `ssn.us` keeps en-US and its contract; this arm adds the German-cued population it can never see.
+# LOCALE BASIS: `format`, like `ssn.us`. Same class, same national identifier shape (`d3-d2-d4` is
+# the US SSN shape; `d3.d4.d4.d2` is the Swiss AHV/AVS shape); only the cue language differs. A
+# format-basis identifier class must behave the same under every chain whichever language cues it —
+# gating this arm on a German document locale would make "SSN 123-45-6789" survive `--locale=global`
+# tokenized while "Sozialversicherungsnummer 123-45-6789" leaks, and #414's ratified rule is that
+# changing the locale is not a suppression mechanism for bundled identifiers. Promotion evidence
+# meets #414's bar: this arm replays to ZERO documents / ZERO spans over all 1,024 A4 negatives
+# (512 of them English) when run everywhere. `locales` therefore records provenance, not a gate:
+# the DACH social-insurance-number vocabulary (Sozialversicherungsnummer, SV-Nummer) this arm
+# carries. The native German SVNR (`12 345678 A 123`) and checksummed AHV forms are follow-up work.
 [[recognizers]]
 id = "ssn.de_cue"
 safety_tier = "safe_default"
 class = "custom:ssn"
 cooperates_with = ["ssn.us"]
 enabled = true
-locales = ["global"]
+locales = ["de-DE", "de-AT", "de-CH"]
+locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
@@ -983,12 +994,20 @@ license = "Apache-2.0"
 # carries the distinct `custom:tax_number` class so the checksummed Steuer-ID contract is
 # unchanged. This supersedes the held grouped-TAXNUM stack ec6b92d, whose 2-3-3-3-only shape is a
 # strict subset covering 3 spans / 42 bytes against this rule's 34 / 418.
+#
+# LOCALE BASIS: `document` + `global`, like `security_token.anchored`. The captured shape (three
+# separated digit groups) belongs to no single nation — it deliberately cedes the DE Steuer-ID form
+# to `steuer_id.de` — so there is no format provenance to record; the discriminating evidence is
+# the cue, and the cue vocabulary is bilingual by construction (steuer*/idnr and tax/taxpayer/tin),
+# so no document-language gate is wanted. `global` under document basis is eligible for every
+# chain, including `--locale=global`.
 [[recognizers]]
 id = "tax_number.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:tax_number"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -1018,12 +1037,17 @@ license = "Apache-2.0"
 # (31.6%) at zero A4 and zero holdout false positives, against the looser
 # `[A-Z0-9][A-Z0-9-]{5,19}` draft's 68 spans and 105 holdout false positives. Requiring a leading
 # letter run and a digit tail is what removes the false matches, and it costs no coverage.
+#
+# LOCALE BASIS: `document` + `global`. Letter-led alphanumeric is not a national format; the cue
+# (driver's/driving licence, DL#, Führerschein, Fahrerlaubnis) is the evidence and it is bilingual
+# by construction, so the recognizer is eligible for every chain and records no provenance.
 [[recognizers]]
 id = "driver_license.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:driver_license"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
@@ -1051,12 +1075,20 @@ license = "Apache-2.0"
 # Chosen form covers 44 spans / 438 bytes (18.9%) at zero A4 and zero holdout false positives.
 # Weakest in the family (precedence 30; lower numbers win) because its cues ("id number", "id card") are the vaguest of the
 # three numeric variants and must lose a genuine overlap against an SSN or tax cue.
+#
+# LOCALE BASIS: `document` + `global`. The three captured shapes are generic (letter-led alnum,
+# separated digit groups, bare 9-11 digits) and the bilingual cue vocabulary (national id / identity
+# card / national insurance and Personalausweis / Ausweisnummer) is the evidence, so no
+# document-language gate and no format provenance apply. Note that `nino.uk` (format, en-GB) now
+# also runs everywhere after #414; a National-Insurance-cued NINO can therefore be claimed by
+# either class and is resolved by the ordinary cross-class resolver, never left raw.
 [[recognizers]]
 id = "national_id.cue_anchored"
 safety_tier = "safe_default"
 class = "custom:national_id"
 enabled = true
 locales = ["global"]
+locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
