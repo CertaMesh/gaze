@@ -119,7 +119,7 @@ require_cmd() {
 require_cmd curl
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 LABELS_SOURCE="${REPO_ROOT}/crates/gaze-recognizers/assets/ner/labels.davlan-mbert.json"
 
 if [ ! -f "$LABELS_SOURCE" ]; then
