@@ -834,9 +834,12 @@ fn empty_context() -> Context {
 
 #[cfg(feature = "safety-net-kiji")]
 fn register_kiji(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Error>> {
-    use gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet;
+    use gaze_recognizers::safety_net::kiji_distilbert::{
+        KijiDistilbertSafetyNet, SubprocessKijiConfig,
+    };
 
-    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::from_env()?))
+    let config = SubprocessKijiConfig::from_env()?.with_timeout(benchmark_subprocess_timeout()?);
+    Ok(pipeline.with_safety_net(KijiDistilbertSafetyNet::new(config)))
 }
 
 #[cfg(feature = "safety-net-kiji")]
@@ -867,7 +870,7 @@ fn register_opf(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::error::Erro
     let checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
     let config = SubprocessOpenAiFilterConfig::new(command)
         .with_checkpoint_path(checkpoint)
-        .with_timeout(std::time::Duration::from_secs(30))
+        .with_timeout(benchmark_subprocess_timeout()?)
         .with_args([
             "--format",
             "json",
@@ -902,13 +905,14 @@ fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::er
     let opf_command =
         std::env::var_os("GAZE_OPENAI_FILTER_OPF").ok_or("GAZE_OPENAI_FILTER_OPF is not set")?;
     let opf_checkpoint = std::env::var_os("OPF_CHECKPOINT").ok_or("OPF_CHECKPOINT is not set")?;
+    let subprocess_timeout = benchmark_subprocess_timeout()?;
 
     Ok(pipeline
         .with_safety_net(
             OpenAiFilterSafetyNet::new(
                 SubprocessOpenAiFilterConfig::new(opf_command)
                     .with_checkpoint_path(opf_checkpoint)
-                    .with_timeout(std::time::Duration::from_secs(30))
+                    .with_timeout(subprocess_timeout)
                     .with_args([
                         "--format",
                         "json",
@@ -925,10 +929,22 @@ fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::er
             KijiDistilbertSafetyNet::new(
                 SubprocessKijiConfig::new(kiji_command)
                     .with_model_dir(kiji_model_dir)
-                    .with_timeout(std::time::Duration::from_secs(30)),
+                    .with_timeout(subprocess_timeout),
             )
             .with_locales(vec![LocaleTag::DeDe]),
         ))
+}
+
+fn benchmark_subprocess_timeout() -> Result<std::time::Duration, Box<dyn std::error::Error>> {
+    let seconds = match std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS") {
+        Ok(value) => value.parse::<u64>()?,
+        Err(std::env::VarError::NotPresent) => 60,
+        Err(error) => return Err(error.into()),
+    };
+    if seconds == 0 {
+        return Err("benchmark subprocess timeout must be positive".into());
+    }
+    Ok(std::time::Duration::from_secs(seconds))
 }
 
 #[cfg(not(all(feature = "safety-net-kiji", feature = "safety-net-openai")))]
