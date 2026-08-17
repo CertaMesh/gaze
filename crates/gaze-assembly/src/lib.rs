@@ -98,23 +98,7 @@ pub fn build_pipeline(
     let has_policy_detector = !policy.detectors.is_empty();
     let has_enabled_rulepack_recognizer = rulepacks.iter().any(|rulepack| {
         rulepack.recognizers.iter().any(|recognizer| {
-            recognizer.enabled
-                && active_locales.intersects(&recognizer.locales)
-                && match recognizer.safety_tier {
-                    gaze::SafetyTier::SafeDefault => true,
-                    gaze::SafetyTier::LocaleGated => {
-                        policy.rulepacks.auto_activate_locale_gated
-                            || recognizer.locales.iter().any(|locale| {
-                                *locale != gaze::LocaleTag::Global
-                                    && active_locales
-                                        .as_slice()
-                                        .iter()
-                                        .any(|active| active == locale)
-                            })
-                    }
-                    gaze::SafetyTier::OptIn => false,
-                    _ => false,
-                }
+            detector_wiring::recognizer_activates(recognizer, policy, active_locales)
         })
     });
     let has_usable_ner = policy
@@ -236,7 +220,9 @@ fn mandatory_anchor_families(
     let rulepack_families = rulepacks
         .iter()
         .flat_map(|rulepack| &rulepack.recognizers)
-        .filter(|recognizer| recognizer.enabled && active_locales.intersects(&recognizer.locales))
+        .filter(|recognizer| {
+            detector_wiring::recognizer_activates(recognizer, policy, active_locales)
+        })
         .filter_map(|recognizer| recognizer.collision.as_ref());
     let policy_families = policy
         .detectors

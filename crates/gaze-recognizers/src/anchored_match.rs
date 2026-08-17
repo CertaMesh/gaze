@@ -1,4 +1,6 @@
-use gaze_types::{Candidate, ConflictTier, DetectContext, LocaleTag, PiiClass, Recognizer};
+use gaze_types::{
+    Candidate, ConflictTier, DetectContext, LocaleBasis, LocaleTag, PiiClass, Recognizer,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AnchoredBoundary {
@@ -37,6 +39,7 @@ pub struct AnchoredMatchRecognizer {
     priority: i32,
     token_family: String,
     locales: Vec<LocaleTag>,
+    locale_basis: LocaleBasis,
     min_components: usize,
 }
 
@@ -71,8 +74,20 @@ impl AnchoredMatchRecognizer {
             priority,
             token_family: "name.counter".to_string(),
             locales: vec![LocaleTag::Global],
+            locale_basis: LocaleBasis::Document,
             min_components,
         }
+    }
+
+    /// Overrides the locale provenance and eligibility interpretation.
+    pub fn with_locale_metadata(
+        mut self,
+        locales: Vec<LocaleTag>,
+        locale_basis: LocaleBasis,
+    ) -> Self {
+        self.locales = locales;
+        self.locale_basis = locale_basis;
+        self
     }
 
     fn candidate_after_cue(&self, input: &str, cue_end: usize) -> Option<std::ops::Range<usize>> {
@@ -156,6 +171,10 @@ impl Recognizer for AnchoredMatchRecognizer {
 
     fn locales(&self) -> &[LocaleTag] {
         &self.locales
+    }
+
+    fn locale_basis(&self) -> LocaleBasis {
+        self.locale_basis
     }
 }
 

@@ -2462,6 +2462,60 @@ impl fmt::Display for SafetyTierParseError {
 
 impl std::error::Error for SafetyTierParseError {}
 
+/// Interpretation of a rulepack recognizer's locale metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[non_exhaustive]
+pub enum LocaleBasis {
+    /// `locales` is an eligibility gate matched against the document locale chain.
+    #[default]
+    Document,
+    /// `locales` records identifier-format provenance and never gates eligibility.
+    Format,
+}
+
+/// Locale-basis parsing error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct LocaleBasisParseError {
+    value: String,
+}
+
+impl LocaleBasis {
+    /// Parses the TOML `locale_basis` string.
+    pub fn parse(value: &str) -> Result<Self, LocaleBasisParseError> {
+        match value {
+            "document" => Ok(Self::Document),
+            "format" => Ok(Self::Format),
+            other => Err(LocaleBasisParseError {
+                value: other.to_string(),
+            }),
+        }
+    }
+
+    /// Returns the TOML string for this basis.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Document => "document",
+            Self::Format => "format",
+        }
+    }
+}
+
+impl LocaleBasisParseError {
+    /// Returns the rejected locale-basis string.
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Display for LocaleBasisParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "unsupported locale_basis '{}'", self.value)
+    }
+}
+
+impl std::error::Error for LocaleBasisParseError {}
+
 /// Locale tag recognized by policy and recognizers.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
@@ -3271,6 +3325,10 @@ pub trait Recognizer: Send + Sync {
     /// Locales where this recognizer is active.
     fn locales(&self) -> &[LocaleTag] {
         &[LocaleTag::Global]
+    }
+    /// Interpretation of [`Self::locales`] for request eligibility.
+    fn locale_basis(&self) -> LocaleBasis {
+        LocaleBasis::Document
     }
 }
 

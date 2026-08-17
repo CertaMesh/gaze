@@ -190,6 +190,21 @@ const RECOGNIZER_COMPOSITION_VALIDATOR_TESTS: &[BehavioralTest] = &[
         target: BehavioralTarget::Lib,
         name: "rulepack::tests::rulepack_load_accepts_same_class_pair_with_cooperates_with",
     },
+    BehavioralTest {
+        package: "gaze-pii",
+        target: BehavioralTarget::Lib,
+        name: "registry::tests::format_basis_runs_once_and_unions_with_document_fallback",
+    },
+    BehavioralTest {
+        package: "gaze-assembly",
+        target: BehavioralTarget::Lib,
+        name: "tests::format_basis_rulepack_ignores_document_locale",
+    },
+    BehavioralTest {
+        package: "gaze-recognizers",
+        target: BehavioralTarget::Lib,
+        name: "tests::embedded_core_declares_locale_basis_for_every_recognizer",
+    },
 ];
 
 fn run_symmetric_potemkin_gate() -> Result<()> {

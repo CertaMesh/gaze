@@ -119,4 +119,11 @@ mod tests {
             .iter()
             .any(|recognizer| recognizer.id == "vat.es"));
     }
+
+    #[test]
+    fn embedded_core_declares_locale_basis_for_every_recognizer() {
+        let core = embedded("core").expect("core rulepack");
+
+        Rulepack::parse_bundled(core).expect("bundled recognizers declare locale_basis");
+    }
 }
