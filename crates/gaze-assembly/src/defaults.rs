@@ -173,7 +173,7 @@ fn class_rules_from_rulepacks(rulepacks: &[Rulepack]) -> Vec<RuleSpec> {
                     .as_ref()
                     .map(|_| &collision.family)
             })
-            .map(|family| PiiClass::Custom(format!("family:{family}")))
+            .map(|family| PiiClass::family(family))
         {
             if seen.insert(family_class.clone()) {
                 rules.push(RuleSpec::Class {

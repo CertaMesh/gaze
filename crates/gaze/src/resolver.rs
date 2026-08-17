@@ -310,7 +310,7 @@ fn family_tie_candidate(
     merged_sources.dedup();
     Some(Candidate::new(
         candidate.span.start.min(existing.span.start)..candidate.span.end.max(existing.span.end),
-        PiiClass::Custom(format!("family:{family}")),
+        PiiClass::family(family),
         format!("collision-family:{family}"),
         candidate.score.max(existing.score),
         candidate.priority.max(existing.priority),
@@ -351,7 +351,7 @@ fn family_fallback_candidate(
     let original_recognizer_id = candidate.recognizer_id.clone();
     Candidate::new(
         candidate.span,
-        PiiClass::Custom(format!("family:{family}")),
+        PiiClass::family(&family),
         format!("collision-family:{family}"),
         candidate.score,
         candidate.priority,

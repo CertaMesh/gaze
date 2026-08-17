@@ -344,7 +344,7 @@ impl Rulepack {
                         .as_ref()
                         .map(|_| &collision.family)
                 })
-                .map(|family| PiiClass::Custom(format!("family:{family}")))
+                .map(|family| PiiClass::family(family))
             {
                 classes.insert(family_class);
             }
@@ -1180,29 +1180,7 @@ fn has_regex_separator(pattern: &str) -> bool {
 }
 
 pub fn parse_class(input: &str) -> Result<PiiClass, RulepackError> {
-    let trimmed = input.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    match lower.as_str() {
-        "email" => Ok(PiiClass::Email),
-        "name" => Ok(PiiClass::Name),
-        "location" => Ok(PiiClass::Location),
-        "organization" => Ok(PiiClass::Organization),
-        custom if custom.starts_with("custom:") => {
-            let name = trimmed
-                .split_once(':')
-                .map(|(_, name)| name)
-                .unwrap_or_default();
-            if name.trim().is_empty() {
-                return Err(RulepackError::UnknownClass(input.to_string()));
-            }
-            if name.starts_with("family:") {
-                Ok(PiiClass::Custom(name.to_string()))
-            } else {
-                Ok(PiiClass::custom(name))
-            }
-        }
-        _ => Err(RulepackError::UnknownClass(input.to_string())),
-    }
+    PiiClass::from_policy_name(input).ok_or_else(|| RulepackError::UnknownClass(input.to_string()))
 }
 
 fn parse_locales(locales: Vec<String>) -> Result<Vec<LocaleTag>, RulepackError> {
@@ -1906,6 +1884,19 @@ rulepack_version = "0.4.0"
             parse_class("custom:Class_Alpha").unwrap(),
             PiiClass::Custom("class_alpha".to_string())
         );
+    }
+
+    #[test]
+    fn bundled_family_rulepack_classes_preserve_the_family_namespace() {
+        for family in crate::RESERVED_BUNDLED_FAMILIES {
+            let policy_name = format!("custom:family:{family}");
+            assert_eq!(
+                parse_class(&policy_name)
+                    .expect("family rulepack class")
+                    .to_canonical_str(),
+                policy_name
+            );
+        }
     }
 
     fn unsupported_field_rulepack(extra: &str) -> String {
