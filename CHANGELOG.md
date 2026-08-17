@@ -239,6 +239,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A detached `gaze proxy start --policy prod.toml` now runs the policy instead
+  of the bundled `core` pipeline** (solo todo #2965). `start` persisted the
+  policy into its daemon config and then spawned the serving child with only
+  `--bind` and `--session-ttl`, so the detached daemon resolved
+  `build_pipeline(None, "core")`: no policy rules, no custom recognizers, no
+  dictionaries, and no policy locale tier. The configured `--rulepack` and all
+  three `--upstream-*` overrides were dropped the same way, which is why
+  `gaze proxy status` could print upstreams the running daemon never used. The
+  child's argument list is now derived from the daemon config as a whole, so the
+  daemonized proxy resolves the same pipeline as `gaze clean`. **The previous
+  entry for `gaze proxy` (solo todo #2937, PR #437) covered `gaze proxy serve`
+  only**; adopters running the daemon were unaffected by that fix. `restart`
+  carried the same defect and is fixed by the same change.
+
+- **`gaze proxy start` now fails when the daemon dies during startup instead of
+  reporting success** (found by the red test for #2965). The liveness probe used
+  `kill(pid, 0)`, which cannot distinguish a running child from one that exited
+  and has not been reaped, so a child that failed closed on an unloadable policy
+  was reported as `gaze-proxy started` with exit code 0. `start` now reports the
+  new `ProxyError::DaemonExitedEarly`, naming the child's exit code and the
+  stderr log to read, and removes the empty pidfile that would otherwise fail
+  every later start as stale. A startup failure slower than the 250 ms probe
+  window is still reported as started; that daemon is dead rather than serving
+  unprotected.
+
 - **`custom:family:*` policy classes now preserve the collision-family namespace**
   (audit S05-F1, solo todo #2934). `PiiClass::from_policy_name` previously
   normalized the reserved `family:` separator and hyphenated family name, so a

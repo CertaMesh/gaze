@@ -836,4 +836,8 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
         "a policy-less daemon is serving at {bind}{}",
         daemon_log_tail(home.path())
     );
+    assert!(
+        find_under(home.path(), "proxy.pid").is_none(),
+        "a failed start must not leave the pidfile that bricks the next one"
+    );
 }

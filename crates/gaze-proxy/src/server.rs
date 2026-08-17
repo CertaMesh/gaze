@@ -2902,6 +2902,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::DaemonPidfileStale { .. } => "DaemonPidfileStale",
         ProxyError::DaemonIo { .. } => "DaemonIo",
         ProxyError::DaemonConfig { .. } => "DaemonConfig",
+        ProxyError::DaemonExitedEarly { .. } => "DaemonExitedEarly",
     }
 }
 
