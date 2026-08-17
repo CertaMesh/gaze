@@ -90,6 +90,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
   was removed (it had no callers). The AEAD/key layer and the sealed-file
   envelope are unchanged.
+- **Audit-row enums now own one canonical string form** (audit S05-F2, solo todo
+  #2935). `Action`, `ConflictTier`, `DocumentKind`, and `FallbackReason` expose
+  matching `as_str` / `from_canonical_str` methods, and SQLite plus CLI consumers
+  delegate to them instead of maintaining panic-prone copies. `FallbackReason`
+  JSON now serializes as snake_case to match SQLite; every former PascalCase
+  spelling remains accepted as a serde alias.
 
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
   actual registration and uses one locale predicate** (audit 7201 S10-F1,
