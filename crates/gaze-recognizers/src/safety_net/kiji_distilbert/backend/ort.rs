@@ -7,14 +7,11 @@ use super::artifacts::{
     model_filename, verify_model_dir_for_precision, KIJI_DISTILBERT_BUNDLE_SHA256,
     KIJI_DISTILBERT_INT8_BUNDLE_SHA256,
 };
+use super::decode::decode_logits;
 use super::{normalize_raw_spans, KijiDistilbertBackend, KijiDistilbertPrecision, RawSpan};
-use crate::ner::decode::{softmax_confidence, split_bio};
 
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const TOKENIZER_FILE: &str = "tokenizer.json";
-const ID2LABEL: [&str; 9] = [
-    "O", "B-PER", "I-PER", "B-LOC", "I-LOC", "B-ORG", "I-ORG", "B-MISC", "I-MISC",
-];
 
 /// Configuration for the in-process Kiji DistilBERT ONNX Runtime backend.
 #[derive(Debug, Clone)]
@@ -297,18 +294,12 @@ impl KijiDistilbertBackend for OrtKijiBackend {
                 sanitize_error(&err.to_string())
             ),
         })?;
-        let logits = match outputs.iter().next() {
-            Some((_, value)) => value,
-            None => return Ok(Vec::new()),
-        };
+        let logits = require_ort_output(outputs.iter().next().map(|(_, value)| value))?;
         let (shape_obj, flat) =
             logits
                 .try_extract_tensor::<f32>()
-                .map_err(|err| SafetyNetError::Runtime {
-                    message: format!(
-                        "kiji ort output failed: {}",
-                        sanitize_error(&err.to_string())
-                    ),
+                .map_err(|_| SafetyNetError::InvalidOutput {
+                    message: "kiji ort returned invalid output tensor".to_string(),
                 })?;
         let shape: Vec<usize> = shape_obj.iter().map(|dim| *dim as usize).collect();
         if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
@@ -317,142 +308,17 @@ impl KijiDistilbertBackend for OrtKijiBackend {
             });
         }
 
-        let num_labels = shape[2];
-        let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
-        let mut subword_scores = Vec::with_capacity(seq_len);
-        for pos in 0..seq_len {
-            let base = pos * num_labels;
-            let row = &flat[base..base + num_labels];
-            let (argmax, _) =
-                row.iter()
-                    .enumerate()
-                    .fold((0usize, f32::NEG_INFINITY), |acc, (index, &value)| {
-                        if value > acc.1 {
-                            (index, value)
-                        } else {
-                            acc
-                        }
-                    });
-            subword_labels.push(ID2LABEL.get(argmax).copied().unwrap_or("O"));
-            subword_scores.push(softmax_confidence(row, argmax));
-        }
-
         normalize_raw_spans(
-            merge_kiji_bio_spans(clean, offsets, &subword_labels, &subword_scores),
+            decode_logits(clean, offsets, flat, seq_len, shape[2])?,
             clean,
         )
     }
 }
 
-fn merge_kiji_bio_spans(
-    source: &str,
-    subword_spans: &[(usize, usize)],
-    subword_labels: &[&str],
-    subword_scores: &[f32],
-) -> Vec<RawSpan> {
-    let (effective_labels, effective_scores) =
-        bridge_joiner_tokens(source, subword_spans, subword_labels, subword_scores);
-    let mut out = Vec::new();
-    let mut index = 0usize;
-    while index < effective_labels.len() {
-        let tag = effective_labels[index].as_str();
-        let (prefix, entity) = split_bio(tag);
-        if prefix == 'O' || entity.is_empty() {
-            index += 1;
-            continue;
-        }
-        let Some(label) = kiji_entity_label(entity) else {
-            index += 1;
-            continue;
-        };
-        let (start, mut end) = subword_spans[index];
-        if start == end {
-            index += 1;
-            continue;
-        }
-        let mut span_score = *effective_scores.get(index).unwrap_or(&0.0);
-        let mut next = index + 1;
-        while next < effective_labels.len() {
-            let (next_prefix, next_entity) = split_bio(effective_labels[next].as_str());
-            if next_prefix == 'I' && next_entity == entity {
-                let (next_start, next_end) = subword_spans[next];
-                if next_start != next_end {
-                    end = next_end;
-                    span_score = span_score.min(*effective_scores.get(next).unwrap_or(&0.0));
-                }
-                next += 1;
-            } else {
-                break;
-            }
-        }
-        out.push(RawSpan::new(start, end, label, Some(span_score)));
-        index = next;
-    }
-    out
-}
-
-fn bridge_joiner_tokens(
-    source: &str,
-    subword_spans: &[(usize, usize)],
-    subword_labels: &[&str],
-    subword_scores: &[f32],
-) -> (Vec<String>, Vec<f32>) {
-    let mut effective_labels = subword_labels
-        .iter()
-        .map(|label| (*label).to_string())
-        .collect::<Vec<_>>();
-    let mut effective_scores = (0..subword_labels.len())
-        .map(|index| *subword_scores.get(index).unwrap_or(&0.0))
-        .collect::<Vec<_>>();
-
-    for index in 1..subword_labels.len().saturating_sub(1) {
-        let (prefix, _) = split_bio(subword_labels[index]);
-        if prefix != 'O' {
-            continue;
-        }
-        let (start, end) = subword_spans[index];
-        let Some(token_text) = source.get(start..end) else {
-            continue;
-        };
-        if !is_entity_joiner_token(token_text) {
-            continue;
-        }
-        let (prev_prefix, prev_entity) = split_bio(subword_labels[index - 1]);
-        if !matches!(prev_prefix, 'B' | 'I') || prev_entity.is_empty() {
-            continue;
-        }
-        let (next_prefix, next_entity) = split_bio(subword_labels[index + 1]);
-        if !matches!(next_prefix, 'B' | 'I') || next_entity != prev_entity {
-            continue;
-        }
-        if next_prefix == 'B' && token_text.trim() == "," {
-            continue;
-        }
-        effective_labels[index] = format!("I-{prev_entity}");
-        if next_prefix == 'B' {
-            effective_labels[index + 1] = format!("I-{prev_entity}");
-        }
-        let prev_score = *subword_scores.get(index - 1).unwrap_or(&0.0);
-        let next_score = *subword_scores.get(index + 1).unwrap_or(&0.0);
-        effective_scores[index] = (prev_score + next_score) / 2.0;
-    }
-
-    (effective_labels, effective_scores)
-}
-
-fn is_entity_joiner_token(text: &str) -> bool {
-    let trimmed = text.trim();
-    !trimmed.is_empty() && trimmed.chars().all(|ch| ".,@_-+:/#%&=".contains(ch))
-}
-
-fn kiji_entity_label(entity: &str) -> Option<&'static str> {
-    match entity {
-        "PER" => Some("person"),
-        "LOC" => Some("location"),
-        "ORG" => Some("organization"),
-        "MISC" => Some("miscellaneous"),
-        _ => None,
-    }
+fn require_ort_output<T>(output: Option<T>) -> Result<T, SafetyNetError> {
+    output.ok_or_else(|| SafetyNetError::InvalidOutput {
+        message: "kiji ort returned no output tensor".to_string(),
+    })
 }
 
 fn sanitize_error(message: &str) -> String {
@@ -481,18 +347,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn merges_kiji_bio_to_private_labels() {
-        let source = "Alice visits Berlin";
-        let spans = [(0, 5), (6, 12), (13, 19)];
-        let labels = ["B-PER", "O", "B-LOC"];
-        let scores = [0.9, 0.1, 0.8];
-        let out = merge_kiji_bio_spans(source, &spans, &labels, &scores);
-        assert_eq!(
-            out,
-            vec![
-                RawSpan::new(0, 5, "person", Some(0.9)),
-                RawSpan::new(13, 19, "location", Some(0.8)),
-            ]
-        );
+    fn missing_output_fails_closed() {
+        let error = require_ort_output::<()>(None).unwrap_err();
+        assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
     }
 }

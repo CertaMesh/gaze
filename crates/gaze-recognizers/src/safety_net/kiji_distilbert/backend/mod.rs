@@ -5,7 +5,6 @@ use gaze_types::SafetyNetError;
 pub mod artifacts;
 #[cfg(feature = "runtime-candle")]
 pub mod candle;
-#[cfg(any(feature = "runtime-candle", feature = "runtime-tract"))]
 pub(crate) mod decode;
 pub mod ort;
 pub mod subprocess;

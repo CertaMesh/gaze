@@ -217,7 +217,7 @@ impl KijiDistilbertBackend for CandleKijiBackend {
             })?;
 
         normalize_raw_spans(
-            decode_logits(clean, offsets, &flat, seq_len, num_labels),
+            decode_logits(clean, offsets, &flat, seq_len, num_labels)?,
             clean,
         )
     }

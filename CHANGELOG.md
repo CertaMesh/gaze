@@ -187,6 +187,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no-ops instead of destroying the token. `SafetyNetFallback::Redact` keeps its
   existing redact-and-deliver meaning for every fallback reason.
 
+- **Kiji safety net: location and organization suspects were swapped** (PR
+  #425, todo #2312, defect todo #2925). Since v0.9.0-rc.1 the in-process Kiji
+  DistilBERT decoders (`ort`, `tract`, `candle`) mapped classifier ids 3–6 as
+  `B-LOC, I-LOC, B-ORG, I-ORG` while the pinned model actually emits
+  `B-ORG, I-ORG, B-LOC, I-LOC`, and the Python subprocess runner used a third,
+  MISC-first order. Every real place was therefore reported as `organization`
+  (mapped to the `Name` safety-net class) and every real organisation as
+  `location`: the `LeakSuspect` class, the class/family of tokens minted by
+  RESOLVE mode, `ClassMismatch`/fallback decisions, and the `raw_label` /
+  `mapped_class` columns of `safety_net_log` audit rows were all wrong for
+  those suspects. Span positions and scores were unaffected. All backends and
+  the runner now share one label registry pinned to the upstream
+  `onnx-community/distilbert-NER-ONNX` `config.json` (`3a19fe9`), verified by
+  decoder-parity tests, and every backend fails the whole request closed with
+  a typed `SafetyNetError::InvalidOutput` on a malformed classifier width,
+  offset/logit length mismatch, non-finite logits, or missing output tensor
+  instead of silently mapping to `O` or returning no spans. The bundle ships no
+  `id2label` artifact, so the registry cannot be re-checked at bundle load; the
+  SHA-256 bundle pin plus the parity tests are the guard.
+
 ## [0.12.0] - 2026-07-06
 
 ### Added
