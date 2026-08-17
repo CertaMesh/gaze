@@ -177,7 +177,7 @@ mod tests {
 
         for (class, raw) in [
             (gaze::PiiClass::Name, "Dr. Schmidt"),
-            (gaze::PiiClass::Custom("order_id".to_string()), "ORDER-0001"),
+            (gaze::PiiClass::Custom("case_ref".to_string()), "CASE-0001"),
         ] {
             let expected_class = class.class_name();
             let token = session.tokenize(&class, raw).expect("token");

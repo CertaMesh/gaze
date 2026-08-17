@@ -163,7 +163,7 @@ mod tests {
         let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
         let expected = [
             (gaze::PiiClass::Name, "Dr. Schmidt"),
-            (gaze::PiiClass::Custom("order_id".to_string()), "ORDER-0001"),
+            (gaze::PiiClass::Custom("case_ref".to_string()), "CASE-0001"),
         ]
         .into_iter()
         .map(|(class, raw)| {
