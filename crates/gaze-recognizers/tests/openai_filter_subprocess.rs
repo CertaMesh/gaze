@@ -16,7 +16,7 @@ use gaze_types::{
     DocumentKind, LeakKind, LocaleTag, Manifest, PiiClass, SafetyNet, SafetyNetContext,
     SafetyNetError,
 };
-use serial_test::serial;
+use serial_test::file_serial;
 
 fn test_subprocess_timeout() -> Duration {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
@@ -31,7 +31,7 @@ fn test_subprocess_timeout() -> Duration {
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn official_json_private_fields_are_dropped_at_boundary() {
     let clean = "Dr. Schmidt uses alice@example.invalid";
     let opf = script(
@@ -67,7 +67,7 @@ printf '%s\n' '{"schema_version":1,"summary":{"output_mode":"typed","span_count"
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn all_official_labels_map_exactly_to_gaze_classes() {
     let cases = [
         ("private_person", PiiClass::Name),
@@ -103,7 +103,7 @@ fn all_official_labels_map_exactly_to_gaze_classes() {
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn openai_filter_locale_aware_model_reports_configured_native_locales() {
     let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new("opf"))
         .with_locales(vec![LocaleTag::EnUs]);
@@ -114,7 +114,7 @@ fn openai_filter_locale_aware_model_reports_configured_native_locales() {
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn openai_filter_infer_round_trips_spans_through_locale_aware_trait() {
     let opf = script(
         "opf-locale-aware",
@@ -151,7 +151,7 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"lab
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn unknown_valid_label_fails_closed() {
     let opf = script(
         "opf-unknown-label",
@@ -168,7 +168,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_bank","st
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn invalid_label_characters_fail_invalid_output() {
     let opf = script(
         "opf-invalid-label",
@@ -184,7 +184,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private-email","s
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn sleeping_child_times_out_and_returns_sanitized_runtime_error() {
     let opf = script(
         "opf-sleep",
@@ -206,7 +206,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[],"text":"","redacted_text"
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn stdin_blocked_child_times_out_and_kills_subprocess() {
     let dir = tempfile::tempdir().unwrap();
     let pidfile = dir.path().join("opf.pid");
@@ -245,7 +245,7 @@ exec sleep 30
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn oversized_input_returns_before_spawn() {
     let dir = tempfile::tempdir().unwrap();
     let marker = dir.path().join("spawned");
@@ -272,7 +272,7 @@ printf '%s\n' '{{"schema_version":1,"detected_spans":[],"text":"","redacted_text
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn verbose_stderr_is_stripped_and_capped() {
     let opf = script(
         "opf-stderr",
@@ -299,7 +299,7 @@ exit 7
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn missing_checkpoint_fails_closed_without_spawn_or_download() {
     let dir = tempfile::tempdir().unwrap();
     let marker = dir.path().join("spawned");
@@ -323,7 +323,7 @@ printf '%s\n' '{{"schema_version":1,"detected_spans":[],"text":"","redacted_text
 }
 
 #[test]
-#[serial]
+#[file_serial(gaze_subprocess)]
 fn safety_net_correlates_raw_spans_with_manifest_without_source_text() {
     let clean = "<Email_1>";
     let opf = script(

@@ -7,6 +7,7 @@ use assert_cmd::Command;
 use gaze::{LeakKind, LeakSuspect, PiiClass};
 use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 use serde_json::Value;
+use serial_test::file_serial;
 use tempfile::{tempdir, TempDir};
 
 fn test_subprocess_timeout_ms() -> String {
@@ -112,6 +113,7 @@ fn safety_args(command: &Path, checkpoint: &Path) -> Vec<String> {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn explicit_openai_filter_device_reaches_opf_argv() {
     let arg_dir = tempdir().unwrap();
     let arg_log = arg_dir.path().join("opf.args");
@@ -134,6 +136,7 @@ fn explicit_openai_filter_device_reaches_opf_argv() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn auto_openai_filter_device_does_not_inject_opf_device_arg() {
     let arg_dir = tempdir().unwrap();
     let arg_log = arg_dir.path().join("opf.args");
@@ -155,6 +158,7 @@ fn auto_openai_filter_device_does_not_inject_opf_device_arg() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn missing_checkpoint_fails_closed_with_sanitized_error() {
     let (_opf_dir, opf) = write_mock_opf("[]");
     let missing = tempdir().unwrap().path().join("missing-checkpoint");
@@ -169,6 +173,7 @@ fn missing_checkpoint_fails_closed_with_sanitized_error() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn uncovered_suspect_exits_three_in_strict_mode_without_stdout() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_person","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
@@ -184,6 +189,7 @@ fn uncovered_suspect_exits_three_in_strict_mode_without_stdout() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn default_safety_net_mode_resolves_with_redact_fallback() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
@@ -203,6 +209,7 @@ fn default_safety_net_mode_resolves_with_redact_fallback() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn tolerant_mode_requires_env_opt_in() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
@@ -217,6 +224,7 @@ fn tolerant_mode_requires_env_opt_in() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn tolerant_fallback_requires_env_opt_in() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
@@ -231,6 +239,7 @@ fn tolerant_fallback_requires_env_opt_in() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn class_mismatch_warns_and_reports_without_failing() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_person","start":8,"end":17}]"#);
     let checkpoint = checkpoint_dir();
@@ -264,6 +273,7 @@ fn class_mismatch_warns_and_reports_without_failing() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn tolerant_uncovered_outputs_report_and_logs_audit_row() {
     let (_opf_dir, opf) = write_mock_opf(r#"[{"label":"private_email","start":0,"end":5}]"#);
     let checkpoint = checkpoint_dir();
@@ -303,6 +313,7 @@ fn tolerant_uncovered_outputs_report_and_logs_audit_row() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn safety_net_audit_query_filters_structured_field_path() {
     let dir = tempdir().unwrap();
     let db = dir.path().join("audit.sqlite");

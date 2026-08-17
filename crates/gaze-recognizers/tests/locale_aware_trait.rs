@@ -12,6 +12,7 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
 };
 use gaze_recognizers::{LocaleAwareModel, ModelHints, ModelInput, ModelStage};
 use gaze_types::{LocaleTag, PiiClass};
+use serial_test::file_serial;
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
 
@@ -82,6 +83,7 @@ fn kiji_locale_aware_model_reports_configured_native_locales() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn kiji_infer_round_trips_spans_through_locale_aware_trait() {
     let (_kiji_dir, kiji) =
         write_mock_kiji(r#"[{"label":"person","start":0,"end":11,"score":0.97}]"#);

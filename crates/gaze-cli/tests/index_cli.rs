@@ -5,6 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
+use serial_test::file_serial;
 
 const DOMAIN: &str = "local_owner/support_notes/v1";
 const TEST_INDEX_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -23,6 +24,7 @@ fn test_subprocess_timeout_ms() -> String {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_then_search_returns_tokenized_hits_without_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -100,6 +102,7 @@ Second support note for search isolation.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_redacts_safety_net_only_prose_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -156,6 +159,7 @@ Support summary mentions Dr. Schmidt after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_redacts_residual_suspects_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -219,6 +223,7 @@ Support summary mentions Dr. Schmidt marker after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_strict_residual_mode_fails_closed_with_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -268,6 +273,7 @@ Support summary mentions Dr. Schmidt marker after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_search_wrong_key_surfaces_decrypt_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -314,6 +320,7 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn realistic_prose_name_org_email_regression_never_returns_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -371,6 +378,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_fails_closed_without_kiji_model_or_command() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");

@@ -13,6 +13,7 @@ use base64::Engine;
 use regex::Regex;
 use rusqlite::{params, params_from_iter, Connection};
 use serde_json::{json, Value};
+use serial_test::file_serial;
 use tempfile::tempdir;
 
 use gaze::{PiiClass, Scope, Session};
@@ -4106,6 +4107,7 @@ fn t_kiji_distilbert_backend_without_artifact_emits_typed_envelope() {
 
 #[cfg(all(feature = "safety-net-openai", feature = "safety-net-kiji"))]
 #[test]
+#[file_serial(gaze_subprocess)]
 fn t_safety_net_registry_selects_locale_backend() {
     let dir = tempdir().unwrap();
     let opf = dir.path().join("opf");

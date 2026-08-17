@@ -17,6 +17,7 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
     SubprocessKijiBackend, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
 };
 use gaze_types::{DocumentKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
+use serial_test::file_serial;
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
 
@@ -109,6 +110,7 @@ fn missing_sha256sums_is_weights_missing() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn subprocess_span_round_trips_through_manifest_diff() {
     // Mock-kiji emits one person span at [0,11] over "Alice Smith". The default
     // empty manifest classifies that as Uncovered.
@@ -140,6 +142,7 @@ fn subprocess_span_round_trips_through_manifest_diff() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn ort_matches_subprocess_for_fixture_inputs_when_real_kiji_is_configured() {
     let Some(command) = std::env::var_os("GAZE_KIJI_DISTILBERT_COMMAND") else {
         eprintln!("skipping parity test: GAZE_KIJI_DISTILBERT_COMMAND is not set");
