@@ -187,7 +187,7 @@ Emit one `RedactionEntry` per redacted suspect with:
 
 The audit row carries the action and the byte range. It does **not** carry the original suspect bytes — that would re-introduce the leak into the audit DB. This is consistent with the existing safety-nets contract (no raw bytes cross the adapter boundary, see [`safety-nets.md`](safety-nets.md)).
 
-Update the string mapping in `redaction_conflict_tier_as_str` at `crates/gaze-types/src/lib.rs:1559` to cover `SafetyNetRedacted` with `"safety_net_redacted"` and `Fallback` with `"fallback"`.
+Update the string mapping in `ConflictTier::as_str` to cover `SafetyNetRedacted` with `"safety_net_redacted"` and `Fallback` with `"fallback"`.
 
 ### 4.4 Restore behavior
 
@@ -437,7 +437,7 @@ pub struct RedactionEntry {
 }
 ```
 
-Also update the string mapping in `redaction_conflict_tier_as_str` at `crates/gaze-types/src/lib.rs:1559` to cover `SafetyNetRedacted` with `"safety_net_redacted"` and `Fallback` with `"fallback"`.
+Also update the string mapping in `ConflictTier::as_str` to cover `SafetyNetRedacted` with `"safety_net_redacted"` and `Fallback` with `"fallback"`.
 
 Today's `SafetyNetMode` enum at `crates/gaze-cli/src/commands/mod.rs:399` is **not** annotated `#[non_exhaustive]`. The impl PR for redact mode should add that attribute as part of the same change. This is one-time hygiene, not a contract change.
 

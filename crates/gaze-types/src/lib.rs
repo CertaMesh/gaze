@@ -1451,6 +1451,17 @@ pub enum LeakKind {
     },
 }
 
+impl LeakKind {
+    /// Returns the canonical audit-row spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Uncovered => "uncovered",
+            Self::PartialBleed { .. } => "partial_bleed",
+            Self::ClassMismatch { .. } => "class_mismatch",
+        }
+    }
+}
+
 /// Bytes-free telemetry emitted by safety-net orchestration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -1964,6 +1975,31 @@ pub enum Action {
     Preserve,
 }
 
+impl Action {
+    /// Returns the canonical audit-row spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Tokenize => "tokenize",
+            Self::Redact => "redact",
+            Self::FormatPreserve => "format_preserve",
+            Self::Generalize => "generalize",
+            Self::Preserve => "preserve",
+        }
+    }
+
+    /// Parses a canonical audit-row spelling.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "tokenize" => Some(Self::Tokenize),
+            "redact" => Some(Self::Redact),
+            "format_preserve" => Some(Self::FormatPreserve),
+            "generalize" => Some(Self::Generalize),
+            "preserve" => Some(Self::Preserve),
+            _ => None,
+        }
+    }
+}
+
 /// Conflict resolution tier that selected or rejected a candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -1998,18 +2034,89 @@ pub enum ConflictTier {
     Fallback,
 }
 
+impl ConflictTier {
+    /// Returns the canonical audit-row spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::ClassPriority => "class_priority",
+            Self::RulePriority => "rule_priority",
+            Self::Score => "score",
+            Self::SpanLength => "span_length",
+            Self::Validator => "validator",
+            Self::ValidatorVeto => "validator_veto",
+            Self::CollisionPolicy => "collision_policy",
+            Self::AnchoredContext => "anchored_context",
+            Self::RecognizerId => "recognizer_id",
+            Self::Merged => "merged",
+            Self::Redact => "redact",
+            Self::Resolve => "resolve",
+            Self::Fallback => "fallback",
+        }
+    }
+
+    /// Parses a canonical audit-row spelling.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "none" => Some(Self::None),
+            "class_priority" => Some(Self::ClassPriority),
+            "rule_priority" => Some(Self::RulePriority),
+            "score" => Some(Self::Score),
+            "span_length" => Some(Self::SpanLength),
+            "validator" => Some(Self::Validator),
+            "validator_veto" => Some(Self::ValidatorVeto),
+            "collision_policy" => Some(Self::CollisionPolicy),
+            "anchored_context" => Some(Self::AnchoredContext),
+            "recognizer_id" => Some(Self::RecognizerId),
+            "merged" => Some(Self::Merged),
+            "redact" => Some(Self::Redact),
+            "resolve" => Some(Self::Resolve),
+            "fallback" => Some(Self::Fallback),
+            _ => None,
+        }
+    }
+}
+
 /// Safety-net fallback reason recorded in metadata-only audit rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
+#[serde(rename_all = "snake_case")]
 pub enum FallbackReason {
     /// The suspect overlapped an existing emitted token in a way that could not be promoted.
+    #[serde(alias = "OverlapConflict")]
     OverlapConflict,
     /// A validator rejected the promoted candidate.
+    #[serde(alias = "ValidatorVeto")]
     ValidatorVeto,
     /// A mandatory anchor was missing for the promoted candidate.
+    #[serde(alias = "AnchorMissing")]
     AnchorMissing,
     /// A follow-up safety-net pass still observed a suspect.
+    #[serde(alias = "ResidualSuspect")]
     ResidualSuspect,
+}
+
+impl FallbackReason {
+    /// Returns the canonical audit-row and JSON spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::OverlapConflict => "overlap_conflict",
+            Self::ValidatorVeto => "validator_veto",
+            Self::AnchorMissing => "anchor_missing",
+            Self::ResidualSuspect => "residual_suspect",
+        }
+    }
+
+    /// Parses a canonical audit-row spelling.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "overlap_conflict" => Some(Self::OverlapConflict),
+            "validator_veto" => Some(Self::ValidatorVeto),
+            "anchor_missing" => Some(Self::AnchorMissing),
+            "residual_suspect" => Some(Self::ResidualSuspect),
+            _ => None,
+        }
+    }
 }
 
 /// Source document kind for metadata-only audit logging.
@@ -2020,6 +2127,25 @@ pub enum DocumentKind {
     Structured,
     /// Plain text document.
     Text,
+}
+
+impl DocumentKind {
+    /// Returns the canonical audit-row spelling.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Structured => "structured",
+            Self::Text => "text",
+        }
+    }
+
+    /// Parses a canonical audit-row spelling.
+    pub fn from_canonical_str(value: &str) -> Option<Self> {
+        match value {
+            "structured" => Some(Self::Structured),
+            "text" => Some(Self::Text),
+            _ => None,
+        }
+    }
 }
 
 /// One row of redaction metadata emitted to a [`RedactionLogger`].
@@ -2143,17 +2269,11 @@ impl Serialize for RedactionEntry {
             state.serialize_field("recognizer_version_id", recognizer_version_id)?;
         }
         state.serialize_field("class", &self.class.to_canonical_str())?;
-        state.serialize_field("action", redaction_action_as_str(self.action))?;
+        state.serialize_field("action", self.action.as_str())?;
         state.serialize_field("field_name", &self.field_name)?;
-        state.serialize_field(
-            "document_kind",
-            redaction_document_kind_as_str(self.document_kind),
-        )?;
+        state.serialize_field("document_kind", self.document_kind.as_str())?;
         state.serialize_field("conflict_loser", &self.conflict_loser)?;
-        state.serialize_field(
-            "decided_by",
-            redaction_conflict_tier_as_str(self.decided_by),
-        )?;
+        state.serialize_field("decided_by", self.decided_by.as_str())?;
         state.serialize_field("created_at", &self.created_at)?;
         state.serialize_field("session_id", &self.session_id)?;
         state.serialize_field("validator_fail_reason", &self.validator_fail_reason)?;
@@ -2216,42 +2336,6 @@ impl Serialize for RedactionEntry {
             state.serialize_field("restore_phase_mask", &value)?;
         }
         state.end()
-    }
-}
-
-fn redaction_action_as_str(action: Action) -> &'static str {
-    match action {
-        Action::Tokenize => "tokenize",
-        Action::Redact => "redact",
-        Action::FormatPreserve => "format_preserve",
-        Action::Generalize => "generalize",
-        Action::Preserve => "preserve",
-    }
-}
-
-fn redaction_document_kind_as_str(kind: DocumentKind) -> &'static str {
-    match kind {
-        DocumentKind::Structured => "structured",
-        DocumentKind::Text => "text",
-    }
-}
-
-fn redaction_conflict_tier_as_str(tier: ConflictTier) -> &'static str {
-    match tier {
-        ConflictTier::None => "none",
-        ConflictTier::ClassPriority => "class_priority",
-        ConflictTier::RulePriority => "rule_priority",
-        ConflictTier::Score => "score",
-        ConflictTier::SpanLength => "span_length",
-        ConflictTier::Validator => "validator",
-        ConflictTier::ValidatorVeto => "validator_veto",
-        ConflictTier::CollisionPolicy => "collision_policy",
-        ConflictTier::AnchoredContext => "anchored_context",
-        ConflictTier::RecognizerId => "recognizer_id",
-        ConflictTier::Merged => "merged",
-        ConflictTier::Redact => "redact",
-        ConflictTier::Resolve => "resolve",
-        ConflictTier::Fallback => "fallback",
     }
 }
 
@@ -3030,6 +3114,94 @@ mod redaction_logger_tests {
     }
 
     fn assert_send_sync<T: Send + Sync + ?Sized>() {}
+
+    #[test]
+    fn fallback_reason_serializes_snake_case_and_accepts_legacy_pascal_case() {
+        for (legacy, canonical, value) in [
+            (
+                "OverlapConflict",
+                "overlap_conflict",
+                FallbackReason::OverlapConflict,
+            ),
+            (
+                "ValidatorVeto",
+                "validator_veto",
+                FallbackReason::ValidatorVeto,
+            ),
+            (
+                "AnchorMissing",
+                "anchor_missing",
+                FallbackReason::AnchorMissing,
+            ),
+            (
+                "ResidualSuspect",
+                "residual_suspect",
+                FallbackReason::ResidualSuspect,
+            ),
+        ] {
+            let legacy_json = format!(r#""{legacy}""#);
+            assert_eq!(
+                serde_json::from_str::<FallbackReason>(&legacy_json)
+                    .expect("legacy fallback reason"),
+                value
+            );
+            assert_eq!(
+                serde_json::to_string(&value).expect("fallback reason"),
+                format!(r#""{canonical}""#)
+            );
+        }
+    }
+
+    #[test]
+    fn audit_enum_canonical_forms_round_trip() {
+        for value in [
+            Action::Tokenize,
+            Action::Redact,
+            Action::FormatPreserve,
+            Action::Generalize,
+            Action::Preserve,
+        ] {
+            assert_eq!(Action::from_canonical_str(value.as_str()), Some(value));
+        }
+        for value in [
+            ConflictTier::None,
+            ConflictTier::ClassPriority,
+            ConflictTier::RulePriority,
+            ConflictTier::Score,
+            ConflictTier::SpanLength,
+            ConflictTier::Validator,
+            ConflictTier::ValidatorVeto,
+            ConflictTier::CollisionPolicy,
+            ConflictTier::AnchoredContext,
+            ConflictTier::RecognizerId,
+            ConflictTier::Merged,
+            ConflictTier::Redact,
+            ConflictTier::Resolve,
+            ConflictTier::Fallback,
+        ] {
+            assert_eq!(
+                ConflictTier::from_canonical_str(value.as_str()),
+                Some(value)
+            );
+        }
+        for value in [DocumentKind::Structured, DocumentKind::Text] {
+            assert_eq!(
+                DocumentKind::from_canonical_str(value.as_str()),
+                Some(value)
+            );
+        }
+        for value in [
+            FallbackReason::OverlapConflict,
+            FallbackReason::ValidatorVeto,
+            FallbackReason::AnchorMissing,
+            FallbackReason::ResidualSuspect,
+        ] {
+            assert_eq!(
+                FallbackReason::from_canonical_str(value.as_str()),
+                Some(value)
+            );
+        }
+    }
 
     #[test]
     fn redaction_log_error_display_is_stable() {

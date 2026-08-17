@@ -1064,11 +1064,7 @@ impl From<&LeakReportTelemetry> for LeakTelemetryResponse {
 }
 
 fn document_kind_label(kind: DocumentKind) -> &'static str {
-    match kind {
-        DocumentKind::Structured => "structured",
-        DocumentKind::Text => "text",
-        _ => "unknown",
-    }
+    kind.as_str()
 }
 
 pub(crate) fn enforce_safety_net_mode(

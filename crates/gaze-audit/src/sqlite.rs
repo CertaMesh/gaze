@@ -729,61 +729,28 @@ impl gaze_types::RedactionLogger for SqliteLogger {
 }
 
 fn conflict_tier_to_db(tier: ConflictTier) -> &'static str {
-    match tier {
-        ConflictTier::None => "none",
-        ConflictTier::ClassPriority => "class_priority",
-        ConflictTier::RulePriority => "rule_priority",
-        ConflictTier::Score => "score",
-        ConflictTier::SpanLength => "span_length",
-        ConflictTier::Validator => "validator",
-        ConflictTier::ValidatorVeto => "validator_veto",
-        ConflictTier::CollisionPolicy => "collision_policy",
-        ConflictTier::AnchoredContext => "anchored_context",
-        ConflictTier::RecognizerId => "recognizer_id",
-        ConflictTier::Merged => "merged",
-        ConflictTier::Redact => "redact",
-        ConflictTier::Resolve => "resolve",
-        ConflictTier::Fallback => "fallback",
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {tier:?}"),
-    }
+    tier.as_str()
 }
 
 fn fallback_reason_to_db(reason: FallbackReason) -> &'static str {
-    match reason {
-        FallbackReason::OverlapConflict => "overlap_conflict",
-        FallbackReason::ValidatorVeto => "validator_veto",
-        FallbackReason::AnchorMissing => "anchor_missing",
-        FallbackReason::ResidualSuspect => "residual_suspect",
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {reason:?}"),
-    }
+    reason.as_str()
 }
 
 fn fallback_reason_from_db(value: &str) -> std::result::Result<FallbackReason, rusqlite::Error> {
-    Ok(match value {
-        "overlap_conflict" => FallbackReason::OverlapConflict,
-        "validator_veto" => FallbackReason::ValidatorVeto,
-        "anchor_missing" => FallbackReason::AnchorMissing,
-        "residual_suspect" => FallbackReason::ResidualSuspect,
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                18,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown fallback reason {other}"),
-                )),
-            ))
-        }
+    FallbackReason::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            18,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown fallback reason {value}"),
+            )),
+        )
     })
 }
 
 fn leak_kind_to_db(kind: &LeakKind) -> &'static str {
-    match kind {
-        LeakKind::Uncovered => "uncovered",
-        LeakKind::PartialBleed { .. } => "partial_bleed",
-        LeakKind::ClassMismatch { .. } => "class_mismatch",
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {kind:?}"),
-    }
+    kind.as_str()
 }
 
 fn leak_kind_pipeline_class(kind: &LeakKind) -> Option<&PiiClass> {
@@ -818,31 +785,15 @@ fn table_has_column(conn: &Connection, name: &str) -> Result<bool> {
 }
 
 fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusqlite::Error> {
-    Ok(match value {
-        "none" => ConflictTier::None,
-        "class_priority" => ConflictTier::ClassPriority,
-        "rule_priority" => ConflictTier::RulePriority,
-        "score" => ConflictTier::Score,
-        "span_length" => ConflictTier::SpanLength,
-        "validator" => ConflictTier::Validator,
-        "validator_veto" => ConflictTier::ValidatorVeto,
-        "collision_policy" => ConflictTier::CollisionPolicy,
-        "anchored_context" => ConflictTier::AnchoredContext,
-        "recognizer_id" => ConflictTier::RecognizerId,
-        "merged" => ConflictTier::Merged,
-        "redact" => ConflictTier::Redact,
-        "resolve" => ConflictTier::Resolve,
-        "fallback" => ConflictTier::Fallback,
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                6,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown conflict tier {other}"),
-                )),
-            ))
-        }
+    ConflictTier::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            6,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown conflict tier {value}"),
+            )),
+        )
     })
 }
 
@@ -884,58 +835,36 @@ fn deserialize_json_column<T: DeserializeOwned>(
 }
 
 fn action_to_db(action: Action) -> &'static str {
-    match action {
-        Action::Tokenize => "tokenize",
-        Action::Redact => "redact",
-        Action::FormatPreserve => "format_preserve",
-        Action::Generalize => "generalize",
-        Action::Preserve => "preserve",
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {action:?}"),
-    }
+    action.as_str()
 }
 
 fn action_from_db(value: &str) -> std::result::Result<Action, rusqlite::Error> {
-    Ok(match value {
-        "tokenize" => Action::Tokenize,
-        "redact" => Action::Redact,
-        "format_preserve" => Action::FormatPreserve,
-        "generalize" => Action::Generalize,
-        "preserve" => Action::Preserve,
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                2,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown action {other}"),
-                )),
-            ))
-        }
+    Action::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            2,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown action {value}"),
+            )),
+        )
     })
 }
 
 fn document_kind_to_db(kind: &DocumentKind) -> &'static str {
-    match kind {
-        DocumentKind::Structured => "structured",
-        DocumentKind::Text => "text",
-        _ => panic!("unknown variant in audit serialization - update sqlite.rs for new {kind:?}"),
-    }
+    kind.as_str()
 }
 
 fn document_kind_from_db(value: &str) -> std::result::Result<DocumentKind, rusqlite::Error> {
-    Ok(match value {
-        "structured" => DocumentKind::Structured,
-        "text" => DocumentKind::Text,
-        other => {
-            return Err(rusqlite::Error::FromSqlConversionFailure(
-                3,
-                rusqlite::types::Type::Text,
-                Box::new(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("unknown document kind {other}"),
-                )),
-            ))
-        }
+    DocumentKind::from_canonical_str(value).ok_or_else(|| {
+        rusqlite::Error::FromSqlConversionFailure(
+            3,
+            rusqlite::types::Type::Text,
+            Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("unknown document kind {value}"),
+            )),
+        )
     })
 }
 
@@ -946,6 +875,136 @@ mod tests {
         RestoreDecision, RestorePolicy, RestoreTelemetry, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
         RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
     };
+
+    #[test]
+    fn sqlite_sink_uses_each_audit_enums_canonical_spelling() {
+        let temp_db = tempfile::NamedTempFile::new().expect("temp db");
+        let logger = SqliteLogger::new(temp_db.path()).expect("logger");
+
+        for action in [
+            Action::Tokenize,
+            Action::Redact,
+            Action::FormatPreserve,
+            Action::Generalize,
+            Action::Preserve,
+        ] {
+            assert_logged_column(
+                &logger,
+                temp_db.path(),
+                RedactionEntry::new(
+                    format!("action:{}", action.as_str()),
+                    PiiClass::Email,
+                    action,
+                    None,
+                    DocumentKind::Text,
+                    false,
+                    ConflictTier::None,
+                    0,
+                    None,
+                ),
+                "action",
+                action.as_str(),
+            );
+        }
+        for tier in [
+            ConflictTier::None,
+            ConflictTier::ClassPriority,
+            ConflictTier::RulePriority,
+            ConflictTier::Score,
+            ConflictTier::SpanLength,
+            ConflictTier::Validator,
+            ConflictTier::ValidatorVeto,
+            ConflictTier::CollisionPolicy,
+            ConflictTier::AnchoredContext,
+            ConflictTier::RecognizerId,
+            ConflictTier::Merged,
+            ConflictTier::Redact,
+            ConflictTier::Resolve,
+            ConflictTier::Fallback,
+        ] {
+            assert_logged_column(
+                &logger,
+                temp_db.path(),
+                RedactionEntry::new(
+                    format!("tier:{}", tier.as_str()),
+                    PiiClass::Email,
+                    Action::Tokenize,
+                    None,
+                    DocumentKind::Text,
+                    false,
+                    tier,
+                    0,
+                    None,
+                ),
+                "decided_by",
+                tier.as_str(),
+            );
+        }
+        for kind in [DocumentKind::Structured, DocumentKind::Text] {
+            assert_logged_column(
+                &logger,
+                temp_db.path(),
+                RedactionEntry::new(
+                    format!("kind:{}", kind.as_str()),
+                    PiiClass::Email,
+                    Action::Tokenize,
+                    None,
+                    kind,
+                    false,
+                    ConflictTier::None,
+                    0,
+                    None,
+                ),
+                "document_kind",
+                kind.as_str(),
+            );
+        }
+        for reason in [
+            FallbackReason::OverlapConflict,
+            FallbackReason::ValidatorVeto,
+            FallbackReason::AnchorMissing,
+            FallbackReason::ResidualSuspect,
+        ] {
+            assert_logged_column(
+                &logger,
+                temp_db.path(),
+                RedactionEntry::new(
+                    format!("fallback:{}", reason.as_str()),
+                    PiiClass::Email,
+                    Action::Tokenize,
+                    None,
+                    DocumentKind::Text,
+                    false,
+                    ConflictTier::None,
+                    0,
+                    None,
+                )
+                .with_fallback_triggered(reason),
+                "fallback_triggered",
+                reason.as_str(),
+            );
+        }
+    }
+
+    fn assert_logged_column(
+        logger: &SqliteLogger,
+        path: &Path,
+        entry: RedactionEntry,
+        column: &str,
+        expected: &str,
+    ) {
+        let source = entry.source.clone();
+        logger.log(&entry).expect("write audit row");
+        let conn = Connection::open(path).expect("open audit db");
+        let actual: String = conn
+            .query_row(
+                &format!("SELECT {column} FROM redaction_log WHERE source = ?1"),
+                [&source],
+                |row| row.get(0),
+            )
+            .expect("read canonical enum column");
+        assert_eq!(actual, expected);
+    }
 
     fn create_legacy_redaction_log(path: &Path) {
         let conn = Connection::open(path).expect("legacy sqlite");
