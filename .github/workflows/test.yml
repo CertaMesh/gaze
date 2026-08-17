@@ -216,5 +216,7 @@ jobs:
         run: cargo run -p xtask -- safety-net-sanity
       - name: xtask dashboard-isolation
         run: cargo run -p xtask -- dashboard-isolation
+      - name: xtask mcp-tier-isolation
+        run: cargo run -p xtask -- mcp-tier-isolation
       - name: xtask ci-feature-matrix
         run: cargo run -p xtask -- ci-feature-matrix

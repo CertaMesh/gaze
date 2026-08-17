@@ -6,6 +6,8 @@ extern crate rustc_span;
 
 use std::collections::HashSet;
 
+mod default_config;
+
 use clippy_utils::diagnostics::span_lint_and_then;
 use rustc_hir::def::Res;
 use rustc_hir::def_id::{DefId, CRATE_DEF_INDEX};
@@ -33,18 +35,18 @@ struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            protected_paths: vec![
-                "crates/gaze-cli/src/restore".to_owned(),
-                "crates/gaze/src".to_owned(),
-            ],
-            forbidden_crates: vec!["gaze_audit".to_owned()],
-            forbidden_items: vec![
-                "gaze_audit::SqliteLogger".to_owned(),
-                "gaze_audit::AuditFilter".to_owned(),
-                "gaze_audit::AuditLogRow".to_owned(),
-                "gaze_audit::build_audit_query_sql".to_owned(),
-                "gaze_audit::AUDIT_RESTRICTED_COLUMNS".to_owned(),
-            ],
+            protected_paths: default_config::PROTECTED_PATHS
+                .iter()
+                .map(|path| (*path).to_owned())
+                .collect(),
+            forbidden_crates: default_config::FORBIDDEN_CRATES
+                .iter()
+                .map(|name| (*name).to_owned())
+                .collect(),
+            forbidden_items: default_config::FORBIDDEN_ITEMS
+                .iter()
+                .map(|item| (*item).to_owned())
+                .collect(),
         }
     }
 }

@@ -36,4 +36,6 @@ jobs:
         working-directory: lint/dylint
         run: cargo test --test ui
       - name: Run dylint gate
+        env:
+          GAZE_DYLINT_REQUIRED: "1"
         run: cargo run -p xtask -- dylint-gate
