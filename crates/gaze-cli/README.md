@@ -179,7 +179,10 @@ ChaCha20-Poly1305. Default key resolution is fail-closed and headless-friendly:
 `--features os-keychain` adds OS keychain fallback for desktop use: macOS
 Keychain, Windows Credential Manager, or Linux kernel keyutils (no dbus). If no
 key source is available, `gaze index` refuses to read or write the index, and
-legacy plaintext `index.json` files are not loaded.
+legacy plaintext `index.json` files are not loaded. The sealed payload is
+schema-versioned (currently v2: one record per document, with the search
+postings derived on load); when a file's schema does not match the loader,
+`gaze index` fails closed and the index must be rebuilt with `gaze index ingest`.
 
 Search output is the bridge's agent-facing response: snippets contain only
 current-session tokens, never raw PII or index-domain aliases. The v1 ingest path
