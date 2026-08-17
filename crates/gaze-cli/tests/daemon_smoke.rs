@@ -172,3 +172,106 @@ fn daemon_malformed_json_fails_closed_and_continues() {
     assert_eq!(responses[1]["session_id"], "session-a");
     assert!(responses[1]["clean_text"].as_str().unwrap().contains("<"));
 }
+
+// S10-F2 (audit 7201) drift gate for the daemon path: the auto-activate locale
+// set is derived from the loaded rulepacks (same source of truth as
+// `gaze clean`). An adopter path pack with a document-basis `locale_gated`
+// es-ES recognizer activates under `core-extended` with no policy locale.
+fn write_policy_with_es_locale_gated_path_rulepack() -> (tempfile::TempDir, std::path::PathBuf) {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("es-locale-gated.toml");
+    fs::write(
+        &rulepack_path,
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "es-locale-gated"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "es.test_id"
+class = "custom:es_test_id"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["es-ES"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''ES-TEST-[0-9]{6}'''
+"#,
+    )
+    .unwrap();
+    let policy_path = dir.path().join("policy.toml");
+    fs::write(
+        &policy_path,
+        format!(
+            r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[policy.rulepacks]
+bundled = ["core-extended"]
+paths = ["{}"]
+
+[[rule]]
+kind = "class"
+class = "custom:es_test_id"
+action = "tokenize"
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+            rulepack_path.display()
+        ),
+    )
+    .unwrap();
+    (dir, policy_path)
+}
+
+#[test]
+fn daemon_auto_activate_derives_locale_gated_locales_from_loaded_rulepacks() {
+    let (_dir, policy) = write_policy_with_es_locale_gated_path_rulepack();
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--idle-timeout",
+            "30",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        writeln!(
+            stdin,
+            "{}",
+            json!({"session_id": "session-es", "text": "id ES-TEST-123456"})
+        )
+        .unwrap();
+    }
+
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let responses = stdout
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(responses.len(), 1, "{stdout}");
+    let clean = responses[0]["clean_text"].as_str().unwrap();
+    assert!(
+        clean.contains(":Custom:es_test_id_"),
+        "es-ES locale-gated recognizer must auto-activate in the daemon: {clean}"
+    );
+}

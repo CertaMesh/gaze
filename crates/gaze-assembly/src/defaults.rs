@@ -6,7 +6,7 @@ use gaze::{
     PolicyError, RawDocument, RuleSpec, Rulepack, RulepackSource, Session,
 };
 
-use crate::{build_pipeline, BuildError};
+use crate::{build_pipeline, locale_gated_activation_locales, BuildError};
 
 const CORE_BUNDLED_RULEPACK: &str = "core";
 
@@ -50,13 +50,8 @@ impl CorePipelineConfig {
             .any(|bundle| bundle == "core-extended");
         let mut rulepack_defaults = merged_rulepack_default_locales(&rulepacks);
         if auto_activate_locale_gated {
-            for locale in [
-                LocaleTag::EnUs,
-                LocaleTag::DeDe,
-                LocaleTag::DeAt,
-                LocaleTag::DeCh,
-            ] {
-                if !rulepack_defaults.iter().any(|existing| existing == &locale) {
+            for locale in locale_gated_activation_locales(&rulepacks) {
+                if !rulepack_defaults.contains(&locale) {
                     rulepack_defaults.push(locale);
                 }
             }

@@ -255,21 +255,29 @@ The plain `core` default locale chain is `global`
 `safe_default` recognizers activate. For the CLI, `normalize_rulepack_bundles`
 rewrites the deprecated `core-extended` selection to `core` while returning an
 `auto_activate_locale_gated` bit
-(`crates/gaze-cli/src/pipeline/run.rs:700-733`). `CleanOverrides::apply_to`
+(`crates/gaze-cli/src/pipeline/run.rs:712-728`). `CleanOverrides::apply_to`
 carries that bit into `Policy::rulepacks`
 (`crates/gaze-cli/src/clean_overrides.rs:48-63`). Pipeline construction then
-adds `en-US`, `de-DE`, `de-AT`, and `de-CH` to the compatibility locale chain
-(`crates/gaze-cli/src/pipeline/run.rs:137-158`), and recognizer wiring admits
-locale-gated rows under that policy and locale intersection
-(`crates/gaze-assembly/src/detector_wiring.rs:251-285`). The library's
-`CorePipelineConfig` implements the same compatibility behavior directly from
-the requested bundle name (`crates/gaze-assembly/src/defaults.rs:45-76`).
+adds the auto-activation locales to the compatibility locale chain. That set is
+derived from the loaded rulepacks by
+`gaze_assembly::locale_gated_activation_locales`
+(`crates/gaze-assembly/src/locale.rs`): the union of `locales` over enabled,
+document-basis `safety_tier = "locale_gated"` recognizers, minus `global`,
+ordered compatibility-first (`en-US`, `de-DE`, `de-AT`, `de-CH`) then by
+canonical tag. For the bundled `core` recognizers that is exactly `en-US`,
+`de-DE`, `de-AT`, `de-CH`; an adopter path rulepack with a locale-gated
+recognizer for another locale extends the chain automatically. `gaze clean`
+(`crates/gaze-cli/src/pipeline/run.rs`), `gaze daemon`
+(`crates/gaze-cli/src/commands/daemon.rs`), and the library's
+`CorePipelineConfig` (`crates/gaze-assembly/src/defaults.rs`) all call that one
+function, and recognizer wiring admits locale-gated rows under that policy and
+locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, phone.e164.spaced, phone.structural, security_token.anchored, url.anchored` | `crates/gaze-recognizers/embedded/core.toml:1-847`; `crates/gaze-assembly/src/defaults.rs:45-76` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.us, steuer_id.de, url.anchored, vat.de` | `crates/gaze-assembly/src/defaults.rs:45-76`; `crates/gaze-cli/src/pipeline/run.rs:137-158,718-733` |
+| `core` | `global` | no | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, phone.e164.spaced, phone.structural, security_token.anchored, url.anchored` | `crates/gaze-recognizers/embedded/core.toml:1-847`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `card.structural, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.us, steuer_id.de, url.anchored, vat.de` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate

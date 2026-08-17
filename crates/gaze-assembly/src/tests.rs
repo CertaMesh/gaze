@@ -458,6 +458,198 @@ fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_phone() {
     assert!(text.contains(":Custom:phone_"), "{text}");
 }
 
+// S10-F2 (audit 7201): the auto-activate locale set is derived from the loaded
+// rulepacks, not spelled out. This adopter path rulepack declares a
+// document-basis `locale_gated` recognizer for `es-ES` under `global` defaults;
+// `core-extended` (auto-activate) must put `es-ES` on the chain so it activates.
+const ES_LOCALE_GATED_RULEPACK: &str = r#"
+schema_version = "0.1.0"
+rulepack_id = "es-locale-gated"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "es.test_id"
+class = "custom:es_test_id"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["es-ES"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''ES-TEST-[0-9]{6}'''
+"#;
+
+fn write_temp_rulepack(name: &str, contents: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "gaze-assembly-{name}-{}-{}.toml",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    std::fs::write(&path, contents).expect("write temp rulepack");
+    path
+}
+
+// The derived set for the bundled `core` recognizers equals the literal list
+// the CLI/daemon/library used to carry (`en-US, de-DE, de-AT, de-CH`) — this is
+// the derived-set == pack-union assertion; it also gates the bundle: a new
+// bundled `locale_gated` recognizer changes this set and must update the pin
+// plus the "Shipped default activation" reference table.
+#[test]
+fn locale_gated_activation_locales_for_core_bundle_match_compat_list() {
+    let core = embedded_rulepack("core");
+
+    assert_eq!(
+        locale_gated_activation_locales(&[core]),
+        vec![
+            LocaleTag::EnUs,
+            LocaleTag::DeDe,
+            LocaleTag::DeAt,
+            LocaleTag::DeCh,
+        ]
+    );
+}
+
+// Set rules: enabled + `locale_gated` + document basis contribute; `global`,
+// format-basis, disabled, and safe_default recognizers do not. Ordering:
+// compatibility tags first in their shipped order, then canonical string order.
+#[test]
+fn locale_gated_activation_locales_derive_set_and_order_from_loaded_packs() {
+    let pack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "mixed-locale-gated"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "gated.es"
+class = "custom:a"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["es-ES", "global"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''ES-A-[0-9]{6}'''
+
+[[recognizers]]
+id = "gated.gb_and_de"
+class = "custom:b"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["en-GB", "de-DE"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''GB-B-[0-9]{6}'''
+
+[[recognizers]]
+id = "gated.format_basis"
+class = "custom:c"
+enabled = true
+safety_tier = "locale_gated"
+locales = ["fr-FR"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''FR-C-[0-9]{6}'''
+
+[[recognizers]]
+id = "gated.disabled"
+class = "custom:d"
+enabled = false
+safety_tier = "locale_gated"
+locales = ["nl-NL"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''NL-D-[0-9]{6}'''
+
+[[recognizers]]
+id = "safe.default"
+class = "custom:e"
+enabled = true
+safety_tier = "safe_default"
+locales = ["pt-BR"]
+
+[recognizers.match]
+kind = "regex"
+pattern = '''BR-E-[0-9]{6}'''
+"#,
+    )
+    .expect("rulepack");
+    let core = embedded_rulepack("core");
+
+    let es = LocaleTag::parse("es-ES").expect("es-ES parses");
+    assert_eq!(
+        locale_gated_activation_locales(std::slice::from_ref(&pack)),
+        vec![LocaleTag::DeDe, LocaleTag::EnGb, es.clone()],
+        "compat tag de-DE first, then en-GB < es-ES by canonical string"
+    );
+    assert_eq!(
+        locale_gated_activation_locales(&[core, pack]),
+        vec![
+            LocaleTag::EnUs,
+            LocaleTag::DeDe,
+            LocaleTag::DeAt,
+            LocaleTag::DeCh,
+            LocaleTag::EnGb,
+            es,
+        ],
+        "shipped compat order is stable regardless of pack load order"
+    );
+}
+
+// Pins the shipped compatibility chain: for the bundled `core` recognizers the
+// derived activation set is exactly the v0.6 alias order, so S10-F2 changes no
+// shipped behaviour.
+#[test]
+fn core_extended_alias_locale_chain_is_compat_order() {
+    let core = CorePipelineConfig::new()
+        .with_bundled_rulepack("core-extended")
+        .build()
+        .expect("extended pipeline");
+
+    assert_eq!(
+        core.locale_chain().as_slice(),
+        &[
+            LocaleTag::Global,
+            LocaleTag::EnUs,
+            LocaleTag::DeDe,
+            LocaleTag::DeAt,
+            LocaleTag::DeCh,
+        ]
+    );
+}
+
+#[test]
+fn core_extended_alias_auto_activates_locale_gated_recognizer_from_path_rulepack() {
+    let path = write_temp_rulepack("es-locale-gated", ES_LOCALE_GATED_RULEPACK);
+    let built = CorePipelineConfig::new()
+        .with_bundled_rulepack("core-extended")
+        .with_rulepack_path(path.clone())
+        .build();
+    let _ = std::fs::remove_file(&path);
+    let core = built.expect("extended pipeline with path rulepack");
+
+    assert!(
+        core.locale_chain()
+            .as_slice()
+            .iter()
+            .any(|locale| locale.as_str() == "es-ES"),
+        "auto-activate chain must carry the locale-gated recognizer's locale: {:?}",
+        core.locale_chain()
+    );
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let text = clean_text(
+        core.pseudonymize_text(&session, "id ES-TEST-123456")
+            .expect("redact"),
+    );
+    assert!(text.contains(":Custom:es_test_id_"), "{text}");
+}
+
 #[test]
 fn core_pipeline_config_core_extended_alias_tokenizes_synthetic_iban() {
     let core = CorePipelineConfig::new()
