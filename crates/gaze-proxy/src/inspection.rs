@@ -517,6 +517,35 @@ mod tests {
         parked
     }
 
+    // `QueueContended` is not a lifecycle verdict: it means the runtime declined to block on its
+    // own mutex to read that verdict. A registration's dispatcher thread re-acquires that mutex
+    // when `begin_purge`/`disable` notify it, so an emission issued in that window gets the
+    // non-answer instead of `Purging`/`Disabled`. Retrying is idempotent — a dropped emission
+    // advances no sequence and exhausts no emitter — so ask again rather than weaken the
+    // assertion, the same treatment `begin_for_test` and `park_dispatcher_for_test` already give
+    // contention.
+    fn settled_stages(
+        mut emit: impl FnMut() -> [InspectionAdmissionOutcomeV1; 2],
+    ) -> [InspectionAdmissionOutcomeV1; 2] {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            let outcomes = emit();
+            if !outcomes.iter().any(|outcome| {
+                matches!(
+                    outcome,
+                    InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::QueueContended)
+                )
+            }) {
+                return outcomes;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "inspection stages stayed contended: {outcomes:?}"
+            );
+            std::thread::yield_now();
+        }
+    }
+
     #[test]
     fn parked_dispatcher_releases_sink_during_unwind() {
         let sink = Arc::new(BlockingSink::default());
@@ -800,7 +829,7 @@ mod tests {
         let mut logical = begin_for_test(&producer);
         let purge = consumer.begin_purge().unwrap();
         assert_eq!(
-            logical.emit_request_stages(b"owner", b"provider", None, false),
+            settled_stages(|| logical.emit_request_stages(b"owner", b"provider", None, false)),
             [
                 InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::Purging),
                 InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::Purging),
@@ -809,7 +838,13 @@ mod tests {
         purge.complete().unwrap();
         consumer.disable();
         assert_eq!(
-            logical.emit_response_stages(b"provider", b"owner", WireFormat::Json, None, false,),
+            settled_stages(|| logical.emit_response_stages(
+                b"provider",
+                b"owner",
+                WireFormat::Json,
+                None,
+                false,
+            )),
             [
                 InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::Disabled),
                 InspectionAdmissionOutcomeV1::Dropped(InspectionDropCodeV1::Disabled),
