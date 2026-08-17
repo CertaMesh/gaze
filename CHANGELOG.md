@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`gaze_proxy::ProxyConfig::with_dictionaries` installs one immutable
+  dictionary source for every proxy detection pass.** Omitting the builder keeps
+  the existing empty-bundle default. `ProxyConfig` was already
+  `#[non_exhaustive]` and the stored field is private, so this addition does not
+  break external struct construction.
+
 - **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
   (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
   tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
@@ -203,9 +209,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This deliberately trades axis 5 (snapshot compatibility and configuration
   convenience) for axis 1 (never leak a foreign-format identifier merely
   because the surrounding document uses another locale). The known remaining
-  debt is 27 target spans: 14 DE national-phone and 13 postal spans. Todo #2411
-  stays open: direct/codec primary and residual proxy passes still require the
-  shared `ProxyConfig::locale_chain` for every document-basis recognizer.
+  rule-coverage debt is 27 target spans: 14 DE national-phone and 13 postal
+  spans. The proxy transport debt is now closed by #2411: direct/codec primary
+  and residual passes receive the shared `ProxyConfig::locale_chain`; #2403
+  previously fixed the legacy path.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
@@ -239,6 +246,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve the original value. `PiiClass::family` and `as_family_name` now model
   that namespace once, and policy and rulepack parsing share the same
   non-normalizing path. The enum and manifest wire shape are unchanged.
+- **`gaze proxy` now resolves the same rulepacks, dictionaries, and
+  auto-activated locales as `gaze clean` for the same policy** (audit 7201
+  S11-F2, solo todo #2937). Previously the proxy assembled a narrower pipeline
+  that skipped dictionary values and locale-gated auto-activation.
+- **Proxy request protection and fail-closed residual validation now read the
+  same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
+  response validation plus the legacy primary and residual request passes; the
+  residual can no longer know fewer dictionary terms than the primary pass.
+- **`gaze-proxy` direct/codec primary and residual passes now use the resolved
+  locale chain instead of a pinned Global chain** (solo todo #2411). This
+  closes the direct/codec half after #2403 fixed the legacy path, and keeps both
+  passes aligned with the same configured dictionaries and document locales.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed

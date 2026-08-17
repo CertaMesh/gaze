@@ -14,21 +14,16 @@ use super::{
     SafetyNetFallback, SafetyNetKind, SafetyNetMode,
 };
 use crate::error::CliError;
-use crate::pipeline::build::{
-    build_pipeline_from_policy, dictionary_terms_from_rulepacks, load_rulepacks,
-    map_pipeline_error, map_policy_error, merged_rulepack_default_locales, resolve_ner_threshold,
-    ArcLogger,
-};
+use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
-    map_safety_net_pipeline_error, maybe_register_safety_net, parse_cli_locales, safety_net_policy,
+    map_safety_net_pipeline_error, maybe_register_safety_net, safety_net_policy,
     validate_safety_net_tolerant_gate, CleanOptions,
 };
 use gaze::{
-    dictionary_bundle_from_context, Action, ConflictTier, DictionaryBundle, DocumentKind,
-    EmittedTokenSpan, LeakReport, LocaleTag, PiiClass, Policy, RawDocument, RedactionEntry,
-    RedactionLogError, RedactionLogger, Result as GazeResult, Session, SessionSnapshotEntry,
-    TypedContext,
+    Action, ConflictTier, DictionaryBundle, DocumentKind, EmittedTokenSpan, LeakReport, LocaleTag,
+    PiiClass, Policy, RawDocument, RedactionEntry, RedactionLogError, RedactionLogger,
+    Result as GazeResult, Session, SessionSnapshotEntry,
 };
 use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 
@@ -151,52 +146,22 @@ impl Daemon {
         let options = clean_options(&args);
         let cli_ner_threshold = args
             .ner_threshold
-            .map(crate::pipeline::build::validate_ner_threshold)
+            .map(validate_ner_threshold)
             .transpose()
             .map_err(map_policy_error)?;
         let clean_overrides = clean_overrides_from_options(&options)?;
-        let loaded_policy = Policy::load_for_cli(&args.policy)
-            .map_err(map_policy_error)
-            .map(|policy| clean_overrides.apply_to(&policy))?;
-        let loaded_rulepacks = load_rulepacks(&loaded_policy).map_err(map_pipeline_error)?;
-        let rulepack_dictionaries =
-            dictionary_terms_from_rulepacks(&loaded_rulepacks).map_err(map_pipeline_error)?;
-        let mut policy_dictionaries = loaded_policy.dictionaries.clone();
-        policy_dictionaries.extend(rulepack_dictionaries);
-        let dictionaries = DictionaryBundle::merge(
-            DictionaryBundle::from_rulepack_terms(&policy_dictionaries),
-            dictionary_bundle_from_context(&TypedContext {
-                dictionaries: std::collections::HashMap::new(),
-                class_map: std::collections::HashMap::new(),
-                fields: serde_json::Map::new(),
-            }),
-        );
-        let mut rulepack_default_locales = merged_rulepack_default_locales(&loaded_rulepacks);
-        if loaded_policy.rulepacks.auto_activate_locale_gated {
-            // Derived from the loaded packs (audit 7201 S10-F2), same source of
-            // truth as `gaze clean` and `CorePipelineConfig`.
-            for locale in gaze_assembly::locale_gated_activation_locales(&loaded_rulepacks) {
-                if !rulepack_default_locales.contains(&locale) {
-                    rulepack_default_locales.push(locale);
-                }
-            }
-        }
-        let cli_locales = parse_cli_locales(&args.locale)?;
-        let locale_chain = gaze::LocaleChain::merge_cli_policy_rulepack_default(
-            cli_locales.as_deref(),
-            loaded_policy.locale.as_deref(),
-            Some(&rulepack_default_locales),
-        );
-        let resolved_ner_threshold = resolve_ner_threshold(cli_ner_threshold, Some(&loaded_policy));
-        let pipeline = build_pipeline_from_policy(
-            &loaded_policy,
-            &loaded_rulepacks,
+        let resolved = resolve_pipeline(
+            Some(&args.policy),
+            &clean_overrides,
+            &args.locale,
+            cli_ner_threshold,
             None,
-            &locale_chain,
-            resolved_ner_threshold,
-        )?
-        .with_redaction_logger(ArcLogger(Arc::clone(&logger) as Arc<dyn RedactionLogger>));
-        let pipeline = maybe_register_safety_net(pipeline, &options)?;
+            Some(Arc::clone(&logger) as Arc<dyn RedactionLogger>),
+        )?;
+        let loaded_policy = resolved.policy.expect("daemon requires a policy path");
+        let locale_chain = resolved.locale_chain;
+        let dictionaries = resolved.dictionaries;
+        let pipeline = maybe_register_safety_net(resolved.pipeline, &options)?;
         Ok(Self {
             pipeline,
             policy: loaded_policy,
