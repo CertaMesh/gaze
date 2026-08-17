@@ -833,6 +833,104 @@ fn mandatory_anchor_present_keeps_variant_token_without_ambiguity() {
     assert!(winner.ambiguity_record.is_none());
 }
 
+#[test]
+fn anchored_iban_beating_a_rival_on_score_logs_score_not_anchored_context() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    // Anchored IBAN pipeline plus a lower-score digit-run rival that lands
+    // inside the IBAN span; the anchor is present, so the variant token wins
+    // by Score and the audit row must say so.
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b",
+                PiiClass::Custom("iban".to_string()),
+                "iban.structural",
+                vec![gaze::LocaleTag::Global],
+                0.70,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::IbanMod97),
+                Some(NormalizerKind::IbanCanonical),
+            )
+            .expect("iban detector"),
+        )
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b\d{4}\b",
+                PiiClass::Custom("digits".to_string()),
+                "digits.generic",
+                vec![gaze::LocaleTag::Global],
+                0.50,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("digits detector"),
+        )
+        .register_collision(
+            "iban.structural",
+            CollisionMembership::new("payment-card-or-iban", "iban", 10, Some("iban".to_string())),
+        )
+        .register_anchor_cue_bundle(
+            gaze::LocaleTag::DeDe,
+            "iban",
+            vec!["IBAN:".to_string(), "IBAN".to_string()],
+            Some(64),
+        )
+        .rule(ClassRule::new(
+            PiiClass::Custom("iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("digits".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .pseudonymize_with_context(
+            &session,
+            RawDocument::Text("IBAN: DE89 3704 0044 0532 0130 00".to_string()),
+            &[gaze::LocaleTag::DeDe],
+        )
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+    assert!(clean.contains(":Custom:iban_"), "{clean}");
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.recognizer_id.as_deref(), Some("iban.structural"));
+    assert_eq!(winner.class, PiiClass::Custom("iban".to_string()));
+    assert_eq!(winner.decided_by, gaze::ConflictTier::Score);
+    assert!(winner.ambiguity_record.is_none());
+    let losers: Vec<_> = entries
+        .iter()
+        .filter(|entry| entry.conflict_loser)
+        .collect();
+    assert!(
+        !losers.is_empty(),
+        "digit-run rivals must be logged as losers"
+    );
+    for loser in losers {
+        assert_eq!(loser.recognizer_id.as_deref(), Some("digits.generic"));
+        assert_eq!(loser.decided_by, gaze::ConflictTier::Score);
+    }
+}
+
 fn mandatory_anchor_iban_pipeline(logger: MemoryLogger) -> Pipeline {
     Pipeline::builder()
         .recognizer(

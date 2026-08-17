@@ -103,9 +103,7 @@ fn insert_candidate(
                 }
             }
             Arbitration::ExistingWins(tier) => {
-                if let Some(tier) = tier {
-                    resolved[index].decided_by = tier;
-                }
+                resolved[index].decided_by = tier;
                 resolved[index].merged_sources.push(candidate.source);
             }
         }
@@ -150,9 +148,9 @@ enum Arbitration {
     Family(Candidate),
     /// `candidate` replaces `existing`; the tier names what decided it.
     CandidateWins(ConflictTier),
-    /// `existing` keeps the slot. `Some(tier)` re-labels its `decided_by`;
-    /// `None` leaves the previous label untouched.
-    ExistingWins(Option<ConflictTier>),
+    /// `existing` keeps the slot; the tier names the rung that separated the
+    /// pair (never a label left over from an earlier overlap).
+    ExistingWins(ConflictTier),
 }
 
 fn arbitrate(
@@ -171,33 +169,71 @@ fn arbitrate(
     if overlap == Overlap::Exact && existing.class == candidate.class {
         return Arbitration::Merge;
     }
-    if let Some(tier) = should_replace(candidate, existing, overlap, policy, anchor_ctx) {
-        return Arbitration::CandidateWins(tier);
+
+    // Same-class containment prefers the validator-backed span, then the base
+    // ladder; policy and anchors do not apply inside one class.
+    if overlap == Overlap::Containment && existing.class == candidate.class {
+        let candidate_validated = candidate.canonical_form.is_some();
+        let existing_validated = existing.canonical_form.is_some();
+        if candidate_validated != existing_validated {
+            return if candidate_validated {
+                Arbitration::CandidateWins(ConflictTier::Validator)
+            } else {
+                Arbitration::ExistingWins(ConflictTier::Validator)
+            };
+        }
+        return ladder_verdict(existing, candidate);
     }
-    Arbitration::ExistingWins(should_replace(
-        existing, candidate, overlap, policy, anchor_ctx,
-    ))
+
+    if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
+    {
+        return if candidate_wins {
+            Arbitration::CandidateWins(ConflictTier::CollisionPolicy)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::CollisionPolicy)
+        };
+    }
+
+    // Anchor rung, consulted once per pair: an anchored *incoming* candidate
+    // takes the slot from a rival outside its family and defers the
+    // found/missing verdict to `apply_missing_anchor_fallback`. An anchored
+    // incumbent gets no short-circuit; the ladder decides and names the tier,
+    // so `AnchoredContext` is never stamped on a ladder-decided overlap.
+    if let Some(anchor_ctx) = anchor_ctx {
+        if requires_anchor(candidate, policy, anchor_ctx) {
+            return Arbitration::CandidateWins(ConflictTier::AnchoredContext);
+        }
+    }
+
+    ladder_verdict(existing, candidate)
 }
 
-/// Does `left` beat `right`? Same-class containment prefers the validator-backed
-/// span before the base ladder; every other overlap goes through the policy /
-/// anchor / ladder spec.
-fn should_replace(
-    left: &Candidate,
-    right: &Candidate,
-    overlap: Overlap,
+fn requires_anchor(
+    candidate: &Candidate,
     policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    if overlap == Overlap::Containment && left.class == right.class {
-        let left_validated = left.canonical_form.is_some();
-        let right_validated = right.canonical_form.is_some();
-        if left_validated != right_validated {
-            return left_validated.then_some(ConflictTier::Validator);
-        }
-        return compare_base_ladder(left, right);
+    anchor_ctx: AnchorContext<'_>,
+) -> bool {
+    match anchor_ctx
+        .resolver
+        .resolve(candidate, anchor_ctx.input, policy, anchor_ctx.locale_chain)
+    {
+        AnchorOutcome::Found | AnchorOutcome::Missing { .. } => true,
+        AnchorOutcome::NotRequired => false,
     }
-    compare_by_spec(left, right, policy, anchor_ctx)
+}
+
+/// Runs the base ladder in both directions and labels the winner with the rung
+/// that separated the pair. When every rung ties (same recognizer id, class
+/// priority, rule priority, score, and length) the incumbent keeps the slot
+/// and the row carries the terminal `RecognizerId` rung rather than a stale
+/// tier from an earlier overlap.
+fn ladder_verdict(existing: &Candidate, candidate: &Candidate) -> Arbitration {
+    if let Some(tier) = compare_base_ladder(candidate, existing) {
+        return Arbitration::CandidateWins(tier);
+    }
+    Arbitration::ExistingWins(
+        compare_base_ladder(existing, candidate).unwrap_or(ConflictTier::RecognizerId),
+    )
 }
 
 fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
@@ -223,32 +259,6 @@ fn append_unique(existing: &mut String, next: &str) {
         existing.push('+');
     }
     existing.push_str(next);
-}
-
-fn compare_by_spec(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
-    {
-        return candidate_wins.then_some(ConflictTier::CollisionPolicy);
-    }
-    if let Some(anchor_ctx) = anchor_ctx {
-        match anchor_ctx.resolver.resolve(
-            candidate,
-            anchor_ctx.input,
-            policy,
-            anchor_ctx.locale_chain,
-        ) {
-            AnchorOutcome::Found | AnchorOutcome::Missing { .. } => {
-                return Some(ConflictTier::AnchoredContext);
-            }
-            AnchorOutcome::NotRequired => {}
-        }
-    }
-    compare_base_ladder(candidate, existing)
 }
 
 /// The base conflict ladder: class-priority > rule-priority > score >
@@ -569,5 +579,95 @@ mod tests {
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].span, 0..10);
         assert_eq!(resolved[0].class, PiiClass::Email);
+    }
+
+    /// The anchor short-circuit must not label an overlap the base ladder
+    /// decided. Here the anchored incumbent wins on Score; the audit row has to
+    /// say Score, not AnchoredContext.
+    #[test]
+    fn anchored_incumbent_that_wins_on_score_is_labelled_score() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
+                candidate(6..10, PiiClass::custom("digits"), 0.50, "digits.generic"),
+            ],
+            registry.family_policy(),
+            &anchors,
+            "IBAN: DE89",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].class, PiiClass::custom("iban"));
+        assert_eq!(
+            resolved[0].merged_sources,
+            vec!["digits.generic".to_string()]
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::Score);
+    }
+
+    /// Same mislabel through the partial-overlap path.
+    #[test]
+    fn anchored_incumbent_that_wins_partial_overlap_on_score_is_labelled_score() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
+                candidate(8..12, PiiClass::custom("digits"), 0.50, "digits.generic"),
+            ],
+            registry.family_policy(),
+            &anchors,
+            "IBAN: DE8912",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].span, 6..10);
+        assert_eq!(resolved[0].decided_by, ConflictTier::Score);
+    }
+
+    /// When the ladder is exhausted (identical recognizer id, class, priority,
+    /// score, and length) the incumbent keeps the slot; the row must carry the
+    /// terminal rung, not whatever tier an earlier overlap stamped.
+    #[test]
+    fn fully_tied_partial_overlap_never_keeps_stale_tier() {
+        let resolved = resolve_candidates(vec![
+            candidate(0..4, PiiClass::Name, 0.70, "dict"),
+            candidate(2..6, PiiClass::Name, 0.70, "dict"),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 0..4);
+        assert_eq!(resolved[0].merged_sources, vec!["dict".to_string()]);
+        assert_eq!(resolved[0].decided_by, ConflictTier::RecognizerId);
     }
 }
