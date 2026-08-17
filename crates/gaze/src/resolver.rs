@@ -78,91 +78,126 @@ fn insert_candidate(
 ) {
     let mut index = 0;
     while index < resolved.len() {
-        if !overlaps(&resolved[index].span, &candidate.span) {
+        let Some(overlap) = Overlap::classify(&resolved[index].span, &candidate.span) else {
             index += 1;
             continue;
-        }
+        };
 
-        if resolved[index].span == candidate.span {
-            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
+        match arbitrate(&resolved[index], &candidate, overlap, policy, anchor_ctx) {
+            Arbitration::Merge => merge_same_span_same_class(&mut resolved[index], candidate),
+            Arbitration::Family(tie) => {
                 resolved[index] = tie;
-                return;
+                if overlap != Overlap::Exact {
+                    remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
+                }
             }
-            if resolved[index].class == candidate.class {
-                merge_same_span_same_class(&mut resolved[index], candidate);
-                return;
-            }
-            if let Some(tier) =
-                should_replace_same_span_class(&candidate, &resolved[index], policy, anchor_ctx)
-            {
+            Arbitration::CandidateWins(tier) => {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
                 candidate
                     .merged_sources
                     .push(resolved[index].source.clone());
                 resolved[index] = candidate;
-            } else {
-                if let Some(tier) =
-                    should_replace_same_span_class(&resolved[index], &candidate, policy, anchor_ctx)
-                {
+                if overlap != Overlap::Exact {
+                    remove_overlaps(resolved, index, tier);
+                }
+            }
+            Arbitration::ExistingWins(tier) => {
+                if let Some(tier) = tier {
                     resolved[index].decided_by = tier;
                 }
                 resolved[index].merged_sources.push(candidate.source);
             }
-            return;
-        }
-
-        if contains(&resolved[index].span, &candidate.span)
-            || contains(&candidate.span, &resolved[index].span)
-        {
-            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
-                resolved[index] = tie;
-                remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
-            } else if let Some(tier) =
-                should_replace_containment(&candidate, &resolved[index], policy, anchor_ctx)
-            {
-                let mut candidate = candidate;
-                candidate.decided_by = tier;
-                candidate
-                    .merged_sources
-                    .push(resolved[index].source.clone());
-                resolved[index] = candidate;
-                remove_overlaps(resolved, index, tier);
-            } else {
-                if let Some(tier) =
-                    should_replace_containment(&resolved[index], &candidate, policy, anchor_ctx)
-                {
-                    resolved[index].decided_by = tier;
-                }
-                resolved[index].merged_sources.push(candidate.source);
-            }
-            return;
-        }
-
-        if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
-            resolved[index] = tie;
-            remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
-        } else if let Some(tier) =
-            should_replace_partial_overlap(&candidate, &resolved[index], policy, anchor_ctx)
-        {
-            let mut candidate = candidate;
-            candidate.decided_by = tier;
-            candidate
-                .merged_sources
-                .push(resolved[index].source.clone());
-            resolved[index] = candidate;
-            remove_overlaps(resolved, index, tier);
-        } else {
-            if let Some(tier) =
-                should_replace_partial_overlap(&resolved[index], &candidate, policy, anchor_ctx)
-            {
-                resolved[index].decided_by = tier;
-            }
-            resolved[index].merged_sources.push(candidate.source);
         }
         return;
     }
     resolved.push(candidate);
+}
+
+/// Geometric relation between an already-resolved span and an incoming one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Overlap {
+    /// Identical spans: the winner keeps the slot; nothing else can overlap.
+    Exact,
+    /// One span fully covers the other (same-class containment gets the
+    /// validator-preference rule).
+    Containment,
+    /// Spans overlap without either covering the other.
+    Partial,
+}
+
+impl Overlap {
+    fn classify(existing: &Range<usize>, candidate: &Range<usize>) -> Option<Self> {
+        if !overlaps(existing, candidate) {
+            return None;
+        }
+        if existing == candidate {
+            Some(Self::Exact)
+        } else if contains(existing, candidate) || contains(candidate, existing) {
+            Some(Self::Containment)
+        } else {
+            Some(Self::Partial)
+        }
+    }
+}
+
+/// Outcome of arbitrating one overlapping pair.
+enum Arbitration {
+    /// Exact span, same class: provenance and confidence merge into `existing`.
+    Merge,
+    /// Precedence tie inside one collision family: emit the family-level
+    /// candidate in place of both rivals.
+    Family(Candidate),
+    /// `candidate` replaces `existing`; the tier names what decided it.
+    CandidateWins(ConflictTier),
+    /// `existing` keeps the slot. `Some(tier)` re-labels its `decided_by`;
+    /// `None` leaves the previous label untouched.
+    ExistingWins(Option<ConflictTier>),
+}
+
+fn arbitrate(
+    existing: &Candidate,
+    candidate: &Candidate,
+    overlap: Overlap,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> Arbitration {
+    // Family tie must be checked before the same-class merge and before any
+    // ladder: two equal-precedence variants collapse into one family token even
+    // when they share a class.
+    if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
+        return Arbitration::Family(tie);
+    }
+    if overlap == Overlap::Exact && existing.class == candidate.class {
+        return Arbitration::Merge;
+    }
+    if let Some(tier) = should_replace(candidate, existing, overlap, policy, anchor_ctx) {
+        return Arbitration::CandidateWins(tier);
+    }
+    Arbitration::ExistingWins(should_replace(
+        existing, candidate, overlap, policy, anchor_ctx,
+    ))
+}
+
+/// Does `left` beat `right`? Same-class containment prefers the validator-backed
+/// span before the base ladder; every other overlap goes through the policy /
+/// anchor / ladder spec.
+fn should_replace(
+    left: &Candidate,
+    right: &Candidate,
+    overlap: Overlap,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> Option<ConflictTier> {
+    if overlap == Overlap::Containment && left.class == right.class {
+        let left_validated = left.canonical_form.is_some();
+        let right_validated = right.canonical_form.is_some();
+        if left_validated != right_validated {
+            return left_validated.then_some(ConflictTier::Validator);
+        }
+        return compare_base_ladder(left, right);
+    }
+    compare_by_spec(left, right, policy, anchor_ctx)
 }
 
 fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
@@ -190,67 +225,6 @@ fn append_unique(existing: &mut String, next: &str) {
     existing.push_str(next);
 }
 
-fn should_replace_same_span_class(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
-fn should_replace_containment(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    if candidate.class == existing.class {
-        let candidate_validated = candidate.canonical_form.is_some();
-        let existing_validated = existing.canonical_form.is_some();
-        if candidate_validated != existing_validated {
-            return candidate_validated.then_some(ConflictTier::Validator);
-        }
-
-        if class_priority(&candidate.class) != class_priority(&existing.class) {
-            return (class_priority(&candidate.class) > class_priority(&existing.class))
-                .then_some(ConflictTier::ClassPriority);
-        }
-
-        if candidate.priority != existing.priority {
-            return (candidate.priority > existing.priority).then_some(ConflictTier::RulePriority);
-        }
-
-        if candidate.score != existing.score {
-            return candidate
-                .score
-                .total_cmp(&existing.score)
-                .is_gt()
-                .then_some(ConflictTier::Score);
-        }
-
-        let candidate_len = candidate.span.end - candidate.span.start;
-        let existing_len = existing.span.end - existing.span.start;
-        if candidate_len != existing_len {
-            return (candidate_len > existing_len).then_some(ConflictTier::SpanLength);
-        }
-
-        return (candidate.recognizer_id < existing.recognizer_id)
-            .then_some(ConflictTier::RecognizerId);
-    }
-
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
-fn should_replace_partial_overlap(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
 fn compare_by_spec(
     candidate: &Candidate,
     existing: &Candidate,
@@ -274,6 +248,13 @@ fn compare_by_spec(
             AnchorOutcome::NotRequired => {}
         }
     }
+    compare_base_ladder(candidate, existing)
+}
+
+/// The base conflict ladder: class-priority > rule-priority > score >
+/// span-length > recognizer-id. Returns the tier at which `candidate` beats
+/// `existing`, or `None` when it does not.
+fn compare_base_ladder(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
     if class_priority(&candidate.class) != class_priority(&existing.class) {
         return (class_priority(&candidate.class) > class_priority(&existing.class))
             .then_some(ConflictTier::ClassPriority);
