@@ -67,6 +67,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Persistent owner-side corpus index schema v2: each document is stored
+  once, postings are derived on load, and re-ingest upserts** (audit 7201
+  S17-F1, todo #2936). `gaze_token_bridge::persistent::FileCorpusIndexStore`
+  previously wrote one record per distinct fingerprint, each carrying a full
+  copy of the document (snippet plus every entity's raw value), so a document
+  with E entities was duplicated E times on disk, and re-ingesting a `doc_id`
+  without clearing the domain left the stale copy first in scan order (the
+  stale snippet won). Raw document snippets and entity values are now persisted
+  exactly once per `(domain_id, doc_id)`; the fingerprint-to-document postings
+  map is rebuilt on load and never written to disk; `insert_hit` replaces an
+  existing `(domain_id, doc_id)` outright, and `clear_domain` + `save` leaves
+  no document bytes in the sealed payload.
+
+  **Breaking for existing local index files.** `SCHEMA_VERSION` is now `2`.
+  Loading a v1 `index.json` fails closed with the typed
+  `unsupported owner-side index schema 1; supported 2` error (the version is
+  checked before the payload shape, so there is no partial or reinterpreted
+  load), and a v2 payload carrying duplicate document keys is rejected the
+  same way. Rebuild local indexes by re-running `gaze index ingest <dir>`.
+  The `entities: N` metric printed by `gaze index ingest` keeps its meaning
+  (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
+  was removed (it had no callers). The AEAD/key layer and the sealed-file
+  envelope are unchanged.
+
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
   actual registration and uses one locale predicate** (audit 7201 S10-F1,
   todo #2928). The guard now fails closed when zero recognizers were
