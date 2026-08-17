@@ -65,6 +65,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
   separate no-policy stub path is unchanged.
 
+- **Corpus-informed government-ID recognizers at the deterministic rule floor**
+  (todos #2318 follow-on, #2923). Four cue-anchored `safe_default` recognizers
+  join the embedded `core` bundle: `ssn.de_cue` (German social-insurance cues
+  such as `Sozialversicherungsnummer` and `SV-Nummer` before dashed, dotted, or
+  9 to 11 digit values, class `custom:ssn`), `tax_number.cue_anchored`
+  (`custom:tax_number`), `driver_license.cue_anchored`
+  (`custom:driver_license`), and `national_id.cue_anchored`
+  (`custom:national_id`). Every chosen shape was picked by measured sweep against
+  looser drafts and matches 0 of the 1,024 committed A4 negative documents.
+
+  Locale basis follows the mixed model from #414: `ssn.de_cue` is a
+  format-basis sibling of `ssn.us` (same class, same national identifier
+  shapes, German cue vocabulary, DACH provenance) and is an explicit addition
+  to the ratified format-basis promotion set; the three bilingual cue-anchored
+  recognizers are document-basis `global`, like `security_token.anchored`. All
+  four therefore fire under every locale chain, including `--locale=global`.
+  `ssn.us` keeps its pattern, locales, and basis unchanged; the only edit to it
+  is the symmetric `cooperates_with` metadata line. Cross-class overlaps between
+  the numeric shapes are resolved by the new `government-id` collision family
+  (`ssn` 10 beats `tax-number` 20 beats `national-id` 30; lower wins).
+
+  Measured on the pre-#414 basis (fresh scorecard on `main` pending): the
+  deterministic cells removed 3,221 leaked bytes each (SSN -1,085, DRIVERLICENSENUM
+  -682, NATIONALID -493, TAXNUM -442, plus spillover onto IDCARDNUM -464 and
+  PASSPORTID -53 that is not target-class performance), covered 309 more
+  entities fully, and added 9 false-positive bytes in 1 document (about 358:1).
+  **Disclosed regression:** in the full-stack Kiji `resolve` cell the same
+  change lost a few covered bytes on SECURITYTOKEN (+32), PASSWORD (+31), and
+  USERNAME (+27) — the downstream safety-net interaction tracked as todo #2491
+  (mechanism #2420), not a resolver decision, and unaffected by collision
+  precedence.
+
+  `tax_number.cue_anchored` deliberately requires a three-digit lead and
+  internal separators: it cedes the checksummed 2-3-3-3 Steuer-ID shape to
+  `steuer_id.de` and excludes A4's bare-digit invalid identifiers, so its
+  measured 16.8% coverage is a precision choice, not a detection deficiency.
+  `national_id.cue_anchored` ships with a known, bounded gap: 77 bare German
+  NATIONALID spans carry no cue and are structurally unreachable by any
+  cue-anchored rule.
+
 ### Changed
 
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from

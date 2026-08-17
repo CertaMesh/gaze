@@ -88,9 +88,14 @@ format-basis rows, they record the identifier's format provenance.
 | `core` | `ssn.us` | `custom:ssn` | format | `en-US` | None |
 | `core` | `nino.uk` | `custom:nino` | format | `en-GB` | None |
 | `core` | `pan.in` | `custom:pan` | format | `en-IN`, `hi-IN` | None |
+| `core` | `ssn.de_cue` | `custom:ssn` | format | `de-DE`, `de-AT`, `de-CH` | None |
+| `core` | `tax_number.cue_anchored` | `custom:tax_number` | document | `global` | None |
+| `core` | `driver_license.cue_anchored` | `custom:driver_license` | document | `global` | None |
+| `core` | `national_id.cue_anchored` | `custom:national_id` | document | `global` | None |
 | `core-extended` | `postal.de` | `custom:postal_code` | document | `de-DE` | None |
 | `core-extended` | `postal.us` | `custom:postal_code` | document | `en-US` | None |
 | `core` | `url.anchored` | `custom:url` | document | `global` | None |
+| `core` | `security_token.anchored` | `custom:security_token` | document | `global` | None |
 | NER artifact | `ner` | `Name` | document | Policy-selected NER locale, or any locale when unset | None |
 
 The NER recognizer keeps semantic `recognizer_id = "ner"` for registry
