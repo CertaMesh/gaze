@@ -67,6 +67,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
+  actual registration and uses one locale predicate** (audit 7201 S10-F1,
+  todo #2928). The guard now fails closed when zero recognizers were
+  registered, instead of re-deriving eligibility from policy and rulepack
+  metadata. Two behavioural consequences for adopters:
+  - Rulepack recognizers with an **empty locale list** (a pack that omits both
+    `default_locales` and per-recognizer `locales`) now register and run under
+    every document locale chain, matching the detect-time
+    `LocaleChain::intersects` semantics that already treated an empty list as
+    matching. Previously assembly silently dropped them (a missed detection).
+    Bundled rulepacks are unaffected (every bundled recognizer declares
+    locales).
+  - An `anchored_match`-only rulepack whose optional builtin cue bucket
+    (`forward_markers`, `agent_recipient_cues`, `footer_cues`) is not present
+    under the active locale chain now fails with `NoRecognizers` instead of
+    building a zero-recognizer pipeline that preserved every byte.
+  NER model loading now runs before the guard; error precedence is unchanged
+  for reachable configurations (a configured `model_dir` that fails to load
+  still surfaces as `NerLoad`).
 - `[bundle-tokenization-drift]` snapshot for bundle `core` regenerated: the new
   `url.anchored` recognizer adds one `custom:url` detection to the drift corpus
   (11 -> 12 detections). No existing detection changed class, span, or shape.

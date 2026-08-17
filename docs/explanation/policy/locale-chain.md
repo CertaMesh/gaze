@@ -13,7 +13,11 @@ Recognizer eligibility then depends on `locale_basis`:
 - `document` (the default when an external rulepack omits the field) treats
   `locales` as an eligibility gate. A recognizer tagged `global` is eligible for
   every document locale. Other locale tags are strict:
-  `LocaleTag::Other(_)` matches only the same opaque tag.
+  `LocaleTag::Other(_)` matches only the same opaque tag. A recognizer whose
+  locale list is empty (an external pack that omits both `default_locales` and
+  per-recognizer `locales`) is eligible for every document locale; assembly
+  (`gaze_assembly::build_pipeline`) and detection (`LocaleChain::intersects`)
+  share this one predicate.
 - `format` treats `locales` as format provenance, not a document-language gate.
   The recognizer runs once regardless of the document locale and its candidates
   join the document-basis candidates before the normal conflict resolver runs.

@@ -1,13 +1,13 @@
-use gaze::{PipelineBuilder, PolicyError};
+use gaze::PolicyError;
 use gaze_recognizers::{NerOptions, NerRecognizer};
 
-use crate::BuildError;
+use crate::{registration::AssemblyBuilder, BuildError};
 
 pub(crate) fn register_ner(
-    mut builder: PipelineBuilder,
+    builder: &mut AssemblyBuilder,
     policy: &gaze::Policy,
     ner_threshold: Option<f32>,
-) -> Result<PipelineBuilder, BuildError> {
+) -> Result<(), BuildError> {
     if let Some(ner) = &policy.ner {
         if let Some(path) = &ner.model_dir {
             let detector = NerRecognizer::load_with_options(
@@ -18,9 +18,9 @@ pub(crate) fn register_ner(
                 },
             )
             .map_err(|err| PolicyError::NerLoad(err.to_string()))?;
-            builder = builder.recognizer(detector);
+            builder.recognizer(detector);
         }
     }
 
-    Ok(builder)
+    Ok(())
 }
