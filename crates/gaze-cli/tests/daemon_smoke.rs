@@ -4,6 +4,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Value};
+use serial_test::file_serial;
 use tempfile::tempdir;
 
 fn write_policy() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -37,6 +38,7 @@ action = "preserve"
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn daemon_processes_jsonl_and_isolates_sessions() {
     let (_dir, policy) = write_policy();
     let audit_dir = tempdir().unwrap();
@@ -133,6 +135,7 @@ fn daemon_processes_jsonl_and_isolates_sessions() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn daemon_malformed_json_fails_closed_and_continues() {
     let (_dir, policy) = write_policy();
     let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))

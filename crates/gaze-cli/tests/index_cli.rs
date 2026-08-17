@@ -5,12 +5,26 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
+use serial_test::file_serial;
 
 const DOMAIN: &str = "local_owner/support_notes/v1";
 const TEST_INDEX_KEY: &str = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
 const WRONG_INDEX_KEY: &str = "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f";
 
+fn test_subprocess_timeout_ms() -> String {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    seconds.saturating_mul(1_000).to_string()
+}
+
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_then_search_returns_tokenized_hits_without_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -41,7 +55,7 @@ Second support note for search isolation.
     .expect("write beta");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -54,7 +68,7 @@ Second support note for search isolation.
     );
 
     let search = gaze_index_command(&fake_kiji)
-        .args(["index", "search", "alice@example.invalid"])
+        .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
         .output()
@@ -88,6 +102,7 @@ Second support note for search isolation.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_redacts_safety_net_only_prose_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -103,7 +118,7 @@ Support summary mentions Dr. Schmidt after triage.
     .expect("write safety-net-only");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -116,7 +131,7 @@ Support summary mentions Dr. Schmidt after triage.
     );
 
     let search = gaze_index_command(&fake_kiji)
-        .args(["index", "search", "Dr. Schmidt"])
+        .args(["search", "Dr. Schmidt"])
         .args(["--class", "name", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
         .output()
@@ -144,6 +159,7 @@ Support summary mentions Dr. Schmidt after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_redacts_residual_suspects_by_default_without_raw_persistence() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -160,7 +176,7 @@ Support summary mentions Dr. Schmidt marker after triage.
     .expect("write residual");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -173,7 +189,7 @@ Support summary mentions Dr. Schmidt marker after triage.
     );
 
     let search = gaze_index_command(&fake_kiji)
-        .args(["index", "search", "alice@example.invalid"])
+        .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
         .output()
@@ -207,6 +223,7 @@ Support summary mentions Dr. Schmidt marker after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_strict_residual_mode_fails_closed_with_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -222,7 +239,7 @@ Support summary mentions Dr. Schmidt marker after triage.
     .expect("write strict");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args([
             "--on-residual",
@@ -256,6 +273,7 @@ Support summary mentions Dr. Schmidt marker after triage.
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_search_wrong_key_surfaces_decrypt_reason() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -265,7 +283,7 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
     fs::write(corpus.join("alpha.md"), "Email: alice@example.invalid\n").expect("write alpha");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -278,7 +296,7 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
     );
 
     let search = gaze_index_command_with_key(&fake_kiji, WRONG_INDEX_KEY)
-        .args(["index", "search", "alice@example.invalid"])
+        .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
         .output()
@@ -302,6 +320,7 @@ fn index_search_wrong_key_surfaces_decrypt_reason() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn realistic_prose_name_org_email_regression_never_returns_raw_values() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -317,7 +336,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
     .expect("write prose");
 
     let ingest = gaze_index_command(&fake_kiji)
-        .args(["index", "ingest"])
+        .arg("ingest")
         .arg(&corpus)
         .args(["--domain", DOMAIN, "--index-path"])
         .arg(&index)
@@ -335,7 +354,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
     );
 
     let search = gaze_index_command(&fake_kiji)
-        .args(["index", "search", "alice@example.invalid"])
+        .args(["search", "alice@example.invalid"])
         .args(["--class", "email", "--domain", DOMAIN, "--index-path"])
         .arg(&index)
         .output()
@@ -359,6 +378,7 @@ Support summary: Alice Mueller from Globex GmbH wrote from alice@example.invalid
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn index_ingest_fails_closed_without_kiji_model_or_command() {
     let temp = tempfile::tempdir().expect("tempdir");
     let corpus = temp.path().join("corpus");
@@ -396,6 +416,10 @@ fn gaze_index_command(fake_kiji: &Path) -> Command {
 fn gaze_index_command_with_key(fake_kiji: &Path, index_key: &str) -> Command {
     let mut command = Command::cargo_bin("gaze").expect("gaze bin");
     command
+        .args([
+            "index",
+            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
+        ])
         .env("GAZE_KIJI_DISTILBERT_COMMAND", fake_kiji)
         .env_remove("GAZE_KIJI_DISTILBERT_MODEL_DIR")
         .env("GAZE_INDEX_KEY", index_key);

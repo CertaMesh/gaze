@@ -276,6 +276,9 @@ enum Cmd {
     /// Requires the binary to be built with `--features index`.
     #[cfg(feature = "index")]
     Index {
+        /// Safety-net subprocess timeout in milliseconds.
+        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
+        safety_net_timeout_ms: u64,
         #[command(subcommand)]
         command: IndexCmd,
     },
@@ -1064,7 +1067,10 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             }),
         },
         #[cfg(feature = "index")]
-        Cmd::Index { command } => match command {
+        Cmd::Index {
+            safety_net_timeout_ms,
+            command,
+        } => match command {
             IndexCmd::Ingest {
                 dir,
                 domain,
@@ -1075,6 +1081,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 domain,
                 index_path,
                 on_residual,
+                safety_net_timeout_ms,
             }),
             IndexCmd::Search {
                 entity,
@@ -1086,6 +1093,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 domain,
                 class,
                 index_path,
+                safety_net_timeout_ms,
             }),
         },
         #[cfg(feature = "mcp")]

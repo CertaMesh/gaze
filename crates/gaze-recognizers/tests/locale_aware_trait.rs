@@ -5,14 +5,28 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use gaze_recognizers::safety_net::kiji_distilbert::{
     KijiDistilbertSafetyNet, SubprocessKijiConfig, REQUIRED_KIJI_ARTIFACTS,
 };
 use gaze_recognizers::{LocaleAwareModel, ModelHints, ModelInput, ModelStage};
 use gaze_types::{LocaleTag, PiiClass};
+use serial_test::file_serial;
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
+
+fn test_subprocess_timeout() -> Duration {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    Duration::from_secs(seconds)
+}
 
 fn write_mock_kiji(body: &str) -> (TempDir, PathBuf) {
     let dir = tempdir().unwrap();
@@ -69,6 +83,7 @@ fn kiji_locale_aware_model_reports_configured_native_locales() {
 }
 
 #[test]
+#[file_serial(gaze_subprocess)]
 fn kiji_infer_round_trips_spans_through_locale_aware_trait() {
     let (_kiji_dir, kiji) =
         write_mock_kiji(r#"[{"label":"person","start":0,"end":11,"score":0.97}]"#);
@@ -76,6 +91,7 @@ fn kiji_infer_round_trips_spans_through_locale_aware_trait() {
     let net = KijiDistilbertSafetyNet::new(
         SubprocessKijiConfig::new(&kiji)
             .with_model_dir(model_dir.path())
+            .with_timeout(test_subprocess_timeout())
             .with_expected_bundle_sha256_for_tests(expected_sha),
     );
     let model: &dyn LocaleAwareModel = &net;

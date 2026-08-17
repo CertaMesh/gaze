@@ -52,7 +52,7 @@ unicode-normalization = "0.1"
 criterion = "0.5"
 gaze = { path = "../gaze", package = "gaze-pii", default-features = false, features = ["test-support"] }
 gaze-assembly = { path = "../gaze-assembly" }
-serial_test = "3"
+serial_test = { version = "3", features = ["file_locks"] }
 tempfile = "3"
 
 [[test]]
