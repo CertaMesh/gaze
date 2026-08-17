@@ -46,20 +46,16 @@ impl Tool for ExportSessionTokensTool {
     async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
         let session = ctx.resources().session();
         let mut entries = session
-            .tokens()
+            .snapshot_entries()
             .into_iter()
-            .map(|token| {
-                let raw = session
-                    .restore_strict(&token)
-                    .map_err(ToolError::internal)?;
-                let class = classify_token(&token)?;
-                Ok(json!({
-                    "token": token,
-                    "raw": raw,
-                    "class": class,
-                }))
+            .map(|entry| {
+                json!({
+                    "token": entry.token,
+                    "raw": entry.raw,
+                    "class": entry.class.class_name(),
+                })
             })
-            .collect::<Result<Vec<_>, ToolError>>()?;
+            .collect::<Vec<_>>();
         entries.sort_by(|left, right| left["token"].as_str().cmp(&right["token"].as_str()));
         let count = entries.len();
         Ok(ToolResponse::json(json!({
@@ -69,45 +65,6 @@ impl Tool for ExportSessionTokensTool {
         })))
     }
 }
-
-fn classify_token(token: &str) -> Result<String, ToolError> {
-    if token.starts_with("email") && token.ends_with("@gaze-fake.invalid") {
-        return Ok("Email".to_string());
-    }
-    let core = token
-        .strip_prefix('<')
-        .and_then(|value| value.strip_suffix('>'))
-        .unwrap_or(token);
-    let after_session = if core.len() > 9
-        && core.as_bytes()[8] == b':'
-        && core[..8].bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
-        &core[9..]
-    } else {
-        core
-    };
-    let class_part = after_session
-        .rsplit_once('_')
-        .map(|(class, _)| class)
-        .ok_or_else(|| ToolError::internal(TokenClassError(token.to_string())))?;
-    if let Some(custom) = class_part
-        .strip_prefix("Custom:")
-        .or_else(|| class_part.strip_prefix("custom:"))
-    {
-        return Ok(format!("Custom:{custom}"));
-    }
-    Ok(match class_part {
-        "email" => "Email".to_string(),
-        "name" => "Name".to_string(),
-        "location" => "Location".to_string(),
-        "organization" => "Organization".to_string(),
-        class => class.to_string(),
-    })
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("could not classify token `{0}`")]
-struct TokenClassError(String);
 
 #[cfg(test)]
 mod tests {
@@ -198,6 +155,41 @@ mod tests {
 
         assert_eq!(response.payload["count"], 0);
         assert_eq!(response.payload["entries"], json!([]));
+    }
+
+    #[tokio::test]
+    async fn export_uses_manifest_class_for_builtin_and_custom_tokens() {
+        let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
+        let expected = [
+            (gaze::PiiClass::Name, "Dr. Schmidt"),
+            (gaze::PiiClass::Custom("order_id".to_string()), "ORDER-0001"),
+        ]
+        .into_iter()
+        .map(|(class, raw)| {
+            let token = session.tokenize(&class, raw).expect("token");
+            (token, raw, class.class_name())
+        })
+        .collect::<Vec<_>>();
+        let manifest = NullManifest;
+        let tool = ExportSessionTokensTool::new();
+
+        let response = tool
+            .invoke(&ctx(&pipeline, &session, &manifest))
+            .await
+            .expect("export response");
+
+        assert_eq!(response.payload["count"], expected.len());
+        for (token, raw, class) in expected {
+            let entry = response.payload["entries"]
+                .as_array()
+                .expect("entries array")
+                .iter()
+                .find(|entry| entry["token"] == token)
+                .expect("exported token");
+            assert_eq!(entry["raw"], raw);
+            assert_eq!(entry["class"], class);
+        }
     }
 
     #[tokio::test]

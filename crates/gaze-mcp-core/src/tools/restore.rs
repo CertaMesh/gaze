@@ -69,57 +69,19 @@ impl Tool for RestoreTool {
             .get("token")
             .and_then(|value| value.as_str())
             .ok_or_else(|| ToolError::InvalidArgs("missing required field `token`".to_string()))?;
-        let raw = ctx
+        let entry = ctx
             .resources()
             .session()
-            .restore(token)
+            .snapshot_entries()
+            .into_iter()
+            .find(|entry| entry.token == token)
             .ok_or_else(|| ToolError::NotFound(format!("token {token} not in session")))?;
-        let class = classify_token(token)?;
         Ok(ToolResponse::json(json!({
-            "raw": raw,
-            "class": class,
+            "raw": entry.raw,
+            "class": entry.class.class_name(),
         })))
     }
 }
-
-fn classify_token(token: &str) -> Result<String, ToolError> {
-    if token.starts_with("email") && token.ends_with("@gaze-fake.invalid") {
-        return Ok("Email".to_string());
-    }
-    let core = token
-        .strip_prefix('<')
-        .and_then(|value| value.strip_suffix('>'))
-        .unwrap_or(token);
-    let after_session = if core.len() > 9
-        && core.as_bytes()[8] == b':'
-        && core[..8].bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
-        &core[9..]
-    } else {
-        core
-    };
-    let class_part = after_session
-        .rsplit_once('_')
-        .map(|(class, _)| class)
-        .ok_or_else(|| ToolError::internal(TokenClassError(token.to_string())))?;
-    if let Some(custom) = class_part
-        .strip_prefix("Custom:")
-        .or_else(|| class_part.strip_prefix("custom:"))
-    {
-        return Ok(format!("Custom:{custom}"));
-    }
-    Ok(match class_part {
-        "email" => "Email".to_string(),
-        "name" => "Name".to_string(),
-        "location" => "Location".to_string(),
-        "organization" => "Organization".to_string(),
-        class => class.to_string(),
-    })
-}
-
-#[derive(Debug, thiserror::Error)]
-#[error("could not classify token `{0}`")]
-struct TokenClassError(String);
 
 #[cfg(test)]
 mod tests {
@@ -204,5 +166,33 @@ mod tests {
             tool.descriptor().response_redaction(),
             ResponseRedaction::BypassByOperator
         );
+    }
+
+    #[tokio::test]
+    async fn restore_uses_manifest_class_for_builtin_and_custom_tokens() {
+        let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
+        let manifest = NullManifest;
+        let tool = RestoreTool::new();
+
+        for (class, raw) in [
+            (gaze::PiiClass::Name, "Dr. Schmidt"),
+            (gaze::PiiClass::Custom("order_id".to_string()), "ORDER-0001"),
+        ] {
+            let expected_class = class.class_name();
+            let token = session.tokenize(&class, raw).expect("token");
+            let response = tool
+                .invoke(&ctx(
+                    &pipeline,
+                    &session,
+                    &manifest,
+                    json!({ "token": token }),
+                ))
+                .await
+                .expect("restore response");
+
+            assert_eq!(response.payload["raw"], raw);
+            assert_eq!(response.payload["class"], expected_class);
+        }
     }
 }
