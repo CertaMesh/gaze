@@ -160,6 +160,154 @@ pattern = '''alice@example\.invalid'''
     assert!(text.contains(":Email_"), "{text}");
 }
 
+// S10-F1 (audit 7201): the guard and registration must agree on ONE locale
+// predicate — the detect-time `LocaleChain::intersects` (empty list ⇒ matches).
+// A rulepack that omits both `default_locales` and per-recognizer `locales`
+// yields an empty locale list; the runtime would run it everywhere, so assembly
+// must register it instead of silently dropping it.
+#[test]
+fn empty_locale_rulepack_recognizer_registers_under_document_chain() {
+    let policy = name_email_policy(vec![LocaleTag::DeDe]);
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "no-locales"
+rulepack_version = "0.1.0"
+
+[[recognizers]]
+id = "unscoped.email"
+class = "Email"
+enabled = true
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#,
+    )
+    .expect("rulepack");
+    assert!(
+        rulepack.recognizers[0].locales.is_empty(),
+        "precondition: loader keeps an empty locale list when neither default_locales nor locales is set"
+    );
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+    assert!(
+        active_locales.intersects(&rulepack.recognizers[0].locales),
+        "precondition: detect-time predicate treats an empty locale list as matching"
+    );
+
+    let text = clean_with_policy_and_rulepacks(&policy, &[rulepack], "Email alice@example.invalid");
+
+    assert!(text.contains(":Email_"), "{text}");
+}
+
+// S10-F1 (audit 7201): an anchored_match recognizer whose optional builtin cue
+// bucket is absent under the active locale chain is skipped at registration.
+// The guard must see that skip; otherwise an anchored-only rulepack builds a
+// zero-recognizer pipeline that preserves every byte (silent fail-open).
+#[test]
+fn anchored_only_rulepack_without_cue_bucket_returns_no_recognizers() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "anchored-only"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+"#,
+    )
+    .expect("rulepack");
+    let policy = policy();
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+    let err = match build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    ) {
+        Ok(_) => panic!("anchored-only rulepack without its cue bucket must fail closed"),
+        Err(err) => err,
+    };
+
+    assert!(matches!(err, BuildError::NoRecognizers), "{err:?}");
+}
+
+// Pins #414: a format-basis recognizer registers regardless of the document
+// locale chain, so a format-only rulepack passes the guard under a chain that
+// would filter the same recognizer on document basis (compare
+// `build_pipeline_locale_filtered_rulepack_returns_no_recognizers`).
+#[test]
+fn format_basis_only_rulepack_passes_guard_under_non_matching_document_chain() {
+    let policy = empty_policy();
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "format-only"
+rulepack_version = "0.1.0"
+default_locales = ["de-DE"]
+
+[[recognizers]]
+id = "format.email"
+class = "Email"
+enabled = true
+locales = ["de-DE"]
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''alice@example\.invalid'''
+"#,
+    )
+    .expect("rulepack");
+    let active_locales = LocaleChain::merge_policy_and_cli(Some(&[LocaleTag::EnUs]), None);
+
+    build_pipeline(
+        &policy,
+        &empty_context(),
+        &[rulepack],
+        &active_locales,
+        None,
+    )
+    .expect("format-basis recognizer must register under a non-matching document chain");
+}
+
+// A configured-but-unloadable NER model surfaces as the NER load error; the
+// guard must not mask it as `NoRecognizers` (nor pass on the mere presence of a
+// `model_dir` — see `build_pipeline_ner_without_model_dir_returns_no_recognizers`).
+#[test]
+fn ner_load_failure_is_reported_not_masked_as_no_recognizers() {
+    let mut policy = empty_policy();
+    let mut ner = NerPolicy::default();
+    ner.model_dir = Some(std::path::PathBuf::from(
+        "/nonexistent/gaze-assembly-ner-model-dir",
+    ));
+    policy.ner = Some(ner);
+    let active_locales = LocaleChain::merge_policy_and_cli(policy.locale.as_deref(), None);
+
+    let err = match build_pipeline(&policy, &empty_context(), &[], &active_locales, None) {
+        Ok(_) => panic!("unloadable NER model must not build"),
+        Err(err) => err,
+    };
+
+    assert!(
+        matches!(err, BuildError::Policy(PolicyError::NerLoad(_))),
+        "{err:?}"
+    );
+}
+
 #[test]
 fn build_pipeline_ner_without_model_dir_returns_no_recognizers() {
     let mut policy = empty_policy();

@@ -1,27 +1,30 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use gaze::{
-    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PipelineBuilder,
-    PolicyError, RawMatch, Rulepack, RulepackError, SafetyTier,
+    Context, DetectorKind, LocaleBasis, LocaleChain, LocaleTag, PiiClass, PolicyError, RawMatch,
+    Rulepack, RulepackError, SafetyTier,
 };
 use gaze_recognizers::{
     AnchoredMatchRecognizer, DictionaryRecognizer, NormalizerKind, RegexDetector, ValidatorKind,
 };
 
-use crate::{class_map::class_for_dictionary, template::lower_regex_pattern, BuildError};
+use crate::{
+    class_map::class_for_dictionary, registration::AssemblyBuilder, template::lower_regex_pattern,
+    BuildError,
+};
 
 pub(crate) fn register_policy_detectors(
-    mut builder: PipelineBuilder,
+    builder: &mut AssemblyBuilder,
     policy: &gaze::Policy,
     context: &Context,
     registered_dictionaries: &mut BTreeSet<String>,
-) -> Result<PipelineBuilder, BuildError> {
+) -> Result<(), BuildError> {
     for detector in &policy.detectors {
         let recognizer_id = match detector.kind {
             DetectorKind::Dictionary => format!("dict/{}", detector.name),
             _ => detector.name.clone(),
         };
-        builder = match &detector.kind {
+        match &detector.kind {
             DetectorKind::Regex => builder.detector(RegexDetector::with_source(
                 detector
                     .pattern
@@ -49,7 +52,7 @@ pub(crate) fn register_policy_detectors(
                     dictionary_name,
                     detector.case_sensitive,
                     detector.token_family.clone(),
-                ))
+                ));
             }
             DetectorKind::Unknown(kind) => {
                 return Err(PolicyError::BadTtl(format!("unknown detector.kind '{kind}'")).into())
@@ -61,22 +64,22 @@ pub(crate) fn register_policy_detectors(
             }
         };
         if let Some(collision) = detector.collision.clone() {
-            builder = builder.register_collision(recognizer_id, collision);
+            builder.register_collision(recognizer_id, collision);
         }
     }
 
-    Ok(builder)
+    Ok(())
 }
 
 pub(crate) fn register_rulepack_recognizers(
-    mut builder: PipelineBuilder,
+    builder: &mut AssemblyBuilder,
     policy: &gaze::Policy,
     context: &Context,
     rulepacks: &[Rulepack],
     active_locales: &LocaleChain,
     locale_vocab: &HashMap<String, Vec<String>>,
     registered_dictionaries: &mut BTreeSet<String>,
-) -> Result<PipelineBuilder, BuildError> {
+) -> Result<(), BuildError> {
     let mut rulepack_recognizers = BTreeMap::<String, (String, gaze::RecognizerSpec)>::new();
     for rulepack in rulepacks {
         for recognizer in &rulepack.recognizers {
@@ -109,7 +112,7 @@ pub(crate) fn register_rulepack_recognizers(
             continue;
         }
         if let Some(collision) = recognizer.collision.clone() {
-            builder = builder.register_collision(recognizer.id.clone(), collision);
+            builder.register_collision(recognizer.id.clone(), collision);
         }
         match recognizer.matcher {
             RawMatch::Regex {
@@ -137,7 +140,7 @@ pub(crate) fn register_rulepack_recognizers(
                     .as_ref()
                     .map(|normalizer| NormalizerKind::parse(&normalizer.kind))
                     .transpose()?;
-                builder = builder.recognizer(
+                builder.recognizer(
                     RegexDetector::with_rulepack_fields(
                         &pattern,
                         recognizer.class,
@@ -185,7 +188,7 @@ pub(crate) fn register_rulepack_recognizers(
                 registered_dictionaries.insert(dictionary_name.clone());
                 let class =
                     class_for_dictionary(policy, context, &dictionary_name, recognizer.class)?;
-                builder = builder.recognizer(
+                builder.recognizer(
                     DictionaryRecognizer::with_rulepack_fields(
                         id,
                         class,
@@ -209,11 +212,6 @@ pub(crate) fn register_rulepack_recognizers(
                 name_shape,
                 cue_position,
             } => {
-                if recognizer.locale_basis == LocaleBasis::Document
-                    && !recognizer_matches_active_locale(&recognizer.locales, active_locales)
-                {
-                    continue;
-                }
                 let Some(cues) = locale_vocab.get(&cues_bucket) else {
                     if is_optional_builtin_cue_bucket(&cues_bucket) {
                         tracing::warn!(
@@ -245,7 +243,7 @@ pub(crate) fn register_rulepack_recognizers(
                 } else {
                     recognizer.locales
                 };
-                builder = builder.recognizer(
+                builder.recognizer(
                     AnchoredMatchRecognizer::new(
                         recognizer.id,
                         cues.clone(),
@@ -265,9 +263,18 @@ pub(crate) fn register_rulepack_recognizers(
         }
     }
 
-    Ok(builder)
+    Ok(())
 }
 
+/// Whether a rulepack recognizer is admitted for registration under `policy`
+/// and `active_locales`.
+///
+/// The locale test is the detect-time canonical one (`RecognizerRegistry`
+/// gating): a `LocaleBasis::Format` recognizer runs regardless of the document
+/// locale chain, and a `LocaleBasis::Document` recognizer runs when
+/// [`LocaleChain::intersects`] admits its locale list — an empty list matches
+/// every chain. Assembly must not narrow that predicate: a recognizer the
+/// runtime would run but assembly silently dropped is a missed detection.
 pub(crate) fn recognizer_activates(
     recognizer: &gaze::RecognizerSpec,
     policy: &gaze::Policy,
@@ -277,7 +284,7 @@ pub(crate) fn recognizer_activates(
         return false;
     }
     if recognizer.locale_basis == LocaleBasis::Document
-        && !recognizer_matches_active_locale(&recognizer.locales, active_locales)
+        && !active_locales.intersects(&recognizer.locales)
     {
         return false;
     }
@@ -298,16 +305,6 @@ pub(crate) fn recognizer_activates(
         SafetyTier::OptIn => false,
         _ => false,
     }
-}
-
-fn recognizer_matches_active_locale(locales: &[LocaleTag], active_locales: &LocaleChain) -> bool {
-    locales.iter().any(|locale| {
-        *locale == LocaleTag::Global
-            || active_locales
-                .as_slice()
-                .iter()
-                .any(|active| active == locale)
-    })
 }
 
 fn is_optional_builtin_cue_bucket(bucket: &str) -> bool {
@@ -363,17 +360,17 @@ fn convert_cue_position(cue_position: &str) -> gaze_recognizers::CuePosition {
 }
 
 pub(crate) fn register_context_dictionaries(
-    mut builder: PipelineBuilder,
+    builder: &mut AssemblyBuilder,
     policy: &gaze::Policy,
     context: &Context,
     registered_dictionaries: &BTreeSet<String>,
-) -> Result<PipelineBuilder, BuildError> {
+) -> Result<(), BuildError> {
     for name in context.dictionaries.keys() {
         if registered_dictionaries.contains(name) {
             continue;
         }
         let class = class_for_dictionary(policy, context, name, PiiClass::custom(name))?;
-        builder = builder.recognizer(DictionaryRecognizer::new(
+        builder.recognizer(DictionaryRecognizer::new(
             format!("context/{name}"),
             class,
             name,
@@ -382,5 +379,5 @@ pub(crate) fn register_context_dictionaries(
         ));
     }
 
-    Ok(builder)
+    Ok(())
 }

@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
-use gaze::{LocaleChain, PipelineBuilder, Rulepack};
+use gaze::{LocaleChain, Rulepack};
+
+use crate::registration::AssemblyBuilder;
 
 pub(crate) fn merged_locale_vocab(
     rulepacks: &[Rulepack],
@@ -35,10 +37,10 @@ pub(crate) fn merged_locale_vocab(
 }
 
 pub(crate) fn register_anchor_cue_bundles(
-    mut builder: PipelineBuilder,
+    builder: &mut AssemblyBuilder,
     rulepacks: &[Rulepack],
     active_locales: &LocaleChain,
-) -> PipelineBuilder {
+) {
     for active_locale in active_locales.as_slice() {
         for rulepack in rulepacks {
             if !rulepack.default_locales.contains(active_locale) {
@@ -48,7 +50,7 @@ pub(crate) fn register_anchor_cue_bundles(
                 continue;
             };
             for (anchor_key, bundle) in &locale.cues {
-                builder = builder.register_anchor_cue_bundle(
+                builder.register_anchor_cue_bundle(
                     active_locale.clone(),
                     anchor_key.clone(),
                     bundle.names.clone(),
@@ -57,5 +59,4 @@ pub(crate) fn register_anchor_cue_bundles(
             }
         }
     }
-    builder
 }
