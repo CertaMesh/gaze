@@ -1,6 +1,7 @@
 use assert_cmd::Command;
 use gaze_audit::{
-    build_audit_query_sql, AuditFilter, DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
+    build_audit_query_sql, AuditFilter, PresentColumns, AUDIT_RESTRICTED_COLUMNS,
+    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
 };
 use rusqlite::{types::Value as SqlValue, Connection};
 use serde_json::Value;
@@ -469,11 +470,13 @@ fn audit_sql_uses_restricted_column_set() {
         provenance_merged_from: None,
         restore_events_only: false,
     };
-    let (current_sql, values) = build_audit_query_sql(
-        &filter, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true, true, true, true, true, true, true, true, true, true, true, true, true, true,
-        true, true,
+    let current_columns = PresentColumns::new(
+        AUDIT_RESTRICTED_COLUMNS
+            .iter()
+            .map(|column| (*column).to_string())
+            .collect(),
     );
+    let (current_sql, values) = build_audit_query_sql(&filter, &current_columns);
     assert_eq!(
         values,
         [
@@ -507,39 +510,8 @@ fn audit_sql_uses_restricted_column_set() {
         snapshot_key_version: Some(1),
         ..AuditFilter::default()
     };
-    let (legacy_sql, legacy_values) = build_audit_query_sql(
-        &legacy_filter,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-        false,
-    );
+    let legacy_columns = PresentColumns::default();
+    let (legacy_sql, legacy_values) = build_audit_query_sql(&legacy_filter, &legacy_columns);
     assert_restricted_sql(&legacy_sql);
     assert!(legacy_sql.contains("'none' AS decided_by"));
     assert!(legacy_sql.contains("NULL AS created_at"));

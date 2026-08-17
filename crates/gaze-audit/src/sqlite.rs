@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -12,7 +13,7 @@ use thiserror::Error;
 
 use crate::query::{
     build_audit_query_sql, build_safety_net_query_sql, AuditFilter, AuditLogRow, LeakSuspectRow,
-    DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
+    PresentColumns, DEFAULT_SNAPSHOT_ALG, DEFAULT_SNAPSHOT_SCHEME,
 };
 
 pub type Result<T> = std::result::Result<T, AuditError>;
@@ -491,73 +492,8 @@ impl SqliteLogger {
     /// moved into a pipeline or dropped.
     pub fn query(path: &Path, filter: &AuditFilter) -> Result<Vec<AuditLogRow>> {
         let conn = open_audit_query_connection(path)?;
-        let has_decided_by = table_has_column(&conn, "decided_by")?;
-        let has_created_at = table_has_column(&conn, "created_at")?;
-        let has_session_id = table_has_column(&conn, "session_id")?;
-        let has_snapshot_scheme = table_has_column(&conn, "snapshot_scheme")?;
-        let has_snapshot_alg = table_has_column(&conn, "snapshot_alg")?;
-        let has_snapshot_key_version = table_has_column(&conn, "snapshot_key_version")?;
-        let has_validator_fail_reason = table_has_column(&conn, "validator_fail_reason")?;
-        let has_ambiguity_record = table_has_column(&conn, "ambiguity_record")?;
-        let has_collision_family = table_has_column(&conn, "collision_family")?;
-        let has_collision_variant = table_has_column(&conn, "collision_variant")?;
-        let has_fallback_triggered = table_has_column(&conn, "fallback_triggered")?;
-        let has_recognizer_id = table_has_column(&conn, "recognizer_id")?;
-        let has_recognizer_version_id = table_has_column(&conn, "recognizer_version_id")?;
-        let has_provenance_stage = table_has_column(&conn, "provenance_stage")?;
-        let has_provenance_model_id = table_has_column(&conn, "provenance_model_id")?;
-        let has_provenance_model_version = table_has_column(&conn, "provenance_model_version")?;
-        let has_provenance_artifact_sha256 = table_has_column(&conn, "provenance_artifact_sha256")?;
-        let has_provenance_tokenizer_sha256 =
-            table_has_column(&conn, "provenance_tokenizer_sha256")?;
-        let has_provenance_locale_resolved = table_has_column(&conn, "provenance_locale_resolved")?;
-        let has_provenance_locale_match_kind =
-            table_has_column(&conn, "provenance_locale_match_kind")?;
-        let has_provenance_canonical_class = table_has_column(&conn, "provenance_canonical_class")?;
-        let has_provenance_native_class = table_has_column(&conn, "provenance_native_class")?;
-        let has_provenance_confidence = table_has_column(&conn, "provenance_confidence")?;
-        let has_provenance_merged_from = table_has_column(&conn, "provenance_merged_from")?;
-        let has_restore_policy = table_has_column(&conn, "restore_policy")?;
-        let has_restore_decision = table_has_column(&conn, "restore_decision")?;
-        let has_restore_unknown_token_count =
-            table_has_column(&conn, "restore_unknown_token_count")?;
-        let has_restore_manifest_bypass_count =
-            table_has_column(&conn, "restore_manifest_bypass_count")?;
-        let has_restore_fresh_pii_count = table_has_column(&conn, "restore_fresh_pii_count")?;
-        let has_restore_phase_mask = table_has_column(&conn, "restore_phase_mask")?;
-        let (sql, values) = build_audit_query_sql(
-            filter,
-            has_decided_by,
-            has_created_at,
-            has_session_id,
-            has_snapshot_scheme,
-            has_snapshot_alg,
-            has_snapshot_key_version,
-            has_validator_fail_reason,
-            has_ambiguity_record,
-            has_collision_family,
-            has_collision_variant,
-            has_fallback_triggered,
-            has_recognizer_id,
-            has_recognizer_version_id,
-            has_provenance_stage,
-            has_provenance_model_id,
-            has_provenance_model_version,
-            has_provenance_artifact_sha256,
-            has_provenance_tokenizer_sha256,
-            has_provenance_locale_resolved,
-            has_provenance_locale_match_kind,
-            has_provenance_canonical_class,
-            has_provenance_native_class,
-            has_provenance_confidence,
-            has_provenance_merged_from,
-            has_restore_policy,
-            has_restore_decision,
-            has_restore_unknown_token_count,
-            has_restore_manifest_bypass_count,
-            has_restore_fresh_pii_count,
-            has_restore_phase_mask,
-        );
+        let present_columns = PresentColumns::new(redaction_log_column_names(&conn)?);
+        let (sql, values) = build_audit_query_sql(filter, &present_columns);
         let mut stmt = conn
             .prepare(&sql)
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -769,19 +705,18 @@ fn open_audit_query_connection(path: &Path) -> Result<Connection> {
     .map_err(|err| AuditError::Sqlite(err.to_string()))
 }
 
-fn table_has_column(conn: &Connection, name: &str) -> Result<bool> {
+fn redaction_log_column_names(conn: &Connection) -> Result<BTreeSet<String>> {
     let mut stmt = conn
         .prepare("PRAGMA table_info(redaction_log)")
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
     let columns = stmt
         .query_map([], |row| row.get::<_, String>(1))
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
+    let mut names = BTreeSet::new();
     for column in columns {
-        if column.map_err(|err| AuditError::Sqlite(err.to_string()))? == name {
-            return Ok(true);
-        }
+        names.insert(column.map_err(|err| AuditError::Sqlite(err.to_string()))?);
     }
-    Ok(false)
+    Ok(names)
 }
 
 fn conflict_tier_from_db(value: &str) -> std::result::Result<ConflictTier, rusqlite::Error> {

@@ -1,3 +1,6 @@
+use std::borrow::Cow;
+use std::collections::BTreeSet;
+
 use rusqlite::types::Value;
 
 pub const DEFAULT_SNAPSHOT_SCHEME: &str = "gaze.snapshot.v1.sha256-salted";
@@ -175,150 +178,70 @@ pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
     "telemetry_kind",
 ];
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PresentColumns(BTreeSet<String>);
+
+impl PresentColumns {
+    pub fn new(columns: BTreeSet<String>) -> Self {
+        Self(columns)
+    }
+
+    pub fn contains(&self, column: &str) -> bool {
+        self.0.contains(column)
+    }
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct Predicates<'a>(Vec<Cow<'a, str>>);
+
+impl<'a> Predicates<'a> {
+    fn push(&mut self, predicate: impl Into<Cow<'a, str>>) {
+        self.0.push(predicate.into());
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn join(&self, separator: &str) -> String {
+        self.0
+            .iter()
+            .map(Cow::as_ref)
+            .collect::<Vec<_>>()
+            .join(separator)
+    }
+}
+
+fn audit_select_expression<'a>(column: &'a str, present_columns: &PresentColumns) -> Cow<'a, str> {
+    if present_columns.contains(column) {
+        return Cow::Borrowed(column);
+    }
+
+    match column {
+        "source" | "class" | "action" | "field_name" | "document_kind" | "conflict_loser" => {
+            Cow::Borrowed(column)
+        }
+        "decided_by" => Cow::Borrowed("'none' AS decided_by"),
+        "snapshot_scheme" => Cow::Owned(format!("'{DEFAULT_SNAPSHOT_SCHEME}' AS snapshot_scheme")),
+        "snapshot_alg" => Cow::Owned(format!("'{DEFAULT_SNAPSHOT_ALG}' AS snapshot_alg")),
+        _ => Cow::Owned(format!("NULL AS {column}")),
+    }
+}
+
 /// Audit reads are defense-in-depth restricted to metadata columns that are
 /// safe to display. Do not switch this path to `SELECT *`; future schema
 /// additions may include restore material or other sensitive payloads.
-#[allow(clippy::too_many_arguments)]
 pub fn build_audit_query_sql(
     filter: &AuditFilter,
-    has_decided_by: bool,
-    has_created_at: bool,
-    has_session_id: bool,
-    has_snapshot_scheme: bool,
-    has_snapshot_alg: bool,
-    has_snapshot_key_version: bool,
-    has_validator_fail_reason: bool,
-    has_ambiguity_record: bool,
-    has_collision_family: bool,
-    has_collision_variant: bool,
-    has_fallback_triggered: bool,
-    has_recognizer_id: bool,
-    has_recognizer_version_id: bool,
-    has_provenance_stage: bool,
-    has_provenance_model_id: bool,
-    has_provenance_model_version: bool,
-    has_provenance_artifact_sha256: bool,
-    has_provenance_tokenizer_sha256: bool,
-    has_provenance_locale_resolved: bool,
-    has_provenance_locale_match_kind: bool,
-    has_provenance_canonical_class: bool,
-    has_provenance_native_class: bool,
-    has_provenance_confidence: bool,
-    has_provenance_merged_from: bool,
-    has_restore_policy: bool,
-    has_restore_decision: bool,
-    has_restore_unknown_token_count: bool,
-    has_restore_manifest_bypass_count: bool,
-    has_restore_fresh_pii_count: bool,
-    has_restore_phase_mask: bool,
+    present_columns: &PresentColumns,
 ) -> (String, Vec<Value>) {
-    let decided_by_column = if has_decided_by {
-        "decided_by"
-    } else {
-        "'none' AS decided_by"
-    };
-    let created_at_column = if has_created_at {
-        "created_at"
-    } else {
-        "NULL AS created_at"
-    };
-    let session_id_column = if has_session_id {
-        "session_id"
-    } else {
-        "NULL AS session_id"
-    };
-    let snapshot_scheme_column = if has_snapshot_scheme {
-        "snapshot_scheme".to_string()
-    } else {
-        format!("'{DEFAULT_SNAPSHOT_SCHEME}' AS snapshot_scheme")
-    };
-    let snapshot_alg_column = if has_snapshot_alg {
-        "snapshot_alg".to_string()
-    } else {
-        format!("'{DEFAULT_SNAPSHOT_ALG}' AS snapshot_alg")
-    };
-    let snapshot_key_version_column = if has_snapshot_key_version {
-        "snapshot_key_version"
-    } else {
-        "NULL AS snapshot_key_version"
-    };
-    let validator_fail_reason_column = if has_validator_fail_reason {
-        "validator_fail_reason"
-    } else {
-        "NULL AS validator_fail_reason"
-    };
-    let ambiguity_record_column = if has_ambiguity_record {
-        "ambiguity_record"
-    } else {
-        "NULL AS ambiguity_record"
-    };
-    let collision_family_column = if has_collision_family {
-        "collision_family"
-    } else {
-        "NULL AS collision_family"
-    };
-    let collision_variant_column = if has_collision_variant {
-        "collision_variant"
-    } else {
-        "NULL AS collision_variant"
-    };
-    let fallback_triggered_column = if has_fallback_triggered {
-        "fallback_triggered"
-    } else {
-        "NULL AS fallback_triggered"
-    };
-    let recognizer_id_column = if has_recognizer_id {
-        "recognizer_id"
-    } else {
-        "NULL AS recognizer_id"
-    };
-    let recognizer_version_id_column = if has_recognizer_version_id {
-        "recognizer_version_id"
-    } else {
-        "NULL AS recognizer_version_id"
-    };
-    let provenance_stage_column = nullable_column(has_provenance_stage, "provenance_stage");
-    let provenance_model_id_column =
-        nullable_column(has_provenance_model_id, "provenance_model_id");
-    let provenance_model_version_column =
-        nullable_column(has_provenance_model_version, "provenance_model_version");
-    let provenance_artifact_sha256_column =
-        nullable_column(has_provenance_artifact_sha256, "provenance_artifact_sha256");
-    let provenance_tokenizer_sha256_column = nullable_column(
-        has_provenance_tokenizer_sha256,
-        "provenance_tokenizer_sha256",
-    );
-    let provenance_locale_resolved_column =
-        nullable_column(has_provenance_locale_resolved, "provenance_locale_resolved");
-    let provenance_locale_match_kind_column = nullable_column(
-        has_provenance_locale_match_kind,
-        "provenance_locale_match_kind",
-    );
-    let provenance_canonical_class_column =
-        nullable_column(has_provenance_canonical_class, "provenance_canonical_class");
-    let provenance_native_class_column =
-        nullable_column(has_provenance_native_class, "provenance_native_class");
-    let provenance_confidence_column =
-        nullable_column(has_provenance_confidence, "provenance_confidence");
-    let provenance_merged_from_column =
-        nullable_column(has_provenance_merged_from, "provenance_merged_from");
-    let restore_policy_column = nullable_column(has_restore_policy, "restore_policy");
-    let restore_decision_column = nullable_column(has_restore_decision, "restore_decision");
-    let restore_unknown_token_count_column = nullable_column(
-        has_restore_unknown_token_count,
-        "restore_unknown_token_count",
-    );
-    let restore_manifest_bypass_count_column = nullable_column(
-        has_restore_manifest_bypass_count,
-        "restore_manifest_bypass_count",
-    );
-    let restore_fresh_pii_count_column =
-        nullable_column(has_restore_fresh_pii_count, "restore_fresh_pii_count");
-    let restore_phase_mask_column = nullable_column(has_restore_phase_mask, "restore_phase_mask");
-    let mut sql = format!(
-        "SELECT source, {recognizer_id_column}, {recognizer_version_id_column}, class, action, field_name, document_kind, conflict_loser, {decided_by_column}, {created_at_column}, {session_id_column}, {snapshot_scheme_column}, {snapshot_alg_column}, {snapshot_key_version_column}, {validator_fail_reason_column}, {ambiguity_record_column}, {collision_family_column}, {collision_variant_column}, {fallback_triggered_column}, {provenance_stage_column}, {provenance_model_id_column}, {provenance_model_version_column}, {provenance_artifact_sha256_column}, {provenance_tokenizer_sha256_column}, {provenance_locale_resolved_column}, {provenance_locale_match_kind_column}, {provenance_canonical_class_column}, {provenance_native_class_column}, {provenance_confidence_column}, {provenance_merged_from_column}, {restore_policy_column}, {restore_decision_column}, {restore_unknown_token_count_column}, {restore_manifest_bypass_count_column}, {restore_fresh_pii_count_column}, {restore_phase_mask_column} FROM redaction_log"
-    );
-    let mut predicates = Vec::new();
+    let select_list = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| audit_select_expression(column, present_columns))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut sql = format!("SELECT {select_list} FROM redaction_log");
+    let mut predicates = Predicates::default();
     let mut values = Vec::new();
     if let Some(class) = &filter.class {
         predicates.push("class = ?");
@@ -329,7 +252,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(source.clone()));
     }
     if let Some(recognizer_id) = &filter.recognizer_id {
-        if has_recognizer_id {
+        if present_columns.contains("recognizer_id") {
             predicates.push("recognizer_id = ?");
         } else {
             predicates.push("NULL = ?");
@@ -337,7 +260,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(recognizer_id.clone()));
     }
     if let Some(recognizer_version_id) = &filter.recognizer_version_id {
-        if has_recognizer_version_id {
+        if present_columns.contains("recognizer_version_id") {
             predicates.push("recognizer_version_id = ?");
         } else {
             predicates.push("NULL = ?");
@@ -353,7 +276,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(document_kind.clone()));
     }
     if let Some(from_epoch_ms) = filter.from_epoch_ms {
-        if has_created_at {
+        if present_columns.contains("created_at") {
             predicates.push("created_at >= ?");
         } else {
             predicates.push("NULL >= ?");
@@ -361,7 +284,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Integer(from_epoch_ms));
     }
     if let Some(to_epoch_ms) = filter.to_epoch_ms {
-        if has_created_at {
+        if present_columns.contains("created_at") {
             predicates.push("created_at <= ?");
         } else {
             predicates.push("NULL <= ?");
@@ -369,7 +292,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Integer(to_epoch_ms));
     }
     if let Some(session_id) = &filter.session_id {
-        if has_session_id {
+        if present_columns.contains("session_id") {
             predicates.push("session_id = ?");
         } else {
             predicates.push("NULL = ?");
@@ -377,7 +300,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(session_id.clone()));
     }
     if let Some(snapshot_scheme) = &filter.snapshot_scheme {
-        if has_snapshot_scheme {
+        if present_columns.contains("snapshot_scheme") {
             predicates.push("snapshot_scheme = ?");
         } else {
             predicates.push("'gaze.snapshot.v1.sha256-salted' = ?");
@@ -385,7 +308,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(snapshot_scheme.clone()));
     }
     if let Some(snapshot_alg) = &filter.snapshot_alg {
-        if has_snapshot_alg {
+        if present_columns.contains("snapshot_alg") {
             predicates.push("snapshot_alg = ?");
         } else {
             predicates.push("'SHA-256' = ?");
@@ -393,7 +316,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(snapshot_alg.clone()));
     }
     if let Some(snapshot_key_version) = filter.snapshot_key_version {
-        if has_snapshot_key_version {
+        if present_columns.contains("snapshot_key_version") {
             predicates.push("snapshot_key_version = ?");
         } else {
             predicates.push("NULL = ?");
@@ -401,7 +324,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Integer(snapshot_key_version));
     }
     if let Some(has_ambiguity) = filter.has_ambiguity {
-        if has_ambiguity_record {
+        if present_columns.contains("ambiguity_record") {
             predicates.push(if has_ambiguity {
                 "ambiguity_record IS NOT NULL"
             } else {
@@ -416,7 +339,7 @@ pub fn build_audit_query_sql(
         }
     }
     if let Some(reason) = &filter.ambiguity_reason {
-        if has_ambiguity_record {
+        if present_columns.contains("ambiguity_record") {
             predicates.push("json_extract(ambiguity_record, '$.reason') = ?");
         } else {
             predicates.push("json_extract(NULL, '$.reason') = ?");
@@ -424,7 +347,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(reason.clone()));
     }
     if let Some(family) = &filter.collision_family {
-        if has_collision_family {
+        if present_columns.contains("collision_family") {
             predicates.push("collision_family = ?");
         } else {
             predicates.push("NULL = ?");
@@ -432,7 +355,7 @@ pub fn build_audit_query_sql(
         values.push(Value::Text(family.clone()));
     }
     if let Some(variant) = &filter.collision_variant {
-        if has_collision_variant {
+        if present_columns.contains("collision_variant") {
             predicates.push("collision_variant = ?");
         } else {
             predicates.push("NULL = ?");
@@ -442,68 +365,68 @@ pub fn build_audit_query_sql(
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_stage,
+        present_columns.contains("provenance_stage"),
         "provenance_stage",
         &filter.provenance_stage,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_model_id,
+        present_columns.contains("provenance_model_id"),
         "provenance_model_id",
         &filter.provenance_model_id,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_model_version,
+        present_columns.contains("provenance_model_version"),
         "provenance_model_version",
         &filter.provenance_model_version,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_artifact_sha256,
+        present_columns.contains("provenance_artifact_sha256"),
         "provenance_artifact_sha256",
         &filter.provenance_artifact_sha256,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_tokenizer_sha256,
+        present_columns.contains("provenance_tokenizer_sha256"),
         "provenance_tokenizer_sha256",
         &filter.provenance_tokenizer_sha256,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_locale_resolved,
+        present_columns.contains("provenance_locale_resolved"),
         "provenance_locale_resolved",
         &filter.provenance_locale_resolved,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_locale_match_kind,
+        present_columns.contains("provenance_locale_match_kind"),
         "provenance_locale_match_kind",
         &filter.provenance_locale_match_kind,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_canonical_class,
+        present_columns.contains("provenance_canonical_class"),
         "provenance_canonical_class",
         &filter.provenance_canonical_class,
     );
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_native_class,
+        present_columns.contains("provenance_native_class"),
         "provenance_native_class",
         &filter.provenance_native_class,
     );
     if let Some(confidence) = filter.provenance_confidence {
-        if has_provenance_confidence {
+        if present_columns.contains("provenance_confidence") {
             predicates.push("provenance_confidence = ?");
         } else {
             predicates.push("NULL = ?");
@@ -513,12 +436,12 @@ pub fn build_audit_query_sql(
     add_optional_text_filter(
         &mut predicates,
         &mut values,
-        has_provenance_merged_from,
+        present_columns.contains("provenance_merged_from"),
         "provenance_merged_from",
         &filter.provenance_merged_from,
     );
     if filter.restore_events_only {
-        if has_restore_policy {
+        if present_columns.contains("restore_policy") {
             predicates.push("restore_policy IS NOT NULL");
         } else {
             predicates.push("NULL IS NOT NULL");
@@ -532,16 +455,8 @@ pub fn build_audit_query_sql(
     (sql, values)
 }
 
-fn nullable_column(has_column: bool, column: &'static str) -> String {
-    if has_column {
-        column.to_string()
-    } else {
-        format!("NULL AS {column}")
-    }
-}
-
 fn add_optional_text_filter<'a>(
-    predicates: &mut Vec<&'a str>,
+    predicates: &mut Predicates<'a>,
     values: &mut Vec<Value>,
     has_column: bool,
     column: &'a str,
@@ -549,27 +464,11 @@ fn add_optional_text_filter<'a>(
 ) {
     if let Some(value) = value {
         if has_column {
-            predicates.push(column_eq_predicate(column));
+            predicates.push(Cow::Owned(format!("{column} = ?")));
         } else {
             predicates.push("NULL = ?");
         }
         values.push(Value::Text(value.clone()));
-    }
-}
-
-fn column_eq_predicate(column: &str) -> &str {
-    match column {
-        "provenance_stage" => "provenance_stage = ?",
-        "provenance_model_id" => "provenance_model_id = ?",
-        "provenance_model_version" => "provenance_model_version = ?",
-        "provenance_artifact_sha256" => "provenance_artifact_sha256 = ?",
-        "provenance_tokenizer_sha256" => "provenance_tokenizer_sha256 = ?",
-        "provenance_locale_resolved" => "provenance_locale_resolved = ?",
-        "provenance_locale_match_kind" => "provenance_locale_match_kind = ?",
-        "provenance_canonical_class" => "provenance_canonical_class = ?",
-        "provenance_native_class" => "provenance_native_class = ?",
-        "provenance_merged_from" => "provenance_merged_from = ?",
-        _ => unreachable!("unsupported audit provenance filter column"),
     }
 }
 
@@ -625,4 +524,121 @@ pub fn build_safety_net_query_sql(filter: &AuditFilter) -> (String, Vec<Value>) 
     }
     sql.push_str(" ORDER BY id");
     (sql, values)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const OPTIONAL_COLUMNS: [&str; 30] = [
+        "decided_by",
+        "created_at",
+        "session_id",
+        "snapshot_scheme",
+        "snapshot_alg",
+        "snapshot_key_version",
+        "validator_fail_reason",
+        "ambiguity_record",
+        "collision_family",
+        "collision_variant",
+        "fallback_triggered",
+        "recognizer_id",
+        "recognizer_version_id",
+        "provenance_stage",
+        "provenance_model_id",
+        "provenance_model_version",
+        "provenance_artifact_sha256",
+        "provenance_tokenizer_sha256",
+        "provenance_locale_resolved",
+        "provenance_locale_match_kind",
+        "provenance_canonical_class",
+        "provenance_native_class",
+        "provenance_confidence",
+        "provenance_merged_from",
+        "restore_policy",
+        "restore_decision",
+        "restore_unknown_token_count",
+        "restore_manifest_bypass_count",
+        "restore_fresh_pii_count",
+        "restore_phase_mask",
+    ];
+
+    fn build_with_columns(columns: &[&str]) -> String {
+        let present_columns =
+            PresentColumns::new(columns.iter().map(|column| (*column).to_string()).collect());
+        build_audit_query_sql(&AuditFilter::default(), &present_columns).0
+    }
+
+    #[test]
+    fn generated_sql_is_byte_identical_for_column_presence_matrix() {
+        assert_eq!(
+            build_with_columns(&OPTIONAL_COLUMNS),
+            "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask FROM redaction_log ORDER BY rowid"
+        );
+        assert_eq!(
+            build_with_columns(&[]),
+            "SELECT source, NULL AS recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, NULL AS created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, 'SHA-256' AS snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, NULL AS ambiguity_record, NULL AS collision_family, NULL AS collision_variant, NULL AS fallback_triggered, NULL AS provenance_stage, NULL AS provenance_model_id, NULL AS provenance_model_version, NULL AS provenance_artifact_sha256, NULL AS provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, NULL AS provenance_locale_match_kind, NULL AS provenance_canonical_class, NULL AS provenance_native_class, NULL AS provenance_confidence, NULL AS provenance_merged_from, NULL AS restore_policy, NULL AS restore_decision, NULL AS restore_unknown_token_count, NULL AS restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, NULL AS restore_phase_mask FROM redaction_log ORDER BY rowid"
+        );
+        let mixed = [
+            "created_at",
+            "snapshot_alg",
+            "ambiguity_record",
+            "collision_variant",
+            "recognizer_id",
+            "provenance_stage",
+            "provenance_model_version",
+            "provenance_tokenizer_sha256",
+            "provenance_locale_match_kind",
+            "provenance_native_class",
+            "provenance_merged_from",
+            "restore_decision",
+            "restore_manifest_bypass_count",
+            "restore_phase_mask",
+        ];
+        assert_eq!(
+            build_with_columns(&mixed),
+            "SELECT source, recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, ambiguity_record, NULL AS collision_family, collision_variant, NULL AS fallback_triggered, provenance_stage, NULL AS provenance_model_id, provenance_model_version, NULL AS provenance_artifact_sha256, provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, provenance_locale_match_kind, NULL AS provenance_canonical_class, provenance_native_class, NULL AS provenance_confidence, provenance_merged_from, NULL AS restore_policy, restore_decision, NULL AS restore_unknown_token_count, restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, restore_phase_mask FROM redaction_log ORDER BY rowid"
+        );
+    }
+
+    #[test]
+    fn select_list_contains_each_allowlisted_column_once_in_order() {
+        let sql = build_with_columns(&[]);
+        let select_list = sql
+            .strip_prefix("SELECT ")
+            .unwrap()
+            .split_once(" FROM redaction_log")
+            .unwrap()
+            .0;
+        let aliases = select_list
+            .split(", ")
+            .map(|expression| {
+                expression
+                    .rsplit_once(" AS ")
+                    .map_or(expression, |(_, alias)| alias)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(aliases, AUDIT_RESTRICTED_COLUMNS);
+        for column in AUDIT_RESTRICTED_COLUMNS {
+            assert_eq!(aliases.iter().filter(|alias| *alias == column).count(), 1);
+        }
+    }
+
+    #[test]
+    fn optional_text_filter_is_total_for_future_allowlisted_columns() {
+        let mut predicates = Predicates::default();
+        let mut values = Vec::new();
+
+        add_optional_text_filter(
+            &mut predicates,
+            &mut values,
+            true,
+            "future_provenance",
+            &Some("synthetic".to_string()),
+        );
+
+        assert_eq!(predicates.0, ["future_provenance = ?"]);
+        assert_eq!(values, [Value::Text("synthetic".to_string())]);
+    }
 }
