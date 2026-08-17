@@ -18,6 +18,18 @@ use gaze_types::{
 };
 use serial_test::serial;
 
+fn test_subprocess_timeout() -> Duration {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    Duration::from_secs(seconds)
+}
+
 #[test]
 #[serial]
 fn official_json_private_fields_are_dropped_at_boundary() {
@@ -40,9 +52,10 @@ printf '%s\n' '{"schema_version":1,"summary":{"output_mode":"typed","span_count"
     let debug = format!("{spans:?} {backend:?}");
     assert_private_payload_absent(&debug);
 
-    let net = OpenAiFilterSafetyNet::new(SubprocessOpenAiFilterConfig::new(
-        backend.config().command().to_path_buf(),
-    ));
+    let net = OpenAiFilterSafetyNet::new(
+        SubprocessOpenAiFilterConfig::new(backend.config().command().to_path_buf())
+            .with_timeout(test_subprocess_timeout()),
+    );
     let manifest = Manifest::default();
     let context = context(&manifest, Some("$.profile.email"));
     let suspects = net.check(clean, context).unwrap();
@@ -112,7 +125,7 @@ printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97},{"lab
     )
     .unwrap();
     let net = OpenAiFilterSafetyNet::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(120)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(test_subprocess_timeout()),
     );
     let model: &dyn LocaleAwareModel = &net;
 
@@ -272,7 +285,7 @@ exit 7
     .unwrap();
     let backend = SubprocessOpenAiFilterBackend::new(
         SubprocessOpenAiFilterConfig::new(opf)
-            .with_timeout(Duration::from_secs(120))
+            .with_timeout(test_subprocess_timeout())
             .with_stderr_diagnostics(true),
     )
     .unwrap();
@@ -322,7 +335,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
     )
     .unwrap();
     let net = OpenAiFilterSafetyNet::new(
-        SubprocessOpenAiFilterConfig::new(opf).with_timeout(Duration::from_secs(120)),
+        SubprocessOpenAiFilterConfig::new(opf).with_timeout(test_subprocess_timeout()),
     );
     let manifest = Manifest::from_spans(vec![gaze_types::EmittedTokenSpan::new(
         0..9,
@@ -342,7 +355,7 @@ printf '%s\n' '{"schema_version":1,"detected_spans":[{"label":"private_email","s
 
 fn backend(command: PathBuf) -> SubprocessOpenAiFilterBackend {
     SubprocessOpenAiFilterBackend::new(
-        SubprocessOpenAiFilterConfig::new(command).with_timeout(Duration::from_secs(120)),
+        SubprocessOpenAiFilterConfig::new(command).with_timeout(test_subprocess_timeout()),
     )
     .unwrap()
 }

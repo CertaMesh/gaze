@@ -5,6 +5,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use clap::ValueEnum;
 use gaze::{
@@ -35,6 +36,7 @@ pub(crate) struct IngestArgs {
     pub(crate) domain: String,
     pub(crate) index_path: Option<PathBuf>,
     pub(crate) on_residual: OnResidual,
+    pub(crate) safety_net_timeout_ms: u64,
 }
 
 pub(crate) struct SearchArgs {
@@ -42,6 +44,7 @@ pub(crate) struct SearchArgs {
     pub(crate) domain: String,
     pub(crate) class: Option<PiiClass>,
     pub(crate) index_path: Option<PathBuf>,
+    pub(crate) safety_net_timeout_ms: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
@@ -78,7 +81,7 @@ pub(crate) fn ingest(args: IngestArgs) -> Result<(), CliError> {
     let index_path = resolve_index_path(args.index_path);
     let docs = collect_docs(&args.dir)?;
     let classes = classes_for_docs(&docs);
-    let pipeline = build_index_pipeline(&classes)?;
+    let pipeline = build_index_pipeline(&classes, args.safety_net_timeout_ms)?;
 
     let mut store = FileCorpusIndexStore::load_or_create(&index_path, &args.domain, &classes)
         .map_err(map_bridge_error)?;
@@ -120,7 +123,7 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         .cloned()
         .ok_or_else(index_failed)?;
     let policy_json = store.policy_json().map_err(map_bridge_error)?;
-    let output_safety_net = build_index_output_safety_net_pipeline()?;
+    let output_safety_net = build_index_output_safety_net_pipeline(args.safety_net_timeout_ms)?;
     let mut bridge = TokenBridge::from_policy_json_and_store(&policy_json, store)
         .map_err(map_bridge_error)?
         .with_output_safety_net(output_safety_net, vec![LocaleTag::Global]);
@@ -218,13 +221,16 @@ fn classes_for_docs(docs: &[SourceDoc]) -> Vec<PiiClass> {
     classes.into_iter().collect()
 }
 
-fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
+fn build_index_pipeline(
+    classes: &[PiiClass],
+    safety_net_timeout_ms: u64,
+) -> Result<Pipeline, CliError> {
     let mut builder = Pipeline::builder()
         .detector(RegexDetector::emails().map_err(|err| {
             CliError::PolicyConfigDetail(format!("index email detector failed: {err}"))
         })?)
         .detector(FieldEntityDetector);
-    builder = builder.register_safety_net_registry(index_kiji_registry()?);
+    builder = builder.register_safety_net_registry(index_kiji_registry(safety_net_timeout_ms)?);
 
     let mut rule_classes =
         BTreeSet::from([PiiClass::Email, PiiClass::Name, PiiClass::Organization]);
@@ -239,23 +245,26 @@ fn build_index_pipeline(classes: &[PiiClass]) -> Result<Pipeline, CliError> {
         .map_err(|err| CliError::PolicyConfigDetail(format!("index pipeline build failed: {err}")))
 }
 
-fn build_index_output_safety_net_pipeline() -> Result<Pipeline, CliError> {
+fn build_index_output_safety_net_pipeline(
+    safety_net_timeout_ms: u64,
+) -> Result<Pipeline, CliError> {
     Pipeline::builder()
-        .register_safety_net_registry(index_kiji_registry()?)
+        .register_safety_net_registry(index_kiji_registry(safety_net_timeout_ms)?)
         .build()
         .map_err(|err| {
             CliError::PolicyConfigDetail(format!("index output safety-net build failed: {err}"))
         })
 }
 
-fn index_kiji_registry() -> Result<LocaleAwareModelRegistry, CliError> {
+fn index_kiji_registry(safety_net_timeout_ms: u64) -> Result<LocaleAwareModelRegistry, CliError> {
     let mut registry = LocaleAwareModelRegistry::new();
-    registry.register(index_kiji_safety_net()?);
+    registry.register(index_kiji_safety_net(safety_net_timeout_ms)?);
     Ok(registry)
 }
 
 #[cfg(feature = "safety-net-kiji")]
 fn index_kiji_safety_net(
+    safety_net_timeout_ms: u64,
 ) -> Result<gaze_recognizers::safety_net::kiji_distilbert::KijiDistilbertSafetyNet, CliError> {
     use gaze_recognizers::safety_net::kiji_distilbert::{
         KijiDistilbertConfig, KijiDistilbertSafetyNet, OrtKijiConfig, SubprocessKijiConfig,
@@ -269,7 +278,8 @@ fn index_kiji_safety_net(
 
     if let Some(command) = std::env::var_os(KIJI_COMMAND_ENV) {
         return Ok(KijiDistilbertSafetyNet::new(KijiDistilbertConfig::from(
-            SubprocessKijiConfig::new(command),
+            SubprocessKijiConfig::new(command)
+                .with_timeout(Duration::from_millis(safety_net_timeout_ms)),
         )));
     }
 
@@ -279,7 +289,9 @@ fn index_kiji_safety_net(
 }
 
 #[cfg(not(feature = "safety-net-kiji"))]
-fn index_kiji_safety_net() -> Result<impl gaze_recognizers::LocaleAwareModel, CliError> {
+fn index_kiji_safety_net(
+    _safety_net_timeout_ms: u64,
+) -> Result<impl gaze_recognizers::LocaleAwareModel, CliError> {
     Err(CliError::SafetyNetConfigDetail(
         "gaze index requires gaze-cli feature safety-net-kiji".to_string(),
     ))

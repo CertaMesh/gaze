@@ -9,6 +9,18 @@ use gaze_audit::{LeakSuspectLogEntry, LeakSuspectLogger, SqliteLogger};
 use serde_json::Value;
 use tempfile::{tempdir, TempDir};
 
+fn test_subprocess_timeout_ms() -> String {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    seconds.saturating_mul(1_000).to_string()
+}
+
 fn write_mock_opf(body: &str) -> (TempDir, PathBuf) {
     let dir = tempdir().unwrap();
     let path = dir.path().join("mock-opf");
@@ -95,7 +107,7 @@ fn safety_args(command: &Path, checkpoint: &Path) -> Vec<String> {
         "--openai-filter-checkpoint".to_string(),
         checkpoint.display().to_string(),
         "--safety-net-timeout-ms".to_string(),
-        "30000".to_string(),
+        test_subprocess_timeout_ms(),
     ]
 }
 

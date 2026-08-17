@@ -703,3 +703,10 @@ mod tests {
         assert!(matches!(error, SafetyNetError::ModelUnavailable { .. }));
     }
 }
+#[test]
+fn production_default_timeout_remains_five_seconds() {
+    assert_eq!(
+        SubprocessKijiConfig::new("kiji").timeout,
+        Duration::from_secs(5)
+    );
+}

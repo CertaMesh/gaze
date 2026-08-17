@@ -18,6 +18,18 @@ use tempfile::tempdir;
 use gaze::{PiiClass, Scope, Session};
 use gaze_audit::{build_audit_query_sql, AuditFilter, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
 
+fn test_subprocess_timeout_ms() -> u64 {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    seconds.saturating_mul(1_000)
+}
+
 /// Run `gaze clean` on the given stdin and parse the JSON response.
 fn clean_ok(input: &str) -> (String, String, u64) {
     clean_ok_with_args(&[], input)
@@ -4126,6 +4138,7 @@ fn t_safety_net_registry_selects_locale_backend() {
             "--safety-net-registry",
             "--safety-net-add=openai-filter",
             "--safety-net-add=kiji-distilbert",
+            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
             &format!("--opf-command={}", opf.display()),
             &format!("--opf-checkpoint={}", checkpoint.display()),
             "--opf-locales=en-US,en-GB",
@@ -4150,6 +4163,7 @@ fn t_safety_net_registry_selects_locale_backend() {
             "--safety-net-registry",
             "--safety-net-add=openai-filter",
             "--safety-net-add=kiji-distilbert",
+            &format!("--safety-net-timeout-ms={}", test_subprocess_timeout_ms()),
             &format!("--opf-command={}", opf.display()),
             &format!("--opf-checkpoint={}", checkpoint.display()),
             "--opf-locales=en-US,en-GB",

@@ -10,6 +10,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use gaze_recognizers::safety_net::kiji_distilbert::{
     KijiDistilbertBackend, KijiDistilbertSafetyNet, OrtKijiBackend, OrtKijiConfig,
@@ -18,6 +19,18 @@ use gaze_recognizers::safety_net::kiji_distilbert::{
 use gaze_types::{DocumentKind, LocaleTag, Manifest, SafetyNet, SafetyNetContext, SafetyNetError};
 use sha2::{Digest, Sha256};
 use tempfile::{tempdir, TempDir};
+
+fn test_subprocess_timeout() -> Duration {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    Duration::from_secs(seconds)
+}
 
 fn write_mock_kiji(body: &str) -> (TempDir, PathBuf) {
     let dir = tempdir().unwrap();
@@ -105,6 +118,7 @@ fn subprocess_span_round_trips_through_manifest_diff() {
 
     let config = SubprocessKijiConfig::new(&kiji)
         .with_model_dir(model.path())
+        .with_timeout(test_subprocess_timeout())
         .with_expected_bundle_sha256_for_tests(expected_sha);
     let net = KijiDistilbertSafetyNet::new(config);
     let manifest = Manifest::default();
@@ -137,7 +151,9 @@ fn ort_matches_subprocess_for_fixture_inputs_when_real_kiji_is_configured() {
     };
 
     let subprocess = SubprocessKijiBackend::new(
-        SubprocessKijiConfig::new(command).with_model_dir(PathBuf::from(&model_dir)),
+        SubprocessKijiConfig::new(command)
+            .with_model_dir(PathBuf::from(&model_dir))
+            .with_timeout(test_subprocess_timeout()),
     )
     .unwrap();
     let ort = OrtKijiBackend::new(OrtKijiConfig::new(PathBuf::from(model_dir))).unwrap();
