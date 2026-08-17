@@ -354,7 +354,26 @@ fn family_fallback_candidate(
     )
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Test-only count of `remove_overlaps` entries on the current thread.
+    ///
+    /// The two exact-span short-circuits in `insert_candidate` cannot be
+    /// observed through the resolver's output: an exact-overlap winner keeps
+    /// the very span it replaced, and the resolved set is pairwise disjoint
+    /// (property 1 in `tests/prop_resolver_invariants.rs`), so overlap removal
+    /// would find nothing to remove and return an identical set. Dropping both
+    /// guards is therefore output-identical, and only the entry count can lock
+    /// them; `non_exact_winner_enters_overlap_removal` is the positive control
+    /// that keeps that count honest. Thread-local because the harness runs
+    /// tests in parallel.
+    static REMOVE_OVERLAPS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
+    #[cfg(test)]
+    REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(calls.get() + 1));
+
     let winner_span = resolved[winner_index].span.clone();
     let mut index = 0;
     while index < resolved.len() {
@@ -408,6 +427,33 @@ mod tests {
             ConflictTier::None,
             Vec::new(),
         )
+    }
+
+    /// Two variants of one collision family at equal precedence: the shape
+    /// `family_tie_candidate` recognises as a precedence tie.
+    fn tenant_document_registry() -> crate::RecognizerRegistry {
+        crate::RecognizerRegistry::builder()
+            .register_collision(
+                "doc.alpha",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "doc.beta",
+                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .build()
+    }
+
+    /// Resolves and reports how many times the resolver entered
+    /// `remove_overlaps`, so the exact-span short-circuits can be asserted
+    /// directly rather than through output that does not change.
+    fn counting_removals<F>(resolve: F) -> (Vec<Candidate>, usize)
+    where
+        F: FnOnce() -> Vec<Candidate>,
+    {
+        REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(0));
+        let resolved = resolve();
+        (resolved, REMOVE_OVERLAPS_CALLS.with(std::cell::Cell::get))
     }
 
     #[test]
@@ -496,16 +542,7 @@ mod tests {
 
     #[test]
     fn precedence_tie_emits_family_level_candidate() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "doc.alpha",
-                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "doc.beta",
-                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
-            )
-            .build();
+        let registry = tenant_document_registry();
 
         let resolved = resolve_candidates_with_policy(
             vec![
@@ -528,6 +565,119 @@ mod tests {
         assert_eq!(
             resolved[0].merged_sources,
             vec!["doc.alpha".to_string(), "doc.beta".to_string()]
+        );
+    }
+
+    /// `arbitrate` probes the family tie *before* the exact same-class merge.
+    /// Both rivals here report the same class, so a merge that ran first would
+    /// swallow the tie and emit an ordinary merged candidate instead of the
+    /// family token. The other precedence-tie fixtures pair different classes
+    /// and cannot fail when that ordering regresses.
+    #[test]
+    fn exact_span_same_class_precedence_tie_emits_family_candidate_not_merge() {
+        let registry = tenant_document_registry();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
+                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::Custom("family:tenant-document".to_string()),
+            "an exact same-class overlap must not merge ahead of the family tie"
+        );
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:tenant-document"
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            resolved[0].merged_sources,
+            vec!["doc.alpha".to_string(), "doc.beta".to_string()]
+        );
+    }
+
+    /// Positive control for `counting_removals`. A non-exact winner widens the
+    /// slot it took, so it must enter overlap removal; without this, the two
+    /// zero-call assertions below would also pass on a counter that never
+    /// increments.
+    #[test]
+    fn non_exact_winner_enters_overlap_removal() {
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates(vec![
+                candidate(0..6, PiiClass::Name, 0.70, "ner"),
+                candidate(3..12, PiiClass::Email, 0.80, "regex"),
+            ])
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 3..12);
+        assert_eq!(removal_calls, 1);
+    }
+
+    /// An exact-span family tie installs a span identical to the one it
+    /// evicted, so no other resolved candidate can overlap it and overlap
+    /// removal is dead work. Skipping it is invisible in the output, so assert
+    /// on the entry count itself (see `REMOVE_OVERLAPS_CALLS`).
+    #[test]
+    fn exact_span_family_tie_skips_overlap_removal() {
+        let registry = tenant_document_registry();
+
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates_with_policy(
+                vec![
+                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
+                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+                ],
+                registry.family_policy(),
+            )
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            removal_calls, 0,
+            "an exact-span family tie must not enter overlap removal"
+        );
+    }
+
+    /// The same guard on the other exact-span path: a collision-policy win
+    /// replaces the slot span-for-span, so it must not enter overlap removal
+    /// either.
+    #[test]
+    fn exact_span_candidate_win_skips_overlap_removal() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "pan",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .register_collision(
+                "iban",
+                crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
+            )
+            .build();
+
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates_with_policy(
+                vec![
+                    candidate(0..5, PiiClass::Email, 0.70, "pan"),
+                    candidate(0..5, PiiClass::custom("iban"), 0.70, "iban"),
+                ],
+                registry.family_policy(),
+            )
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban");
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            removal_calls, 0,
+            "an exact-span collision-policy win must not enter overlap removal"
         );
     }
 
