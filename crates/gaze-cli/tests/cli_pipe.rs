@@ -17,7 +17,18 @@ use serial_test::file_serial;
 use tempfile::tempdir;
 
 use gaze::{PiiClass, Scope, Session};
-use gaze_audit::{build_audit_query_sql, AuditFilter, SqliteLogger, AUDIT_RESTRICTED_COLUMNS};
+use gaze_audit::{
+    build_audit_query_sql, AuditFilter, PresentColumns, SqliteLogger, AUDIT_RESTRICTED_COLUMNS,
+};
+
+fn all_audit_columns() -> PresentColumns {
+    PresentColumns::new(
+        AUDIT_RESTRICTED_COLUMNS
+            .iter()
+            .map(|column| (*column).to_string())
+            .collect(),
+    )
+}
 
 fn test_subprocess_timeout_ms() -> u64 {
     let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
@@ -1854,39 +1865,8 @@ fn s4_audit_query_columns_are_restricted() {
     let conn = Connection::open(&audit_path).unwrap();
     conn.execute("ALTER TABLE redaction_log ADD COLUMN raw_value TEXT", [])
         .unwrap();
-    let (sql, values) = build_audit_query_sql(
-        &AuditFilter::default(),
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-    );
+    let present_columns = all_audit_columns();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), &present_columns);
     assert!(
         values.is_empty(),
         "default audit filter should not bind query values"
@@ -1940,39 +1920,8 @@ fn p5_audit_query_reads_structural_agent_recipient_source() {
     // `source` is intentionally present so audit reads can explain the
     // structural family without a schema change.
     assert!(AUDIT_RESTRICTED_COLUMNS.contains(&"source"));
-    let (sql, values) = build_audit_query_sql(
-        &AuditFilter::default(),
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-    );
+    let present_columns = all_audit_columns();
+    let (sql, values) = build_audit_query_sql(&AuditFilter::default(), &present_columns);
     let conn = Connection::open(&audit_path).unwrap();
     let mut stmt = conn.prepare(&sql).unwrap();
     let rows = stmt
