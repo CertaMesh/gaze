@@ -996,6 +996,7 @@ fn emit_safety_net_warning(variant: &'static str, count: usize) {
 mod tests {
     use super::*;
     use crate::pipeline::build::resolve_ner_threshold;
+    use gaze::Policy;
 
     fn policy_with_ner_threshold(threshold: f32) -> Policy {
         let mut session = gaze::SessionPolicy::default();
