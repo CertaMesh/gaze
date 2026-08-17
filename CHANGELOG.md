@@ -164,6 +164,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`custom:family:*` policy classes now preserve the collision-family namespace**
+  (audit S05-F1, solo todo #2934). `PiiClass::from_policy_name` previously
+  normalized the reserved `family:` separator and hyphenated family name, so a
+  protective class rule could silently miss a family-level ambiguity token and
+  preserve the original value. `PiiClass::family` and `as_family_name` now model
+  that namespace once, and policy and rulepack parsing share the same
+  non-normalizing path. The enum and manifest wire shape are unchanged.
+
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed
   the constant `"ner/ort"` where `merge_bio_span_results` expected the string

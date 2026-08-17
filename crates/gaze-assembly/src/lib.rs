@@ -189,7 +189,7 @@ pub fn uncovered_collision_family_classes(
     mandatory_anchor_families(policy, rulepacks, active_locales)
         .into_iter()
         .filter(|family| {
-            let family_class = PiiClass::Custom(format!("family:{family}"));
+            let family_class = PiiClass::family(family);
             !live_rules
                 .iter()
                 .any(|rule| matches!(rule, RuleSpec::Class { class, .. } if *class == family_class))

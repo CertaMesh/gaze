@@ -233,16 +233,25 @@ impl CollisionMembership {
 impl PiiClass {
     /// Parses a policy class name into the shared class vocabulary.
     pub fn from_policy_name(input: &str) -> Option<Self> {
-        match input {
+        let trimmed = input.trim();
+        match trimmed.to_ascii_lowercase().as_str() {
             "email" => Some(Self::Email),
             "name" => Some(Self::Name),
             "location" => Some(Self::Location),
             "organization" => Some(Self::Organization),
-            custom if custom.starts_with("custom:") => {
-                let name = custom.trim_start_matches("custom:");
-                (!name.trim().is_empty()).then(|| Self::custom(name))
-            }
-            _ => None,
+            _ => trimmed
+                .split_once(':')
+                .filter(|(namespace, _)| namespace.eq_ignore_ascii_case("custom"))
+                .and_then(|(_, name)| Self::from_custom_policy_suffix(name)),
+        }
+    }
+
+    fn from_custom_policy_suffix(name: &str) -> Option<Self> {
+        let name = name.trim();
+        if let Some(family) = name.strip_prefix("family:") {
+            (!family.trim().is_empty()).then(|| Self::family(family))
+        } else {
+            (!name.is_empty()).then(|| Self::custom(name))
         }
     }
 
@@ -275,12 +284,22 @@ impl PiiClass {
         Self::Custom(normalized)
     }
 
+    /// Builds a collision-family class without normalizing its reserved namespace.
+    pub fn family(name: &str) -> Self {
+        Self::Custom(format!("family:{}", name.trim()))
+    }
+
     /// Returns the normalized custom class name for custom classes.
     pub fn as_custom_name(&self) -> Option<&str> {
         match self {
             Self::Custom(name) => Some(name.as_str()),
             Self::Email | Self::Name | Self::Location | Self::Organization => None,
         }
+    }
+
+    /// Returns the collision-family name for family classes.
+    pub fn as_family_name(&self) -> Option<&str> {
+        self.as_custom_name()?.strip_prefix("family:")
     }
 
     /// Returns the audit/token display label for this class.
@@ -317,6 +336,22 @@ impl PiiClass {
                 (!name.is_empty()).then(|| Self::Custom(name.to_string()))
             }
             _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod pii_class_tests {
+    use super::*;
+
+    #[test]
+    fn bundled_family_policy_names_round_trip_without_normalization() {
+        for family in RESERVED_BUNDLED_FAMILIES {
+            let policy_name = format!("custom:family:{family}");
+            let class = PiiClass::from_policy_name(&policy_name).expect("family policy class");
+
+            assert_eq!(class.to_canonical_str(), policy_name);
+            assert_eq!(class.as_family_name(), Some(*family));
         }
     }
 }

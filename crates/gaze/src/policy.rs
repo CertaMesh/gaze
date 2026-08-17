@@ -748,29 +748,7 @@ fn expand_home(path: String) -> Result<PathBuf, PolicyError> {
 }
 
 fn parse_class(input: &str) -> Result<PiiClass, PolicyError> {
-    let lower = input.trim().to_ascii_lowercase();
-    match lower.as_str() {
-        "email" => Ok(PiiClass::Email),
-        "name" => Ok(PiiClass::Name),
-        "location" => Ok(PiiClass::Location),
-        "organization" => Ok(PiiClass::Organization),
-        custom if custom.starts_with("custom:") => {
-            let name = input
-                .trim()
-                .split_once(':')
-                .map(|(_, name)| name)
-                .unwrap_or_default();
-            if name.trim().is_empty() {
-                return Err(PolicyError::UnknownClass(input.to_string()));
-            }
-            if name.starts_with("family:") {
-                Ok(PiiClass::Custom(name.to_string()))
-            } else {
-                Ok(PiiClass::custom(name))
-            }
-        }
-        _ => Err(PolicyError::UnknownClass(input.to_string())),
-    }
+    PiiClass::from_policy_name(input).ok_or_else(|| PolicyError::UnknownClass(input.to_string()))
 }
 
 fn parse_action(input: &str) -> Result<Action, PolicyError> {
@@ -793,6 +771,19 @@ mod tests {
     use tempfile::tempdir;
 
     use super::*;
+
+    #[test]
+    fn bundled_family_policy_classes_preserve_the_family_namespace() {
+        for family in RESERVED_BUNDLED_FAMILIES {
+            let policy_name = format!("custom:family:{family}");
+            assert_eq!(
+                parse_class(&policy_name)
+                    .expect("family policy class")
+                    .to_canonical_str(),
+                policy_name
+            );
+        }
+    }
 
     #[test]
     fn loads_policy_and_expands_home() {

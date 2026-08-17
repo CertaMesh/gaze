@@ -791,7 +791,7 @@ fn benchmark_policy(rulepack: &Rulepack, auto_activate_locale_gated: bool) -> ga
             collision
                 .mandatory_anchor
                 .as_ref()
-                .map(|_| PiiClass::Custom(format!("family:{}", collision.family)))
+                .map(|_| PiiClass::family(&collision.family))
         }) {
             if seen.insert(family_class.clone()) {
                 rules.push(RuleSpec::Class {

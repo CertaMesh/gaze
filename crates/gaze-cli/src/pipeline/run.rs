@@ -778,7 +778,7 @@ fn class_rules_for_bundled_overrides(
                                 .as_ref()
                                 .map(|_| &collision.family)
                         })
-                        .map(|family| PiiClass::Custom(format!("family:{family}")))
+                        .map(|family| PiiClass::family(family))
                 }),
         );
     }

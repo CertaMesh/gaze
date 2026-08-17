@@ -16,7 +16,7 @@ pub(crate) fn emit(
         .recognizer_id
         .strip_prefix("collision-family:")?
         .to_string();
-    let class = PiiClass::Custom(format!("family:{family}"));
+    let class = PiiClass::family(&family);
     let mut losing_candidates = candidate
         .merged_sources
         .iter()

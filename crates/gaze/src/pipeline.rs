@@ -5070,6 +5070,81 @@ mod tests {
     }
 
     #[test]
+    fn policy_family_rule_matches_a_precedence_tie_candidate() {
+        struct TieRecognizer {
+            id: &'static str,
+            class: PiiClass,
+        }
+
+        impl Recognizer for TieRecognizer {
+            fn id(&self) -> &str {
+                self.id
+            }
+
+            fn supported_class(&self) -> &PiiClass {
+                &self.class
+            }
+
+            fn detect(
+                &self,
+                input: &str,
+                _ctx: &DetectContext<'_>,
+            ) -> std::result::Result<Vec<Candidate>, gaze_types::DetectError> {
+                Ok(vec![Candidate::new(
+                    0..input.len(),
+                    self.class.clone(),
+                    self.id(),
+                    1.0,
+                    0,
+                    None,
+                    self.token_family(),
+                    self.id(),
+                    ConflictTier::None,
+                    Vec::new(),
+                )])
+            }
+
+            fn token_family(&self) -> &str {
+                "document"
+            }
+        }
+
+        let family_class = PiiClass::from_policy_name("custom:family:tenant-document")
+            .expect("family policy class");
+        let pipeline = Pipeline::builder()
+            .recognizer(TieRecognizer {
+                id: "doc.alpha",
+                class: PiiClass::custom("alpha"),
+            })
+            .recognizer(TieRecognizer {
+                id: "doc.beta",
+                class: PiiClass::custom("beta"),
+            })
+            .register_collision(
+                "doc.alpha",
+                CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "doc.beta",
+                CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .rule(ClassRule::new(family_class, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let clean = pipeline
+            .redact(&session, RawDocument::Text("CASE-0001".to_string()))
+            .expect("redact");
+
+        let CleanDocument::Text(text) = clean else {
+            panic!("expected text");
+        };
+        assert_ne!(text, "CASE-0001");
+    }
+
+    #[test]
     fn t21d_token_family_threads_from_recognizer_to_session() {
         struct FamilyRecognizer;
 
