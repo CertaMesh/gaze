@@ -1,0 +1,26 @@
+Install the pinned local model, write a working policy, and run a doctor check.
+
+Requires the binary to be built with `--features setup`.
+
+Usage: gaze setup [OPTIONS]
+
+Options:
+      --safety-net <SAFETY_NET>
+          Safety-net setup path. Defaults to NER; OPF verifies an existing `opf download` checkpoint when available
+          
+          [possible values: ner, opf]
+
+      --policy-out <POLICY_OUT>
+          Policy TOML output path. Defaults to ./gaze.toml
+
+      --model-dir <MODEL_DIR>
+          Model install directory. Defaults to $XDG_DATA_HOME/gaze/models/kiji-distilbert
+
+      --non-interactive
+          Use defaults without prompts
+
+      --force
+          Overwrite an existing policy file
+
+  -h, --help
+          Print help (see a summary with '-h')

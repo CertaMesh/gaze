@@ -1,0 +1,13 @@
+Ingest a document (PNG/JPG/PDF) into a split SafeBundle.
+
+Requires the binary to be built with `--features document`.
+
+Usage: gaze document <COMMAND>
+
+Commands:
+  clean  Run OCR + Gaze redact on `<input>` and split agent-safe files from owner restore material
+  help   Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')

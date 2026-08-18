@@ -1,0 +1,12 @@
+Run OCR + Gaze redact on `<input>` and split agent-safe files from owner restore material
+
+Usage: gaze document clean [OPTIONS] <--out <OUT>|--agent-out <AGENT_OUT>> <INPUT>
+
+Arguments:
+  <INPUT>  Source file. Must be `.png`, `.jpg`, `.jpeg`, or `.pdf` (single-page)
+
+Options:
+      --out <OUT>              Convenience output root. Creates `<PATH>/agent` and `<PATH>/owner`
+      --agent-out <AGENT_OUT>  Agent-visible output directory for `clean.md` and `report.json`
+      --owner-out <OWNER_OUT>  Owner-only output directory for `manifest.json`
+  -h, --help                   Print help

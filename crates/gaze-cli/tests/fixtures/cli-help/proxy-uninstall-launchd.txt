@@ -1,0 +1,6 @@
+Uninstall macOS launchd auto-start integration
+
+Usage: gaze proxy uninstall-launchd
+
+Options:
+  -h, --help  Print help

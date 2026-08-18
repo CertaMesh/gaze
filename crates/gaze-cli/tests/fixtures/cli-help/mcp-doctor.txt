@@ -1,0 +1,9 @@
+Diagnose MCP server dependencies and client configuration
+
+Usage: gaze mcp doctor [OPTIONS]
+
+Options:
+      --agents-md <AGENTS_MD>  Agent guidance file to check
+      --strict                 Exit non-zero when any warning is present
+      --json                   Emit machine-readable JSON
+  -h, --help                   Print help

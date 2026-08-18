@@ -1,0 +1,16 @@
+Install, diagnose, or run the Gaze MCP stdio server.
+
+Requires the binary to be built with `--features mcp`.
+
+Usage: gaze mcp <COMMAND>
+
+Commands:
+  install  Install Gaze as an MCP stdio server in a supported client config
+  doctor   Diagnose MCP server dependencies and client configuration
+  serve    Run the Gaze MCP stdio server
+  bridge   Run the policy-gated MCP bridge over stdio
+  help     Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')

@@ -111,6 +111,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`gaze-cli` declares each shared flag group once** (audit 7201 S11-F1, solo
+  todo #2368). `gaze clean` and `gaze daemon` each declared their flags inline
+  in `Cmd`, restated them in a 33- and 23-field destructure, and rebuilt them
+  into a runtime `Args` struct — five mirrors of one list. `gaze proxy serve`
+  and `gaze proxy start` carried two byte-identical 31-line dashboard blocks
+  plus two hand-written 10-field mappings. The flags now live in one
+  `#[derive(clap::Args)]` struct per group, flattened with `#[command(flatten)]`,
+  and the OpenAI-filter subprocess group and the safety-net budget group
+  (`--safety-net-timeout-ms`, `--safety-net-input-limit-bytes`,
+  `--safety-net-mode`, `--safety-net-fallback`) are owned once in
+  `commands::shared_args` and shared by `clean` and `daemon`, so a verb cannot
+  quietly lose one and run a weaker Pass-3 safety net than its sibling.
+
+  **The published CLI surface is unchanged.** `scripts/verify/cli-help-surface.sh`
+  builds the base revision and the working tree in one run and diffs `--help`
+  for the root command and all 32 subcommands; all 33 captures are byte-identical
+  across the change, and the captures are committed under
+  `crates/gaze-cli/tests/fixtures/cli-help/`.
+
+  `gaze daemon` still accepts fewer flags than `gaze clean`: no
+  `--safety-net-registry`, `--safety-net-add`, `--kiji-distilbert-precision`,
+  `--opf-locales`, `--opf-command`, `--opf-checkpoint`, `--rulepack-bundled`,
+  or `--rulepack-path`. That gap is unchanged by this release and is now pinned
+  by a test rather than left implicit; passing one of those to `gaze daemon` is
+  rejected, not ignored.
+
 - **One documented safety-net default across the library and the CLI** (audit
   7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
   `clean_with_safety_net_detect_context` — the policy-less convenience entry

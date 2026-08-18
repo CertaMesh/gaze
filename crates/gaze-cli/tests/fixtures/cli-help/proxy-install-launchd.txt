@@ -1,0 +1,6 @@
+Install macOS launchd auto-start integration
+
+Usage: gaze proxy install-launchd
+
+Options:
+  -h, --help  Print help

@@ -1,0 +1,12 @@
+Search the local owner-side index by one entity
+
+Usage: gaze index search [OPTIONS] <ENTITY>
+
+Arguments:
+  <ENTITY>  Entity value to search for. It is tokenized before authorization/search
+
+Options:
+      --domain <DOMAIN>          Local index domain id [default: local_owner/docs/v1]
+      --class <CLASS>            Entity class: name, email, org, organization, or `custom:<name>`
+      --index-path <INDEX_PATH>  Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`
+  -h, --help                     Print help

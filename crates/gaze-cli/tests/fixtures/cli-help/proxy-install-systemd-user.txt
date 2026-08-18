@@ -1,0 +1,6 @@
+Install Linux systemd user auto-start integration
+
+Usage: gaze proxy install-systemd-user
+
+Options:
+  -h, --help  Print help
