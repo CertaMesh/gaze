@@ -11,6 +11,12 @@ repository root.
 | `scripts/fetch/fetch-kiji-safetynet-model.sh` | Fetches and verifies the pinned Kiji DistilBERT safety-net bundle. | Operators and Kiji safety-net docs. |
 | `scripts/fetch/fetch-openai-privacy-filter.sh` | Installs the pinned OpenAI Privacy Filter subprocess runtime. | Operators evaluating the OPF safety net. |
 
+## Gate
+
+| Script | What it does | Who calls it |
+|---|---|---|
+| `scripts/gate/mcp-tier-isolation-mutation-probe.sh` | Un-gates the operator-tier surface and requires `cargo run -p xtask -- mcp-tier-isolation` to go red, then reverts, rebuilds, and requires green. | Maintainers and reviewers verifying the tier gate can still fail. |
+
 ## Bench
 
 | Script | What it does | Who calls it |

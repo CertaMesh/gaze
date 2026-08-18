@@ -331,6 +331,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contract are byte-identical; only `decided_by` (and the `ambiguity_record`
   derived from it in `gaze-audit` / JSON exports) moves.
 
+- **The `mcp-tier-isolation` gate now actually fails when the agent/operator
+  tier boundary is violated** (audit 7359 §6-F1, solo todo #2993). **The tier
+  partition itself was, and remains, enforced by rustc:** the operator surface
+  sits behind `#[cfg(feature = "operator-tier")]` in
+  `crates/gaze-mcp-core/src/{lib.rs,tools/mod.rs}`, and no agent-tier build has
+  ever linked it. What was missing was any check that this keeps holding. The
+  gate's agent-tier assertion was `assert!(true)`, deferring the real guarantee
+  to the `dylint-gate`, whose `dylint.toml` carries only `gaze_audit` rules and
+  nothing about tiers — so un-gating the operator restore surface and running
+  `cargo run -p xtask -- mcp-tier-isolation` exited 0. **No adopter was exposed
+  by this; the alarm on the boundary was, until now, the only thing that was
+  not real.**
+
+  The vacuous assertion is replaced by `trybuild` compile-fail fixtures in
+  `crates/gaze-mcp-core/tests/ui/tier/`, one per gated surface (`tools::export`,
+  `tools::restore`, `tools::restore_strict`, and the `operator_tools`
+  re-export). Each is compiled as an external crate against the same agent-tier
+  feature graph the test binary was built with, so rustc — not another gate's
+  configuration — is the enforcer. Removing any `cfg` gate makes the matching
+  fixture compile, which fails the gate and names the surface. The gate
+  additionally requires each feature graph to report its tier tests as passing,
+  since `cargo test` exits 0 for zero tests, and the fixtures are enrolled in
+  the `trybuild-fixture-hygiene` inventory so deleting one is also a failure.
+  Each graph further declares whether it is driven with `cargo test` or
+  `cargo check`, and the gate refuses a `cargo test` graph that names no test,
+  so an empty expectation cannot silently mean both "nothing executes here" and
+  "nobody filled this in".
+
 - **Structured documents no longer accept a safety-net enforcement request and
   silently perform observation** (audit 7201 S01-F2, solo todo #2950). The
   structured arm of `clean_with_safety_net_policy_detect_context` cleaned each

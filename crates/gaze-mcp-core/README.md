@@ -209,6 +209,14 @@ agent surface, so an adopter who skips wiring auth hits
 `AuthError::MissingHook` from `DenyAllAuthHook` instead of accidentally
 exposing restore.
 
+The exclusion is a `#[cfg(feature = "operator-tier")]` gate on each operator
+module, so rustc keeps the surface out of an agent-tier build entirely. That it
+stays that way is verified by the trybuild compile-fail fixtures in
+`tests/ui/tier/` — one per gated surface, each compiled as an external crate
+against an agent-tier feature graph and required to fail resolution — driven by
+the `mcp-tier-isolation` xtask gate. `scripts/gate/mcp-tier-isolation-mutation-probe.sh`
+re-proves that the gate goes red when a gate is removed.
+
 ## Open items
 
 - `gaze-mcp-rmcp` ships alongside this crate as the reference rmcp
