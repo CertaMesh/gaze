@@ -37,6 +37,7 @@ Current measured values live in the
 | Actionable residual suspects | ↓ lower is better; goal 0 |
 | Production/benchmark divergence | ↔ invariant target; goal 0 |
 | False-positive bytes/documents and clean-document changes | ↔ invariant ratchet; goal no regression |
+| *Ratchet exception (gold noise)* | A slice may raise holdout false-positive bytes only by spans that are genuine identifiers the corpus gold does not label, and only when the A4 negative corpus does not move at all (bytes and documents, every category); each such span is enumerated shape-normalised in the slice's `.md` with the reason it is real, and the reviewer re-confirms the list — never tune a rule to skip real PII to keep the counter flat |
 | Complete three-cell correctness integers | ↔ exact target; goal equality across two full runs |
 
 ## Committed Benchmark Evidence Index
@@ -70,6 +71,9 @@ not imply that they meet current production targets.
 | [v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json](v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`a8f7182`), the two-run determinism evidence for the post-wave comparison (not an accepted baseline) | Current evidence |
 | [v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json) | Bisect run at `d64d7e3` (parent of #436) for the post-wave comparison; identical to BASE (not an accepted baseline) | Current evidence |
 | [v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json) | Bisect run at `6ad0efe` (#436 merge) for the post-wave comparison (not an accepted baseline) | Current evidence |
+| [v0.12-3025u-bfcf264-scorecard.md](v0.12-3025u-bfcf264-scorecard.md) | #3025 slice U: structured-containment resolver rung (`ConflictTier::StructuredContainment`) at `bfcf264` against `main` `8d87468`, with the span-by-span set of changed arbitration outcomes and the enumerated gold-noise FP exception | Current evidence |
+| [v0.12-3025u-bfcf264-candidate-scorecard-v4.json](v0.12-3025u-bfcf264-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`bfcf264`, run 1) for the slice-U comparison; BASE is the committed `a8f7182` candidate scorecard, whose runtime tree equals `8d87468` (not an accepted baseline) | Current evidence |
+| [v0.12-3025u-bfcf264-candidate-run2-scorecard-v4.json](v0.12-3025u-bfcf264-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`bfcf264`), the two-run determinism evidence for the slice-U comparison (not an accepted baseline) | Current evidence |
 | [v0.12-en-de-whole-pipeline-baseline.md](v0.12-en-de-whole-pipeline-baseline.md) | Human-readable authoritative no-OPF whole-pipeline baseline | Current evidence |
 | [v0.12-no-opf-error-buckets.md](v0.12-no-opf-error-buckets.md) | Prioritized analysis of current no-OPF Kiji error buckets | Current evidence |
 | [v0.12-no-opf-scorecard-v3.json](v0.12-no-opf-scorecard-v3.json) | Normalized machine-readable three-cell schema-v3 scorecard | Current evidence |
