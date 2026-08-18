@@ -39,6 +39,35 @@ fn bundle_tokenization_drift_gate_passes_on_baseline() {
 }
 
 #[test]
+fn bundle_tokenization_drift_gate_targets_repo_snapshot_from_nested_cwd() {
+    let root = workspace_root();
+    let nested = root.join("crates/xtask/fixtures");
+    let output = Command::new("cargo")
+        .args([
+            "run",
+            "-p",
+            "xtask",
+            "--",
+            "bundle-tokenization-drift",
+            "--verify-ack",
+        ])
+        .current_dir(&nested)
+        .output()
+        .expect("run bundle-tokenization-drift gate from nested cwd");
+
+    assert!(
+        output.status.success(),
+        "nested-cwd gate must resolve the repo-root snapshot; {}",
+        output_text(&output)
+    );
+    assert!(
+        output_text(&output).contains("bundle-tokenization-drift: passed"),
+        "nested-cwd gate must execute against the committed snapshot; {}",
+        output_text(&output)
+    );
+}
+
+#[test]
 fn bundle_tokenization_drift_gate_fails_when_enabled_recognizer_id_drifts() {
     let temp = tempfile::tempdir().expect("tempdir");
     let fixture_root = temp

@@ -19,6 +19,7 @@ mod negative_corpus;
 mod no_tenant_knowledge;
 mod publish_plan;
 mod readme_version_check;
+mod repo;
 mod safety_net_sanity;
 mod scrub_public_text;
 mod tokenbridge_encrypted_index;

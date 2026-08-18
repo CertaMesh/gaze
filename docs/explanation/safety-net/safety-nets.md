@@ -179,8 +179,21 @@ this struct.
 
 ### Observer-only contract
 
-The trait has no return channel for replacement text and no mutable handle to
-the manifest, by construction. The pipeline calls
+The *backend* is observer-only; the *pipeline* may still act on what it reports.
+A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
+for replacement text and no mutable handle to the manifest, by construction —
+but the `SafetyNetPolicy` the caller passes decides what the deterministic core
+does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), delete the
+suspect spans (`Redact`), or tokenize them reversibly and re-run
+(`Resolve`). The policy-less entry points below use
+`SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
+production default since v0.8.1. Pass an explicit `Strict` policy to
+`Pipeline::clean_with_safety_net_policy_detect_context`, or use
+`Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
+and the full lowering table:
+[`safety-net-modes.md`](safety-net-modes.md#6-fallback-flag).
+
+The pipeline calls
 `Pipeline::clean_with_safety_net_detect_context`, which:
 
 1. Runs the deterministic detection-and-redaction pipeline.
@@ -190,7 +203,9 @@ the manifest, by construction. The pipeline calls
 4. Returns `(CleanDocument, LeakReport)` to the caller.
 
 The bytes on `CleanDocument` are produced exclusively by the deterministic
-core. A safety net cannot rewrite, append to, or veto the clean text.
+core. A safety net cannot rewrite, append to, or veto the clean text: under an
+enforcing policy it is still the core's tokenizer and redactor that mutate the
+document, driven by the report, never the backend.
 
 ### Locale gating
 
@@ -362,8 +377,46 @@ that field path, and the FP-adjudication query
 it. Locale-skip telemetry is also recorded per field when the session-level
 locale chain does not match.
 
+### The structured path is observer-only, and says so
+
+**A structured document accepts only an observer policy.** Passing
+`SafetyNetMode::Redact` or `SafetyNetMode::Resolve` with a
+`RawDocument::Structured` returns
+`Error::UnsupportedSafetyNetModeForStructured` before any field is
+tokenized. The traversal above has no enforcement stage: it cleans each
+leaf, runs the nets over the result, and reports. Accepting an enforcing
+policy and quietly performing observation would be the worst of both — the
+caller is told `Ok`, and the suspect bytes are still in the document.
+Failing closed is the axis-1 answer.
+
+Use `SafetyNetMode::Strict` (reject at your boundary when the report is
+non-empty) or `SafetyNetMode::Tolerant`, via
+`Pipeline::clean_with_safety_net_policy_detect_context`, or
+`Pipeline::scan_safety_nets_structured` for a read-only pass over an
+already-clean document. Note that the policy-less
+`Pipeline::clean_with_safety_net*` entry points default to `Resolve`
+(`SafetyNetPolicy::default()`), so they are text-only in practice.
+
+Enforcement for structured documents is not implemented rather than
+forbidden: per-field enforcement is a coherent future feature (each leaf
+carries its own manifest, so a leaf could be resolved or redacted in
+isolation). Until it exists, the contract says so out loud.
+
+### One walker
+
+All three structured traversals — pseudonymize, clean-and-scan, and
+scan-only — are the single `walk_structured` in
+`crates/gaze/src/pipeline.rs`, parameterized by a `LeafOp`. They were three
+near-identical copies and had already drifted. What the op varies is
+documented on `LeafOp` itself: empty-string skipping, whether scalar leaves
+are scanned, whether the document is rebuilt, and the root field-path
+prefix.
+
 The integration coverage lives in
-`crates/gaze/tests/safety_net.rs::structured_safety_net_traverses_nested_fields_and_preserves_shape`.
+`crates/gaze/tests/safety_net.rs`:
+`structured_safety_net_traverses_nested_fields_and_preserves_shape`,
+`structured_walk_has_nested_parity_across_every_leaf_op`, and
+`structured_documents_do_not_silently_observe_when_enforcement_is_requested`.
 
 ## Replay hash
 

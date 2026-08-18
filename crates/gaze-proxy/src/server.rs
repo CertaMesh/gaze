@@ -1278,23 +1278,27 @@ pub fn parse_request_stream_format(body: &[u8]) -> Result<WireFormat, DirectProx
 /// It delegates to the single shared Pipeline algorithm introduced by P4a and performs only
 /// validation against the staged token namespace. No throwaway session, replay, or whole-value
 /// token shortcut exists here.
-struct PipelineRequestPseudonymizer<'pipeline, 'transaction, 'session> {
+struct PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session> {
     pipeline: &'pipeline Pipeline,
     transaction: &'transaction mut SessionTransaction<'session>,
-    dictionaries: DictionaryBundle,
+    locale_chain: &'context [LocaleTag],
+    dictionaries: &'context DictionaryBundle,
 }
 
-impl<'pipeline, 'transaction, 'session>
-    PipelineRequestPseudonymizer<'pipeline, 'transaction, 'session>
+impl<'pipeline, 'context, 'transaction, 'session>
+    PipelineRequestPseudonymizer<'pipeline, 'context, 'transaction, 'session>
 {
     fn new(
         pipeline: &'pipeline Pipeline,
+        locale_chain: &'context [LocaleTag],
+        dictionaries: &'context DictionaryBundle,
         transaction: &'transaction mut SessionTransaction<'session>,
     ) -> Self {
         Self {
             pipeline,
             transaction,
-            dictionaries: DictionaryBundle::default(),
+            locale_chain,
+            dictionaries,
         }
     }
 
@@ -1308,8 +1312,8 @@ impl<'pipeline, 'transaction, 'session>
             .pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
                 self.transaction,
                 RawDocument::Text(input.to_owned()),
-                &[LocaleTag::Global],
-                &self.dictionaries,
+                self.locale_chain,
+                self.dictionaries,
                 prefix_cache_write_mode,
             )
             .map_err(|_| CodecErrorCode::ProtectionFailedClosed)?;
@@ -1320,7 +1324,7 @@ impl<'pipeline, 'transaction, 'session>
     }
 }
 
-impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_> {
+impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_, '_> {
     fn protect(&mut self, input: &str) -> Result<String, CodecErrorCode> {
         self.protect_with_prefix_cache_write_mode(input, PrefixCacheWriteMode::Allow)
     }
@@ -1377,24 +1381,32 @@ impl RequestPseudonymizer for PipelineRequestPseudonymizer<'_, '_, '_> {
     }
 }
 
-struct PipelineResponseResidualValidator<'pipeline> {
+struct PipelineResponseResidualValidator<'pipeline, 'context> {
     pipeline: &'pipeline Pipeline,
+    locale_chain: &'context [LocaleTag],
+    dictionaries: &'context DictionaryBundle,
     validation_session: Session,
 }
 
-impl<'pipeline> PipelineResponseResidualValidator<'pipeline> {
-    fn new(pipeline: &'pipeline Pipeline) -> Result<Self, DirectProxyError> {
+impl<'pipeline, 'context> PipelineResponseResidualValidator<'pipeline, 'context> {
+    fn new(
+        pipeline: &'pipeline Pipeline,
+        locale_chain: &'context [LocaleTag],
+        dictionaries: &'context DictionaryBundle,
+    ) -> Result<Self, DirectProxyError> {
         let validation_session = Session::new(Scope::Ephemeral).map_err(|_| {
             ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::ResponseValidation)
         })?;
         Ok(Self {
             pipeline,
+            locale_chain,
+            dictionaries,
             validation_session,
         })
     }
 }
 
-impl ResponseResidualValidator for PipelineResponseResidualValidator<'_> {
+impl ResponseResidualValidator for PipelineResponseResidualValidator<'_, '_> {
     fn validate(
         &mut self,
         value: &str,
@@ -1402,10 +1414,11 @@ impl ResponseResidualValidator for PipelineResponseResidualValidator<'_> {
     ) -> Result<(), CodecErrorCode> {
         let (_, spans, _) = self
             .pipeline
-            .clean_with_safety_net(
+            .clean_with_safety_net_detect_context(
                 &self.validation_session,
                 RawDocument::Text(value.to_owned()),
-                &[LocaleTag::Global],
+                self.locale_chain,
+                self.dictionaries,
             )
             .map_err(|_| CodecErrorCode::ProviderOriginPii)?;
         for span in spans {
@@ -1422,6 +1435,8 @@ impl ResponseResidualValidator for PipelineResponseResidualValidator<'_> {
 #[allow(clippy::too_many_arguments)]
 fn prepare_and_commit_direct_request(
     pipeline: &Pipeline,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
     session: &Session,
     codec: &dyn BodyCodec,
     original_body: &[u8],
@@ -1434,6 +1449,8 @@ fn prepare_and_commit_direct_request(
 ) -> Result<CommittedDirectRequest, DirectProxyError> {
     prepare_and_commit_direct_request_with_hook(
         pipeline,
+        locale_chain,
+        dictionaries,
         session,
         codec,
         original_body,
@@ -1474,6 +1491,8 @@ fn map_session_commit_failure(kind: SessionCommitFailureKind) -> DirectProxyErro
 #[allow(clippy::too_many_arguments)]
 fn prepare_and_commit_direct_request_with_hook(
     pipeline: &Pipeline,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
     session: &Session,
     codec: &dyn BodyCodec,
     original_body: &[u8],
@@ -1488,7 +1507,12 @@ fn prepare_and_commit_direct_request_with_hook(
     for attempt in 0..=1 {
         let mut transaction = session.begin_transaction();
         let proved_body = {
-            let mut pseudonymizer = PipelineRequestPseudonymizer::new(pipeline, &mut transaction);
+            let mut pseudonymizer = PipelineRequestPseudonymizer::new(
+                pipeline,
+                locale_chain,
+                dictionaries,
+                &mut transaction,
+            );
             let mut context =
                 RequestTransformContext::new(&mut pseudonymizer, WireFormat::Json, limits);
             if provider_request_projection_selected {
@@ -1829,11 +1853,13 @@ async fn proxy_inner(
     // path is a configuration decision, and it must land on the primary pass and the residual
     // re-scan identically or the two disagree about what counts as PII.
     let locale_chain = state.config.locale_chain();
+    let dictionaries = state.config.dictionaries();
     let surfaced = redact_surfaces(
         &state.pipeline,
         &session,
         adapter.request_pii_surfaces(&mut json),
         locale_chain,
+        dictionaries,
     )?;
     // The declared coverage policy SELECTS the mechanism that establishes coverage. Reading it
     // here is what keeps the declaration honest: a contract cannot claim a coverage posture the
@@ -1842,7 +1868,13 @@ async fn proxy_inner(
         // Legacy adapters carry no codec proof, so coverage is established right here, by
         // re-scanning the outbound body and failing closed on anything left unprotected.
         CoveragePolicy::LegacySurfaces => {
-            residual_scan_request(&state.pipeline, &json, &surfaced, locale_chain)?;
+            residual_scan_request(
+                &state.pipeline,
+                &json,
+                &surfaced,
+                locale_chain,
+                dictionaries,
+            )?;
         }
         // A codec-proved adapter must have been routed to the codec branch above. Reaching this
         // point means the contract and the router disagree and no proof has been established.
@@ -1981,6 +2013,8 @@ async fn direct_proxy_inner(
                 .map_err(|_| ProxyErrorCode::ProxyConfiguration.error(ProxyErrorPhase::Session))?;
             prepare_and_commit_direct_request(
                 &state.pipeline,
+                state.config.locale_chain(),
+                state.config.dictionaries(),
                 &session,
                 codec,
                 body,
@@ -1998,6 +2032,8 @@ async fn direct_proxy_inner(
             let request_guard = lease.lock_request().await;
             let committed = prepare_and_commit_direct_request(
                 &state.pipeline,
+                state.config.locale_chain(),
+                state.config.dictionaries(),
                 lease.session(),
                 codec,
                 body,
@@ -2031,6 +2067,8 @@ async fn direct_proxy_inner(
         let opened = runtime.client.execute_sse(committed).await?;
         return stage_and_replay_direct_sse(
             Arc::clone(&state.pipeline),
+            state.config.locale_chain.clone(),
+            state.config.dictionaries().clone(),
             opened,
             runtime.codec_limits,
             runtime.client_config.max_response_bytes,
@@ -2042,6 +2080,8 @@ async fn direct_proxy_inner(
     let executed = runtime.client.execute(committed).await?;
     let response = restore_direct_response(
         &state.pipeline,
+        state.config.locale_chain(),
+        state.config.dictionaries(),
         codec,
         executed,
         runtime.codec_limits,
@@ -2051,8 +2091,11 @@ async fn direct_proxy_inner(
     response
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stage_and_replay_direct_sse(
     pipeline: Arc<Pipeline>,
+    locale_chain: gaze::LocaleChain,
+    dictionaries: DictionaryBundle,
     opened: CommittedDirectSse,
     limits: CodecLimits,
     max_response_bytes: usize,
@@ -2085,7 +2128,11 @@ fn stage_and_replay_direct_sse(
         let proof = async move {
             let body = collect_response_body(upstream_response, max_response_bytes).await?;
             validate_declared_body(WireFormat::Sse, &body, max_response_bytes)?;
-            let mut residual = PipelineResponseResidualValidator::new(&pipeline)?;
+            let mut residual = PipelineResponseResidualValidator::new(
+                &pipeline,
+                locale_chain.as_slice(),
+                &dictionaries,
+            )?;
             let mut context =
                 ResponseTransformContext::new(&snapshot, &mut residual, WireFormat::Sse, limits);
             if inspection
@@ -2291,13 +2338,16 @@ fn canonical_session_identifier(headers: &HeaderMap) -> Result<&str, DirectProxy
 
 fn restore_direct_response(
     pipeline: &Pipeline,
+    locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
     codec: &dyn BodyCodec,
     mut executed: CommittedDirectResponse,
     limits: CodecLimits,
     inspection: Option<&mut ProxyInspectionLogicalV1>,
 ) -> Result<Response, DirectProxyError> {
     let (head, body) = executed.response.into_parts();
-    let mut residual = PipelineResponseResidualValidator::new(pipeline)?;
+    let mut residual =
+        PipelineResponseResidualValidator::new(pipeline, locale_chain, dictionaries)?;
     let mut context =
         ResponseTransformContext::new(&executed.snapshot, &mut residual, head.format(), limits);
     if inspection
@@ -2564,14 +2614,16 @@ fn redact_surfaces(
     session: &Session,
     surfaces: Vec<crate::adapter::PiiSurface<'_>>,
     locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
 ) -> Result<HashSet<String>, ProxyError> {
     let mut surfaced = HashSet::new();
     for surface in surfaces {
         let clean = pipeline
-            .pseudonymize_with_context(
+            .pseudonymize_with_detect_context(
                 session,
                 RawDocument::Text(surface.text.clone()),
                 locale_chain,
+                dictionaries,
             )
             .map_err(|source| ProxyError::Pipeline { source })?;
         if let CleanDocument::Text(text) = clean {
@@ -2602,6 +2654,7 @@ fn residual_scan_request(
     body: &Value,
     surfaced: &HashSet<String>,
     locale_chain: &[LocaleTag],
+    dictionaries: &DictionaryBundle,
 ) -> Result<(), ProxyError> {
     let session =
         Session::new(Scope::Ephemeral).map_err(|source| ProxyError::Pipeline { source })?;
@@ -2610,6 +2663,7 @@ fn residual_scan_request(
         session,
         surfaced,
         locale_chain,
+        dictionaries,
     };
     scan.walk("", "", body, false, true)
 }
@@ -2621,16 +2675,19 @@ struct RequestResidualScan<'a> {
     surfaced: &'a HashSet<String>,
     /// The same chain the primary pass ran under. See [`residual_scan_request`].
     locale_chain: &'a [LocaleTag],
+    /// The exact bundle used by the primary pass.
+    dictionaries: &'a DictionaryBundle,
 }
 
 impl RequestResidualScan<'_> {
     fn probe(&self, field_path: &str, text: &str) -> Result<(), ProxyError> {
         let (_, spans, _) = self
             .pipeline
-            .clean_with_safety_net(
+            .clean_with_safety_net_detect_context(
                 &self.session,
                 RawDocument::Text(text.to_owned()),
                 self.locale_chain,
+                self.dictionaries,
             )
             .map_err(|source| ProxyError::Pipeline { source })?;
         if spans.is_empty() {
@@ -2845,6 +2902,7 @@ fn proxy_error_name(err: &ProxyError) -> &'static str {
         ProxyError::DaemonPidfileStale { .. } => "DaemonPidfileStale",
         ProxyError::DaemonIo { .. } => "DaemonIo",
         ProxyError::DaemonConfig { .. } => "DaemonConfig",
+        ProxyError::DaemonExitedEarly { .. } => "DaemonExitedEarly",
     }
 }
 
@@ -3345,6 +3403,8 @@ mod tests {
 
         let committed = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body.as_bytes(),
@@ -3396,6 +3456,8 @@ mod tests {
                 .headers;
             let first = prepare_and_commit_direct_request(
                 &pipeline,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
                 &session,
                 &codec,
                 original.as_bytes(),
@@ -3412,6 +3474,8 @@ mod tests {
 
             let second = prepare_and_commit_direct_request(
                 &pipeline,
+                &[LocaleTag::Global],
+                &DictionaryBundle::default(),
                 &session,
                 &codec,
                 &proved_once,
@@ -3452,6 +3516,8 @@ mod tests {
         let request = direct_request(url, WireFormat::Json, body.as_bytes()).unwrap();
         let error = prepare_and_commit_direct_request(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body.as_bytes(),
@@ -3474,6 +3540,8 @@ mod tests {
         );
         prepare_and_commit_direct_request(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             valid.as_bytes(),
@@ -3532,6 +3600,8 @@ mod tests {
         let mut before_commit_calls = 0usize;
         let error = match prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body.as_bytes(),
@@ -3582,6 +3652,8 @@ mod tests {
 
         let committed = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body,
@@ -3626,6 +3698,8 @@ mod tests {
 
         let committed = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body,
@@ -3696,6 +3770,8 @@ mod tests {
         let mut hook_calls = 0;
         let committed = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body.as_bytes(),
@@ -3752,6 +3828,8 @@ mod tests {
 
         let error = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body,
@@ -3804,6 +3882,8 @@ mod tests {
         let request = direct_request(url, WireFormat::Json, body.as_bytes()).unwrap();
         let error = prepare_and_commit_direct_request_with_hook(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &session,
             &codec,
             body.as_bytes(),
@@ -3913,6 +3993,8 @@ mod tests {
         };
         let response = restore_direct_response(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &crate::codecs::anthropic::AnthropicMessagesCodec,
             executed,
             CodecLimits::default(),
@@ -3956,6 +4038,8 @@ mod tests {
         let probe_request = direct_request(url.clone(), WireFormat::Json, body.as_bytes()).unwrap();
         let transformed = prepare_and_commit_direct_request(
             &pipeline,
+            &[LocaleTag::Global],
+            &DictionaryBundle::default(),
             &probe_session,
             &codec,
             body.as_bytes(),
@@ -4036,6 +4120,8 @@ mod tests {
         );
         let recovered = prepare_and_commit_direct_request(
             &state.pipeline,
+            state.config.locale_chain(),
+            state.config.dictionaries(),
             observed_lease.session(),
             &codec,
             extended_body.as_bytes(),

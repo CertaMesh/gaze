@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`gaze_proxy::ProxyConfig::with_dictionaries` installs one immutable
+  dictionary source for every proxy detection pass.** Omitting the builder keeps
+  the existing empty-bundle default. `ProxyConfig` was already
+  `#[non_exhaustive]` and the stored field is private, so this addition does not
+  break external struct construction.
+
 - **Scheme- and `www.`-anchored URL detection at the deterministic rule floor**
   (todo #2254). The new `url.anchored` recognizer in the embedded `core` bundle
   tokenizes `http://`, `https://`, and `www.`-prefixed URLs as
@@ -65,7 +71,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   recoverable axis-5 ergonomics cost in service of axis-1 reliability. The CLI's
   separate no-policy stub path is unchanged.
 
+- **Corpus-informed government-ID recognizers at the deterministic rule floor**
+  (todos #2318 follow-on, #2923). Four cue-anchored `safe_default` recognizers
+  join the embedded `core` bundle: `ssn.de_cue` (German social-insurance cues
+  such as `Sozialversicherungsnummer` and `SV-Nummer` before dashed, dotted, or
+  9 to 11 digit values, class `custom:ssn`), `tax_number.cue_anchored`
+  (`custom:tax_number`), `driver_license.cue_anchored`
+  (`custom:driver_license`), and `national_id.cue_anchored`
+  (`custom:national_id`). Every chosen shape was picked by measured sweep against
+  looser drafts and matches 0 of the 1,024 committed A4 negative documents.
+
+  Locale basis follows the mixed model from #414: `ssn.de_cue` is a
+  format-basis sibling of `ssn.us` (same class, same national identifier
+  shapes, German cue vocabulary, DACH provenance) and is an explicit addition
+  to the ratified format-basis promotion set; the three bilingual cue-anchored
+  recognizers are document-basis `global`, like `security_token.anchored`. All
+  four therefore fire under every locale chain, including `--locale=global`.
+  `ssn.us` keeps its pattern, locales, and basis unchanged; the only edit to it
+  is the symmetric `cooperates_with` metadata line. Cross-class overlaps between
+  the numeric shapes are resolved by the new `government-id` collision family
+  (`ssn` 10 beats `tax-number` 20 beats `national-id` 30; lower wins).
+
+  The [shipped scorecard](docs/reference/benchmarks/v0.12-government-id-scorecard.md)
+  measures the deterministic cells at 3,194 fewer leaked bytes each and 9 more
+  false-positive bytes: rule floor adds 1 false-positive document, while pass2
+  adds none. The full-stack Kiji `resolve` cell removes 3,093 leaked bytes and
+  613 false-positive bytes with no change in false-positive documents.
+  **Disclosed regression:** the Kiji cell loses 6 covered `PASSWORD` bytes, the
+  downstream safety-net interaction tracked as todo #2491 (mechanism #2420),
+  not a resolver decision and unaffected by collision precedence.
+
+  `tax_number.cue_anchored` deliberately requires a three-digit lead and
+  internal separators: it cedes the checksummed 2-3-3-3 Steuer-ID shape to
+  `steuer_id.de` and excludes A4's bare-digit invalid identifiers, so its
+  measured 16.8% coverage is a precision choice, not a detection deficiency.
+  `national_id.cue_anchored` ships with a known, bounded gap: 77 bare German
+  NATIONALID spans carry no cue and are structurally unreachable by any
+  cue-anchored rule.
+
 ### Changed
+
+- **One documented safety-net default across the library and the CLI** (audit
+  7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
+  `clean_with_safety_net_detect_context` — the policy-less convenience entry
+  points — previously hard-coded `SafetyNetMode::Strict` + `Redact`, which
+  contradicted `SafetyNetPolicy::default()` (`Resolve` + `Redact`, the shipped
+  production default and the CLI default since v0.8.1). They now use
+  `SafetyNetPolicy::default()`. **Adopters calling these entry points with a
+  registered safety net now get enforcement instead of observation**: suspects
+  are tokenized reversibly and any residual takes the `Redact` fallback, rather
+  than being reported and shipped. This strengthens axis 1 and preserves
+  axis 2 (the promoted spans stay restorable). For the previous behaviour pass
+  an explicit policy to `clean_with_safety_net_policy_detect_context`, or use
+  `Pipeline::scan_safety_nets` for a report-only pass. In-tree pipelines that
+  register no safety net are unaffected.
+
+- **The three structured-document walkers are one `walk_structured` with a
+  `LeafOp`** (audit 7201 S01-F2, solo todo #2950). The pseudonymize,
+  clean-and-scan, and scan-only traversals of `RawDocument::Structured` were
+  three near-identical recursive copies that had already drifted. They are now
+  one function parameterized by `LeafOp { Pseudonymize, CleanAndScan, ScanOnly }`,
+  with every intentional difference — empty-string skipping, whether scalar
+  leaves are scanned, whether the document is rebuilt, and the root field-path
+  prefix — declared once on the op and documented there. Behaviour is unchanged
+  on all three paths, including the pre-existing divergence where
+  `scan_safety_nets_structured` reports bare-key field paths (`profile.email`)
+  and `clean_with_safety_net*` reports JSONPath-style ones (`$.profile.email`),
+  which is preserved deliberately and tracked as solo todo #2958.
+
+- **`SafetyNetMode` x `SafetyNetFallback` is lowered once to a total
+  `SafetyNetDecision`** (audit 7201 S01-F1, solo todo #2949). The two public
+  fields spell twelve pairs; the runtime has six behaviours, and seven pairs
+  previously differed only in a field nothing read. `SafetyNetPolicy::decision()`
+  is now the single, total lowering to
+  `SafetyNetDecision { Observe { strict }, Redact, Resolve { on_residual } }`,
+  and every pipeline arm, the skip-gating optimizer, and the CLI boundary read
+  the decision instead of re-deriving the lattice from the pair. `SafetyNetDecision`
+  is exported from `gaze`. The public `mode` and `fallback` fields are unchanged.
+  The full twelve-pair behaviour table is pinned by
+  `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
+
+- **`gaze clean` no longer warns that `--safety-net-fallback` is "ignored when
+  `--safety-net-mode` is terminal"** (audit 7201 S01-F1, solo todo #2949). The
+  lowering documents which pairs consult the fallback, so the runtime warning is
+  redundant. Relatedly, the tolerant-deprecation warning now fires only where a
+  tolerant disposition is reachable — `--safety-net-mode tolerant`, or a tolerant
+  fallback under `--safety-net-mode resolve`. It no longer fires for
+  `--safety-net-mode redact --safety-net-fallback tolerant`, where the fallback
+  is never consulted. The `GAZE_ALLOW_TOLERANT` gate is unchanged and still
+  rejects a tolerant flag in any position.
 
 - **Persistent owner-side corpus index schema v2: each document is stored
   once, postings are derived on load, and re-ingest upserts** (audit 7201
@@ -90,6 +184,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
   was removed (it had no callers). The AEAD/key layer and the sealed-file
   envelope are unchanged.
+- **Audit-row enums now own one canonical string form** (audit S05-F2, solo todo
+  #2935). `Action`, `ConflictTier`, `DocumentKind`, and `FallbackReason` expose
+  matching `as_str` / `from_canonical_str` methods, and SQLite plus CLI consumers
+  delegate to them instead of maintaining panic-prone copies. `FallbackReason`
+  JSON now serializes as snake_case to match SQLite; every former PascalCase
+  spelling remains accepted as a serde alias.
 
 - **`gaze_assembly::build_pipeline` derives its `NoRecognizers` guard from
   actual registration and uses one locale predicate** (audit 7201 S10-F1,
@@ -159,9 +259,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   This deliberately trades axis 5 (snapshot compatibility and configuration
   convenience) for axis 1 (never leak a foreign-format identifier merely
   because the surrounding document uses another locale). The known remaining
-  debt is 27 target spans: 14 DE national-phone and 13 postal spans. Todo #2411
-  stays open: direct/codec primary and residual proxy passes still require the
-  shared `ProxyConfig::locale_chain` for every document-basis recognizer.
+  rule-coverage debt is 27 target spans: 14 DE national-phone and 13 postal
+  spans. The proxy transport debt is now closed by #2411: direct/codec primary
+  and residual passes receive the shared `ProxyConfig::locale_chain`; #2403
+  previously fixed the legacy path.
 
 - **A provably corrupt clean-text manifest now hard-errors in every safety-net
   fallback mode, including `Tolerant`** (#403). The safety-net RESOLVE path checks
@@ -204,6 +305,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   contract are byte-identical; only `decided_by` (and the `ambiguity_record`
   derived from it in `gaze-audit` / JSON exports) moves.
 
+- **Structured documents no longer accept a safety-net enforcement request and
+  silently perform observation** (audit 7201 S01-F2, solo todo #2950). The
+  structured arm of `clean_with_safety_net_policy_detect_context` cleaned each
+  field, ran the nets over the result, and returned `Ok` — with no enforcement
+  stage anywhere on the path. A caller passing `SafetyNetMode::Redact` or
+  `SafetyNetMode::Resolve` with a `RawDocument::Structured` therefore got
+  observer-only behaviour and a success return, with the suspect bytes still in
+  the document. It now fails closed with the new
+  `Error::UnsupportedSafetyNetModeForStructured { mode }` before any field is
+  tokenized. **Adopters passing structured documents with an enforcing mode now
+  get an error** — the intended correction; pass `SafetyNetMode::Strict` (or
+  `Tolerant`) for the observer behaviour they were actually receiving, or use
+  `Pipeline::scan_safety_nets_structured`. Note that the policy-less
+  `clean_with_safety_net*` entry points default to `Resolve`, so structured
+  documents must go through `clean_with_safety_net_policy_detect_context`.
+  Text documents are unaffected. Axis 1.
+
+- **Safety-net `resolve` fallback acted on the primary report instead of the
+  residual one, destroying tokens and shipping residual PII under the default
+  policy** (audit 7201 S01-F1, solo todos #2949 and #2956). When the resolve
+  pass converged and the post-resolution re-run flagged a residual suspect, the
+  fallback was handed the *primary* `LeakReport`, which by then described
+  pre-resolve coordinates.
+
+  With a **non-empty** primary report — the broadly reachable case, since any
+  deterministic safety net produces one — the redactor was pointed at stale
+  pre-resolve spans. Those spans had since become part of a token the resolve
+  pass minted, so the fallback deleted the token, dropped its manifest entry,
+  and left the actual residual in the document: an axis-1 leak and an axis-2
+  restore break in the same operation, returned as `Ok`.
+
+  With an **empty** primary report the fallback had nothing to act on at all, so
+  the residual shipped and no fallback audit row was written. (Reaching that
+  shape requires a backend whose verdict differs across byte-identical text,
+  since a converged resolve leaves the document unchanged.)
+
+  Only the `strict` fallback was safe, because it rejects the document without
+  consulting the report. The fallback now receives the report that produced the
+  reason, and acts only on the suspects in it that are not already protected by
+  a live token — a protected suspect is audited as a `Preserve` no-op instead of
+  being redacted, which also closes a gap where such suspects were left out of
+  the audit entirely. Pinned by
+  `resolve_fallback_does_not_redact_stale_pre_resolve_spans`,
+  `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`,
+  `resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens`
+  (both fallback reasons), and the twelve-pair lowering table; the first three
+  are required by name in the `safety-net-sanity` gate.
+
+- **A residual found only by the post-resolution re-run was invisible in the
+  returned `LeakReport`** (solo todo #2959). The report handed back to the
+  caller is the first pass's, so a boundary that decides on it — the CLI's
+  tolerant-mode deprecation warning, or an adopter's "did anything leak?" check
+  — was told nothing was found while the residual shipped under `tolerant` or
+  was destroyed one-way under `redact`. The suspects the fallback acted on are
+  now merged into the returned report. A converged resolve merges nothing, so a
+  deterministic net that re-reports the same suspect does not produce
+  duplicates.
+
+- **Fallback audit rows now state what happened to the suspect's bytes**
+  (audit 7201 S01-F1, solo todo #2949). `fallback_action` was renamed to
+  `fallback_row_action` and documented as the row's claim about the bytes:
+  `Action::Redact` only when the residual span is actually deleted,
+  `Action::Preserve` when it is left in place (shipped under `tolerant`,
+  rejected under `strict`). With the residual-report fix above, a
+  `decided_by: Fallback` row now also names the residual suspect that drove it
+  rather than a stale primary-pass suspect.
+- **A detached `gaze proxy start --policy prod.toml` now runs the policy instead
+  of the bundled `core` pipeline** (solo todo #2965). `start` persisted the
+  policy into its daemon config and then spawned the serving child with only
+  `--bind` and `--session-ttl`, so the detached daemon resolved
+  `build_pipeline(None, "core")`: no policy rules, no custom recognizers, no
+  dictionaries, and no policy locale tier. The configured `--rulepack` and all
+  three `--upstream-*` overrides were dropped the same way, which is why
+  `gaze proxy status` could print upstreams the running daemon never used. The
+  child's argument list is now derived from the daemon config as a whole, so the
+  daemonized proxy resolves the same pipeline as `gaze clean`. **The previous
+  entry for `gaze proxy` (solo todo #2937, PR #437) covered `gaze proxy serve`
+  only**; adopters running the daemon were unaffected by that fix. `restart`
+  carried the same defect and is fixed by the same change.
+
+- **`gaze proxy start` now fails when the daemon dies during startup instead of
+  reporting success** (found by the red test for #2965). The liveness probe used
+  `kill(pid, 0)`, which cannot distinguish a running child from one that exited
+  and has not been reaped, so a child that failed closed on an unloadable policy
+  was reported as `gaze-proxy started` with exit code 0. `start` now reports the
+  new `ProxyError::DaemonExitedEarly`, naming the child's exit code and the
+  stderr log to read, and removes the empty pidfile that would otherwise fail
+  every later start as stale. A startup failure slower than the 250 ms probe
+  window is still reported as started; that daemon is dead rather than serving
+  unprotected.
+
 - **`custom:family:*` policy classes now preserve the collision-family namespace**
   (audit S05-F1, solo todo #2934). `PiiClass::from_policy_name` previously
   normalized the reserved `family:` separator and hyphenated family name, so a
@@ -211,6 +403,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   preserve the original value. `PiiClass::family` and `as_family_name` now model
   that namespace once, and policy and rulepack parsing share the same
   non-normalizing path. The enum and manifest wire shape are unchanged.
+- **`gaze proxy` now resolves the same rulepacks, dictionaries, and
+  auto-activated locales as `gaze clean` for the same policy** (audit 7201
+  S11-F2, solo todo #2937). Previously the proxy assembled a narrower pipeline
+  that skipped dictionary values and locale-gated auto-activation.
+- **Proxy request protection and fail-closed residual validation now read the
+  same configured `DictionaryBundle`.** This covers direct/codec JSON and SSE
+  response validation plus the legacy primary and residual request passes; the
+  residual can no longer know fewer dictionary terms than the primary pass.
+- **`gaze-proxy` direct/codec primary and residual passes now use the resolved
+  locale chain instead of a pinned Global chain** (solo todo #2411). This
+  closes the direct/codec half after #2403 fixed the legacy path, and keeps both
+  passes aligned with the same configured dictionaries and document locales.
 
 - **The ORT NER backend now hands the BIO decoder the document text, not its
   provenance label** (audit S07-F1, solo todo #2902). `OrtBackend::detect` passed

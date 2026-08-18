@@ -104,7 +104,7 @@ The lower-level audit query keeps raw JSON strings so `gaze-audit` does not
 interpret CLI presentation concerns. CLI JSONL parses the JSON strings back into
 typed `ValidatorFailReason` and `AmbiguityRecord` values before writing output.
 
-`build_audit_query_sql` accepts column-presence booleans for cross-version
+`build_audit_query_sql` accepts a `PresentColumns` set for cross-version
 compatibility. If a database lacks a Spike 4 column, query projection uses
 `NULL AS <column>`. Filters against missing columns naturally return no matching
 rows, except `has_ambiguity = false`, which matches legacy rows because their

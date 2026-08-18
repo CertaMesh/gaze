@@ -1,8 +1,9 @@
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
@@ -208,6 +209,59 @@ pub fn write_config(paths: &DaemonPaths, config: &DaemonConfig) -> Result<(), Pr
     })
 }
 
+/// Rebuilds the daemon's configured surface as `gaze proxy serve` flags.
+///
+/// The persisted [`DaemonConfig`] is the single source of truth for a detached
+/// proxy: `start` and `restart` write it, and the child is handed nothing but
+/// what this derives from it, so `serve` keeps exactly one policy input whether
+/// it runs in the foreground or as the daemon child. The exhaustive
+/// destructuring is load-bearing — a new `DaemonConfig` field stops compiling
+/// here instead of silently never reaching the daemon, which is how `--policy`,
+/// `--rulepack`, and the adapter upstreams went missing (solo todo #2965).
+fn serve_args(config: &DaemonConfig) -> Vec<OsString> {
+    let DaemonConfig {
+        bind,
+        session_ttl,
+        policy,
+        rulepack,
+        adapters,
+    } = config;
+    let AdapterConfig {
+        openai,
+        anthropic,
+        gemini,
+    } = adapters;
+
+    let mut args: Vec<OsString> = vec![
+        "--bind".into(),
+        bind.to_string().into(),
+        "--session-ttl".into(),
+        session_ttl.into(),
+    ];
+    // The policy path travels, not its resolved contents: the child loads it
+    // through the same sequence as `gaze clean`, and a path that has moved since
+    // `start` fails the child closed instead of quietly demoting the chokepoint
+    // to the bundled floor. Serializing resolved inputs into the config would
+    // make that file a second, staleable copy of the policy.
+    if let Some(policy) = policy {
+        args.push("--policy".into());
+        args.push(policy.into());
+    }
+    if let Some(rulepack) = rulepack {
+        args.push("--rulepack".into());
+        args.push(rulepack.into());
+    }
+    for (flag, ProviderConfig { upstream }) in [
+        ("--upstream-openai", openai),
+        ("--upstream-anthropic", anthropic),
+        ("--upstream-gemini", gemini),
+    ] {
+        args.push(flag.into());
+        args.push(upstream.to_string().into());
+    }
+    args
+}
+
 pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
     cleanup_stale(&options.paths)?;
     if let Some(status) = status(&options.paths)? {
@@ -248,24 +302,53 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
         );
     command
         .args(["proxy", "serve", "--_foreground-daemon"])
-        .arg("--bind")
-        .arg(options.config.bind.to_string())
-        .arg("--session-ttl")
-        .arg(&options.config.session_ttl)
+        .args(serve_args(&options.config))
         .args(options.extra_args)
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr));
     drop(lock);
-    let child = command.spawn().map_err(|source| ProxyError::DaemonIo {
+    let mut child = command.spawn().map_err(|source| ProxyError::DaemonIo {
         path: PathBuf::from("gaze proxy serve"),
         source,
     })?;
-    std::thread::sleep(Duration::from_millis(250));
-    if process_exists(child.id()) {
-        Ok(child.id())
-    } else {
-        Err(ProxyError::DaemonNotRunning)
+    confirm_started(&mut child, &options.paths)
+}
+
+/// Confirms the spawned child is still alive after a short probe window and
+/// returns its pid.
+///
+/// The child resolves the configured policy, so a fail-closed load error
+/// surfaces as an immediate exit. `kill(pid, 0)` cannot see that: an unreaped
+/// child is a zombie and still answers as alive, which reported a dead daemon as
+/// started (solo todo #2965). `try_wait` reaps and reports the real status
+/// within the same 250ms budget, returning early on failure.
+///
+/// A failure slower than the probe window still reports success; that daemon is
+/// dead rather than serving unprotected, and `gaze proxy status` shows it.
+fn confirm_started(child: &mut Child, paths: &DaemonPaths) -> Result<u32, ProxyError> {
+    let deadline = Instant::now() + Duration::from_millis(250);
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                // The parent created this pidfile before spawning and the child
+                // never filled it in; leaving the empty file behind would fail
+                // every later start as stale.
+                let _ = fs::remove_file(&paths.pidfile);
+                return Err(ProxyError::DaemonExitedEarly {
+                    code: status.code(),
+                    stderr_file: paths.stderr_file.clone(),
+                });
+            }
+            Ok(None) if Instant::now() >= deadline => return Ok(child.id()),
+            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+            Err(source) => {
+                return Err(ProxyError::DaemonIo {
+                    path: PathBuf::from("gaze proxy serve"),
+                    source,
+                })
+            }
+        }
     }
 }
 
@@ -522,6 +605,53 @@ mod tests {
         .unwrap();
         cleanup_stale(&paths).unwrap();
         assert!(!paths.pidfile.exists());
+    }
+
+    // solo todo #2965: every field the adopter can configure has to reach the
+    // detached child, because the child's argv is all it ever sees.
+    #[test]
+    fn serve_args_forward_every_configured_field_to_the_daemon_child() {
+        let config = DaemonConfig {
+            policy: Some(PathBuf::from("/etc/gaze/prod.toml")),
+            rulepack: Some("core-extended".to_string()),
+            adapters: AdapterConfig::new(
+                Url::parse("http://127.0.0.1:4001").unwrap(),
+                Url::parse("http://127.0.0.1:4002").unwrap(),
+                Url::parse("http://127.0.0.1:4003").unwrap(),
+            ),
+            ..Default::default()
+        };
+
+        assert_eq!(
+            serve_args(&config),
+            [
+                "--bind",
+                "127.0.0.1:8787",
+                "--session-ttl",
+                "30m",
+                "--policy",
+                "/etc/gaze/prod.toml",
+                "--rulepack",
+                "core-extended",
+                "--upstream-openai",
+                "http://127.0.0.1:4001/",
+                "--upstream-anthropic",
+                "http://127.0.0.1:4002/",
+                "--upstream-gemini",
+                "http://127.0.0.1:4003/",
+            ]
+            .map(OsString::from)
+        );
+    }
+
+    #[test]
+    fn serve_args_omit_policy_when_the_daemon_has_none() {
+        let args = serve_args(&DaemonConfig::default());
+
+        assert!(!args.contains(&OsString::from("--policy")));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair == ["--rulepack", "core"].map(OsString::from)));
     }
 
     #[test]

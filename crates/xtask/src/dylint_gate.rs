@@ -9,6 +9,8 @@ use std::process::Command;
 
 use anyhow::{bail, Context, Result};
 
+use crate::repo::repo_root;
+
 const EXPECTED_UI_FIXTURES: usize = 18;
 const DYLINT_REQUIRED_ENV: &str = "GAZE_DYLINT_REQUIRED";
 const DEFERRED_MESSAGE: &str = "dylint_gate: ui-fixture-shape passed; cargo-dylint DEFERRED to the scheduled dylint.yml workflow (solo todo #1870)";
@@ -20,7 +22,7 @@ enum DylintDisposition {
 }
 
 pub fn run() -> Result<()> {
-    let root = std::env::current_dir().context("failed to resolve current directory")?;
+    let root = repo_root()?;
     assert_ui_fixture_shape(&root)?;
     match cargo_dylint_requirement(env_flag(DYLINT_REQUIRED_ENV), cargo_dylint_available())? {
         DylintDisposition::Run => {

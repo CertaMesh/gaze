@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use gaze::{PiiClass, RawMatch, Rulepack, RulepackSource};
+use gaze::{LocaleBasis, PiiClass, RawMatch, Rulepack, RulepackSource};
 use gaze_recognizers::{NormalizerKind, SafetyTier, ValidatorKind};
 use syn::{Expr, Item, Lit, Meta, Pat, Stmt};
 
@@ -550,13 +550,21 @@ fn documented_collision_rows(document: &str) -> BTreeSet<CollisionRow> {
         .collect()
 }
 
+/// Mirrors `gaze_assembly::detector_wiring::recognizer_activates`: document-basis recognizers
+/// gate on locale intersection, format-basis recognizers activate under every chain, and the
+/// `locale_gated` tier additionally needs auto-activation or (document basis only) an explicit
+/// non-global locale match.
 fn activates(
     recognizer: &gaze::RecognizerSpec,
     active_locales: &[&str],
     auto_locale_gated: bool,
 ) -> bool {
-    if !recognizer.enabled
-        || !recognizer
+    if !recognizer.enabled {
+        return false;
+    }
+    let document_basis = recognizer.locale_basis == LocaleBasis::Document;
+    if document_basis
+        && !recognizer
             .locales
             .iter()
             .any(|locale| locale.as_str() == "global" || active_locales.contains(&locale.as_str()))
@@ -568,9 +576,10 @@ fn activates(
         SafetyTier::SafeDefault => true,
         SafetyTier::LocaleGated => {
             auto_locale_gated
-                || recognizer.locales.iter().any(|locale| {
-                    locale.as_str() != "global" && active_locales.contains(&locale.as_str())
-                })
+                || (document_basis
+                    && recognizer.locales.iter().any(|locale| {
+                        locale.as_str() != "global" && active_locales.contains(&locale.as_str())
+                    }))
         }
         SafetyTier::OptIn => false,
         _ => panic!("new SafetyTier variant must define default activation"),

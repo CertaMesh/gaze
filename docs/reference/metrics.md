@@ -262,9 +262,8 @@ SafetyNet modes layer on top of the resolver (after tokenization):
 
 ### 2.2 `decided_by` audit-string values
 
-Canonical strings produced by `redaction_conflict_tier_as_str`
-(`gaze-types/src/lib.rs:1866`). These are what land in the `decided_by`
-column.
+Canonical strings produced by `ConflictTier::as_str`. These are what land in
+the `decided_by` column.
 
 | String | Variant | Landed |
 |---|---|---|
