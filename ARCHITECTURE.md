@@ -190,8 +190,9 @@ and [crates/gaze-assembly/src/defaults.rs](crates/gaze-assembly/src/defaults.rs)
 
 When candidates overlap, Gaze resolves them in a fixed order: PII class
 priority, rule priority, score, span length, and recognizer id. Collision-family
-policy and mandatory anchors add fail-closed fallback, while `ConflictTier`
-keeps losers visible in the audit trail.
+policy and mandatory anchors add fail-closed fallback, structured containment
+keeps a custom-class span whole when a builtin-class span sits strictly inside
+it, and `ConflictTier` keeps losers visible in the audit trail.
 
 Source anchors: [crates/gaze/src/resolver.rs](crates/gaze/src/resolver.rs),
 [crates/gaze/src/pipeline.rs](crates/gaze/src/pipeline.rs),

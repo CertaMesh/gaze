@@ -246,8 +246,13 @@ the first tier to produce a decision wins. The order is part of
    collision families.
 8. **`AnchoredContext`** — mandatory-anchor missing → family-level
    `Custom("family:<name>")` fallback emitted.
-9. **`RecognizerId`** — final lexicographic tiebreak on recognizer id.
-10. **`Merged`** — adjacent same-class candidates merged into one span.
+9. **`StructuredContainment`** — a custom-class structured span that strictly
+   encloses a builtin-class (`Email`/`Name`/`Organization`/`Location`) span
+   keeps the slot; the enclosed span is recorded as a merged source. Consulted
+   after collision policy and anchors and before the generic ladder, so class
+   priority cannot split a URL, IBAN or credential around an NER sub-token.
+10. **`RecognizerId`** — final lexicographic tiebreak on recognizer id.
+11. **`Merged`** — adjacent same-class candidates merged into one span.
 
 SafetyNet modes layer on top of the resolver (after tokenization):
 
@@ -276,6 +281,7 @@ the `decided_by` column.
 | `validator_veto` | `ConflictTier::ValidatorVeto` | v0.7 |
 | `collision_policy` | `ConflictTier::CollisionPolicy` | v0.7 |
 | `anchored_context` | `ConflictTier::AnchoredContext` | v0.7 |
+| `structured_containment` | `ConflictTier::StructuredContainment` | unreleased |
 | `recognizer_id` | `ConflictTier::RecognizerId` | v0.4 |
 | `merged` | `ConflictTier::Merged` | v0.4 |
 | `redact` | `ConflictTier::Redact` | v0.8 |

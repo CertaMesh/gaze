@@ -331,6 +331,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A builtin-class sub-token can no longer split a structured identifier**
+  (solo todo #3025, slice U). The base conflict ladder ranks `Email`, `Name`,
+  `Organization` and `Location` above every `Custom` class, so an NER
+  organisation or name token that sat *inside* a rule-recognised span
+  (`url.anchored`, `security_token.anchored`, …) won on `ClassPriority`,
+  `remove_overlaps` dropped the whole container, and the clean text carried a
+  mid-word token with the head and tail of the identifier raw — for example
+  `https://www.finanzamt.at` split around `nzamt`, or an `AKIA…` credential
+  split around `AKIAIOSF`. Measured on the shipped default: 1,522 URL bytes and
+  44 credential bytes leaked this way on the pinned EN/DE corpus; the rule
+  floor was unaffected because it has no NER pass. `resolve_candidates` now
+  carries a structured-containment rung (`ConflictTier::StructuredContainment`,
+  audit string `structured_containment`): when a custom-class span strictly
+  encloses a builtin-class span, the enclosing span keeps the slot and the
+  enclosed span is recorded as a merged source. The rung is containment-only
+  and geometry-decided (permutation-invariant); partial overlaps,
+  custom-inside-custom, builtin-inside-builtin and builtin containers over
+  custom spans keep their existing rungs.
+
 - **Audit rows now name the conflict tier that actually decided the overlap**
   (audit S02-F1, solo todo #2948). The resolver probed its comparator twice —
   once per direction — and reused the second answer as the winner's

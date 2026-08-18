@@ -746,6 +746,7 @@ mod tests {
             ConflictTier::ValidatorVeto,
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,
+            ConflictTier::StructuredContainment,
             ConflictTier::RecognizerId,
             ConflictTier::Merged,
             ConflictTier::Redact,

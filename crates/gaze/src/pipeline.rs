@@ -4995,6 +4995,82 @@ mod tests {
         assert_eq!(loser.decided_by, ConflictTier::SpanLength);
     }
 
+    /// Deterministic probe for the container-eviction defect (todo #3025 slice U):
+    /// an NER organisation sub-token inside a rule-recognised credential must not
+    /// split the credential. Before `ConflictTier::StructuredContainment` the
+    /// builtin sub-span won on class priority, `remove_overlaps` dropped the whole
+    /// credential span, and the clean text carried a mid-word organisation token
+    /// with the rest of the secret raw on both sides.
+    #[test]
+    fn ner_sub_token_does_not_split_a_structured_credential() {
+        let text = "aws key AKIAIOSFODNN7EXAMPLE end";
+        let credential = 8..28;
+        assert_eq!(&text[credential.clone()], "AKIAIOSFODNN7EXAMPLE");
+        let sub_token = 8..16;
+        assert_eq!(&text[sub_token.clone()], "AKIAIOSF");
+
+        let structured = detector_with_detections(
+            "security_token.anchored",
+            vec![Detection::new(
+                credential,
+                PiiClass::custom("security_token"),
+                "security_token.anchored",
+            )],
+        );
+        let ner = detector_with_detections(
+            "ner/bert",
+            vec![Detection::new(
+                sub_token,
+                PiiClass::Organization,
+                "ner/bert",
+            )],
+        );
+        let entries = Arc::new(Mutex::new(Vec::<RedactionEntry>::new()));
+        let pipeline = Pipeline::builder()
+            .detector(structured)
+            .detector(ner)
+            .rule(ClassRule::new(
+                PiiClass::custom("security_token"),
+                Action::Tokenize,
+            ))
+            .rule(ClassRule::new(PiiClass::Organization, Action::Tokenize))
+            .rule(DefaultRule::new(Action::Preserve))
+            .redaction_logger(CapturingLogger {
+                entries: Arc::clone(&entries),
+            })
+            .build()
+            .expect("pipeline");
+
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let clean = pipeline
+            .redact(&session, RawDocument::Text(text.to_string()))
+            .expect("redact");
+        let out = match clean {
+            CleanDocument::Text(t) => t,
+            _ => panic!("expected text"),
+        };
+
+        assert!(
+            !out.contains("AKIA") && !out.contains("ODNN7EXAMPLE"),
+            "credential fragment leaked around a sub-token: {out}"
+        );
+        assert!(
+            out.starts_with("aws key <") && out.ends_with("> end"),
+            "expected exactly one token in place of the credential: {out}"
+        );
+        assert!(
+            out.contains(":security_token_"),
+            "the container class must own the token: {out}"
+        );
+
+        let entries = entries.lock().unwrap();
+        let winner = entries.iter().find(|e| !e.conflict_loser).expect("winner");
+        let loser = entries.iter().find(|e| e.conflict_loser).expect("loser");
+        assert_eq!(winner.source, "security_token.anchored");
+        assert_eq!(loser.source, "ner/bert");
+        assert_eq!(loser.decided_by, ConflictTier::StructuredContainment);
+    }
+
     #[test]
     fn stacked_detectors_both_win_when_spans_disjoint() {
         let text = "Alice visited Berlin";
