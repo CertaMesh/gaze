@@ -27,7 +27,8 @@ The shared payload currently contains exactly 35 recognizer specs
 `PiiClass` is the closed class vocabulary at
 `crates/gaze-types/src/lib.rs:62-96`. During generic overlap resolution, a
 higher class-priority integer wins containment
-(`crates/gaze/src/resolver.rs:267-288,395-403`), with one exception decided
+(`compare_base_ladder` and `class_priority` in `crates/gaze/src/resolver.rs`),
+with one exception decided
 before the generic tiers: a custom-class structured span that strictly encloses
 a builtin-class span keeps the slot (`structured_containment` in
 `crates/gaze/src/resolver.rs`, `ConflictTier::StructuredContainment`), so an
@@ -36,11 +37,11 @@ NER token inside a URL, IBAN or credential cannot split the identifier.
 <!-- redaction-classes-gate:pii-classes:start -->
 | Rust variant | Policy spelling | Class priority | Source |
 |---|---|---:|---|
-| `Email` | `email` | 90 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Name` | `name` | 80 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Organization` | `organization` | 70 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Location` | `location` | 60 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs:82-92,233-246`; `crates/gaze/src/resolver.rs:395-403` |
+| `Email` | `email` | 90 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Name` | `name` | 80 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Organization` | `organization` | 70 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Location` | `location` | 60 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs:82-92,233-246`; `crates/gaze/src/resolver.rs` (`class_priority`) |
 <!-- redaction-classes-gate:pii-classes:end -->
 
 `Custom(String)` is parametric: the table's `custom:<name>` denotes every
@@ -220,16 +221,18 @@ The end-to-end order is:
    (`compare_base_ladder` in `crates/gaze/src/resolver.rs`).
 6. Same-class containment has one extra check before those generic tiers: a
    candidate with a validator-produced canonical form defeats an otherwise
-   equivalent unvalidated candidate
-   (`crates/gaze/src/resolver.rs:175-186`). This is
+   equivalent unvalidated candidate (the same-class containment branch of
+   `arbitrate` in `crates/gaze/src/resolver.rs`). This is
    `ConflictTier::Validator`, distinct from the pre-resolver
    `ValidatorVeto`.
 7. Replacement removes every overlap with the winner, so multi-overlap inputs
    converge to a disjoint fixed point rather than leaving a candidate that
-   overlapped an earlier loser (`crates/gaze/src/resolver.rs:73-115,373-393`).
+   overlapped an earlier loser (`insert_candidate` and `remove_overlaps` in
+   `crates/gaze/src/resolver.rs`).
 8. After pairwise resolution, a surviving candidate that requires but lacks a
    mandatory anchor is converted to its family-level fallback
-   (`crates/gaze/src/resolver.rs:63-68,316-371`).
+   (`resolve_candidates_inner` and `apply_missing_anchor_fallback` in
+   `crates/gaze/src/resolver.rs`).
 
 ## Deterministic floor and NER-only mass
 
