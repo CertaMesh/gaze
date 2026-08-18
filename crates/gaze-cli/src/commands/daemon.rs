@@ -9,9 +9,10 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use super::shared_args::{OpenAiFilterSubprocessArgs, SafetyNetLimitArgs};
 use super::{
-    KijiBackend, OpenAiFilterDevice, OpenAiFilterOperatingPoint, SafetyNetBackend,
-    SafetyNetFallback, SafetyNetKind, SafetyNetMode,
+    KijiBackend, OpenAiFilterDevice, SafetyNetBackend, SafetyNetFallback, SafetyNetKind,
+    SafetyNetMode,
 };
 use crate::error::CliError;
 use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
@@ -31,30 +32,65 @@ const DEFAULT_PROCESS_IDLE_TIMEOUT_SECS: u64 = 1_800;
 const DEFAULT_SESSION_IDLE_TIMEOUT_SECS: u64 = 3_600;
 const DEFAULT_SESSION_CAP: usize = 1_000;
 
+/// The complete `gaze daemon` flag surface.
+///
+/// Declared once and flattened into `Cmd::Daemon`. The safety-net groups it
+/// shares with `gaze clean` come from [`super::shared_args`], so the two verbs
+/// cannot drift apart on those flags without a compile error.
+#[derive(clap::Args, Debug)]
 pub(crate) struct Args {
+    /// Path to policy.toml.
+    #[arg(long)]
     pub(crate) policy: PathBuf,
+    /// Optional observer-only privacy safety net.
+    #[arg(long, value_enum)]
     pub(crate) safety_net: Option<SafetyNetKind>,
+    /// v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins.
+    #[arg(long, value_enum)]
     pub(crate) safety_net_backend: Option<SafetyNetBackend>,
-    pub(crate) idle_timeout_secs: u64,
-    pub(crate) session_idle_timeout_secs: u64,
+    /// Exit when stdin is idle for this many seconds.
+    #[arg(long, default_value_t = default_process_idle_timeout_secs())]
+    pub(crate) idle_timeout: u64,
+    /// Evict sessions idle for this many seconds.
+    #[arg(long, default_value_t = default_session_idle_timeout_secs())]
+    pub(crate) session_idle_timeout: u64,
+    /// Maximum live sessions before LRU eviction.
+    #[arg(long, default_value_t = default_session_cap())]
     pub(crate) session_cap: usize,
+    /// Optional SQLite redaction-log database path.
+    #[arg(long)]
     pub(crate) audit_db: Option<PathBuf>,
+    /// Active locale fallback chain, comma separated and priority ordered.
+    #[arg(long, value_delimiter = ',')]
     pub(crate) locale: Vec<String>,
+    /// Override policy \[ner\] threshold. Must be between 0.0 and 1.0 inclusive.
+    #[arg(long)]
     pub(crate) ner_threshold: Option<f32>,
+    /// Override policy \[ner\].model_dir.
+    #[arg(long)]
     pub(crate) ner_model_dir: Option<PathBuf>,
+    /// Override policy \[ner\].locale.
+    #[arg(long)]
     pub(crate) ner_locale: Option<String>,
-    pub(crate) openai_filter_command: Option<PathBuf>,
-    pub(crate) openai_filter_checkpoint: Option<PathBuf>,
-    pub(crate) openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
+    #[command(flatten)]
+    pub(crate) openai_filter: OpenAiFilterSubprocessArgs,
+    /// Device selection for the OpenAI safety-net subprocess.
+    #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
     pub(crate) openai_filter_device: OpenAiFilterDevice,
+    /// Kiji DistilBERT runtime backend.
+    #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
     pub(crate) kiji_backend: KijiBackend,
+    /// Path to the local Kiji DistilBERT subprocess command.
+    #[arg(long)]
     pub(crate) kiji_distilbert_command: Option<PathBuf>,
+    /// Path to the pinned Kiji DistilBERT model directory.
+    #[arg(long)]
     pub(crate) kiji_distilbert_model_dir: Option<PathBuf>,
+    /// Locale list for the Kiji DistilBERT backend.
+    #[arg(long, value_delimiter = ',')]
     pub(crate) kiji_distilbert_locales: Vec<String>,
-    pub(crate) safety_net_timeout_ms: u64,
-    pub(crate) safety_net_input_limit_bytes: usize,
-    pub(crate) safety_net_mode: SafetyNetMode,
-    pub(crate) safety_net_fallback: SafetyNetFallback,
+    #[command(flatten)]
+    pub(crate) safety_net_limits: SafetyNetLimitArgs,
 }
 
 pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
@@ -140,7 +176,10 @@ impl Daemon {
                 "--session-cap must be greater than zero".to_string(),
             ));
         }
-        validate_safety_net_tolerant_gate(args.safety_net_mode, args.safety_net_fallback)?;
+        validate_safety_net_tolerant_gate(
+            args.safety_net_limits.safety_net_mode,
+            args.safety_net_limits.safety_net_fallback,
+        )?;
         let logger =
             Arc::new(DaemonLogger::new(args.audit_db.as_deref()).map_err(|_| CliError::Pipeline)?);
         let options = clean_options(&args);
@@ -168,14 +207,14 @@ impl Daemon {
             locale_chain: locale_chain.as_slice().to_vec(),
             dictionaries,
             safety_net_active: args.safety_net.is_some(),
-            safety_net_mode: args.safety_net_mode,
-            safety_net_fallback: args.safety_net_fallback,
+            safety_net_mode: args.safety_net_limits.safety_net_mode,
+            safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
             sessions: HashMap::new(),
             lru: VecDeque::new(),
             session_cap: args.session_cap,
-            session_idle_timeout: Duration::from_secs(args.session_idle_timeout_secs),
-            process_idle_timeout: Duration::from_secs(args.idle_timeout_secs),
+            session_idle_timeout: Duration::from_secs(args.session_idle_timeout),
+            process_idle_timeout: Duration::from_secs(args.idle_timeout),
             last_stdin_activity: Instant::now(),
         })
     }
@@ -322,9 +361,9 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         safety_net_backend: args.safety_net_backend,
         safety_net_registry: false,
         safety_net_add: &[],
-        openai_filter_command: args.openai_filter_command.as_deref(),
-        openai_filter_checkpoint: args.openai_filter_checkpoint.as_deref(),
-        openai_filter_operating_point: args.openai_filter_operating_point,
+        openai_filter_command: args.openai_filter.openai_filter_command.as_deref(),
+        openai_filter_checkpoint: args.openai_filter.openai_filter_checkpoint.as_deref(),
+        openai_filter_operating_point: args.openai_filter.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
         kiji_backend: args.kiji_backend,
         kiji_distilbert_precision: super::KijiDistilbertPrecision::Fp32,
@@ -334,10 +373,10 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
         kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
         kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
         kiji_distilbert_locales: &args.kiji_distilbert_locales,
-        safety_net_timeout_ms: args.safety_net_timeout_ms,
-        safety_net_input_limit_bytes: args.safety_net_input_limit_bytes,
-        safety_net_mode: args.safety_net_mode,
-        safety_net_fallback: args.safety_net_fallback,
+        safety_net_timeout_ms: args.safety_net_limits.safety_net_timeout_ms,
+        safety_net_input_limit_bytes: args.safety_net_limits.safety_net_input_limit_bytes,
+        safety_net_mode: args.safety_net_limits.safety_net_mode,
+        safety_net_fallback: args.safety_net_limits.safety_net_fallback,
     }
 }
 

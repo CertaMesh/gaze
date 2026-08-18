@@ -1,0 +1,13 @@
+Query, export, or maintain redaction-log metadata without reading raw PII payloads
+
+Usage: gaze audit <COMMAND>
+
+Commands:
+  query       Print filtered audit metadata rows as tab-separated values
+  export      Export filtered audit metadata rows
+  purge       Purge audit metadata rows older than an ISO 8601 UTC timestamp
+  safety-net  Query safety-net leak metadata without changing redaction-log output
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help  Print help

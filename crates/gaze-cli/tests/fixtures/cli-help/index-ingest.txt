@@ -1,0 +1,12 @@
+Ingest `.txt` and `.md` files into a local owner-side index
+
+Usage: gaze index ingest [OPTIONS] <DIR>
+
+Arguments:
+  <DIR>  Directory containing text/Markdown files
+
+Options:
+      --domain <DOMAIN>            Local index domain id [default: local_owner/docs/v1]
+      --index-path <INDEX_PATH>    Owner-side index directory. Defaults to `GAZE_INDEX_PATH` or `./.gaze-index/`
+      --on-residual <ON_RESIDUAL>  Safety-net fallback for residual suspects after resolver pass [default: redact] [possible values: redact, strict]
+  -h, --help                       Print help

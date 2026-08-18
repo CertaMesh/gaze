@@ -1,0 +1,10 @@
+Internal dashboard child runtime
+
+Usage: gaze proxy _dashboard-child --bind-addr <BIND_ADDR> --ttl-secs <TTL_SECS> --max-events <MAX_EVENTS> --max-bytes <MAX_BYTES>
+
+Options:
+      --bind-addr <BIND_ADDR>    
+      --ttl-secs <TTL_SECS>      
+      --max-events <MAX_EVENTS>  
+      --max-bytes <MAX_BYTES>    
+  -h, --help                     Print help

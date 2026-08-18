@@ -32,17 +32,80 @@ const DEFAULT_TTL: Duration = Duration::from_secs(5 * 60);
 
 /// Section 2 dashboard flags carried by `gaze proxy serve` and relayed
 /// verbatim by `gaze proxy start`.
-#[derive(Clone, Debug, Default)]
+///
+/// Both verbs flatten this struct, so the capture/acknowledgement pairs and
+/// the retention caps are declared once. `dashboard` itself is `#[arg(skip)]`
+/// because the two verbs word its help differently (`start` notes the relay),
+/// so each declares `--dashboard` inline and fills this field in.
+#[derive(Clone, Debug, Default, clap::Args)]
 pub(crate) struct DashboardArgs {
+    #[arg(skip)]
     pub(crate) dashboard: bool,
+    // Every arg below pins `id` explicitly. Clap identifies an argument by its
+    // Rust field name, so the short field names here (`bind`, `ttl`, ...) would
+    // collide with the host verb's own args once flattened -- `proxy serve` has
+    // its own `bind`. A collision is silent: clap merges the two and the loser's
+    // default vanishes. An explicit id is also used verbatim as the help
+    // placeholder, so value-carrying args restate `value_name` to keep the
+    // published `<DASHBOARD_BIND>` spelling.
+    /// Capture OwnerRaw payloads (requires the matching acknowledgement).
+    #[arg(
+        id = "dashboard_capture_owner_raw",
+        long = "dashboard-capture-owner-raw"
+    )]
     pub(crate) capture_owner_raw: bool,
+    /// Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB.
+    #[arg(
+        id = "dashboard_acknowledge_owner_raw_risk",
+        long = "dashboard-acknowledge-owner-raw-risk"
+    )]
     pub(crate) acknowledge_owner_raw_risk: bool,
+    /// Capture OwnerRestored payloads (requires the matching acknowledgement).
+    #[arg(
+        id = "dashboard_capture_owner_restored",
+        long = "dashboard-capture-owner-restored"
+    )]
     pub(crate) capture_owner_restored: bool,
+    /// Acknowledge that OwnerRestored capture exposes re-identified text.
+    #[arg(
+        id = "dashboard_acknowledge_owner_restored_risk",
+        long = "dashboard-acknowledge-owner-restored-risk"
+    )]
     pub(crate) acknowledge_owner_restored_risk: bool,
+    /// Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin).
+    #[arg(
+        id = "dashboard_bind",
+        long = "dashboard-bind",
+        value_name = "DASHBOARD_BIND"
+    )]
     pub(crate) bind: Option<SocketAddrV4>,
+    /// Dashboard retention TTL such as `5m` (crate-ceiling capped).
+    #[arg(
+        id = "dashboard_ttl",
+        long = "dashboard-ttl",
+        value_name = "DASHBOARD_TTL"
+    )]
     pub(crate) ttl: Option<String>,
+    /// Dashboard retained logical-event cap (crate-ceiling capped).
+    #[arg(
+        id = "dashboard_max_events",
+        long = "dashboard-max-events",
+        value_name = "DASHBOARD_MAX_EVENTS"
+    )]
     pub(crate) max_events: Option<usize>,
+    /// Dashboard retained byte cap (crate-ceiling capped).
+    #[arg(
+        id = "dashboard_max_bytes",
+        long = "dashboard-max-bytes",
+        value_name = "DASHBOARD_MAX_BYTES"
+    )]
     pub(crate) max_bytes: Option<usize>,
+    /// Inherited FIFO descriptor for noninteractive pairing-token delivery.
+    #[arg(
+        id = "dashboard_pairing_fd",
+        long = "dashboard-pairing-fd",
+        value_name = "DASHBOARD_PAIRING_FD"
+    )]
     pub(crate) pairing_fd: Option<i32>,
 }
 

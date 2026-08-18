@@ -1,0 +1,10 @@
+Run the policy-gated MCP bridge over stdio
+
+Usage: gaze mcp bridge [OPTIONS] --config <CONFIG>
+
+Options:
+      --config <CONFIG>            Bridge TOML configuration
+      --session-dir <SESSION_DIR>  Override [session].dir from the config
+      --dry-run                    Load config and discover downstream surface without serving
+      --print-tools                Print namespaced downstream tools and denied resource/prompt counts
+  -h, --help                       Print help

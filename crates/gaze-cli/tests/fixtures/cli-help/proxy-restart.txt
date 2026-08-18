@@ -1,0 +1,8 @@
+Restart proxy daemon using persisted config
+
+Usage: gaze proxy restart [OPTIONS]
+
+Options:
+      --force              
+      --timeout <TIMEOUT>  [default: 10s]
+  -h, --help               Print help

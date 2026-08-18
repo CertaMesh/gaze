@@ -1,0 +1,22 @@
+Run or manage the Gaze LLM proxy.
+
+Requires the binary to be built with `--features proxy`.
+
+Usage: gaze proxy <COMMAND>
+
+Commands:
+  serve                   Run proxy in the foreground
+  start                   Start proxy as a detached daemon
+  stop                    Stop the detached proxy daemon
+  status                  Show proxy daemon status
+  logs                    Print proxy daemon logs
+  restart                 Restart proxy daemon using persisted config
+  install-launchd         Install macOS launchd auto-start integration
+  uninstall-launchd       Uninstall macOS launchd auto-start integration
+  install-systemd-user    Install Linux systemd user auto-start integration
+  uninstall-systemd-user  Uninstall Linux systemd user auto-start integration
+  help                    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')

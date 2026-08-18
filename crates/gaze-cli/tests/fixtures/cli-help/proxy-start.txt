@@ -1,0 +1,41 @@
+Start proxy as a detached daemon
+
+Usage: gaze proxy start [OPTIONS]
+
+Options:
+      --bind <BIND>
+          
+      --upstream-openai <UPSTREAM_OPENAI>
+          
+      --upstream-anthropic <UPSTREAM_ANTHROPIC>
+          
+      --upstream-gemini <UPSTREAM_GEMINI>
+          
+      --policy <POLICY>
+          
+      --rulepack <RULEPACK>
+          
+      --session-ttl <SESSION_TTL>
+          
+      --dashboard
+          Launch the isolated memory-only inspection dashboard child (relayed to the daemon)
+      --dashboard-capture-owner-raw
+          Capture OwnerRaw payloads (requires the matching acknowledgement)
+      --dashboard-acknowledge-owner-raw-risk
+          Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB
+      --dashboard-capture-owner-restored
+          Capture OwnerRestored payloads (requires the matching acknowledgement)
+      --dashboard-acknowledge-owner-restored-risk
+          Acknowledge that OwnerRestored capture exposes re-identified text
+      --dashboard-bind <DASHBOARD_BIND>
+          Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin)
+      --dashboard-ttl <DASHBOARD_TTL>
+          Dashboard retention TTL such as `5m` (crate-ceiling capped)
+      --dashboard-max-events <DASHBOARD_MAX_EVENTS>
+          Dashboard retained logical-event cap (crate-ceiling capped)
+      --dashboard-max-bytes <DASHBOARD_MAX_BYTES>
+          Dashboard retained byte cap (crate-ceiling capped)
+      --dashboard-pairing-fd <DASHBOARD_PAIRING_FD>
+          Inherited FIFO descriptor for noninteractive pairing-token delivery
+  -h, --help
+          Print help

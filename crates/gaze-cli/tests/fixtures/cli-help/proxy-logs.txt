@@ -1,0 +1,7 @@
+Print proxy daemon logs
+
+Usage: gaze proxy logs [OPTIONS]
+
+Options:
+      --follow  
+  -h, --help    Print help

@@ -1,0 +1,10 @@
+Install Gaze as an MCP stdio server in a supported client config
+
+Usage: gaze mcp install [OPTIONS] --client <CLIENT>
+
+Options:
+      --client <CLIENT>        Client config to update [possible values: claude-code, claude-desktop, cursor, all]
+      --agents-md <AGENTS_MD>  Agent guidance file to create/update
+      --dry-run                Print planned changes without writing files
+      --skip-agents-md         Skip the marker-fenced AGENTS.md skill section
+  -h, --help                   Print help

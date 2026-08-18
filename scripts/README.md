@@ -32,3 +32,9 @@ repository root.
 | `scripts/bench/onnx-token-classification-runner.py` | Generic ONNX Runtime token-classification subprocess wrapper. | NER leaderboard and warm-latency scripts. |
 | `scripts/bench/transformers-runner.py` | Generic Hugging Face transformers NER subprocess wrapper. | NER leaderboard scorer. |
 | `scripts/bench/quantize-kiji-int8.py` | Quantizes an already-fetched Kiji ONNX bundle to int8 and writes checksums. | Operators and Kiji benchmark setup. |
+
+## Verify
+
+| Script | What it does | Who calls it |
+|---|---|---|
+| `scripts/verify/cli-help-surface.sh` | Builds `gaze` at a base revision and at the working tree in one run and diffs `--help` for the root command and every subcommand, so a CLI refactor can be shown not to have moved the published surface. Refreshes `crates/gaze-cli/tests/fixtures/cli-help/` with `--write-fixtures`. | Anyone refactoring `gaze-cli` argument parsing, and reviewers checking that claim. |

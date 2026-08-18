@@ -1,0 +1,53 @@
+Run a long-lived JSON-lines stdio cleaning daemon
+
+Usage: gaze daemon [OPTIONS] --policy <POLICY>
+
+Options:
+      --policy <POLICY>
+          Path to policy.toml
+      --safety-net <SAFETY_NET>
+          Optional observer-only privacy safety net [possible values: openai-filter, kiji-distilbert]
+      --safety-net-backend <SAFETY_NET_BACKEND>
+          v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins [possible values: openai-filter, kiji-distilbert]
+      --idle-timeout <IDLE_TIMEOUT>
+          Exit when stdin is idle for this many seconds [default: 1800]
+      --session-idle-timeout <SESSION_IDLE_TIMEOUT>
+          Evict sessions idle for this many seconds [default: 3600]
+      --session-cap <SESSION_CAP>
+          Maximum live sessions before LRU eviction [default: 1000]
+      --audit-db <AUDIT_DB>
+          Optional SQLite redaction-log database path
+      --locale <LOCALE>
+          Active locale fallback chain, comma separated and priority ordered
+      --ner-threshold <NER_THRESHOLD>
+          Override policy \[ner\] threshold. Must be between 0.0 and 1.0 inclusive
+      --ner-model-dir <NER_MODEL_DIR>
+          Override policy \[ner\].model_dir
+      --ner-locale <NER_LOCALE>
+          Override policy \[ner\].locale
+      --openai-filter-command <OPENAI_FILTER_COMMAND>
+          Path to the local OpenAI Privacy Filter `opf` command
+      --openai-filter-checkpoint <OPENAI_FILTER_CHECKPOINT>
+          Path to the local OpenAI Privacy Filter checkpoint or model directory
+      --openai-filter-operating-point <OPENAI_FILTER_OPERATING_POINT>
+          OpenAI Privacy Filter operating point, when supported by the command [possible values: high-recall, balanced, high-precision]
+      --openai-filter-device <OPENAI_FILTER_DEVICE>
+          Device selection for the OpenAI safety-net subprocess [default: auto] [possible values: auto, cpu, cuda, mps]
+      --kiji-backend <KIJI_BACKEND>
+          Kiji DistilBERT runtime backend [default: subprocess] [possible values: subprocess, ort, tract, candle]
+      --kiji-distilbert-command <KIJI_DISTILBERT_COMMAND>
+          Path to the local Kiji DistilBERT subprocess command
+      --kiji-distilbert-model-dir <KIJI_DISTILBERT_MODEL_DIR>
+          Path to the pinned Kiji DistilBERT model directory
+      --kiji-distilbert-locales <KIJI_DISTILBERT_LOCALES>
+          Locale list for the Kiji DistilBERT backend
+      --safety-net-timeout-ms <SAFETY_NET_TIMEOUT_MS>
+          Safety-net subprocess timeout in milliseconds [default: 5000]
+      --safety-net-input-limit-bytes <SAFETY_NET_INPUT_LIMIT_BYTES>
+          Maximum clean-text bytes submitted to the safety net [default: 1048576]
+      --safety-net-mode <SAFETY_NET_MODE>
+          Safety-net handling mode for suspected leaks [default: resolve] [possible values: strict, tolerant, redact, resolve]
+      --safety-net-fallback <SAFETY_NET_FALLBACK>
+          Fallback when safety-net resolve or redact cannot complete [default: redact] [possible values: strict, tolerant, redact]
+  -h, --help
+          Print help
