@@ -72,10 +72,22 @@ dispatcher reads this per call:
 The `operator-tier` Cargo feature controls whether the built-in
 operator-tier tools (`RestoreTool`, `RestoreStrictTool`,
 `ExportManifestTool`) are linked at all. Default builds expose only the
-agent surface. The `mcp-tier-isolation` xtask gate
+agent surface: `tools::{export, restore, restore_strict}` and the
+`operator_tools` re-export module are each behind
+`#[cfg(feature = "operator-tier")]`, so rustc excludes them from an
+agent-tier build.
+
+The `mcp-tier-isolation` xtask gate
 ([`crates/xtask/src/mcp_tier_isolation.rs`](../../../crates/xtask/src/mcp_tier_isolation.rs))
-runs the `tier_isolation` integration test under four feature graphs to
-verify the partitioning holds.
+is the check that those gates stay in place. It runs the `tier_isolation`
+integration test under four feature graphs. In the agent-tier graphs that
+test drives `trybuild` compile-fail fixtures
+([`crates/gaze-mcp-core/tests/ui/tier`](../../../crates/gaze-mcp-core/tests/ui/tier)),
+one per gated surface: each is built as an external crate against the same
+feature graph and must fail to resolve the operator path it names. Remove a
+`cfg` gate and the corresponding fixture compiles, which fails the gate and
+names the surface. Each graph also declares the tests it must observe
+passing, because `cargo test` exits 0 for zero tests.
 
 The `gaze_dylint` protected-path lint
 ([`lint/dylint`](../../../lint/dylint)) lists `crates/gaze-mcp-core/src` so

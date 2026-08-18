@@ -1,0 +1,13 @@
+error[E0432]: unresolved import `gaze_mcp_core::tools::export`
+ --> tests/ui/tier/agent_tier_must_not_reach_export_session_tokens.rs:5:27
+  |
+5 | use gaze_mcp_core::tools::export::ExportSessionTokensTool;
+  |                           ^^^^^^ could not find `export` in `tools`
+  |
+note: found an item that was configured out
+ --> src/tools/mod.rs
+  |
+  | #[cfg(feature = "operator-tier")]
+  |       ------------------------- the item is gated behind the `operator-tier` feature
+  | pub mod export;
+  |         ^^^^^^

@@ -1,0 +1,13 @@
+error[E0432]: unresolved import `gaze_mcp_core::tools::restore_strict`
+ --> tests/ui/tier/agent_tier_must_not_reach_restore_strict.rs:5:27
+  |
+5 | use gaze_mcp_core::tools::restore_strict::RestoreStrictTool;
+  |                           ^^^^^^^^^^^^^^ could not find `restore_strict` in `tools`
+  |
+note: found an item that was configured out
+ --> src/tools/mod.rs
+  |
+  | #[cfg(feature = "operator-tier")]
+  |       ------------------------- the item is gated behind the `operator-tier` feature
+  | pub mod restore_strict;
+  |         ^^^^^^^^^^^^^^

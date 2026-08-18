@@ -1,0 +1,13 @@
+error[E0432]: unresolved import `gaze_mcp_core::operator_tools`
+ --> tests/ui/tier/agent_tier_must_not_reach_operator_tools_reexport.rs:5:20
+  |
+5 | use gaze_mcp_core::operator_tools::RestoreTool;
+  |                    ^^^^^^^^^^^^^^ could not find `operator_tools` in `gaze_mcp_core`
+  |
+note: found an item that was configured out
+ --> src/lib.rs
+  |
+  | #[cfg(feature = "operator-tier")]
+  |       ------------------------- the item is gated behind the `operator-tier` feature
+  | pub mod operator_tools {
+  |         ^^^^^^^^^^^^^^
