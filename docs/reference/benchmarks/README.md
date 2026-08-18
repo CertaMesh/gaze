@@ -68,6 +68,8 @@ not imply that they meet current production targets.
 | [v0.12-post-wave-a8f7182-base-scorecard-v4.json](v0.12-post-wave-a8f7182-base-scorecard-v4.json) | Schema-v4 BASE scorecard (`18fd9e2`) for the post-wave comparison (not an accepted baseline) | Current evidence |
 | [v0.12-post-wave-a8f7182-candidate-scorecard-v4.json](v0.12-post-wave-a8f7182-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`a8f7182`, run 1) for the post-wave comparison (not an accepted baseline) | Current evidence |
 | [v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json](v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`a8f7182`), the two-run determinism evidence for the post-wave comparison (not an accepted baseline) | Current evidence |
+| [v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json) | Bisect run at `d64d7e3` (parent of #436) for the post-wave comparison; identical to BASE (not an accepted baseline) | Current evidence |
+| [v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json) | Bisect run at `6ad0efe` (#436 merge) for the post-wave comparison (not an accepted baseline) | Current evidence |
 | [v0.12-en-de-whole-pipeline-baseline.md](v0.12-en-de-whole-pipeline-baseline.md) | Human-readable authoritative no-OPF whole-pipeline baseline | Current evidence |
 | [v0.12-no-opf-error-buckets.md](v0.12-no-opf-error-buckets.md) | Prioritized analysis of current no-OPF Kiji error buckets | Current evidence |
 | [v0.12-no-opf-scorecard-v3.json](v0.12-no-opf-scorecard-v3.json) | Normalized machine-readable three-cell schema-v3 scorecard | Current evidence |
