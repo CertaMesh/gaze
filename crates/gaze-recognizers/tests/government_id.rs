@@ -604,3 +604,131 @@ fn government_ids_restore_exactly() {
         .expect("restore");
     assert_eq!(restored, original, "manifest-first restore must round-trip");
 }
+
+// ---------------------------------------------------------------------------- Slice G: shared connector
+//
+// Solo todo #3025 slice G: the cue→value connector of the five SSN / government-ID recognizers
+// was a single optional keyword plus one punctuation mark. Real corpus phrasing puts up to four
+// closed-vocabulary words between the cue and the value ("license number, X", "Sozialversicherungs-
+// nummer, die lautet X", "tax number as X"), so those spans leaked. All five now share ONE
+// connector grammar. This is a grammar-only change: cue vocabulary and value shapes are byte-
+// identical to the previous rules, so nothing about which VALUE shapes are eligible changed.
+//
+// Measured (isolated, Kiji cell, base 8d87468): +1,744 newly covered leaked gold bytes
+// (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
+// matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
+
+/// The canonical shared connector grammar. It appears byte-identical in all five family patterns;
+/// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
+const SHARED_CONNECTOR: &str = r"[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}";
+
+const CONNECTOR_FAMILY: [&str; 5] = [
+    "ssn.us",
+    "ssn.de_cue",
+    "tax_number.cue_anchored",
+    "driver_license.cue_anchored",
+    "national_id.cue_anchored",
+];
+
+/// Extracts the single-quoted `pattern = '''...'''` value for one recognizer id from the embedded
+/// core TOML by text scan (the compiled rulepack does not expose the raw pattern string).
+fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
+    let anchor = format!("id = \"{id}\"");
+    let start = core
+        .find(&anchor)
+        .unwrap_or_else(|| panic!("recognizer id {id} not found in embedded core"));
+    let after = &core[start..];
+    let pat_key = after
+        .find("pattern = '''")
+        .unwrap_or_else(|| panic!("recognizer {id} has no pattern"));
+    let body = &after[pat_key + "pattern = '''".len()..];
+    let end = body
+        .find("'''")
+        .unwrap_or_else(|| panic!("recognizer {id} pattern is not terminated"));
+    &body[..end]
+}
+
+/// Drift guard: one edit to a single family pattern's connector must turn this red. It asserts the
+/// canonical fragment appears exactly once per family recognizer (five total) AND that each named
+/// recognizer's pattern carries it. Adding a cue word to only `tax_number.cue_anchored`, or
+/// widening only `national_id.cue_anchored`'s separators, drops that copy below the shared string
+/// and the count no longer equals five. Changing the grammar for the whole family means editing
+/// all five patterns AND this constant together — which is the intended workflow, not drift.
+#[test]
+fn shared_connector_grammar_is_byte_identical_across_the_family() {
+    let core = embedded("core").expect("core rulepack");
+    assert_eq!(
+        core.matches(SHARED_CONNECTOR).count(),
+        CONNECTOR_FAMILY.len(),
+        "the shared connector grammar must appear once per family recognizer and nowhere else; \
+         if you changed it, update all five family patterns and this constant together",
+    );
+    for id in CONNECTOR_FAMILY {
+        let pattern = recognizer_pattern(core, id);
+        assert!(
+            pattern.contains(SHARED_CONNECTOR),
+            "recognizer {id} must carry the shared connector grammar verbatim; found: {pattern}",
+        );
+    }
+}
+
+/// Positive fixtures: one multi-word connector per recognizer that the single-keyword connector
+/// could not reach. Each value must be tokenized; reverting the connector (the mutation probe)
+/// leaves every one of these raw.
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_us() {
+    assert_id_removed(
+        "Her social security number is 564-23-7890 today.",
+        "564-23-7890",
+        &["social security number", "today"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_de_cue() {
+    assert_id_removed(
+        "Meine Sozialversicherungsnummer, die lautet 756.1234.5678.90, ist aktuell.",
+        "756.1234.5678.90",
+        &["Sozialversicherungsnummer", "aktuell"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_tax_number() {
+    assert_id_removed(
+        "His tax number, 123-456-789, was filed.",
+        "123-456-789",
+        &["tax number", "was filed"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_driver_license() {
+    assert_id_removed(
+        "The driver's license number, D1234567, is valid.",
+        "D1234567",
+        &["license number", "is valid"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_national_id() {
+    assert_id_removed(
+        "His national ID, as recorded, is AB123456C in the file.",
+        "AB123456C",
+        &["national ID", "in the file"],
+    );
+}
+
+/// Negative fixtures: the widened connector must not bridge an unbounded gap. A cue with the value
+/// many words away, or with a non-connector word between them, stays untouched — the loop is
+/// capped at four closed-vocabulary tokens.
+#[test]
+fn widened_connector_does_not_bridge_an_unbounded_gap() {
+    // "yesterday" is not a connector word: the run breaks and the value is not reached.
+    assert_unchanged("The tax number yesterday somewhere far 123-456-789 appeared.");
+    // Five+ words of genuine prose between cue and value exceed the four-token cap.
+    assert_unchanged(
+        "His national ID was discussed at length during the meeting AB123456C afterwards.",
+    );
+}
