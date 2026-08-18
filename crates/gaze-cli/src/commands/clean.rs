@@ -2,10 +2,11 @@ use std::path::PathBuf;
 
 use clap::Args as ClapArgs;
 
-use super::shared_args::{OpenAiFilterSubprocessArgs, SafetyNetLimitArgs};
-use super::{
-    KijiBackend, KijiDistilbertPrecision, OpenAiFilterDevice, SafetyNetBackend, SafetyNetKind,
+use super::shared_args::{
+    KijiPrecisionArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
+    SafetyNetLimitArgs, SafetyNetRegistryArgs,
 };
+use super::{KijiBackend, OpenAiFilterDevice, SafetyNetBackend, SafetyNetKind};
 use crate::error::CliError;
 use crate::io::DEFAULT_MAX_BYTES;
 use crate::pipeline::{run_clean, CleanOptions};
@@ -41,12 +42,8 @@ pub(crate) struct Args {
     /// Override policy \[ner].locale.
     #[arg(long)]
     pub(crate) ner_locale: Option<String>,
-    /// Override policy.rulepacks.bundled. Comma-separated and repeatable.
-    #[arg(long, value_delimiter = ',')]
-    pub(crate) rulepack_bundled: Vec<String>,
-    /// Override policy.rulepacks.paths. Repeatable.
-    #[arg(long = "rulepack-path")]
-    pub(crate) rulepack_paths: Vec<PathBuf>,
+    #[command(flatten)]
+    pub(crate) rulepacks: RulepackOverrideArgs,
     /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
     #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
     pub(crate) max_bytes: u64,
@@ -64,12 +61,8 @@ pub(crate) struct Args {
     /// Pass-3 backend without re-typing the legacy `--safety-net` value.
     #[arg(long, value_enum)]
     pub(crate) safety_net_backend: Option<SafetyNetBackend>,
-    /// Enable locale-aware Pass-3 safety-net registry dispatch.
-    #[arg(long)]
-    pub(crate) safety_net_registry: bool,
-    /// Add one backend to the locale-aware safety-net registry. Repeatable.
-    #[arg(long, value_enum)]
-    pub(crate) safety_net_add: Vec<SafetyNetBackend>,
+    #[command(flatten)]
+    pub(crate) safety_net_registry: SafetyNetRegistryArgs,
     #[command(flatten)]
     pub(crate) openai_filter: OpenAiFilterSubprocessArgs,
     /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
@@ -78,18 +71,10 @@ pub(crate) struct Args {
     /// Kiji DistilBERT runtime backend. Default: subprocess for compatibility.
     #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
     pub(crate) kiji_backend: KijiBackend,
-    /// Kiji DistilBERT ONNX precision. Default: fp32.
-    #[arg(long, value_enum, default_value_t = KijiDistilbertPrecision::Fp32)]
-    pub(crate) kiji_distilbert_precision: KijiDistilbertPrecision,
-    /// Locale list for the OpenAI Privacy Filter registry entry.
-    #[arg(long, value_delimiter = ',')]
-    pub(crate) opf_locales: Vec<String>,
-    /// Alias for --openai-filter-command in registry examples.
-    #[arg(long)]
-    pub(crate) opf_command: Option<PathBuf>,
-    /// Alias for --openai-filter-checkpoint in registry examples.
-    #[arg(long)]
-    pub(crate) opf_checkpoint: Option<PathBuf>,
+    #[command(flatten)]
+    pub(crate) kiji_precision: KijiPrecisionArgs,
+    #[command(flatten)]
+    pub(crate) opf_registry: OpfRegistryArgs,
     /// Path to the local Kiji DistilBERT subprocess command.
     #[arg(long)]
     pub(crate) kiji_distilbert_command: Option<PathBuf>,
@@ -114,24 +99,24 @@ pub(crate) fn run(args: Args) -> std::result::Result<(), CliError> {
         ner_threshold: args.ner_threshold,
         ner_model_dir: args.ner_model_dir,
         ner_locale: args.ner_locale.as_deref(),
-        rulepack_bundled: &args.rulepack_bundled,
-        rulepack_paths: args.rulepack_paths,
+        rulepack_bundled: &args.rulepacks.rulepack_bundled,
+        rulepack_paths: args.rulepacks.rulepack_paths,
         max_bytes: args.max_bytes,
         context_json: args.context_json.as_deref(),
         audit_db: args.audit_db.as_deref(),
         safety_net: args.safety_net,
         safety_net_backend: args.safety_net_backend,
-        safety_net_registry: args.safety_net_registry,
-        safety_net_add: &args.safety_net_add,
+        safety_net_registry: args.safety_net_registry.safety_net_registry,
+        safety_net_add: &args.safety_net_registry.safety_net_add,
         openai_filter_command: args.openai_filter.openai_filter_command.as_deref(),
         openai_filter_checkpoint: args.openai_filter.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
         kiji_backend: args.kiji_backend,
-        kiji_distilbert_precision: args.kiji_distilbert_precision,
-        opf_locales: &args.opf_locales,
-        opf_command: args.opf_command.as_deref(),
-        opf_checkpoint: args.opf_checkpoint.as_deref(),
+        kiji_distilbert_precision: args.kiji_precision.kiji_distilbert_precision,
+        opf_locales: &args.opf_registry.opf_locales,
+        opf_command: args.opf_registry.opf_command.as_deref(),
+        opf_checkpoint: args.opf_registry.opf_checkpoint.as_deref(),
         kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
         kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
         kiji_distilbert_locales: &args.kiji_distilbert_locales,

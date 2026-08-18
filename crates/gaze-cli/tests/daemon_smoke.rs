@@ -902,3 +902,356 @@ fn daemonized_proxy_start_fails_closed_when_the_policy_cannot_be_loaded() {
         "a failed start must not leave the pidfile that bricks the next one"
     );
 }
+
+// ---------------------------------------------------------------------------
+// solo todo #3004: `gaze daemon` can run the locale-aware safety-net registry.
+//
+// Before #3004 `daemon.rs::clean_options` hardcoded `safety_net_registry: false`
+// and `safety_net_add: &[]`, and clap rejected the flags outright, so under an
+// identical policy the daemon chokepoint could only ever run a *single*
+// safety-net backend. `gaze::Policy` has no safety-net section, so there was no
+// second route to the stronger configuration either.
+//
+// These tests assert behaviour, not parsing: a flag that were accepted and then
+// ignored would be strictly worse than the honest rejection it replaces.
+// ---------------------------------------------------------------------------
+
+/// The Pass-3 safety-net subprocess budget, mirroring `safety_net_cli.rs`.
+fn safety_net_timeout_ms() -> String {
+    let seconds = std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS")
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .expect("test subprocess timeout must be an integer")
+        })
+        .unwrap_or(60);
+    assert!(seconds > 0, "test subprocess timeout must be positive");
+    seconds.saturating_mul(1_000).to_string()
+}
+
+fn write_executable(path: &Path, body: &str) {
+    fs::write(path, body).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+}
+
+/// A policy that tokenizes nothing in the fixtures below, so the daemon's
+/// `clean_text` is byte-identical to the request text and any difference is
+/// attributable to the Pass-3 safety net rather than to Pass-1 detection.
+fn write_preserve_default_policy() -> (tempfile::TempDir, PathBuf) {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("policy.toml");
+    fs::write(
+        &path,
+        r#"
+[session]
+scope = "persistent"
+ttl_secs = 86400
+
+[[rule]]
+kind = "default"
+action = "preserve"
+"#,
+    )
+    .unwrap();
+    (dir, path)
+}
+
+/// Drives one JSONL request through a `gaze daemon` started with `extra_args`
+/// and returns the single parsed response line.
+fn daemon_request(policy: &Path, extra_args: &[String], text: &str) -> (Value, Output) {
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(["daemon", "--policy", policy.to_str().unwrap()])
+        .args(extra_args)
+        .args(["--idle-timeout", "30"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        let request = json!({ "session_id": "session-3004", "text": text });
+        writeln!(stdin, "{request}").unwrap();
+    }
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let line = stdout
+        .lines()
+        .next()
+        .unwrap_or_else(|| {
+            panic!(
+                "daemon produced no response line; stderr={}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })
+        .to_string();
+    let value: Value = serde_json::from_str(&line)
+        .unwrap_or_else(|err| panic!("daemon response is not JSON ({err}): {line}"));
+    (value, output)
+}
+
+/// An `opf` stand-in that reports nothing: a backend with no coverage for the
+/// text it is handed.
+fn write_blind_opf(dir: &Path) -> PathBuf {
+    let path = dir.join("blind-opf");
+    write_executable(&path, "#!/bin/sh\ncat >/dev/null\nprintf '[]\\n'\n");
+    path
+}
+
+fn opf_checkpoint(dir: &Path) -> PathBuf {
+    let path = dir.join("opf-checkpoint");
+    fs::create_dir(&path).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    path
+}
+
+/// Both registry entries are live inside one daemon process, and the daemon
+/// dispatches between them by locale.
+///
+/// The en-US request reaches the OPF entry (which answers, so the request
+/// succeeds); the de-DE request reaches the Kiji entry (whose model is a
+/// placeholder, so it fails closed). One backend could not produce both
+/// outcomes, which is what makes this a multi-backend proof rather than a
+/// parsing one.
+#[cfg(all(feature = "safety-net-openai", feature = "safety-net-kiji"))]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_safety_net_registry_dispatches_between_two_backends_by_locale() {
+    let dir = tempdir().unwrap();
+    let opf = write_blind_opf(dir.path());
+    let checkpoint = opf_checkpoint(dir.path());
+    let kiji = dir.path().join("kiji");
+    write_executable(&kiji, "#!/bin/sh\nexit 91\n");
+    let model_dir = dir.path().join("kiji-distilbert");
+    fs::create_dir(&model_dir).unwrap();
+    for artifact in ["SHA256SUMS", "labels.json", "model.onnx", "tokenizer.json"] {
+        fs::write(model_dir.join(artifact), b"placeholder").unwrap();
+    }
+    let (_policy_dir, policy) = write_preserve_default_policy();
+
+    let registry_args = |locale: &str| -> Vec<String> {
+        vec![
+            format!("--locale={locale}"),
+            "--safety-net-registry".to_string(),
+            "--safety-net-add=openai-filter".to_string(),
+            "--safety-net-add=kiji-distilbert".to_string(),
+            format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
+            format!("--opf-command={}", opf.display()),
+            format!("--opf-checkpoint={}", checkpoint.display()),
+            "--opf-locales=en-US,en-GB".to_string(),
+            format!("--kiji-distilbert-command={}", kiji.display()),
+            format!("--kiji-distilbert-model-dir={}", model_dir.display()),
+            "--kiji-distilbert-locales=de-DE,de-AT".to_string(),
+        ]
+    };
+
+    let (english, output) = daemon_request(&policy, &registry_args("en-US"), "hello there");
+    assert_eq!(
+        english["clean_text"],
+        "hello there",
+        "en-US must route to the OPF entry and answer: response={english}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        english.get("error").is_none(),
+        "en-US must not fail closed: {english}"
+    );
+
+    let (german, _output) = daemon_request(&policy, &registry_args("de-DE"), "hallo zusammen");
+    assert_eq!(
+        german["error"], "ModelUnavailable",
+        "de-DE must route to the Kiji entry and fail closed on its placeholder model: {german}"
+    );
+    assert!(
+        german.get("clean_text").is_none(),
+        "a failed-closed request must not answer with text: {german}"
+    );
+}
+
+/// The axis-1 contrast: same daemon, same policy, same document, same `opf`
+/// binary — the only difference is the capability #3004 adds.
+///
+/// A single backend has no locale gate: it scans every locale with one model,
+/// reports nothing for the locale it does not cover, and the document ships.
+/// The registry resolves by locale and refuses to hand on a document no
+/// registered backend covers.
+#[cfg(feature = "safety-net-openai")]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_single_backend_ships_what_the_registry_refuses() {
+    let dir = tempdir().unwrap();
+    let opf = write_blind_opf(dir.path());
+    let checkpoint = opf_checkpoint(dir.path());
+    let (_policy_dir, policy) = write_preserve_default_policy();
+    let german = "Rueckfragen an Hanna Weber";
+
+    // What `gaze daemon` could do before #3004: one backend, no locale gate.
+    // `--safety-net-backend` only selects; `--safety-net` is what activates.
+    let single_backend = vec![
+        "--locale=de-DE".to_string(),
+        "--safety-net=openai-filter".to_string(),
+        "--safety-net-backend=openai-filter".to_string(),
+        format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
+        format!("--openai-filter-command={}", opf.display()),
+        format!("--openai-filter-checkpoint={}", checkpoint.display()),
+    ];
+    let (shipped, output) = daemon_request(&policy, &single_backend, german);
+    assert_eq!(
+        shipped["clean_text"], german,
+        "the single-backend daemon ships the de-DE document unflagged: response={shipped}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // What #3004 makes reachable: locale-keyed dispatch that fails closed.
+    let registry = vec![
+        "--locale=de-DE".to_string(),
+        "--safety-net-registry".to_string(),
+        "--safety-net-add=openai-filter".to_string(),
+        format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
+        format!("--opf-command={}", opf.display()),
+        format!("--opf-checkpoint={}", checkpoint.display()),
+        "--opf-locales=en-US".to_string(),
+    ];
+    let (refused, _output) = daemon_request(&policy, &registry, german);
+    assert_eq!(
+        refused["error"], "Unavailable",
+        "the registry must refuse a locale no registered backend covers: {refused}"
+    );
+    assert!(
+        refused.get("clean_text").is_none(),
+        "a refused request must not answer with text: {refused}"
+    );
+}
+
+/// The registry's findings reach the daemon's enforcement path.
+///
+/// Under the default `resolve` mode a residual-PII suspect is substituted out
+/// of the answer. Without the registry flags the identical daemon returns the
+/// same name verbatim, so this pins that the flags are acted on rather than
+/// accepted and dropped.
+#[cfg(feature = "safety-net-openai")]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_safety_net_registry_finding_is_enforced_not_merely_parsed() {
+    let dir = tempdir().unwrap();
+    let checkpoint = opf_checkpoint(dir.path());
+    let text = "Freundliche Gruesse Hanna Weber";
+    let name = "Hanna Weber";
+    let start = text.find(name).expect("fixture contains the name");
+    let end = start + name.len();
+    let opf = dir.path().join("reporting-opf");
+    write_executable(
+        &opf,
+        &format!(
+            "#!/bin/sh\ncat >/dev/null\nprintf '%s\\n' \
+             '[{{\"label\":\"private_person\",\"start\":{start},\"end\":{end},\"score\":0.99}}]'\n"
+        ),
+    );
+    let (_policy_dir, policy) = write_preserve_default_policy();
+
+    let registry = vec![
+        "--locale=de-DE".to_string(),
+        "--safety-net-registry".to_string(),
+        "--safety-net-add=openai-filter".to_string(),
+        format!("--safety-net-timeout-ms={}", safety_net_timeout_ms()),
+        format!("--opf-command={}", opf.display()),
+        format!("--opf-checkpoint={}", checkpoint.display()),
+        "--opf-locales=de-DE".to_string(),
+    ];
+    let (caught, output) = daemon_request(&policy, &registry, text);
+    let clean_text = caught["clean_text"].as_str().unwrap_or_else(|| {
+        panic!(
+            "registry run must answer; response={caught}, stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    assert!(
+        !clean_text.contains(name),
+        "the registry reported the residual name, so it must not survive into the answer: {clean_text}"
+    );
+
+    // Same daemon, same document, registry flags withheld.
+    let (missed, output) = daemon_request(&policy, &["--locale=de-DE".to_string()], text);
+    assert_eq!(
+        missed["clean_text"], text,
+        "without the registry the identical daemon ships the name verbatim: response={missed}, stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+/// The rulepack overrides #3004 added actually reach the daemon's detection
+/// surface: the plumbing already ran through `clean_overrides_from_options`,
+/// only the flags were missing, so the hardcoded empty override silently pinned
+/// the daemon to whatever the policy declared.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_rulepack_override_changes_the_detection_surface() {
+    let (_dir, policy) = write_policy_with_es_locale_gated_path_rulepack();
+    let text = "id ES-TEST-123456";
+
+    // Baseline: the policy's path rulepack tokenizes the ES id.
+    let (baseline, output) = daemon_request(&policy, &["--locale=es-ES".to_string()], text);
+    let baseline_text = baseline["clean_text"].as_str().unwrap_or_else(|| {
+        panic!(
+            "baseline run must answer; response={baseline}, stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    assert!(
+        baseline_text.contains("Custom:es_test_id_"),
+        "the policy's path rulepack must tokenize the ES id: {baseline_text}"
+    );
+
+    // `--rulepack-path` replaces `policy.rulepacks.paths` wholesale, so pointing
+    // it at a rulepack without the ES recognizer removes that class from the
+    // detection surface. Before #3004 the daemon had no way to express this.
+    let override_dir = tempdir().unwrap();
+    let unrelated = override_dir.path().join("unrelated.toml");
+    fs::write(
+        &unrelated,
+        concat!(
+            "schema_version = \"0.1.0\"\n",
+            "rulepack_id = \"unrelated\"\n",
+            "rulepack_version = \"0.1.0\"\n",
+            "default_locales = [\"global\"]\n",
+            "\n",
+            "[[recognizers]]\n",
+            "id = \"unrelated.marker\"\n",
+            "class = \"custom:unrelated_marker\"\n",
+            "enabled = true\n",
+            "locales = [\"global\"]\n",
+            "\n",
+            "[recognizers.match]\n",
+            "kind = \"regex\"\n",
+            "pattern = \"ZZ-UNRELATED-[0-9]{4}\"\n",
+        ),
+    )
+    .unwrap();
+
+    let (overridden, output) = daemon_request(
+        &policy,
+        &[
+            "--locale=es-ES".to_string(),
+            format!("--rulepack-path={}", unrelated.display()),
+        ],
+        text,
+    );
+    let overridden_text = overridden["clean_text"].as_str().unwrap_or_else(|| {
+        panic!(
+            "override run must answer; response={overridden}, stderr={}",
+            String::from_utf8_lossy(&output.stderr)
+        )
+    });
+    assert_eq!(
+        overridden_text, text,
+        "--rulepack-path replaced the policy's rulepack, so the ES id is no longer tokenized: {overridden_text}"
+    );
+}

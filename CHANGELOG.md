@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`gaze daemon` gained the eight safety-net and detection-surface flags only
+  `gaze clean` accepted** (#446): `--safety-net-registry`, `--safety-net-add`,
+  `--opf-locales`, `--opf-command`, `--opf-checkpoint`,
+  `--kiji-distilbert-precision`, `--rulepack-bundled`, and `--rulepack-path`.
+  None of these has a policy.toml equivalent — `gaze::Policy` carries no
+  safety-net section — so under an identical policy the daemon chokepoint could
+  previously only ever run a *single* Pass-3 backend, never the locale-aware
+  multi-backend registry, with no configuration able to reach the stronger
+  setup. The daemon now refuses a document whose locale no registered backend
+  covers, where a single backend would scan it with a model that does not cover
+  it and report nothing. This was a capability gap, not a leak: the flags were
+  rejected by clap and the daemon failed closed, so nothing was silently
+  ignored. The five flags `clean` still has that `daemon` does not
+  (`--format`, `--max-bytes`, `--context-json`, `--session-scope`,
+  `--session-ttl`) are deliberate and each is justified where its value is set.
+
 - **`gaze_proxy::ProxyConfig::with_dictionaries` installs one immutable
   dictionary source for every proxy detection pass.** Omitting the builder keeps
   the existing empty-bundle default. `ProxyConfig` was already
