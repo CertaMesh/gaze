@@ -857,6 +857,16 @@ list from `gaze_assembly::uncovered_collision_family_classes`. The bundled famil
 names are listed under
 [Custom-recognizer collision metadata](#custom-recognizer-collision-metadata).
 
+> **A `preserve` rule on a container class fails open for the PII inside it.**
+> Overlap resolution runs before the action lookup, and a custom-class span that
+> wholly encloses a builtin-class (`email`, `name`, `organization`, `location`)
+> span keeps the slot (`ConflictTier::StructuredContainment`), so with
+> `custom:url = preserve` and `email = tokenize` an email inside a URL is
+> preserved raw along with the URL. Keep container-capable classes
+> (`custom:url`, `custom:security_token`, broad tenant recognizers) on a
+> protective action, or accept that everything inside them passes through;
+> a load-time guard is tracked as solo todo #3064.
+
 ### `[ner]` (optional)
 
 ```toml

@@ -27,16 +27,21 @@ The shared payload currently contains exactly 35 recognizer specs
 `PiiClass` is the closed class vocabulary at
 `crates/gaze-types/src/lib.rs:62-96`. During generic overlap resolution, a
 higher class-priority integer wins containment
-(`crates/gaze/src/resolver.rs:267-288,395-403`).
+(`compare_base_ladder` and `class_priority` in `crates/gaze/src/resolver.rs`),
+with one exception decided
+before the generic tiers: a custom-class structured span that strictly encloses
+a builtin-class span keeps the slot (`structured_containment` in
+`crates/gaze/src/resolver.rs`, `ConflictTier::StructuredContainment`), so an
+NER token inside a URL, IBAN or credential cannot split the identifier.
 
 <!-- redaction-classes-gate:pii-classes:start -->
 | Rust variant | Policy spelling | Class priority | Source |
 |---|---|---:|---|
-| `Email` | `email` | 90 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Name` | `name` | 80 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Organization` | `organization` | 70 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Location` | `location` | 60 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs:395-403` |
-| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs:82-92,233-246`; `crates/gaze/src/resolver.rs:395-403` |
+| `Email` | `email` | 90 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Name` | `name` | 80 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Organization` | `organization` | 70 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Location` | `location` | 60 | `crates/gaze-types/src/lib.rs:82-92`; `crates/gaze/src/resolver.rs` (`class_priority`) |
+| `Custom` | `custom:<name>` | 50 | `crates/gaze-types/src/lib.rs:82-92,233-246`; `crates/gaze/src/resolver.rs` (`class_priority`) |
 <!-- redaction-classes-gate:pii-classes:end -->
 
 `Custom(String)` is parametric: the table's `custom:<name>` denotes every
@@ -202,23 +207,32 @@ The end-to-end order is:
    resolved (`crates/gaze/src/registry.rs:382-390`). The detailed typed audit
    contract is [Validator Veto](../explanation/detection/validator-veto.md).
 3. For an overlap, collision-family precedence is consulted first, then
-   mandatory-anchor context, then the generic tiers
-   (`crates/gaze/src/resolver.rs:156-209`).
-4. The generic tiers are **class priority > rule priority > score > span length
+   mandatory-anchor context, then structured containment, then the generic
+   tiers (`arbitrate` in `crates/gaze/src/resolver.rs`).
+4. Structured containment: when a custom-class span strictly encloses a
+   builtin-class (`Email`/`Name`/`Organization`/`Location`) span, the enclosing
+   span wins and the enclosed candidate is recorded as a merged source
+   (`structured_containment` in `crates/gaze/src/resolver.rs`, audit tier
+   `ConflictTier::StructuredContainment`). Geometry decides, never arrival
+   order; partial overlaps, custom-inside-custom, builtin-inside-builtin and
+   builtin containers over custom spans fall through to the generic tiers.
+5. The generic tiers are **class priority > rule priority > score > span length
    > lexicographically smaller recognizer id**
-   (`crates/gaze/src/resolver.rs:267-288`).
-5. Same-class containment has one extra check before those generic tiers: a
+   (`compare_base_ladder` in `crates/gaze/src/resolver.rs`).
+6. Same-class containment has one extra check before those generic tiers: a
    candidate with a validator-produced canonical form defeats an otherwise
-   equivalent unvalidated candidate
-   (`crates/gaze/src/resolver.rs:175-186`). This is
+   equivalent unvalidated candidate (the same-class containment branch of
+   `arbitrate` in `crates/gaze/src/resolver.rs`). This is
    `ConflictTier::Validator`, distinct from the pre-resolver
    `ValidatorVeto`.
-6. Replacement removes every overlap with the winner, so multi-overlap inputs
+7. Replacement removes every overlap with the winner, so multi-overlap inputs
    converge to a disjoint fixed point rather than leaving a candidate that
-   overlapped an earlier loser (`crates/gaze/src/resolver.rs:73-115,373-393`).
-7. After pairwise resolution, a surviving candidate that requires but lacks a
+   overlapped an earlier loser (`insert_candidate` and `remove_overlaps` in
+   `crates/gaze/src/resolver.rs`).
+8. After pairwise resolution, a surviving candidate that requires but lacks a
    mandatory anchor is converted to its family-level fallback
-   (`crates/gaze/src/resolver.rs:63-68,316-371`).
+   (`resolve_candidates_inner` and `apply_missing_anchor_fallback` in
+   `crates/gaze/src/resolver.rs`).
 
 ## Deterministic floor and NER-only mass
 

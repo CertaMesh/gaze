@@ -2022,6 +2022,10 @@ pub enum ConflictTier {
     CollisionPolicy,
     /// Mandatory-anchor context was missing, so family-level fallback was emitted.
     AnchoredContext,
+    /// A builtin-class span (`Email`/`Name`/`Organization`/`Location`) strictly
+    /// inside a custom-class structured span lost to the enclosing span, so a
+    /// structured identifier is never split around a sub-token.
+    StructuredContainment,
     /// Recognizer identifier decided the conflict.
     RecognizerId,
     /// Candidate was merged with another candidate.
@@ -2047,6 +2051,7 @@ impl ConflictTier {
             Self::ValidatorVeto => "validator_veto",
             Self::CollisionPolicy => "collision_policy",
             Self::AnchoredContext => "anchored_context",
+            Self::StructuredContainment => "structured_containment",
             Self::RecognizerId => "recognizer_id",
             Self::Merged => "merged",
             Self::Redact => "redact",
@@ -2067,6 +2072,7 @@ impl ConflictTier {
             "validator_veto" => Some(Self::ValidatorVeto),
             "collision_policy" => Some(Self::CollisionPolicy),
             "anchored_context" => Some(Self::AnchoredContext),
+            "structured_containment" => Some(Self::StructuredContainment),
             "recognizer_id" => Some(Self::RecognizerId),
             "merged" => Some(Self::Merged),
             "redact" => Some(Self::Redact),
@@ -3173,6 +3179,7 @@ mod redaction_logger_tests {
             ConflictTier::ValidatorVeto,
             ConflictTier::CollisionPolicy,
             ConflictTier::AnchoredContext,
+            ConflictTier::StructuredContainment,
             ConflictTier::RecognizerId,
             ConflictTier::Merged,
             ConflictTier::Redact,

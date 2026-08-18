@@ -205,7 +205,47 @@ fn arbitrate(
         }
     }
 
+    // Structured-containment rung: a builtin-class span strictly inside a
+    // custom-class structured span never evicts its container. Without it the
+    // base ladder's class priority (Email/Name/Organization/Location above
+    // every `Custom`) let an NER sub-token split a URL, IBAN or credential
+    // around a mid-word token and leave the rest raw (todo #3025).
+    if let Some(container_is_candidate) = structured_containment(existing, candidate, overlap) {
+        return if container_is_candidate {
+            Arbitration::CandidateWins(ConflictTier::StructuredContainment)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::StructuredContainment)
+        };
+    }
+
     ladder_verdict(existing, candidate)
+}
+
+/// Detects the structured-containment shape and says which side is the
+/// container: `Some(true)` when `candidate` encloses a builtin-class
+/// `existing`, `Some(false)` when `existing` encloses a builtin-class
+/// `candidate`, `None` when the pair is not a custom-class span enclosing a
+/// builtin-class span. Geometry decides, never arrival order, so the verdict
+/// is permutation-invariant. Same-class pairs, custom-inside-custom,
+/// builtin-inside-builtin, and builtin containers over custom spans are all
+/// left to the existing rungs.
+fn structured_containment(
+    existing: &Candidate,
+    candidate: &Candidate,
+    overlap: Overlap,
+) -> Option<bool> {
+    if overlap != Overlap::Containment {
+        return None;
+    }
+    let candidate_encloses = contains(&candidate.span, &existing.span);
+    let (container, enclosed) = if candidate_encloses {
+        (candidate, existing)
+    } else {
+        (existing, candidate)
+    };
+    let structured_container = matches!(container.class, PiiClass::Custom(_));
+    let builtin_enclosed = !matches!(enclosed.class, PiiClass::Custom(_));
+    (structured_container && builtin_enclosed).then_some(candidate_encloses)
 }
 
 fn requires_anchor(
@@ -819,5 +859,120 @@ mod tests {
         assert_eq!(resolved[0].span, 0..4);
         assert_eq!(resolved[0].merged_sources, vec!["dict".to_string()]);
         assert_eq!(resolved[0].decided_by, ConflictTier::RecognizerId);
+    }
+
+    fn prioritized(mut candidate: Candidate, priority: i32) -> Candidate {
+        candidate.priority = priority;
+        candidate
+    }
+
+    /// An NER organisation token strictly inside a rule-recognised URL: the
+    /// structured container keeps the slot whichever candidate arrives first,
+    /// the enclosed span is recorded as a merged source, and the rung that
+    /// decided it is named truthfully. Before this rung existed the enclosed
+    /// builtin span won on `ClassPriority` and `remove_overlaps` dropped the
+    /// whole URL, leaving its head and tail raw around a mid-word token.
+    #[test]
+    fn builtin_sub_span_does_not_evict_custom_container() {
+        for container_first in [true, false] {
+            let container = prioritized(
+                candidate(0..24, PiiClass::custom("url"), 0.80, "url.anchored"),
+                90,
+            );
+            let enclosed = candidate(12..16, PiiClass::Organization, 0.99, "ner");
+            let input = if container_first {
+                vec![container, enclosed]
+            } else {
+                vec![enclosed, container]
+            };
+
+            let resolved = resolve_candidates(input);
+
+            assert_eq!(resolved.len(), 1, "container_first={container_first}");
+            assert_eq!(resolved[0].span, 0..24);
+            assert_eq!(resolved[0].class, PiiClass::custom("url"));
+            assert_eq!(resolved[0].recognizer_id, "url.anchored");
+            assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
+            assert_eq!(resolved[0].merged_sources, vec!["ner".to_string()]);
+        }
+    }
+
+    /// Two builtin sub-spans of different classes inside one structured span
+    /// converge to the container alone (multi-overlap fixed point).
+    #[test]
+    fn several_builtin_sub_spans_collapse_into_the_custom_container() {
+        let resolved = resolve_candidates(vec![
+            candidate(12..16, PiiClass::Organization, 0.99, "ner"),
+            prioritized(
+                candidate(0..30, PiiClass::custom("url"), 0.80, "url.anchored"),
+                90,
+            ),
+            candidate(20..26, PiiClass::Name, 0.97, "ner"),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 0..30);
+        assert_eq!(resolved[0].class, PiiClass::custom("url"));
+        assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
+    }
+
+    /// Scope pin: the rung is containment-only. A builtin span that merely
+    /// straddles the structured span's edge is still decided by the base
+    /// ladder (class priority), exactly as before.
+    #[test]
+    fn partial_overlap_with_a_custom_span_still_uses_class_priority() {
+        let resolved = resolve_candidates(vec![
+            prioritized(
+                candidate(0..24, PiiClass::custom("url"), 0.80, "url.anchored"),
+                90,
+            ),
+            candidate(20..30, PiiClass::Organization, 0.99, "ner"),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].class, PiiClass::Organization);
+        assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
+    }
+
+    /// Scope pin: containment between two custom-class spans is untouched and
+    /// keeps going through the base ladder (here rule priority).
+    #[test]
+    fn custom_inside_custom_containment_still_uses_the_base_ladder() {
+        let resolved = resolve_candidates(vec![
+            prioritized(
+                candidate(
+                    0..13,
+                    PiiClass::custom("tax_number"),
+                    0.85,
+                    "tax_number.cue_anchored",
+                ),
+                84,
+            ),
+            prioritized(
+                candidate(8..13, PiiClass::custom("postal_code"), 0.80, "postal.de"),
+                70,
+            ),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "tax_number.cue_anchored");
+        assert_eq!(resolved[0].decided_by, ConflictTier::RulePriority);
+    }
+
+    /// Scope pin: a builtin container over a custom sub-span already won on
+    /// class priority; the new rung must not relabel that decision.
+    #[test]
+    fn builtin_container_over_custom_sub_span_is_still_class_priority() {
+        let resolved = resolve_candidates(vec![
+            candidate(0..20, PiiClass::Location, 0.95, "ner"),
+            prioritized(
+                candidate(10..15, PiiClass::custom("postal_code"), 0.80, "postal.de"),
+                70,
+            ),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].class, PiiClass::Location);
+        assert_eq!(resolved[0].decided_by, ConflictTier::ClassPriority);
     }
 }
