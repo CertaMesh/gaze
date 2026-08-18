@@ -9,12 +9,16 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use super::shared_args::{OpenAiFilterSubprocessArgs, SafetyNetLimitArgs};
+use super::shared_args::{
+    KijiPrecisionArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
+    SafetyNetLimitArgs, SafetyNetRegistryArgs,
+};
 use super::{
     KijiBackend, OpenAiFilterDevice, SafetyNetBackend, SafetyNetFallback, SafetyNetKind,
     SafetyNetMode,
 };
 use crate::error::CliError;
+use crate::io::DEFAULT_MAX_BYTES;
 use crate::pipeline::build::{map_policy_error, resolve_pipeline, validate_ner_threshold};
 use crate::pipeline::run::{
     clean_overrides_from_options, enforce_safety_net_mode, entry_class_to_string,
@@ -48,6 +52,8 @@ pub(crate) struct Args {
     /// v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins.
     #[arg(long, value_enum)]
     pub(crate) safety_net_backend: Option<SafetyNetBackend>,
+    #[command(flatten)]
+    pub(crate) safety_net_registry: SafetyNetRegistryArgs,
     /// Exit when stdin is idle for this many seconds.
     #[arg(long, default_value_t = default_process_idle_timeout_secs())]
     pub(crate) idle_timeout: u64,
@@ -73,6 +79,8 @@ pub(crate) struct Args {
     #[arg(long)]
     pub(crate) ner_locale: Option<String>,
     #[command(flatten)]
+    pub(crate) rulepacks: RulepackOverrideArgs,
+    #[command(flatten)]
     pub(crate) openai_filter: OpenAiFilterSubprocessArgs,
     /// Device selection for the OpenAI safety-net subprocess.
     #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
@@ -80,6 +88,10 @@ pub(crate) struct Args {
     /// Kiji DistilBERT runtime backend.
     #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
     pub(crate) kiji_backend: KijiBackend,
+    #[command(flatten)]
+    pub(crate) kiji_precision: KijiPrecisionArgs,
+    #[command(flatten)]
+    pub(crate) opf_registry: OpfRegistryArgs,
     /// Path to the local Kiji DistilBERT subprocess command.
     #[arg(long)]
     pub(crate) kiji_distilbert_command: Option<PathBuf>,
@@ -206,7 +218,11 @@ impl Daemon {
             policy: loaded_policy,
             locale_chain: locale_chain.as_slice().to_vec(),
             dictionaries,
-            safety_net_active: args.safety_net.is_some(),
+            // Mirrors `run_clean`: the registry activates the Pass-3 safety net exactly
+            // as `--safety-net` does, so a registry-only daemon must map safety-net
+            // failures to their typed variant instead of a generic pipeline error.
+            safety_net_active: args.safety_net.is_some()
+                || args.safety_net_registry.safety_net_registry,
             safety_net_mode: args.safety_net_limits.safety_net_mode,
             safety_net_fallback: args.safety_net_limits.safety_net_fallback,
             logger,
@@ -342,34 +358,65 @@ impl Daemon {
     }
 }
 
+/// `CleanOptions::format` is read only by `require_json_format` inside `run_clean`.
+/// The daemon never calls `run_clean`: its wire format is the JSONL protocol written
+/// by `write_json_line` and is not selectable, which is why there is no `--format` on
+/// `gaze daemon`. The field is inert here, and set to the encoding the daemon does in
+/// fact emit rather than to an arbitrary string.
+const DAEMON_CLEAN_FORMAT: &str = "json";
+
+/// `CleanOptions::max_bytes` bounds `read_stdin_text`, which only `run_clean` calls.
+/// The daemon reads its own newline-delimited frames from stdin and never goes through
+/// that path, so the field is inert; bounding one daemon request is a protocol concern
+/// needing a typed over-limit response, which is not smuggled in here. It carries
+/// `clean`'s default rather than `u64::MAX` so that if a later change ever does route
+/// the daemon through this field it inherits a bound instead of an unbounded read.
+const DAEMON_CLEAN_MAX_BYTES: u64 = DEFAULT_MAX_BYTES;
+
 fn clean_options(args: &Args) -> CleanOptions<'_> {
     CleanOptions {
         policy: Some(args.policy.as_path()),
-        format: "json",
+        format: DAEMON_CLEAN_FORMAT,
+        // Both are `[session]` keys in policy.toml, which is mandatory on `gaze daemon`,
+        // so `None` ("no CLI override") still leaves the operator able to set them.
+        //
+        // `session_ttl` additionally has no live consumer on this path: only `run_clean`
+        // passes it to `Session::from_policy_with_ttl_override`, while `ensure_session`
+        // builds every session with `Session::from_policy`, which supplies `None`. Adding
+        // a `--session-ttl` flag and wiring it only here would therefore be accepted and
+        // then silently ignored -- strictly worse than not offering it. Closing that gap
+        // means threading the override into `ensure_session`, not adding a flag.
+        //
+        // `--session-ttl` would also read as governing the daemon's own session registry,
+        // which `--session-idle-timeout` and `--session-cap` own instead.
         session_ttl: None,
         session_scope: None,
         locale: &args.locale,
         ner_threshold: args.ner_threshold,
         ner_model_dir: args.ner_model_dir.clone(),
         ner_locale: args.ner_locale.as_deref(),
-        rulepack_bundled: &[],
-        rulepack_paths: Vec::new(),
-        max_bytes: u64::MAX,
+        rulepack_bundled: &args.rulepacks.rulepack_bundled,
+        rulepack_paths: args.rulepacks.rulepack_paths.clone(),
+        max_bytes: DAEMON_CLEAN_MAX_BYTES,
+        // A typed context envelope describes one document. The daemon serves many
+        // documents across many sessions from one process, so a process-wide
+        // `--context-json` would apply one document's context to every session's every
+        // request. That belongs in the per-request protocol frame, not in a flag.
         context_json: None,
         audit_db: args.audit_db.as_deref(),
         safety_net: args.safety_net,
         safety_net_backend: args.safety_net_backend,
-        safety_net_registry: false,
-        safety_net_add: &[],
+        safety_net_registry: args.safety_net_registry.safety_net_registry,
+        safety_net_add: &args.safety_net_registry.safety_net_add,
         openai_filter_command: args.openai_filter.openai_filter_command.as_deref(),
         openai_filter_checkpoint: args.openai_filter.openai_filter_checkpoint.as_deref(),
         openai_filter_operating_point: args.openai_filter.openai_filter_operating_point,
         openai_filter_device: args.openai_filter_device,
         kiji_backend: args.kiji_backend,
-        kiji_distilbert_precision: super::KijiDistilbertPrecision::Fp32,
-        opf_locales: &[],
-        opf_command: None,
-        opf_checkpoint: None,
+        kiji_distilbert_precision: args.kiji_precision.kiji_distilbert_precision,
+        opf_locales: &args.opf_registry.opf_locales,
+        opf_command: args.opf_registry.opf_command.as_deref(),
+        opf_checkpoint: args.opf_registry.opf_checkpoint.as_deref(),
         kiji_distilbert_command: args.kiji_distilbert_command.as_deref(),
         kiji_distilbert_model_dir: args.kiji_distilbert_model_dir.as_deref(),
         kiji_distilbert_locales: &args.kiji_distilbert_locales,

@@ -877,7 +877,10 @@ mod tests {
 
     use clap::{Args as ClapArgsTrait, Command, CommandFactory};
 
-    use super::shared_args::{OpenAiFilterSubprocessArgs, SafetyNetLimitArgs};
+    use super::shared_args::{
+        KijiPrecisionArgs, OpenAiFilterSubprocessArgs, OpfRegistryArgs, RulepackOverrideArgs,
+        SafetyNetLimitArgs, SafetyNetRegistryArgs,
+    };
     use super::*;
 
     /// Long flag names a subcommand accepts, hidden ones included.
@@ -976,6 +979,10 @@ mod tests {
         for group in [
             long_flags_of::<OpenAiFilterSubprocessArgs>(),
             long_flags_of::<SafetyNetLimitArgs>(),
+            long_flags_of::<SafetyNetRegistryArgs>(),
+            long_flags_of::<OpfRegistryArgs>(),
+            long_flags_of::<KijiPrecisionArgs>(),
+            long_flags_of::<RulepackOverrideArgs>(),
         ] {
             assert!(!group.is_empty(), "a shared group contributed no flags");
             for flag in &group {
@@ -990,10 +997,17 @@ mod tests {
     /// that a new flag landing on only one verb fails here, and so that closing
     /// one of these gaps has to update this list deliberately.
     ///
-    /// `daemon` cannot opt into the locale-aware safety-net registry, cannot
-    /// select int8 Kiji precision, and takes no rulepack overrides: passing any
-    /// of these to `gaze daemon` is rejected, not ignored (see solo todo for
-    /// the capability gap).
+    /// The safety-net half of this list was closed by solo todo #3004: `daemon`
+    /// now opts into the locale-aware registry, selects Kiji precision, and takes
+    /// rulepack overrides, because none of those have a policy.toml equivalent
+    /// and `daemon` could otherwise only ever run a single safety-net backend.
+    ///
+    /// What is left is deliberate, and each exclusion is justified where its
+    /// value is set in `daemon::clean_options`: `--format` and `--max-bytes`
+    /// configure `run_clean`'s stdio, which the daemon never uses;
+    /// `--context-json` is per-document and the daemon serves many documents per
+    /// process; `--session-scope` and `--session-ttl` are reachable through the
+    /// policy file, which is mandatory on `daemon`.
     #[test]
     fn clean_and_daemon_flag_divergence_is_exactly_the_reviewed_set() {
         let clean = long_flags(&["clean"]);
@@ -1005,15 +1019,7 @@ mod tests {
         let expected_clean_only: BTreeSet<String> = [
             "context-json",
             "format",
-            "kiji-distilbert-precision",
             "max-bytes",
-            "opf-checkpoint",
-            "opf-command",
-            "opf-locales",
-            "rulepack-bundled",
-            "rulepack-path",
-            "safety-net-add",
-            "safety-net-registry",
             "session-scope",
             "session-ttl",
         ]
