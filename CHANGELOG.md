@@ -111,6 +111,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **One documented safety-net default across the library and the CLI** (audit
+  7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
+  `clean_with_safety_net_detect_context` — the policy-less convenience entry
+  points — previously hard-coded `SafetyNetMode::Strict` + `Redact`, which
+  contradicted `SafetyNetPolicy::default()` (`Resolve` + `Redact`, the shipped
+  production default and the CLI default since v0.8.1). They now use
+  `SafetyNetPolicy::default()`. **Adopters calling these entry points with a
+  registered safety net now get enforcement instead of observation**: suspects
+  are tokenized reversibly and any residual takes the `Redact` fallback, rather
+  than being reported and shipped. This strengthens axis 1 and preserves
+  axis 2 (the promoted spans stay restorable). For the previous behaviour pass
+  an explicit policy to `clean_with_safety_net_policy_detect_context`, or use
+  `Pipeline::scan_safety_nets` for a report-only pass. In-tree pipelines that
+  register no safety net are unaffected.
+
+- **`SafetyNetMode` x `SafetyNetFallback` is lowered once to a total
+  `SafetyNetDecision`** (audit 7201 S01-F1, solo todo #2949). The two public
+  fields spell twelve pairs; the runtime has six behaviours, and seven pairs
+  previously differed only in a field nothing read. `SafetyNetPolicy::decision()`
+  is now the single, total lowering to
+  `SafetyNetDecision { Observe { strict }, Redact, Resolve { on_residual } }`,
+  and every pipeline arm, the skip-gating optimizer, and the CLI boundary read
+  the decision instead of re-deriving the lattice from the pair. `SafetyNetDecision`
+  is exported from `gaze`. The public `mode` and `fallback` fields are unchanged.
+  The full twelve-pair behaviour table is pinned by
+  `safety_net_policy_lowering_covers_all_twelve_representable_pairs`.
+
+- **`gaze clean` no longer warns that `--safety-net-fallback` is "ignored when
+  `--safety-net-mode` is terminal"** (audit 7201 S01-F1, solo todo #2949). The
+  lowering documents which pairs consult the fallback, so the runtime warning is
+  redundant. Relatedly, the tolerant-deprecation warning now fires only where a
+  tolerant disposition is reachable — `--safety-net-mode tolerant`, or a tolerant
+  fallback under `--safety-net-mode resolve`. It no longer fires for
+  `--safety-net-mode redact --safety-net-fallback tolerant`, where the fallback
+  is never consulted. The `GAZE_ALLOW_TOLERANT` gate is unchanged and still
+  rejects a tolerant flag in any position.
+
 - **Persistent owner-side corpus index schema v2: each document is stored
   once, postings are derived on load, and re-ingest upserts** (audit 7201
   S17-F1, todo #2936). `gaze_token_bridge::persistent::FileCorpusIndexStore`
@@ -239,6 +276,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Safety-net `resolve` fallback acted on the primary report instead of the
+  residual one, destroying tokens and shipping residual PII under the default
+  policy** (audit 7201 S01-F1, solo todos #2949 and #2956). When the resolve
+  pass converged and the post-resolution re-run flagged a residual suspect, the
+  fallback was handed the *primary* `LeakReport`, which by then described
+  pre-resolve coordinates.
+
+  With a **non-empty** primary report — the broadly reachable case, since any
+  deterministic safety net produces one — the redactor was pointed at stale
+  pre-resolve spans. Those spans had since become part of a token the resolve
+  pass minted, so the fallback deleted the token, dropped its manifest entry,
+  and left the actual residual in the document: an axis-1 leak and an axis-2
+  restore break in the same operation, returned as `Ok`.
+
+  With an **empty** primary report the fallback had nothing to act on at all, so
+  the residual shipped and no fallback audit row was written. (Reaching that
+  shape requires a backend whose verdict differs across byte-identical text,
+  since a converged resolve leaves the document unchanged.)
+
+  Only the `strict` fallback was safe, because it rejects the document without
+  consulting the report. The fallback now receives the report that produced the
+  reason, and acts only on the suspects in it that are not already protected by
+  a live token — a protected suspect is audited as a `Preserve` no-op instead of
+  being redacted, which also closes a gap where such suspects were left out of
+  the audit entirely. Pinned by
+  `resolve_fallback_does_not_redact_stale_pre_resolve_spans`,
+  `resolve_fallback_redacts_the_residual_report_not_the_stale_primary_report`,
+  `resolve_fallback_redacts_the_residual_without_deleting_protected_live_tokens`
+  (both fallback reasons), and the twelve-pair lowering table; the first three
+  are required by name in the `safety-net-sanity` gate.
+
+- **A residual found only by the post-resolution re-run was invisible in the
+  returned `LeakReport`** (solo todo #2959). The report handed back to the
+  caller is the first pass's, so a boundary that decides on it — the CLI's
+  tolerant-mode deprecation warning, or an adopter's "did anything leak?" check
+  — was told nothing was found while the residual shipped under `tolerant` or
+  was destroyed one-way under `redact`. The suspects the fallback acted on are
+  now merged into the returned report. A converged resolve merges nothing, so a
+  deterministic net that re-reports the same suspect does not produce
+  duplicates.
+
+- **Fallback audit rows now state what happened to the suspect's bytes**
+  (audit 7201 S01-F1, solo todo #2949). `fallback_action` was renamed to
+  `fallback_row_action` and documented as the row's claim about the bytes:
+  `Action::Redact` only when the residual span is actually deleted,
+  `Action::Preserve` when it is left in place (shipped under `tolerant`,
+  rejected under `strict`). With the residual-report fix above, a
+  `decided_by: Fallback` row now also names the residual suspect that drove it
+  rather than a stale primary-pass suspect.
 - **A detached `gaze proxy start --policy prod.toml` now runs the policy instead
   of the bundled `core` pipeline** (solo todo #2965). `start` persisted the
   policy into its daemon config and then spawned the serving child with only
