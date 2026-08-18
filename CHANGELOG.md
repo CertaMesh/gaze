@@ -304,7 +304,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unchanged — which spans get tokenized, their classes, and the restore
   contract are byte-identical; only `decided_by` (and the `ambiguity_record`
   derived from it in `gaze-audit` / JSON exports) moves.
-||||||| 2ee85f2
+
 - **The `mcp-tier-isolation` gate now actually fails when the agent/operator
   tier boundary is violated** (audit 7359 §6-F1, solo todo #2993). **The tier
   partition itself was, and remains, enforced by rustc:** the operator surface
