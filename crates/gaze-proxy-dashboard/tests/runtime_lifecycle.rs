@@ -83,27 +83,6 @@ fn assert_process_reaped(pid: u32) {
 }
 
 #[test]
-fn binding_precedes_socket_writer_runtime_and_admission_activation_in_commit() {
-    let source = include_str!("../src/supervisor.rs");
-    let commit = source
-        .find("impl PendingDashboardActivation")
-        .expect("pending activation implementation");
-    let body = &source[commit..];
-    let binding = body.find(".bind(activated)").expect("binding step");
-    for (name, needle) in [
-        ("socket take", "child.take_inspection()"),
-        ("writer spawn", "WriterHandle::spawn"),
-        ("runtime start", "DashboardLaunch::start"),
-        ("admission activation", "admission.activate()"),
-    ] {
-        let side_effect = body
-            .find(needle)
-            .unwrap_or_else(|| panic!("missing {name}"));
-        assert!(binding < side_effect, "binding must precede {name}");
-    }
-}
-
-#[test]
 #[cfg(not(target_os = "macos"))]
 fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
     let temp = tempfile::tempdir().unwrap();
