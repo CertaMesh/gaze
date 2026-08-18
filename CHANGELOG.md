@@ -312,6 +312,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   additionally requires each feature graph to report its tier tests as passing,
   since `cargo test` exits 0 for zero tests, and the fixtures are enrolled in
   the `trybuild-fixture-hygiene` inventory so deleting one is also a failure.
+  Each graph further declares whether it is driven with `cargo test` or
+  `cargo check`, and the gate refuses a `cargo test` graph that names no test,
+  so an empty expectation cannot silently mean both "nothing executes here" and
+  "nobody filled this in".
 
 - **Structured documents no longer accept a safety-net enforcement request and
   silently perform observation** (audit 7201 S01-F2, solo todo #2950). The
