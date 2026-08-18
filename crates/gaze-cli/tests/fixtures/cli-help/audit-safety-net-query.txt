@@ -1,0 +1,13 @@
+Print filtered safety-net metadata rows as tab-separated values
+
+Usage: gaze audit safety-net query [OPTIONS] --audit-db <AUDIT_DB>
+
+Options:
+      --audit-db <AUDIT_DB>          SQLite redaction-log database path
+      --leak-kind <LEAK_KIND>        Filter by safety-net leak kind
+      --raw-label <RAW_LABEL>        Filter by raw backend label
+      --mapped-class <MAPPED_CLASS>  Filter by mapped Gaze class
+      --field-path <FIELD_PATH>      Filter by structured field path
+      --from <FROM_ISO8601>          Include rows created at or after this ISO 8601 timestamp
+      --to <TO_ISO8601>              Include rows created at or before this ISO 8601 timestamp
+  -h, --help                         Print help

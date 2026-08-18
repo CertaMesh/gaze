@@ -1,0 +1,8 @@
+Stop the detached proxy daemon
+
+Usage: gaze proxy stop [OPTIONS]
+
+Options:
+      --force              
+      --timeout <TIMEOUT>  [default: 10s]
+  -h, --help               Print help

@@ -1,0 +1,19 @@
+Owner-side local text/Markdown index ingest and search.
+
+Requires the binary to be built with `--features index`.
+
+Usage: gaze index [OPTIONS] <COMMAND>
+
+Commands:
+  ingest  Ingest `.txt` and `.md` files into a local owner-side index
+  search  Search the local owner-side index by one entity
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+      --safety-net-timeout-ms <SAFETY_NET_TIMEOUT_MS>
+          Safety-net subprocess timeout in milliseconds
+          
+          [default: 5000]
+
+  -h, --help
+          Print help (see a summary with '-h')

@@ -1,0 +1,6 @@
+Show proxy daemon status
+
+Usage: gaze proxy status
+
+Options:
+  -h, --help  Print help

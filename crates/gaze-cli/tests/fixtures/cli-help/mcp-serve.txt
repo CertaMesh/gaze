@@ -1,0 +1,8 @@
+Run the Gaze MCP stdio server
+
+Usage: gaze mcp serve [OPTIONS]
+
+Options:
+      --manifest-dir <MANIFEST_DIR>    Directory where MCP manifest call records are written
+      --max-file-size <MAX_FILE_SIZE>  Maximum file size accepted by `gaze_read_file`
+  -h, --help                           Print help

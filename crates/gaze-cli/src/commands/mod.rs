@@ -14,6 +14,7 @@ mod proxy_dashboard;
 mod restore;
 #[cfg(feature = "setup")]
 mod setup;
+mod shared_args;
 
 use std::path::PathBuf;
 
@@ -41,180 +42,13 @@ pub(crate) struct Cli {
 enum Cmd {
     /// Read raw text from stdin; emit `{clean_text, session_blob, stats}` JSON to stdout.
     Clean {
-        /// Path to policy.toml. Required once the policy loader lands (issue #3).
-        #[arg(long)]
-        policy: Option<PathBuf>,
-        /// Output format. Only `json` is supported today.
-        #[arg(long, default_value = "json")]
-        format: String,
-        /// Override the persistent session TTL in seconds.
-        #[arg(long)]
-        session_ttl: Option<u64>,
-        /// Override policy \[session].scope.
-        #[arg(long)]
-        session_scope: Option<String>,
-        /// Active locale fallback chain, comma separated and priority ordered.
-        #[arg(long, value_delimiter = ',')]
-        locale: Vec<String>,
-        /// Override policy \[ner] threshold. Must be between 0.0 and 1.0 inclusive.
-        #[arg(long)]
-        ner_threshold: Option<f32>,
-        /// Override policy \[ner].model_dir.
-        #[arg(long)]
-        ner_model_dir: Option<PathBuf>,
-        /// Override policy \[ner].locale.
-        #[arg(long)]
-        ner_locale: Option<String>,
-        /// Override policy.rulepacks.bundled. Comma-separated and repeatable.
-        #[arg(long, value_delimiter = ',')]
-        rulepack_bundled: Vec<String>,
-        /// Override policy.rulepacks.paths. Repeatable.
-        #[arg(long = "rulepack-path")]
-        rulepack_paths: Vec<PathBuf>,
-        /// Max stdin size in bytes. stdin longer than this exits 1 InputTooLarge.
-        #[arg(long, default_value_t = DEFAULT_MAX_BYTES)]
-        max_bytes: u64,
-        /// Path to a typed Context JSON envelope. stdin remains raw text.
-        #[arg(long)]
-        context_json: Option<PathBuf>,
-        /// Optional SQLite redaction-log database path.
-        #[arg(long)]
-        audit_db: Option<PathBuf>,
-        /// Optional observer-only privacy safety net.
-        #[arg(long, value_enum)]
-        safety_net: Option<SafetyNetKind>,
-        /// v0.8 backend selector. When set with
-        /// `--safety-net=<kind>`, this flag wins. Lets adopters swap the
-        /// Pass-3 backend without re-typing the legacy `--safety-net` value.
-        #[arg(long, value_enum)]
-        safety_net_backend: Option<SafetyNetBackend>,
-        /// Enable locale-aware Pass-3 safety-net registry dispatch.
-        #[arg(long)]
-        safety_net_registry: bool,
-        /// Add one backend to the locale-aware safety-net registry. Repeatable.
-        #[arg(long, value_enum)]
-        safety_net_add: Vec<SafetyNetBackend>,
-        /// Path to the local OpenAI Privacy Filter `opf` command.
-        #[arg(long)]
-        openai_filter_command: Option<PathBuf>,
-        /// Path to the local OpenAI Privacy Filter checkpoint or model directory.
-        #[arg(long)]
-        openai_filter_checkpoint: Option<PathBuf>,
-        /// OpenAI Privacy Filter operating point, when supported by the command.
-        #[arg(long, value_enum)]
-        openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
-        /// Device selection for the OpenAI safety-net subprocess (auto|cpu|cuda|mps). Default: auto (let opf decide).
-        #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
-        openai_filter_device: OpenAiFilterDevice,
-        /// Kiji DistilBERT runtime backend. Default: subprocess for compatibility.
-        #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
-        kiji_backend: KijiBackend,
-        /// Kiji DistilBERT ONNX precision. Default: fp32.
-        #[arg(long, value_enum, default_value_t = KijiDistilbertPrecision::Fp32)]
-        kiji_distilbert_precision: KijiDistilbertPrecision,
-        /// Locale list for the OpenAI Privacy Filter registry entry.
-        #[arg(long, value_delimiter = ',')]
-        opf_locales: Vec<String>,
-        /// Alias for --openai-filter-command in registry examples.
-        #[arg(long)]
-        opf_command: Option<PathBuf>,
-        /// Alias for --openai-filter-checkpoint in registry examples.
-        #[arg(long)]
-        opf_checkpoint: Option<PathBuf>,
-        /// Path to the local Kiji DistilBERT subprocess command.
-        #[arg(long)]
-        kiji_distilbert_command: Option<PathBuf>,
-        /// Path to the pinned Kiji DistilBERT model directory (must contain
-        /// SHA256SUMS, labels.json, model.onnx, tokenizer.json).
-        #[arg(long)]
-        kiji_distilbert_model_dir: Option<PathBuf>,
-        /// Locale list for the Kiji DistilBERT registry entry.
-        #[arg(long, value_delimiter = ',')]
-        kiji_distilbert_locales: Vec<String>,
-        /// Safety-net subprocess timeout in milliseconds.
-        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
-        safety_net_timeout_ms: u64,
-        /// Maximum clean-text bytes submitted to the safety net.
-        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
-        safety_net_input_limit_bytes: usize,
-        /// Safety-net handling mode for suspected leaks.
-        #[arg(long, value_enum, default_value_t = SafetyNetMode::Resolve)]
-        safety_net_mode: SafetyNetMode,
-        /// Fallback when safety-net resolve or redact cannot complete.
-        #[arg(long, value_enum, default_value_t = SafetyNetFallback::Redact)]
-        safety_net_fallback: SafetyNetFallback,
+        #[command(flatten)]
+        args: clean::Args,
     },
     /// Run a long-lived JSON-lines stdio cleaning daemon.
     Daemon {
-        /// Path to policy.toml.
-        #[arg(long)]
-        policy: PathBuf,
-        /// Optional observer-only privacy safety net.
-        #[arg(long, value_enum)]
-        safety_net: Option<SafetyNetKind>,
-        /// v0.8 backend selector. When set with `--safety-net=<kind>`, this flag wins.
-        #[arg(long, value_enum)]
-        safety_net_backend: Option<SafetyNetBackend>,
-        /// Exit when stdin is idle for this many seconds.
-        #[arg(long, default_value_t = daemon::default_process_idle_timeout_secs())]
-        idle_timeout: u64,
-        /// Evict sessions idle for this many seconds.
-        #[arg(long, default_value_t = daemon::default_session_idle_timeout_secs())]
-        session_idle_timeout: u64,
-        /// Maximum live sessions before LRU eviction.
-        #[arg(long, default_value_t = daemon::default_session_cap())]
-        session_cap: usize,
-        /// Optional SQLite redaction-log database path.
-        #[arg(long)]
-        audit_db: Option<PathBuf>,
-        /// Active locale fallback chain, comma separated and priority ordered.
-        #[arg(long, value_delimiter = ',')]
-        locale: Vec<String>,
-        /// Override policy \[ner\] threshold. Must be between 0.0 and 1.0 inclusive.
-        #[arg(long)]
-        ner_threshold: Option<f32>,
-        /// Override policy \[ner\].model_dir.
-        #[arg(long)]
-        ner_model_dir: Option<PathBuf>,
-        /// Override policy \[ner\].locale.
-        #[arg(long)]
-        ner_locale: Option<String>,
-        /// Path to the local OpenAI Privacy Filter `opf` command.
-        #[arg(long)]
-        openai_filter_command: Option<PathBuf>,
-        /// Path to the local OpenAI Privacy Filter checkpoint or model directory.
-        #[arg(long)]
-        openai_filter_checkpoint: Option<PathBuf>,
-        /// OpenAI Privacy Filter operating point, when supported by the command.
-        #[arg(long, value_enum)]
-        openai_filter_operating_point: Option<OpenAiFilterOperatingPoint>,
-        /// Device selection for the OpenAI safety-net subprocess.
-        #[arg(long, value_enum, default_value_t = OpenAiFilterDevice::Auto)]
-        openai_filter_device: OpenAiFilterDevice,
-        /// Kiji DistilBERT runtime backend.
-        #[arg(long, value_enum, default_value_t = KijiBackend::Subprocess)]
-        kiji_backend: KijiBackend,
-        /// Path to the local Kiji DistilBERT subprocess command.
-        #[arg(long)]
-        kiji_distilbert_command: Option<PathBuf>,
-        /// Path to the pinned Kiji DistilBERT model directory.
-        #[arg(long)]
-        kiji_distilbert_model_dir: Option<PathBuf>,
-        /// Locale list for the Kiji DistilBERT backend.
-        #[arg(long, value_delimiter = ',')]
-        kiji_distilbert_locales: Vec<String>,
-        /// Safety-net subprocess timeout in milliseconds.
-        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_TIMEOUT_MS)]
-        safety_net_timeout_ms: u64,
-        /// Maximum clean-text bytes submitted to the safety net.
-        #[arg(long, default_value_t = DEFAULT_SAFETY_NET_INPUT_LIMIT_BYTES)]
-        safety_net_input_limit_bytes: usize,
-        /// Safety-net handling mode for suspected leaks.
-        #[arg(long, value_enum, default_value_t = SafetyNetMode::Resolve)]
-        safety_net_mode: SafetyNetMode,
-        /// Fallback when safety-net resolve or redact cannot complete.
-        #[arg(long, value_enum, default_value_t = SafetyNetFallback::Redact)]
-        safety_net_fallback: SafetyNetFallback,
+        #[command(flatten)]
+        args: daemon::Args,
     },
     /// Read `{session_blob, text}` JSON from stdin; emit `{text}` JSON to stdout.
     Restore {
@@ -438,42 +272,9 @@ enum ProxyCmd {
         #[cfg(feature = "dashboard")]
         #[arg(long)]
         dashboard: bool,
-        /// Capture OwnerRaw payloads (requires the matching acknowledgement).
         #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-capture-owner-raw")]
-        dashboard_capture_owner_raw: bool,
-        /// Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-acknowledge-owner-raw-risk")]
-        dashboard_acknowledge_owner_raw_risk: bool,
-        /// Capture OwnerRestored payloads (requires the matching acknowledgement).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-capture-owner-restored")]
-        dashboard_capture_owner_restored: bool,
-        /// Acknowledge that OwnerRestored capture exposes re-identified text.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-acknowledge-owner-restored-risk")]
-        dashboard_acknowledge_owner_restored_risk: bool,
-        /// Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-bind")]
-        dashboard_bind: Option<std::net::SocketAddrV4>,
-        /// Dashboard retention TTL such as `5m` (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-ttl")]
-        dashboard_ttl: Option<String>,
-        /// Dashboard retained logical-event cap (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-max-events")]
-        dashboard_max_events: Option<usize>,
-        /// Dashboard retained byte cap (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-max-bytes")]
-        dashboard_max_bytes: Option<usize>,
-        /// Inherited FIFO descriptor for noninteractive pairing-token delivery.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-pairing-fd")]
-        dashboard_pairing_fd: Option<i32>,
+        #[command(flatten)]
+        dashboard_opts: proxy_dashboard::DashboardArgs,
     },
     /// Start proxy as a detached daemon.
     Start {
@@ -495,42 +296,9 @@ enum ProxyCmd {
         #[cfg(feature = "dashboard")]
         #[arg(long)]
         dashboard: bool,
-        /// Capture OwnerRaw payloads (requires the matching acknowledgement).
         #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-capture-owner-raw")]
-        dashboard_capture_owner_raw: bool,
-        /// Acknowledge that OwnerRaw capture exposes PII to the dashboard TCB.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-acknowledge-owner-raw-risk")]
-        dashboard_acknowledge_owner_raw_risk: bool,
-        /// Capture OwnerRestored payloads (requires the matching acknowledgement).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-capture-owner-restored")]
-        dashboard_capture_owner_restored: bool,
-        /// Acknowledge that OwnerRestored capture exposes re-identified text.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-acknowledge-owner-restored-risk")]
-        dashboard_acknowledge_owner_restored_risk: bool,
-        /// Literal loopback dashboard bind with port 0 (default: fresh CSPRNG 127/8 origin).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-bind")]
-        dashboard_bind: Option<std::net::SocketAddrV4>,
-        /// Dashboard retention TTL such as `5m` (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-ttl")]
-        dashboard_ttl: Option<String>,
-        /// Dashboard retained logical-event cap (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-max-events")]
-        dashboard_max_events: Option<usize>,
-        /// Dashboard retained byte cap (crate-ceiling capped).
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-max-bytes")]
-        dashboard_max_bytes: Option<usize>,
-        /// Inherited FIFO descriptor for noninteractive pairing-token delivery.
-        #[cfg(feature = "dashboard")]
-        #[arg(long = "dashboard-pairing-fd")]
-        dashboard_pairing_fd: Option<i32>,
+        #[command(flatten)]
+        dashboard_opts: proxy_dashboard::DashboardArgs,
     },
     /// Stop the detached proxy daemon.
     Stop {
@@ -812,75 +580,7 @@ pub(crate) enum SafetyNetFallback {
 
 pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
     match cli.cmd {
-        Cmd::Clean {
-            policy,
-            format,
-            session_ttl,
-            session_scope,
-            locale,
-            ner_threshold,
-            ner_model_dir,
-            ner_locale,
-            rulepack_bundled,
-            rulepack_paths,
-            max_bytes,
-            context_json,
-            audit_db,
-            safety_net,
-            safety_net_backend,
-            safety_net_registry,
-            safety_net_add,
-            openai_filter_command,
-            openai_filter_checkpoint,
-            openai_filter_operating_point,
-            openai_filter_device,
-            kiji_backend,
-            kiji_distilbert_precision,
-            opf_locales,
-            opf_command,
-            opf_checkpoint,
-            kiji_distilbert_command,
-            kiji_distilbert_model_dir,
-            kiji_distilbert_locales,
-            safety_net_timeout_ms,
-            safety_net_input_limit_bytes,
-            safety_net_mode,
-            safety_net_fallback,
-        } => clean::run(clean::Args {
-            policy,
-            format,
-            session_ttl,
-            session_scope,
-            locale,
-            ner_threshold,
-            ner_model_dir,
-            ner_locale,
-            rulepack_bundled,
-            rulepack_paths,
-            max_bytes,
-            context_json,
-            audit_db,
-            safety_net,
-            safety_net_backend,
-            safety_net_registry,
-            safety_net_add,
-            openai_filter_command,
-            openai_filter_checkpoint,
-            openai_filter_operating_point,
-            openai_filter_device,
-            kiji_backend,
-            kiji_distilbert_precision,
-            opf_locales,
-            opf_command,
-            opf_checkpoint,
-            kiji_distilbert_command,
-            kiji_distilbert_model_dir,
-            kiji_distilbert_locales,
-            safety_net_timeout_ms,
-            safety_net_input_limit_bytes,
-            safety_net_mode,
-            safety_net_fallback,
-        }),
+        Cmd::Clean { args } => clean::run(args),
         Cmd::Restore {
             format,
             restore_mode,
@@ -895,55 +595,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
             audit_db,
             max_bytes,
         }),
-        Cmd::Daemon {
-            policy,
-            safety_net,
-            safety_net_backend,
-            idle_timeout,
-            session_idle_timeout,
-            session_cap,
-            audit_db,
-            locale,
-            ner_threshold,
-            ner_model_dir,
-            ner_locale,
-            openai_filter_command,
-            openai_filter_checkpoint,
-            openai_filter_operating_point,
-            openai_filter_device,
-            kiji_backend,
-            kiji_distilbert_command,
-            kiji_distilbert_model_dir,
-            kiji_distilbert_locales,
-            safety_net_timeout_ms,
-            safety_net_input_limit_bytes,
-            safety_net_mode,
-            safety_net_fallback,
-        } => daemon::run(daemon::Args {
-            policy,
-            safety_net,
-            safety_net_backend,
-            idle_timeout_secs: idle_timeout,
-            session_idle_timeout_secs: session_idle_timeout,
-            session_cap,
-            audit_db,
-            locale,
-            ner_threshold,
-            ner_model_dir,
-            ner_locale,
-            openai_filter_command,
-            openai_filter_checkpoint,
-            openai_filter_operating_point,
-            openai_filter_device,
-            kiji_backend,
-            kiji_distilbert_command,
-            kiji_distilbert_model_dir,
-            kiji_distilbert_locales,
-            safety_net_timeout_ms,
-            safety_net_input_limit_bytes,
-            safety_net_mode,
-            safety_net_fallback,
-        }),
+        Cmd::Daemon { args } => daemon::run(args),
         Cmd::Audit { command } => match command {
             AuditCmd::Query {
                 audit_db,
@@ -1151,23 +803,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 #[cfg(feature = "dashboard")]
                 dashboard,
                 #[cfg(feature = "dashboard")]
-                dashboard_capture_owner_raw,
-                #[cfg(feature = "dashboard")]
-                dashboard_acknowledge_owner_raw_risk,
-                #[cfg(feature = "dashboard")]
-                dashboard_capture_owner_restored,
-                #[cfg(feature = "dashboard")]
-                dashboard_acknowledge_owner_restored_risk,
-                #[cfg(feature = "dashboard")]
-                dashboard_bind,
-                #[cfg(feature = "dashboard")]
-                dashboard_ttl,
-                #[cfg(feature = "dashboard")]
-                dashboard_max_events,
-                #[cfg(feature = "dashboard")]
-                dashboard_max_bytes,
-                #[cfg(feature = "dashboard")]
-                dashboard_pairing_fd,
+                dashboard_opts,
             } => proxy::serve(proxy::ServeArgs {
                 bind,
                 upstream_openai,
@@ -1180,15 +816,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 #[cfg(feature = "dashboard")]
                 dashboard: proxy_dashboard::DashboardArgs {
                     dashboard,
-                    capture_owner_raw: dashboard_capture_owner_raw,
-                    acknowledge_owner_raw_risk: dashboard_acknowledge_owner_raw_risk,
-                    capture_owner_restored: dashboard_capture_owner_restored,
-                    acknowledge_owner_restored_risk: dashboard_acknowledge_owner_restored_risk,
-                    bind: dashboard_bind,
-                    ttl: dashboard_ttl,
-                    max_events: dashboard_max_events,
-                    max_bytes: dashboard_max_bytes,
-                    pairing_fd: dashboard_pairing_fd,
+                    ..dashboard_opts
                 },
             }),
             ProxyCmd::Start {
@@ -1202,23 +830,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 #[cfg(feature = "dashboard")]
                 dashboard,
                 #[cfg(feature = "dashboard")]
-                dashboard_capture_owner_raw,
-                #[cfg(feature = "dashboard")]
-                dashboard_acknowledge_owner_raw_risk,
-                #[cfg(feature = "dashboard")]
-                dashboard_capture_owner_restored,
-                #[cfg(feature = "dashboard")]
-                dashboard_acknowledge_owner_restored_risk,
-                #[cfg(feature = "dashboard")]
-                dashboard_bind,
-                #[cfg(feature = "dashboard")]
-                dashboard_ttl,
-                #[cfg(feature = "dashboard")]
-                dashboard_max_events,
-                #[cfg(feature = "dashboard")]
-                dashboard_max_bytes,
-                #[cfg(feature = "dashboard")]
-                dashboard_pairing_fd,
+                dashboard_opts,
             } => proxy::start(proxy::StartArgs {
                 bind,
                 upstream_openai,
@@ -1230,15 +842,7 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
                 #[cfg(feature = "dashboard")]
                 dashboard: proxy_dashboard::DashboardArgs {
                     dashboard,
-                    capture_owner_raw: dashboard_capture_owner_raw,
-                    acknowledge_owner_raw_risk: dashboard_acknowledge_owner_raw_risk,
-                    capture_owner_restored: dashboard_capture_owner_restored,
-                    acknowledge_owner_restored_risk: dashboard_acknowledge_owner_restored_risk,
-                    bind: dashboard_bind,
-                    ttl: dashboard_ttl,
-                    max_events: dashboard_max_events,
-                    max_bytes: dashboard_max_bytes,
-                    pairing_fd: dashboard_pairing_fd,
+                    ..dashboard_opts
                 },
             }),
             ProxyCmd::Stop { force, timeout } => proxy::stop(proxy::StopArgs { force, timeout }),
@@ -1269,20 +873,167 @@ pub(crate) fn dispatch(cli: Cli) -> std::result::Result<(), CliError> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use clap::{Args as ClapArgsTrait, Command, CommandFactory};
+
+    use super::shared_args::{OpenAiFilterSubprocessArgs, SafetyNetLimitArgs};
     use super::*;
+
+    /// Long flag names a subcommand accepts, hidden ones included.
+    fn long_flags(path: &[&str]) -> BTreeSet<String> {
+        let mut cmd = Cli::command();
+        for name in path {
+            let sub = cmd
+                .get_subcommands()
+                .find(|sub| sub.get_name() == *name)
+                .cloned()
+                .unwrap_or_else(|| panic!("no `{name}` subcommand under {path:?}"));
+            cmd = sub;
+        }
+        cmd.get_arguments()
+            .filter_map(|arg| arg.get_long().map(str::to_string))
+            .collect()
+    }
+
+    /// Long flag names contributed by one shared `#[derive(Args)]` struct.
+    ///
+    /// Read off the struct itself rather than restated as a list, so the
+    /// expectation cannot drift away from the declaration it is checking.
+    fn long_flags_of<T: ClapArgsTrait>() -> BTreeSet<String> {
+        T::augment_args(Command::new("probe"))
+            .get_arguments()
+            .filter_map(|arg| arg.get_long().map(str::to_string))
+            .filter(|long| long != "help")
+            .collect()
+    }
+
+    fn walk(cmd: &Command, path: String, out: &mut Vec<(String, Vec<String>)>) {
+        out.push((
+            path.clone(),
+            cmd.get_arguments()
+                .map(|arg| arg.get_id().to_string())
+                .collect(),
+        ));
+        for sub in cmd.get_subcommands() {
+            walk(sub, format!("{path} {}", sub.get_name()), out);
+        }
+    }
 
     #[test]
     fn openai_filter_device_defaults_to_auto() {
         let cli = Cli::parse_from(["gaze", "clean"]);
 
-        let Cmd::Clean {
-            openai_filter_device,
-            ..
-        } = cli.cmd
-        else {
+        let Cmd::Clean { args } = cli.cmd else {
             unreachable!("expected clean command");
         };
 
-        assert_eq!(openai_filter_device, OpenAiFilterDevice::Auto);
+        assert_eq!(args.openai_filter_device, OpenAiFilterDevice::Auto);
+    }
+
+    /// Clap keys an argument on its Rust field name, not on its `--long` name,
+    /// so two flattened structs that both name a field `bind` silently merge
+    /// into one argument and the loser's default disappears. Nothing in the
+    /// type system catches that, so assert it here across every command.
+    #[test]
+    fn no_command_has_two_arguments_sharing_an_id() {
+        let root = Cli::command();
+        let mut commands = Vec::new();
+        walk(&root, "gaze".to_string(), &mut commands);
+        assert!(
+            commands.len() > 1,
+            "walked no subcommands; the traversal is broken"
+        );
+
+        let mut collisions = Vec::new();
+        for (path, ids) in &commands {
+            let mut seen = BTreeMap::new();
+            for id in ids {
+                *seen.entry(id.clone()).or_insert(0usize) += 1;
+            }
+            for (id, count) in seen {
+                if count > 1 {
+                    collisions.push(format!("`{path}` declares `{id}` {count} times"));
+                }
+            }
+        }
+        assert!(
+            collisions.is_empty(),
+            "clap argument id collisions: {}",
+            collisions.join("; ")
+        );
+    }
+
+    /// The shared safety-net groups must reach both verbs. If a future edit
+    /// drops a `#[command(flatten)]`, or re-declares the block inline on one
+    /// side only, this fails instead of shipping a verb with a weaker Pass-3
+    /// safety net than its sibling under the same policy.
+    #[test]
+    fn shared_safety_net_groups_reach_both_clean_and_daemon() {
+        let clean = long_flags(&["clean"]);
+        let daemon = long_flags(&["daemon"]);
+
+        for group in [
+            long_flags_of::<OpenAiFilterSubprocessArgs>(),
+            long_flags_of::<SafetyNetLimitArgs>(),
+        ] {
+            assert!(!group.is_empty(), "a shared group contributed no flags");
+            for flag in &group {
+                assert!(clean.contains(flag), "`gaze clean` is missing --{flag}");
+                assert!(daemon.contains(flag), "`gaze daemon` is missing --{flag}");
+            }
+        }
+    }
+
+    /// `clean` and `daemon` do not accept the same flags, and the difference is
+    /// a product decision rather than an accident. Pin it in both directions so
+    /// that a new flag landing on only one verb fails here, and so that closing
+    /// one of these gaps has to update this list deliberately.
+    ///
+    /// `daemon` cannot opt into the locale-aware safety-net registry, cannot
+    /// select int8 Kiji precision, and takes no rulepack overrides: passing any
+    /// of these to `gaze daemon` is rejected, not ignored (see solo todo for
+    /// the capability gap).
+    #[test]
+    fn clean_and_daemon_flag_divergence_is_exactly_the_reviewed_set() {
+        let clean = long_flags(&["clean"]);
+        let daemon = long_flags(&["daemon"]);
+
+        let clean_only: BTreeSet<String> = clean.difference(&daemon).cloned().collect();
+        let daemon_only: BTreeSet<String> = daemon.difference(&clean).cloned().collect();
+
+        let expected_clean_only: BTreeSet<String> = [
+            "context-json",
+            "format",
+            "kiji-distilbert-precision",
+            "max-bytes",
+            "opf-checkpoint",
+            "opf-command",
+            "opf-locales",
+            "rulepack-bundled",
+            "rulepack-path",
+            "safety-net-add",
+            "safety-net-registry",
+            "session-scope",
+            "session-ttl",
+        ]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+
+        let expected_daemon_only: BTreeSet<String> =
+            ["idle-timeout", "session-cap", "session-idle-timeout"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect();
+
+        assert_eq!(
+            clean_only, expected_clean_only,
+            "flags on `gaze clean` but not `gaze daemon` changed"
+        );
+        assert_eq!(
+            daemon_only, expected_daemon_only,
+            "flags on `gaze daemon` but not `gaze clean` changed"
+        );
     }
 }

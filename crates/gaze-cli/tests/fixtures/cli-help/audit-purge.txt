@@ -1,0 +1,9 @@
+Purge audit metadata rows older than an ISO 8601 UTC timestamp
+
+Usage: gaze audit purge [OPTIONS] --audit-db <AUDIT_DB> --before <BEFORE>
+
+Options:
+      --audit-db <AUDIT_DB>  SQLite redaction-log database path
+      --before <BEFORE>      Purge rows where created_at is before this ISO 8601 UTC timestamp
+      --dry-run              Count matching rows without deleting them
+  -h, --help                 Print help

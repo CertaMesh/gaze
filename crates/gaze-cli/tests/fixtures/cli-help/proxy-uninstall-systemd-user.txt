@@ -1,0 +1,6 @@
+Uninstall Linux systemd user auto-start integration
+
+Usage: gaze proxy uninstall-systemd-user
+
+Options:
+  -h, --help  Print help
