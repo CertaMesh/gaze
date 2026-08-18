@@ -377,9 +377,16 @@ fn clean_options(args: &Args) -> CleanOptions<'_> {
     CleanOptions {
         policy: Some(args.policy.as_path()),
         format: DAEMON_CLEAN_FORMAT,
-        // `[session].ttl_secs` and `[session].scope` in policy.toml, which is mandatory
-        // on `gaze daemon`. `None` here means "no CLI override", so the daemon operator
-        // still reaches both through the policy file. Deliberately not exposed as flags:
+        // Both are `[session]` keys in policy.toml, which is mandatory on `gaze daemon`,
+        // so `None` ("no CLI override") still leaves the operator able to set them.
+        //
+        // `session_ttl` additionally has no live consumer on this path: only `run_clean`
+        // passes it to `Session::from_policy_with_ttl_override`, while `ensure_session`
+        // builds every session with `Session::from_policy`, which supplies `None`. Adding
+        // a `--session-ttl` flag and wiring it only here would therefore be accepted and
+        // then silently ignored -- strictly worse than not offering it. Closing that gap
+        // means threading the override into `ensure_session`, not adding a flag.
+        //
         // `--session-ttl` would also read as governing the daemon's own session registry,
         // which `--session-idle-timeout` and `--session-cap` own instead.
         session_ttl: None,
