@@ -78,91 +78,162 @@ fn insert_candidate(
 ) {
     let mut index = 0;
     while index < resolved.len() {
-        if !overlaps(&resolved[index].span, &candidate.span) {
+        let Some(overlap) = Overlap::classify(&resolved[index].span, &candidate.span) else {
             index += 1;
             continue;
-        }
+        };
 
-        if resolved[index].span == candidate.span {
-            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
+        match arbitrate(&resolved[index], &candidate, overlap, policy, anchor_ctx) {
+            Arbitration::Merge => merge_same_span_same_class(&mut resolved[index], candidate),
+            Arbitration::Family(tie) => {
                 resolved[index] = tie;
-                return;
+                if overlap != Overlap::Exact {
+                    remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
+                }
             }
-            if resolved[index].class == candidate.class {
-                merge_same_span_same_class(&mut resolved[index], candidate);
-                return;
-            }
-            if let Some(tier) =
-                should_replace_same_span_class(&candidate, &resolved[index], policy, anchor_ctx)
-            {
+            Arbitration::CandidateWins(tier) => {
                 let mut candidate = candidate;
                 candidate.decided_by = tier;
                 candidate
                     .merged_sources
                     .push(resolved[index].source.clone());
                 resolved[index] = candidate;
-            } else {
-                if let Some(tier) =
-                    should_replace_same_span_class(&resolved[index], &candidate, policy, anchor_ctx)
-                {
-                    resolved[index].decided_by = tier;
+                if overlap != Overlap::Exact {
+                    remove_overlaps(resolved, index, tier);
                 }
-                resolved[index].merged_sources.push(candidate.source);
             }
-            return;
-        }
-
-        if contains(&resolved[index].span, &candidate.span)
-            || contains(&candidate.span, &resolved[index].span)
-        {
-            if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
-                resolved[index] = tie;
-                remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
-            } else if let Some(tier) =
-                should_replace_containment(&candidate, &resolved[index], policy, anchor_ctx)
-            {
-                let mut candidate = candidate;
-                candidate.decided_by = tier;
-                candidate
-                    .merged_sources
-                    .push(resolved[index].source.clone());
-                resolved[index] = candidate;
-                remove_overlaps(resolved, index, tier);
-            } else {
-                if let Some(tier) =
-                    should_replace_containment(&resolved[index], &candidate, policy, anchor_ctx)
-                {
-                    resolved[index].decided_by = tier;
-                }
-                resolved[index].merged_sources.push(candidate.source);
-            }
-            return;
-        }
-
-        if let Some(tie) = family_tie_candidate(&candidate, &resolved[index], policy) {
-            resolved[index] = tie;
-            remove_overlaps(resolved, index, ConflictTier::CollisionPolicy);
-        } else if let Some(tier) =
-            should_replace_partial_overlap(&candidate, &resolved[index], policy, anchor_ctx)
-        {
-            let mut candidate = candidate;
-            candidate.decided_by = tier;
-            candidate
-                .merged_sources
-                .push(resolved[index].source.clone());
-            resolved[index] = candidate;
-            remove_overlaps(resolved, index, tier);
-        } else {
-            if let Some(tier) =
-                should_replace_partial_overlap(&resolved[index], &candidate, policy, anchor_ctx)
-            {
+            Arbitration::ExistingWins(tier) => {
                 resolved[index].decided_by = tier;
+                resolved[index].merged_sources.push(candidate.source);
             }
-            resolved[index].merged_sources.push(candidate.source);
         }
         return;
     }
     resolved.push(candidate);
+}
+
+/// Geometric relation between an already-resolved span and an incoming one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Overlap {
+    /// Identical spans: the winner keeps the slot; nothing else can overlap.
+    Exact,
+    /// One span fully covers the other (same-class containment gets the
+    /// validator-preference rule).
+    Containment,
+    /// Spans overlap without either covering the other.
+    Partial,
+}
+
+impl Overlap {
+    fn classify(existing: &Range<usize>, candidate: &Range<usize>) -> Option<Self> {
+        if !overlaps(existing, candidate) {
+            return None;
+        }
+        if existing == candidate {
+            Some(Self::Exact)
+        } else if contains(existing, candidate) || contains(candidate, existing) {
+            Some(Self::Containment)
+        } else {
+            Some(Self::Partial)
+        }
+    }
+}
+
+/// Outcome of arbitrating one overlapping pair.
+enum Arbitration {
+    /// Exact span, same class: provenance and confidence merge into `existing`.
+    Merge,
+    /// Precedence tie inside one collision family: emit the family-level
+    /// candidate in place of both rivals.
+    Family(Candidate),
+    /// `candidate` replaces `existing`; the tier names what decided it.
+    CandidateWins(ConflictTier),
+    /// `existing` keeps the slot; the tier names the rung that separated the
+    /// pair (never a label left over from an earlier overlap).
+    ExistingWins(ConflictTier),
+}
+
+fn arbitrate(
+    existing: &Candidate,
+    candidate: &Candidate,
+    overlap: Overlap,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: Option<AnchorContext<'_>>,
+) -> Arbitration {
+    // Family tie must be checked before the same-class merge and before any
+    // ladder: two equal-precedence variants collapse into one family token even
+    // when they share a class.
+    if let Some(tie) = family_tie_candidate(candidate, existing, policy) {
+        return Arbitration::Family(tie);
+    }
+    if overlap == Overlap::Exact && existing.class == candidate.class {
+        return Arbitration::Merge;
+    }
+
+    // Same-class containment prefers the validator-backed span, then the base
+    // ladder; policy and anchors do not apply inside one class.
+    if overlap == Overlap::Containment && existing.class == candidate.class {
+        let candidate_validated = candidate.canonical_form.is_some();
+        let existing_validated = existing.canonical_form.is_some();
+        if candidate_validated != existing_validated {
+            return if candidate_validated {
+                Arbitration::CandidateWins(ConflictTier::Validator)
+            } else {
+                Arbitration::ExistingWins(ConflictTier::Validator)
+            };
+        }
+        return ladder_verdict(existing, candidate);
+    }
+
+    if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
+    {
+        return if candidate_wins {
+            Arbitration::CandidateWins(ConflictTier::CollisionPolicy)
+        } else {
+            Arbitration::ExistingWins(ConflictTier::CollisionPolicy)
+        };
+    }
+
+    // Anchor rung, consulted once per pair: an anchored *incoming* candidate
+    // takes the slot from a rival outside its family and defers the
+    // found/missing verdict to `apply_missing_anchor_fallback`. An anchored
+    // incumbent gets no short-circuit; the ladder decides and names the tier,
+    // so `AnchoredContext` is never stamped on a ladder-decided overlap.
+    if let Some(anchor_ctx) = anchor_ctx {
+        if requires_anchor(candidate, policy, anchor_ctx) {
+            return Arbitration::CandidateWins(ConflictTier::AnchoredContext);
+        }
+    }
+
+    ladder_verdict(existing, candidate)
+}
+
+fn requires_anchor(
+    candidate: &Candidate,
+    policy: &FamilyPolicyTable,
+    anchor_ctx: AnchorContext<'_>,
+) -> bool {
+    match anchor_ctx
+        .resolver
+        .resolve(candidate, anchor_ctx.input, policy, anchor_ctx.locale_chain)
+    {
+        AnchorOutcome::Found | AnchorOutcome::Missing { .. } => true,
+        AnchorOutcome::NotRequired => false,
+    }
+}
+
+/// Runs the base ladder in both directions and labels the winner with the rung
+/// that separated the pair. When every rung ties (same recognizer id, class
+/// priority, rule priority, score, and length) the incumbent keeps the slot
+/// and the row carries the terminal `RecognizerId` rung rather than a stale
+/// tier from an earlier overlap.
+fn ladder_verdict(existing: &Candidate, candidate: &Candidate) -> Arbitration {
+    if let Some(tier) = compare_base_ladder(candidate, existing) {
+        return Arbitration::CandidateWins(tier);
+    }
+    Arbitration::ExistingWins(
+        compare_base_ladder(existing, candidate).unwrap_or(ConflictTier::RecognizerId),
+    )
 }
 
 fn merge_same_span_same_class(existing: &mut Candidate, candidate: Candidate) {
@@ -190,90 +261,10 @@ fn append_unique(existing: &mut String, next: &str) {
     existing.push_str(next);
 }
 
-fn should_replace_same_span_class(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
-fn should_replace_containment(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    if candidate.class == existing.class {
-        let candidate_validated = candidate.canonical_form.is_some();
-        let existing_validated = existing.canonical_form.is_some();
-        if candidate_validated != existing_validated {
-            return candidate_validated.then_some(ConflictTier::Validator);
-        }
-
-        if class_priority(&candidate.class) != class_priority(&existing.class) {
-            return (class_priority(&candidate.class) > class_priority(&existing.class))
-                .then_some(ConflictTier::ClassPriority);
-        }
-
-        if candidate.priority != existing.priority {
-            return (candidate.priority > existing.priority).then_some(ConflictTier::RulePriority);
-        }
-
-        if candidate.score != existing.score {
-            return candidate
-                .score
-                .total_cmp(&existing.score)
-                .is_gt()
-                .then_some(ConflictTier::Score);
-        }
-
-        let candidate_len = candidate.span.end - candidate.span.start;
-        let existing_len = existing.span.end - existing.span.start;
-        if candidate_len != existing_len {
-            return (candidate_len > existing_len).then_some(ConflictTier::SpanLength);
-        }
-
-        return (candidate.recognizer_id < existing.recognizer_id)
-            .then_some(ConflictTier::RecognizerId);
-    }
-
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
-fn should_replace_partial_overlap(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    compare_by_spec(candidate, existing, policy, anchor_ctx)
-}
-
-fn compare_by_spec(
-    candidate: &Candidate,
-    existing: &Candidate,
-    policy: &FamilyPolicyTable,
-    anchor_ctx: Option<AnchorContext<'_>>,
-) -> Option<ConflictTier> {
-    if let Some(candidate_wins) = policy.compare(&candidate.recognizer_id, &existing.recognizer_id)
-    {
-        return candidate_wins.then_some(ConflictTier::CollisionPolicy);
-    }
-    if let Some(anchor_ctx) = anchor_ctx {
-        match anchor_ctx.resolver.resolve(
-            candidate,
-            anchor_ctx.input,
-            policy,
-            anchor_ctx.locale_chain,
-        ) {
-            AnchorOutcome::Found | AnchorOutcome::Missing { .. } => {
-                return Some(ConflictTier::AnchoredContext);
-            }
-            AnchorOutcome::NotRequired => {}
-        }
-    }
+/// The base conflict ladder: class-priority > rule-priority > score >
+/// span-length > recognizer-id. Returns the tier at which `candidate` beats
+/// `existing`, or `None` when it does not.
+fn compare_base_ladder(candidate: &Candidate, existing: &Candidate) -> Option<ConflictTier> {
     if class_priority(&candidate.class) != class_priority(&existing.class) {
         return (class_priority(&candidate.class) > class_priority(&existing.class))
             .then_some(ConflictTier::ClassPriority);
@@ -363,7 +354,26 @@ fn family_fallback_candidate(
     )
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Test-only count of `remove_overlaps` entries on the current thread.
+    ///
+    /// The two exact-span short-circuits in `insert_candidate` cannot be
+    /// observed through the resolver's output: an exact-overlap winner keeps
+    /// the very span it replaced, and the resolved set is pairwise disjoint
+    /// (property 1 in `tests/prop_resolver_invariants.rs`), so overlap removal
+    /// would find nothing to remove and return an identical set. Dropping both
+    /// guards is therefore output-identical, and only the entry count can lock
+    /// them; `non_exact_winner_enters_overlap_removal` is the positive control
+    /// that keeps that count honest. Thread-local because the harness runs
+    /// tests in parallel.
+    static REMOVE_OVERLAPS_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 fn remove_overlaps(resolved: &mut Vec<Candidate>, winner_index: usize, tier: ConflictTier) {
+    #[cfg(test)]
+    REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(calls.get() + 1));
+
     let winner_span = resolved[winner_index].span.clone();
     let mut index = 0;
     while index < resolved.len() {
@@ -417,6 +427,33 @@ mod tests {
             ConflictTier::None,
             Vec::new(),
         )
+    }
+
+    /// Two variants of one collision family at equal precedence: the shape
+    /// `family_tie_candidate` recognises as a precedence tie.
+    fn tenant_document_registry() -> crate::RecognizerRegistry {
+        crate::RecognizerRegistry::builder()
+            .register_collision(
+                "doc.alpha",
+                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
+            )
+            .register_collision(
+                "doc.beta",
+                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
+            )
+            .build()
+    }
+
+    /// Resolves and reports how many times the resolver entered
+    /// `remove_overlaps`, so the exact-span short-circuits can be asserted
+    /// directly rather than through output that does not change.
+    fn counting_removals<F>(resolve: F) -> (Vec<Candidate>, usize)
+    where
+        F: FnOnce() -> Vec<Candidate>,
+    {
+        REMOVE_OVERLAPS_CALLS.with(|calls| calls.set(0));
+        let resolved = resolve();
+        (resolved, REMOVE_OVERLAPS_CALLS.with(std::cell::Cell::get))
     }
 
     #[test]
@@ -505,16 +542,7 @@ mod tests {
 
     #[test]
     fn precedence_tie_emits_family_level_candidate() {
-        let registry = crate::RecognizerRegistry::builder()
-            .register_collision(
-                "doc.alpha",
-                crate::CollisionMembership::new("tenant-document", "alpha", 10, None),
-            )
-            .register_collision(
-                "doc.beta",
-                crate::CollisionMembership::new("tenant-document", "beta", 10, None),
-            )
-            .build();
+        let registry = tenant_document_registry();
 
         let resolved = resolve_candidates_with_policy(
             vec![
@@ -537,6 +565,119 @@ mod tests {
         assert_eq!(
             resolved[0].merged_sources,
             vec!["doc.alpha".to_string(), "doc.beta".to_string()]
+        );
+    }
+
+    /// `arbitrate` probes the family tie *before* the exact same-class merge.
+    /// Both rivals here report the same class, so a merge that ran first would
+    /// swallow the tie and emit an ordinary merged candidate instead of the
+    /// family token. The other precedence-tie fixtures pair different classes
+    /// and cannot fail when that ordering regresses.
+    #[test]
+    fn exact_span_same_class_precedence_tie_emits_family_candidate_not_merge() {
+        let registry = tenant_document_registry();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
+                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::Custom("family:tenant-document".to_string()),
+            "an exact same-class overlap must not merge ahead of the family tie"
+        );
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:tenant-document"
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            resolved[0].merged_sources,
+            vec!["doc.alpha".to_string(), "doc.beta".to_string()]
+        );
+    }
+
+    /// Positive control for `counting_removals`. A non-exact winner widens the
+    /// slot it took, so it must enter overlap removal; without this, the two
+    /// zero-call assertions below would also pass on a counter that never
+    /// increments.
+    #[test]
+    fn non_exact_winner_enters_overlap_removal() {
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates(vec![
+                candidate(0..6, PiiClass::Name, 0.70, "ner"),
+                candidate(3..12, PiiClass::Email, 0.80, "regex"),
+            ])
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 3..12);
+        assert_eq!(removal_calls, 1);
+    }
+
+    /// An exact-span family tie installs a span identical to the one it
+    /// evicted, so no other resolved candidate can overlap it and overlap
+    /// removal is dead work. Skipping it is invisible in the output, so assert
+    /// on the entry count itself (see `REMOVE_OVERLAPS_CALLS`).
+    #[test]
+    fn exact_span_family_tie_skips_overlap_removal() {
+        let registry = tenant_document_registry();
+
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates_with_policy(
+                vec![
+                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
+                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+                ],
+                registry.family_policy(),
+            )
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            removal_calls, 0,
+            "an exact-span family tie must not enter overlap removal"
+        );
+    }
+
+    /// The same guard on the other exact-span path: a collision-policy win
+    /// replaces the slot span-for-span, so it must not enter overlap removal
+    /// either.
+    #[test]
+    fn exact_span_candidate_win_skips_overlap_removal() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "pan",
+                crate::CollisionMembership::new("payment-card-or-iban", "pan", 20, None),
+            )
+            .register_collision(
+                "iban",
+                crate::CollisionMembership::new("payment-card-or-iban", "iban", 10, None),
+            )
+            .build();
+
+        let (resolved, removal_calls) = counting_removals(|| {
+            resolve_candidates_with_policy(
+                vec![
+                    candidate(0..5, PiiClass::Email, 0.70, "pan"),
+                    candidate(0..5, PiiClass::custom("iban"), 0.70, "iban"),
+                ],
+                registry.family_policy(),
+            )
+        });
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban");
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert_eq!(
+            removal_calls, 0,
+            "an exact-span collision-policy win must not enter overlap removal"
         );
     }
 
@@ -588,5 +729,95 @@ mod tests {
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].span, 0..10);
         assert_eq!(resolved[0].class, PiiClass::Email);
+    }
+
+    /// The anchor short-circuit must not label an overlap the base ladder
+    /// decided. Here the anchored incumbent wins on Score; the audit row has to
+    /// say Score, not AnchoredContext.
+    #[test]
+    fn anchored_incumbent_that_wins_on_score_is_labelled_score() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
+                candidate(6..10, PiiClass::custom("digits"), 0.50, "digits.generic"),
+            ],
+            registry.family_policy(),
+            &anchors,
+            "IBAN: DE89",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].class, PiiClass::custom("iban"));
+        assert_eq!(
+            resolved[0].merged_sources,
+            vec!["digits.generic".to_string()]
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::Score);
+    }
+
+    /// Same mislabel through the partial-overlap path.
+    #[test]
+    fn anchored_incumbent_that_wins_partial_overlap_on_score_is_labelled_score() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        let mut anchors = AnchorResolver::default();
+        anchors.register(LocaleTag::DeDe, "iban", vec!["IBAN".to_string()], None);
+
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
+                candidate(8..12, PiiClass::custom("digits"), 0.50, "digits.generic"),
+            ],
+            registry.family_policy(),
+            &anchors,
+            "IBAN: DE8912",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].recognizer_id, "iban.structural");
+        assert_eq!(resolved[0].span, 6..10);
+        assert_eq!(resolved[0].decided_by, ConflictTier::Score);
+    }
+
+    /// When the ladder is exhausted (identical recognizer id, class, priority,
+    /// score, and length) the incumbent keeps the slot; the row must carry the
+    /// terminal rung, not whatever tier an earlier overlap stamped.
+    #[test]
+    fn fully_tied_partial_overlap_never_keeps_stale_tier() {
+        let resolved = resolve_candidates(vec![
+            candidate(0..4, PiiClass::Name, 0.70, "dict"),
+            candidate(2..6, PiiClass::Name, 0.70, "dict"),
+        ]);
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(resolved[0].span, 0..4);
+        assert_eq!(resolved[0].merged_sources, vec!["dict".to_string()]);
+        assert_eq!(resolved[0].decided_by, ConflictTier::RecognizerId);
     }
 }

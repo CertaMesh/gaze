@@ -289,6 +289,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Audit rows now name the conflict tier that actually decided the overlap**
+  (audit S02-F1, solo todo #2948). The resolver probed its comparator twice —
+  once per direction — and reused the second answer as the winner's
+  `decided_by` label. The mandatory-anchor rung is not antisymmetric (it
+  inspects one candidate and ignores the rival), so when an anchored incumbent
+  such as `iban.structural` kept its span by score, span length, or recognizer
+  id, the reverse probe stamped `ConflictTier::AnchoredContext` on it — an audit
+  row claiming a missing-anchor fallback decided a conflict the base ladder
+  decided. A fully tied overlap kept whatever tier an earlier overlap had left
+  behind instead of naming its own. Both are corrected: the anchor rung is
+  consulted once per pair and no longer labels a ladder-decided overlap, and a
+  retained incumbent always carries a definite tier. Detection outcomes are
+  unchanged — which spans get tokenized, their classes, and the restore
+  contract are byte-identical; only `decided_by` (and the `ambiguity_record`
+  derived from it in `gaze-audit` / JSON exports) moves.
+||||||| 2ee85f2
 - **The `mcp-tier-isolation` gate now actually fails when the agent/operator
   tier boundary is violated** (audit 7359 §6-F1, solo todo #2993). **The tier
   partition itself was, and remains, enforced by rustc:** the operator surface
