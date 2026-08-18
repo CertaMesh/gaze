@@ -179,8 +179,21 @@ this struct.
 
 ### Observer-only contract
 
-The trait has no return channel for replacement text and no mutable handle to
-the manifest, by construction. The pipeline calls
+The *backend* is observer-only; the *pipeline* may still act on what it reports.
+A `SafetyNet` can never rewrite bytes itself — the trait has no return channel
+for replacement text and no mutable handle to the manifest, by construction —
+but the `SafetyNetPolicy` the caller passes decides what the deterministic core
+does with the resulting `LeakReport`: nothing (`Strict`, `Tolerant`), delete the
+suspect spans (`Redact`), or tokenize them reversibly and re-run
+(`Resolve`). The policy-less entry points below use
+`SafetyNetPolicy::default()`, which is `Resolve` + `Redact` — the shipped
+production default since v0.8.1. Pass an explicit `Strict` policy to
+`Pipeline::clean_with_safety_net_policy_detect_context`, or use
+`Pipeline::scan_safety_nets`, when you want report-only behaviour. Mode catalog
+and the full lowering table:
+[`safety-net-modes.md`](safety-net-modes.md#6-fallback-flag).
+
+The pipeline calls
 `Pipeline::clean_with_safety_net_detect_context`, which:
 
 1. Runs the deterministic detection-and-redaction pipeline.
@@ -190,7 +203,9 @@ the manifest, by construction. The pipeline calls
 4. Returns `(CleanDocument, LeakReport)` to the caller.
 
 The bytes on `CleanDocument` are produced exclusively by the deterministic
-core. A safety net cannot rewrite, append to, or veto the clean text.
+core. A safety net cannot rewrite, append to, or veto the clean text: under an
+enforcing policy it is still the core's tokenizer and redactor that mutate the
+document, driven by the report, never the backend.
 
 ### Locale gating
 
