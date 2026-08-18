@@ -79,6 +79,11 @@ pub enum Error {
     UnsupportedRawDocumentVariant,
     #[error("unsupported structured value variant")]
     UnsupportedValueVariant,
+    #[error(
+        "safety-net mode {mode:?} is unsupported for structured documents; \
+         pass SafetyNetMode::Strict or SafetyNetMode::Tolerant, or use scan_safety_nets_structured"
+    )]
+    UnsupportedSafetyNetModeForStructured { mode: SafetyNetMode },
     #[error("unsupported policy action variant")]
     UnsupportedActionVariant,
 }
@@ -570,14 +575,19 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanDocument> {
         match raw {
-            RawDocument::Structured(structured_fields) => redact_structured(
-                self,
-                target,
-                structured_fields,
-                DocumentKind::Structured,
-                locale_chain,
-                dictionaries,
-            ),
+            RawDocument::Structured(structured_fields) => {
+                let mut report = LeakReport::default();
+                walk_structured(
+                    self,
+                    target,
+                    &structured_fields,
+                    locale_chain,
+                    dictionaries,
+                    &mut report,
+                    LeafOp::Pseudonymize,
+                )
+                .map(CleanDocument::Structured)
+            }
             RawDocument::Text(text) => Ok(CleanDocument::Text(self.pseudonymize_text(
                 target,
                 &text,
@@ -675,15 +685,23 @@ impl Pipeline {
         let decision = policy.decision();
         match raw {
             RawDocument::Structured(structured_fields) => {
+                // Fail closed before any detection or tokenization runs. The structured path has
+                // no enforcement stage: it cleans each leaf, runs the nets over the result, and
+                // reports. Accepting an enforcing policy here and quietly performing observation
+                // is the axis-1 hole this rejects — the caller asked for the suspect bytes to be
+                // removed and would have been told, with `Ok`, that they were.
+                if !matches!(decision, SafetyNetDecision::Observe { .. }) {
+                    return Err(Error::UnsupportedSafetyNetModeForStructured { mode: policy.mode });
+                }
                 let mut report = LeakReport::default();
-                let clean = redact_structured_with_safety_net(
+                let clean = walk_structured(
                     self,
                     target,
-                    structured_fields,
+                    &structured_fields,
                     locale_chain,
                     dictionaries,
                     &mut report,
-                    decision,
+                    LeafOp::CleanAndScan(decision),
                 )?;
                 Ok((CleanDocument::Structured(clean), Vec::new(), report))
             }
@@ -819,16 +837,15 @@ impl Pipeline {
 
         let mut report = LeakReport::default();
         let mut target = ProtectionTarget::Live(session);
-        for (key, value) in document {
-            walk_value_for_safety_net_scan(
-                self,
-                &mut target,
-                value,
-                key,
-                locale_chain,
-                &mut report,
-            )?;
-        }
+        walk_structured(
+            self,
+            &mut target,
+            document,
+            locale_chain,
+            &DictionaryBundle::default(),
+            &mut report,
+            LeafOp::ScanOnly,
+        )?;
         Ok(SafetyNetResult { nets_run, report })
     }
 
@@ -2783,289 +2800,231 @@ fn model_error_to_safety_net_error(error: ModelError) -> SafetyNetError {
     }
 }
 
-fn redact_structured(
-    pipeline: &Pipeline,
-    target: &mut ProtectionTarget<'_, '_>,
-    fields: BTreeMap<String, Value>,
-    document_kind: DocumentKind,
-    locale_chain: &[crate::LocaleTag],
-    dictionaries: &DictionaryBundle,
-) -> Result<CleanDocument> {
-    let mut clean = BTreeMap::new();
-    for (key, value) in fields {
-        let path = format!("$.{key}");
-        clean.insert(
-            key.clone(),
-            redact_structured_value(
-                pipeline,
-                target,
-                value,
-                &key,
-                &path,
-                document_kind,
-                locale_chain,
-                dictionaries,
-            )?,
-        );
-    }
-    Ok(CleanDocument::Structured(clean))
+/// What a [`walk_structured_value`] traversal does at each leaf.
+///
+/// The three ops are deliberately asymmetric, and each asymmetry is contractual rather than
+/// accidental:
+///
+/// - **Empty strings.** Both safety-net ops skip them: an empty leaf cannot carry a suspect, and
+///   handing `""` to a subprocess backend is pure cost. `Pseudonymize` does not skip — every
+///   string leaf goes through the primary pipeline.
+/// - **Scalars** (`null`, `true`, `7`). `Pseudonymize` passes them through untouched; there is
+///   nothing in a scalar for the deterministic detectors to tokenize. Both safety-net ops
+///   stringify and scan them, because a net can flag a numeric leaf that never reaches the text
+///   detectors. `null` stringifies to nothing and is skipped by all three
+///   ([`Value::scalar_to_safety_net_string`]).
+/// - **Rebuilding.** [`Self::ScanOnly`] reads the document and produces no replacement; the other
+///   two rebuild it. See [`Self::rebuilds`].
+///
+/// There is no enforcing op. The structured entry point rejects an enforcing
+/// [`SafetyNetDecision`] with [`Error::UnsupportedSafetyNetModeForStructured`] before any
+/// traversal starts, so a leaf never has to decide whether to act on a suspect.
+#[derive(Debug, Clone, Copy)]
+enum LeafOp {
+    /// Tokenize each string leaf through the primary pipeline. No safety net runs.
+    Pseudonymize,
+    /// Tokenize each string leaf, then run the safety nets over the tokenized text and accumulate
+    /// the per-field reports. The decision is carried only so `run_safety_nets` can apply its
+    /// observer-only skip gating; it is always an `Observe` decision here.
+    CleanAndScan(SafetyNetDecision),
+    /// Run the safety nets over each leaf as-is, with no manifest and no mutation.
+    ScanOnly,
 }
 
-#[allow(clippy::too_many_arguments)]
-fn redact_structured_value(
-    pipeline: &Pipeline,
-    target: &mut ProtectionTarget<'_, '_>,
-    value: Value,
-    field_name: &str,
-    field_path: &str,
-    document_kind: DocumentKind,
-    locale_chain: &[crate::LocaleTag],
-    dictionaries: &DictionaryBundle,
-) -> Result<Value> {
-    match value {
-        Value::String(text) => Ok(Value::String(pipeline.pseudonymize_text(
-            target,
-            &text,
-            Some(field_name),
-            document_kind,
-            locale_chain,
-            dictionaries,
-        )?)),
-        Value::Array(values) => values
-            .into_iter()
-            .enumerate()
-            .map(|(idx, value)| {
-                redact_structured_value(
-                    pipeline,
-                    target,
-                    value,
-                    field_name,
-                    &format!("{field_path}[{idx}]"),
-                    document_kind,
-                    locale_chain,
-                    dictionaries,
-                )
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(Value::Array),
-        Value::Object(fields) => {
-            let mut clean = BTreeMap::new();
-            for (key, value) in fields {
-                let child_path = format!("{field_path}.{key}");
-                clean.insert(
-                    key.clone(),
-                    redact_structured_value(
-                        pipeline,
-                        target,
-                        value,
-                        &key,
-                        &child_path,
-                        document_kind,
-                        locale_chain,
-                        dictionaries,
-                    )?,
-                );
-            }
-            Ok(Value::Object(clean))
+impl LeafOp {
+    /// Whether the traversal produces a replacement document. `ScanOnly` reads without rebuilding,
+    /// so its walk returns `None` at every level and allocates no copy of the caller's document.
+    fn rebuilds(self) -> bool {
+        !matches!(self, LeafOp::ScanOnly)
+    }
+
+    /// The root field path reported for a top-level key.
+    ///
+    /// `ScanOnly` reports a bare key (`profile.email`) where the two cleaning ops report a
+    /// JSONPath-style root (`$.profile.email`). That is a pre-existing divergence between
+    /// `Pipeline::scan_safety_nets_structured` and `Pipeline::clean_with_safety_net*`, surfaced
+    /// by folding the three walkers into one. It is preserved rather than silently unified
+    /// because `field_path` is adopter-visible telemetry that lands in the audit log; changing it
+    /// is a separate, announced change (solo todo #2958).
+    fn root_path(self, key: &str) -> String {
+        match self {
+            LeafOp::ScanOnly => key.to_string(),
+            LeafOp::Pseudonymize | LeafOp::CleanAndScan(_) => format!("$.{key}"),
         }
-        Value::Null | Value::Bool(_) | Value::I64(_) => Ok(value),
-        _ => Err(Error::UnsupportedValueVariant),
+    }
+
+    /// The decision handed to `run_safety_nets` for this op.
+    fn decision(self) -> SafetyNetDecision {
+        match self {
+            LeafOp::CleanAndScan(decision) => decision,
+            LeafOp::Pseudonymize | LeafOp::ScanOnly => SafetyNetDecision::Observe { strict: true },
+        }
     }
 }
 
+/// Walks every field of a structured document under one [`LeafOp`].
+///
+/// Returns the rebuilt document, or an empty map when the op does not rebuild.
 #[allow(clippy::too_many_arguments)]
-fn redact_structured_with_safety_net(
+fn walk_structured(
     pipeline: &Pipeline,
     target: &mut ProtectionTarget<'_, '_>,
-    fields: BTreeMap<String, Value>,
+    fields: &BTreeMap<String, Value>,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
-    decision: SafetyNetDecision,
+    op: LeafOp,
 ) -> Result<BTreeMap<String, Value>> {
     let mut clean = BTreeMap::new();
     for (key, value) in fields {
-        let path = format!("$.{key}");
-        clean.insert(
-            key.clone(),
-            redact_structured_value_with_safety_net(
-                pipeline,
-                target,
-                value,
-                &key,
-                &path,
-                locale_chain,
-                dictionaries,
-                report,
-                decision,
-            )?,
-        );
+        let path = op.root_path(key);
+        // A field error aborts the whole document rather than yielding a partially protected
+        // one: the caller asked for a protected document, not a best-effort one.
+        if let Some(value) = walk_structured_value(
+            pipeline,
+            target,
+            value,
+            key,
+            &path,
+            locale_chain,
+            dictionaries,
+            report,
+            op,
+        )? {
+            clean.insert(key.clone(), value);
+        }
     }
     Ok(clean)
 }
 
+/// Walks one structured value under `op`.
+///
+/// `report` is only written by the safety-net ops; [`LeafOp::Pseudonymize`] ignores it. Keeping it
+/// a separate parameter rather than a field on the op keeps `LeafOp` `Copy` through the recursion.
 #[allow(clippy::too_many_arguments)]
-fn redact_structured_value_with_safety_net(
+fn walk_structured_value(
     pipeline: &Pipeline,
     target: &mut ProtectionTarget<'_, '_>,
-    value: Value,
+    value: &Value,
     field_name: &str,
     field_path: &str,
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
     report: &mut LeakReport,
-    decision: SafetyNetDecision,
-) -> Result<Value> {
+    op: LeafOp,
+) -> Result<Option<Value>> {
     match value {
-        Value::String(text) => {
-            if text.is_empty() {
-                return Ok(Value::String(text));
-            }
-            let clean = pipeline.redact_text_with_manifest(
+        Value::String(text) => match op {
+            LeafOp::Pseudonymize => Ok(Some(Value::String(pipeline.pseudonymize_text(
                 target,
-                &text,
+                text,
                 Some(field_name),
                 DocumentKind::Structured,
                 locale_chain,
                 dictionaries,
-            )?;
-            // For RawDocument::Structured, locale gating uses the session-level
-            // locale chain across all fields; fields have no locale annotations.
-            let field_report = pipeline.run_safety_nets(
-                target,
-                &clean.text,
-                &Manifest::from_spans(clean.manifest),
-                DocumentKind::Structured,
-                locale_chain,
-                Some(field_path),
-                decision,
-            )?;
-            report.extend(field_report);
-            Ok(Value::String(clean.text))
-        }
-        Value::Array(values) => values
-            .into_iter()
-            .enumerate()
-            .map(|(idx, value)| {
-                redact_structured_value_with_safety_net(
+            )?))),
+            LeafOp::CleanAndScan(decision) => {
+                if text.is_empty() {
+                    return Ok(Some(Value::String(String::new())));
+                }
+                let clean = pipeline.redact_text_with_manifest(
+                    target,
+                    text,
+                    Some(field_name),
+                    DocumentKind::Structured,
+                    locale_chain,
+                    dictionaries,
+                )?;
+                // For RawDocument::Structured, locale gating uses the session-level
+                // locale chain across all fields; fields have no locale annotations.
+                let field_report = pipeline.run_safety_nets(
+                    target,
+                    &clean.text,
+                    &Manifest::from_spans(clean.manifest),
+                    DocumentKind::Structured,
+                    locale_chain,
+                    Some(field_path),
+                    decision,
+                )?;
+                report.extend(field_report);
+                Ok(Some(Value::String(clean.text)))
+            }
+            LeafOp::ScanOnly => {
+                if !text.is_empty() {
+                    let field_report = pipeline.run_safety_nets(
+                        target,
+                        text,
+                        &Manifest::default(),
+                        DocumentKind::Structured,
+                        locale_chain,
+                        Some(field_path),
+                        op.decision(),
+                    )?;
+                    report.extend(field_report);
+                }
+                Ok(None)
+            }
+        },
+        Value::Array(values) => {
+            let mut clean = Vec::new();
+            for (idx, child) in values.iter().enumerate() {
+                // An index is not a field name, so array elements keep the parent's.
+                if let Some(child) = walk_structured_value(
                     pipeline,
                     target,
-                    value,
+                    child,
                     field_name,
                     &format!("{field_path}[{idx}]"),
                     locale_chain,
                     dictionaries,
                     report,
-                    decision,
-                )
-            })
-            .collect::<Result<Vec<_>>>()
-            .map(Value::Array),
+                    op,
+                )? {
+                    clean.push(child);
+                }
+            }
+            Ok(op.rebuilds().then_some(Value::Array(clean)))
+        }
         Value::Object(fields) => {
             let mut clean = BTreeMap::new();
-            for (key, value) in fields {
-                let child_path = format!("{field_path}.{key}");
-                clean.insert(
-                    key.clone(),
-                    redact_structured_value_with_safety_net(
-                        pipeline,
-                        target,
-                        value,
-                        &key,
-                        &child_path,
-                        locale_chain,
-                        dictionaries,
-                        report,
-                        decision,
-                    )?,
-                );
-            }
-            Ok(Value::Object(clean))
-        }
-        Value::Null | Value::Bool(_) | Value::I64(_) => {
-            if let Some(scalar) = value.scalar_to_safety_net_string() {
-                let field_report = pipeline.run_safety_nets(
-                    target,
-                    &scalar,
-                    &Manifest::default(),
-                    DocumentKind::Structured,
-                    locale_chain,
-                    Some(field_path),
-                    decision,
-                )?;
-                report.extend(field_report);
-            }
-            Ok(value)
-        }
-        _ => Err(Error::UnsupportedValueVariant),
-    }
-}
-
-fn walk_value_for_safety_net_scan(
-    pipeline: &Pipeline,
-    target: &mut ProtectionTarget<'_, '_>,
-    value: &Value,
-    field_path: &str,
-    locale_chain: &[crate::LocaleTag],
-    report: &mut LeakReport,
-) -> Result<()> {
-    match value {
-        Value::String(text) => {
-            if !text.is_empty() {
-                let field_report = pipeline.run_safety_nets(
-                    target,
-                    text,
-                    &Manifest::default(),
-                    DocumentKind::Structured,
-                    locale_chain,
-                    Some(field_path),
-                    SafetyNetDecision::Observe { strict: true },
-                )?;
-                report.extend(field_report);
-            }
-        }
-        Value::Null => {}
-        Value::Bool(_) | Value::I64(_) => {
-            if let Some(scalar) = value.scalar_to_safety_net_string() {
-                let field_report = pipeline.run_safety_nets(
-                    target,
-                    &scalar,
-                    &Manifest::default(),
-                    DocumentKind::Structured,
-                    locale_chain,
-                    Some(field_path),
-                    SafetyNetDecision::Observe { strict: true },
-                )?;
-                report.extend(field_report);
-            }
-        }
-        Value::Array(values) => {
-            for (idx, value) in values.iter().enumerate() {
-                walk_value_for_safety_net_scan(
+            for (key, child) in fields {
+                if let Some(child) = walk_structured_value(
                     pipeline,
                     target,
-                    value,
-                    &format!("{field_path}[{idx}]"),
-                    locale_chain,
-                    report,
-                )?;
-            }
-        }
-        Value::Object(fields) => {
-            for (key, value) in fields {
-                walk_value_for_safety_net_scan(
-                    pipeline,
-                    target,
-                    value,
+                    child,
+                    key,
                     &format!("{field_path}.{key}"),
                     locale_chain,
+                    dictionaries,
                     report,
-                )?;
+                    op,
+                )? {
+                    clean.insert(key.clone(), child);
+                }
             }
+            Ok(op.rebuilds().then_some(Value::Object(clean)))
         }
-        _ => return Err(Error::UnsupportedValueVariant),
+        Value::Null | Value::Bool(_) | Value::I64(_) => {
+            if !matches!(op, LeafOp::Pseudonymize) {
+                if let Some(scalar) = value.scalar_to_safety_net_string() {
+                    let field_report = pipeline.run_safety_nets(
+                        target,
+                        &scalar,
+                        &Manifest::default(),
+                        DocumentKind::Structured,
+                        locale_chain,
+                        Some(field_path),
+                        op.decision(),
+                    )?;
+                    report.extend(field_report);
+                }
+            }
+            Ok(op.rebuilds().then(|| value.clone()))
+        }
+        // Fail closed on a value variant this build does not model. Widening this arm would let
+        // an unmodelled leaf pass through unprotected.
+        _ => Err(Error::UnsupportedValueVariant),
     }
-    Ok(())
 }
 
 fn translate_candidate(candidate: Candidate, spans: &[(usize, usize)]) -> Option<Candidate> {
