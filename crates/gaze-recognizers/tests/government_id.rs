@@ -38,12 +38,13 @@ fn empty_context() -> Context {
     }
 }
 
-const CLASSES: [&str; 5] = [
+const CLASSES: [&str; 6] = [
     "ssn",
     "steuer_id",
     "tax_number",
     "driver_license",
     "national_id",
+    "passport",
 ];
 
 /// Core bundle under an explicit chain with locale-gated auto-activation OFF — the weakest
@@ -618,16 +619,19 @@ fn government_ids_restore_exactly() {
 // (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
 // matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
 
-/// The canonical shared connector grammar. It appears byte-identical in all five family patterns;
+/// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
 const SHARED_CONNECTOR: &str = r"\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*";
 
-const CONNECTOR_FAMILY: [&str; 5] = [
+const CONNECTOR_FAMILY: [&str; 6] = [
     "ssn.us",
     "ssn.de_cue",
     "tax_number.cue_anchored",
     "driver_license.cue_anchored",
     "national_id.cue_anchored",
+    // Slice A (#3025) adds passport as the sixth family member: it carries the byte-identical
+    // shared connector, so a one-character edit to ANY of the six now turns the drift guard red.
+    "passport.cue_anchored",
 ];
 
 /// Extracts the single-quoted `pattern = '''...'''` value for one recognizer id from the embedded
@@ -649,11 +653,11 @@ fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
 }
 
 /// Drift guard: one edit to a single family pattern's connector must turn this red. It asserts the
-/// canonical fragment appears exactly once per family recognizer (five total) AND that each named
+/// canonical fragment appears exactly once per family recognizer (six total) AND that each named
 /// recognizer's pattern carries it. Adding a cue word to only `tax_number.cue_anchored`, or
 /// widening only `national_id.cue_anchored`'s separators, drops that copy below the shared string
-/// and the count no longer equals five. Changing the grammar for the whole family means editing
-/// all five patterns AND this constant together — which is the intended workflow, not drift.
+/// and the count no longer equals six. Changing the grammar for the whole family means editing
+/// all six patterns AND this constant together — which is the intended workflow, not drift.
 #[test]
 fn shared_connector_grammar_is_byte_identical_across_the_family() {
     let core = embedded("core").expect("core rulepack");
@@ -781,5 +785,143 @@ fn widened_connector_does_not_bridge_an_unbounded_gap() {
     // Five+ words of genuine prose between cue and value exceed the four-token cap.
     assert_unchanged(
         "His national ID was discussed at length during the meeting AB123456C afterwards.",
+    );
+}
+
+// ------------------------------------------------------------------- Slice A: passport + national_id extension
+//
+// Solo todo #3025 slice A. Adds `passport.cue_anchored` (custom:passport, government-id family
+// precedence 15, sixth member of the shared-connector family) and extends `national_id.cue_anchored`
+// with new cue vocabulary (Identitätskarte, Personalnummer, Staatsbürgerschaftsnummer, AHV, the
+// hyphenated `national-id` forms) and new shapes (Swiss AHV `756.dddd.dddd.dd`, longer alnum). Both
+// use the byte-identical shared connector, so they inherit its Unicode/unbounded whitespace.
+// Measured (Kiji cell, increment over merged G): PASSPORTID −1,791, NATIONALID −1,017,
+// IDCARDNUM −577 at zero A4 movement; national_id extension is a strict superset of the prior rule
+// (0 previously-covered spans lost).
+
+// --- Passport positives (one named test per dominant shape) ---
+#[test]
+fn passport_covers_letter_led_alnum() {
+    assert_id_removed(
+        "His passport ID, A1234567, was verified.",
+        "A1234567",
+        &["passport", "verified"],
+    );
+}
+
+#[test]
+fn passport_covers_the_personalausweis_silhouette() {
+    // German Personalausweis form as it appears in the holdout: letter, two digits, letter, digits.
+    assert_id_removed(
+        "Ihr Reisepass mit der Nummer C12X34567 wurde ausgestellt.",
+        "C12X34567",
+        &["Reisepass", "ausgestellt"],
+    );
+}
+
+/// Passport inherits the shared connector, so aligned columns / long padding / non-breaking spaces
+/// between the cue and the value redact — the same recall property B1 restored for the family.
+#[test]
+fn passport_covers_a_value_after_padded_and_unicode_whitespace() {
+    assert_id_removed(
+        "Reisepass Nr.        A1234567 wurde vorgelegt.",
+        "A1234567",
+        &["Reisepass", "vorgelegt"],
+    );
+    assert_id_removed(
+        "Passport ID:\u{00A0}N12345678 confirmed.",
+        "N12345678",
+        &["Passport", "confirmed"],
+    );
+}
+
+/// PIN (cannot be silently weakened): passport must stay cue-anchored. A bare alphanumeric of the
+/// passport shape with NO passport cue must pass through untouched. Dropping the cue anchor turns
+/// exactly this test red.
+#[test]
+fn passport_requires_its_cue() {
+    assert_unchanged("The reference A1234567 was noted in the shipping log.");
+}
+
+/// PIN (cannot be silently weakened): the passport SHAPE bounds. A passport-cued alphanumeric that
+/// is too short or too long for the documented shape must NOT be captured as a passport. Widening
+/// the shape length bounds turns exactly this test red.
+#[test]
+fn passport_rejects_alnum_outside_the_documented_length() {
+    // Five characters — below the 1-3 letters + 6-9 digits minimum.
+    assert_unchanged("Reisepass Nr. AB123 steht im Antrag.");
+    // Fourteen alphanumerics — above the documented maximum.
+    assert_unchanged("His passport ID, A123456789012Z, appeared in the draft.");
+}
+
+// --- national_id extension: named pins for the new cue and the new checksum shape ---
+
+/// PIN: the Swiss AHV number with its national prefix (`CH-756.dddd.dddd.dd`). This form is
+/// covered ONLY by the dedicated AHV arm — the letter-led alphanumeric arm needs six contiguous
+/// digits, which the AHV dot-groups block, so removing the `[A-Z]{2}-?756.`-arm makes the whole
+/// value leak and turns exactly this test red. The plain, unprefixed `756.dddd.dddd.dd` form is
+/// covered by the generic DACH digit-group arm (`\d{3}[.-]\d{2,4}...`); the EAN-13 checksum
+/// (a real validator) is a follow-up in a dedicated AHV recognizer (#2926) gated on #2427 — the
+/// synthetic corpus has no valid check digits, so no validator is attached here.
+#[test]
+fn national_id_covers_swiss_ahv_checksum_shape() {
+    assert_id_removed(
+        "Seine Schweizer AHV-Nummer CH-756.1234.5678.90 wurde erfasst.",
+        "CH-756.1234.5678.90",
+        &["AHV", "erfasst"],
+    );
+}
+
+/// PIN: the `Identitätskarte` cue added by slice A. Removing it turns exactly this test red.
+#[test]
+fn national_id_covers_identitaetskarte_cue() {
+    assert_id_removed(
+        "Seine Identitätskarte trägt die Nummer AB123456 im Register.",
+        "AB123456",
+        &["Identitätskarte", "Register"],
+    );
+}
+
+/// Regression: the extension is a strict superset of the prior `national_id.cue_anchored`. A value
+/// the pre-slice-A rule already covered must still redact.
+#[test]
+fn national_id_extension_still_covers_the_prior_shapes() {
+    assert_id_removed(
+        "His national ID number is AB123456C on file.",
+        "AB123456C",
+        &["national ID", "on file"],
+    );
+}
+
+/// PIN (N2, #451 review): the widened national-ID value arm `[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}`. A
+/// three-letter-prefixed twelve-digit identifier fires ONLY through this arm (the prior arm was
+/// `[A-Z]{1,2}\d{6,9}[A-Z]?` — at most two letters and nine digits — and the AHV / digit-group /
+/// bare-digit arms cannot start with three letters). Narrowing the arm back to the old bounds
+/// makes this value leak and turns exactly this test red; without it only the corpus guarded it.
+#[test]
+fn national_id_covers_a_three_letter_twelve_digit_alnum() {
+    assert_id_removed(
+        "The national identification number ABC-123456789012 is on file.",
+        "ABC-123456789012",
+        &["national identification number", "on file"],
+    );
+}
+
+/// Passport joins the shared-connector family at precedence 15: a passport cue beats a tax-number
+/// or national-id cue for the same value, but yields to an SSN cue. This pins the family ordering
+/// for the new member.
+#[test]
+fn passport_class_wins_over_national_id_for_a_passport_cue() {
+    // "passport ID number" fires BOTH passport (passport cue) and national_id (`id number` cue) on
+    // the same value, so collision precedence actually decides. With "Passport ID:" only passport
+    // fires and the test would be vacuous (precedence 15->40 would change nothing — review nit N1).
+    let cleaned = clean("passport ID number NZ1234567 was recorded.");
+    assert!(
+        !cleaned.contains("NZ1234567"),
+        "passport value survived: {cleaned}"
+    );
+    assert!(
+        cleaned.contains(":passport_"),
+        "expected a passport-class token, got {cleaned}"
     );
 }

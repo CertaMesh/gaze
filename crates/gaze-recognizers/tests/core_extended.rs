@@ -221,7 +221,7 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
             "vat.es",
         ])
     );
-    assert_eq!(core.recognizers.len(), 35);
+    assert_eq!(core.recognizers.len(), 36);
     for id in [
         "name.forward_marker",
         "name.agent_recipient",
@@ -235,6 +235,9 @@ fn embedded_core_mixed_locale_basis_membership_is_explicit() {
         "tax_number.cue_anchored",
         "driver_license.cue_anchored",
         "national_id.cue_anchored",
+        // Slice A (#3025): passport is bilingual cue-anchored with no single-nation shape, so it
+        // is document basis (`global`) like the other cue-anchored government-ID recognizers.
+        "passport.cue_anchored",
     ] {
         assert_eq!(
             core.recognizers

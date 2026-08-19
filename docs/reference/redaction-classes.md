@@ -19,7 +19,7 @@ compatibility name for the same embedded `core.toml` bytes
 (`crates/gaze-recognizers/src/lib.rs:45-55`,
 `crates/gaze-cli/src/pipeline/run.rs:718-733`). Its difference is activation
 policy, described under [Shipped default activation](#shipped-default-activation).
-The shared payload currently contains exactly 35 recognizer specs
+The shared payload currently contains exactly 36 recognizer specs
 (`crates/gaze-recognizers/src/lib.rs:62-110`).
 
 ## PII classes and resolver priority
@@ -99,7 +99,8 @@ See [Validator Veto](../explanation/detection/validator-veto.md) and
 | `core, core-extended` | `ssn.de_cue` | `regex` | Cue-anchored SSN values after German social-insurance cues (Sozialversicherungsnummer, SV-Nummer) in dashed, dotted, or 9 to 11 digit form; format basis; DACH provenance describes cue vocabulary until native SVNR/AHV shapes ship in #2926 | `custom:ssn` | `de-DE, de-AT, de-CH` | `none` | `none` | `safe_default` | yes | 0.88 | 86 | `crates/gaze-recognizers/embedded/core.toml:937-964` |
 | `core, core-extended` | `tax_number.cue_anchored` | `regex` | Cue-anchored tax numbers with a three-digit lead and separated digit groups after German or English tax cues; bare digit runs and the checksummed 2-3-3-3 Steuer-ID shape are excluded | `custom:tax_number` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 | `crates/gaze-recognizers/embedded/core.toml:1005-1031` |
 | `core, core-extended` | `driver_license.cue_anchored` | `regex` | Letter-led alphanumeric licence numbers after German or English driving-licence cues | `custom:driver_license` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 83 | `crates/gaze-recognizers/embedded/core.toml:1045-1066` |
-| `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, or 9 to 11 digit identifiers after German or English national-ID cues | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 | `crates/gaze-recognizers/embedded/core.toml:1086-1112` |
+| `core, core-extended` | `national_id.cue_anchored` | `regex` | Letter-led, digit-grouped, 9 to 13 digit, or Swiss AHV (`756.dddd.dddd.dd`) identifiers after German or English national-ID / identity-card / AHV cues | `custom:national_id` | `global` | `none` | `none` | `safe_default` | yes | 0.82 | 82 | `crates/gaze-recognizers/embedded/core.toml` (`id = "national_id.cue_anchored"`) |
+| `core, core-extended` | `passport.cue_anchored` | `regex` | Letter-led alphanumeric, Personalausweis-silhouette, or 9-digit passport numbers after passport / Reisepass cues | `custom:passport` | `global` | `none` | `none` | `safe_default` | yes | 0.85 | 84 | `crates/gaze-recognizers/embedded/core.toml` (`id = "passport.cue_anchored"`) |
 <!-- redaction-classes-gate:recognizers:end -->
 
 ## Closed validator and normalizer sets
@@ -190,6 +191,7 @@ which beats the vaguer national-ID cues (30).
 | `government-id` | `ssn.de_cue` | `ssn` | 10 | `none` | `crates/gaze-recognizers/embedded/core.toml:957-960` |
 | `government-id` | `tax_number.cue_anchored` | `tax-number` | 20 | `none` | `crates/gaze-recognizers/embedded/core.toml:1024-1027` |
 | `government-id` | `national_id.cue_anchored` | `national-id` | 30 | `none` | `crates/gaze-recognizers/embedded/core.toml:1105-1108` |
+| `government-id` | `passport.cue_anchored` | `passport` | 15 | `none` | `crates/gaze-recognizers/embedded/core.toml` (`variant = "passport"`) |
 <!-- redaction-classes-gate:collisions:end -->
 
 For the full family-level ambiguity contract, including equal-precedence
@@ -303,8 +305,8 @@ locale intersection (`crates/gaze-assembly/src/detector_wiring.rs`).
 <!-- redaction-classes-gate:default-activation:start -->
 | Bundle selection | Effective locale chain | Auto-activate locale-gated | Active recognizer ids | Source |
 |---|---|---|---|---|
-| `core` | `global` | no | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, phone.e164.spaced, phone.national.us, phone.structural, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1112`; `crates/gaze-assembly/src/defaults.rs:45-77` |
-| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
+| `core` | `global` | no | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.us, phone.structural, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-recognizers/embedded/core.toml:1-1112`; `crates/gaze-assembly/src/defaults.rs:45-77` |
+| `core-extended compatibility alias` | `global, en-US, de-DE, de-AT, de-CH` | yes | `aadhaar.in, bsn.nl, card.structural, cnpj.br, cpf.br, driver_license.cue_anchored, email.global, email.header.name, email.header.name.paren, eth.address, iban.structural, ip.v4, ip.v6, name.agent_recipient, name.auto_footer, name.forward_marker, national_id.cue_anchored, nhs.uk, nino.uk, nir.fr, pan.in, passport.cue_anchored, phone.e164.spaced, phone.national.de, phone.national.us, phone.structural, postal.de, postal.us, security_token.anchored, ssn.de_cue, ssn.us, steuer_id.de, tax_number.cue_anchored, url.anchored, vat.de, vat.es` | `crates/gaze-assembly/src/locale.rs` (`locale_gated_activation_locales`); `crates/gaze-assembly/src/defaults.rs:45-77`; `crates/gaze-cli/src/pipeline/run.rs:137-146,712-728` |
 <!-- redaction-classes-gate:default-activation:end -->
 
 The v0.6+ compatibility behavior therefore does activate
