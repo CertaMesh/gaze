@@ -350,6 +350,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   custom-inside-custom, builtin-inside-builtin and builtin containers over
   custom spans keep their existing rungs.
 
+- **The five SSN / government-ID recognizers share one cue-to-value connector grammar, so
+  multi-word phrasing between the cue and the value is covered** (solo todo #3025, slice G).
+  `ssn.us`, `ssn.de_cue`, `tax_number.cue_anchored`, `driver_license.cue_anchored` and
+  `national_id.cue_anchored` previously allowed a single optional keyword plus one punctuation
+  mark between the cue and the value, so real phrasing such as `license number, D1234567`,
+  `Sozialversicherungsnummer, die lautet 756.1234.5678.90` and `tax number as 123-456-789`
+  leaked. All five now carry one byte-identical connector fragment (up to four closed-vocabulary
+  tokens with Unicode-aware, unbounded whitespace — matching `ssn.us`'s prior `\s*` tolerance, so
+  aligned columns, long padding and non-breaking spaces stay covered — and one optional separator).
+  This is a grammar-only change: cue
+  vocabulary and value shapes are unchanged, so the set of eligible value shapes did not move.
+  Measured on the pinned EN/DE corpus, on the shipped default (`full-stack-kiji-resolve`),
+  against the slice-U merge (`56e1a3d`): 1,802 fewer leaked labelled bytes — SSN −526,
+  DRIVERLICENSENUM −582, IDCARDNUM −384, NATIONALID −205, TAXNUM −95. On the deterministic rule
+  floor, 190 more entities fully covered for zero false-positive movement (rule and pass2
+  false-positive bytes unchanged), and zero A4 negative movement in every category and cell. A
+  drift-guard test (`shared_connector_grammar_is_byte_identical_across_the_family`) fails if one
+  of the five copies is edited alone.
+
 - **Audit rows now name the conflict tier that actually decided the overlap**
   (audit S02-F1, solo todo #2948). The resolver probed its comparator twice —
   once per direction — and reused the second answer as the winner's

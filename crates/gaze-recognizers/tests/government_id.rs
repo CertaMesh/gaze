@@ -604,3 +604,182 @@ fn government_ids_restore_exactly() {
         .expect("restore");
     assert_eq!(restored, original, "manifest-first restore must round-trip");
 }
+
+// ---------------------------------------------------------------------------- Slice G: shared connector
+//
+// Solo todo #3025 slice G: the cue→value connector of the five SSN / government-ID recognizers
+// was a single optional keyword plus one punctuation mark. Real corpus phrasing puts up to four
+// closed-vocabulary words between the cue and the value ("license number, X", "Sozialversicherungs-
+// nummer, die lautet X", "tax number as X"), so those spans leaked. All five now share ONE
+// connector grammar. This is a grammar-only change: cue vocabulary and value shapes are byte-
+// identical to the previous rules, so nothing about which VALUE shapes are eligible changed.
+//
+// Measured (isolated, Kiji cell, base 8d87468): +1,744 newly covered leaked gold bytes
+// (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
+// matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
+
+/// The canonical shared connector grammar. It appears byte-identical in all five family patterns;
+/// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
+const SHARED_CONNECTOR: &str = r"\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*";
+
+const CONNECTOR_FAMILY: [&str; 5] = [
+    "ssn.us",
+    "ssn.de_cue",
+    "tax_number.cue_anchored",
+    "driver_license.cue_anchored",
+    "national_id.cue_anchored",
+];
+
+/// Extracts the single-quoted `pattern = '''...'''` value for one recognizer id from the embedded
+/// core TOML by text scan (the compiled rulepack does not expose the raw pattern string).
+fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
+    let anchor = format!("id = \"{id}\"");
+    let start = core
+        .find(&anchor)
+        .unwrap_or_else(|| panic!("recognizer id {id} not found in embedded core"));
+    let after = &core[start..];
+    let pat_key = after
+        .find("pattern = '''")
+        .unwrap_or_else(|| panic!("recognizer {id} has no pattern"));
+    let body = &after[pat_key + "pattern = '''".len()..];
+    let end = body
+        .find("'''")
+        .unwrap_or_else(|| panic!("recognizer {id} pattern is not terminated"));
+    &body[..end]
+}
+
+/// Drift guard: one edit to a single family pattern's connector must turn this red. It asserts the
+/// canonical fragment appears exactly once per family recognizer (five total) AND that each named
+/// recognizer's pattern carries it. Adding a cue word to only `tax_number.cue_anchored`, or
+/// widening only `national_id.cue_anchored`'s separators, drops that copy below the shared string
+/// and the count no longer equals five. Changing the grammar for the whole family means editing
+/// all five patterns AND this constant together — which is the intended workflow, not drift.
+#[test]
+fn shared_connector_grammar_is_byte_identical_across_the_family() {
+    let core = embedded("core").expect("core rulepack");
+    // Per-id check FIRST so a diverged copy is NAMED (the count assertion alone would only
+    // report "4 != 5" and cost the next person a diff — N1 from the #450 review).
+    let missing: Vec<&str> = CONNECTOR_FAMILY
+        .iter()
+        .copied()
+        .filter(|id| !recognizer_pattern(core, id).contains(SHARED_CONNECTOR))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "these family recognizers no longer carry the shared connector grammar verbatim: {missing:?}; \
+         if you changed the grammar, update all {} family patterns AND `SHARED_CONNECTOR` together",
+        CONNECTOR_FAMILY.len(),
+    );
+    // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
+    assert_eq!(
+        core.matches(SHARED_CONNECTOR).count(),
+        CONNECTOR_FAMILY.len(),
+        "the shared connector grammar must appear exactly once per family recognizer and nowhere else",
+    );
+}
+
+/// Positive fixtures: one multi-word connector per recognizer that the single-keyword connector
+/// could not reach. Each value must be tokenized; reverting the connector (the mutation probe)
+/// leaves every one of these raw.
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_us() {
+    assert_id_removed(
+        "Her social security number is 564-23-7890 today.",
+        "564-23-7890",
+        &["social security number", "today"],
+    );
+}
+
+/// N2 (#450 review): `ssn.us` needs a pin that a connector NARROWING can break. Its other
+/// fixture (`social security number is …`) needs only the single keyword `is`, so it survives the
+/// old one-keyword grammar. This one needs three connector tokens.
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_us_multi_token() {
+    assert_id_removed(
+        "SSN, which is listed as 564-23-7890 in the file.",
+        "564-23-7890",
+        &["SSN", "in the file"],
+    );
+}
+
+/// B1 (#450 review): the old `ssn.us` connector `\s*[:#-]?\s*` tolerated UNBOUNDED whitespace, so
+/// an aligned plain-text column (`SSN:` + many spaces) was redacted. The first shared fragment
+/// bounded every slot to four ASCII spaces and leaked it on the shipped default. The corpus has no
+/// padded SSN spans, so only a direct probe catches it. Reverting the fragment to a bounded slot
+/// turns this red.
+#[test]
+fn ssn_us_covers_a_value_after_aligned_whitespace_padding() {
+    assert_id_removed(
+        "Name:      John Doe
+SSN:            123-45-6789
+DOB:       01/02/1980",
+        "123-45-6789",
+        &["John Doe", "DOB"],
+    );
+}
+
+/// B1 (#450 review): NBSP / narrow-NBSP / em-space between the cue and the value (HTML or Word
+/// paste). The old connector's `\s` matched them; the ASCII-only first fragment did not. The
+/// shared fragment is Unicode-aware again. `\u{00A0}` is a non-breaking space.
+#[test]
+fn ssn_us_covers_a_value_after_a_unicode_whitespace() {
+    assert_id_removed(
+        "SSN:\u{00A0}123-45-6789 was on file.",
+        "123-45-6789",
+        &["SSN", "on file"],
+    );
+    assert_id_removed(
+        "SSN:\u{2003}987-65-4321 confirmed.",
+        "987-65-4321",
+        &["SSN", "confirmed"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_de_cue() {
+    assert_id_removed(
+        "Meine Sozialversicherungsnummer, die lautet 756.1234.5678.90, ist aktuell.",
+        "756.1234.5678.90",
+        &["Sozialversicherungsnummer", "aktuell"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_tax_number() {
+    assert_id_removed(
+        "His tax number, 123-456-789, was filed.",
+        "123-456-789",
+        &["tax number", "was filed"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_driver_license() {
+    assert_id_removed(
+        "The driver's license number, D1234567, is valid.",
+        "D1234567",
+        &["license number", "is valid"],
+    );
+}
+
+#[test]
+fn multi_word_connectors_reach_the_value_national_id() {
+    assert_id_removed(
+        "His national ID, as recorded, is AB123456C in the file.",
+        "AB123456C",
+        &["national ID", "in the file"],
+    );
+}
+
+/// Negative fixtures: the widened connector must not bridge an unbounded gap. A cue with the value
+/// many words away, or with a non-connector word between them, stays untouched — the loop is
+/// capped at four closed-vocabulary tokens.
+#[test]
+fn widened_connector_does_not_bridge_an_unbounded_gap() {
+    // "yesterday" is not a connector word: the run breaks and the value is not reached.
+    assert_unchanged("The tax number yesterday somewhere far 123-456-789 appeared.");
+    // Five+ words of genuine prose between cue and value exceed the four-token cap.
+    assert_unchanged(
+        "His national ID was discussed at length during the meeting AB123456C afterwards.",
+    );
+}
