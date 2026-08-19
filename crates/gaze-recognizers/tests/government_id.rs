@@ -620,7 +620,7 @@ fn government_ids_restore_exactly() {
 
 /// The canonical shared connector grammar. It appears byte-identical in all five family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
-const SHARED_CONNECTOR: &str = r"[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}";
+const SHARED_CONNECTOR: &str = r"\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*";
 
 const CONNECTOR_FAMILY: [&str; 5] = [
     "ssn.us",
@@ -657,19 +657,25 @@ fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
 #[test]
 fn shared_connector_grammar_is_byte_identical_across_the_family() {
     let core = embedded("core").expect("core rulepack");
+    // Per-id check FIRST so a diverged copy is NAMED (the count assertion alone would only
+    // report "4 != 5" and cost the next person a diff — N1 from the #450 review).
+    let missing: Vec<&str> = CONNECTOR_FAMILY
+        .iter()
+        .copied()
+        .filter(|id| !recognizer_pattern(core, id).contains(SHARED_CONNECTOR))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "these family recognizers no longer carry the shared connector grammar verbatim: {missing:?}; \
+         if you changed the grammar, update all {} family patterns AND `SHARED_CONNECTOR` together",
+        CONNECTOR_FAMILY.len(),
+    );
+    // Then the count, so an EXTRA stray copy (or a sixth rule that forgot to join the array) is caught too.
     assert_eq!(
         core.matches(SHARED_CONNECTOR).count(),
         CONNECTOR_FAMILY.len(),
-        "the shared connector grammar must appear once per family recognizer and nowhere else; \
-         if you changed it, update all five family patterns and this constant together",
+        "the shared connector grammar must appear exactly once per family recognizer and nowhere else",
     );
-    for id in CONNECTOR_FAMILY {
-        let pattern = recognizer_pattern(core, id);
-        assert!(
-            pattern.contains(SHARED_CONNECTOR),
-            "recognizer {id} must carry the shared connector grammar verbatim; found: {pattern}",
-        );
-    }
 }
 
 /// Positive fixtures: one multi-word connector per recognizer that the single-keyword connector
@@ -681,6 +687,51 @@ fn multi_word_connectors_reach_the_value_ssn_us() {
         "Her social security number is 564-23-7890 today.",
         "564-23-7890",
         &["social security number", "today"],
+    );
+}
+
+/// N2 (#450 review): `ssn.us` needs a pin that a connector NARROWING can break. Its other
+/// fixture (`social security number is …`) needs only the single keyword `is`, so it survives the
+/// old one-keyword grammar. This one needs three connector tokens.
+#[test]
+fn multi_word_connectors_reach_the_value_ssn_us_multi_token() {
+    assert_id_removed(
+        "SSN, which is listed as 564-23-7890 in the file.",
+        "564-23-7890",
+        &["SSN", "in the file"],
+    );
+}
+
+/// B1 (#450 review): the old `ssn.us` connector `\s*[:#-]?\s*` tolerated UNBOUNDED whitespace, so
+/// an aligned plain-text column (`SSN:` + many spaces) was redacted. The first shared fragment
+/// bounded every slot to four ASCII spaces and leaked it on the shipped default. The corpus has no
+/// padded SSN spans, so only a direct probe catches it. Reverting the fragment to a bounded slot
+/// turns this red.
+#[test]
+fn ssn_us_covers_a_value_after_aligned_whitespace_padding() {
+    assert_id_removed(
+        "Name:      John Doe
+SSN:            123-45-6789
+DOB:       01/02/1980",
+        "123-45-6789",
+        &["John Doe", "DOB"],
+    );
+}
+
+/// B1 (#450 review): NBSP / narrow-NBSP / em-space between the cue and the value (HTML or Word
+/// paste). The old connector's `\s` matched them; the ASCII-only first fragment did not. The
+/// shared fragment is Unicode-aware again. `\u{00A0}` is a non-breaking space.
+#[test]
+fn ssn_us_covers_a_value_after_a_unicode_whitespace() {
+    assert_id_removed(
+        "SSN:\u{00A0}123-45-6789 was on file.",
+        "123-45-6789",
+        &["SSN", "on file"],
+    );
+    assert_id_removed(
+        "SSN:\u{2003}987-65-4321 confirmed.",
+        "987-65-4321",
+        &["SSN", "confirmed"],
     );
 }
 

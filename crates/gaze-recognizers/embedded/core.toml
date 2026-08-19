@@ -648,7 +648,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:ssn|social\s+security(?:\s+number)?|ss#)[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}(\d{3}-\d{2}-\d{4}|\d{9})\b'''
+pattern = '''(?i)\b(?:ssn|social\s+security(?:\s+number)?|ss#)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}-\d{2}-\d{4}|\d{9})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -891,7 +891,10 @@ license = "Apache-2.0"
 # SHARED CONNECTOR GRAMMAR (solo todo #3025 slice G). The cue->value connector of these five
 # recognizers (the four above plus `ssn.us`) is one byte-identical fragment: up to four
 # closed-vocabulary tokens (numbers?/nummern?/no/nr/id/is/ist/lautet/mit/der/hat/with/the/... plus
-# `no.`/`nr.`) with bounded whitespace and one optional separator. Real corpus phrasing puts
+# `no.`/`nr.`) with Unicode-aware, UNBOUNDED whitespace (`\s`) and one optional separator. The
+# unbounded Unicode whitespace preserves the prior `ssn.us` connector tolerance (`\s*[:#-]?\s*`):
+# aligned plain-text columns, long padding and NBSP/narrow-NBSP/em-space between cue and value stay
+# covered on all five, not just ssn.us. Real corpus phrasing puts
 # multiple words between cue and value ("license number, X", "Sozialversicherungsnummer, die
 # lautet X", "tax number as X"); the previous single-keyword connector missed them. Grammar-only:
 # every cue vocabulary and value shape is unchanged, so which VALUE shapes are eligible did not
@@ -957,7 +960,7 @@ locale_basis = "format"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:sozialversicherung(?:s(?:nummer|ausweis))?|sv-?nummer)[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
+pattern = '''(?i)\b(?:sozialversicherung(?:s(?:nummer|ausweis))?|sv-?nummer)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}-\d{2}-\d{4}|\d{3}\.\d{4}\.\d{4}\.\d{2}|\d{9,11})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1024,7 +1027,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:steuer(?:-?id|nummer|liche[ \t]identifikationsnummer)?|idnr\.?|tax(?:[ \t](?:id|number))?|taxpayer|tin)[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
+pattern = '''(?i)\b(?:steuer(?:-?id|nummer|liche[ \t]identifikationsnummer)?|idnr\.?|tax(?:[ \t](?:id|number))?|taxpayer|tin)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*(\d{3}[ ./-]\d{2,4}[ ./-]\d{2,4}(?:[ ./-]\d{2,4})?)\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1064,7 +1067,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:driver'?s?[ \t]licen[cs]e|driving[ \t]licen[cs]e|licen[cs]e[ \t]number|dl#|f[uü]hrerschein(?:nummer)?|fahrerlaubnis)[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
+pattern = '''(?i)\b(?:driver'?s?[ \t]licen[cs]e|driving[ \t]licen[cs]e|licen[cs]e[ \t]number|dl#|f[uü]hrerschein(?:nummer)?|fahrerlaubnis)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,3}\d{5,12}|[A-Z]{1,3}-?\d{5,12})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1105,7 +1108,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:national[ \t]id(?:entity)?(?:[ \t]number)?|nationalid|identity[ \t](?:card|number)|id[ \t](?:card|number)|personalausweis(?:nummer)?|ausweisnummer|national[ \t]insurance)[ \t\r\n]{0,4}(?:[,:;(]?[ \t\r\n]{0,4}(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)[ \t\r\n]{0,4}){0,4}[ \t\r\n]{0,4}[:=#/,.-]?[ \t\r\n]{0,4}([A-Z]{1,2}\d{6,9}[A-Z]?|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,11})\b'''
+pattern = '''(?i)\b(?:national[ \t]id(?:entity)?(?:[ \t]number)?|nationalid|identity[ \t](?:card|number)|id[ \t](?:card|number)|personalausweis(?:nummer)?|ausweisnummer|national[ \t]insurance)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,2}\d{6,9}[A-Z]?|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,11})\b'''
 capture_groups = [1]
 
 [recognizers.scoring]

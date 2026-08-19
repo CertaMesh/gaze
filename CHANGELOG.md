@@ -357,7 +357,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mark between the cue and the value, so real phrasing such as `license number, D1234567`,
   `Sozialversicherungsnummer, die lautet 756.1234.5678.90` and `tax number as 123-456-789`
   leaked. All five now carry one byte-identical connector fragment (up to four closed-vocabulary
-  tokens with bounded whitespace and one optional separator). This is a grammar-only change: cue
+  tokens with Unicode-aware, unbounded whitespace — matching `ssn.us`'s prior `\s*` tolerance, so
+  aligned columns, long padding and non-breaking spaces stay covered — and one optional separator).
+  This is a grammar-only change: cue
   vocabulary and value shapes are unchanged, so the set of eligible value shapes did not move.
   Measured on the pinned EN/DE corpus, on the shipped default (`full-stack-kiji-resolve`),
   against the slice-U merge (`56e1a3d`): 1,802 fewer leaked labelled bytes — SSN −526,
