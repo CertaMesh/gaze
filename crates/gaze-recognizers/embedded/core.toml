@@ -1108,7 +1108,7 @@ locale_basis = "document"
 
 [recognizers.match]
 kind = "regex"
-pattern = '''(?i)\b(?:national[ \t]id(?:entity)?(?:[ \t]number)?|nationalid|identity[ \t](?:card|number)|id[ \t](?:card|number)|personalausweis(?:nummer)?|ausweisnummer|national[ \t]insurance)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,2}\d{6,9}[A-Z]?|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,11})\b'''
+pattern = '''(?i)\b(?:national[ \t-]?id(?:entity|entification)?(?:[ \t-]?(?:number|nummer))?|nationalid|nationale[nr]?[ \t]+(?:id(?:-?nummer)?|identifikationsnummer|identit[äa]tsnummer|id-nummer)|national(?:-?ausweis(?:es)?|er[ \t]+identit[äa]tsausweis)(?:nummer)?|identity[ \t](?:card|number)|id[ \t-]?(?:card|number|nummer|karte)(?:n?nummer)?|idcard|id-kartennummer|identit[äa]tskarte(?:n?nummer)?|personalausweis(?:es|nummer)?|ausweis(?:es)?(?:nummer)?|national[ \t]insurance(?:[ \t]number)?|identifikationsnummer|personalnummer|staatsb[üu]rgerschaftsnummer|b[üu]rgerschaftsnummer|ahv(?:-?nummer)?)\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{2}-?756\.\d{4}\.\d{4}\.\d{1,2}|[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}|\d{3}[.-]\d{2,4}[.-]\d{2,4}(?:[.-]\d{2,4})?|\d{9,13}|\d{6}-\d{4}|\d\.\d{2}\.\d{6}\.\d)\b'''
 capture_groups = [1]
 
 [recognizers.scoring]
@@ -1125,3 +1125,45 @@ precedence = 30
 [recognizers.source]
 origin = "project-authored"
 license = "Apache-2.0"
+
+# PASSPORT. New sixth member of the government-id shared-connector family (#3025 slice A). Cue-
+# anchored on passport / Reisepass(nummer/-nr/-id/dokument) / Passnummer / Passagierschein (bare
+# `Pass` only when a number phrase follows), same shared connector `F` as the other five, so the
+# `government_id.rs` drift guard now covers six copies. Shape: letter-led alphanumeric (1-3 letters
+# + 6-9 digits + up to 2 trailing letters), the German Personalausweis `L##L#####` silhouette, and
+# a bare 9-digit form. `custom:passport` class; government-id collision precedence 15 (a passport
+# cue is unambiguous, so it beats tax-number=20 and national-id=30 but yields to an SSN cue=10),
+# matching the cluster's cue-specificity ordering.
+#
+# VALIDATOR SEAM: real passports carry check digits (German 9-char weighted checksum; several
+# national schemes). The synthetic corpus has no valid check digits, so a validator here would
+# score ~0 and is NOT attached; the shape is a single capture so a `ValidatorKind` can attach
+# without redesign once a checksum-valid generator exists (gated on #2427).
+[[recognizers]]
+id = "passport.cue_anchored"
+safety_tier = "safe_default"
+class = "custom:passport"
+enabled = true
+locales = ["global"]
+locale_basis = "document"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''(?i)\b(?:passports?|passport[ \t-]?id|reisep[aä]ss(?:e?s|nummer|-?nr\.?|-?id|dokument)?|passnummer|passagierschein|pass(?:es)?[ \t]+(?:mit[ \t]+de[rmn][ \t]+(?:nummer|id)|nummer|nr\.?|trug[ \t]+die[ \t]+nummer))\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*([A-Z]{1,3}-?\d{6,9}[A-Z]{0,2}|[A-Z]\d{2}[A-Z]\d{5,6}|\d{2}[A-Z]\d{6}|\d{9}|[A-Z]\d{2}[A-Z]\d[A-Z]\d[A-Z]\d|[A-Z]\d{2}[ ]\d{7}|\d{2}[A-Z]{2}\d{4})\b'''
+capture_groups = [1]
+
+[recognizers.scoring]
+base = 0.85
+priority = 84
+
+[recognizers.token]
+
+[recognizers.collision]
+family = "government-id"
+variant = "passport"
+precedence = 15
+
+[recognizers.source]
+origin = "project-authored"
+license = "Apache-2.0"
+

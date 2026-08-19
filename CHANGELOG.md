@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`passport.cue_anchored` recognizer and an extended `national_id.cue_anchored`
+  close the passport / national-ID / ID-card detection gap on the shipped
+  default** (solo todo #3025, slice A). A new `custom:passport` recognizer
+  (government-ID collision family, precedence 15 — a passport cue beats a
+  tax-number or national-ID cue but yields to an SSN cue) covers passport /
+  Reisepass numbers, and `national_id.cue_anchored` gains cue vocabulary
+  (Identitätskarte, Personalnummer, Staatsbürgerschaftsnummer, AHV, the
+  hyphenated `national-id` forms) and shapes (Swiss AHV `756.dddd.dddd.dd`,
+  longer alphanumerics). Both carry the byte-identical shared connector, so
+  passport is the sixth member of the drift-guarded connector family. Measured
+  on the pinned EN/DE corpus (shipped default): PASSPORTID −1,791, NATIONALID
+  −1,017, IDCARDNUM −577 fewer leaked bytes, with zero A4 negative movement and
+  the national-ID extension a strict superset of the prior rule (no
+  previously-covered span lost). The passport check digit and the Swiss AHV
+  EAN-13 check digit are real validators, but the synthetic corpus carries no
+  valid check digits, so no validator is attached. The passport shape is a single
+  capture and the prefixed Swiss AHV form (`CH-756.dddd.dddd.dd`) is a dedicated
+  pattern alternative, so a `ValidatorKind` can attach without redesign once a
+  checksum-valid generator exists (gated on #2427; the AHV EAN-13 validator lands
+  in a dedicated recognizer per #2926). The unprefixed `756.dddd.dddd.dd` form is
+  covered by the generic DACH digit-group arm.
+
 - **`gaze daemon` gained the eight safety-net and detection-surface flags only
   `gaze clean` accepted** (#446): `--safety-net-registry`, `--safety-net-add`,
   `--opf-locales`, `--opf-command`, `--opf-checkpoint`,

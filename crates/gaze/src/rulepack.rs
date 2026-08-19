@@ -1370,6 +1370,7 @@ window_chars = 48
                 PiiClass::custom("tax_number"),
                 PiiClass::custom("driver_license"),
                 PiiClass::custom("national_id"),
+                PiiClass::custom("passport"),
                 PiiClass::custom("aadhaar"),
                 PiiClass::custom("nir"),
                 PiiClass::custom("steuer_id"),
