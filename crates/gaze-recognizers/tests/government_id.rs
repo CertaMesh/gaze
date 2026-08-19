@@ -619,7 +619,7 @@ fn government_ids_restore_exactly() {
 // (SSN +495, DRIVERLICENSENUM +581, NATIONALID +205, IDCARDNUM +384, TAXNUM +79), ZERO non-gold
 // matches on the EN/DE holdout and ZERO matches across all 1,024 A4 negatives, per recognizer.
 
-/// The canonical shared connector grammar. It appears byte-identical in all five family patterns;
+/// The canonical shared connector grammar. It appears byte-identical in all six family patterns;
 /// `shared_connector_grammar_is_byte_identical_across_the_family` fails the moment one copy drifts.
 const SHARED_CONNECTOR: &str = r"\s*(?:[,:;(]?\s*(?:(?:numbers?|nummern?|no|nr|num|id|code|ident|identification|is|was|ist|lautet|lauten|war|as|to|of|reads|mit|der|dem|den|die|das|dessen|deren|hat|trägt|unter|bearing|bears|with|which|my|your|his|her|their|the|new|und|and|als|being|listed|recorded|verified|registered|under)\b|no\.|nr\.)\s*){0,4}\s*[:=#/,.-]?\s*";
 
@@ -653,11 +653,11 @@ fn recognizer_pattern<'a>(core: &'a str, id: &str) -> &'a str {
 }
 
 /// Drift guard: one edit to a single family pattern's connector must turn this red. It asserts the
-/// canonical fragment appears exactly once per family recognizer (five total) AND that each named
+/// canonical fragment appears exactly once per family recognizer (six total) AND that each named
 /// recognizer's pattern carries it. Adding a cue word to only `tax_number.cue_anchored`, or
 /// widening only `national_id.cue_anchored`'s separators, drops that copy below the shared string
-/// and the count no longer equals five. Changing the grammar for the whole family means editing
-/// all five patterns AND this constant together — which is the intended workflow, not drift.
+/// and the count no longer equals six. Changing the grammar for the whole family means editing
+/// all six patterns AND this constant together — which is the intended workflow, not drift.
 #[test]
 fn shared_connector_grammar_is_byte_identical_across_the_family() {
     let core = embedded("core").expect("core rulepack");
@@ -893,12 +893,29 @@ fn national_id_extension_still_covers_the_prior_shapes() {
     );
 }
 
+/// PIN (N2, #451 review): the widened national-ID value arm `[A-Z]{1,3}-?\d{6,12}[A-Z]{0,2}`. A
+/// three-letter-prefixed twelve-digit identifier fires ONLY through this arm (the prior arm was
+/// `[A-Z]{1,2}\d{6,9}[A-Z]?` — at most two letters and nine digits — and the AHV / digit-group /
+/// bare-digit arms cannot start with three letters). Narrowing the arm back to the old bounds
+/// makes this value leak and turns exactly this test red; without it only the corpus guarded it.
+#[test]
+fn national_id_covers_a_three_letter_twelve_digit_alnum() {
+    assert_id_removed(
+        "The national identification number ABC-123456789012 is on file.",
+        "ABC-123456789012",
+        &["national identification number", "on file"],
+    );
+}
+
 /// Passport joins the shared-connector family at precedence 15: a passport cue beats a tax-number
 /// or national-id cue for the same value, but yields to an SSN cue. This pins the family ordering
 /// for the new member.
 #[test]
 fn passport_class_wins_over_national_id_for_a_passport_cue() {
-    let cleaned = clean("Passport ID: NZ1234567 was recorded.");
+    // "passport ID number" fires BOTH passport (passport cue) and national_id (`id number` cue) on
+    // the same value, so collision precedence actually decides. With "Passport ID:" only passport
+    // fires and the test would be vacuous (precedence 15->40 would change nothing — review nit N1).
+    let cleaned = clean("passport ID number NZ1234567 was recorded.");
     assert!(
         !cleaned.contains("NZ1234567"),
         "passport value survived: {cleaned}"
