@@ -163,7 +163,15 @@ impl Tool for GazeReadFile {
     }
 
     async fn invoke(&self, ctx: &ToolCtx<'_>) -> Result<ToolResponse, ToolError> {
-        let path = PathBuf::from(required_string(ctx.redacted_args(), "path")?);
+        // Restore only inside the trusted tool, after protected manifest args
+        // were recorded. Opening the token spelling can select a different file.
+        let protected_path = required_string(ctx.redacted_args(), "path")?;
+        let raw_path = ctx
+            .resources()
+            .session()
+            .restore_strict_text(protected_path)
+            .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+        let path = PathBuf::from(raw_path);
         validate_file(&path, self.max_file_size)?;
         read_file_response(&path, ctx).map(|response| ToolResponse::json(json!(response)))
     }
@@ -395,6 +403,7 @@ mod tests {
         begins: AtomicUsize,
         finishes: AtomicUsize,
         failures: AtomicUsize,
+        args: std::sync::Mutex<Vec<serde_json::Value>>,
     }
 
     impl RecordingManifest {
@@ -403,6 +412,7 @@ mod tests {
                 begins: AtomicUsize::new(0),
                 finishes: AtomicUsize::new(0),
                 failures: AtomicUsize::new(0),
+                args: Default::default(),
             }
         }
     }
@@ -411,6 +421,7 @@ mod tests {
     impl ManifestStore for RecordingManifest {
         async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {
             self.begins.fetch_add(1, Ordering::SeqCst);
+            self.args.lock().unwrap().push(ctx.redacted_args.clone());
             Ok(CallHandle::new(ctx.call_id))
         }
 
@@ -565,6 +576,89 @@ mod tests {
             }
             other => panic!("unexpected error: {other:?}"),
         }
+    }
+
+    #[tokio::test]
+    async fn configured_dispatch_restores_owner_path_before_file_validation() {
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let raw_path = directory
+            .path()
+            .join("alice@example.invalid")
+            .join("input.png");
+        std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
+        std::fs::write(&raw_path, b"oversized").unwrap();
+        let gaze::CleanDocument::Text(protected_path) = core
+            .pseudonymize_text(&session, raw_path.to_str().unwrap())
+            .unwrap()
+        else {
+            panic!("text expected")
+        };
+        assert_ne!(protected_path, raw_path.to_str().unwrap());
+        // A distinct literal-token file must never replace the owner's target.
+        let literal_path = PathBuf::from(&protected_path);
+        assert!(literal_path.starts_with(directory.path()));
+        std::fs::create_dir_all(literal_path.parent().unwrap()).unwrap();
+        std::fs::write(&literal_path, b"").unwrap();
+        let mut registry = ToolRegistry::new();
+        registry
+            .register(GazeReadFile::with_max_file_size(1))
+            .unwrap();
+        let manifest = RecordingManifest::new();
+        let policy = SessionIdPolicy::default_strict();
+        let envelope = PiiEnvelope::new(
+            &registry,
+            &AllowAllAuth,
+            &manifest,
+            core.pipeline(),
+            &session,
+            core.locale_chain().as_slice(),
+            &policy,
+        );
+        for path in [raw_path.to_str().unwrap(), &protected_path] {
+            let err = envelope
+                .dispatch(
+                    &Principal::new("unit-test"),
+                    "gaze_read_file",
+                    json!({"path": path}),
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, DispatchError::ToolError(ToolError::LimitExceeded(_))),
+                "{err:?}"
+            );
+        }
+        for args in manifest.args.lock().unwrap().iter() {
+            let path = args["path"].as_str().unwrap();
+            assert!(!path.contains("alice@example.invalid"));
+            assert_eq!(
+                session.restore_strict_text(path).unwrap(),
+                raw_path.to_str().unwrap()
+            );
+        }
+        let unknown_path = directory
+            .path()
+            .join("<deadbeef:Email_999>")
+            .join("input.png");
+        std::fs::create_dir_all(unknown_path.parent().unwrap()).unwrap();
+        std::fs::write(&unknown_path, b"oversized").unwrap();
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": unknown_path}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
+            "{err:?}"
+        );
+        assert_eq!(manifest.finishes.load(Ordering::SeqCst), 0);
     }
 
     #[cfg(feature = "ocr-tesseract")]

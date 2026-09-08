@@ -105,6 +105,10 @@ payloads offline under the v0.7.x threat model.
 
 ## Adopter quickstart
 
+Add `gaze-assembly` as a direct dependency alongside `gaze-mcp-core` and
+`gaze` (package `gaze-pii`). It builds the bundled primary recognizers and
+matching locale chain used below.
+
 ```rust
 use std::sync::Arc;
 
@@ -165,7 +169,7 @@ impl AuthHook for MyAuth {
 }
 
 // 3. Build the gaze pipeline + session per conversation.
-let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
+let core = gaze_assembly::CorePipelineConfig::new().build().expect("core pipeline");
 let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
 
 // 4. Register tools.
@@ -177,7 +181,10 @@ registry.register(gaze_mcp_core::core_tools::CleanTool::new()).unwrap();
 let manifest = MyManifest {};
 let auth = MyAuth;
 let policy = SessionIdPolicy::default_strict();
-let _envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &[], &policy);
+let _envelope = PiiEnvelope::new(
+    &registry, &auth, &manifest, core.pipeline(), &session,
+    core.locale_chain().as_slice(), &policy,
+);
 ```
 
 The transport sink (e.g. `gaze-mcp-rmcp::RmcpFrontend`) wraps the envelope
