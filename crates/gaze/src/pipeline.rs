@@ -1,3 +1,6 @@
+mod protection;
+pub use protection::{ProtectionContext, ProtectionError};
+
 use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
@@ -31,6 +34,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("strict protection failed: {0}")]
+    Protection(#[from] ProtectionError),
     #[error("invalid regex: {0}")]
     InvalidRegex(#[source] regex::Error),
     #[error("unknown token: [REDACTED]")]
@@ -800,6 +805,22 @@ impl Pipeline {
         clean_text: &str,
         locale_chain: &[crate::LocaleTag],
     ) -> Result<SafetyNetResult> {
+        self.scan_safety_nets_with_dictionaries(
+            session,
+            clean_text,
+            locale_chain,
+            &DictionaryBundle::default(),
+        )
+    }
+
+    /// Observer scan consuming caller-supplied locale and dictionaries.
+    pub fn scan_safety_nets_with_dictionaries(
+        &self,
+        session: &Session,
+        clean_text: &str,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
+    ) -> Result<SafetyNetResult> {
         let nets_run = self.safety_nets_len();
         if nets_run == 0 {
             return Ok(SafetyNetResult {
@@ -809,7 +830,7 @@ impl Pipeline {
         }
 
         let mut target = ProtectionTarget::Live(session);
-        let report = self.run_safety_nets(
+        let report = self.run_safety_nets_in_context(
             &mut target,
             clean_text,
             &Manifest::default(),
@@ -817,6 +838,8 @@ impl Pipeline {
             locale_chain,
             None,
             SafetyNetDecision::Observe { strict: true },
+            dictionaries,
+            false,
         )?;
         Ok(SafetyNetResult { nets_run, report })
     }
@@ -826,6 +849,22 @@ impl Pipeline {
         session: &Session,
         document: &BTreeMap<String, Value>,
         locale_chain: &[crate::LocaleTag],
+    ) -> Result<SafetyNetResult> {
+        self.scan_safety_nets_structured_with_dictionaries(
+            session,
+            document,
+            locale_chain,
+            &DictionaryBundle::default(),
+        )
+    }
+
+    /// Observer scan consuming caller-supplied locale and dictionaries.
+    pub fn scan_safety_nets_structured_with_dictionaries(
+        &self,
+        session: &Session,
+        document: &BTreeMap<String, Value>,
+        locale_chain: &[crate::LocaleTag],
+        dictionaries: &DictionaryBundle,
     ) -> Result<SafetyNetResult> {
         let nets_run = self.safety_nets_len();
         if nets_run == 0 {
@@ -842,7 +881,7 @@ impl Pipeline {
             &mut target,
             document,
             locale_chain,
-            &DictionaryBundle::default(),
+            dictionaries,
             &mut report,
             LeafOp::ScanOnly,
         )?;
@@ -1085,10 +1124,38 @@ impl Pipeline {
         field_path: Option<&str>,
         decision: SafetyNetDecision,
     ) -> Result<LeakReport> {
+        self.run_safety_nets_in_context(
+            target,
+            clean_text,
+            manifest,
+            document_kind,
+            locale_chain,
+            field_path,
+            decision,
+            &DictionaryBundle::default(),
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn run_safety_nets_in_context(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        clean_text: &str,
+        manifest: &Manifest,
+        document_kind: DocumentKind,
+        locale_chain: &[crate::LocaleTag],
+        field_path: Option<&str>,
+        decision: SafetyNetDecision,
+        dictionaries: &DictionaryBundle,
+        mandatory: bool,
+    ) -> Result<LeakReport> {
         if self.safety_nets_len() == 0 {
             return Ok(LeakReport::default());
         }
-        if self.should_skip_safety_nets(clean_text, manifest, locale_chain, decision)? {
+        if !mandatory
+            && self.should_skip_safety_nets(clean_text, manifest, locale_chain, decision)?
+        {
             return Ok(LeakReport::default());
         }
 
@@ -1097,6 +1164,9 @@ impl Pipeline {
         let active = gaze_types::LocaleChain::from(locale_chain);
         for net in &self.safety_nets {
             if !active.intersects(net.supported_locales()) {
+                if mandatory {
+                    return Err(ProtectionError::UnsupportedCoverage.into());
+                }
                 telemetry.push(LeakReportTelemetry::LocaleSkipped {
                     safety_net_id: net.id().to_string(),
                     document_kind,
@@ -1111,7 +1181,8 @@ impl Pipeline {
                 document_kind,
                 Some(target.audit_session_id()),
                 field_path,
-            );
+            )
+            .with_dictionaries(dictionaries);
             let mut reported = net.check(clean_text, context)?;
             if let Some(path) = field_path {
                 for suspect in &mut reported {
@@ -1130,8 +1201,23 @@ impl Pipeline {
                 .unwrap_or(crate::LocaleTag::Global);
             let selected = registry
                 .resolve(&locale, ModelStage::Pass3SafetyNet)
-                .map_err(model_error_to_safety_net_error)?;
-            if selected.len() > 1 {
+                .map_err(|error| {
+                    if mandatory
+                        && matches!(
+                            error,
+                            ModelError::NoLocaleModelCoverage { .. }
+                                | ModelError::LocaleNotSupported(_)
+                        )
+                    {
+                        Error::Protection(ProtectionError::UnsupportedCoverage)
+                    } else {
+                        Error::SafetyNet(model_error_to_safety_net_error(error))
+                    }
+                })?;
+            if mandatory && !registry.is_empty() && selected.is_empty() {
+                return Err(ProtectionError::UnsupportedCoverage.into());
+            }
+            if !mandatory && selected.len() > 1 {
                 let selected_backend = selected[0].name();
                 let dropped = selected
                     .iter()
@@ -1151,20 +1237,41 @@ impl Pipeline {
                     dropped,
                 )?;
             }
-            if let Some(model) = selected.first() {
+            for model in selected
+                .iter()
+                .take(if mandatory { selected.len() } else { 1 })
+            {
                 let spans = model
                     .infer(
                         ModelInput {
                             text: clean_text.to_string(),
-                            locale,
+                            locale: locale.clone(),
                         },
                         ModelHints {
                             stage: ModelStage::Pass3SafetyNet,
                             max_spans: None,
                         },
                     )
-                    .map_err(model_error_to_safety_net_error)?;
+                    .map_err(|error| {
+                        if mandatory
+                            && matches!(
+                                error,
+                                ModelError::NoLocaleModelCoverage { .. }
+                                    | ModelError::LocaleNotSupported(_)
+                            )
+                        {
+                            Error::Protection(ProtectionError::UnsupportedCoverage)
+                        } else {
+                            Error::SafetyNet(model_error_to_safety_net_error(error))
+                        }
+                    })?;
                 for span in spans {
+                    if mandatory
+                        && (span.byte_range.start >= span.byte_range.end
+                            || clean_text.get(span.byte_range.clone()).is_none())
+                    {
+                        return Err(ProtectionError::Residual.into());
+                    }
                     if let Some(suspect) =
                         model_span_to_suspect(span, model.name(), manifest, field_path)
                     {
@@ -2937,7 +3044,7 @@ fn walk_structured_value(
                 )?;
                 // For RawDocument::Structured, locale gating uses the session-level
                 // locale chain across all fields; fields have no locale annotations.
-                let field_report = pipeline.run_safety_nets(
+                let field_report = pipeline.run_safety_nets_in_context(
                     target,
                     &clean.text,
                     &Manifest::from_spans(clean.manifest),
@@ -2945,13 +3052,15 @@ fn walk_structured_value(
                     locale_chain,
                     Some(field_path),
                     decision,
+                    dictionaries,
+                    false,
                 )?;
                 report.extend(field_report);
                 Ok(Some(Value::String(clean.text)))
             }
             LeafOp::ScanOnly => {
                 if !text.is_empty() {
-                    let field_report = pipeline.run_safety_nets(
+                    let field_report = pipeline.run_safety_nets_in_context(
                         target,
                         text,
                         &Manifest::default(),
@@ -2959,6 +3068,8 @@ fn walk_structured_value(
                         locale_chain,
                         Some(field_path),
                         op.decision(),
+                        dictionaries,
+                        false,
                     )?;
                     report.extend(field_report);
                 }
@@ -3007,7 +3118,7 @@ fn walk_structured_value(
         Value::Null | Value::Bool(_) | Value::I64(_) => {
             if !matches!(op, LeafOp::Pseudonymize) {
                 if let Some(scalar) = value.scalar_to_safety_net_string() {
-                    let field_report = pipeline.run_safety_nets(
+                    let field_report = pipeline.run_safety_nets_in_context(
                         target,
                         &scalar,
                         &Manifest::default(),
@@ -3015,6 +3126,8 @@ fn walk_structured_value(
                         locale_chain,
                         Some(field_path),
                         op.decision(),
+                        dictionaries,
+                        false,
                     )?;
                     report.extend(field_report);
                 }

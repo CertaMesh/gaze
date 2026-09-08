@@ -70,23 +70,51 @@ pub struct ToolResources<'a> {
     session: &'a gaze::Session,
     manifest: &'a dyn ManifestStore,
     locale_chain: &'a [gaze::LocaleTag],
+    dictionaries: &'a gaze::DictionaryBundle,
     _life: PhantomData<&'a ()>,
 }
 
 impl<'a> ToolResources<'a> {
+    #[allow(dead_code)]
     pub(crate) fn new(
         pipeline: &'a gaze::Pipeline,
         session: &'a gaze::Session,
         manifest: &'a dyn ManifestStore,
         locale_chain: &'a [gaze::LocaleTag],
     ) -> Self {
+        Self::new_with_dictionaries(
+            pipeline,
+            session,
+            manifest,
+            locale_chain,
+            crate::dispatch::default_dictionaries(),
+        )
+    }
+
+    pub(crate) fn new_with_dictionaries(
+        pipeline: &'a gaze::Pipeline,
+        session: &'a gaze::Session,
+        manifest: &'a dyn ManifestStore,
+        locale_chain: &'a [gaze::LocaleTag],
+        dictionaries: &'a gaze::DictionaryBundle,
+    ) -> Self {
         Self {
+            dictionaries,
             pipeline,
             session,
             manifest,
             locale_chain,
             _life: PhantomData,
         }
+    }
+
+    /// Caller-supplied dictionaries shared by primary and observer operations.
+    pub fn dictionaries(&self) -> &'a gaze::DictionaryBundle {
+        self.dictionaries
+    }
+    /// Strict boundary context with the same caller-supplied inputs.
+    pub fn protection_context(&self) -> gaze::ProtectionContext<'a> {
+        gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries)
     }
 
     /// Gaze pipeline backing this dispatch.

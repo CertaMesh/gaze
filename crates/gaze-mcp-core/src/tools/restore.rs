@@ -45,6 +45,10 @@ impl RestoreTool {
                     "required": ["token"]
                 }),
             )
+            .with_carriers(
+                crate::CarrierDeclaration::text_fields(&["token"]),
+                crate::CarrierDeclaration::text_fields(&[]),
+            )
             .with_description("Operator-only: restore PII from a manifest token.")
             .with_response_redaction(ResponseRedaction::BypassByOperator),
         }

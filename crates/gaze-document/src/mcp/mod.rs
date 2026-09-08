@@ -8,7 +8,6 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use gaze::{CleanDocument, RawDocument};
 use gaze_mcp_core::{
     Tool, ToolCtx, ToolDescriptor, ToolError, ToolRegistry, ToolRegistryError, ToolResponse,
 };
@@ -74,7 +73,8 @@ impl GazeReadText {
                 }),
             )
             .with_description("Pseudonymize already-extracted text before returning it to an MCP client.")
-            .with_output_schema(response_schema()),
+            .with_output_schema(response_schema())
+            .with_carriers(gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]), response_carriers()),
         }
     }
 }
@@ -140,7 +140,11 @@ impl GazeReadFile {
             .with_description(
                 "Read an image or PDF through OCR and Gaze pseudonymization before MCP return.",
             )
-            .with_output_schema(response_schema()),
+            .with_output_schema(response_schema())
+            .with_carriers(
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["path"]),
+                response_carriers(),
+            ),
             max_file_size,
         }
     }
@@ -186,21 +190,43 @@ fn required_string<'a>(args: &'a serde_json::Value, field: &str) -> Result<&'a s
         .ok_or_else(|| ToolError::InvalidArgs(format!("missing required string field `{field}`")))
 }
 
+fn response_carriers() -> gaze_mcp_core::CarrierDeclaration {
+    use gaze_mcp_core::CarrierSegment::Member;
+    let path = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| Member((*name).into()))
+            .collect::<Vec<_>>()
+    };
+    let mut members = ["clean_markdown", "manifest_id", "file_metadata"]
+        .iter()
+        .map(|name| path(&[name]))
+        .collect::<Vec<_>>();
+    for name in [
+        "source_kind",
+        "ocr_mean_confidence",
+        "bundle_version",
+        "page_count",
+    ] {
+        members.push(path(&["file_metadata", name]));
+    }
+    let numbers = ["ocr_mean_confidence", "bundle_version", "page_count"]
+        .iter()
+        .map(|name| path(&["file_metadata", name]))
+        .collect();
+    gaze_mcp_core::CarrierDeclaration::new(members, numbers)
+}
+
 fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolError> {
     let pipeline = crate::bundle::build_document_pipeline().map_err(map_document_error)?;
+    // The envelope may have already protected arguments. Preserve the session's
+    // exact owned tokens while applying the document-specific primary graph.
+    let mut transaction = ctx.resources().session().begin_transaction();
     let clean = pipeline
-        .pseudonymize_with_context(
-            ctx.resources().session(),
-            RawDocument::Text(text.to_string()),
-            ctx.resources().locale_chain(),
-        )
-        .map_err(|err| ToolError::BackendFailure(format!("document pipeline failed: {err}")))?;
-    match clean {
-        CleanDocument::Text(text) => Ok(text),
-        _ => Err(ToolError::BackendFailure(
-            "document pipeline returned non-text output".to_string(),
-        )),
-    }
+        .protect_text_transaction(&mut transaction, text, ctx.resources().protection_context())
+        .map_err(ToolError::internal)?;
+    transaction.commit().map_err(ToolError::internal)?;
+    Ok(clean)
 }
 
 fn validate_file(path: &Path, max_file_size: u64) -> Result<(), ToolError> {

@@ -30,14 +30,21 @@ use crate::registry::ToolRegistry;
 use crate::session_id::{SessionIdError, SessionIdPolicy};
 use crate::tool::{ResponseRedaction, ToolError, ToolResponse, ToolTier};
 
-/// Errors returned by [`PiiEnvelope::dispatch`]. Each variant maps onto a
-/// distinct manifest [`FailureReason`] (or, on the success path, no failure
-/// reason at all). The dispatcher always finalizes the manifest entry before
-/// returning a `Dispatch_Error` — there is no path that records a failure
-/// without persisting the row.
+/// Typed dispatch failures. Errors before begin have no manifest handle.
+/// Open handles receive one terminal attempt; persistence failure prevents
+/// response egress and must not trigger another terminal call.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum DispatchError {
+    /// Strict boundary failure, containing class-only diagnostics.
+    #[error("protection failed: {0}")]
+    Protection(#[from] gaze::ProtectionError),
+    /// Producer carrier contract violation, containing no input paths or values.
+    #[error("carrier rejected: {0}")]
+    Carrier(#[from] crate::CarrierError),
+    /// Concurrent live mutation invalidated operation staging.
+    #[error("session transaction conflict")]
+    Transaction(#[from] gaze::SessionTransactionError),
     /// Transport supplied an invalid session id (format or entropy).
     #[error("session id rejected: {0}")]
     SessionId(#[from] SessionIdError),
@@ -87,6 +94,8 @@ pub struct PiiEnvelope<'a> {
     pub session: &'a gaze::Session,
     /// Locale chain available to tool bodies that need observer-only checks.
     pub locale_chain: &'a [gaze::LocaleTag],
+    /// Default-empty unless explicitly supplied by the host.
+    pub dictionaries: &'a gaze::DictionaryBundle,
     /// Transport-supplied session id validation policy.
     pub session_id_policy: &'a SessionIdPolicy,
 }
@@ -105,6 +114,7 @@ impl<'a> PiiEnvelope<'a> {
         session_id_policy: &'a SessionIdPolicy,
     ) -> Self {
         Self {
+            dictionaries: default_dictionaries(),
             registry,
             auth,
             manifest,
@@ -115,15 +125,16 @@ impl<'a> PiiEnvelope<'a> {
         }
     }
 
-    /// Dispatch a tool call. The contract is:
-    ///
-    /// - Either a redacted [`ToolResponse`] is returned AND a manifest
-    ///   `finish_call` row was persisted, OR
-    /// - A [`DispatchError`] is returned AND a manifest `fail_call` row was
-    ///   persisted (when a manifest entry was opened — variants returned
-    ///   before `begin_call` cannot persist a row).
-    ///
-    /// There is no third path. Verified by `tests/chokepoint_ordering.rs`.
+    /// Supply dictionaries without changing the compatible empty-bundle constructor.
+    pub fn with_dictionaries(mut self, dictionaries: &'a gaze::DictionaryBundle) -> Self {
+        self.dictionaries = dictionaries;
+        self
+    }
+
+    /// Protect one declared JSON argument operation, invoke with live resources,
+    /// then protect a fresh response operation. Egress requires response commit
+    /// and successful manifest finish. A failed terminal attempt is never retried;
+    /// failed finish retains committed mappings but returns no response.
     pub async fn dispatch(
         &self,
         principal: &Principal,
@@ -155,8 +166,10 @@ impl<'a> PiiEnvelope<'a> {
         };
 
         // 4. Redact raw args. Errors before begin_call also stay pre-manifest.
-        let redacted_args = redact_json(self.pipeline, self.session, &raw_args)
-            .map_err(|e| DispatchError::Redaction(e.to_string()))?;
+        descriptor.argument_carriers().preflight(&raw_args)?;
+        let context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
+        let mut args_transaction = self.session.begin_transaction();
+        let redacted_args = protect_json(self.pipeline, &mut args_transaction, context, &raw_args)?;
 
         // Generate the call id once and reuse it as the manifest handle.
         let call_id = Ulid::new();
@@ -173,6 +186,17 @@ impl<'a> PiiEnvelope<'a> {
             started_at,
         };
         let handle = self.manifest.begin_call(begin_ctx).await?;
+        if let Err(error) = args_transaction.commit() {
+            self.manifest
+                .fail_call(
+                    handle,
+                    FailureReason::RedactionFailed {
+                        message: "session transaction conflict".into(),
+                    },
+                )
+                .await?;
+            return Err(error.into());
+        }
 
         // 6. Build the sealed ToolCtx — pub(crate) constructor; this is the
         //    only call site in the entire crate.
@@ -183,11 +207,12 @@ impl<'a> PiiEnvelope<'a> {
             None => call_id.to_string(),
         };
         let session_handle = SessionHandle::new(&audit_session_id_owned);
-        let resources = ToolResources::new(
+        let resources = ToolResources::new_with_dictionaries(
             self.pipeline,
             self.session,
             self.manifest,
             self.locale_chain,
+            self.dictionaries,
         );
         let ctx = ToolCtx::new_with_resources(
             session_handle,
@@ -214,31 +239,49 @@ impl<'a> PiiEnvelope<'a> {
             }
         };
 
-        // 8. Redact the response payload unless an operator-tier descriptor
-        //    explicitly opted out for restore/export semantics.
-        let response_payload = match (tier, descriptor.response_redaction()) {
-            (ToolTier::Agent, ResponseRedaction::BypassByOperator) => {
-                let reason = FailureReason::Other {
-                    message: "agent tool with BypassByOperator reached dispatch".to_string(),
-                };
-                self.manifest.fail_call(handle, reason).await?;
-                return Err(DispatchError::Redaction(
-                    "agent tool cannot bypass response redaction".to_string(),
-                ));
-            }
-            (_, ResponseRedaction::Apply) => {
-                match redact_json(self.pipeline, self.session, &raw_response.payload) {
-                    Ok(value) => value,
-                    Err(e) => {
-                        let reason = FailureReason::RedactionFailed {
-                            message: e.to_string(),
-                        };
-                        self.manifest.fail_call(handle, reason).await?;
-                        return Err(DispatchError::Redaction(e.to_string()));
+        // Response staging starts after invoke, preserving legitimate live tool changes.
+        let mut response_transaction = None;
+        let response_result: Result<_, DispatchError> =
+            match (tier, descriptor.response_redaction()) {
+                (ToolTier::Agent, ResponseRedaction::BypassByOperator) => {
+                    Err(DispatchError::Redaction("agent bypass rejected".into()))
+                }
+                (_, ResponseRedaction::Apply) => {
+                    match descriptor
+                        .response_carriers()
+                        .preflight(&raw_response.payload)
+                    {
+                        Err(error) => Err(error.into()),
+                        Ok(()) => {
+                            let mut transaction = self.session.begin_transaction();
+                            let result = protect_json(
+                                self.pipeline,
+                                &mut transaction,
+                                context,
+                                &raw_response.payload,
+                            );
+                            response_transaction = Some(transaction);
+                            result.map_err(Into::into)
+                        }
                     }
                 }
+                (ToolTier::Operator, ResponseRedaction::BypassByOperator) => {
+                    Ok(raw_response.payload)
+                }
+            };
+        let response_payload = match response_result {
+            Ok(payload) => payload,
+            Err(error) => {
+                self.manifest
+                    .fail_call(
+                        handle,
+                        FailureReason::RedactionFailed {
+                            message: error.to_string(),
+                        },
+                    )
+                    .await?;
+                return Err(error);
             }
-            (ToolTier::Operator, ResponseRedaction::BypassByOperator) => raw_response.payload,
         };
 
         // 9. Compute SnapshotRef on the redacted bytes (out-of-row metadata
@@ -262,82 +305,95 @@ impl<'a> PiiEnvelope<'a> {
         // 10. Finalize the manifest entry. If finish_call fails, the redacted
         //     response is NOT returned — the chokepoint contract demands the
         //     response only escape after the manifest row is durable.
+        if let Some(transaction) = response_transaction {
+            if let Err(error) = transaction.commit() {
+                self.manifest
+                    .fail_call(
+                        handle,
+                        FailureReason::RedactionFailed {
+                            message: "session transaction conflict".into(),
+                        },
+                    )
+                    .await?;
+                return Err(error.into());
+            }
+        }
+        // A terminal attempt consumes the handle even when persistence fails.
+        // A failed finish retains committed response mappings but returns no payload.
         self.manifest.finish_call(handle, snapshot).await?;
 
         Ok(ToolResponse::json(response_payload))
     }
 }
 
-/// Walk a JSON value and run the gaze pipeline on every string leaf. Numbers,
-/// booleans, and nulls pass through unchanged. Object keys are preserved
-/// verbatim (keys aren't redacted — the chokepoint contract redacts values,
-/// not field names).
-fn redact_json(
+pub(crate) fn default_dictionaries() -> &'static gaze::DictionaryBundle {
+    static DEFAULT: std::sync::LazyLock<gaze::DictionaryBundle> =
+        std::sync::LazyLock::new(gaze::DictionaryBundle::default);
+    &DEFAULT
+}
+
+fn protect_json(
     pipeline: &gaze::Pipeline,
-    session: &gaze::Session,
+    transaction: &mut gaze::SessionTransaction<'_>,
+    context: gaze::ProtectionContext<'_>,
     value: &serde_json::Value,
-) -> Result<serde_json::Value, gaze::Error> {
+) -> Result<serde_json::Value, gaze::ProtectionError> {
+    pipeline.validate_protection_context(context)?;
+    // Freeze interpretation for the whole operation, not just the current leaf.
+    let original_tokens = transaction.tokens();
+    let output = protect_json_leaves(pipeline, transaction, context, value)?;
+    for token in transaction
+        .tokens()
+        .iter()
+        .filter(|token| !original_tokens.contains(token))
+    {
+        if json_contains_literal(value, token) {
+            return Err(gaze::ProtectionError::Provenance);
+        }
+    }
+    Ok(output)
+}
+
+fn json_contains_literal(value: &serde_json::Value, token: &str) -> bool {
+    match value {
+        serde_json::Value::String(text) => text.contains(token),
+        serde_json::Value::Array(values) => values.iter().any(|v| json_contains_literal(v, token)),
+        serde_json::Value::Object(values) => {
+            values.values().any(|v| json_contains_literal(v, token))
+        }
+        _ => false,
+    }
+}
+
+fn protect_json_leaves(
+    pipeline: &gaze::Pipeline,
+    transaction: &mut gaze::SessionTransaction<'_>,
+    context: gaze::ProtectionContext<'_>,
+    value: &serde_json::Value,
+) -> Result<serde_json::Value, gaze::ProtectionError> {
     use serde_json::Value as JsonValue;
     match value {
-        JsonValue::String(s) => Ok(JsonValue::String(redact_json_string(pipeline, session, s)?)),
-        JsonValue::Array(arr) => {
-            let mut out = Vec::with_capacity(arr.len());
-            for item in arr {
-                out.push(redact_json(pipeline, session, item)?);
-            }
-            Ok(JsonValue::Array(out))
-        }
-        JsonValue::Object(map) => {
-            let mut out = serde_json::Map::with_capacity(map.len());
-            for (k, v) in map {
-                out.insert(k.clone(), redact_json(pipeline, session, v)?);
-            }
-            Ok(JsonValue::Object(out))
-        }
-        // Null / Bool / Number — no string content to redact.
+        JsonValue::String(text) => Ok(JsonValue::String(pipeline.protect_text_transaction(
+            transaction,
+            text,
+            context,
+        )?)),
+        JsonValue::Array(values) => values
+            .iter()
+            .map(|value| protect_json_leaves(pipeline, transaction, context, value))
+            .collect::<Result<Vec<_>, _>>()
+            .map(JsonValue::Array),
+        JsonValue::Object(values) => values
+            .iter()
+            .map(|(key, value)| {
+                Ok((
+                    key.clone(),
+                    protect_json_leaves(pipeline, transaction, context, value)?,
+                ))
+            })
+            .collect::<Result<serde_json::Map<_, _>, _>>()
+            .map(JsonValue::Object),
         other => Ok(other.clone()),
-    }
-}
-
-fn redact_json_string(
-    pipeline: &gaze::Pipeline,
-    session: &gaze::Session,
-    value: &str,
-) -> Result<String, gaze::Error> {
-    let mut out = String::with_capacity(value.len());
-    let mut cursor = 0usize;
-    for token in gaze::token_shape::pattern().find_iter(value) {
-        if !session.contains_token(token.as_str()) {
-            continue;
-        }
-        out.push_str(&redact_json_string_segment(
-            pipeline,
-            session,
-            &value[cursor..token.start()],
-        )?);
-        out.push_str(token.as_str());
-        cursor = token.end();
-    }
-    out.push_str(&redact_json_string_segment(
-        pipeline,
-        session,
-        &value[cursor..],
-    )?);
-    Ok(out)
-}
-
-fn redact_json_string_segment(
-    pipeline: &gaze::Pipeline,
-    session: &gaze::Session,
-    segment: &str,
-) -> Result<String, gaze::Error> {
-    if segment.is_empty() {
-        return Ok(String::new());
-    }
-    let clean = pipeline.redact(session, gaze::RawDocument::Text(segment.to_string()))?;
-    match clean {
-        gaze::CleanDocument::Text(text) => Ok(text),
-        _ => Err(gaze::Error::UnsupportedRawDocumentVariant),
     }
 }
 
@@ -453,7 +509,14 @@ mod tests {
         };
 
         let payload = json!(format!("{token}alice@example.invalid"));
-        let redacted = redact_json(&pipeline, &session, &payload).expect("redact json");
+        let mut transaction = session.begin_transaction();
+        let redacted = protect_json(
+            &pipeline,
+            &mut transaction,
+            gaze::ProtectionContext::strict(&[gaze::LocaleTag::Global], default_dictionaries()),
+            &payload,
+        )
+        .expect("protect json");
 
         assert_eq!(redacted, json!(format!("{token}{token}")));
     }

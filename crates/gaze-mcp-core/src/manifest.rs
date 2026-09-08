@@ -189,9 +189,10 @@ pub trait ManifestStore: Send + Sync {
     /// this AFTER the tool returned and AFTER its response was redacted,
     /// passing an out-of-row [`SnapshotRef`] to the redacted response bytes.
     ///
-    /// The chokepoint contract requires this call to complete (or
-    /// [`fail_call`](Self::fail_call) to be called) before the dispatcher
-    /// returns the response to the transport.
+    /// Attempting this terminal operation consumes the handle's terminal
+    /// opportunity even on persistence failure. The caller must never then
+    /// attempt `fail_call`. Only successful finish permits response egress.
+    /// Response mappings commit before finish; failed finish retains them.
     async fn finish_call(
         &self,
         handle: CallHandle,
@@ -199,9 +200,10 @@ pub trait ManifestStore: Send + Sync {
     ) -> Result<(), ManifestError>;
 
     /// Finalize a manifest entry on the failure path. The dispatcher calls
-    /// this when auth, the tool body, or response redaction returned an error.
+    /// this when the tool body or response protection returned an error.
     /// The manifest entry is closed with a [`FailureReason`] so operators can
-    /// review the call later.
+    /// review the call later. Attempting this consumes the terminal opportunity
+    /// even on persistence failure; neither terminal method may be retried.
     async fn fail_call(
         &self,
         handle: CallHandle,

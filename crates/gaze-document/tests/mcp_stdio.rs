@@ -85,7 +85,7 @@ struct EnvelopeHost {
     registry: gaze_mcp_core::ToolRegistry,
     auth: AllowAllAuth,
     manifest: Arc<RecordingManifest>,
-    pipeline: gaze::Pipeline,
+    pipeline: gaze_assembly::CorePipeline,
     session: gaze::Session,
     session_id_policy: SessionIdPolicy,
 }
@@ -102,7 +102,9 @@ impl EnvelopeHost {
             registry,
             auth: AllowAllAuth,
             manifest: Arc::new(RecordingManifest::new()),
-            pipeline: gaze::Pipeline::builder().build().expect("pipeline"),
+            pipeline: gaze_assembly::CorePipelineConfig::new()
+                .build()
+                .expect("pipeline"),
             session: gaze::Session::new(gaze::Scope::Ephemeral).expect("session"),
             session_id_policy: SessionIdPolicy::default_strict(),
         }
@@ -122,9 +124,9 @@ impl DispatchHost for EnvelopeHost {
             &self.registry,
             &self.auth,
             self.manifest.as_ref(),
-            &self.pipeline,
+            self.pipeline.pipeline(),
             &self.session,
-            &[gaze::LocaleTag::Global],
+            self.pipeline.locale_chain().as_slice(),
             &self.session_id_policy,
         );
         envelope
@@ -199,6 +201,38 @@ async fn stdio_document_tools_return_clean_payloads() {
         .expect("text tool call succeeds");
     let text_payload = parse_success_payload(text_result);
     assert_clean_response(&text_payload, "text");
+    let restored = host
+        .session
+        .restore_strict_text(text_payload["clean_markdown"].as_str().unwrap())
+        .expect("actual document restore");
+    assert!(restored.contains("jane.doe@example.invalid"));
+    assert!(restored.contains("Jane Doe"));
+
+    let custom = host
+        .session
+        .tokenize(
+            &gaze::PiiClass::Custom("class_alpha".into()),
+            "synthetic alpha",
+        )
+        .unwrap();
+    let fake = host
+        .session
+        .format_preserving_fake(&gaze::PiiClass::Email, "alice@example.invalid")
+        .unwrap();
+    let echo_input = format!("{custom}{custom} {fake}");
+    let echo_result = client
+        .call_tool(
+            CallToolRequestParams::new("gaze_read_text")
+                .with_arguments(json!({"text":echo_input}).as_object().unwrap().clone()),
+        )
+        .await
+        .unwrap();
+    let echo_payload = parse_success_payload(echo_result);
+    let echo_clean = echo_payload["clean_markdown"].as_str().unwrap();
+    assert!(echo_clean.contains(&custom));
+    assert!(echo_clean.contains(&fake));
+    let echo_restored = host.session.restore_strict_text(echo_clean).unwrap();
+    assert!(echo_restored.contains("synthetic alphasynthetic alpha alice@example.invalid"));
 
     let file_args = json!({ "path": synthetic_image_path() })
         .as_object()
@@ -221,8 +255,8 @@ async fn stdio_document_tools_return_clean_payloads() {
     let file_payload = parse_success_payload(file_result);
     assert_clean_response(&file_payload, "image");
 
-    assert_eq!(host.manifest.begins.load(Ordering::SeqCst), 2);
-    assert_eq!(host.manifest.finishes.load(Ordering::SeqCst), 2);
+    assert_eq!(host.manifest.begins.load(Ordering::SeqCst), 3);
+    assert_eq!(host.manifest.finishes.load(Ordering::SeqCst), 3);
     assert_eq!(host.manifest.fails.load(Ordering::SeqCst), 0);
 
     client.cancel().await.expect("client cancels");

@@ -74,3 +74,6 @@ pub use crate::manifest::{
 pub use crate::registry::{ToolRegistry, ToolRegistryError};
 pub use crate::session_id::{SessionIdError, SessionIdFormat, SessionIdPolicy};
 pub use crate::tool::{ResponseRedaction, Tool, ToolDescriptor, ToolError, ToolResponse, ToolTier};
+
+mod carrier;
+pub use carrier::{CarrierDeclaration, CarrierError, CarrierPath, CarrierSegment};

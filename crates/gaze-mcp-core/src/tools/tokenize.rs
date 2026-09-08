@@ -28,6 +28,10 @@ impl TokenizeFieldTool {
                     "required": ["value"]
                 }),
             )
+            .with_carriers(
+                crate::CarrierDeclaration::text_fields(&["value"]),
+                crate::CarrierDeclaration::text_fields(&["token"]),
+            )
             .with_description("Tokenize a single field value via the gaze pipeline."),
         }
     }

@@ -1249,7 +1249,14 @@ pub trait SafetyNet: Send + Sync {
 #[derive(Debug, Clone, Copy)]
 #[non_exhaustive]
 pub struct SafetyNetContext<'a> {
-    /// Tokens emitted by the pseudonymization pipeline for this text segment.
+    /// Optional caller-supplied dictionaries. `new` leaves this unset; pipeline
+    /// wrappers supply the caller bundle or `Some(empty default)`. Locale-aware
+    /// model backends have their separate text/locale interface without dictionaries.
+    pub dictionaries: Option<&'a DictionaryBundle>,
+    /// Tokens emitted by the pipeline or verified as owned at a strict boundary.
+    /// At that boundary, raw spans use expanded-owner input coordinates, not
+    /// offsets into the literal token-bearing input. Do not index that literal
+    /// input with reconstructed raw spans.
     pub manifest: &'a Manifest,
     /// Active session-level locale chain. For `RawDocument::Structured`, locale
     /// gating uses this same session-level chain across all fields; structured
@@ -1264,6 +1271,12 @@ pub struct SafetyNetContext<'a> {
 }
 
 impl<'a> SafetyNetContext<'a> {
+    /// Supplies the same dictionary bundle used by primary detection.
+    pub fn with_dictionaries(mut self, dictionaries: &'a DictionaryBundle) -> Self {
+        self.dictionaries = Some(dictionaries);
+        self
+    }
+
     /// Builds safety-net context for one clean text segment.
     pub fn new(
         manifest: &'a Manifest,
@@ -1273,6 +1286,7 @@ impl<'a> SafetyNetContext<'a> {
         field_path: Option<&'a str>,
     ) -> Self {
         Self {
+            dictionaries: None,
             manifest,
             locale_chain,
             document_kind,

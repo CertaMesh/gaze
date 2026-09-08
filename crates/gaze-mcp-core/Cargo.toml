@@ -35,5 +35,6 @@ core-tools = []
 operator-tier = []
 
 [dev-dependencies]
+gaze = { path = "../gaze", version = "0.12.0", package = "gaze-pii", features = ["test-support"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 trybuild = "1"

@@ -433,6 +433,10 @@ mod tests {
 }
 
 impl RecognizerRegistry {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
     pub fn builder() -> RecognizerRegistryBuilder {
         RecognizerRegistryBuilder::default()
     }

@@ -35,6 +35,7 @@ impl RestoreStrictTool {
                     "required": ["text"]
                 }),
             )
+            .with_carriers(crate::CarrierDeclaration::text_fields(&["text"]), crate::CarrierDeclaration::text_fields(&[]))
             .with_description(
                 "Operator-only: strict restore that fails if any token is missing.",
             )

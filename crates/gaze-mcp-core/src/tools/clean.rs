@@ -41,6 +41,10 @@ impl CleanTool {
                     "required": ["text"]
                 }),
             )
+            .with_carriers(
+                crate::CarrierDeclaration::text_fields(&["text"]),
+                crate::CarrierDeclaration::text_fields(&["text"]),
+            )
             .with_description("Redact PII in the supplied text via the gaze pipeline."),
         }
     }

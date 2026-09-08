@@ -132,7 +132,10 @@ async fn finish_call_failure_returns_error_instead_of_tool_response() {
     let mut registry = ToolRegistry::new();
     registry
         .register(EchoTool {
-            descriptor: ToolDescriptor::agent("echo", json!({ "type": "object" })),
+            descriptor: ToolDescriptor::agent("echo", json!({ "type": "object" })).with_carriers(
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+                Default::default(),
+            ),
         })
         .expect("register echo tool");
 
@@ -145,7 +148,10 @@ async fn finish_call_failure_returns_error_instead_of_tool_response() {
             fails: AtomicUsize::new(0),
             reject_failure: false,
         },
-        pipeline: gaze::Pipeline::builder().build().expect("pipeline"),
+        pipeline: gaze_assembly::CorePipelineConfig::new()
+            .build()
+            .expect("pipeline")
+            .into_pipeline(),
         session: gaze::Session::new(gaze::Scope::Ephemeral).expect("session"),
         session_id_policy: SessionIdPolicy::default_strict(),
     });
@@ -236,7 +242,10 @@ async fn assert_tool_error_egress(reject_failure: bool) {
             fails: AtomicUsize::new(0),
             reject_failure,
         },
-        pipeline: gaze::Pipeline::builder().build().expect("pipeline"),
+        pipeline: gaze_assembly::CorePipelineConfig::new()
+            .build()
+            .expect("pipeline")
+            .into_pipeline(),
         session: gaze::Session::new(gaze::Scope::Ephemeral).expect("session"),
         session_id_policy: SessionIdPolicy::default_strict(),
     });
