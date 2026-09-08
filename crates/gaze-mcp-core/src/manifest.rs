@@ -68,6 +68,9 @@ pub struct BeginCallContext<'a> {
 /// Reason a manifest call did not complete successfully. The dispatcher always
 /// supplies one of these on the failure path so the manifest row carries
 /// enough context to drive operator review later.
+///
+/// These records are trusted-side diagnostics and may contain PII. Transports
+/// must never serialize manifest records into model-facing responses.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FailureReason {
@@ -75,7 +78,8 @@ pub enum FailureReason {
     ToolError {
         /// Stable error class string, e.g. `"invalid-args"`.
         class: String,
-        /// Human-readable error message; safe to persist (post-redaction).
+        /// Trusted-side diagnostic text; may contain unredacted PII from the tool
+        /// or backend. Never expose this field to a model-facing transport.
         message: String,
     },
     /// Authorization denied by the [`crate::auth::AuthHook`] before the tool
