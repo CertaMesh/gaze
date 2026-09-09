@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
+from bench_subprocess import BenchSubprocess, producer_boundary
+
 
 SCORECARD_SCHEMA_VERSION = 4
 READABLE_SCORECARD_SCHEMA_VERSIONS = frozenset({3, SCORECARD_SCHEMA_VERSION})
@@ -1486,6 +1488,7 @@ def _validate_validator_probe_response(
     }
 
 
+@producer_boundary
 def collect_validator_measurements(
     probe_binary: Path,
     documents: Sequence[Document],
@@ -1495,32 +1498,11 @@ def collect_validator_measurements(
     document_ids = {document.uid for document in documents}
     unknown_ids = measured_ids - document_ids
     if unknown_ids:
-        raise ValueError(
-            "validator measurement IDs are outside the document population: "
-            + ", ".join(sorted(unknown_ids))
-        )
-    process = subprocess.Popen(
-        [str(probe_binary)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        encoding="utf-8",
-        bufsize=1,
-    )
-    assert process.stdin is not None
-    assert process.stdout is not None
-    assert process.stderr is not None
-    handshake_line = process.stdout.readline()
-    if not handshake_line:
-        stderr = process.stderr.read()
-        raise RuntimeError(
-            "validator recall probe exited before its handshake"
-            + (f": {stderr.strip()}" if stderr.strip() else "")
-        )
-    handshake = _validate_validator_probe_handshake(json.loads(handshake_line))
+        raise ValueError("validator measurement population mismatch")
     responses: dict[str, dict[str, object]] = {}
-    try:
+    with BenchSubprocess([str(probe_binary)]) as process:
+        handshake = _validate_validator_probe_handshake(process.receive_handshake())
+        process.check_message_deadline()
         for document in documents:
             request = {
                 "fixture_id": document.uid,
@@ -1539,31 +1521,12 @@ def collect_validator_measurements(
                 ],
                 "measure_predictions": document.uid in measured_ids,
             }
-            process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
-            process.stdin.flush()
-            response_line = process.stdout.readline()
-            if not response_line:
-                stderr = process.stderr.read()
-                raise RuntimeError(
-                    f"validator recall probe exited before {document.uid}"
-                    + (f": {stderr.strip()}" if stderr.strip() else "")
-                )
             responses[document.uid] = _validate_validator_probe_response(
                 document,
-                json.loads(response_line),
+                process.exchange(request),
                 predictions_expected=document.uid in measured_ids,
             )
-    finally:
-        process.stdin.close()
-        return_code = process.wait(timeout=30)
-        stderr = process.stderr.read()
-        process.stdout.close()
-        process.stderr.close()
-        if return_code != 0:
-            raise RuntimeError(
-                f"validator recall probe failed with status {return_code}"
-                + (f": {stderr.strip()}" if stderr.strip() else "")
-            )
+            process.check_message_deadline()
     return {**handshake, "documents": responses}
 
 
@@ -1720,6 +1683,7 @@ def validator_recall_by_label(
     return result
 
 
+@producer_boundary
 def run_config(
     repo_root: Path,
     binary: Path,
@@ -1756,23 +1720,7 @@ def run_config(
     if opf_daemon_socket is not None:
         environment["GAZE_OPF_DAEMON_SOCKET"] = str(opf_daemon_socket)
     command = [str(binary), "--config", config]
-    diagnostics_dir.mkdir(parents=True, exist_ok=True)
-    stderr_path = diagnostics_dir / f"{config}.stderr.log"
-    stderr_handle = stderr_path.open("w", encoding="utf-8")
     started = time.perf_counter()
-    process = subprocess.Popen(
-        command,
-        cwd=repo_root,
-        env=environment,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=stderr_handle,
-        text=True,
-        encoding="utf-8",
-        bufsize=1,
-    )
-    assert process.stdin is not None
-    assert process.stdout is not None
 
     overall = MetricAccumulator()
     per_language: defaultdict[str, MetricAccumulator] = defaultdict(MetricAccumulator)
@@ -1791,27 +1739,22 @@ def run_config(
 
     def exchange(document: Document) -> tuple[dict[str, object], float]:
         nonlocal first_response_ms
+        if process.message_deadline:
+            process.check_message_deadline()
         request = {
             "fixture_id": document.uid,
             "locale_chain": document.locale_chain,
             "text": document.text,
         }
         request_started = time.perf_counter()
-        process.stdin.write(json.dumps(request, ensure_ascii=False) + "\n")
-        process.stdin.flush()
-        response_line = process.stdout.readline()
-        if not response_line:
-            return_code = process.poll()
-            raise RuntimeError(
-                f"benchmark runner exited before {document.uid}; status={return_code}"
-            )
-        response = validate_response(document, json.loads(response_line))
+        response = validate_response(document, process.exchange(request))
+        process.check_message_deadline()
         validated_at = time.perf_counter()
         if first_response_ms is None:
             first_response_ms = (validated_at - started) * 1000.0
         return response, (validated_at - request_started) * 1000.0
 
-    try:
+    with BenchSubprocess(command, cwd=repo_root, env=environment) as process:
         for warmup_index in range(warmup_count):
             warmup_document = documents[warmup_index % len(documents)]
             response, round_trip_ms = exchange(warmup_document)
@@ -1907,12 +1850,7 @@ def run_config(
                     f"{config}: scored {index + 1}/{len(documents)} documents",
                     file=sys.stderr,
                 )
-    finally:
-        process.stdin.close()
-        return_code = process.wait(timeout=30)
-        stderr_handle.close()
-        if return_code != 0:
-            raise RuntimeError(f"benchmark runner failed with status {return_code}")
+        process.check_message_deadline()
 
     wall_seconds = time.perf_counter() - started
     clean_ms = success_timing.get("clean_ms", [])
@@ -1936,7 +1874,7 @@ def run_config(
         "stage_counts": dict(sorted(pipeline_error_stages.items())),
     }
     failed_closed_count = len(failed_closed_documents)
-    return {
+    result = {
         "config": config,
         "scored_population": scored_population,
         "failed_closed_population": failed_closed_population,
@@ -1989,10 +1927,11 @@ def run_config(
             "cold_start_to_first_validated_response_ms": first_response_ms,
             "warmup_count": warmup_count,
             "discarded_warmup_samples": discarded_warmup_samples,
-            "stderr_log": str(stderr_path.relative_to(repo_root)),
-            "stderr_bytes": stderr_path.stat().st_size,
         },
     }
+
+    process.check_deadline()
+    return result
 
 
 def git_metadata(repo_root: Path) -> dict[str, object]:
