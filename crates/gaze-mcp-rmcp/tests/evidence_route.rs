@@ -292,6 +292,14 @@ fn host(
         argument,
     })
 }
+fn string_leaves(value: &Value) -> usize {
+    match value {
+        Value::String(_) => 1,
+        Value::Array(items) => items.iter().map(string_leaves).sum(),
+        Value::Object(items) => items.values().map(string_leaves).sum(),
+        _ => 0,
+    }
+}
 fn fresh_session() -> Arc<Session> {
     Arc::new(must(Session::new(Scope::Ephemeral)))
 }
@@ -390,13 +398,12 @@ fn occurrence(session: &Session, observed: &str, expected: &str, anchor: bool) -
             return Verdict::Partial(fragment.len());
         }
     }
-    if let Ok(r) = restored {
-        if r.authorized_output_ranges.len() == 1
-            && r.text == expected
-            && r.authorized_output_ranges[0] == (0..expected.len())
-        {
-            return Verdict::Protected;
-        }
+    if let Ok(r) = restored
+        && r.authorized_output_ranges.len() == 1
+        && r.text == expected
+        && r.authorized_output_ranges[0] == (0..expected.len())
+    {
+        return Verdict::Protected;
     }
     Verdict::Unknown
 }
@@ -937,7 +944,10 @@ async fn protected_success_and_golden_receipt() {
         &authored,
         EMAIL,
     );
-    c.add("protected_leaves", h.spans.lock().unwrap().len());
+    c.add(
+        "protected_leaves",
+        string_leaves(&h.argument.lock().unwrap()) + string_leaves(&v),
+    );
     c.observe_host(&h, 2);
     assert!(
         h.session
@@ -1328,7 +1338,7 @@ async fn private_failure_canary_child() {
     let wire = must(serde_json::to_string(&r));
     assert!(!wire.contains(EMAIL), "error-payload-canary");
     let _ = std::panic::catch_unwind(|| {
-        assert!(false, "static-assertion-canary");
+        panic!("static-assertion-canary");
     });
     for size in [0, 300000] {
         let payload = format!("{{{}", " ".repeat(size));
