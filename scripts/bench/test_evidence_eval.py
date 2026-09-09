@@ -219,7 +219,8 @@ class ExportTests(unittest.TestCase):
             # Attribution is deliberately observed, but cannot prove survival zero.
             observed = frozenset(m for m,v in zip(metrics,values) if v is not None) | {'gold_occurrences_attribution_not_measured'}
             kw = {ee.METRIC_FIELDS[m]:v for m,v in zip(metrics,values) if v is not None}
-            r0 = ee.DocRecord(outcome='UNKNOWN_EGRESS', observed_metrics=observed, gold_occurrences=2, gold_bytes=30, **kw)
+            r0 = ee.DocRecord(outcome='UNKNOWN_EGRESS', observed_metrics=observed, gold_occurrences=2, gold_bytes=30,
+                gold_occurrences_attribution_not_measured=int(sum(v or 0 for v in values[1:]) < 2), **kw)
             known = any(v == 1 for v in values) or all(v == 0 for v in values)
             for mixed in (False, True):
                 e = ee.PrivateEvaluator(inventory()); e.add('candidate','fixture_a',r0)
@@ -233,9 +234,10 @@ class ExportTests(unittest.TestCase):
                 self.assertTrue(all(v == 'NOT_EVALUABLE' for v in r['intervals'].values()), 'unknown-predicate-interval')
 
     def test_planned_counts_have_no_paired_estimand(self):
-        r = self.export()
         for metric in ee.PLAN_METRICS:
             self.assertTrue(paired().paired_interval(metric,declaration()) == 'NOT_EVALUABLE', 'planned-no-estimand')
+        r = self.export()
+        for metric in ee.PLAN_METRICS:
             self.assertTrue(r['intervals'].get(metric,'NOT_EVALUABLE') == 'NOT_EVALUABLE', 'planned-no-estimand')
 
     def test_local_membership_order_is_actually_stamped(self):
@@ -382,6 +384,7 @@ def run_rust_mutation_proof():
         ('MUT-GATE-GOLD', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["gold_survival_oracle"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'missing_measurements_and_ambiguous_only_gates'),
         ('MUT-GATE-FP', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["false_positive_negative_control"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'missing_measurements_and_ambiguous_only_gates'),
     ])
+    cases.extend([('MUT-RAW-COVERAGE-COUNT', [('"egress_raw_value_mismatches" => c.1.get("raw_compared") != c.1.get("restore"),', '"egress_raw_value_mismatches" => false,')], 'r2_mixed_raw_comparison_coverage'), ('MUT-RAW-COVERAGE-GATE', [('\n        c.1.get("raw_compared").copied().unwrap_or(0) != restores', '\n        false')], 'r2_mixed_raw_comparison_coverage'), ('MUT-NEGATIVE-COVERAGE-COUNT', [('\n                c.1.get("negative_compared") != c.1.get("negative")', '\n                false')], 'r2_negative_predicate_coverage'), ('MUT-NEGATIVE-COVERAGE-GATE', [('\n        c.1.get("negative_compared") != c.1.get("negative")', '\n        false')], 'r2_negative_predicate_coverage'), ('MUT-PRODUCER-GRADE-RUST', [('allowed_derivation(route, m, text(g))', '(allowed_derivation(route, m, text(g)) || true)')], 'r2_producer_grade_and_identity_binding'), ('MUT-PRODUCER-CELL-RUST', [('    if !match route {', '    if false && !match route {')], 'r2_producer_grade_and_identity_binding'), ('MUT-PLAN-INTERVAL-RUST', [(') && v != "NOT_EVALUABLE"', ') && false && v != "NOT_EVALUABLE"')], 'r2_planned_interval_refused')])
     env = os.environ.copy()
     env.update(RUSTUP_TOOLCHAIN='1.96.0', RUSTC=str(Path(cargo).with_name('rustc')), RUSTDOC=str(Path(cargo).with_name('rustdoc')))
     markers = {
@@ -394,6 +397,7 @@ def run_rust_mutation_proof():
         'MUT-CANARY-RUST':'private-output-canary',
     }
     markers.update({'MUT-ROUTE-AVAILABILITY':'absent-measurements', 'MUT-EXTRA-SURFACES':'extra-surface-unknown', 'MUT-GATE-INTEGRITY':'swap-gate-fail', 'MUT-GATE-STRING':'string-gate-fail', 'MUT-GATE-GOLD':'unperformed-gate', 'MUT-GATE-FP':'unperformed-gate'})
+    markers.update({'MUT-RAW-COVERAGE-COUNT': 'raw-incomplete-count', 'MUT-RAW-COVERAGE-GATE': 'raw-coverage-gate', 'MUT-NEGATIVE-COVERAGE-COUNT': 'negative-incomplete-count', 'MUT-NEGATIVE-COVERAGE-GATE': 'negative-coverage-gate', 'MUT-PRODUCER-GRADE-RUST': 'producer-metric-grade', 'MUT-PRODUCER-CELL-RUST': 'producer-cell-policy', 'MUT-PLAN-INTERVAL-RUST': 'planned-interval-refused'})
     results = []
     for identifier,edits,target in cases:
         mutated = source

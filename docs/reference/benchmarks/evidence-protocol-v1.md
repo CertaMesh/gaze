@@ -99,6 +99,19 @@ in `EVALUATOR_DERIVATIONS`: authored inventory denominators, private authored
 record sums, and not_measured for every unperformed runtime check. Availability
 can downgrade a declared metric to not_measured or an observed subset lower bound;
 it never upgrades provenance merely because a numeric field exists.
+Both validators bind the emitting route to its cell/policy pair and a per-metric
+allowed derivation map. MCP core pairs with core.rule_floor.v1; MCP controlled
+pairs with controlled.email_only.v1. Evaluator plans allow planned_inventory;
+evaluator survival, attribution, false-positive and unknown-case counts allow
+private_authored_records or observed_subset_lower_bound. Other evaluator metrics
+are not_measured. Route observer metrics allow observer_native; survival,
+attribution, false positives and the two counted integrity analogues allow
+egress_reconstructed; planned/restore/tool/terminal/protected-leaf counts allow
+route_native. Geometry and manifest invariants retain their respective
+construction/invariant grades. Every metric permits a not_measured downgrade.
+No route metric uses observed_subset_lower_bound: incomplete comparisons are
+omitted. A foreign producer grade, a grade moved to the wrong metric, or a
+wrong cell/policy pair refuses with protocol_identity_mismatch (Rust: false).
 Non-counting grades are `invariant_enforced_not_counted`,
 `not_applicable_by_construction`, `not_measured`. Counts are exactly the
 counting-grade subset of the complete derivation inventory. Every metric at
@@ -168,6 +181,19 @@ observed_metrics explicitly names evaluated count operands; default numeric
 fields do not establish availability. An observed zero remains numeric. Missing
 records, unobserved unknown frames and failed preflight have no egress counts.
 A mixed cell exports only explicitly graded observed subset sums.
+An authoritative plan bounds each case's surviving bytes and the sum of full,
+partial and attribution-unknown occurrences. Optional record denominators must
+agree with known plan denominators; they default to unavailable, not zero.
+Missing records retain available planned counts without measured egress zeros.
+Plan counts are not paired estimands: their intervals are NOT_EVALUABLE or absent;
+both consumers refuse numeric plan intervals.
+
+The unknown-egress case predicate is three-valued: any observed positive byte,
+full-occurrence or partial-occurrence operand proves positive; all three observed
+zeros prove zero. Attribution alone proves neither. A missing operand otherwise
+leaves that case unavailable. An observed subset gets observed_subset_lower_bound
+and a NOT_EVALUABLE gate; only complete predicate coverage permits PASS. The count
+is omitted when no case predicate is known.
 No duplicate keys; groups have one stratum and one positive finite weight.
 Records cannot alter this metadata. Unknown/duplicate additions are refused.
 Finalization fills absent cases in both arms. The paired set is the intersection
@@ -267,7 +293,13 @@ detector run, new runtime API or instrumentation is permitted.
 
 Measurement gates require a performed check and evaluated denominator. Missing
 restore/negative/gold checks are NOT_EVALUABLE, ambiguity prevents a gold PASS,
-and actual token swaps or byte mismatches produce FAIL receipts. Tests that
+and actual token swaps or byte mismatches produce FAIL receipts. Each restore
+attempt contributes an expected raw-comparison operand; exactly one authorized
+range contributes a performed comparison. Raw mismatch counts are omitted unless
+all expected comparisons were performed. A negative-control predicate is known
+only for full preservation or exact owned-token restoration; partial/unknown
+verdicts remain unavailable. Its counts are likewise omitted on incomplete
+coverage. Known failures override incompleteness for both gates. Tests that
 mutate a restore operand label that receipt as a test-only falsifier.
 
 Restoration compares exact **owner-authorized string bytes**. Parsed JSON
@@ -318,7 +350,15 @@ helper-call assertion. Stamp separation checks `local_membership_order_verified`
 Python canaries fork with a disposable child cwd, capture both descriptors
 privately, exercise complete success/refusal/export paths, inspect actual files,
 and remove the directory. Forking preserves the in-memory implementation mutant.
-No probe runs with the original checkout as its child cwd.
+No probe runs with the original checkout as its child cwd. Closed-exception
+violations use a dedicated child exit status and static parent marker; no private
+exception text is printed. MUT-VOCAB-PY uses the same one-test, zero-error,
+expected-marker kill predicate and records failure_marker like every other row.
+The 67 prior probes remain; MUT-INVENTORY now bypasses unknown-key lookup using
+the first planned case, and MUT-ROUTE-AVAILABILITY disables the expanded
+availability guard. Producer-declaration tests inspect pre-validation output;
+separate consumer counterexamples prove refusal, so a typed refusal cannot be
+misreported as an assertion kill.
 
 | Identifier | Actual edit | Exact target assertion/test | Expected marker |
 |---|---|---|---|
@@ -340,12 +380,12 @@ No probe runs with the original checkout as its child cwd.
 | MUT-EMITTER-FORBIDDEN-COUNT | `assert!(receipt_allowlisted(&r), "emitter-conformance");` → `r["counts"]["protection_trace_items"] = json!(0); ↵     assert!(receipt_allowlisted(&r), "emitter-conformance");` | `protected_success_and_golden_receipt` | `emitter-conformance` |
 | MUT-EVALUATOR-AVAILABILITY | `if values: result[metric] = sum(values)` → `result[metric] = sum(values)` | `test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map` | `missing-observation-counts` |
 | MUT-EVALUATOR-EMPTY-STAMP | `bool(self.inventory.keys()) and bool(custody.get('membership_order'))` → `True` | `test_evidence_eval.ExportTests.test_empty_or_missing_membership_is_refused` | `AssertionError` |
-| MUT-EVALUATOR-FILE | Inject relative `Path.write_text` during validation/export | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-file-boundary` |
+| MUT-EVALUATOR-FILE | `self.finalize()` → `Path('synthetic-private-output').write_text('synthetic-private-canary') ↵         self.finalize()` (export_receipt) | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-file-boundary` |
 | MUT-EVALUATOR-GRADES | `result = EVALUATOR_DERIVATIONS.copy()` → `result = dict.fromkeys(ep.METRIC_IDS, 'egress_reconstructed')` | `test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map` | `evaluator-declared-grades` |
 | MUT-EVALUATOR-IDENTITY | `route_id='evaluator.private.v1'` → `route_id='mcp.rmcp.duplex.v1'`; `if k == 'evaluator.private.v1'` → `if k == 'mcp.rmcp.duplex.v1'` | `test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map` | `evaluator-identity` |
-| MUT-EVALUATOR-STDERR | Inject print to stderr during validation/export | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-stderr-boundary` |
-| MUT-EVALUATOR-STDOUT | Inject print during validation/export | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-stdout-boundary` |
-| MUT-EVALUATOR-VACUOUS-GATE | `if 'unknown_egress_lower_bound_cases' in r['counts']:` → `if True:` | `test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map` | `unexercised-evaluator-gates` |
+| MUT-EVALUATOR-STDERR | `self.finalize()` → `print('synthetic-private-canary', file=__import__('sys').stderr) ↵         self.finalize()` (export_receipt) | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-stderr-boundary` |
+| MUT-EVALUATOR-STDOUT | `self.finalize()` → `print('synthetic-private-canary') ↵         self.finalize()` (export_receipt) | `test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes` | `evaluator-stdout-boundary` |
+| MUT-EVALUATOR-VACUOUS-GATE | `if r['derivations']['unknown_egress_lower_bound_cases'] == 'private_authored_records':` → `if True:` | `test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map` | `unexercised-evaluator-gates` |
 | MUT-EXTRA-SURFACES | `if no_payload_surfaces(r)` → `if true` | `no_payload_classifier_rejects_extra_surfaces` | `extra-surface-unknown` |
 | MUT-FAILED-FINISH | `async fn finish_call(&self, _: CallHandle, _: SnapshotRef)` → `async fn finish_call(&self, handle: CallHandle, _: SnapshotRef)`; `if self.fail_finish {` → `if self.fail_finish { ↵             self.fail_call(handle, FailureReason::Other { message: "synthetic".into() }).await?;` | `response_conflict_rolls_back_but_failed_finish_retains_mappings` | `failed-finish-retains-committed` |
 | MUT-FULL-CELL-BASIS | `require(not interval['conditional'] and not incomplete, 'conditional_reported_as_full_cell')` → `pass` | `test_evidence_protocol.ReceiptTests.test_full_cell_requires_complete_known_outcomes` | `AssertionError` |
@@ -356,10 +396,12 @@ No probe runs with the original checkout as its child cwd.
 | MUT-GROUPING | `result.extend(groups[rng.choice(ids)])` → `result.append(rng.choice(groups[rng.choice(ids)]))` | `test_evidence_eval.GroupingTests.test_resample_draws_groups_not_records` | `AssertionError` |
 | MUT-HANDLE-OPACITY | `require(type(node) is str and re.fullmatch('[0-9a-f]{32,64}', node) is not None, 'handle_shape_invalid')` → `pass` | `test_evidence_protocol.ReceiptTests.test_readable_population_handle_in_custody_is_still_refused` | `AssertionError` |
 | MUT-INTERVAL-DECLARATION | `require(declaration_valid(r['analysis_declaration']), 'interval_without_declaration')` → `pass` | `test_evidence_protocol.ReceiptTests.test_interval_without_declaration_is_refused` | `AssertionError` |
-| MUT-INVENTORY | `self.inventory.case(key)` → `pass` | `test_evidence_eval.PlannedInventoryTests.test_unknown_key_is_refused` | `AssertionError` |
+| MUT-INVENTORY | `planned = self.inventory.case(key)` → `planned = self.inventory.case(self.inventory.keys()[0])` | `test_evidence_eval.PlannedInventoryTests.test_unknown_key_is_refused` | `AssertionError` |
 | MUT-LEAF-TYPES | `if kind == 'nullable_object'` → `if kind not in ('object','nullable_object','interval','array'): return ↵     if kind == 'nullable_object'` | `test_evidence_protocol.ReceiptTests.test_bool_where_int_required_is_refused` | `AssertionError` |
 | MUT-LEAK-COMPUTED | `self.add("gold_occurrences_surviving_egress", 1);` → `self.add("gold_occurrences_surviving_egress", 0);` | `controlled_four_slot_occurrence_oracle` | `four-exact-verdicts` |
 | MUT-LOCAL-MEMBERSHIP-PROOF | `tuple(custody.get('membership_order', ())) == self.inventory.keys()` → `True` | `test_evidence_eval.ExportTests.test_wrong_local_order_fails_membership_proof` | `AssertionError` |
+| MUT-NEGATIVE-COVERAGE-COUNT | `c.1.get("negative_compared") != c.1.get("negative")` → `false` | `r2_negative_predicate_coverage` | `negative-incomplete-count` |
+| MUT-NEGATIVE-COVERAGE-GATE | `c.1.get("negative_compared") != c.1.get("negative")` → `false` | `r2_negative_predicate_coverage` | `negative-coverage-gate` |
 | MUT-NO-PAYLOAD | `r.is_error != Some(true) => "COMPLETED"` → `(r.is_error == Some(true) &#124;&#124; r.is_error != Some(true)) => "COMPLETED"` | `undeclared_carrier_has_positive_no_payload_and_unobserved_leaves` | `positive-no-payload` |
 | MUT-OBSERVER-COVERAGE | `require(r['gate_results']['source_attribution_events'] != 'PASS', 'observer_coverage_incomplete')` → `pass` | `test_evidence_protocol.ReceiptTests.test_observer_coverage_is_not_inferred_for_unobserved_leaves` | `AssertionError` |
 | MUT-OBSERVER-RAW-GAP | `mode, ↵             session: session.clone(),` → `mode: if mode == 0 {1} else {mode}, ↵             session: session.clone(),` | `protected_success_and_golden_receipt` | `completed-single-carrier` |
@@ -370,24 +412,37 @@ No probe runs with the original checkout as its child cwd.
 | MUT-PAIRED-BASE-MARGIN | `margins.append({a:sum(table[a].values()) for a in OUTCOME_STATES})` → `pass`; `paired_count = table['COMPLETED']['COMPLETED']` → `paired_count = r['outcomes']['COMPLETED']` | `test_evidence_protocol.ReceiptTests.test_both_arm_margins_gate_paired_intervals` | `AssertionError` |
 | MUT-PATH-NESTED | `require(path in RECEIPT_PATHS` → `if path != '$': return ↵     require(path in RECEIPT_PATHS` | `test_evidence_protocol.ReceiptTests.test_unknown_nested_key_is_refused` | `AssertionError` |
 | MUT-PATH-TOP | `walk(r)` → `pass` | `test_evidence_protocol.ReceiptTests.test_unknown_top_level_key_is_refused` | `AssertionError` |
-| MUT-PROTOCOL-FILE | Inject relative `Path.write_text` during validation/export | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-file-boundary` |
-| MUT-PROTOCOL-STDERR | Inject print to stderr during validation/export | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-stderr-boundary` |
-| MUT-PROTOCOL-STDOUT | Inject print during validation/export | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-stdout-boundary` |
+| MUT-PLAN-BOUND | `ep.require(bound is None or observed <= bound, 'outcome_identity_violation')` → `pass` | `test_evidence_eval.AuthoritativePlanTests.test_plan_bounds_without_record_denominators` | `AssertionError` |
+| MUT-PLAN-ESTIMAND | `if metric in PLAN_METRICS:` → `if False:` | `test_evidence_eval.ExportTests.test_planned_counts_have_no_paired_estimand` | `AssertionError` |
+| MUT-PLAN-INTERVAL-PY | `require(metric not in ('gold_occurrences_planned','gold_bytes_planned'), 'protocol_identity_mismatch')` → `pass` | `test_evidence_protocol.ReceiptTests.test_numeric_planned_intervals_refused` | `AssertionError` |
+| MUT-PLAN-INTERVAL-RUST | `) && v != "NOT_EVALUABLE"` → `) && false && v != "NOT_EVALUABLE"` | `r2_planned_interval_refused` | `planned-interval-refused` |
+| MUT-PLAN-RECONCILE | `ep.require(authoritative is None or declared is None or authoritative == declared, 'inventory_conflict')` → `pass` | `test_evidence_eval.AuthoritativePlanTests.test_plan_bounds_and_record_conflicts` | `AssertionError` |
+| MUT-PRODUCER-CELL | `require((r['cell_id'], r['policy_identity']) in {('synthetic.mcp.core.v1','core.rule_floor.v1'),('synthetic.mcp.controlled.v1','controlled.email_only.v1')}, 'protocol_identity_mismatch')` → `pass` | `test_evidence_protocol.ReceiptTests.test_producer_metric_grade_and_identity_binding` | `AssertionError` |
+| MUT-PRODUCER-CELL-RUST | `if !match route {` → `if false && !match route {` | `r2_producer_grade_and_identity_binding` | `producer-cell-policy` |
+| MUT-PRODUCER-GRADE | `require(all(grade in allowed_derivations(r['route_id'], metric) for metric,grade in d.items()), 'protocol_identity_mismatch')` → `pass` | `test_evidence_protocol.ReceiptTests.test_producer_metric_grade_and_identity_binding` | `AssertionError` |
+| MUT-PRODUCER-GRADE-RUST | `allowed_derivation(route, m, text(g))` → `(allowed_derivation(route, m, text(g)) &#124;&#124; true)` | `r2_producer_grade_and_identity_binding` | `producer-metric-grade` |
+| MUT-PROTOCOL-FILE | `r = validate_structure(payload)` → `Path('synthetic-private-output').write_text('synthetic-private-canary') ↵     r = validate_structure(payload)` (validate_receipt) | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-file-boundary` |
+| MUT-PROTOCOL-STDERR | `r = validate_structure(payload)` → `print('synthetic-private-canary', file=__import__('sys').stderr) ↵     r = validate_structure(payload)` (validate_receipt) | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-stderr-boundary` |
+| MUT-PROTOCOL-STDOUT | `r = validate_structure(payload)` → `print('synthetic-private-canary') ↵     r = validate_structure(payload)` (validate_receipt) | `test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files` | `protocol-stdout-boundary` |
 | MUT-QUANTILE | `math.ceil(probability * len(samples))-1` → `math.ceil(probability * len(samples))` | `test_evidence_eval.IntervalArithmeticTests.test_non_constant_deltas_match_hand_computed_quantiles` | `AssertionError` |
+| MUT-RAW-COVERAGE-COUNT | `"egress_raw_value_mismatches" => c.1.get("raw_compared") != c.1.get("restore"),` → `"egress_raw_value_mismatches" => false,` | `r2_mixed_raw_comparison_coverage` | `raw-incomplete-count` |
+| MUT-RAW-COVERAGE-GATE | `c.1.get("raw_compared").copied().unwrap_or(0) != restores` → `false` | `r2_mixed_raw_comparison_coverage` | `raw-coverage-gate` |
 | MUT-RAW-VALUE-SWAP | `self.add("egress_raw_value_mismatches", 1);` → `self.add("egress_raw_value_mismatches", 0);` | `integrity_analogues_have_independent_nonzero_falsifiers` | `independent-slot-swap` |
 | MUT-REJECTION-CREDIT | `r.outcome == 'COMPLETED' and r.entities > 0 and r.entities == r.entities_fully_covered` → `r.outcome == 'FAILED_CLOSED_NO_EGRESS'` | `test_evidence_eval.PairingTests.test_failed_closed_is_not_protection` | `AssertionError` |
 | MUT-ROLLBACK | `if self.mode == 3 && !ctx.manifest.spans.is_empty() {` → `if self.mode == 3 && !ctx.manifest.spans.is_empty() { ↵             must(self.session.tokenize(&PiiClass::Email, FRESH));` | `response_conflict_rolls_back_but_failed_finish_retains_mappings` | `rollback-no-losing-mappings` |
-| MUT-ROUTE-AVAILABILITY | `COUNTING_GRADES.contains(&grade) && !c.0.contains_key(m)` → `false` | `missing_measurements_and_ambiguous_only_gates` | `absent-measurements` |
+| MUT-ROUTE-AVAILABILITY | `COUNTING_GRADES.contains(&grade) && (!c.0.contains_key(m) &#124;&#124; incomplete)` → `false` | `missing_measurements_and_ambiguous_only_gates` | `absent-measurements` |
 | MUT-RUST-WALKER | `fn walk(node: &Value, path: &str, rules: &Value) -> bool {` → `fn walk(node: &Value, path: &str, rules: &Value) -> bool { if path != "$" {return true;}` | `rust_walker_rejects_nested_paths_types_and_forbidden_counts` | `nested-path-type-refusal` |
 | MUT-STAMP-SEPARATION | `require(not STAMPED_KEYS.intersection(r), 'stamped_key_in_emitted_receipt')` → `pass`; `walk(r)` → `walk({k:v for k,v in r.items() if k not in STAMPED_KEYS})` | `test_evidence_protocol.ReceiptTests.test_emitted_receipt_carrying_a_stamped_key_is_refused` | `AssertionError` |
 | MUT-STRING-BYTES | `if r.text == expected {` → `if must(serde_json::from_str::<Value>(&r.text)) == must(serde_json::from_str::<Value>(expected)) {` | `json_text_string_bytes_are_stricter_than_semantic_equality` | `string-bytes-discriminate` |
 | MUT-TOKEN-CORRUPTION | `self.add("egress_token_restore_failures", 1);` → `self.add("egress_token_restore_failures", 0);` | `integrity_analogues_have_independent_nonzero_falsifiers` | `restore-error-counted` |
 | MUT-UNKNOWN-INTERVAL | `require(not (unknown and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')` → `pass`; `require(interval['conditional'], 'conditional_reported_as_full_cell')` → `pass` | `test_evidence_protocol.ReceiptTests.test_unknown_with_no_fragment_still_blocks_exact_interval` | `AssertionError` |
 | MUT-UNKNOWN-LOWER-BOUND | `return result` → `result['gold_bytes_surviving_egress'] = 0 ↵         return result` | `test_evidence_eval.PairingTests.test_unknown_egress_observed_fragment_is_retained_as_lower_bound` | `AssertionError` |
+| MUT-UNKNOWN-PREDICATE | `return None` → `return False` | `test_evidence_eval.ExportTests.test_unknown_predicate_truth_table_and_mixed_coverage` | `AssertionError` |
+| MUT-UNKNOWN-SUBSET | `elif m == 'unknown_egress_lower_bound_cases' and any(` → `elif False and any(` | `test_evidence_eval.ExportTests.test_unknown_predicate_truth_table_and_mixed_coverage` | `AssertionError` |
 | MUT-VALIDATOR-ACCEPTS-FORBIDDEN-COUNT | `require(all(d[k] in COUNTING_GRADES for k in c), 'counted_non_measurement')` → `pass` | `test_evidence_protocol.ReceiptTests.test_non_counting_grades_refuse_counts` | `AssertionError` |
 | MUT-VOCAB-CLOSURE-MAPS | `require(key in allowed, 'value_out_of_vocabulary')` → `pass` | `test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_map_keys` | `AssertionError` |
 | MUT-VOCAB-CLOSURE-VALUES | `require(node in allowed, 'value_out_of_vocabulary')` → `pass` | `test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_values` | `AssertionError` |
-| MUT-VOCAB-PY | Add mutation-only to the Python METRIC_IDS mirror | `test_evidence_protocol.VocabularyMirrorTests.test_python_vocabularies_equal_committed_artifact` | `AssertionError` |
+| MUT-VOCAB-PY | `METRIC_IDS` → `METRIC_IDS` plus `mutation-only` in copied vocabulary | `test_evidence_protocol.VocabularyMirrorTests.test_python_vocabularies_equal_committed_artifact` | `AssertionError` |
 | MUT-VOCAB-RUST | `const METRIC_IDS: &[&str] = &[` → `const METRIC_IDS: &[&str] = &["mutation-only",` | `vocabularies_match_committed_artifact` | `vocabulary-mirror` |
 
 ## Closed vocabulary reference

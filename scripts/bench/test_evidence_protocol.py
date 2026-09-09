@@ -461,6 +461,16 @@ def run_mutation_proof():
         ('MUT-PAIRED-BASE-MARGIN',ep,'validate_structure',[("margins.append({a:sum(table[a].values()) for a in OUTCOME_STATES})", "pass"), ("paired_count = table['COMPLETED']['COMPLETED']", "paired_count = r['outcomes']['COMPLETED']")],'test_evidence_protocol.ReceiptTests.test_both_arm_margins_gate_paired_intervals'),
         ('MUT-EVALUATOR-VACUOUS-GATE',ee.PrivateEvaluator,'export_receipt',[("if r['derivations']['unknown_egress_lower_bound_cases'] == 'private_authored_records':", "if True:")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
     ])
+    mutations.extend([
+        ('MUT-PLAN-RECONCILE',ee.PrivateEvaluator,'add',[("ep.require(authoritative is None or declared is None or authoritative == declared, 'inventory_conflict')", 'pass')],'test_evidence_eval.AuthoritativePlanTests.test_plan_bounds_and_record_conflicts'),
+        ('MUT-PLAN-BOUND',ee.PrivateEvaluator,'add',[("ep.require(bound is None or observed <= bound, 'outcome_identity_violation')", 'pass')],'test_evidence_eval.AuthoritativePlanTests.test_plan_bounds_without_record_denominators'),
+        ('MUT-UNKNOWN-PREDICATE',ee,'unknown_survival',[('    return None', '    return False')],'test_evidence_eval.ExportTests.test_unknown_predicate_truth_table_and_mixed_coverage'),
+        ('MUT-UNKNOWN-SUBSET',ee.PrivateEvaluator,'derivations',[("elif m == 'unknown_egress_lower_bound_cases' and any(", 'elif False and any(')],'test_evidence_eval.ExportTests.test_unknown_predicate_truth_table_and_mixed_coverage'),
+        ('MUT-PRODUCER-GRADE',ep,'validate_structure',[("require(all(grade in allowed_derivations(r['route_id'], metric) for metric,grade in d.items()), 'protocol_identity_mismatch')", 'pass')],'test_evidence_protocol.ReceiptTests.test_producer_metric_grade_and_identity_binding'),
+        ('MUT-PRODUCER-CELL',ep,'validate_structure',[("require((r['cell_id'], r['policy_identity']) in {('synthetic.mcp.core.v1','core.rule_floor.v1'),('synthetic.mcp.controlled.v1','controlled.email_only.v1')}, 'protocol_identity_mismatch')", 'pass')],'test_evidence_protocol.ReceiptTests.test_producer_metric_grade_and_identity_binding'),
+        ('MUT-PLAN-ESTIMAND',ee.PrivateEvaluator,'paired_interval',[('if metric in PLAN_METRICS:', 'if False:')],'test_evidence_eval.ExportTests.test_planned_counts_have_no_paired_estimand'),
+        ('MUT-PLAN-INTERVAL-PY',ep,'validate_structure',[("require(metric not in ('gold_occurrences_planned','gold_bytes_planned'), 'protocol_identity_mismatch')", 'pass')],'test_evidence_protocol.ReceiptTests.test_numeric_planned_intervals_refused'),
+    ])
     for prefix,owner,name,target in [('PROTOCOL',ep,'validate_receipt','test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files'), ('EVALUATOR',ee.PrivateEvaluator,'export_receipt','test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes')]:
         site = '    r = validate_structure(payload)' if prefix == 'PROTOCOL' else '        self.finalize()'
         indent = '    ' if prefix == 'PROTOCOL' else '        '
