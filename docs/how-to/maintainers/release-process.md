@@ -35,6 +35,32 @@ After the seed publish, add the crate's Trusted Publisher on crates.io for `Cert
 
 Cutting a release: tag the merge commit on `main` with `vX.Y.Z` and push the tag. Both workflows fire from the same tag push; no manual crates.io step is needed for crates already in the OIDC publish loop.
 
+## Pre-tag model-setup ownership gate
+
+Before the first `gaze-model-setup` publication, run `release.yml` with
+`workflow_dispatch` on the reviewed preparation branch. This path scrubs the
+release text and runs `scripts/gate/model-setup-ownership.sh` on hosted Linux;
+it does not build release assets, create a release, or publish crates.
+
+The ownership gate uses the shipped installer to fetch and strictly verify
+the source-pinned real Kiji FP32 bundle. It checks identical artifact hashes
+before testing a copy owned by a distinct user, uses a foreign-owned working
+directory, and explicitly runs the ignored cross-directory effective-user test.
+It also verifies loose-mode repair for the current owner and rejection of a
+foreign-owned installation. Exact test names must report a passing test;
+a zero-test cargo result cannot pass the gate.
+
+After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>
+-f version=0.13.0 -f pr_number=<release-pr>`. Require a successful
+`model-setup-ownership-preflight` job for that exact preparation head before
+tagging. Its `model-setup-ownership-<commit>` artifact
+records the commit, commands, toolchain, model hashes, owner/mode inventory,
+and test results. It contains receipts only; model files are temporary and
+are removed when the gate exits. The script requires an unprivileged Linux
+user with passwordless sudo so real foreign ownership can be constructed.
+The publish plan orders `gaze-recognizers` before `gaze-model-setup` at the
+coordinated release version.
+
 ## Homebrew Tap Location
 
 Decision for v0.4.6 S6 (#184), reaffirmed post repo-public flip: keep Homebrew repo-local until the organization creates an explicit public tap and release publication target.
