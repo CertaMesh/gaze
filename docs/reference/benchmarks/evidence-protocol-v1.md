@@ -11,10 +11,11 @@ components separately: recursive aggregate receipt validation, private grouped
 paired arithmetic on synthetic records, and observations on one real rmcp
 transport through `PiiEnvelope::dispatch`.
 
-T1 makes **no claim of end-to-end paired evaluation of route observations**.
+The T1 receipt exporters make **no claim of end-to-end paired evaluation of
+route observations**.
 The Rust route exports aggregates; the Python evaluator consumes independently
-authored in-memory records. There is no route-to-evaluator per-document bridge,
-persisted or salted. Neither component proves detection completeness, corpus
+authored in-memory records. These receipt exporters have no route-to-evaluator per-document bridge.
+The separate private synthetic bridge below exports no receipt. Neither component proves detection completeness, corpus
 fitness, generalization, promotion readiness or the historical IBAN discrepancy.
 The evaluator identifies itself as `evaluator.private.v1`, cell
 `synthetic.evaluator.v1`, policy `authored.records.v1`; its receipt marks the MCP
@@ -105,7 +106,7 @@ comparison diagnostics are deliberately preserved for the authorized synthetic
 workflow. **Private inputs remain prohibited through these legacy producers and
 exporters.** Labels, ID prefixes and boolean attestations do not authorize a
 private run. A separately reviewed custody, provenance and in-memory
-producer-to-evaluator bridge is still required; unavailable observations and
+producer-to-evaluator bridge for private data is still required; unavailable observations and
 producer membership proof remain unmeasured/blocked. This change establishes
 no corpus-fitness, statistical-power or generalization claim.
 
@@ -667,5 +668,83 @@ canary child; only the parent output-capture test is its targeted kill set.
 The executable roster and targeted proof receipts below determine the probe
 count; there is no fixed-count acceptance target.
 Rust probes run with `python3.13 scripts/bench/test_evidence_eval.py
---rust-mutation-proof` under the machine lease, modifying only evidence_route.rs
-and restoring its exact committed bytes after each probe.
+--rust-mutation-proof` under machine serialization. Each edit resolves to exactly
+one site in `crates/gaze-mcp-rmcp/tests/evidence_route.rs` or its shared
+`crates/gaze-mcp-rmcp/tests/support/evidence_harness.rs`. Both files are restored
+to their exact original bytes in `finally`; extraction preserves every existing
+target and assertion marker.
+
+
+## Private synthetic route-to-estimator bridge
+
+`crates/gaze-mcp-rmcp/examples/evidence_bridge.rs` and the route tests include
+one shared harness, including the occurrence scorer, negative comparison and
+restore operations. `scripts/bench/evidence_bridge.py` sends four fixed requests
+through unchanged `BenchSubprocess`. Each request uses a fresh real session and
+rmcp call. The private pipe carries closed slot observations only. Class and
+region are omitted from child frames and supplied by the parent; any such child
+field is refused along with denominators, grouping, weights and keys.
+
+The fixed `phone_pair_v1` cell uses two independent groups with weights 1 and 3.
+Each case plans two 16-byte synthetic gold slots, one benign negative slot and
+three restore leaves. Both artificial arms use the controlled email-only pipeline.
+Baseline observed gold bytes are `(0, 0)`; candidate observed gold bytes are
+`(16, 8)`. The existing private paired estimator must produce `(16 + 3*8)/4 = 10`.
+Per-case observations are checked as well. A correct processing reorder preserves
+10; exchanging case keys produces 14 and exchanging arms produces -10.
+
+The test-only declaration uses confidence level 0.5, 16 resamples, seed 4,
+`synthetic_de`, `inventory_group`, `synthetic_none`, coverage target 0.8 and
+acceptance limit 0.1. These are test constants, not a statistical declaration for
+real data. The interval stays private and is not exported.
+
+A visited ambiguous gold slot retains measured bytes in a private side record
+but withholds exact survival metrics; complete traversal still observes the
+attribution count. Missing slots are tracked separately from ambiguous slots.
+Uncompared negatives withhold false-positive metrics. Restore requires every
+planned leaf and the actual boolean reduction. Unsupported evaluator count and
+boolean defaults are placeholders, never measured zero or protection credit.
+Each fault cell has its own inventory and evaluator.
+
+The entire bridge call has a producer boundary, including validation, estimator
+work, final exit and cleanup. Success is returned only after finish and cleanup.
+A refused frame, malformed exchange, exception, cancellation, expired deadline,
+trailing stdout or nonzero exit aborts the whole cell. There is no per-case
+transport-error recovery. The tests retain the direct child owner to verify
+reaping and pipe closure, with independent emergency cleanup.
+
+Run the explicit real integration with Python >=3.11 and the pinned Rust toolchain:
+
+```sh
+cargo build --locked --offline -p gaze-mcp-rmcp --example evidence_bridge
+python3 scripts/bench/test_evidence_bridge.py --integration --binary target/debug/examples/evidence_bridge
+```
+
+Missing or unexecutable binaries fail. Real execution requires `transport-stdio`
+(enabled by default). The no-default-feature example compiles but exits with
+status 2; that compile check is not runtime evidence. Ordinary unittest discovery runs the
+bridge's model, coverage and synthetic lifecycle tests without running the Rust
+example or silently skipping integration. Stable CI runs the two commands after
+normal Cargo tests have populated the offline cache, and first checks Python's
+version. No binary-path provenance claim is made.
+
+The additional executable mutation roster is in `test_evidence_bridge.py`:
+
+```sh
+python3.13 scripts/bench/test_evidence_bridge.py --mutation-proof --binary target/debug/examples/evidence_bridge
+```
+
+It mutates implementation sites, restores each original in `finally`, and reports
+only actual named assertion kills. Compile errors, timeouts, unittest errors and
+survivors are not kills. Two probes alter the shared Rust scorer's numeric
+observations and run real integration assertions. Other probes cover pairing,
+slot coverage, attribution, negatives, restore, closed fields, error boundaries,
+transport recovery, deadlines, finish/cleanup and forbidden authored export.
+Run this serially with other Cargo work in an isolated checkout.
+
+This bridge proves synthetic plumbing only. It publishes no bridge receipt,
+source attestation, per-document records or interval. It unblocks no public gate
+and claims no detector improvement, corpus fitness, generalization or permission
+to execute private data. Traceback-local inspection and a malicious child's
+filesystem are not sandboxed. No public evidence schema or production runtime
+changes are part of this bridge.

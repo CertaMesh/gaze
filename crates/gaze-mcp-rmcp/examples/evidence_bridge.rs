@@ -1,10 +1,14 @@
 //! Private synthetic transport fixture. No evidence receipt is exported.
+#[cfg(feature = "transport-stdio")]
 #[allow(dead_code)]
 #[path = "../tests/support/evidence_harness.rs"]
 mod evidence_harness;
+#[cfg(feature = "transport-stdio")]
 use evidence_harness::*;
+#[cfg(feature = "transport-stdio")]
 use std::io::{BufRead, Read, Write};
 
+#[cfg(feature = "transport-stdio")]
 async fn observe(request: &Value) -> Option<Value> {
     let object = request.as_object()?;
     if object.len() != 4
@@ -75,6 +79,7 @@ async fn observe(request: &Value) -> Option<Value> {
     )
 }
 
+#[cfg(feature = "transport-stdio")]
 fn emit(value: &Value) -> std::io::Result<()> {
     let mut stdout = std::io::stdout().lock();
     serde_json::to_writer(&mut stdout, value)?;
@@ -82,6 +87,7 @@ fn emit(value: &Value) -> std::io::Result<()> {
     stdout.flush()
 }
 
+#[cfg(feature = "transport-stdio")]
 #[tokio::main]
 async fn main() {
     std::panic::set_hook(Box::new(|_| {}));
@@ -113,7 +119,7 @@ async fn main() {
                 .count()
                 == 1
         });
-        let response = if !unique_keys {
+        let response = if !unique_keys || frame.contains(&b'\\') {
             None
         } else {
             match serde_json::from_slice::<Value>(&frame) {
@@ -129,4 +135,10 @@ async fn main() {
             break;
         }
     }
+}
+
+// Without the selected transport, compilation does not imply an executable bridge.
+#[cfg(not(feature = "transport-stdio"))]
+fn main() {
+    std::process::exit(2);
 }

@@ -60,7 +60,7 @@ jobs:
         env:
           RUSTUP_TOOLCHAIN: 1.89.0
         # Opt-in runtime-tract needs rust >= 1.91 (tract 0.23.0-dev rust-version),
-        # tracked in solo todo #1934; all-features MSRV intentionally not gated.
+        # all-features MSRV is intentionally not gated.
         run: cargo check --workspace --all-targets --locked
 
   test:
@@ -120,6 +120,12 @@ jobs:
         run: cargo test -p gaze-cli --features mcp --no-fail-fast
       - name: cargo test
         run: cargo test --workspace --all-features --no-fail-fast
+      - name: Verify synthetic bridge Python requirement
+        run: python3 -c 'import sys; assert sys.version_info >= (3, 11), "Python >= 3.11 required"'
+      - name: Build offline synthetic rmcp bridge
+        run: cargo build --locked --offline -p gaze-mcp-rmcp --example evidence_bridge
+      - name: Test real synthetic rmcp bridge
+        run: python3 scripts/bench/test_evidence_bridge.py --integration --binary target/debug/examples/evidence_bridge
 
   benchmark-model-free:
     name: benchmark model-free Python tests

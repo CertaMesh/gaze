@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import contextlib
-import copy
 from dataclasses import replace
 import io
 import json
@@ -115,6 +114,15 @@ class ModelTests(unittest.TestCase):
         v = frame(); v['negative'][0].update(verdict='protected', false_positive_bytes=12)
         self.assertEqual(mapped(v).record.false_positive_bytes, 12)
 
+    def test_partial_negative_retains_private_count(self):
+        v = frame(); v['negative'][0].update(verdict='protected', false_positive_bytes=12)
+        p = replace(bridge.PLANS[0], negative=(bridge.Slot('n', 12), bridge.Slot('other', 12)))
+        side = bridge.map_observation(v, p, 'candidate')
+        self.assertEqual(side.negative_coverage, bridge.Coverage.PARTIAL)
+        self.assertEqual((side.false_positive_occurrences, side.false_positive_bytes), (1, 12))
+        self.assertFalse(side.record.observed_metrics & bridge.NEGATIVE)
+        self.assertEqual(side.record.false_positive_bytes, 0)
+
     def test_restore_requires_complete_nonempty_actual_reduction(self):
         for size in (0, 1, 2):
             v = frame(); v['restore'] = v['restore'][:size]
@@ -175,6 +183,15 @@ class ModelTests(unittest.TestCase):
         for state in ('FAILED_CLOSED_NO_EGRESS', 'UNKNOWN_EGRESS'):
             v = frame(); v['outcome'] = state
             with self.assertRaises(ProducerFailure): mapped(v)
+
+    def test_integration_missing_or_unexecutable_binary_is_hard_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory)/'not-executable'
+            file.write_text('synthetic')
+            for binary in (Path(directory)/'missing', file):
+                result = subprocess.run([sys.executable, str(HERE), '--integration', '--binary', str(binary)], capture_output=True)
+                self.assertEqual(result.returncode, 2, 'integration-hard-failure')
+                self.assertNotIn(b'skipped', result.stdout + result.stderr)
 
     def test_private_repr(self):
         for value in (bridge.PLANS[0], mapped(frame()), mapped(frame()).record):
@@ -372,6 +389,21 @@ class RealBridgeTests:
                     mapped(value)
                     owner.check_message_deadline()
             owner.finish()
+
+    def test_real_child_refuses_closed_request_violations(self):
+        for field, value in (('ordinal', True), ('ordinal', 2), ('arm', 'other'), ('extra', 0)):
+            request = bridge.request_for(bridge.PLANS[0], 'base'); request[field] = value
+            with BenchSubprocess([self.binary]) as owner:
+                owner.receive_handshake()
+                self.assertEqual(owner.exchange(request), dict(format=bridge.FORMAT, kind='refused', code='protocol'), 'closed-request-refusal')
+                owner.finish()
+        request = json.dumps(bridge.request_for(bridge.PLANS[0], 'base')).encode()
+        for suffix in (b', "arm": "base"}', b', "\\u0061rm": "base"}'):
+            with BenchSubprocess([self.binary]) as owner:
+                owner.receive_handshake()
+                with mock.patch.object(owner, '_encode', return_value=request[:-1] + suffix + b'\n'):
+                    self.assertEqual(owner.exchange({}), dict(format=bridge.FORMAT, kind='refused', code='protocol'), 'duplicate-request-refusal')
+                owner.finish()
 
     def test_real_estimator_and_reorder(self):
         for order in (None, tuple((a, p) for p in reversed(bridge.PLANS) for a in ('candidate', 'base'))):
