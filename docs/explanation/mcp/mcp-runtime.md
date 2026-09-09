@@ -26,11 +26,11 @@ Every tool call traverses this sequence in order:
 | 1 | Validate transport-supplied session id via `SessionIdPolicy` | `DispatchError::SessionId`; **no manifest row** |
 | 2 | Look up tool in `ToolRegistry` | `DispatchError::UnknownTool`; **no manifest row** |
 | 3 | Authorize via `AuthHook::authorize_agent` or `_operator` (driven by `ToolDescriptor::tier`) | `DispatchError::Auth`; **no manifest row** |
-| 4 | Redact raw args via `gaze::Pipeline::redact` (string leaves) | `DispatchError::Redaction`; **no manifest row** |
+| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` for preflight and protect — **no manifest row**; `DispatchError::Transaction` for the post-begin commit — **fail_call written first** |
 | 5 | `ManifestStore::begin_call(BeginCallContext)` | `DispatchError::Manifest`; **no manifest row written** |
 | 6 | Build the sealed `ToolCtx` (only construction site in the crate) | — |
 | 7 | `Tool::invoke(&ctx).await` | `DispatchError::ToolError`; **fail_call written first** |
-| 8 | Redact response payload | `DispatchError::Redaction`; **fail_call written first** |
+| 8 | Preflight response carriers, then protect response payload via `gaze::Pipeline::protect_text_transaction` (agent-tier `ResponseRedaction::BypassByOperator` rejected; the staged response transaction commits before `finish_call`) | `DispatchError::Carrier` / `DispatchError::Protection` / `DispatchError::Transaction`, or `DispatchError::Redaction` for the agent-bypass rejection; **fail_call written first** |
 | 9 | Compute out-of-row `SnapshotRef` over redacted bytes | `DispatchError::ResponseSerialization`; **fail_call written first** |
 | 10 | `ManifestStore::finish_call(handle, snapshot)` | `DispatchError::Manifest` |
 | — | Return redacted response | — |
