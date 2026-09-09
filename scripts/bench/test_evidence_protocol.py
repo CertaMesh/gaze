@@ -282,3 +282,95 @@ class CanaryTests(unittest.TestCase):
                     self.assertTrue(str(exc) in ep.REFUSAL_CODES, 'closed-exception')
             self.assertTrue(set(Path(d).iterdir()) == before, 'no-private-files')
         self.assertTrue(secret not in stdout.getvalue()+stderr.getvalue() and token not in stdout.getvalue()+stderr.getvalue(), 'private-output-canary')
+
+
+class DirectBoundaryTests(unittest.TestCase):
+    def test_closed_dynamic_map_keys(self):
+        for path in ('$.counts','$.gate_results'):
+            with self.assertRaises(ep.ReceiptRefused): ep.walk({'private':0},path)
+
+    def test_empty_container_types(self):
+        with self.assertRaises(ep.ReceiptRefused): ep.walk([], '$.counts')
+
+    def test_closed_dynamic_values(self):
+        for value,path in [('private','$.derivations.*'),('private','$.analysis_declaration.strata.[]')]:
+            with self.assertRaises(ep.ReceiptRefused): ep.walk(value,path)
+
+
+def run_mutation_proof():
+    """Explicit opt-in; in-memory mutants, one mechanism-specific target per run."""
+    import inspect
+    import textwrap
+    import evidence_eval as ee
+    import test_evidence_eval  # noqa: F401
+    mutations = [
+        ('MUT-PATH-TOP',ep,'validate_structure',[('    walk(r)','    pass')],'test_evidence_protocol.ReceiptTests.test_unknown_top_level_key_is_refused'),
+        ('MUT-PATH-NESTED',ep,'walk',[("    require(path in RECEIPT_PATHS", "    if path != '$': return\n    require(path in RECEIPT_PATHS")],'test_evidence_protocol.ReceiptTests.test_unknown_nested_key_is_refused'),
+        ('MUT-LEAF-TYPES',ep,'walk',[("    if kind == 'nullable_object'", "    if kind not in ('object','nullable_object','interval','array'): return\n    if kind == 'nullable_object'")],'test_evidence_protocol.ReceiptTests.test_bool_where_int_required_is_refused'),
+        ('MUT-VOCAB-CLOSURE-MAPS',ep,'walk',[("require(key in allowed, 'value_out_of_vocabulary')","pass")],'test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_map_keys'),
+        ('MUT-VOCAB-CLOSURE-VALUES',ep,'walk',[("require(node in allowed, 'value_out_of_vocabulary')","pass")],'test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_values'),
+        ('MUT-HANDLE-OPACITY',ep,'walk',[("require(type(node) is str and re.fullmatch('[0-9a-f]{32,64}', node) is not None, 'handle_shape_invalid')","pass")],'test_evidence_protocol.ReceiptTests.test_readable_population_handle_in_custody_is_still_refused'),
+        ('MUT-ATTESTATION-BINDING',ep,'validate_receipt',[("require(type(meta['revision']) is str and re.fullmatch('[0-9a-f]{40}', meta['revision']) is not None and type(meta['dirty']) is bool, 'attestation_shape_invalid')","pass")],'test_evidence_protocol.StampTests.test_placeholder_source_revision_is_refused'),
+        ('MUT-OUTCOME-IDENTITY',ep,'check_outcome_identities',[("require(sum(o.values()) == r['planned_case_count'], 'outcome_identity_violation')","pass")],'test_evidence_protocol.ReceiptTests.test_planned_count_must_equal_outcome_sum'),
+        ('MUT-AGGREGATION',ep,'overall',[("if any(v != 'PASS' for v in gates.values()):","if False:")],'test_evidence_protocol.AggregationTests.test_all_blocked_is_not_evaluable_not_pass'),
+        ('MUT-VALIDATOR-ACCEPTS-FORBIDDEN-COUNT',ep,'validate_structure',[("require(all(d[k] in COUNTING_GRADES for k in c), 'counted_non_measurement')","pass")],'test_evidence_protocol.ReceiptTests.test_non_counting_grades_refuse_counts'),
+        ('MUT-BLOCKED-BOOKKEEPING',ep,'validate_structure',[("require(set(r['not_measured']['blocked_gates']) == {k for k,v in r['gate_results'].items() if v == 'BLOCKED'}, 'derivation_conflict')","pass")],'test_evidence_protocol.ReceiptTests.test_blocked_gate_absent_from_blocked_gates_is_refused'),
+        ('MUT-COUNTING-SUBSET',ep,'validate_structure',[("require(all(k in c for k,v in d.items() if v in COUNTING_GRADES), 'uncounted_measurable_metric')","pass")],'test_evidence_protocol.ReceiptTests.test_actual_measurement_requires_count'),
+        ('MUT-INTERVAL-DECLARATION',ep,'validate_structure',[("require(declaration_valid(r['analysis_declaration']), 'interval_without_declaration')","pass")],'test_evidence_protocol.ReceiptTests.test_interval_without_declaration_is_refused'),
+        ('MUT-UNKNOWN-INTERVAL',ep,'validate_structure',[("require(not (r['outcomes']['UNKNOWN_EGRESS'] and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')","pass"),("require(interval['conditional'], 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_unknown_with_no_fragment_still_blocks_exact_interval'),
+        ('MUT-FULL-CELL-BASIS',ep,'validate_structure',[("require(not interval['conditional'] and not r['outcomes']['UNKNOWN_EGRESS'] and not r['outcomes']['NOT_STARTED'], 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_full_cell_requires_complete_known_outcomes'),
+        ('MUT-CLASS-LOAD',ep,'load_class_commitments',[("pair in {('EMAIL','global'), ('PHONE','de')} and pair not in seen","pair not in seen")],'test_evidence_protocol.ClassCommitmentTests.test_unknown_label_region_pair_is_a_load_error'),
+        ('MUT-OBSERVER-COVERAGE',ep,'validate_structure',[("require(r['gate_results']['source_attribution_events'] != 'PASS', 'observer_coverage_incomplete')","pass")],'test_evidence_protocol.ReceiptTests.test_observer_coverage_is_not_inferred_for_unobserved_leaves'),
+        ('MUT-CLAIM-SCOPE',ep,'validate_structure',[("MANDATORY_KEYS <= set(r)","MANDATORY_KEYS - {'claim_scope'} <= set(r)")],'test_evidence_protocol.ReceiptTests.test_missing_claim_scope_is_refused'),
+        ('MUT-QUANTILE',ee,'quantile',[("math.ceil(probability * len(samples))-1","math.ceil(probability * len(samples))")],'test_evidence_eval.IntervalArithmeticTests.test_non_constant_deltas_match_hand_computed_quantiles'),
+        ('MUT-CONDITIONALITY',ee.PrivateEvaluator,'paired_interval',[("conditional=any(self.outcomes(a)['COMPLETED'] != len(self.inventory) for a in ep.ARM_IDS)","conditional=False")],'test_evidence_eval.PairingTests.test_conditional_flag_set_when_remainder_non_empty'),
+        ('MUT-UNKNOWN-LOWER-BOUND',ee.PrivateEvaluator,'aggregate',[("for metric,field in METRIC_FIELDS.items()}","for metric,field in METRIC_FIELDS.items()}\n        result['gold_bytes_surviving_egress'] = 0")],'test_evidence_eval.PairingTests.test_unknown_egress_observed_fragment_is_retained_as_lower_bound'),
+        ('MUT-LOCAL-MEMBERSHIP-PROOF',ee.PrivateEvaluator,'export_receipt',[("tuple(custody.get('membership_order', ())) == self.inventory.keys()","True")],'test_evidence_eval.ExportTests.test_wrong_local_order_fails_membership_proof'),
+        ('MUT-REJECTION-CREDIT',ee.PrivateEvaluator,'protected_case_count',[("r.outcome == 'COMPLETED' and r.entities > 0 and r.entities == r.entities_fully_covered","r.outcome == 'FAILED_CLOSED_NO_EGRESS'")],'test_evidence_eval.PairingTests.test_failed_closed_is_not_protection'),
+        ('MUT-GROUPING',ee.PrivateEvaluator,'draw_resample',[("result.extend(groups[rng.choice(ids)])","result.append(rng.choice(groups[rng.choice(ids)]))")],'test_evidence_eval.GroupingTests.test_resample_draws_groups_not_records'),
+    ]
+    mutations.extend([
+        ('MUT-OUTCOME-COVERAGE',ep,'check_outcome_identities',[("    o = r['outcomes']", "    o = r['outcomes']\n    o.setdefault('NOT_STARTED', 0)")],'test_evidence_protocol.ReceiptTests.test_all_five_states_are_mandatory'),
+        ('MUT-INVENTORY',ee.PrivateEvaluator,'add',[("        self.inventory.case(key)","        pass")],'test_evidence_eval.PlannedInventoryTests.test_unknown_key_is_refused'),
+        ('MUT-DECLARATION-ABSENT',ee.PrivateEvaluator,'paired_interval',[("        self.finalize()", "        if declaration is None: declaration = __import__('test_evidence_protocol').declaration()\n        self.finalize()")],'test_evidence_eval.DeclarationTests.test_absent_declaration_is_not_evaluable'),
+        ('MUT-DECLARATION-PARTIAL',ee.PrivateEvaluator,'paired_interval',[("        self.finalize()", "        if type(declaration) is dict: declaration.setdefault('confidence_level', .5)\n        self.finalize()")],'test_evidence_eval.DeclarationTests.test_partial_declaration_is_not_evaluable'),
+        ('MUT-PAIR-HONESTY',ee.PrivateEvaluator,'paired_completed_keys',[("if all(self._records[a][k].outcome == 'COMPLETED' for a in ep.ARM_IDS)","if any(self._records[a][k].outcome == 'COMPLETED' for a in ep.ARM_IDS)")],'test_evidence_eval.PairingTests.test_missing_pair_leaves_intersection_and_is_not_zero_leak'),
+        ('MUT-STAMP-SEPARATION',ep,'validate_structure',[("require(not STAMPED_KEYS.intersection(r), 'stamped_key_in_emitted_receipt')","pass"),("    walk(r)","    walk({k:v for k,v in r.items() if k not in STAMPED_KEYS})")],'test_evidence_protocol.ReceiptTests.test_emitted_receipt_carrying_a_stamped_key_is_refused'),
+        ('MUT-DERIVATION-COVERAGE',ep,'validate_structure',[("require(set(d) == METRIC_IDS, 'derivation_coverage_incomplete')","pass"),("require(set(r['not_measured']['metrics']) == {k for k,v in d.items() if v == 'not_measured'}, 'derivation_conflict')","pass")],'test_evidence_protocol.ReceiptTests.test_metric_without_declared_derivation_is_refused'),
+        ('MUT-CLASS-FIELDS',ep,'load_class_commitments',[("require(type(row) is dict and set(row) == required, 'class_commitment_invalid')","pass"),("all(type(row[k]) is str and row[k] for k in ('partial_scope','rationale'))","all(type(row.get(k,'fixture')) is str and row.get(k,'fixture') for k in ('partial_scope','rationale'))")],'test_evidence_protocol.ClassCommitmentTests.test_missing_mandatory_row_field_is_a_load_error'),
+        ('MUT-CANARY-PRIVATE-VALUE',ep,'loads_receipt',[("    require(type(text) is str", "    print('synthetic-private-canary')\n    require(type(text) is str")],'test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files'),
+        ('MUT-CONTAINER-TYPES',ep,'walk',[("    if kind == 'nullable_object'", "    if kind == 'object' and node == []: return\n    if kind == 'nullable_object'")],'test_evidence_protocol.DirectBoundaryTests.test_empty_container_types'),
+    ])
+    results=[]
+    for identifier,owner,name,edits,target in mutations:
+        original=getattr(owner,name); source=textwrap.dedent(inspect.getsource(original))
+        for old,new in edits:
+            if old not in source: raise AssertionError('mutation-site-missing')
+            source=source.replace(old,new)
+        namespace=original.__globals__.copy()
+        exec(compile(source,'<evidence-mutation>','exec'),namespace)
+        setattr(owner,name,namespace[name])
+        try:
+            suite=unittest.defaultTestLoader.loadTestsFromName(target)
+            output=io.StringIO(); result=unittest.TextTestRunner(stream=output).run(suite)
+            killed=bool(result.failures) and not result.errors and result.testsRun > 0
+            results.append({'id':identifier,'killed':killed,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors)})
+        finally: setattr(owner,name,original)
+        if not killed: break
+    if all(row['killed'] for row in results):
+        vocab = copy.deepcopy(ep.VOCABULARIES)
+        vocab['METRIC_IDS'] = vocab['METRIC_IDS'] | {'mutation-only'}
+        with patch.object(ep, 'VOCABULARIES', vocab):
+            target='test_evidence_protocol.VocabularyMirrorTests.test_python_vocabularies_equal_committed_artifact'
+            result=unittest.TextTestRunner(stream=io.StringIO()).run(unittest.defaultTestLoader.loadTestsFromName(target))
+        results.append({'id':'MUT-VOCAB-PY','killed':bool(result.failures) and not result.errors,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors)})
+    return results
+
+
+if __name__ == '__main__':
+    import sys
+    if '--mutation-proof' in sys.argv:
+        rows=run_mutation_proof()
+        print(json.dumps(rows,sort_keys=True))
+        raise SystemExit(not all(r['killed'] for r in rows))
+    unittest.main()

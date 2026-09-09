@@ -6,6 +6,7 @@ from dataclasses import dataclass, fields
 import math
 import random
 from types import MappingProxyType
+from pathlib import Path
 
 import evidence_protocol as ep
 from gaze_bench_score import merge_intervals, interval_length
@@ -26,7 +27,7 @@ class PlannedInventory:
         for c in self._cases:
             ep.require(type(c) is PlannedCase and type(c.key) is str and bool(c.key)
                        and type(c.group_id) is str and bool(c.group_id), 'inventory_conflict')
-            ep.require(c.key not in index and c.stratum in ep.STRATUM_IDS
+            ep.require(c.key not in index and type(c.stratum) is str and c.stratum in ep.STRATUM_IDS
                        and ep._number(c.weight) and c.weight > 0, 'inventory_conflict')
             group = (c.stratum, c.weight)
             ep.require(c.group_id not in groups or groups[c.group_id] == group, 'inventory_conflict')
@@ -89,6 +90,7 @@ class PrivateEvaluator:
     def __init__(self, inventory):
         ep.require(type(inventory) is PlannedInventory, 'inventory_conflict')
         self.inventory = inventory
+        self._class_rows = ep.load_class_commitments(Path(__file__).resolve().parents[2] / "docs/reference/benchmarks/class-commitments-v1.json")
         self._records = {a:{} for a in ep.ARM_IDS}
         self._finalized = False
 

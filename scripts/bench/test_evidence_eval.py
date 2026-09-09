@@ -218,9 +218,73 @@ class ExportTests(unittest.TestCase):
 
     def test_evaluator_canary_no_output_or_file_writes(self):
         out,err = io.StringIO(),io.StringIO()
+        e = paired()
         with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(out),contextlib.redirect_stderr(err),patch('builtins.open',side_effect=AssertionError('unexpected-file-open')):
-            e = paired();e.finalize(); e.aggregate('candidate')
+            e.finalize(); e.aggregate('candidate')
             try: e.add('base','synthetic-private-canary',completed())
             except ep.ReceiptRefused as error: self.assertTrue(str(error) in ep.REFUSAL_CODES)
             self.assertTrue(not list(Path(d).iterdir()))
         self.assertTrue(not out.getvalue() and not err.getvalue(), 'private-output-canary')
+
+class CommitmentConsumptionTests(unittest.TestCase):
+    def test_evaluator_loads_committed_class_table(self):
+        with patch.object(ep, 'load_class_commitments', side_effect=ep.ClassCommitmentRefused('class_commitment_invalid')) as loader:
+            with self.assertRaises(ep.ClassCommitmentRefused): ee.PrivateEvaluator(inventory())
+        self.assertTrue(loader.call_count == 1)
+
+
+def run_rust_mutation_proof():
+    """Opt-in under the live machine lease; touch only the committed test file."""
+    import os
+    import subprocess
+    import re
+    root = Path(__file__).resolve().parents[2]
+    source_path = root/'crates/gaze-mcp-rmcp/tests/evidence_route.rs'
+    source = source_path.read_text()
+    cargo = '/Users/krishankoenig/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin/cargo'
+    # Each row executes just its declared target, not an inferred whole-suite kill set.
+    cases = [
+        ('MUT-NO-PAYLOAD', [('r.is_error != Some(true) => "COMPLETED"','(r.is_error == Some(true) || r.is_error != Some(true)) => "COMPLETED"')], 'undeclared_carrier_has_positive_no_payload_and_unobserved_leaves'),
+        ('MUT-VOCAB-RUST', [('const METRIC_IDS: &[&str] = &[','const METRIC_IDS: &[&str] = &["mutation-only",')], 'vocabularies_match_committed_artifact'),
+        ('MUT-RUST-WALKER', [('fn walk(node: &Value, path: &str, rules: &Value) -> bool {','fn walk(node: &Value, path: &str, rules: &Value) -> bool { if path != "$" {return true;}')], 'rust_walker_rejects_nested_paths_types_and_forbidden_counts'),
+        ('MUT-OBSERVER-RAW-GAP', [('            mode,\n            session: session.clone(),','            mode: if mode == 0 {1} else {mode},\n            session: session.clone(),')], 'protected_success_and_golden_receipt'),
+        ('MUT-EMITTER-FORBIDDEN-COUNT', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");','    r["counts"]["protection_trace_items"] = json!(0);\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'protected_success_and_golden_receipt'),
+        ('MUT-FAILED-FINISH', [('async fn finish_call(&self, _: CallHandle, _: SnapshotRef)', 'async fn finish_call(&self, handle: CallHandle, _: SnapshotRef)'), ('if self.fail_finish {','if self.fail_finish {\n            self.fail_call(handle, FailureReason::Other { message: "synthetic".into() }).await?;')], 'response_conflict_rolls_back_but_failed_finish_retains_mappings'),
+        ('MUT-ROLLBACK', [('if self.mode == 3 && !ctx.manifest.spans.is_empty() {','if self.mode == 3 && !ctx.manifest.spans.is_empty() {\n            must(self.session.tokenize(&PiiClass::Email, FRESH));')], 'response_conflict_rolls_back_but_failed_finish_retains_mappings'),
+        ('MUT-LEAK-COMPUTED', [('self.add("gold_occurrences_surviving_egress", 1);','self.add("gold_occurrences_surviving_egress", 0);')], 'controlled_four_slot_occurrence_oracle'),
+        ('MUT-OCCURRENCE-ORACLE', [('if observed.matches("[[g]]").count() != 1 || observed.matches("[[/g]]").count() != 1 {\n            return Verdict::Unknown;','if observed.matches("[[g]]").count() != 1 || observed.matches("[[/g]]").count() != 1 {\n            return Verdict::Full;')], 'controlled_four_slot_occurrence_oracle'),
+        ('MUT-STRING-BYTES', [('if r.text == expected {','if must(serde_json::from_str::<Value>(&r.text)) == must(serde_json::from_str::<Value>(expected)) {')], 'json_text_string_bytes_are_stricter_than_semantic_equality'),
+        ('MUT-RAW-VALUE-SWAP', [('self.add("egress_raw_value_mismatches", 1);','self.add("egress_raw_value_mismatches", 0);')], 'integrity_analogues_have_independent_nonzero_falsifiers'),
+        ('MUT-TOKEN-CORRUPTION', [('self.add("egress_token_restore_failures", 1);','self.add("egress_token_restore_failures", 0);')], 'integrity_analogues_have_independent_nonzero_falsifiers'),
+        ('MUT-CANARY-RUST', [('    let wire = must(serde_json::to_string(&r));','    eprintln!("{EMAIL}");\n    let wire = must(serde_json::to_string(&r));')], 'private_failure_canary_captures_stdout_stderr_and_files'),
+    ]
+    env = os.environ.copy()
+    env.update(RUSTUP_TOOLCHAIN='1.96.0', RUSTC=str(Path(cargo).with_name('rustc')), RUSTDOC=str(Path(cargo).with_name('rustdoc')))
+    results = []
+    for identifier,edits,target in cases:
+        mutated = source
+        for old,new in edits:
+            if old not in mutated: raise AssertionError('mutation-site-missing')
+            mutated = mutated.replace(old,new)
+        try:
+            source_path.write_text(mutated)
+            result = subprocess.run([cargo,'test','--offline','--locked','-p','gaze-mcp-rmcp','--test','evidence_route','--','--exact',target,'--test-threads=1'],cwd=root,env=env,capture_output=True)
+            output = result.stdout + result.stderr
+            # Compilation failure, panic in an unrelated test, or zero collection is no proof.
+            killed = result.returncode != 0 and b'running 1 test' in output and ('test '+target+' ... FAILED').encode() in output
+            row = dict(id=identifier,killed=killed,tests_run=1 if b'running 1 test' in output else 0,kill_set=[target] if killed else [])
+            results.append(row)
+            print(json.dumps(row,sort_keys=True),flush=True)
+        finally:
+            source_path.write_text(source)
+        if not killed: break
+    assert source_path.read_text() == source, 'mutation-restoration'
+    return results
+
+
+if __name__ == '__main__':
+    import sys
+    if '--rust-mutation-proof' in sys.argv:
+        rows = run_rust_mutation_proof()
+        raise SystemExit(not all(r['killed'] for r in rows))
+    unittest.main()

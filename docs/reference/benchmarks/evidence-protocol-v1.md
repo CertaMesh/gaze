@@ -334,3 +334,154 @@ count. UNKNOWN-INTERVAL, INTERVAL-DECLARATION and FULL-CELL-BASIS each exercise
 the matching named refusal. RAW-VALUE-SWAP swaps distinct owned tokens;
 TOKEN-CORRUPTION must actually yield RestoreError. CONTAINER-TYPES substitutes
 empty arrays/objects at paths requiring another type.
+
+## Closed vocabulary reference
+
+These are the committed T1 sets. Changes require agreement of both language
+mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
+
+### ARM_IDS
+
+`base`, `candidate`.
+
+### ATTESTATION_SOURCES
+
+`live_repository`, `test_seam`.
+
+### BASIS_IDS
+
+`full_cell`, `paired_completed`.
+
+### BLOCKED_GATES
+
+`class_commitment_completeness`, `manifest_integrity_six_counter_schema_v4`, `per_token_protection_trace`, `producer_membership_order_proof`, `unknown_egress_route_fragment_observation`.
+
+### CELL_IDS
+
+`synthetic.mcp.controlled.v1`, `synthetic.mcp.core.v1`.
+
+### CLAIM_SCOPES
+
+`synthetic_harness_capability_only`.
+
+### CONTROL_REFUSAL_CODES
+
+`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
+
+### COUNTING_GRADES
+
+`egress_reconstructed`, `observer_native`, `route_native`.
+
+### DECLARATION_FIELDS
+
+`acceptance_limit`, `confidence_level`, `coverage_target`, `multiplicity_treatment`, `resample_count`, `seed`, `strata`, `weighting`.
+
+### DERIVATIONS
+
+`egress_reconstructed`, `invariant_enforced_not_counted`, `not_applicable_by_construction`, `not_measured`, `observer_native`, `route_native`.
+
+### ERROR_CODES
+
+`auth-denied`, `backend-failure`, `backend-unavailable`, `internal`, `invalid-args`, `invalid-session-id`, `limit-exceeded`, `manifest-persistence-failed`, `not-found`, `redaction-failed`, `response-serialization-failed`.
+
+### FEATURE_GRAPH_IDS
+
+`workspace.all_features`, `workspace.default`.
+
+### GATE_IDS
+
+`build_attestation_clean_source`, `claim_scope_present`, `class_commitment_completeness`, `class_commitment_schema_load`, `cross_language_vocabulary_equality`, `declaration_gating`, `egress_integrity_analogues`, `false_positive_negative_control`, `gold_survival_oracle`, `local_membership_order_proof`, `manifest_integrity_six_counter_schema_v4`, `no_payload_positive_observation`, `outcome_identities`, `paired_grouped_interval_arithmetic`, `per_token_protection_trace`, `planned_inventory_reconciliation`, `producer_membership_order_proof`, `receipt_path_allowlist`, `rejection_is_not_protection`, `source_attribution_events`, `stamped_field_separation`, `string_byte_reversibility`, `unknown_egress_lower_bound`, `unknown_egress_route_fragment_observation`, `vocabulary_closure`.
+
+### GATE_RESULTS
+
+`BLOCKED`, `FAIL`, `NOT_EVALUABLE`, `PASS`.
+
+### LEAK_FAMILY_METRIC_IDS
+
+`gold_bytes_surviving_egress`, `gold_occurrences_attribution_not_measured`, `gold_occurrences_partially_surviving_egress`, `gold_occurrences_surviving_egress`.
+
+### METHOD_IDS
+
+`grouped_paired_percentile_v1`.
+
+### METRIC_IDS
+
+`egress_authorized_range_bounds_invalid`, `egress_authorized_range_non_monotonic`, `egress_clean_bounds_invalid`, `egress_overlapping_clean_spans`, `egress_raw_value_mismatches`, `egress_token_restore_failures`, `false_positive_bytes`, `false_positive_occurrences`, `gold_bytes_planned`, `gold_bytes_surviving_egress`, `gold_occurrences_attribution_not_measured`, `gold_occurrences_partially_surviving_egress`, `gold_occurrences_planned`, `gold_occurrences_surviving_egress`, `leaf_restore_decision_failures`, `leaf_restore_exact`, `manifest_raw_entry_agreement_enforced`, `manifest_span_monotonicity_enforced`, `manifest_terminal_events`, `observer_leaves_observed`, `observer_leaves_unobserved`, `observer_manifest_spans_observed`, `observer_recognizer_source_events`, `protected_leaves`, `protection_trace_items`, `tool_invocations`, `unknown_egress_lower_bound_cases`.
+
+### MULTIPLICITY_IDS
+
+`synthetic_none`.
+
+### OUTCOME_STATES
+
+`COMPLETED`, `ERROR_PROTOCOL`, `FAILED_CLOSED_NO_EGRESS`, `NOT_STARTED`, `UNKNOWN_EGRESS`.
+
+### POLICY_IDENTITIES
+
+`controlled.email_only.v1`, `core.rule_floor.v1`.
+
+### RECEIPT_PATHS
+
+`$`, `$.analysis_declaration`, `$.analysis_declaration.acceptance_limit`, `$.analysis_declaration.confidence_level`, `$.analysis_declaration.coverage_target`, `$.analysis_declaration.multiplicity_treatment`, `$.analysis_declaration.resample_count`, `$.analysis_declaration.seed`, `$.analysis_declaration.strata`, `$.analysis_declaration.strata.[]`, `$.analysis_declaration.weighting`, `$.arm_id`, `$.asymmetric_outcome_table`, `$.asymmetric_outcome_table.*`, `$.asymmetric_outcome_table.*.*`, `$.cell_id`, `$.claim_scope`, `$.class_commitment_table`, `$.class_commitment_table.id`, `$.class_commitment_table.version`, `$.counts`, `$.counts.*`, `$.derivations`, `$.derivations.*`, `$.error_codes`, `$.error_codes.*`, `$.gate_results`, `$.gate_results.*`, `$.intervals`, `$.intervals.*`, `$.intervals.*.basis`, `$.intervals.*.conditional`, `$.intervals.*.high`, `$.intervals.*.low`, `$.intervals.*.method_id`, `$.intervals.*.point`, `$.not_measured`, `$.not_measured.blocked_gates`, `$.not_measured.blocked_gates.[]`, `$.not_measured.metrics`, `$.not_measured.metrics.[]`, `$.outcomes`, `$.outcomes.*`, `$.planned_case_count`, `$.policy_identity`, `$.population_handle`, `$.protocol_id`, `$.protocol_version`, `$.route_id`, `$.route_status`, `$.route_status.*`.
+
+### REFUSAL_CODES
+
+`attestation_shape_invalid`, `class_commitment_invalid`, `conditional_reported_as_full_cell`, `counted_non_measurement`, `declaration_invalid`, `derivation_conflict`, `derivation_coverage_incomplete`, `duplicate_json_key`, `gate_coverage_incomplete`, `handle_shape_invalid`, `input_limit`, `interval_without_declaration`, `inventory_conflict`, `lower_bound_reported_as_exact`, `malformed_json`, `membership_order_proof_failed`, `missing_mandatory_key`, `non_finite_number`, `observer_coverage_incomplete`, `outcome_identity_violation`, `protocol_identity_mismatch`, `stamped_key_in_emitted_receipt`, `uncounted_measurable_metric`, `unknown_path`, `value_out_of_vocabulary`, `wrong_type`.
+
+### ROUTE_IDS
+
+`daemon.jsonl.v1`, `mcp.rmcp.duplex.v1`, `ocr.document.v1`, `proxy.http.v1`, `session.episode.v1`, `stream.v1`, `structured.core.v1`, `text.clean_for_bench.v1`.
+
+### ROUTE_STATUSES
+
+`IMPLEMENTED`, `NOT_IMPLEMENTED`.
+
+### STAMPED_KEYS
+
+`build_attestation`, `local_membership_order_proof_method`, `local_membership_order_verified`.
+
+### STRATUM_IDS
+
+`synthetic_de`, `synthetic_en`.
+
+### TABLE_IDS
+
+`class-commitments-v1`.
+
+### TOOLCHAIN_IDS
+
+`rust.workspace_pinned`.
+
+### WEIGHTING_IDS
+
+`inventory_group`.
+
+## Reproducible focused proof
+
+Run Python unittest discovery with Python 3.13; assert a nonzero collection.
+Run `cargo test --offline --locked -p gaze-mcp-rmcp --test evidence_route
+-- --test-threads=1` under the pinned Rust 1.96.0 toolchain and live machine
+serialization. Only synthetic data is used. The optional
+`python3.13 scripts/bench/test_evidence_protocol.py --mutation-proof` performs
+in-memory Python function mutations, restores every function, and reports
+only identifiers and actual failing test names. It never reports raw failures.
+Each invocation names its targeted kill set; it does not imply that untargeted
+tests passed. The static roster remains the full review checklist. A mutant
+that survives or fails compilation is not a killed mutant.
+
+Rust test-local counter mutations likewise require compiling and executing the
+named test. Adversarial corrupted-token restore probes are evaluator-helper
+falsifiers using synthetic post-observation operands, not claimed route-native
+unknown-token egress. The actual token-swap fixture does traverse the route.
+The timeout route observes no partial bytes. These distinctions are mandatory.
+
+Normal workspace clippy/all-feature tests, documentation, MSRV, deny and xtask
+CI gates remain separate root/PR obligations; they are not replaced by this
+focused proof. No new screenshots are needed because no visible output changes.
+
+Additional mutation `MUT-CANARY-RUST` emits a synthetic private value inside the
+canary child; only the parent output-capture test is its targeted kill set.
+The complete roster is 48 mechanisms: 35 Python and 13 Rust opt-in probes.
+Rust probes run with `python3.13 scripts/bench/test_evidence_eval.py
+--rust-mutation-proof` under the machine lease, modifying only evidence_route.rs
+and restoring its exact committed bytes after each probe.

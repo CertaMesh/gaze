@@ -92,7 +92,10 @@ def require(ok, code):
 
 
 def _number(v):
-    return type(v) in (int, float) and math.isfinite(v)
+    try:
+        return type(v) in (int, float) and math.isfinite(v)
+    except OverflowError:
+        return False
 
 
 def walk(node, path='$'):
@@ -129,7 +132,7 @@ def walk(node, path='$'):
         require(type(node) is bool, 'wrong_type')
     elif kind == 'number':
         require(type(node) in (int, float), 'wrong_type')
-        require(math.isfinite(node), 'non_finite_number')
+        require(_number(node), 'non_finite_number')
     elif kind == 'handle':
         require(type(node) is str and re.fullmatch('[0-9a-f]{32,64}', node) is not None, 'handle_shape_invalid')
 
