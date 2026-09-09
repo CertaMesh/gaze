@@ -356,8 +356,9 @@ def run_rust_mutation_proof():
     import subprocess
     import re
     root = Path(__file__).resolve().parents[2]
-    source_path = root/'crates/gaze-mcp-rmcp/tests/evidence_route.rs'
-    source = source_path.read_text()
+    source_paths = [root/'crates/gaze-mcp-rmcp/tests/evidence_route.rs',
+                    root/'crates/gaze-mcp-rmcp/tests/support/evidence_harness.rs']
+    sources = {path: path.read_text() for path in source_paths}
     cargo = os.environ.get('GAZE_EVIDENCE_CARGO') or subprocess.check_output(
         ['rustup', 'which', '--toolchain', '1.96.0', 'cargo'], text=True).strip()
     # Each row executes just its declared target, not an inferred whole-suite kill set.
@@ -400,12 +401,16 @@ def run_rust_mutation_proof():
     markers.update({'MUT-RAW-COVERAGE-COUNT': 'raw-incomplete-count', 'MUT-RAW-COVERAGE-GATE': 'raw-coverage-gate', 'MUT-NEGATIVE-COVERAGE-COUNT': 'negative-incomplete-count', 'MUT-NEGATIVE-COVERAGE-GATE': 'negative-coverage-gate', 'MUT-PRODUCER-GRADE-RUST': 'producer-metric-grade', 'MUT-PRODUCER-CELL-RUST': 'producer-cell-policy', 'MUT-PLAN-INTERVAL-RUST': 'planned-interval-refused'})
     results = []
     for identifier,edits,target in cases:
-        mutated = source
+        mutated = dict(sources)
         for old,new in edits:
-            if old not in mutated: raise AssertionError('mutation-site-missing')
-            mutated = mutated.replace(old,new)
+            sites = [path for path, source in mutated.items() if old in source]
+            if len(sites) != 1 or mutated[sites[0]].count(old) != 1:
+                raise AssertionError('mutation-site-not-unique')
+            path = sites[0]
+            mutated[path] = mutated[path].replace(old, new, 1)
         try:
-            source_path.write_text(mutated)
+            for path, source in mutated.items():
+                path.write_text(source)
             result = subprocess.run([cargo,'test','--offline','--locked','-p','gaze-mcp-rmcp','--test','evidence_route','--','--exact',target,'--test-threads=1'],cwd=root,env=env,capture_output=True)
             output = result.stdout + result.stderr
             # Compilation failure, panic in an unrelated test, or zero collection is no proof.
@@ -414,9 +419,10 @@ def run_rust_mutation_proof():
             results.append(row)
             print(json.dumps(row,sort_keys=True),flush=True)
         finally:
-            source_path.write_text(source)
+            for path, source in sources.items():
+                path.write_text(source)
         if not killed: break
-    assert source_path.read_text() == source, 'mutation-restoration'
+    assert all(path.read_text() == source for path, source in sources.items()), 'mutation-restoration'
     return results
 
 
