@@ -53,6 +53,8 @@ not imply that they meet current production targets.
 | [negative-corpus-annotation-contract.md](negative-corpus-annotation-contract.md) | Synthetic EN/DE hard-negative annotation and zero-PII contract | Contract/dataset description |
 | [openpii-micro-holdout.md](openpii-micro-holdout.md) | Secondary multilingual synthetic holdout provenance and scoring contract | Contract/dataset description |
 | [safety-net-benchmark.md](safety-net-benchmark.md) | SafetyNet matrix architecture, modes, and null-cell contract | Contract/dataset description |
+| [evidence-protocol-v1.md](evidence-protocol-v1.md) | Normative contract for the optional offline T1 evidence path (route observations, synthetic paired arithmetic, recursive aggregate receipt validation); explicitly not an end-to-end paired evaluation of route observations | Contract/dataset description |
+| [class-commitments-v1.json](class-commitments-v1.json) | Fixture-only class-commitment schema and its two fixture rows; explicitly not a corpus commitment (scope `fixture_only_not_a_corpus_commitment`) | Contract/dataset description |
 | [v0.12-consolidated-post-wave-scorecard.md](v0.12-consolidated-post-wave-scorecard.md) | Composed effect of the two drained `core` recognizers, measured on shipped main | Current evidence |
 | [v0.12-consolidated-post-wave-base-scorecard-v4.json](v0.12-consolidated-post-wave-base-scorecard-v4.json) | Schema-v4 scorecard for the BASE half of that comparison (not an accepted baseline) | Current evidence |
 | [v0.12-consolidated-post-wave-candidate-scorecard-v4.json](v0.12-consolidated-post-wave-candidate-scorecard-v4.json) | Schema-v4 scorecard for the CANDIDATE half of that comparison (not an accepted baseline) | Current evidence |
