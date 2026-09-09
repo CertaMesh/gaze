@@ -21,7 +21,7 @@ Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publ
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
 - Derives the publish set and topological order from `cargo metadata` with `cargo run -p xtask -- publish-plan`. Every workspace member with `publish != false` is included automatically, including new crates. The core crate is published as `gaze-pii` while its library target remains `gaze`.
-- Runs a manifest pre-flight before any real publish: `cargo package --no-verify -p <crate>` for each crate in the derived plan. This catches unpublishable workspace dependency manifests before OIDC auth or partial publishing.
+- Runs a manifest pre-flight before any real publish: `cargo package --no-verify --workspace --exclude xtask` for the workspace. Workspace packaging resolves coordinated, not-yet-published dependency versions together. Per-crate packaging would resolve those versions against crates.io before they exist. This catches unpublishable manifests before OIDC auth or partial publishing.
 - Checks crates.io for every planned crate before publishing. If any crate is absent, the workflow fails up front because OIDC trusted publishing cannot first-publish a new crate.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
 - New crates require a one-time manual seed publish with a crates.io token, followed by trusted-publisher linking, before a tag publish can proceed:

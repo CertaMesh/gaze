@@ -7,10 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-09-09
+
 ### Added
 
+- **Opt-in local proxy inspection dashboard** (#397). The default-off
+  `gaze-cli` `dashboard` feature adds an isolated, killable child runtime with
+  bounded, memory-only inspection. Pairing, authentication, registration-bound
+  activation, purge, and disable are fail-closed boundaries. Inspection may
+  expose owner-side content to the authenticated local operator; it is not an
+  agent-facing surface. See the [local dashboard guide](docs/how-to/dashboard/run-local-dashboard.md)
+  and [trust boundary](docs/explanation/dashboard/trust-boundary.md).
+- **Strict Anthropic Messages direct profile** (#397, #399). The proxy validates
+  supported request and response carriers, stages reversible substitutions,
+  and rejects unsupported opaque or numeric schema carriers before forwarding.
+  Limits, tool-schema handling, buffering, and unsupported features are explicit
+  in the [Anthropic contract](docs/explanation/proxy/anthropic-messages-contract.md).
+  These guarantees are profile-specific, not a blanket promise for every
+  provider or every SDK extension.
+- **Reusable pinned model setup library** (#366–#368). `gaze-model-setup` and
+  the public Kiji bundle verifier provide the installation path used by
+  `gaze setup`, with verified artifacts and typed installation outcomes.
+
 - **`passport.cue_anchored` recognizer and an extended `national_id.cue_anchored`
-  close the passport / national-ID / ID-card detection gap on the shipped
+  expand passport / national-ID / ID-card detection on the shipped
   default** (solo todo #3025, slice A). A new `custom:passport` recognizer
   (government-ID collision family, precedence 15 — a passport cue beats a
   tax-number or national-ID cue but yields to an SSN cue) covers passport /
@@ -19,10 +39,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hyphenated `national-id` forms) and shapes (Swiss AHV `756.dddd.dddd.dd`,
   longer alphanumerics). Both carry the byte-identical shared connector, so
   passport is the sixth member of the drift-guarded connector family. Measured
-  on the pinned EN/DE corpus (shipped default): PASSPORTID −1,791, NATIONALID
-  −1,017, IDCARDNUM −577 fewer leaked bytes, with zero A4 negative movement and
-  the national-ID extension a strict superset of the prior rule (no
-  previously-covered span lost). The passport check digit and the Swiss AHV
+  on the pinned EN/DE corpus at candidate `cfb3aed` against `def702a`, the
+  full-stack Kiji resolve cell removes 3,480 leaked labelled bytes: PASSPORTID
+  −1,810, NATIONALID −1,027, IDCARDNUM −586, plus incidental BUILDINGNUM −26.
+  These are slice-specific measurements, not a v0.12.0-to-v0.13.0 comparison.
+  The deterministic cells add 12 false-positive bytes from one unlabelled
+  national-ID span; the rule floor adds one false-positive document. A4 negative
+  results are unchanged. Kiji also loses coverage on LICENSEPLATENUM, ZIP, and
+  PASSWORD, and the scorecard's strict regression comparison does not pass.
+  See the [measured scorecard, hardware, and limits](docs/reference/benchmarks/v0.12-3025a-cfb3aed-scorecard.md)
+  and [benchmark runner](scripts/bench/run_no_opf_benchmark.py). The passport check digit and the Swiss AHV
   EAN-13 check digit are real validators, but the synthetic corpus carries no
   valid check digits, so no validator is attached. The passport shape is a single
   capture and the prefixed Swiss AHV form (`CH-756.dddd.dddd.dd`) is a dedicated
@@ -61,20 +87,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every adopter of the default bundle, not only for configurations that
   auto-activate locale-gated recognizers.
 
-  Measured against the EN/DE benchmark holdout: those two anchors carry 232 of
-  276 gold URL spans and 6,385 of 7,209 leaked URL bytes (88.6%), while matching
-  nothing at all across the 1,024 documents of the committed A4 negative corpus.
-  Before this recognizer the deterministic rule floor was completely blind to
-  URLs — 0 of 276 spans covered and 0 overlapped.
-
-  **Bare-host URLs are deliberately out of scope.** Shapes with no scheme and no
-  `www.` prefix (`example.invalid/orders`) are the remaining 47 spans / 887 bytes
-  / 12.3% of the bucket, and 97 of the 1,024 committed negative documents contain
-  bare-host shapes, so no bare-host rule can clear the negative gate.
+  The [consolidated scorecard](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
+  records the measured EN/DE coverage and A4 negative results. Bare-host URLs
+  without a scheme or `www.` prefix remain outside this rule's scope because
+  they also occur in the negative corpus.
 
   **Documentation, repository, and example URLs are tokenized.** This is
-  intentional: 16 of the 232 gold spans the rule covers are themselves
-  reference-host shaped, so the corpus treats a reference URL inside a
+  intentional: the benchmark includes reference-host shaped gold spans, so it treats a reference URL inside a
   data-owner document as PII to protect. Tokens stay restorable through the
   manifest, so an over-tokenized public URL is a recoverable ergonomics cost
   (axis 5) while an under-tokenized private one is a leak (axis 1).
@@ -86,7 +105,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to explicit English or German credential cues, emitting the reversible
   `custom:security_token` class.
 
-  A fresh full EN/DE comparison removed 3,065 leaked SECURITYTOKEN bytes at the
+  The [consolidated EN/DE comparison](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md) removed 3,065 leaked SECURITYTOKEN bytes at the
   rule floor and 2,985 with pass2 NER. Each deterministic cell added 17
   false-positive bytes, ratios of about 180:1 and 176:1, while the rule matched
   0 of all 1,024 committed A4 negative documents. Cue anchoring is supported by
@@ -158,8 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   owner-side. See `crates/gaze-mcp-core/README.md` for migration requirements.
   `SearchDocumentsTool` supplies its bounded carrier declarations, and
   `gaze_read_file` restores protected paths owner-side before file validation.
-  Publication requires coordinated crate versions and dependency minimums;
-  these unreleased changes do not bump published versions.
+  All publishable workspace crates and their internal dependency minimums
+  move together to 0.13.0 in this release (#452).
 
 
 - **`gaze-cli` declares each shared flag group once** (audit 7201 S11-F1, solo
@@ -175,18 +194,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `commands::shared_args` and shared by `clean` and `daemon`, so a verb cannot
   quietly lose one and run a weaker Pass-3 safety net than its sibling.
 
-  **The published CLI surface is unchanged.** `scripts/verify/cli-help-surface.sh`
+  **The shared-argument refactor preserved the CLI surface at that commit.** `scripts/verify/cli-help-surface.sh`
   builds the base revision and the working tree in one run and diffs `--help`
   for the root command and all 32 subcommands; all 33 captures are byte-identical
   across the change, and the captures are committed under
   `crates/gaze-cli/tests/fixtures/cli-help/`.
 
-  `gaze daemon` still accepts fewer flags than `gaze clean`: no
-  `--safety-net-registry`, `--safety-net-add`, `--kiji-distilbert-precision`,
-  `--opf-locales`, `--opf-command`, `--opf-checkpoint`, `--rulepack-bundled`,
-  or `--rulepack-path`. That gap is unchanged by this release and is now pinned
-  by a test rather than left implicit; passing one of those to `gaze daemon` is
-  rejected, not ignored.
+  The refactor preceded #446, which adds the eight daemon flags listed above.
+  Its help-surface comparison describes the refactor alone, not the cumulative
+  v0.13.0 release.
 
 - **One documented safety-net default across the library and the CLI** (audit
   7201 S01-F1, solo todo #2949). `Pipeline::clean_with_safety_net` and
@@ -373,7 +389,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`url.anchored`, `security_token.anchored`, …) won on `ClassPriority`,
   `remove_overlaps` dropped the whole container, and the clean text carried a
   mid-word token with the head and tail of the identifier raw — for example
-  `https://www.finanzamt.at` split around `nzamt`, or an `AKIA…` credential
+  a URL split around an embedded NER name, or an `AKIA…` credential
   split around `AKIAIOSF`. Measured on the shipped default: 1,522 URL bytes and
   44 credential bytes leaked this way on the pinned EN/DE corpus; the rule
   floor was unaffected because it has no NER pass. `resolve_candidates` now
@@ -389,14 +405,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   multi-word phrasing between the cue and the value is covered** (solo todo #3025, slice G).
   `ssn.us`, `ssn.de_cue`, `tax_number.cue_anchored`, `driver_license.cue_anchored` and
   `national_id.cue_anchored` previously allowed a single optional keyword plus one punctuation
-  mark between the cue and the value, so real phrasing such as `license number, D1234567`,
-  `Sozialversicherungsnummer, die lautet 756.1234.5678.90` and `tax number as 123-456-789`
+  mark between the cue and the value, so real phrasing such as a licence cue followed by a comma,
+  a German social-insurance cue followed by a relative clause, and a tax cue followed by `as`
   leaked. All five now carry one byte-identical connector fragment (up to four closed-vocabulary
   tokens with Unicode-aware, unbounded whitespace — matching `ssn.us`'s prior `\s*` tolerance, so
   aligned columns, long padding and non-breaking spaces stay covered — and one optional separator).
   This is a grammar-only change: cue
   vocabulary and value shapes are unchanged, so the set of eligible value shapes did not move.
-  Measured on the pinned EN/DE corpus, on the shipped default (`full-stack-kiji-resolve`),
+  Measured in the [connector scorecard](docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md), on the shipped default (`full-stack-kiji-resolve`),
   against the slice-U merge (`56e1a3d`): 1,802 fewer leaked labelled bytes — SSN −526,
   DRIVERLICENSENUM −582, IDCARDNUM −384, NATIONALID −205, TAXNUM −95. On the deterministic rule
   floor, 190 more entities fully covered for zero false-positive movement (rule and pass2
@@ -618,6 +634,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of silently mapping to `O` or returning no spans. The bundle ships no
   `id2label` artifact, so the registry cannot be re-checked at bundle load; the
   SHA-256 bundle pin plus the parity tests are the guard.
+
+### Evidence and known limits
+
+The release includes all changes since v0.12.0, not only MCP #452. Detection
+remains dependent on the configured recognizers, dictionaries, locales, and
+safety nets. MCP protects supported tool-call carriers; it does not protect
+chat UI uploads or pasted user messages outside that path. Operator restore
+surfaces remain privileged and may intentionally return raw owner data.
+
+Benchmark numbers above describe the named historical candidate/base pairs.
+They are not a fresh measurement of this release head and must not be added
+together as an end-to-end release gain. The
+[benchmark runner](scripts/bench/run_no_opf_benchmark.py),
+[consolidated scorecard and machine specification](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md),
+[post-wave scorecard](docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md),
+and linked slice scorecards retain corpus pins, hardware, failed-closed
+accounting, false positives, and known class regressions. No universal
+PII-detection or exact-restore rate is claimed. Safety-net `Redact` fallback
+still deletes residual bytes; strict MCP rejects results that cannot satisfy
+its reversible protection contract.
 
 ## [0.12.0] - 2026-07-06
 
@@ -1985,7 +2021,8 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/EmpireTwo/gaze/compare/v0.6.4...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/EmpireTwo/gaze/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/EmpireTwo/gaze/compare/v0.6.1...v0.6.2
