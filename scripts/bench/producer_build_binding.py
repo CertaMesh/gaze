@@ -237,7 +237,7 @@ class BuildOwner:
                         if drain_end is None:
                             drain_end = min(self.work_end, time.monotonic()+2)
                         require(time.monotonic() < drain_end, 'cleanup')
-                    if sample is not None and time.monotonic()-sampled >= 1:
+                    if sample is not None and observed is None and time.monotonic()-sampled >= 1:
                         sample()
                         sampled = time.monotonic()
                     for key, _ in selector.select(.02):

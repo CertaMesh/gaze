@@ -579,6 +579,36 @@ class InputRecheckTests(unittest.TestCase):
 
 
 class BindingRegressionTests(unittest.TestCase):
+    def test_exited_leader_drains_without_target_sampling(self):
+        clock = [10.0]
+        with patch.object(binding.time, 'monotonic', side_effect=lambda: clock[0]):
+            owner = binding.BuildOwner(deadline=40)
+            process = MagicMock(pid=7)
+            selector = MagicMock()
+            selector.__enter__.return_value = selector
+            remaining = [process.stdout, process.stderr]
+            selector.get_map.side_effect = lambda: remaining
+            selector.select.side_effect = lambda timeout: [(
+                types.SimpleNamespace(fd=7, fileobj=remaining[0]), None)]
+            selector.unregister.side_effect = remaining.remove
+            def slow_sample():
+                clock[0] += 2.5
+            sample = MagicMock(side_effect=slow_sample)
+            with patch.object(binding, 'platform_preflight'), \
+                    patch.object(binding.subprocess, 'Popen', return_value=process), \
+                    patch.object(binding.selectors, 'DefaultSelector', return_value=selector), \
+                    patch.object(os, 'set_blocking'), patch.object(os, 'read', return_value=b''), \
+                    patch.object(owner, 'observe', return_value=types.SimpleNamespace(si_status=0)), \
+                    patch.object(owner, 'cleanup', return_value=0) as cleanup:
+                try:
+                    status = owner.run(['synthetic'], sample=sample)
+                except ProducerFailure:
+                    self.fail('clean-drain-must-not-expire-during-sampling')
+                self.assertEqual(status, 0)
+            sample.assert_not_called()
+            self.assertEqual(remaining, [])
+            cleanup.assert_called_once_with(False)
+
     def test_spawn_bookkeeping_cancellation_and_normal_control(self):
         import inspect
         lines, first = inspect.getsourcelines(binding.BuildOwner.run.__wrapped__)
@@ -1039,6 +1069,9 @@ def mutation_proof():
          'SessionOwnershipTests.test_bridge_uses_returned_artifact_with_retained_fd_and_remaining_deadline'),
     ]
     roster.extend([
+        ('post_exit_sampling', 'sample is not None and observed is None and',
+         'sample is not None and',
+         'BindingRegressionTests.test_exited_leader_drains_without_target_sampling'),
         ('returned_process_cleanup', 'if self.process is not None:\n                # A returned process',
          'if self.process is not None and not failure:\n                # A returned process',
          'BindingRegressionTests.test_spawn_bookkeeping_cancellation_and_normal_control'),
