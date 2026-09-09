@@ -18,7 +18,7 @@ from dataclasses import dataclass
 CODES = frozenset({
     "unsupported_platform", "invalid_limits", "invalid_state", "input_limit",
     "output_limit", "stderr_limit", "deadline", "protocol", "producer_exit",
-    "io", "payload_processing", "cleanup",
+    "io", "payload_processing", "cleanup", "cancelled",
 })
 PHASES = frozenset({"start", "handshake", "exchange", "finish", "cleanup", "payload"})
 
@@ -43,6 +43,8 @@ def producer_boundary(function):
             code, phase = error.code, error.phase
         except Exception:
             pass
+        except BaseException:
+            code = "cancelled"
         # Raising inside except would retain the original private exception.
         raise ProducerFailure(code, phase) from None
     return wrapped

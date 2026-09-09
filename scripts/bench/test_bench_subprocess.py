@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
-import io
 import json
 import os
 from pathlib import Path
@@ -54,6 +53,8 @@ def child(mode):
                                          "validator_kind": "synthetic"}]})
     if mode in ("ignore", "finish-hang"):
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
+    if mode in ("blocked-write", "trickle", "silent", "no-newline"):
+        emit({"ready": True})
     if mode == "blocked-write":
         for _ in range(1024):
             os.write(2, b"x" * 1024)
@@ -101,6 +102,7 @@ def child(mode):
             from test_openpii_gaze_bench import ResponseValidationTests
             response = ResponseValidationTests().success_response()
             response["fixture_id"] = request["fixture_id"]
+            response["clean_text"] = request["text"]
             if mode == "score-bad":
                 response[CANARY] = CANARY
             elif mode == "score-reason":
@@ -111,12 +113,17 @@ def child(mode):
                 response = {"fixture_id": request["fixture_id"],
                             "pipeline_error_code": "safety_net_fallback_residual_suspect",
                             "pipeline_error_stage": "clean", "timing": {"total_ms": 1.0}}
-            os.write(2, CANARY.encode())
+            os.write(2, request["text"].encode())
             emit(response)
         else:
             emit(request)
         if mode == "nonzero":
             return 9
+    if mode == "exit-flood":
+        for _ in range(16):
+            os.write(2, CANARY.encode() * 512)
+    if mode == "exit-extra":
+        os.write(1, b"{}\n")
     return 0
 
 
@@ -127,7 +134,7 @@ def invoke(mode, root, *, late=False, post=False):
         created.append(owner)
         return owner
     from test_openpii_gaze_bench import ResponseValidationTests
-    document = ResponseValidationTests().document()
+    document = dataclasses.replace(ResponseValidationTests().document(), text=CANARY)
     with mock.patch.object(score, "BenchSubprocess", side_effect=factory):
         if mode.startswith("probe") or mode in ("bad-handshake", "early"):
             result = score.collect_validator_measurements(Path("synthetic"), [document], [document.uid])
@@ -155,6 +162,7 @@ def invoke(mode, root, *, late=False, post=False):
 
 
 def boundary_scenario(mode, root):
+    os.chdir(root)
     late = mode == "late"
     post = mode == "post"
     actual_mode = "score" if late or post else mode
@@ -182,7 +190,17 @@ def boundary_scenario(mode, root):
 class TransportTests(unittest.TestCase):
     def owner(self, mode="echo", **changes):
         owner = transport.BenchSubprocess(command(mode), limits=limits(**changes))
-        self.addCleanup(owner._cleanup)
+        def fixture_cleanup():
+            # Mutation probes must not disable the test harness's own reaper.
+            if owner.process is not None:
+                if owner.process.poll() is None:
+                    owner.process.kill()
+                owner.process.wait(timeout=1)
+                for stream in (owner.process.stdin, owner.process.stdout, owner.process.stderr):
+                    stream.close()
+            if owner.selector is not None:
+                owner.selector.close()
+        self.addCleanup(fixture_cleanup)
         return owner
 
     def reaped(self, owner):
@@ -284,6 +302,8 @@ class TransportTests(unittest.TestCase):
             started = time.monotonic()
             with self.assertRaises(transport.ProducerFailure, msg="absolute-deadline") as failure:
                 with owner:
+                    self.assertTrue(owner.receive_handshake() == {"ready": True}, "child-ready")
+                    started = time.monotonic()
                     owner.exchange({"text": "x" * 400_000})
             self.assertEqual(failure.exception.code, "deadline", "absolute-deadline")
             self.assertTrue(time.monotonic() - started < 1.1, "absolute-deadline")
@@ -331,6 +351,78 @@ class TransportTests(unittest.TestCase):
                 raise ValueError("synthetic processing failure")
         self.reaped(owner)
 
+    def test_shutdown_output_and_stderr_budget(self):
+        for mode, expected in (("exit-flood", "stderr_limit"), ("exit-extra", "protocol")):
+            owner = self.owner(mode, stderr_bytes=4096)
+            with self.assertRaises(transport.ProducerFailure) as failure:
+                with owner:
+                    owner.exchange({"x": 1})
+            self.assertEqual(failure.exception.code, expected, "shutdown-drain")
+            self.reaped(owner)
+
+    def test_invocation_and_parse_deadline(self):
+        owner = self.owner(invocation_seconds=0.6)
+        with self.assertRaises(transport.ProducerFailure) as failure:
+            with owner:
+                owner.exchange({"x": 1})
+                time.sleep(0.65)
+                owner.exchange({"x": 2})
+        self.assertEqual(failure.exception.code, "deadline", "invocation-deadline")
+        self.reaped(owner)
+        owner = self.owner()
+        with owner:
+            owner.exchange({"x": 1})
+            original = transport.json.loads
+            def slow(*args, **kwargs):
+                time.sleep(0.65)
+                return original(*args, **kwargs)
+            with mock.patch.object(transport.json, "loads", side_effect=slow):
+                with self.assertRaises(transport.ProducerFailure) as failure:
+                    owner.exchange({"x": 2})
+            self.assertEqual(failure.exception.code, "deadline", "decode-deadline")
+        self.reaped(owner)
+
+    def test_cleanup_drain_failure_still_reaps(self):
+        owner = self.owner("ignore")
+        with self.assertRaises(transport.ProducerFailure) as failure:
+            with owner:
+                owner.exchange({"x": 1})
+                with mock.patch.object(owner, "_wait_exit", side_effect=OSError(CANARY)):
+                    self.assertFalse(owner._cleanup(), "cleanup-report")
+                    raise transport.ProducerFailure("cleanup", "cleanup")
+        self.assertEqual(failure.exception.code, "cleanup")
+        self.reaped(owner)
+
+    def test_boundary_no_exception_context_in_process(self):
+        with tempfile.TemporaryDirectory() as root:
+            for mode in ("score-bad", "score-reason", "probe-bad", "bad-handshake"):
+                with self.assertRaises(transport.ProducerFailure) as failure:
+                    invoke(mode, Path(root))
+                error = failure.exception
+                self.assertTrue(error.__context__ is None and error.__cause__ is None, "exception-context")
+                self.assertTrue(CANARY not in repr(error), "exception-boundary")
+
+    def test_cancelled_payload_and_unknown_population_are_closed(self):
+        owners = []
+        def factory(*args, **kwargs):
+            owner = transport.BenchSubprocess(command("probe"), limits=limits())
+            owners.append(owner)
+            return owner
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.object(score, "BenchSubprocess") as spawn:
+                with self.assertRaises(transport.ProducerFailure) as failure:
+                    score.collect_validator_measurements(Path(root), [], [CANARY])
+                spawn.assert_not_called()
+                self.assertTrue(failure.exception.__context__ is None, "exception-context")
+            with mock.patch.object(score, "BenchSubprocess", side_effect=factory), mock.patch.object(
+                score, "_validate_validator_probe_handshake", side_effect=KeyboardInterrupt(CANARY)
+            ):
+                with self.assertRaises(transport.ProducerFailure) as failure:
+                    score.collect_validator_measurements(Path(root), [], [])
+            self.assertEqual(failure.exception.code, "cancelled", "cancelled-boundary")
+            self.assertTrue(failure.exception.__context__ is None and failure.exception.__cause__ is None, "exception-context")
+            self.reaped(owners[0])
+
     def test_boundary_success_and_failure_sinks(self):
         for mode in ("score", "score-refusal", "probe", "early", "bad-handshake",
                      "probe-bad", "score-bad", "score-reason", "late", "post", "uncaught"):
@@ -345,10 +437,76 @@ class TransportTests(unittest.TestCase):
                     self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "boundary-result")
 
 
+MUTATIONS = {
+    "stderr-file": ("        self.stderr_seen += len(chunk)",
+                    "        open('synthetic-output', 'ab').write(chunk)\n        self.stderr_seen += len(chunk)",
+                    "test_boundary_success_and_failure_sinks", "file-boundary"),
+    "stderr-stdout": ("        self.stderr_seen += len(chunk)",
+                      "        print(chunk.decode('utf-8', errors='replace'))\n        self.stderr_seen += len(chunk)",
+                      "test_boundary_success_and_failure_sinks", "output-canary"),
+    "stderr-budget": ("if self.stderr_seen > self.limits.stderr_bytes:", "if False:",
+                      "test_stderr_budget", "stderr-budget"),
+    "request-cap": ("if len(output) + len(data) > self.limits.request_bytes:", "if False:",
+                    "test_request_cap_and_preallocation", "request-preallocation"),
+    "frame-truncation": ("if newline != len(frame) - 1 or (request is not None and offset != len(request)):\n                        raise ProducerFailure(\"protocol\", self.phase)",
+                         "if request is not None and offset != len(request):\n                        raise ProducerFailure(\"protocol\", self.phase)\n                    frame = frame[:newline + 1]",
+                         "test_malformed_extra_partial_frames", "frame-refusal"),
+    "deadline": ("if time.monotonic() >= deadline:", "if False:",
+                 "test_write_blocking_and_absolute_deadlines", "absolute-deadline"),
+    "cleanup": ("        if self.process is None:\n            return clean",
+                "        return clean\n        if self.process is None:\n            return clean",
+                "test_cleanup_on_processing_exception", "child-reaping"),
+    "context": ("        except Exception:\n            pass",
+                "        except Exception:\n            raise ProducerFailure('payload_processing') from None",
+                "test_boundary_no_exception_context_in_process", "exception-context"),
+}
+
+
+def apply_mutation(name):
+    old, new, _, _ = MUTATIONS[name]
+    source = Path(transport.__file__).read_text()
+    assert old in source, "mutation-site"
+    exec(compile(source.replace(old, new, 1), transport.__file__, "exec"), transport.__dict__)
+    score.run_config = transport.producer_boundary(score.run_config.__wrapped__)
+    score.collect_validator_measurements = transport.producer_boundary(score.collect_validator_measurements.__wrapped__)
+
+
+def mutation_worker(name):
+    apply_mutation(name)
+    target = MUTATIONS[name][2]
+    result = unittest.TestResult()
+    unittest.TestSuite([TransportTests(target)]).run(result)
+    # Only the named assertion is a kill. Errors/watchdog/compile failure aren't.
+    killed = any(MUTATIONS[name][3] in detail for _, detail in result.failures)
+    if not killed:
+        print("survived-or-wrong-failure:" + name)
+        return 1
+    print("killed:" + name + ":" + target)
+    return 0
+
+
+def mutation_proof():
+    for name in MUTATIONS:
+        environment = {**os.environ, "GAZE_BENCH_TEST_MUTANT": name}
+        result = subprocess.run([sys.executable, str(HERE), "--mutant", name],
+                                env=environment, capture_output=True, timeout=20)
+        if result.returncode != 0 or CANARY.encode() in result.stdout + result.stderr:
+            print("mutation-proof-failed:" + name)
+            return 1
+        print(result.stdout.decode().strip())
+    return 0
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--child":
         raise SystemExit(child(sys.argv[2]))
+    if len(sys.argv) > 1 and sys.argv[1] == "--mutation-proof":
+        raise SystemExit(mutation_proof())
+    if len(sys.argv) > 1 and sys.argv[1] == "--mutant":
+        raise SystemExit(mutation_worker(sys.argv[2]))
     if len(sys.argv) > 1 and sys.argv[1] == "--boundary":
+        if os.environ.get("GAZE_BENCH_TEST_MUTANT"):
+            apply_mutation(os.environ["GAZE_BENCH_TEST_MUTANT"])
         boundary_scenario(sys.argv[2], Path(sys.argv[3]))
     else:
         unittest.main()

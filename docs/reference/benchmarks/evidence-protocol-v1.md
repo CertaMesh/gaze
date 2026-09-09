@@ -82,7 +82,8 @@ A response must be complete, within limits and strictly decoded/validated.
 Duplicate keys, nonfinite numbers, invalid UTF-8, excessive nesting, extra
 frames and partial EOF refuse; a truncated prefix is never scored. Parent
 exceptions from both calls contain only closed codes/phases, without retained
-payload-bearing exception chains. Malformed transport, timeout or unconfirmed
+payload-bearing exception chains. Cancellation also exits through a closed
+error after cleanup. Malformed transport, timeout or unconfirmed
 cleanup aborts the cell, never yielding a successful scorecard, failed-closed
 protection credit or substitute zero-leak metric. Valid typed pipeline refusals
 retain the existing scoring/accounting behavior. Cleanup targets only the owned
@@ -100,6 +101,21 @@ private run. A separately reviewed custody, provenance and in-memory
 producer-to-evaluator bridge is still required; unavailable observations and
 producer membership proof remain unmeasured/blocked. This change establishes
 no corpus-fitness, statistical-power or generalization claim.
+
+Focused model-free transport proof uses Python 3.13:
+
+```sh
+python3.13 -m unittest discover -s scripts/bench -p test_bench_subprocess.py
+python3.13 scripts/bench/test_bench_subprocess.py --mutation-proof
+```
+
+The second command mutates code only in isolated test-process memory. Its named
+assertions detect diagnostic file/stdout emission, removed stderr/request
+bounds, accepted frame truncation, bypassed deadlines/cleanup and retained
+exception context. Compilation failures, unrelated errors and watchdog kills
+are not counted as killed mutants. The existing scoring/population/evidence
+regressions remain separate requirements; the compiled validator probe is not
+needed for this synthetic subprocess proof.
 
 ## Receipt schema and stamps
 

@@ -2,7 +2,6 @@
 
 import copy
 import hashlib
-import io
 import json
 import socket
 import sys
