@@ -138,6 +138,40 @@ class CargoSelectionTests(unittest.TestCase):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_artifact_accepted_through_alias_parent(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp).resolve()
+            real = base/'real'
+            real.mkdir()
+            alias = base/'alias'
+            alias.symlink_to(real, target_is_directory=True)
+            source = real/'snapshot'
+            tools = {k: real/k for k in ('cargo', 'rustc', 'rustdoc')}
+            package = dict(name='gaze-mcp-rmcp', id='approved-package',
+                           manifest_path=str(source/'crates/gaze-mcp-rmcp/Cargo.toml'))
+            def build(_, command, **kwargs):
+                binary = real/'target'/'evidence_bridge'
+                binary.write_bytes(b'synthetic comparator fixture')
+                event = dict(reason='compiler-artifact', package_id=package['id'],
+                             target=dict(name='evidence_bridge', kind=['example'], crate_types=['bin'],
+                                         src_path=str(source/binding.SOURCE)),
+                             profile=dict(test=False, opt_level='0', debuginfo=2,
+                                          debug_assertions=True, overflow_checks=True),
+                             executable=str(binary), fresh=False, features=['transport-stdio'])
+                kwargs['consume'](json.dumps(event).encode()+b'\n')
+                kwargs['consume'](b'{"reason":"build-finished","success":true}\n')
+                return 0
+            with patch.object(binding, 'prepare_inputs', return_value=(tools, 'host', {}, {},
+                              {k: () for k in tools}, {}, 0)), \
+                    patch.object(binding, 'snapshot', return_value=({}, 0)), \
+                    patch.object(binding, 'inventory', return_value={}), \
+                    patch.object(binding, 'file_digest', return_value=()), \
+                    patch.object(binding, 'metadata', return_value=json.dumps({'packages':[package]}).encode()), \
+                    patch.object(binding.BuildOwner, 'run', build):
+                result = binding.step0(alias, repo=alias, revision='a'*40, registry=alias,
+                                       native=alias, toolchain=alias)
+                self.assertTrue(result['selected'], 'alias-parent-artifact-accepted')
+
     def test_parent_roots_canonicalized_before_setup(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp).resolve()

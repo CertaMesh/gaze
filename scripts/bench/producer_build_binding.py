@@ -180,7 +180,7 @@ class BuildOwner:
         return status
 
     @producer_boundary
-    def run(self, command, *, cwd=None, env=None, consume=None):
+    def run(self, command, *, cwd=None, env=None, consume=None, sample=None):
         platform_preflight()
         require(self.process is None, 'invalid_state')
         check_time(self.work_end)
@@ -191,6 +191,7 @@ class BuildOwner:
         failure = True
         try:
             counts = {'stdout': 0, 'stderr': 0}
+            sampled = 0
             with selectors.DefaultSelector() as selector:
                 for name in counts:
                     stream = getattr(self.process, name)
@@ -198,6 +199,9 @@ class BuildOwner:
                     selector.register(stream, selectors.EVENT_READ, name)
                 while selector.get_map() or self.observe() is None:
                     check_time(self.work_end)
+                    if sample is not None and time.monotonic()-sampled >= 1:
+                        sample()
+                        sampled = time.monotonic()
                     for key, _ in selector.select(.02):
                         chunk = os.read(key.fd, CHUNK)
                         if not chunk:
@@ -485,13 +489,26 @@ def step0(root, *, repo, revision, registry, native, toolchain):
     events = CargoEvents(packages[0]['id'], source/SOURCE, target)
     owner = BuildOwner(deadline=deadline)
     build_start = time.monotonic()
+    peak_bytes = 0
+    def sample():
+        nonlocal peak_bytes
+        size = 0
+        for path in target.rglob('*'):
+            check_time(deadline)
+            try:
+                if path.is_file():
+                    size += path.stat().st_size
+            except FileNotFoundError:
+                pass
+        peak_bytes = max(peak_bytes, size)
     status = owner.run([str(tools['cargo']), 'build', '--locked', '--offline',
                         '-p', 'gaze-mcp-rmcp', '--example', 'evidence_bridge',
                         '--no-default-features', '--features', 'transport-stdio',
                         '--target', host, '--target-dir', str(target),
                         '--message-format=json', '--manifest-path', str(source/'Cargo.toml')],
-                       cwd=source, env=env, consume=events.feed)
+                       cwd=source, env=env, consume=events.feed, sample=sample)
     executable = events.finish(status)
+    sample()
     require(inventory(source, deadline) == before, 'io')
     require(inventory(native, deadline) == native_before, 'io')
     require({k: file_digest(v, deadline) for k, v in tools.items()} == tools_before, 'io')
@@ -502,6 +519,7 @@ def step0(root, *, repo, revision, registry, native, toolchain):
     return dict(build_seconds=round(time.monotonic()-build_start, 3),
                 elapsed_seconds=round(time.monotonic()-started, 3),
                 target_bytes=sum(p.stat().st_size for p in target.rglob('*') if p.is_file()),
+                sampled_peak_target_bytes=peak_bytes, peak_sample_interval_seconds=1,
                 snapshot_bytes=sum(v[1] for v in before.values()), archive_bytes=archive_size,
                 cache_bytes=cache_size, free_delta_bytes=free_before-shutil.disk_usage(root).free,
                 selected=True, build_events=events.count, leader_exit=status,
