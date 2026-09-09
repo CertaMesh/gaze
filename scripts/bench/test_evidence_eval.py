@@ -241,7 +241,8 @@ def run_rust_mutation_proof():
     root = Path(__file__).resolve().parents[2]
     source_path = root/'crates/gaze-mcp-rmcp/tests/evidence_route.rs'
     source = source_path.read_text()
-    cargo = '/Users/krishankoenig/.rustup/toolchains/1.96.0-aarch64-apple-darwin/bin/cargo'
+    cargo = os.environ.get('GAZE_EVIDENCE_CARGO') or subprocess.check_output(
+        ['rustup', 'which', '--toolchain', '1.96.0', 'cargo'], text=True).strip()
     # Each row executes just its declared target, not an inferred whole-suite kill set.
     cases = [
         ('MUT-NO-PAYLOAD', [('r.is_error != Some(true) => "COMPLETED"','(r.is_error == Some(true) || r.is_error != Some(true)) => "COMPLETED"')], 'undeclared_carrier_has_positive_no_payload_and_unobserved_leaves'),
