@@ -476,7 +476,6 @@ impl Counts {
             "leaf_restore_exact",
             "leaf_restore_decision_failures",
             "egress_token_restore_failures",
-            "egress_raw_value_mismatches",
         ] {
             self.add(m, 0);
         }
@@ -489,10 +488,11 @@ impl Counts {
                 if r.text == expected {
                     self.add("leaf_restore_exact", 1);
                 }
-                if r.authorized_output_ranges.len() == 1
-                    && &r.text[r.authorized_output_ranges[0].clone()] != expected_occurrence
-                {
-                    self.add("egress_raw_value_mismatches", 1);
+                if r.authorized_output_ranges.len() == 1 {
+                    self.add("egress_raw_value_mismatches", 0);
+                    if &r.text[r.authorized_output_ranges[0].clone()] != expected_occurrence {
+                        self.add("egress_raw_value_mismatches", 1);
+                    }
                 }
             }
         }
@@ -1006,13 +1006,6 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
                 "vocabulary_closure",
                 "stamped_field_separation",
                 "outcome_identities",
-                "rejection_is_not_protection",
-                "no_payload_positive_observation",
-                "string_byte_reversibility",
-                "gold_survival_oracle",
-                "false_positive_negative_control",
-                "egress_integrity_analogues",
-                "source_attribution_events",
                 "declaration_gating",
                 "claim_scope_present",
             ]
@@ -1062,7 +1055,7 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
     r["gate_results"]["egress_integrity_analogues"] = json!(gate(
         restores > 0,
         c.get("egress_token_restore_failures") + c.get("egress_raw_value_mismatches") > 0,
-        false
+        !c.0.contains_key("egress_raw_value_mismatches")
     ));
     r["gate_results"]["gold_survival_oracle"] = json!(gate(
         c.1.contains_key("gold"),
@@ -1209,6 +1202,11 @@ async fn benign_negative_and_positive_false_positive_control() {
         c.get("false_positive_occurrences") == 1
             && c.get("false_positive_bytes") == EMAIL.len() as u64,
         "positive-fp-control"
+    );
+    assert!(
+        receipt(&c, outcome(Some(&r)), false)["gate_results"]["false_positive_negative_control"]
+            == "FAIL",
+        "fp-gate-fail"
     );
 }
 #[tokio::test]
@@ -1517,6 +1515,12 @@ async fn json_text_string_bytes_are_stricter_than_semantic_equality() {
     assert!(
         c.get("leaf_restore_exact") == 0 && restored != ORIGINAL,
         "string-bytes-discriminate"
+    );
+    assert!(
+        receipt(&c, outcome(Some(&r)), true)["counts"]
+            .get("egress_raw_value_mismatches")
+            .is_none(),
+        "no-authorized-range-no-raw-check"
     );
     assert!(
         receipt(&c, outcome(Some(&r)), true)["gate_results"]["string_byte_reversibility"] == "FAIL",

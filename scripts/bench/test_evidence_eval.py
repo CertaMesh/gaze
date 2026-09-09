@@ -263,6 +263,19 @@ class ExportTests(unittest.TestCase):
             self.assertTrue(r['counts'][m] == n and r['derivations'][m] == 'observed_subset_lower_bound', 'nonzero-authored-subset')
         self.assertTrue(all(v == 'NOT_EVALUABLE' for v in r['intervals'].values()), 'subset-not-exact')
 
+    def test_every_authored_count_has_a_nonzero_driver_and_plan_is_independent(self):
+        e = ee.PrivateEvaluator(inventory())
+        e.add('candidate','fixture_a',completed(8,gold_occurrences_surviving=1,gold_occurrences_partially_surviving=1,false_positive_occurrences=2,false_positive_bytes=7))
+        a = e.aggregate('candidate')
+        for m in ['gold_occurrences_surviving_egress','gold_occurrences_partially_surviving_egress','gold_bytes_surviving_egress','false_positive_occurrences','false_positive_bytes']:
+            self.assertTrue(a[m] > 0, 'authored-nonzero-driver')
+        missing = ee.PrivateEvaluator(inventory())
+        r = self.export(evaluator=missing)
+        self.assertTrue(r['counts'] == {'gold_occurrences_planned':6,'gold_bytes_planned':90}, 'both-arms-missing-plan')
+        no_plan = ee.PlannedInventory([ee.PlannedCase('fixture_a','g','synthetic_en',1.)])
+        e = ee.PrivateEvaluator(no_plan); e.add('candidate','fixture_a',completed())
+        self.assertTrue(not ee.PLAN_METRICS.intersection(e.aggregate('candidate')), 'record-not-plan-authority')
+
     def test_empty_or_missing_membership_is_refused(self):
         for custody in [{}, {'membership_order':[]}]:
             c = json.loads(CUSTODY.read_text()); c.pop('membership_order'); c.update(custody)
@@ -306,7 +319,7 @@ def run_rust_mutation_proof():
     ]
     cases.extend([
         ('MUT-ROUTE-AVAILABILITY', [('COUNTING_GRADES.contains(&grade) && !c.0.contains_key(m)', 'false')], 'missing_measurements_and_ambiguous_only_gates'),
-        ('MUT-EXTRA-SURFACES', [('if no_payload_surfaces(r) && r.content.len() == 1', 'if r.content.len() == 1')], 'no_payload_classifier_rejects_extra_surfaces'),
+        ('MUT-EXTRA-SURFACES', [('if no_payload_surfaces(r)', 'if true')], 'no_payload_classifier_rejects_extra_surfaces'),
         ('MUT-GATE-INTEGRITY', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["egress_integrity_analogues"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'integrity_analogues_have_independent_nonzero_falsifiers'),
         ('MUT-GATE-STRING', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["string_byte_reversibility"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'json_text_string_bytes_are_stricter_than_semantic_equality'),
         ('MUT-GATE-GOLD', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["gold_survival_oracle"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'missing_measurements_and_ambiguous_only_gates'),
