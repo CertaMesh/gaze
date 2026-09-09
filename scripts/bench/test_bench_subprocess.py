@@ -142,8 +142,8 @@ def child(mode):
     return 0
 
 
-def invoke(mode, root, *, late=False, post=False):
-    created = []
+def invoke(mode, root, *, late=False, post=False, owners=None):
+    created = owners if owners is not None else []
     def factory(*args, **kwargs):
         owner = transport.BenchSubprocess(command(mode), cwd=root, limits=limits())
         created.append(owner)
@@ -202,6 +202,23 @@ def assert_success_counts(mode, result):
 
 
 def boundary_scenario(mode, root):
+    owners = []
+    try:
+        _boundary_scenario(mode, root, owners)
+    finally:
+        # Assert first; this independent emergency reaper must not hide a mutant.
+        for owner in owners:
+            if owner.process is not None:
+                if owner.process.poll() is None:
+                    owner.process.kill()
+                owner.process.wait(timeout=1)
+                for stream in (owner.process.stdin, owner.process.stdout, owner.process.stderr):
+                    stream.close()
+            if owner.selector is not None:
+                owner.selector.close()
+
+
+def _boundary_scenario(mode, root, owners):
     os.chdir(root)
     late = mode == "late"
     post = mode == "post"
@@ -209,17 +226,27 @@ def boundary_scenario(mode, root):
     error = None
     result = None
     try:
-        result, owners = invoke(actual_mode, root, late=late, post=post)
+        result, _ = invoke(actual_mode, root, late=late, post=post, owners=owners)
         process_meta = result.get("process", {})
         assert "stderr_log" not in process_meta and "stderr_bytes" not in process_meta, "metadata-boundary"
         assert CANARY not in repr(result), "result-boundary"
-        assert all(owner.process.returncode is not None for owner in owners), "caller-reaping"
     except transport.ProducerFailure as caught:
         assert caught.__context__ is None and caught.__cause__ is None, "exception-context"
         assert CANARY not in str(caught) and CANARY not in repr(caught), "exception-boundary"
         rendered = "".join(traceback.format_exception(caught))
         assert CANARY not in rendered, "traceback-boundary"
         error = (caught.code, caught.phase)
+    assert owners, "caller-reaping"
+    for owner in owners:
+        assert owner.process.returncode is not None, "caller-reaping"
+        assert all(stream.closed for stream in
+                   (owner.process.stdin, owner.process.stdout, owner.process.stderr)), "caller-fd-close"
+        try:
+            os.waitpid(owner.process.pid, os.WNOHANG)
+        except ChildProcessError:
+            pass
+        else:
+            raise AssertionError("caller-reaping")
     assert not list(root.iterdir()), "file-boundary"
     if mode in SUCCESS_MODES:
         assert error is None, "success-required"
@@ -227,7 +254,7 @@ def boundary_scenario(mode, root):
     else:
         assert error is not None, "failure-required"
     if mode == "uncaught":
-        invoke("score-bad", root)
+        invoke("score-bad", root, owners=owners)
 
 
 @unittest.skipUnless(os.name == "posix" and sys.platform in ("darwin", "linux"), "POSIX transport")
@@ -486,6 +513,34 @@ class TransportTests(unittest.TestCase):
 
     # ---- review round r1 regressions ------------------------------------------
 
+    def test_phase_accessor_cannot_escape_boundary(self):
+        class BadPhase:
+            @property
+            def phase(self):
+                raise RuntimeError(CANARY)
+
+        @transport.producer_boundary
+        def fail(owner):
+            raise ValueError(CANARY)
+
+        try:
+            error = self.ambient(lambda: fail(BadPhase()))
+        except RuntimeError:
+            self.fail("phase-boundary")
+        self.assertEqual(error.phase, "payload", "phase-boundary")
+
+    def test_caller_failures_reap_and_close(self):
+        previous = Path.cwd()
+        try:
+            for mode in ("bad-handshake", "probe-bad", "score-bad", "late", "post"):
+                with self.subTest(mode=mode), tempfile.TemporaryDirectory() as root:
+                    try:
+                        boundary_scenario(mode, Path(root))
+                    finally:
+                        os.chdir(previous)
+        finally:
+            os.chdir(previous)
+
     def ambient(self, call):
         """Enter the boundary from inside live, payload-bearing caller handlers."""
         try:
@@ -672,7 +727,7 @@ MUTATIONS = {
     "ambient-context": ("        closed.__cause__ = None\n        closed.__context__ = None",
                         "        closed.__cause__ = None",
                         "test_ambient_caller_context_never_crosses_high_level_calls", "exception-context"),
-    "owner-phase": ("    phase = getattr(args[0], \"phase\", None) if args else None", "    phase = None",
+    "owner-phase": ("        phase = getattr(args[0], \"phase\", None) if args else None", "        phase = None",
                     "test_transport_failures_carry_the_owner_phase", "phase-accuracy"),
     "early-prefix": ("                pending = request is not None and offset != len(request)",
                      "                pending = False",
@@ -686,6 +741,12 @@ MUTATIONS = {
     "cleanup-budget": ("        if max(self.handshake_seconds, self.exchange_seconds, self.finish_seconds) > self.invocation_seconds:",
                        "        if max(self.handshake_seconds, self.exchange_seconds, self.finish_seconds,\n               self.terminate_seconds, self.reap_seconds) > self.invocation_seconds:",
                        "test_cleanup_budget_outlives_the_invocation_budget", "cleanup-budget"),
+    "caller-cleanup": ("    def _cleanup(self):\n        clean = True",
+                       "    def _cleanup(self):\n        return True\n        clean = True",
+                       "test_caller_failures_reap_and_close", "caller-reaping"),
+    "phase-accessor": ("    except BaseException:\n        # Error reporting must not expose a second diagnostic from an accessor.\n        return default",
+                       "    except BaseException:\n        # Error reporting must not expose a second diagnostic from an accessor.\n        raise",
+                       "test_phase_accessor_cannot_escape_boundary", "phase-boundary"),
 }
 
 

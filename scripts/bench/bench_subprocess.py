@@ -34,8 +34,12 @@ class ProducerFailure(RuntimeError):
 
 def _owner_phase(args, default):
     """A bound transport method knows its live phase; a module-level call does not."""
-    phase = getattr(args[0], "phase", None) if args else None
-    return phase if phase in PHASES else default
+    try:
+        phase = getattr(args[0], "phase", None) if args else None
+        return phase if type(phase) is str and phase in PHASES else default
+    except BaseException:
+        # Error reporting must not expose a second diagnostic from an accessor.
+        return default
 
 
 def _raise_closed(code, phase):

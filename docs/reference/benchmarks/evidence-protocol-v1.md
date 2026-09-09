@@ -122,8 +122,10 @@ bounds, accepted frame truncation, bypassed deadlines/cleanup, retained
 exception context under an active caller handler, output accepted before its
 request completed, a stranded write registration, a misreported failure phase,
 a cleanup budget coupled to the invocation budget, and a transport that always
-fails where a scenario requires success. Every mutation site is asserted to
-occur exactly once in the transport source, so a roster entry cannot silently
+fails where a scenario requires success. Caller-level failure tests check reaping
+and closed descriptors before the harness emergency reaper runs. A separate
+mutation checks that an error-phase accessor cannot escape the closed boundary.
+Every mutation site is asserted to occur exactly once in the transport source, so a roster entry cannot silently
 drift onto another line. Compilation failures, unrelated errors and watchdog kills
 are not counted as killed mutants. The existing scoring/population/evidence
 regressions remain separate requirements; the compiled validator probe is not
