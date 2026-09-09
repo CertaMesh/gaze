@@ -728,7 +728,9 @@ example or silently skipping integration. Stable CI runs the two commands after
 normal Cargo tests have populated the offline cache, and first checks Python's
 version. No binary-path provenance claim is made.
 
-The additional executable mutation roster is in `test_evidence_bridge.py`:
+The additional executable mutation roster is in `test_evidence_bridge.py`.
+Its 18 targeted probes cover 17 distinct implementation transformations: removing
+the whole-operation boundary is checked separately for mapper and evaluator errors.
 
 ```sh
 python3.13 scripts/bench/test_evidence_bridge.py --mutation-proof --binary target/debug/examples/evidence_bridge

@@ -65,7 +65,7 @@ class Observation:
 
 
 @dataclass(frozen=True)
-class TestSuccess:
+class BridgeSuccess:
     numeric_verified: bool
     groups_verified: bool
 
@@ -155,7 +155,7 @@ def map_observation(frame, plan, arm):
         require(type(row['decision_success']) is bool and type(row['exact']) is bool)
         require(not row['exact'] or row['decision_success'])
         require(state == 'COMPLETED' or not (row['exact'] or row['decision_success']))
-    require(state != 'FAILED_CLOSED_NO_EGRESS' or not (gold or negatives or restores))
+    require(state == 'COMPLETED' or not (gold or negatives or restores))
     gc = coverage(gold, gold_plan)
     nc = coverage(negatives, negative_plan)
     rc = coverage(restores, plan.restore)
@@ -206,7 +206,7 @@ def validate_numeric(evaluator, observations):
     require(tuple((evaluator.inventory.case(p.key).group_id, evaluator.inventory.case(p.key).weight,
                    evaluator.inventory.case(p.key).stratum) for p in PLANS)
             == (('g0', 1, 'synthetic_de'), ('g1', 3, 'synthetic_de')))
-    return TestSuccess(numeric_verified=True, groups_verified=True)
+    return BridgeSuccess(numeric_verified=True, groups_verified=True)
 
 
 @producer_boundary

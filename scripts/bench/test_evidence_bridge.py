@@ -153,6 +153,18 @@ class ModelTests(unittest.TestCase):
         self.assertEqual(e.outcomes('candidate')['NOT_STARTED'], 2)
         self.assertEqual(e.paired_interval(bridge.GOLD_BYTES, bridge.declaration()), 'NOT_EVALUABLE')
 
+    def test_noncompleted_rows_are_refused_even_without_restore_credit(self):
+        for state in ('FAILED_CLOSED_NO_EGRESS', 'UNKNOWN_EGRESS'):
+            for family in ('gold', 'negative', 'restore'):
+                v = frame(); v['outcome'] = state
+                for row in v['restore']:
+                    row.update(exact=False, decision_success=False)
+                for other in ('gold', 'negative', 'restore'):
+                    if other != family: v[other] = []
+                with self.subTest(state=state, family=family):
+                    with self.assertRaises(ProducerFailure, msg='noncompleted-rows-refused'):
+                        mapped(v)
+
     def test_duplicate_unknown_slots_refused(self):
         for kind in ('gold', 'negative', 'restore'):
             for mutation in ('duplicate', 'unknown'):

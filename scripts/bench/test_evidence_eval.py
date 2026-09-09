@@ -351,7 +351,7 @@ class CommitmentConsumptionTests(unittest.TestCase):
 
 
 def run_rust_mutation_proof():
-    """Opt-in under the live machine lease; route edits only to the committed test sources."""
+    """Opt-in serialized proof; route edits only to the committed test sources."""
     import os
     import subprocess
     import re
