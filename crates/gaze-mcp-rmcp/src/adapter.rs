@@ -132,25 +132,11 @@ pub fn response_to_rmcp_call_tool_result(
 /// Translate a `gaze_mcp_core::ToolError` into an rmcp
 /// `CallToolResult { is_error: true }`.
 ///
-/// The error message is rendered as a single text frame and prefixed with
-/// the stable error class (`invalid-args`, `not-found`, `internal`) so
-/// consumers can branch on class without parsing free text.
+/// Only the stable error class is exposed. Payloads and sources can contain
+/// unredacted PII from tool bodies or backends, so they stay on the trusted
+/// side. Using `class()` for every variant also keeps future variants safe.
 pub fn error_to_rmcp_call_tool_result(err: ToolError) -> CallToolResult {
-    let class = err.class();
-    let message = match err {
-        ToolError::InvalidArgs(msg) => msg,
-        ToolError::NotFound(msg) => msg,
-        ToolError::LimitExceeded(msg) => msg,
-        ToolError::BackendUnavailable(msg) => msg,
-        ToolError::BackendFailure(msg) => msg,
-        ToolError::Internal(source) => source.to_string(),
-        // `ToolError` is `#[non_exhaustive]`. Future variants fall back to
-        // their `class()` string — the chokepoint contract guarantees a
-        // stable class for every variant, so this preserves observability
-        // even before the adapter knows the variant by name.
-        _ => class.to_string(),
-    };
-    CallToolResult::error(vec![Content::text(format!("{class}: {message}"))])
+    CallToolResult::error(vec![Content::text(err.class())])
 }
 
 fn json_value_to_object(value: &Value) -> JsonObject {
@@ -307,22 +293,33 @@ mod tests {
     }
 
     #[test]
-    fn tool_error_translates_to_error_call_tool_result_with_class_prefix() {
-        let err = ToolError::InvalidArgs("missing field text".into());
-        let result = error_to_rmcp_call_tool_result(err);
-        assert_eq!(result.is_error, Some(true));
-        let text = &result.content[0].raw.as_text().unwrap().text;
-        assert!(text.starts_with("invalid-args:"), "got: {text}");
-        assert!(text.contains("missing field text"));
-    }
-
-    #[test]
-    fn tool_error_internal_renders_source_message() {
-        let inner: Box<dyn std::error::Error + Send + Sync> = "manifest persist failed".into();
-        let err = ToolError::Internal(inner);
-        let result = error_to_rmcp_call_tool_result(err);
-        let text = &result.content[0].raw.as_text().unwrap().text;
-        assert!(text.starts_with("internal:"), "got: {text}");
-        assert!(text.contains("manifest persist failed"));
+    fn every_tool_error_exposes_only_its_stable_class() {
+        let detail = "/synthetic/alice@example.invalid/private.txt: Dr. Schmidt backend failed";
+        let cases = [
+            (ToolError::InvalidArgs(detail.into()), "invalid-args"),
+            (ToolError::NotFound(detail.into()), "not-found"),
+            (ToolError::LimitExceeded(detail.into()), "limit-exceeded"),
+            (
+                ToolError::BackendUnavailable(detail.into()),
+                "backend-unavailable",
+            ),
+            (ToolError::BackendFailure(detail.into()), "backend-failure"),
+            (
+                ToolError::internal(std::io::Error::other(detail)),
+                "internal",
+            ),
+        ];
+        for (error, class) in cases {
+            let result = error_to_rmcp_call_tool_result(error);
+            let wire = serde_json::to_value(&result).expect("result serializes");
+            assert!(!wire.to_string().contains(detail), "leaked {class} detail");
+            assert_eq!(
+                wire,
+                json!({
+                    "content": [{ "type": "text", "text": class }],
+                    "isError": true
+                })
+            );
+        }
     }
 }

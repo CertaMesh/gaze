@@ -43,6 +43,10 @@ pub enum ResponseRedaction {
 pub struct ToolDescriptor {
     /// Stable wire name (`"clean"`, `"query"`, …). Must be unique per registry.
     name: String,
+    #[serde(skip)]
+    argument_carriers: crate::CarrierDeclaration,
+    #[serde(skip)]
+    response_carriers: crate::CarrierDeclaration,
     /// Tier — drives both auth-hook routing and feature-flag visibility.
     tier: ToolTier,
     /// JSON-schema document describing the tool's input arguments. The
@@ -67,6 +71,8 @@ impl ToolDescriptor {
     pub fn agent(name: impl Into<String>, schema: serde_json::Value) -> Self {
         Self {
             name: name.into(),
+            argument_carriers: Default::default(),
+            response_carriers: Default::default(),
             tier: ToolTier::Agent,
             schema,
             description: None,
@@ -79,12 +85,33 @@ impl ToolDescriptor {
     pub fn operator(name: impl Into<String>, schema: serde_json::Value) -> Self {
         Self {
             name: name.into(),
+            argument_carriers: Default::default(),
+            response_carriers: Default::default(),
             tier: ToolTier::Operator,
             schema,
             description: None,
             output_schema: None,
             response_redaction: ResponseRedaction::Apply,
         }
+    }
+
+    /// Declare trusted producer carriers independently of wire schemas.
+    pub fn with_carriers(
+        mut self,
+        arguments: crate::CarrierDeclaration,
+        response: crate::CarrierDeclaration,
+    ) -> Self {
+        self.argument_carriers = arguments;
+        self.response_carriers = response;
+        self
+    }
+    /// Trusted argument carrier declaration.
+    pub fn argument_carriers(&self) -> &crate::CarrierDeclaration {
+        &self.argument_carriers
+    }
+    /// Trusted response carrier declaration.
+    pub fn response_carriers(&self) -> &crate::CarrierDeclaration {
+        &self.response_carriers
     }
 
     /// Builder-style description override.
@@ -164,6 +191,11 @@ impl ToolResponse {
 /// Error returned by a [`Tool::invoke`] body. The dispatcher classifies these
 /// into a [`crate::manifest::FailureReason::ToolError`] manifest row and a
 /// transport-level error response.
+///
+/// Payloads and error sources are trusted-side diagnostics and may contain PII,
+/// including backend text that never passed through redaction. Transports must
+/// expose only [`Self::class`], never serialize these details or their Display
+/// / Debug representations.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum ToolError {
@@ -189,7 +221,7 @@ pub enum ToolError {
 
 impl ToolError {
     /// Classify the error into the wire-stable class string the manifest
-    /// records (`"invalid-args"`, `"not-found"`, `"internal"`).
+    /// records. This class is the only tool-error text safe for transport egress.
     pub fn class(&self) -> &'static str {
         match self {
             Self::InvalidArgs(_) => "invalid-args",

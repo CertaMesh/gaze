@@ -1,8 +1,6 @@
 //! `search_documents` chokepoint tool acceptance tests.
 //!
-//! Drives [`SearchDocumentsTool::run`] directly: the sealed `gaze_mcp_core::ToolCtx`
-//! cannot be constructed outside its crate, so the unit-testable sync core is the
-//! seam. Asserts the owner-side session model (token resolves owner-side), the
+//! Exercises both the synchronous core and actual sealed-envelope dispatch. Asserts the owner-side session model (token resolves owner-side), the
 //! never-leak invariant (no raw PII / alias / fingerprint in agent output), and the
 //! no-oracle deny (no `DenyReason` variant ever surfaces; denies are
 //! indistinguishable across causes).
@@ -311,4 +309,162 @@ fn deny_outputs_are_indistinguishable_across_causes() {
         policy_deny, token_deny,
         "deny shape must not reveal whether the token resolved"
     );
+}
+
+// No async runtime is required: this fixture's tool and manifest never yield.
+fn ready<F: std::future::Future>(future: F) -> F::Output {
+    let mut future = std::pin::pin!(future);
+    let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+    match future.as_mut().poll(&mut context) {
+        std::task::Poll::Ready(output) => output,
+        std::task::Poll::Pending => panic!("synchronous fixture unexpectedly yielded"),
+    }
+}
+
+#[derive(Default)]
+struct DispatchManifest(std::sync::Mutex<Vec<Value>>);
+
+#[async_trait::async_trait]
+impl gaze_mcp_core::ManifestStore for DispatchManifest {
+    async fn begin_call(
+        &self,
+        ctx: gaze_mcp_core::BeginCallContext<'_>,
+    ) -> Result<gaze_mcp_core::CallHandle, gaze_mcp_core::ManifestError> {
+        self.0.lock().unwrap().push(ctx.redacted_args.clone());
+        Ok(gaze_mcp_core::CallHandle::new(ctx.call_id))
+    }
+    async fn finish_call(
+        &self,
+        _: gaze_mcp_core::CallHandle,
+        _: gaze_mcp_core::SnapshotRef,
+    ) -> Result<(), gaze_mcp_core::ManifestError> {
+        Ok(())
+    }
+    async fn fail_call(
+        &self,
+        _: gaze_mcp_core::CallHandle,
+        _: gaze_mcp_core::FailureReason,
+    ) -> Result<(), gaze_mcp_core::ManifestError> {
+        Ok(())
+    }
+}
+struct DispatchAuth;
+#[async_trait::async_trait]
+impl gaze_mcp_core::AuthHook for DispatchAuth {
+    async fn authorize_agent(
+        &self,
+        _: &gaze_mcp_core::Principal,
+        _: &str,
+    ) -> Result<(), gaze_mcp_core::AuthError> {
+        Ok(())
+    }
+    async fn authorize_operator(
+        &self,
+        _: &gaze_mcp_core::Principal,
+        _: &str,
+    ) -> Result<(), gaze_mcp_core::AuthError> {
+        Err(gaze_mcp_core::AuthError::MissingHook)
+    }
+}
+struct SyntheticEmail;
+impl gaze::Detector for SyntheticEmail {
+    fn detect(&self, text: &str) -> Vec<gaze::Detection> {
+        text.match_indices("alice@example.invalid")
+            .map(|(start, raw)| {
+                gaze::Detection::new(start..start + raw.len(), PiiClass::Email, "synthetic-email")
+            })
+            .collect()
+    }
+}
+
+#[test]
+fn envelope_dispatch_search_preserves_allow_deny_and_carrier_boundary() {
+    let bridge = demo_bridge();
+    let alias = bridge
+        .primary_alias(CUSTOMER_DOMAIN, "cust-001", &PiiClass::Name)
+        .unwrap();
+    let fingerprint = bridge
+        .primary_fingerprint(CUSTOMER_DOMAIN, "cust-001", &PiiClass::Name)
+        .unwrap();
+    let principal = support_principal();
+    let tool = SearchDocumentsTool::new(bridge, HashMap::from([(principal.id.clone(), principal)]));
+    let token = tool
+        .tokenize_for(SUPPORT_ID, &PiiClass::Name, "Markus Gottschaue")
+        .unwrap();
+    let mut registry = gaze_mcp_core::ToolRegistry::new();
+    registry.register(tool).unwrap();
+    let pipeline = Pipeline::builder()
+        .detector(SyntheticEmail)
+        .rule(gaze::ClassRule::new(
+            PiiClass::Email,
+            gaze::Action::Tokenize,
+        ))
+        .rule(gaze::DefaultRule::new(gaze::Action::Preserve))
+        .build()
+        .unwrap();
+    let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+    let manifest = DispatchManifest::default();
+    let policy = gaze_mcp_core::SessionIdPolicy::default_strict();
+    let envelope = gaze_mcp_core::PiiEnvelope::new(
+        &registry,
+        &DispatchAuth,
+        &manifest,
+        &pipeline,
+        &session,
+        &[LocaleTag::Global],
+        &policy,
+    );
+    let dispatch = |args| {
+        ready(envelope.dispatch(
+            &gaze_mcp_core::Principal::new(SUPPORT_ID),
+            "search_documents",
+            args,
+            None,
+        ))
+    };
+    let out = dispatch(json!({"source_token": token, "target_domain": CUSTOMER_DOMAIN,
+        "agent_run_id": "run", "conversation_session_id": "conversation", "purpose": "alice@example.invalid", "filters": []})).expect("valid search must dispatch").payload;
+    assert_eq!(out["authorized"], true);
+    assert!(!out["results"].as_array().unwrap().is_empty());
+    let encoded = out.to_string();
+    assert!(encoded.contains(&token));
+    assert_no_raw_leak(&encoded);
+    assert!(!encoded.contains(&alias));
+    assert!(!encoded.contains(&fingerprint));
+    let args = manifest.0.lock().unwrap()[0].clone();
+    let protected = args["purpose"].as_str().unwrap();
+    assert!(!protected.contains("alice@example.invalid"));
+    assert_eq!(
+        session.restore_strict_text(protected).unwrap(),
+        "alice@example.invalid"
+    );
+    let denied = dispatch(json!({"source_token": token, "target_domain": LEGAL_DOMAIN}))
+        .unwrap()
+        .payload;
+    let unknown =
+        dispatch(json!({"source_token": "<fffffff0:Name_99>", "target_domain": LEGAL_DOMAIN}))
+            .unwrap()
+            .payload;
+    assert_eq!(denied, unknown);
+    assert_eq!(denied["authorized"], false);
+    assert_eq!(denied["results"], json!([]));
+    assert_no_deny_oracle(&denied.to_string());
+    assert_eq!(dispatch(json!({})).unwrap().payload["authorized"], false);
+    let begins = manifest.0.lock().unwrap().len();
+    for extra in [
+        json!({"unknown": "value"}),
+        json!({"purpose": 42}),
+        json!({"purpose": {"nested": "value"}}),
+        json!({"filters": [{"field": "name"}]}),
+    ] {
+        let mut args = json!({"source_token": token, "target_domain": CUSTOMER_DOMAIN});
+        args.as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        assert!(matches!(
+            dispatch(args),
+            Err(gaze_mcp_core::DispatchError::Carrier(_))
+        ));
+    }
+    assert_eq!(manifest.0.lock().unwrap().len(), begins);
 }

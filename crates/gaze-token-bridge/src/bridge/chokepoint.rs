@@ -30,7 +30,9 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use async_trait::async_trait;
 use gaze::PiiClass;
-use gaze_mcp_core::{Tool, ToolCtx, ToolDescriptor, ToolError, ToolResponse};
+use gaze_mcp_core::{
+    CarrierDeclaration, CarrierSegment, Tool, ToolCtx, ToolDescriptor, ToolError, ToolResponse,
+};
 use serde_json::{json, Value};
 
 use crate::bridge::TokenBridge;
@@ -72,10 +74,22 @@ impl SearchDocumentsTool {
             bridge: Mutex::new(bridge),
             principals,
             sessions: Mutex::new(HashMap::new()),
-            descriptor: ToolDescriptor::agent(TOOL_NAME, input_schema()).with_description(
-                "Search an owner-registered index domain by a session token minted earlier in \
+            descriptor: ToolDescriptor::agent(TOOL_NAME, input_schema())
+                .with_carriers(
+                    CarrierDeclaration::text_fields(&[
+                        "source_token",
+                        "target_domain",
+                        "agent_run_id",
+                        "conversation_session_id",
+                        "purpose",
+                        "filters",
+                    ]),
+                    response_carriers(),
+                )
+                .with_description(
+                    "Search an owner-registered index domain by a session token minted earlier in \
                  this conversation. Results carry only current-session tokens — never raw PII.",
-            ),
+                ),
         }
     }
 
@@ -218,6 +232,25 @@ fn input_schema() -> Value {
         },
         "required": ["source_token", "target_domain"]
     })
+}
+
+/// Matches BridgeSearchResponse/AgentSearchHit plus the uniform deny flag.
+/// There are no numeric fields in this typed contract. Reserved filters have
+/// no declared child members, so arbitrary filter objects remain rejected.
+fn response_carriers() -> CarrierDeclaration {
+    use CarrierSegment::{AnyIndex, Member};
+    let mut members = ["target_domain", "audit_id", "results", "authorized"]
+        .iter()
+        .map(|name| vec![Member((*name).into())])
+        .collect::<Vec<_>>();
+    for name in ["doc_id", "snippet"] {
+        members.push(vec![
+            Member("results".into()),
+            AnyIndex,
+            Member(name.into()),
+        ]);
+    }
+    CarrierDeclaration::new(members, vec![])
 }
 
 /// Uniform, no-oracle deny. Byte-identical across unknown-principal, malformed-args,

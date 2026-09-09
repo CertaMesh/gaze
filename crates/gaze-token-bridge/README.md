@@ -102,3 +102,13 @@ For bring-your-own-data redaction, use the core folder scan example:
 ```bash
 cargo run -p gaze-pii --example scan_folder -- --path ./my-data
 ```
+
+### MCP host configuration
+
+With `chokepoint`, register `SearchDocumentsTool` in a `ToolRegistry` and
+supply a nonempty primary pipeline to `PiiEnvelope`, for example through
+`gaze_assembly::CorePipelineConfig::new().build()` with `core.pipeline()` and
+`core.locale_chain().as_slice()` (add `gaze-assembly` as a direct dependency).
+The tool declares its supported argument and typed result carriers itself;
+reserved `filters` supports an empty array, not arbitrary filter objects or
+numbers. Owner-side bridge tokens remain in their separate namespace.

@@ -105,6 +105,10 @@ payloads offline under the v0.7.x threat model.
 
 ## Adopter quickstart
 
+Add `gaze-assembly` as a direct dependency alongside `gaze-mcp-core` and
+`gaze` (package `gaze-pii`). It builds the bundled primary recognizers and
+matching locale chain used below.
+
 ```rust
 use std::sync::Arc;
 
@@ -165,7 +169,7 @@ impl AuthHook for MyAuth {
 }
 
 // 3. Build the gaze pipeline + session per conversation.
-let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
+let core = gaze_assembly::CorePipelineConfig::new().build().expect("core pipeline");
 let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
 
 // 4. Register tools.
@@ -177,7 +181,10 @@ registry.register(gaze_mcp_core::core_tools::CleanTool::new()).unwrap();
 let manifest = MyManifest {};
 let auth = MyAuth;
 let policy = SessionIdPolicy::default_strict();
-let _envelope = PiiEnvelope::new(&registry, &auth, &manifest, &pipeline, &session, &[], &policy);
+let _envelope = PiiEnvelope::new(
+    &registry, &auth, &manifest, core.pipeline(), &session,
+    core.locale_chain().as_slice(), &policy,
+);
 ```
 
 The transport sink (e.g. `gaze-mcp-rmcp::RmcpFrontend`) wraps the envelope
@@ -233,3 +240,94 @@ The `ToolCtx` audit-correlation surface (`call_id`, `tool_name`,
 (`begin_call` / `finish_call` / `fail_call`), the closed `FailureReason`
 set, and the `AuthHook` decision audit are cataloged in
 [`docs/reference/metrics.md`](../../docs/reference/metrics.md#7-mcp-chokepoint-observability-gaze-mcp-core).
+
+## Strict protection boundary and migration
+
+`PiiEnvelope` now protects both arguments and agent responses through
+`Pipeline::protect_text_transaction`. Supply a configured primary pipeline,
+for example `gaze_assembly::CorePipelineConfig::new().build()`, and pass its
+locale chain to the envelope. An empty primary registry is rejected even for
+calls containing no strings. The CLI MCP host uses this assembly path.
+
+The compatible `PiiEnvelope::new` constructor uses an empty dictionary bundle.
+Use `.with_dictionaries(&bundle)` to supply tenant terms. Primary recognizers,
+mandatory safety nets, and `ToolResources::protection_context()` receive the
+same locale and bundle. Observer tools use the new
+`scan_safety_nets_with_dictionaries` and structured counterpart; the old
+observer signatures retain an empty bundle. Model interfaces that do not
+consume dictionaries are unchanged.
+
+Every installed custom safety net must support the supplied locale chain.
+A configured model registry must resolve coverage. All selected safety-net
+backends run on every complete final string leaf, even when primary detection
+emits nothing or the input consists entirely of existing tokens. Observer
+skip optimizations cannot disable this boundary check. Invalid spans, backend
+failures, and residual suspects outside verified token coverage reject the
+operation. Zero installed safety nets is a **primary-only floor**, not a
+claim that all PII was detected. Global residual policies are unchanged.
+
+Custom producers must declare their JSON carriers at trusted registration:
+
+```rust
+use gaze_mcp_core::{CarrierDeclaration, ToolDescriptor};
+use serde_json::json;
+
+let descriptor = ToolDescriptor::agent("lookup", json!({"type":"object"}))
+    .with_carriers(
+        CarrierDeclaration::text_fields(&["query"]),
+        CarrierDeclaration::text_fields(&["result"]),
+    );
+```
+
+Use `CarrierDeclaration::new` for nested objects or explicitly non-sensitive
+numbers. Each path is a vector of `CarrierSegment::Member(exact_name)` and
+`CarrierSegment::AnyIndex` (one array edge only). Declare every encountered
+object edge and every numeric leaf separately. Full paths must match exactly;
+parent declarations do not authorize descendants. Numbers retain their
+original `serde_json::Number` representation. Numeric declarations mean the
+producer asserts those fields are non-sensitive; detectors do not certify
+their contents. Booleans and null remain non-text values.
+
+Schemas are catalog metadata and grant no authority. Declarations are omitted
+from serialization; deserializing a descriptor cannot recreate trusted
+permissions. Unconfigured descriptors accept root strings or arrays of strings
+but reject object members and numbers. Built-in text, tokenize, and document
+tools carry explicit declarations. For structured `SafetyNetCheckTool` input,
+use `with_argument_carriers` with the complete supported document shape.
+Arbitrary dynamic keys and cross-field concatenation are unsupported.
+
+Known tokens are matched with the session's actual restoration semantics,
+including non-angle format-preserving tokens. Only owned input ranges and
+verified newly emitted ranges are protected coverage. Literal collisions,
+including across JSON leaves, reject rather than silently reinterpret input.
+Primary detection still runs independently on gaps between owned tokens;
+this does not extend its cross-token detection domain. Full-leaf safety nets
+see the entire final text. One-way replacements fail reversibility checks.
+
+Arguments stage as one operation: preflight, protect, begin manifest, commit,
+then invoke. A fresh response transaction starts after invocation. Response
+preflight, protection, and snapshot construction precede its commit; successful
+`finish_call` then permits egress. A later leaf failure discards that operation's
+staging. Argument mappings and legitimate tool-side live-session mutations
+are outside response rollback. Concurrent generation conflicts publish none
+of the losing transaction's state.
+
+A terminal manifest attempt consumes the handle even when persistence fails.
+Never call `fail_call` after attempting `finish_call`. Response mappings are
+already committed when finish is attempted; a failed finish retains those
+mappings but returns no payload. This is not whole-call rollback.
+
+Authorized operator response bypass remains a separate exception: its raw
+keys, strings, and numbers are intentional, require operator authorization,
+and return only after successful manifest finish. Operator arguments still
+use the strict declared-carrier boundary. Agent bypass registration rejects.
+All transport errors remain class-only; detailed backend errors and manifest
+records belong exclusively to trusted-side diagnostics.
+
+Direct users of the core leaf API must discard their transaction after any
+error: staged mappings may remain, and previously returned strings are not
+immutable operation proofs. The envelope performs this discard automatically.
+Safety-net reconstructed `raw_span` offsets address expanded input, with owned
+tokens replaced by their stored raw values; they cannot index the literal
+input containing those tokens. Observer `nets_run` remains a configured count
+(a nonempty registry counts as one), not an executed-model count.

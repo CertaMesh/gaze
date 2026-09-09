@@ -182,7 +182,7 @@ impl Detector for FixedDetector {
 }
 
 fn make_pipeline() -> gaze::Pipeline {
-    gaze::Pipeline::builder().build().expect("pipeline build")
+    tokenizing_pipeline()
 }
 
 fn tokenizing_pipeline() -> gaze::Pipeline {
@@ -210,7 +210,10 @@ async fn dispatch_orders_begin_invoke_finish() {
     let mut registry = ToolRegistry::new();
     registry
         .register(RecordingTool {
-            descriptor: ToolDescriptor::agent("clean", json!({"type": "object"})),
+            descriptor: ToolDescriptor::agent("clean", json!({"type": "object"})).with_carriers(
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+            ),
             events: events_handle.clone(),
             behavior: ToolBehavior::EchoArgs,
         })
@@ -267,7 +270,10 @@ async fn dispatch_redacts_agent_response_payload() {
     let mut registry = ToolRegistry::new();
     registry
         .register(RecordingTool {
-            descriptor: ToolDescriptor::agent("lookup", json!({"type": "object"})),
+            descriptor: ToolDescriptor::agent("lookup", json!({"type": "object"})).with_carriers(
+                Default::default(),
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["email"]),
+            ),
             events: events_handle,
             behavior: ToolBehavior::ReturnPayload(json!({"email": "alice@example.invalid"})),
         })
@@ -308,6 +314,10 @@ async fn dispatch_bypasses_response_redaction_for_operator_with_bypass() {
     registry
         .register(RecordingTool {
             descriptor: ToolDescriptor::operator("restore", json!({"type": "object"}))
+                .with_carriers(
+                    gaze_mcp_core::CarrierDeclaration::text_fields(&["token"]),
+                    Default::default(),
+                )
                 .with_response_redaction(ResponseRedaction::BypassByOperator),
             events: events_handle,
             behavior: ToolBehavior::ReturnPayload(json!({"email": "alice@example.invalid"})),
@@ -356,7 +366,10 @@ async fn dispatch_writes_fail_call_on_tool_error() {
     let mut registry = ToolRegistry::new();
     registry
         .register(RecordingTool {
-            descriptor: ToolDescriptor::agent("explode", json!({"type": "object"})),
+            descriptor: ToolDescriptor::agent("explode", json!({"type": "object"})).with_carriers(
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+                Default::default(),
+            ),
             events: events_handle,
             behavior: ToolBehavior::ReturnError,
         })
@@ -442,7 +455,10 @@ async fn deny_all_hook_blocks_agent_dispatch_pre_manifest() {
     let mut registry = ToolRegistry::new();
     registry
         .register(RecordingTool {
-            descriptor: ToolDescriptor::agent("clean", json!({"type": "object"})),
+            descriptor: ToolDescriptor::agent("clean", json!({"type": "object"})).with_carriers(
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+                gaze_mcp_core::CarrierDeclaration::text_fields(&["text"]),
+            ),
             events: events_handle,
             behavior: ToolBehavior::EchoArgs,
         })

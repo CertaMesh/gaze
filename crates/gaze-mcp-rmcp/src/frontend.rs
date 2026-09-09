@@ -340,7 +340,10 @@ fn dispatch_error_to_tool_result(err: DispatchError) -> CallToolResult {
         DispatchError::Manifest(_) => {
             CallToolResult::error(vec![Content::text("manifest-persistence-failed")])
         }
-        DispatchError::Redaction(_) => {
+        DispatchError::Protection(_)
+        | DispatchError::Carrier(_)
+        | DispatchError::Transaction(_)
+        | DispatchError::Redaction(_) => {
             CallToolResult::error(vec![Content::text("redaction-failed")])
         }
         DispatchError::ResponseSerialization(_) => {

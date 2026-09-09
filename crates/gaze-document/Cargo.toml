@@ -43,6 +43,7 @@ extract-docling = []
 render-image = []
 
 [dev-dependencies]
+gaze-assembly = { workspace = true }
 ab_glyph = "0.2"
 gaze-mcp-rmcp = { path = "../gaze-mcp-rmcp", version = "0.12.0" }
 image = { version = "0.25", default-features = false, features = ["png"] }

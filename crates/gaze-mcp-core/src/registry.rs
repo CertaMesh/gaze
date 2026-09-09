@@ -77,6 +77,13 @@ impl ToolRegistry {
         T: Tool + 'static,
     {
         let descriptor = tool.descriptor();
+        descriptor
+            .argument_carriers()
+            .validate()
+            .and_then(|()| descriptor.response_carriers().validate())
+            .map_err(|_| {
+                ToolRegistryError::InvalidDescriptor("invalid carrier declaration".into())
+            })?;
         let name = descriptor.name().to_string();
         if name.is_empty() {
             return Err(ToolRegistryError::InvalidDescriptor(

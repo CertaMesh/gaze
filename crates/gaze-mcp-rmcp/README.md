@@ -47,6 +47,19 @@ frontend
 
 Most adopters build `host` by wrapping `gaze_mcp_core::PiiEnvelope`: configure the Gaze pipeline/session, register tools in `ToolRegistry`, implement `ManifestStore`, then pass that dispatch host to `RmcpFrontend::serve`.
 
+## Tool Errors
+
+Tool failures return `isError: true` with a single text frame containing only
+`ToolError::class()`: `invalid-args`, `not-found`, `limit-exceeded`,
+`backend-unavailable`, `backend-failure`, or `internal`. Error payloads and
+source messages are never included, including for future error variants.
+
+Detailed typed errors and manifest records remain on the trusted side for
+caller control flow and operator diagnostics. They may contain unredacted PII
+and must never be serialized into model-facing transport responses. Manifest
+persistence still completes before a tool result is returned; persistence
+failure takes precedence over the tool error.
+
 ## Principal Resolution
 
 `PrincipalResolver` maps rmcp request context to `gaze_mcp_core::Principal`. For local stdio servers, `FixedPrincipalResolver` is enough. HTTP adopters should usually supply their own resolver that reads authenticated request context and emits stable principal ids plus roles.

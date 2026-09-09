@@ -235,7 +235,7 @@ enum McpCmd {
         /// Bridge TOML configuration.
         #[arg(long)]
         config: PathBuf,
-        /// Override [session].dir from the config.
+        /// Override `[session].dir` from the config.
         #[arg(long)]
         session_dir: Option<PathBuf>,
         /// Load config and discover downstream surface without serving.

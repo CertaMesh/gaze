@@ -16,6 +16,14 @@ pub struct SafetyNetCheckTool {
 }
 
 impl SafetyNetCheckTool {
+    /// Declare the supported structured input shape explicitly, including the
+    /// root `document` member. Schemas and incoming keys never authorize it.
+    pub fn with_argument_carriers(mut self, declaration: crate::CarrierDeclaration) -> Self {
+        self.descriptor = self
+            .descriptor
+            .with_carriers(declaration, response_carriers());
+        self
+    }
     /// Construct a `SafetyNetCheckTool` with its canonical descriptor.
     pub fn new() -> Self {
         Self {
@@ -33,6 +41,7 @@ impl SafetyNetCheckTool {
                     }
                 }),
             )
+            .with_carriers(crate::CarrierDeclaration::text_fields(&["text", "document"]), response_carriers())
             .with_description("Run the gaze safety-net pass against text and report residual PII.")
             .with_output_schema(json!({
                 "type": "object",
@@ -78,17 +87,23 @@ impl Tool for SafetyNetCheckTool {
                     .ok_or_else(|| ToolError::InvalidArgs("`text` must be a string".into()))?;
                 resources
                     .pipeline()
-                    .scan_safety_nets(resources.session(), text, resources.locale_chain())
+                    .scan_safety_nets_with_dictionaries(
+                        resources.session(),
+                        text,
+                        resources.locale_chain(),
+                        resources.dictionaries(),
+                    )
                     .map_err(ToolError::internal)?
             }
             (None, Some(document)) => {
                 let document = decode_structured_document(document)?;
                 resources
                     .pipeline()
-                    .scan_safety_nets_structured(
+                    .scan_safety_nets_structured_with_dictionaries(
                         resources.session(),
                         &document,
                         resources.locale_chain(),
+                        resources.dictionaries(),
                     )
                     .map_err(ToolError::internal)?
             }
@@ -128,6 +143,44 @@ impl Tool for SafetyNetCheckTool {
             "stats": stats,
         })))
     }
+}
+
+fn response_carriers() -> crate::CarrierDeclaration {
+    use crate::CarrierSegment::{AnyIndex as I, Member as M};
+    let path = |names: &[&str]| {
+        names
+            .iter()
+            .map(|name| M((*name).into()))
+            .collect::<Vec<_>>()
+    };
+    let mut members = ["ok", "nets_run", "leak_count", "leaks", "stats"]
+        .iter()
+        .map(|name| path(&[name]))
+        .collect::<Vec<_>>();
+    let mut numbers = vec![path(&["nets_run"]), path(&["leak_count"])];
+    for name in [
+        "class",
+        "score",
+        "kind",
+        "safety_net_id",
+        "field_path",
+        "span",
+    ] {
+        members.push(vec![M("leaks".into()), I, M(name.into())]);
+    }
+    numbers.push(vec![M("leaks".into()), I, M("score".into())]);
+    numbers.push(vec![M("leaks".into()), I, M("span".into()), I]);
+    for name in [
+        "suspect_count",
+        "uncovered_count",
+        "partial_bleed_count",
+        "class_mismatch_count",
+        "locale_skipped_count",
+    ] {
+        members.push(path(&["stats", name]));
+        numbers.push(path(&["stats", name]));
+    }
+    crate::CarrierDeclaration::new(members, numbers)
 }
 
 fn decode_structured_document(

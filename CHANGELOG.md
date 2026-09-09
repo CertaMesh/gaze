@@ -149,6 +149,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **MCP protection intentionally changes runtime compatibility:** custom tools
+  must declare trusted object-member and non-sensitive numeric carriers;
+  empty primary pipelines now fail closed. Configure the bundled pipeline
+  and locale chain with `gaze-assembly::CorePipelineConfig`. Stricter safety-net
+  coverage, residual, and token-provenance checks can reject previously accepted
+  calls. Transport tool errors now expose only their class, with details kept
+  owner-side. See `crates/gaze-mcp-core/README.md` for migration requirements.
+  `SearchDocumentsTool` supplies its bounded carrier declarations, and
+  `gaze_read_file` restores protected paths owner-side before file validation.
+  Publication requires coordinated crate versions and dependency minimums;
+  these unreleased changes do not bump published versions.
+
+
 - **`gaze-cli` declares each shared flag group once** (audit 7201 S11-F1, solo
   todo #2368). `gaze clean` and `gaze daemon` each declared their flags inline
   in `Cmd`, restated them in a 33- and 23-field destructure, and rebuilt them

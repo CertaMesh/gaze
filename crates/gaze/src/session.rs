@@ -874,6 +874,10 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
+    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
+        build_restore_regex(&self.staged)
+    }
+
     pub fn tokenize(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
         self.tokenize_with_family(DEFAULT_COUNTER_FAMILY, class, raw)
     }

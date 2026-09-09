@@ -68,6 +68,9 @@ pub struct BeginCallContext<'a> {
 /// Reason a manifest call did not complete successfully. The dispatcher always
 /// supplies one of these on the failure path so the manifest row carries
 /// enough context to drive operator review later.
+///
+/// These records are trusted-side diagnostics and may contain PII. Transports
+/// must never serialize manifest records into model-facing responses.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum FailureReason {
@@ -75,7 +78,8 @@ pub enum FailureReason {
     ToolError {
         /// Stable error class string, e.g. `"invalid-args"`.
         class: String,
-        /// Human-readable error message; safe to persist (post-redaction).
+        /// Trusted-side diagnostic text; may contain unredacted PII from the tool
+        /// or backend. Never expose this field to a model-facing transport.
         message: String,
     },
     /// Authorization denied by the [`crate::auth::AuthHook`] before the tool
@@ -185,9 +189,10 @@ pub trait ManifestStore: Send + Sync {
     /// this AFTER the tool returned and AFTER its response was redacted,
     /// passing an out-of-row [`SnapshotRef`] to the redacted response bytes.
     ///
-    /// The chokepoint contract requires this call to complete (or
-    /// [`fail_call`](Self::fail_call) to be called) before the dispatcher
-    /// returns the response to the transport.
+    /// Attempting this terminal operation consumes the handle's terminal
+    /// opportunity even on persistence failure. The caller must never then
+    /// attempt `fail_call`. Only successful finish permits response egress.
+    /// Response mappings commit before finish; failed finish retains them.
     async fn finish_call(
         &self,
         handle: CallHandle,
@@ -195,9 +200,10 @@ pub trait ManifestStore: Send + Sync {
     ) -> Result<(), ManifestError>;
 
     /// Finalize a manifest entry on the failure path. The dispatcher calls
-    /// this when auth, the tool body, or response redaction returned an error.
+    /// this when the tool body or response protection returned an error.
     /// The manifest entry is closed with a [`FailureReason`] so operators can
-    /// review the call later.
+    /// review the call later. Attempting this consumes the terminal opportunity
+    /// even on persistence failure; neither terminal method may be retried.
     async fn fail_call(
         &self,
         handle: CallHandle,

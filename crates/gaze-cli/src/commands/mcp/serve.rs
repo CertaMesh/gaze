@@ -49,7 +49,7 @@ struct McpHost {
     registry: ToolRegistry,
     auth: AllowAgentAuth,
     manifest: Arc<FileManifestStore>,
-    pipeline: gaze::Pipeline,
+    pipeline: gaze_assembly::CorePipeline,
     session: gaze::Session,
     session_id_policy: SessionIdPolicy,
 }
@@ -63,7 +63,7 @@ impl McpHost {
         }
         gaze_document::mcp::register_tools(&mut registry, opts)
             .map_err(|err| CliError::McpDetail(format!("mcp tool registration failed: {err}")))?;
-        let pipeline = gaze::Pipeline::builder()
+        let pipeline = gaze_assembly::CorePipelineConfig::new()
             .build()
             .map_err(|err| CliError::McpDetail(format!("mcp redaction pipeline failed: {err}")))?;
         let session = gaze::Session::new(gaze::Scope::Ephemeral)
@@ -92,9 +92,9 @@ impl DispatchHost for McpHost {
             &self.registry,
             &self.auth,
             self.manifest.as_ref(),
-            &self.pipeline,
+            self.pipeline.pipeline(),
             &self.session,
-            &[gaze::LocaleTag::Global],
+            self.pipeline.locale_chain().as_slice(),
             &self.session_id_policy,
         );
         envelope
@@ -255,4 +255,43 @@ fn unix_ms(time: std::time::SystemTime) -> u128 {
     time.duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod strict_host_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn shipped_host_has_real_primary_detection_and_document_round_trip() {
+        let directory = std::env::temp_dir().join(format!(
+            "gaze-mcp-host-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("clock")
+                .as_nanos()
+        ));
+        let manifest = Arc::new(FileManifestStore::new(directory.clone()).expect("manifest"));
+        let host = McpHost::new(manifest, None).expect("host");
+        // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::strict_host_tests::shipped_host_has_real_primary_detection_and_document_round_trip)
+        let input = "alice@example.invalid";
+        let response = host
+            .dispatch(
+                &Principal::new("synthetic"),
+                "gaze_read_text",
+                serde_json::json!({"text":input}),
+                None,
+            )
+            .await
+            .expect("document text succeeds");
+        let clean = response.payload["clean_markdown"]
+            .as_str()
+            .expect("markdown");
+        assert!(!clean.contains(input));
+        assert!(host
+            .session
+            .restore_strict_text(clean)
+            .expect("restore")
+            .contains(input));
+        std::fs::remove_dir_all(directory).expect("remove synthetic manifest");
+    }
 }

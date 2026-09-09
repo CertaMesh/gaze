@@ -25,6 +25,10 @@ impl ExportSessionTokensTool {
                     "properties": {}
                 }),
             )
+            .with_carriers(
+                crate::CarrierDeclaration::text_fields(&[]),
+                crate::CarrierDeclaration::text_fields(&[]),
+            )
             .with_description("Export the token/raw inventory for the current Session.")
             .with_response_redaction(ResponseRedaction::BypassByOperator),
         }
