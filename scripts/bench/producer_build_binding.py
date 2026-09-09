@@ -6,26 +6,38 @@ have exclusive child-wait ownership and exclude concurrent input writers.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 import hashlib
 import io
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import selectors
 import shutil
 import signal
 import stat
+import struct
 import subprocess
 import sys
 import tarfile
+import tempfile
 import time
 import tomllib
 
-from bench_subprocess import ProducerFailure, producer_boundary
+from bench_subprocess import BenchSubprocess, ProducerFailure, TransportLimits, producer_boundary
+import evidence_bridge
 
 MIB = 1024 * 1024
 CHUNK = 64 * 1024
 SOURCE = 'crates/gaze-mcp-rmcp/examples/evidence_bridge.rs'
+
+
+class OwnerState(Enum):
+    NEW = 'new'
+    RUNNING = 'running'
+    WAIT_ONLY = 'wait_only'
+    REAPED = 'reaped'
 
 
 def require(ok, code='protocol'):
@@ -100,23 +112,31 @@ class BuildOwner:
     """Keep the unreaped session leader pinned until the last signal decision."""
 
     def __init__(self, *, deadline, seconds=1800, cap=64*MIB):
+        require(type(deadline) in (int, float) and math.isfinite(deadline)
+                and type(seconds) in (int, float) and 0 < seconds <= 1800
+                and type(cap) is int and 0 < cap <= 64*MIB, 'invalid_limits')
         self.deadline = deadline
         self.work_end = min(deadline - 10, time.monotonic() + seconds)
         self.cap = cap
         self.process = None
         self.observed = None
-        self.reaped = False
+        self.state = OwnerState.NEW
         self.signals = []
+        self.cleanup_end = deadline
+
+    @property
+    def reaped(self):
+        return self.state == OwnerState.REAPED
 
     def observe(self):
-        require(not self.reaped, 'invalid_state')
+        require(self.state == OwnerState.RUNNING, 'invalid_state')
         if self.observed is None:
             self.observed = os.waitid(os.P_PID, self.process.pid,
                                       os.WEXITED | os.WNOHANG | os.WNOWAIT)
         return self.observed
 
     def signal_group(self, sig):
-        require(self.process is not None and not self.reaped, 'invalid_state')
+        require(self.process is not None and self.state == OwnerState.RUNNING, 'invalid_state')
         self.signals.append(sig)
         try:
             os.killpg(self.process.pid, sig)
@@ -124,35 +144,37 @@ class BuildOwner:
             pass
         except PermissionError:
             # An unreaped zombie-only Darwin group can return EPERM.
-            members = group_members(self.process.pid, self.deadline)
+            members = group_members(self.process.pid, self.cleanup_end)
             require(self.observe() is not None and self.process.pid in members
                     and all(s[0] == 'Z' for s in members.values()), 'cleanup')
 
-    def settled(self):
-        members = group_members(self.process.pid, self.deadline)
+    def settled(self, deadline=None):
+        members = group_members(self.process.pid, deadline or self.cleanup_end)
         require(self.process.pid in members, 'cleanup')
         return self.observe() is not None and all(s[0] == 'Z' for s in members.values())
 
     def cleanup(self, failure):
-        require(not self.reaped, 'invalid_state')
+        require(self.state == OwnerState.RUNNING, 'invalid_state')
         clean = False
         cleanup_error = False
+        live_after_exit = False
+        self.cleanup_end = min(self.deadline, time.monotonic()+7)
         try:
             clean = self.settled()
             if not clean:
-                failure = True
+                live_after_exit = not failure
                 self.signal_group(signal.SIGTERM)
-                end = min(self.deadline-5, time.monotonic()+2)
+                end = min(self.cleanup_end-5, time.monotonic()+2)
                 while time.monotonic() < end:
-                    if self.settled():
+                    if self.settled(end):
                         clean = True
                         break
                     time.sleep(.02)
                 if not clean:
                     self.signal_group(signal.SIGKILL)
-                    end = min(self.deadline-2, time.monotonic()+3)
+                    end = min(self.cleanup_end-2, time.monotonic()+3)
                     while time.monotonic() < end:
-                        if self.settled():
+                        if self.settled(end):
                             clean = True
                             break
                         time.sleep(.02)
@@ -165,14 +187,15 @@ class BuildOwner:
                 pass
         finally:
             # No path beyond here may signal the group, even after wait failure.
-            self.reaped = True
+            self.state = OwnerState.WAIT_ONLY
             try:
-                status = self.process.wait(timeout=max(.001, min(3, self.deadline-time.monotonic())))
+                status = self.process.wait(timeout=max(.001, min(3, self.cleanup_end-time.monotonic())))
+                self.state = OwnerState.REAPED
             finally:
                 self.process.stdout.close()
                 self.process.stderr.close()
         require(clean and not cleanup_error, 'cleanup')
-        require(not failure, 'producer_exit')
+        require(not live_after_exit, 'cleanup')
         require(self.observed is not None, 'cleanup')
         expected = (self.observed.si_status if self.observed.si_code == os.CLD_EXITED
                     else -self.observed.si_status)
@@ -188,6 +211,7 @@ class BuildOwner:
                                         stdin=subprocess.DEVNULL,
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                         start_new_session=True, bufsize=0)
+        self.state = OwnerState.RUNNING
         failure = True
         try:
             counts = {'stdout': 0, 'stderr': 0}
@@ -220,16 +244,8 @@ class BuildOwner:
 def file_digest(path, deadline):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     try:
-        before = os.fstat(fd)
-        require(stat.S_ISREG(before.st_mode), 'io')
-        digest = hashlib.sha256()
-        while chunk := os.read(fd, CHUNK):
-            check_time(deadline)
-            digest.update(chunk)
-        after = os.fstat(fd)
-        require((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-                == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns), 'io')
-        return (before.st_mode, before.st_size, digest.hexdigest())
+        observed, digest = digest_fd(fd, deadline)
+        return observed[4], observed[2], digest.hex()
     finally:
         os.close(fd)
 
@@ -250,6 +266,55 @@ def no_configs(root):
     for directory in (root, *root.parents):
         for name in ('config', 'config.toml'):
             require(not (directory/'.cargo'/name).exists(), 'invalid_state')
+
+
+def verify_native_archive(path, host, deadline):
+    """Check native object architecture without executing or extracting members."""
+    machines = {'x86_64-unknown-linux-gnu': ('elf', 62),
+                'aarch64-unknown-linux-gnu': ('elf', 183),
+                'x86_64-apple-darwin': ('macho', 0x1000007),
+                'aarch64-apple-darwin': ('macho', 0x100000c)}
+    require(host in machines, 'unsupported_platform')
+    kind, machine = machines[host]
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        require(stat.S_ISREG(info.st_mode) and info.st_size <= 2*1024**3, 'input_limit')
+        require(os.read(fd, 8) == b'!<arch>\n', 'invalid_state')
+        offset, members, objects = 8, 0, 0
+        while offset < info.st_size:
+            check_time(deadline)
+            os.lseek(fd, offset, os.SEEK_SET)
+            header = os.read(fd, 60)
+            require(len(header) == 60 and header[58:] == b'`\n', 'invalid_state')
+            name = header[:16].rstrip()
+            raw_size = header[48:58].strip()
+            require(raw_size.isdigit(), 'invalid_state')
+            size = int(raw_size)
+            require(offset+60+size <= info.st_size, 'invalid_state')
+            payload_size = size
+            if name.startswith(b'#1/'):
+                require(name[3:].isdigit() and int(name[3:]) <= min(size, 4096), 'invalid_state')
+                count = int(name[3:])
+                name = os.read(fd, count).rstrip(b'\0')
+                payload_size -= count
+            if name not in (b'/', b'//', b'/SYM64/') and not name.startswith(b'__.SYMDEF'):
+                require(payload_size >= 20, 'invalid_state')
+                prefix = os.read(fd, 20)
+                if kind == 'elf':
+                    require(prefix[:6] == b'\x7fELF\x02\x01'
+                            and struct.unpack('<H', prefix[18:20])[0] == machine, 'invalid_state')
+                else:
+                    require(prefix[:4] == b'\xcf\xfa\xed\xfe'
+                            and struct.unpack('<I', prefix[4:8])[0] == machine, 'invalid_state')
+                objects += 1
+            offset += 60+size+(size & 1)
+            members += 1
+            require(members <= 100000, 'input_limit')
+        require(offset == info.st_size and objects > 0 and identity(os.fstat(fd)) == identity(info),
+                'invalid_state')
+    finally:
+        os.close(fd)
 
 
 def snapshot(repo, revision, destination, deadline):
@@ -283,6 +348,7 @@ def snapshot(repo, revision, destination, deadline):
     owner = BuildOwner(deadline=end, seconds=100, cap=bound)
     require(owner.run(['/usr/bin/git', '-c', 'tar.umask=0022', 'archive', '--format=tar', tree],
                       cwd=repo, env=env, consume=collect) == 0, 'producer_exit')
+    validate_tar_headers(archive)
     destination.mkdir(mode=0o700)
     seen, seen_dirs = set(), set()
     with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as tar:
@@ -330,27 +396,49 @@ def snapshot(repo, revision, destination, deadline):
                 for child in item:
                     visit(child)
         visit(value)
-    require('git+' not in (destination/'Cargo.lock').read_text())
+    lock = tomllib.loads((destination/'Cargo.lock').read_text())
+    require(not any(p.get('source', '').startswith('git+') for p in lock.get('package', [])))
     return inventory(destination, end), len(archive)
+
+
+def validate_tar_headers(archive):
+    # tarfile otherwise silently consumes GNU/PAX extension headers. This
+    # snapshot format deliberately supports only ordinary Git USTAR entries.
+    offset = 0
+    while offset+512 <= len(archive):
+        header = archive[offset:offset+512]
+        if header == bytes(512):
+            require(len(archive)-offset >= 1024 and not any(archive[offset:]))
+            return
+        require(header[156] in (0, ord('0'), ord('5')) and header[257:263] == b'ustar\0')
+        raw = header[124:136].strip(b'\0 ')
+        require(bool(raw) and all(byte in b'01234567' for byte in raw))
+        size = int(raw, 8)
+        offset += 512+((size+511)//512)*512
+        require(offset <= len(archive))
+    require(False)
 
 
 def prepare_inputs(root, *, registry, native, toolchain, deadline):
     platform_preflight()
     require(shutil.disk_usage(root).free >= 20*1024**3, 'input_limit')
+    home, cargo_home, tmp = (root/x for x in ('home', 'cargo-home', 'tmp'))
+    for path in (home, cargo_home, tmp):
+        path.mkdir(mode=0o700)
+    minimal = {'HOME': str(home), 'CARGO_HOME': str(cargo_home),
+               'PATH': '/usr/bin:/bin:/usr/sbin:/sbin', 'LC_ALL': 'C'}
     native_inventory = inventory(native, min(deadline, time.monotonic()+30))
     require('libonnxruntime.a' in native_inventory, 'invalid_state')
     tools = {name: (toolchain/'bin'/name).resolve(strict=True)
              for name in ('cargo', 'rustc', 'rustdoc')}
     tool_inventory = {k: file_digest(v, deadline) for k, v in tools.items()}
     for name, path in tools.items():
-        version = metadata([str(path), '--version'], deadline=deadline)
+        version = metadata([str(path), '--version'], env=minimal, deadline=deadline)
         require(version.startswith((name+' 1.96.0 ').encode()), 'invalid_state')
-    host = metadata([str(tools['rustc']), '-vV'], deadline=deadline)
+    host = metadata([str(tools['rustc']), '-vV'], env=minimal, deadline=deadline)
     hosts = [line[6:].decode('ascii') for line in host.splitlines() if line.startswith(b'host: ')]
     require(len(hosts) == 1)
-    home, cargo_home, tmp = (root/x for x in ('home', 'cargo-home', 'tmp'))
-    for path in (home, cargo_home, tmp):
-        path.mkdir(mode=0o700)
+    verify_native_archive(native/'libonnxruntime.a', hosts[0], min(deadline, time.monotonic()+30))
     # Private copies protect the approved cache from Cargo bookkeeping writes.
     # registry/src is deliberately absent and is extracted by this Cargo alone.
     cache_end = min(deadline, time.monotonic()+120)
@@ -418,6 +506,7 @@ class CargoEvents:
         self.pending = bytearray()
         self.count = 0
         self.selected = None
+        self.selected_record = None
         self.finished = False
 
     def feed(self, chunk):
@@ -457,70 +546,295 @@ class CargoEvents:
                     and path.is_relative_to(self.target))
             require(stat.S_ISREG(path.lstat().st_mode))
             self.selected = path
+            # Keep only the approved unit record; compiler diagnostics are discarded.
+            self.selected_record = {key: event[key] for key in (
+                'reason', 'package_id', 'target', 'profile', 'executable', 'fresh', 'features')}
 
     def finish(self, status):
         require(not self.pending and self.finished and self.selected is not None and status == 0)
         return self.selected
 
 
-@producer_boundary
-def step0(root, *, repo, revision, registry, native, toolchain):
-    # Canonicalize parent-approved roots before Cargo reports canonical paths.
-    # On Darwin /tmp is a symlink; mixing its two spellings rejects all artifacts.
-    root, repo, registry, native, toolchain = (
-        p.resolve(strict=True) for p in (root, repo, registry, native, toolchain))
-    started = time.monotonic()
-    deadline = started + 2400
-    free_before = shutil.disk_usage(root).free
-    tools, host, env, native_before, tools_before, cache_before, cache_size = prepare_inputs(
-        root, registry=registry, native=native, toolchain=toolchain, deadline=deadline)
-    source = root/'snapshot'
-    before, archive_size = snapshot(repo, revision, source, deadline)
-    target = root/'target'
-    target.mkdir(mode=0o700)
-    require(not any(target.iterdir()), 'invalid_state')
-    planned = closed_json(metadata([str(tools['cargo']), 'metadata', '--format-version', '1',
-                                   '--no-deps', '--locked', '--offline',
-                                   '--manifest-path', str(source/'Cargo.toml')],
-                                  cwd=source, env=env, deadline=deadline))
-    packages = [p for p in planned['packages'] if p['name'] == 'gaze-mcp-rmcp'
-                and p['manifest_path'] == str(source/'crates/gaze-mcp-rmcp/Cargo.toml')]
-    require(len(packages) == 1)
-    events = CargoEvents(packages[0]['id'], source/SOURCE, target)
-    owner = BuildOwner(deadline=deadline)
-    build_start = time.monotonic()
-    peak_bytes = 0
-    def sample():
-        nonlocal peak_bytes
+def identity(info):
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_mode
+
+
+def digest_fd(fd, deadline):
+    before = os.fstat(fd)
+    require(stat.S_ISREG(before.st_mode), 'io')
+    digest, count = hashlib.sha256(), 0
+    os.lseek(fd, 0, os.SEEK_SET)
+    while chunk := os.read(fd, CHUNK):
+        check_time(deadline)
+        count += len(chunk)
+        require(count <= before.st_size, 'io')
+        digest.update(chunk)
+    require(count == before.st_size and identity(os.fstat(fd)) == identity(before), 'io')
+    return identity(before), digest.digest()
+
+
+class CapturedArtifact:
+    """Retained fd is a comparator, never a claim of fd-based execution."""
+
+    def __init__(self, path, deadline):
+        require(path == path.resolve(strict=True), 'io')
+        self.path, self.deadline = path, deadline
+        self.fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            self.baseline = digest_fd(self.fd, deadline)
+        except BaseException:
+            self.close()
+            raise
+
+    def compare(self):
+        require(self.fd is not None and self.path == self.path.resolve(strict=True), 'io')
+        require(digest_fd(self.fd, self.deadline) == self.baseline, 'io')
+        other = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            require(digest_fd(other, self.deadline) == self.baseline, 'io')
+        finally:
+            os.close(other)
+
+    def close(self):
+        if self.fd is not None:
+            fd, self.fd = self.fd, None
+            os.close(fd)
+
+
+def remove_owned(path, deadline, *, keep=None):
+    """Remove only this private tree, without following generated symlinks."""
+    check_time(deadline)
+    if keep is not None and path == keep:
+        return
+    if path.is_symlink() or not path.is_dir():
+        path.unlink()
+        return
+    with os.scandir(path) as entries:
+        for entry in entries:
+            remove_owned(Path(entry.path), deadline, keep=keep)
+    if keep is None or not keep.is_relative_to(path):
+        path.rmdir()
+
+
+@dataclass(frozen=True, repr=False)
+class Inputs:
+    repo: Path
+    revision: str
+    registry: Path
+    native: Path
+    toolchain: Path
+    scratch_parent: Path
+
+
+class BindingState(Enum):
+    NEW = 'new'
+    PREPARED = 'prepared'
+    BUILT = 'built'
+    CAPTURED = 'captured'
+    CLOSED = 'closed'
+
+
+class BindingSession:
+    """One fresh build and its artifact stay in one parent through retirement."""
+
+    def __init__(self, inputs, *, suite_deadline, variant='control'):
+        require(variant in ('control', 'no_transport', 'alternate'), 'invalid_state')
+        self.inputs, self.variant = inputs, variant
+        self.started = time.monotonic()
+        self.deadline = min(suite_deadline, self.started+2400)
+        self.work_end = self.deadline-10
+        self.state = BindingState.NEW
+        self.root = None
+        self.captured = None
+        self.events = None
+        self.owner = None
+        self.peak_bytes = 0
+        self.measurements = {}
+
+    @producer_boundary
+    def __enter__(self):
+        require(self.state == BindingState.NEW, 'invalid_state')
+        check_time(self.work_end)
+        try:
+            i = self.inputs
+            # Parent aliases must not split Cargo's canonical identity checks.
+            self.repo, self.registry, self.native, self.toolchain, parent = (
+                p.resolve(strict=True) for p in
+                (i.repo, i.registry, i.native, i.toolchain, i.scratch_parent))
+            self.free_before = shutil.disk_usage(parent).free
+            require(self.free_before >= 20*1024**3, 'input_limit')
+            self.root = Path(tempfile.mkdtemp(prefix='producer-binding-', dir=parent))
+            (self.tools, self.host, self.env, self.native_before, self.tools_before,
+             self.cache_before, cache_size) = prepare_inputs(
+                self.root, registry=self.registry, native=self.native,
+                toolchain=self.toolchain, deadline=self.work_end)
+            self.source, self.target = self.root/'snapshot', self.root/'target'
+            self.source_before, archive_size = snapshot(self.repo, i.revision, self.source, self.work_end)
+            lock = tomllib.loads((self.source/'Cargo.lock').read_text())
+            ort = [p for p in lock.get('package', []) if p.get('name') == 'ort-sys']
+            require(len(ort) == 1 and ort[0].get('version') == '2.0.0-rc.12', 'invalid_state')
+            self.snapshot_identity = 'git-tree'
+            if self.variant == 'alternate':
+                path = self.source/SOURCE
+                data = path.read_bytes()
+                old, new = b'prefix(PHONE, 8)', b'prefix(PHONE, 9)'
+                require(data.count(old) == 1, 'invalid_state')
+                path.write_bytes(data.replace(old, new))
+                self.source_before = inventory(self.source, self.work_end)
+                self.snapshot_identity = 'parent-mutation:partial-prefix-nine'
+            self.inventory_identity = hashlib.sha256(json.dumps(
+                self.source_before, sort_keys=True).encode()).digest()
+            self.target.mkdir(mode=0o700)
+            self.measurements.update(snapshot_bytes=sum(v[1] for v in self.source_before.values()),
+                                     archive_bytes=archive_size, cache_bytes=cache_size)
+            self.state = BindingState.PREPARED
+            return self
+        except BaseException:
+            self.close()
+            raise
+
+    def check_inputs(self):
+        check_time(self.work_end)
+        require(inventory(self.source, self.work_end) == self.source_before, 'io')
+        require(inventory(self.native, self.work_end) == self.native_before, 'io')
+        require({k: file_digest(v, self.work_end) for k, v in self.tools.items()}
+                == self.tools_before, 'io')
+        for name, baseline in self.cache_before.items():
+            require(inventory(self.registry/name, self.work_end) == baseline, 'io')
+            private = {key: (stat.S_IFREG | 0o444, value[1], value[2])
+                       for key, value in baseline.items()}
+            require(inventory(Path(self.env['CARGO_HOME'])/'registry'/name, self.work_end)
+                    == private, 'io')
+        no_configs(self.source)
+        for name in ('config', 'config.toml', 'credentials', 'credentials.toml'):
+            require(not (Path(self.env['CARGO_HOME'])/name).exists(), 'invalid_state')
+
+    def sample_target(self):
         size = 0
-        for path in target.rglob('*'):
-            check_time(deadline)
+        for path in self.target.rglob('*'):
+            check_time(self.work_end)
             try:
                 if path.is_file():
                     size += path.stat().st_size
             except FileNotFoundError:
                 pass
-        peak_bytes = max(peak_bytes, size)
-    status = owner.run([str(tools['cargo']), 'build', '--locked', '--offline',
-                        '-p', 'gaze-mcp-rmcp', '--example', 'evidence_bridge',
-                        '--no-default-features', '--features', 'transport-stdio',
-                        '--target', host, '--target-dir', str(target),
-                        '--message-format=json', '--manifest-path', str(source/'Cargo.toml')],
-                       cwd=source, env=env, consume=events.feed, sample=sample)
-    executable = events.finish(status)
-    sample()
-    require(inventory(source, deadline) == before, 'io')
-    require(inventory(native, deadline) == native_before, 'io')
-    require({k: file_digest(v, deadline) for k, v in tools.items()} == tools_before, 'io')
-    for name, baseline in cache_before.items():
-        require(inventory(registry/name, deadline) == baseline, 'io')
-    no_configs(source)
-    # This aggregate is a calibration, not a receipt or a dependency-wide claim.
-    return dict(build_seconds=round(time.monotonic()-build_start, 3),
-                elapsed_seconds=round(time.monotonic()-started, 3),
-                target_bytes=sum(p.stat().st_size for p in target.rglob('*') if p.is_file()),
-                sampled_peak_target_bytes=peak_bytes, peak_sample_interval_seconds=1,
-                snapshot_bytes=sum(v[1] for v in before.values()), archive_bytes=archive_size,
-                cache_bytes=cache_size, free_delta_bytes=free_before-shutil.disk_usage(root).free,
-                selected=True, build_events=events.count, leader_exit=status,
-                group_signals=len(owner.signals))
+        self.peak_bytes = max(self.peak_bytes, size)
+        return size
+
+    @producer_boundary
+    def build(self):
+        require(self.state == BindingState.PREPARED, 'invalid_state')
+        require(not any(self.target.iterdir()), 'invalid_state')
+        self.check_inputs()
+        planned = closed_json(metadata([str(self.tools['cargo']), 'metadata', '--format-version', '1',
+                                       '--no-deps', '--locked', '--offline',
+                                       '--manifest-path', str(self.source/'Cargo.toml')],
+                                      cwd=self.source, env=self.env, deadline=self.work_end))
+        packages = [p for p in planned['packages'] if p['name'] == 'gaze-mcp-rmcp'
+                    and p['manifest_path'] == str(self.source/'crates/gaze-mcp-rmcp/Cargo.toml')]
+        require(len(packages) == 1)
+        features = () if self.variant == 'no_transport' else ('transport-stdio',)
+        self.events = CargoEvents(packages[0]['id'], self.source/SOURCE, self.target, features)
+        self.owner = BuildOwner(deadline=self.work_end)
+        command = [str(self.tools['cargo']), 'build', '--locked', '--offline',
+                   '-p', 'gaze-mcp-rmcp', '--example', 'evidence_bridge', '--no-default-features',
+                   '--target', self.host, '--target-dir', str(self.target), '--message-format=json',
+                   '--manifest-path', str(self.source/'Cargo.toml')]
+        if features:
+            command += ['--features', ','.join(features)]
+        started = time.monotonic()
+        status = self.owner.run(command, cwd=self.source, env=self.env,
+                                consume=self.events.feed, sample=self.sample_target)
+        self.executable = self.events.finish(status)
+        require(self.owner.reaped, 'cleanup')
+        self.check_inputs()
+        final_bytes = self.sample_target()
+        self.measurements.update(build_seconds=round(time.monotonic()-started, 3),
+                                 target_bytes=final_bytes, sampled_peak_target_bytes=self.peak_bytes,
+                                 peak_sample_interval_seconds=1, build_events=self.events.count,
+                                 leader_exit=status, group_signals=len(self.owner.signals))
+        self.state = BindingState.BUILT
+        return self.events.selected_record
+
+    def validate_record(self, record):
+        # Used before capture as well as by real foreign-artifact falsifiers.
+        events = CargoEvents(self.events.package, self.source/SOURCE, self.target,
+                             self.events.features)
+        events.event(record)
+        events.event({'reason': 'build-finished', 'success': True})
+        return events.finish(0)
+
+    @producer_boundary
+    def capture(self):
+        require(self.state == BindingState.BUILT, 'invalid_state')
+        self.captured = self.capture_record(self.events.selected_record)
+        self.state = BindingState.CAPTURED
+
+    def capture_record(self, record):
+        require(self.state in (BindingState.BUILT, BindingState.CAPTURED)
+                and self.owner.reaped, 'invalid_state')
+        self.check_inputs()
+        require(self.validate_record(record) == self.executable)
+        return CapturedArtifact(self.executable, self.work_end)
+
+    @producer_boundary
+    def run_bridge(self):
+        require(self.state == BindingState.CAPTURED and self.variant != 'no_transport', 'invalid_state')
+        self.check_inputs()
+        self.captured.compare()
+        # B1's direct-child cleanup gets its own reserved time inside this entry.
+        remaining = self.work_end-time.monotonic()-5
+        require(remaining > 0, 'deadline')
+        limits = TransportLimits(invocation_seconds=remaining,
+                                 handshake_seconds=min(120, remaining),
+                                 exchange_seconds=min(300, remaining),
+                                 finish_seconds=min(30, remaining))
+        try:
+            result = evidence_bridge.run(self.executable, _owner=BenchSubprocess(
+                [str(self.executable)], cwd=self.source, env=self.env, limits=limits))
+        finally:
+            self.captured.compare()
+            self.check_inputs()
+        return result
+
+    @producer_boundary
+    def retire_build_products(self):
+        require(self.state == BindingState.CAPTURED, 'invalid_state')
+        self.captured.compare()
+        remove_owned(self.target, self.work_end, keep=self.executable)
+        self.captured.compare()
+
+    def close(self):
+        if self.state == BindingState.CLOSED:
+            return
+        try:
+            if self.captured is not None:
+                self.captured.close()
+        finally:
+            if self.root is not None:
+                remove_owned(self.root, self.deadline)
+            self.state = BindingState.CLOSED
+        self.measurements['elapsed_seconds'] = round(time.monotonic()-self.started, 3)
+        if self.root is not None:
+            self.measurements['free_delta_bytes'] = self.free_before-shutil.disk_usage(self.repo).free
+
+    @producer_boundary
+    def __exit__(self, kind, error, traceback):
+        try:
+            if kind is None:
+                require(self.state == BindingState.CAPTURED, 'invalid_state')
+                self.check_inputs()
+                self.captured.compare()
+        finally:
+            self.close()
+        return False
+
+
+@producer_boundary
+def run_binding(inputs, *, suite_deadline):
+    with BindingSession(inputs, suite_deadline=suite_deadline) as session:
+        session.build()
+        session.capture()
+        result = session.run_bridge()
+    return {'binding_verified': True, 'numeric_verified': result.numeric_verified,
+            'measurements': session.measurements}

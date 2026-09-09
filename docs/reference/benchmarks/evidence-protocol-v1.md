@@ -750,3 +750,115 @@ and claims no detector improvement, corpus fitness, generalization or permission
 to execute private data. Traceback-local inspection and a malicious child's
 filesystem are not sandboxed. No public evidence schema or production runtime
 changes are part of this bridge.
+
+## Private trusted-parent fresh-build binding
+
+`producer_build_binding.py` adds a separate build owner around the unchanged
+synthetic bridge. A `BindingSession` materializes approved Git-object bytes,
+builds into an empty target, accepts Cargo's unique selected example record,
+captures an open file descriptor, executes that returned path through the bridge,
+compares the file again after child cleanup, and retires its private directory.
+The record and descriptor stay in the same parent throughout. Safe success is
+returned only after directory cleanup. There is no existing-binary input to this
+entry point and no calibration receipt that can substitute for live ownership.
+
+This is conditional private causality under a trusted parent, Cargo, compiler,
+SDK, native library, cache, build scripts and proc macros. It is not a sandbox,
+reproducibility proof, dependency-wide compiled-unit graph, or public source
+attestation. The selected artifact must have the approved package, example name,
+source path, binary crate type, debug profile, `profile.test=false`, exactly
+`transport-stdio`, and `fresh=false`. A unique record, successful `build-finished`
+event and genuine exit status zero are all required. Cargo metadata identifies
+the planned package, but does not prove which complete dependency graph ran.
+
+The snapshot uses a bounded Git archive with verified blob hashes, modes and
+inventory, including `Cargo.lock`. Only ordinary USTAR files and expected ancestor
+directories are supported. Links, devices, escapes, duplicates, unexpected entries
+and extension metadata fail closed. Source, native inputs, tool bytes, original
+and private cache copies, and configuration absence are rechecked at the build,
+capture, launch and success boundaries. Persistent changes are refused; a
+mutate-and-restore interval between checks remains outside the proof.
+
+The parent supplies actual Rust 1.96.0 `cargo`, `rustc` and `rustdoc` executables,
+an approved registry directory, and an explicit native directory containing a
+regular `libonnxruntime.a`. Native archive object architecture is checked against
+the compiler host. The known native setup contract is pinned to
+`ort-sys 2.0.0-rc.12`. A private writable `CARGO_HOME` contains only private copies
+of approved registry index/cache files; `registry/src` is extracted privately.
+No user Cargo configuration or credentials are imported or read. Cache input
+copies are read-only files, and no compiled target is copied or reused for a build.
+
+The child environment is constructed explicitly, with isolated `HOME`, mandatory
+`RUSTC`/`RUSTDOC`, controlled SDK `PATH`, `CARGO_NET_OFFLINE=true`,
+`ORT_SKIP_DOWNLOAD=true`, and `ORT_LIB_LOCATION`. Conflicting ORT aliases,
+wrappers, flags, loader and proxy settings are absent. The explicit native branch
+avoids the known ORT download path. Arbitrary trusted build scripts are not
+network-sandboxed. Missing cache/native inputs fail setup; there is no download
+or dynamic-link fallback. CI supplies the exact CPU-only Linux native cache
+directory selected from the pinned ORT distribution table after its existing
+workspace bootstrap; absence fails the job.
+
+The Cargo owner starts a new session and retains its leader reference. It
+requires default `SIGCHLD` handling and exclusive wait ownership, observes exit
+with non-reaping `waitid(WNOWAIT)`, and checks bounded `ps` PID/PGID/state metadata
+before its final group-signalling decision. A zombie leader alone is distinguished
+from live descendants, including descendants that closed inherited pipes. Neither
+pipe EOF nor `killpg(..., 0)` is proof that writers are gone. TERM/KILL target only
+the owned group while the leader remains unreaped; no signal is allowed once the
+owner enters wait-only state. Cleanup uncertainty invalidates success. Descendants
+that detach or change groups, another child reaper, and same-UID/root adversaries
+are excluded from the contract.
+
+Artifact capture uses `O_NOFOLLOW`, checks a regular file, and hashes bytes from
+the retained fd. Before launch and after bridge cleanup it checks device, inode,
+size, timestamp, mode and bytes against a fresh non-following open. The fd is a
+comparator, not fd-based execution. Foreign bytes installed before initial capture
+can become the baseline if trusted testimony is forged; this remains unproved.
+The final comparison-to-exec race, loader/shared-library custody and hostile
+same-UID replacement are also unproved. Numeric behavior alone never proves source.
+
+Run the explicit suite with parent-approved local inputs and Python 3.13:
+
+```sh
+python3.13 scripts/bench/test_producer_build_binding.py --integration \
+  --repo "$APPROVED_REPO" --source-revision "$APPROVED_COMMIT" \
+  --registry "$APPROVED_REGISTRY" --native "$APPROVED_NATIVE" \
+  --toolchain "$APPROVED_TOOLCHAIN" --scratch-parent "$OWNED_SCRATCH_PARENT"
+```
+
+It performs exactly three sequential fresh builds: a valid control, a genuine
+no-transport example that exits two, and a parent-authored alternate snapshot with
+a named numeric mutation. The alternate has its own private inventory identity,
+not a fabricated Git revision. Real foreign records exercise refusal before fd
+capture; actual alternate binaries exercise substitution refusal after capture,
+with no bridge launch. Replacing only the unused conventional target path is a
+positive control. The alternate must reach the numeric oracle with valid protocol
+before its changed behavior is counted as a falsifier. Live-group, timeout,
+cancellation, dirty-input and stream cases complement these checks. Setup errors
+are not successful falsifier kills. Ordinary unittest discovery launches no Cargo;
+real helper processes require explicit lifecycle or integration mode.
+
+The pure mutation roster compiles changed helper code in memory, runs the named
+assertions, and restores the original module. Every replacement site must be
+unique. A failing setup, unittest error, timeout or surviving expected assertion
+is a failed mutation proof, never a kill:
+
+```sh
+python3.13 scripts/bench/test_producer_build_binding.py --mutation-proof
+```
+
+Budgets are 20 GiB initial free space, two Cargo jobs, 1,800 seconds per build,
+2,400 seconds per binding entry and 7,200 seconds per suite. Each stream is capped
+at 64 MiB, each JSON line at 1 MiB, event count at 100,000 and nesting at 64, with
+64 KiB reads. Snapshot extraction has a 120-second/64-MiB ceiling plus an
+inventory-derived size bound. Metadata/tool checks have a 30-second/output bound.
+Cleanup reserves TERM two seconds, KILL three seconds and two seconds for final
+completion. The bridge receives the remaining entry deadline. Target sizes are
+sampled once per second and at completion; this is a sampled peak, not a disk
+quota. Intermediate target products retire before the next build while the
+control's selected artifact remains available for comparison.
+
+The additional fresh builds cost test time and disk space. They strengthen
+reliability and trust without changing restore behavior or runtime integration.
+This helper exports no evidence receipt or interval and unblocks no producer,
+detector-improvement or private-corpus gate.
