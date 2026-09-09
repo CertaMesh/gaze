@@ -14,7 +14,7 @@ import tarfile
 import time
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 
 import producer_build_binding as binding
 from bench_subprocess import ProducerFailure
@@ -32,9 +32,11 @@ class OwnerStateTests(unittest.TestCase):
                 kill.assert_not_called()
 
     def test_nondefault_sigchld_rejected(self):
-        with patch.object(signal, 'getsignal', return_value=signal.SIG_IGN):
-            with self.assertRaises(ProducerFailure):
+        with patch.object(sys, 'version_info', (3, 13)), \
+                patch.object(signal, 'getsignal', return_value=signal.SIG_IGN):
+            with self.assertRaises(ProducerFailure) as caught:
                 binding.platform_preflight()
+            self.assertEqual(caught.exception.code, 'invalid_state')
 
     def test_ambiguous_process_metadata_rejected(self):
         for data in (b'1 1 Z', b'1 1 Z\n1 1 Z\n', b'1 bad Z\n', b'1 1 ?\n'):
@@ -105,6 +107,8 @@ class CargoSelectionTests(unittest.TestCase):
                 ('target', 'kind', ['bin']), ('target', 'crate_types', ['lib']),
                 ('profile', 'test', True), ('profile', 'test', 0),
                 ('profile', 'opt_level', '3'), ('profile', 'debuginfo', 0),
+                ('profile', 'debuginfo', 2.0), ('profile', 'debuginfo', True),
+                ('profile', 'debuginfo', '2'), ('profile', 'debuginfo', None),
                 ('profile', 'debug_assertions', False), ('profile', 'overflow_checks', False)):
             with self.subTest(field=field), self.assertRaises(ProducerFailure):
                 event = copy.deepcopy(self.event)
@@ -127,7 +131,7 @@ class CargoSelectionTests(unittest.TestCase):
         for raw in (b'noise\n', b'{"reason":1,"reason":2}\n',
                     b'{"x":'+b'['*65+b'0'+b']'*65+b'}\n',
                     b'{"x":NaN}\n', b'a'*(binding.MIB+1)):
-            with self.subTest(length=len(raw)), self.assertRaises((ProducerFailure, ValueError)):
+            with self.subTest(length=len(raw)), self.assertRaises(ProducerFailure):
                 self.events().feed(raw)
         events = self.events()
         events.feed(b'{')
@@ -231,6 +235,7 @@ def fake_build_inputs(alias_parent=False):
             kwargs['consume'](b'{"reason":"build-finished","success":true}\n')
             owner.state = binding.OwnerState.REAPED
             return 0
+        stack.enter_context(patch.object(binding.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=30*1024**3)))
         stack.enter_context(patch.object(binding, 'prepare_inputs', side_effect=prepare))
         stack.enter_context(patch.object(binding, 'snapshot', side_effect=snapshot))
         stack.enter_context(patch.object(binding, 'metadata', side_effect=metadata))
@@ -242,7 +247,7 @@ def fake_build_inputs(alias_parent=False):
 class SessionOwnershipTests(unittest.TestCase):
     def test_alias_parent_accepts_actual_selection_and_capture(self):
         with fake_build_inputs(alias_parent=True) as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 record = session.build()
                 self.assertEqual(Path(record['executable']), session.executable,
                                  'returned-record-path-accepted')
@@ -256,7 +261,7 @@ class SessionOwnershipTests(unittest.TestCase):
 
     def test_one_build_and_capture_per_session(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 with self.assertRaises(ProducerFailure):
                     session.build()
@@ -267,7 +272,7 @@ class SessionOwnershipTests(unittest.TestCase):
     def test_occupied_target_fails_before_cargo(self):
         with fake_build_inputs() as inputs:
             with self.assertRaises(ProducerFailure):
-                with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+                with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                     (session.target/'occupied').touch()
                     with patch.object(binding.BuildOwner, 'run') as launch:
                         try:
@@ -284,7 +289,7 @@ class SessionOwnershipTests(unittest.TestCase):
                 owner.state = binding.OwnerState.WAIT_ONLY
                 return status
             with patch.object(binding.BuildOwner, 'run', unreaped):
-                session = binding.BindingSession(inputs, suite_deadline=time.monotonic()+30).__enter__()
+                session = binding.BindingSession(inputs, suite_deadline=time.monotonic()+300).__enter__()
                 try:
                     with self.assertRaises(ProducerFailure):
                         session.build()
@@ -294,7 +299,7 @@ class SessionOwnershipTests(unittest.TestCase):
 
     def test_bridge_uses_returned_artifact_with_retained_fd_and_remaining_deadline(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 observed = []
@@ -306,13 +311,13 @@ class SessionOwnershipTests(unittest.TestCase):
                     self.assertTrue(session.run_bridge().numeric_verified)
                 self.assertEqual(observed[0][0], session.executable, 'execute-returned-artifact')
                 self.assertEqual(observed[0][1], [str(session.executable)], 'selected-command')
-                self.assertLess(observed[0][2], 30, 'remaining-deadline')
+                self.assertLess(observed[0][2], 300, 'remaining-deadline')
                 self.assertTrue(observed[0][3], 'fd-held-through-bridge')
 
     def test_actual_substitution_refused_before_bridge(self):
         with fake_build_inputs() as inputs:
             with self.assertRaises(ProducerFailure):
-                with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+                with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                     session.build()
                     session.capture()
                     other = session.target/'replacement'
@@ -326,7 +331,7 @@ class SessionOwnershipTests(unittest.TestCase):
 
     def test_post_bridge_byte_change_with_restored_metadata_refused(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 old = session.executable.stat()
@@ -346,7 +351,7 @@ class SessionOwnershipTests(unittest.TestCase):
 
     def test_input_refusal_occurs_before_bridge_launch(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 with patch.object(session, 'check_inputs', side_effect=ProducerFailure('io')), \
@@ -357,7 +362,7 @@ class SessionOwnershipTests(unittest.TestCase):
 
     def test_unused_conventional_path_is_positive_control(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 conventional = session.target/'debug/examples/evidence_bridge'
@@ -371,7 +376,7 @@ class SessionOwnershipTests(unittest.TestCase):
     def test_whole_entry_preflight_error_is_closed(self):
         with patch.object(binding.BindingSession, '__enter__', side_effect=ValueError('private setup')):
             with self.assertRaises(ProducerFailure) as caught:
-                binding.run_binding(None, suite_deadline=time.monotonic()+30)
+                binding.run_binding(None, suite_deadline=time.monotonic()+300)
         self.assertIsNone(caught.exception.__context__, 'no-ambient-context')
         self.assertNotIn('private setup', str(caught.exception), 'no-private-error')
 
@@ -381,12 +386,12 @@ class SessionOwnershipTests(unittest.TestCase):
                              return_value=binding.evidence_bridge.BridgeSuccess(True, True)), \
                 patch.object(binding, 'remove_owned', side_effect=OSError('private cleanup')):
             with self.assertRaises(ProducerFailure) as caught:
-                binding.run_binding(inputs, suite_deadline=time.monotonic()+30)
+                binding.run_binding(inputs, suite_deadline=time.monotonic()+300)
             self.assertIsNone(caught.exception.__context__, 'cleanup-error-closed')
 
     def test_retiring_products_keeps_only_selected_binary(self):
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 (session.target/'unused').write_bytes(b'compiled-fixture')
@@ -416,6 +421,7 @@ class InputContextTests(unittest.TestCase):
                 return (b'host: synthetic-host\n' if command[-1] == '-vV'
                         else (Path(command[0]).name+' 1.96.0 (fixture)\n').encode())
             with patch.object(binding, 'platform_preflight'), \
+                    patch.object(binding.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=20*1024**3)), \
                     patch.object(binding, 'metadata', side_effect=versions), \
                     patch.object(binding, 'verify_native_archive'), \
                     patch.dict(os.environ, {'RUSTFLAGS':'--cfg synthetic', 'DYLD_LIBRARY_PATH':'private'}):
@@ -443,19 +449,39 @@ class InputContextTests(unittest.TestCase):
                 self.assertFalse((cargo_home/name).exists(), 'no-cargo-configuration')
 
     def test_missing_or_symlink_native_archive_refused(self):
-        with tempfile.TemporaryDirectory() as temp:
-            parent = Path(temp).resolve()
-            native = parent/'native'
-            native.mkdir()
-            for symlink in (False, True):
-                root = parent/str(symlink)
-                root.mkdir()
+        for symlink, code in ((False, 'invalid_state'), (True, 'io')):
+            with self.subTest(symlink=symlink), tempfile.TemporaryDirectory() as temp:
+                parent = Path(temp).resolve()
+                root, native, tools, registry = (parent/x for x in ('root', 'native', 'tools', 'registry'))
+                for path in (root, native, tools/'bin', registry/'index', registry/'cache'):
+                    path.mkdir(parents=True)
+                for name in ('cargo', 'rustc', 'rustdoc'):
+                    (tools/'bin'/name).write_bytes(b'synthetic-tool')
                 if symlink:
                     (parent/'outside').write_bytes(b'synthetic-archive')
                     (native/'libonnxruntime.a').symlink_to(parent/'outside')
-                with self.assertRaises((ProducerFailure, OSError)):
-                    binding.prepare_inputs(root, registry=parent, native=native,
-                                            toolchain=parent, deadline=time.monotonic()+30)
+                def versions(command, **kwargs):
+                    return (b'host: synthetic-host\n' if command[-1] == '-vV'
+                            else (Path(command[0]).name+' 1.96.0 (fixture)\n').encode())
+                with patch.object(binding, 'platform_preflight'), \
+                        patch.object(binding.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=20*1024**3)), \
+                        patch.object(binding, 'metadata', side_effect=versions), \
+                        patch.object(binding, 'verify_native_archive'):
+                    with self.assertRaises(ProducerFailure) as caught:
+                        binding.prepare_inputs(root, registry=registry, native=native,
+                                               toolchain=tools, deadline=time.monotonic()+30)
+                    self.assertEqual(caught.exception.code, code)
+
+    def test_insufficient_disk_refused_before_setup(self):
+        with patch.object(binding, 'platform_preflight'), \
+                patch.object(binding.shutil, 'disk_usage', return_value=types.SimpleNamespace(free=20*1024**3-1)), \
+                patch.object(Path, 'mkdir') as mkdir:
+            with self.assertRaises(ProducerFailure) as caught:
+                binding.prepare_inputs(Path('/synthetic'), registry=Path('/synthetic'),
+                                       native=Path('/synthetic'), toolchain=Path('/synthetic'),
+                                       deadline=time.monotonic()+30)
+            self.assertEqual(caught.exception.code, 'input_limit')
+            mkdir.assert_not_called()
 
     def test_native_archive_host_mismatch_refused(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -479,7 +505,7 @@ class InputRecheckTests(unittest.TestCase):
     def test_source_and_private_cache_rechecked(self):
         check_inputs = binding.BindingSession.check_inputs
         with fake_build_inputs() as inputs:
-            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+30) as session:
+            with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
                 session.build()
                 session.capture()
                 session.native = session.root/'native'
@@ -544,14 +570,183 @@ class InputRecheckTests(unittest.TestCase):
             with patch.object(binding.BuildOwner, 'run', owner_run), \
                     patch.object(binding.BindingSession, 'check_inputs', check_inputs), \
                     patch.object(binding.evidence_bridge, 'run', side_effect=bridge), \
-                    patch.dict(globals(), {'lifecycle':lambda: {}}):
+                    patch.dict(globals(), {'lifecycle':lambda end: {}}):
                 result = integration(inputs)
             self.assertEqual(result['genuine_builds'], 3, 'suite-three-builds')
             self.assertEqual(len(set(builds)), 3, 'three-distinct-fresh-targets')
             self.assertTrue(all(not path.exists() for path in builds), 'all-targets-retired')
 
 
-def lifecycle():
+
+class BindingRegressionTests(unittest.TestCase):
+    def test_spawn_bookkeeping_cancellation_and_normal_control(self):
+        import inspect
+        lines, first = inspect.getsourcelines(binding.BuildOwner.run.__wrapped__)
+        body = {first+i: line for i, line in enumerate(lines)}
+        for transition in ('prestate', 'poststate', 'normal'):
+            with self.subTest(transition=transition):
+                owner = binding.BuildOwner(deadline=time.monotonic()+30)
+                log = []
+                process = MagicMock(pid=7, returncode=None)
+                def wait(**kwargs):
+                    log.append(('wait', owner.state))
+                    process.returncode = 0
+                    return 0
+                process.wait.side_effect = wait
+                observed = types.SimpleNamespace(si_status=0, si_code=os.CLD_EXITED)
+                selector = MagicMock()
+                selector.__enter__.return_value = selector
+                selector.get_map.return_value = {}
+                settled_calls = 0
+                def settled(*args):
+                    nonlocal settled_calls
+                    settled_calls += 1
+                    clean = transition == 'normal' or settled_calls > 1
+                    if clean:
+                        owner.observed = observed
+                    return clean
+                fired = False
+                def trace(frame, event, arg):
+                    nonlocal fired
+                    if (event == 'line' and frame.f_code.co_name == 'run'
+                            and frame.f_lineno in body and owner.process is process and not fired):
+                        ready = (transition == 'prestate' and owner.state == binding.OwnerState.NEW
+                                 or transition == 'poststate' and owner.state == binding.OwnerState.RUNNING)
+                        if ready:
+                            fired = True
+                            raise KeyboardInterrupt('discarded synthetic context')
+                    return trace
+                with patch.object(binding, 'platform_preflight'), \
+                        patch.object(binding.subprocess, 'Popen', return_value=process), \
+                        patch.object(binding.selectors, 'DefaultSelector', return_value=selector), \
+                        patch.object(os, 'set_blocking'), \
+                        patch.object(os, 'waitid', return_value=observed), \
+                        patch.object(owner, 'settled', side_effect=settled), \
+                        patch.object(os, 'killpg', side_effect=lambda *args: log.append(('signal', owner.state))):
+                    sys.settrace(trace)
+                    try:
+                        if transition == 'normal':
+                            self.assertEqual(owner.run(['synthetic']), 0)
+                        else:
+                            with self.assertRaises(ProducerFailure) as caught:
+                                owner.run(['synthetic'])
+                            self.assertEqual(caught.exception.code, 'cancelled')
+                    finally:
+                        sys.settrace(None)
+                self.assertTrue(owner.reaped, 'returned-process-must-be-reaped')
+                self.assertEqual(log[-1], ('wait', binding.OwnerState.WAIT_ONLY))
+                self.assertEqual(owner.signals, [] if transition == 'normal' else [signal.SIGTERM])
+                process.stdout.close.assert_called_once()
+                process.stderr.close.assert_called_once()
+
+    def test_metadata_bookkeeping_cancellation(self):
+        process = MagicMock(returncode=None)
+        fired = False
+        def trace(frame, event, arg):
+            nonlocal fired
+            if event == 'line' and frame.f_code.co_name == 'metadata' and frame.f_locals.get('p') is process and not fired:
+                fired = True
+                raise KeyboardInterrupt()
+            return trace
+        with patch.object(binding.subprocess, 'Popen', return_value=process):
+            sys.settrace(trace)
+            try:
+                with self.assertRaises(KeyboardInterrupt):
+                    binding.metadata(['synthetic'])
+            finally:
+                sys.settrace(None)
+        process.kill.assert_called_once()
+        process.wait.assert_called_once()
+        process.stdout.close.assert_called_once()
+        process.stderr.close.assert_called_once()
+
+    def test_nonregular_opens_are_nonblocking_and_never_read(self):
+        for mode in (binding.stat.S_IFIFO, binding.stat.S_IFCHR, binding.stat.S_IFSOCK):
+            with self.subTest(mode=mode), patch.object(os, 'open', return_value=7) as opened, \
+                    patch.object(os, 'fstat', return_value=types.SimpleNamespace(st_mode=mode)), \
+                    patch.object(os, 'close') as close, patch.object(os, 'read') as read:
+                with self.assertRaises(ProducerFailure) as caught:
+                    binding.file_digest(Path('/synthetic'), time.monotonic()+3)
+                self.assertEqual(caught.exception.code, 'io')
+                flags = opened.call_args.args[1]
+                self.assertEqual(flags & (os.O_NONBLOCK | os.O_NOFOLLOW), os.O_NONBLOCK | os.O_NOFOLLOW)
+                read.assert_not_called()
+                close.assert_called_once_with(7)
+
+    def test_directory_cleanup_reservation_and_expired_final_deadline(self):
+        with fake_build_inputs() as inputs:
+            session = binding.BindingSession(inputs, suite_deadline=time.monotonic()+300).__enter__()
+            self.assertGreaterEqual(session.deadline-session.work_end, 130, 'separate-process-and-directory-reserves')
+            with patch.object(binding.time, 'monotonic', return_value=session.work_end+1):
+                session.close()
+            self.assertFalse(session.root.exists(), 'cleanup-survives-work-expiry')
+            session = binding.BindingSession(inputs, suite_deadline=time.monotonic()+300).__enter__()
+            with patch.object(binding.time, 'monotonic', return_value=session.deadline):
+                with self.assertRaises(ProducerFailure) as caught:
+                    session.close()
+                self.assertEqual(caught.exception.code, 'deadline')
+                self.assertNotEqual(session.state, binding.BindingState.CLOSED)
+                self.assertTrue(session.root.exists())
+            session.close()
+
+    def test_free_delta_uses_canonical_scratch_filesystem(self):
+        with fake_build_inputs(alias_parent=True) as inputs:
+            calls = []
+            def usage(path):
+                calls.append(path)
+                return types.SimpleNamespace(free=30*1024**3-len(calls))
+            with patch.object(binding.shutil, 'disk_usage', side_effect=usage):
+                session = binding.BindingSession(inputs, suite_deadline=time.monotonic()+300).__enter__()
+                session.repo = Path('/different-filesystem')
+                session.close()
+            self.assertEqual(calls, [inputs.scratch_parent.resolve()]*2)
+            self.assertEqual(session.measurements['free_delta_bytes'], 1)
+
+    def test_suite_lifecycle_cannot_launch_after_budget_exhaustion(self):
+        now = [100.0]
+        launches = []
+        def run(owner, *args, **kwargs):
+            launches.append(owner.deadline)
+            now[0] = 111.0
+            owner.state = binding.OwnerState.REAPED
+            owner.process = types.SimpleNamespace(returncode=0)
+            return 0
+        with patch.object(binding.time, 'monotonic', side_effect=lambda: now[0]), \
+                patch.object(binding.BuildOwner, 'run', run):
+            with self.assertRaises(ProducerFailure) as caught:
+                integration(None, suite_seconds=11)
+            self.assertEqual(caught.exception.code, 'deadline')
+        self.assertEqual(len(launches), 1, 'no-second-launch')
+        self.assertLessEqual(launches[0], 111)
+
+    def test_metadata_has_its_own_four_mib_parse_budget(self):
+        raw = b'{"padding":"'+b'x'*(2*binding.MIB)+b'"}'
+        self.assertEqual(len(binding.closed_json(raw, cap=4*binding.MIB)['padding']), 2*binding.MIB)
+        with self.assertRaises(ProducerFailure) as caught:
+            binding.closed_json(raw)
+        self.assertEqual(caught.exception.code, 'output_limit')
+        with self.assertRaises(ProducerFailure):
+            binding.closed_json(b' '*(4*binding.MIB)+b'{}', cap=4*binding.MIB)
+        with fake_build_inputs() as inputs:
+            original = binding.metadata
+            with patch.object(binding, 'metadata', wraps=original) as metadata:
+                with binding.BindingSession(inputs, suite_deadline=time.monotonic()+300) as session:
+                    session.build()
+                    session.capture()
+            self.assertEqual(metadata.call_args.kwargs['cap'], 4*binding.MIB)
+
+    def test_workflow_native_cache_has_no_legacy_restore(self):
+        workflow = (Path(__file__).resolve().parents[2]/'.github/workflows/test.yml').read_text()
+        cache = workflow.split('  test:\n', 1)[1].split('      - name: Cache cargo registry + target', 1)[1].split('      - name:', 1)[0]
+        native = '~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671'
+        self.assertIn(native, cache, 'warm-target-restores-exact-native')
+        self.assertIn('-cargo-test-native-v2-', cache)
+        self.assertNotIn('-cargo-test-${{', cache, 'legacy-exact-key-excluded')
+        self.assertNotIn('-cargo-test-\n', cache, 'legacy-prefix-excluded')
+        self.assertLess(workflow.index('      - name: cargo test\n'), workflow.index('      - name: Test private fresh-build'))
+
+
+def lifecycle(suite_deadline):
     results = {}
     programs = {
         'normal_leader': 'pass',
@@ -567,9 +762,15 @@ def lifecycle():
         'stderr_overflow': 'import os;os.write(2,b"x"*2048)',
         'non_json_stdout': 'print("synthetic noise")',
     }
+    expected_codes = dict(leader_first_closed_pipes='cleanup', term_ignoring_descendant='cleanup',
+                          timeout='deadline', cancellation='cancelled', leader_first_open_pipes='cleanup',
+                          stdout_overflow='output_limit', stderr_overflow='output_limit', non_json_stdout='protocol')
+    def owner_for(**kwargs):
+        binding.check_time(suite_deadline-binding.PROCESS_RESERVE)
+        return binding.BuildOwner(deadline=min(suite_deadline, time.monotonic()+15), **kwargs)
     for name, program in programs.items():
-        owner = binding.BuildOwner(deadline=time.monotonic()+15,
-                                   seconds=.15 if name in ('timeout', 'leader_first_open_pipes') else 3,
+        owner = owner_for(
+                                   seconds=.15 if name == 'timeout' else 3,
                                    cap=1024 if name.endswith('overflow') else 64*binding.MIB)
         parser = binding.CargoEvents('fixture', Path('/source'), Path('/target'))
         def consume(chunk):
@@ -583,13 +784,16 @@ def lifecycle():
         except ProducerFailure as error:
             assert name != 'normal_leader', 'normal-leader-must-pass'
             assert error.__context__ is None and error.__cause__ is None, 'closed-error'
-            results[name] = 'closed'
+            assert error.code == expected_codes[name], 'lifecycle-exact-code'
+            results[name] = error.code
         else:
             assert name == 'normal_leader' and status == 0, 'live-descendant-must-refuse'
             assert owner.signals == [], 'normal-leader-must-not-be-killed'
             results[name] = 'accepted'
         assert owner.reaped and owner.process.returncode is not None, 'owned-leader-reaped'
         assert time.monotonic()-started < 15, 'finite-cleanup'
+        if name == 'leader_first_open_pipes':
+            assert time.monotonic()-started < 3, 'open-pipe-grace-before-build-timeout'
         if name == 'term_ignoring_descendant':
             assert signal.SIGKILL in owner.signals, 'term-ignore-needs-kill'
     for status in (0, 7):
@@ -598,11 +802,54 @@ def lifecycle():
                    'os.write(1,b\'{"reason":"build-\')\n'
                    'os.write(1,b\'finished","success":true}\\n\')\n'
                    f'sys.exit({status})')
-        owner = binding.BuildOwner(deadline=time.monotonic()+15, seconds=3)
+        owner = owner_for(seconds=3)
         actual = owner.run([sys.executable, '-c', program], consume=parser.feed)
         assert actual == status and parser.finished and not parser.pending, 'stream-exit-independent'
         assert owner.reaped and not owner.signals, 'stream-clean-exit'
         results['split_stream_exit_'+str(status)] = 'observed'
+    for operation in ('digest', 'inventory', 'native', 'capture', 'compare'):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            fifo = root/'fifo'
+            os.mkfifo(fifo)
+            program = """import sys,time
+from pathlib import Path
+import producer_build_binding as b
+root = Path(sys.argv[1])
+operation = sys.argv[2]
+end = time.monotonic()+2
+captured = None
+try:
+    if operation == 'compare':
+        regular = root/'regular'
+        regular.write_bytes(b'synthetic')
+        captured = b.CapturedArtifact(regular, end)
+        regular.unlink()
+        (root/'fifo').rename(regular)
+        captured.compare()
+    elif operation == 'capture':
+        b.CapturedArtifact(root/'fifo', end)
+    elif operation == 'native':
+        b.verify_native_archive(root/'fifo', 'x86_64-unknown-linux-gnu', end)
+    elif operation == 'inventory':
+        b.inventory(root, end)
+    else:
+        b.file_digest(root/'fifo', end)
+except b.ProducerFailure as error:
+    sys.exit(0 if error.code == 'io' else 3)
+else:
+    sys.exit(4)
+finally:
+    if captured is not None:
+        captured.close()
+"""
+            owner = owner_for(seconds=3)
+            started = time.monotonic()
+            status = owner.run([sys.executable, '-B', '-c', program, str(root), operation],
+                               cwd=Path(binding.__file__).resolve().parent)
+            assert status == 0 and owner.reaped and not owner.signals, 'fifo-prompt-closed-refusal'
+            assert time.monotonic()-started < 3, 'fifo-no-blocking-open'
+            results['fifo_'+operation] = 'io'
     return results
 
 
@@ -678,7 +925,7 @@ def integration(inputs, *, suite_seconds=7200):
     binding.require(type(suite_seconds) in (int, float) and binding.math.isfinite(suite_seconds)
                     and 10 < suite_seconds <= 7200, 'invalid_limits')
     end = start+suite_seconds
-    checks = lifecycle()
+    checks = lifecycle(end)
     with binding.BindingSession(inputs, suite_deadline=end) as control:
         control.build()
         lock = control.source/'Cargo.lock'
@@ -749,7 +996,7 @@ def mutation_proof():
     original = binding
     source = Path(original.__file__).read_text()
     classes = (OwnerStateTests, CargoSelectionTests, SnapshotTests,
-               SessionOwnershipTests, InputContextTests, InputRecheckTests)
+               SessionOwnershipTests, InputContextTests, InputRecheckTests, BindingRegressionTests)
     def run_tests(only=None):
         if only is None:
             suite = unittest.TestSuite(unittest.defaultTestLoader.loadTestsFromTestCase(c) for c in classes)
@@ -791,6 +1038,26 @@ def mutation_proof():
          "[str(self.target/'debug/examples/evidence_bridge')], cwd=self.source",
          'SessionOwnershipTests.test_bridge_uses_returned_artifact_with_retained_fd_and_remaining_deadline'),
     ]
+    roster.extend([
+        ('returned_process_cleanup', 'if self.process is not None:\n                # A returned process',
+         'if self.process is not None and not failure:\n                # A returned process',
+         'BindingRegressionTests.test_spawn_bookkeeping_cancellation_and_normal_control'),
+        ('metadata_returned_process_cleanup', 'if p is not None:\n            try:',
+         'if False:\n            try:', 'BindingRegressionTests.test_metadata_bookkeeping_cancellation'),
+        ('nonblocking_open', 'os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK',
+         'os.O_RDONLY | os.O_NOFOLLOW', 'BindingRegressionTests.test_nonregular_opens_are_nonblocking_and_never_read'),
+        ('native_presence', "require('libonnxruntime.a' in native_inventory, 'invalid_state')", 'pass',
+         'InputContextTests.test_missing_or_symlink_native_archive_refused'),
+        ('disk_bound', "require(shutil.disk_usage(root).free >= 20*1024**3, 'input_limit')",
+         "require(shutil.disk_usage(root).free >= 19*1024**3, 'input_limit')",
+         'InputContextTests.test_insufficient_disk_refused_before_setup'),
+        ('typed_debug', "and type(profile.get('debuginfo')) is int", '',
+         'CargoSelectionTests.test_target_identity_and_profile'),
+        ('directory_reserve', 'DIRECTORY_RESERVE = 120', 'DIRECTORY_RESERVE = 0',
+         'BindingRegressionTests.test_directory_cleanup_reservation_and_expired_final_deadline'),
+        ('scratch_filesystem', 'shutil.disk_usage(self.scratch_parent).free', 'shutil.disk_usage(self.repo).free',
+         'BindingRegressionTests.test_free_delta_uses_canonical_scratch_filesystem'),
+    ])
     killed = {}
     try:
         for name, old, new, expected in roster:
@@ -836,6 +1103,6 @@ if __name__ == '__main__':
     elif '--mutation-proof' in sys.argv:
         print(json.dumps(mutation_proof(), sort_keys=True))
     elif '--lifecycle' in sys.argv:
-        print(json.dumps(lifecycle(), sort_keys=True))
+        print(json.dumps(lifecycle(time.monotonic()+120), sort_keys=True))
     else:
         unittest.main()

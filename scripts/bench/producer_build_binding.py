@@ -30,6 +30,8 @@ import evidence_bridge
 
 MIB = 1024 * 1024
 CHUNK = 64 * 1024
+PROCESS_RESERVE = 10
+DIRECTORY_RESERVE = 120
 SOURCE = 'crates/gaze-mcp-rmcp/examples/evidence_bridge.rs'
 
 
@@ -53,18 +55,19 @@ def platform_preflight():
     require(sys.platform in ('darwin', 'linux') and sys.version_info >= (3, 13),
             'unsupported_platform')
     require(signal.getsignal(signal.SIGCHLD) == signal.SIG_DFL, 'invalid_state')
-    require(all(hasattr(os, key) for key in ('waitid', 'WNOWAIT', 'O_NOFOLLOW')),
+    require(all(hasattr(os, key) for key in ('waitid', 'WNOWAIT', 'O_NOFOLLOW', 'O_NONBLOCK')),
             'unsupported_platform')
 
 
 def metadata(command, *, cwd=None, env=None, deadline=None, cap=MIB):
     """Bounded trusted leaf-tool output. This is not the build-group owner."""
     end = min(deadline or float('inf'), time.monotonic() + 30)
-    p = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
-                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
-    output = bytearray()
-    count = 0
+    p = None
     try:
+        p = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
+        output = bytearray()
+        count = 0
         with selectors.DefaultSelector() as selector:
             for stream in (p.stdout, p.stderr):
                 os.set_blocking(stream.fileno(), False)
@@ -83,11 +86,14 @@ def metadata(command, *, cwd=None, env=None, deadline=None, cap=MIB):
         require(p.wait(timeout=max(.001, end-time.monotonic())) == 0, 'producer_exit')
         return bytes(output)
     finally:
-        if p.returncode is None:
-            p.kill()
-            p.wait(timeout=3)
-        p.stdout.close()
-        p.stderr.close()
+        if p is not None:
+            try:
+                if p.returncode is None:
+                    p.kill()
+                    p.wait(timeout=max(.001, min(3, end-time.monotonic())))
+            finally:
+                p.stdout.close()
+                p.stderr.close()
 
 
 def group_members(pgid, deadline):
@@ -116,7 +122,7 @@ class BuildOwner:
                 and type(seconds) in (int, float) and 0 < seconds <= 1800
                 and type(cap) is int and 0 < cap <= 64*MIB, 'invalid_limits')
         self.deadline = deadline
-        self.work_end = min(deadline - 10, time.monotonic() + seconds)
+        self.work_end = min(deadline - PROCESS_RESERVE, time.monotonic() + seconds)
         self.cap = cap
         self.process = None
         self.observed = None
@@ -207,13 +213,13 @@ class BuildOwner:
         platform_preflight()
         require(self.process is None, 'invalid_state')
         check_time(self.work_end)
-        self.process = subprocess.Popen(command, cwd=cwd, env=env,
-                                        stdin=subprocess.DEVNULL,
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                        start_new_session=True, bufsize=0)
-        self.state = OwnerState.RUNNING
         failure = True
         try:
+            self.process = subprocess.Popen(command, cwd=cwd, env=env,
+                                            stdin=subprocess.DEVNULL,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                            start_new_session=True, bufsize=0)
+            self.state = OwnerState.RUNNING
             counts = {'stdout': 0, 'stderr': 0}
             sampled = 0
             with selectors.DefaultSelector() as selector:
@@ -221,8 +227,16 @@ class BuildOwner:
                     stream = getattr(self.process, name)
                     os.set_blocking(stream.fileno(), False)
                     selector.register(stream, selectors.EVENT_READ, name)
-                while selector.get_map() or self.observe() is None:
+                drain_end = None
+                while True:
+                    observed = self.observe()
+                    if not selector.get_map() and observed is not None:
+                        break
                     check_time(self.work_end)
+                    if observed is not None:
+                        if drain_end is None:
+                            drain_end = min(self.work_end, time.monotonic()+2)
+                        require(time.monotonic() < drain_end, 'cleanup')
                     if sample is not None and time.monotonic()-sampled >= 1:
                         sample()
                         sampled = time.monotonic()
@@ -237,12 +251,32 @@ class BuildOwner:
                             consume(chunk)
             failure = False
         finally:
-            status = self.cleanup(failure)
+            if self.process is not None:
+                # A returned process is owned even if RUNNING bookkeeping failed.
+                if self.state == OwnerState.NEW:
+                    self.state = OwnerState.RUNNING
+                status = self.cleanup(failure)
         return status
 
 
+def open_regular(path, deadline):
+    """Never block on a FIFO before validating the opened file kind."""
+    check_time(deadline)
+    fd = None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        require(stat.S_ISREG(os.fstat(fd).st_mode), 'io')
+        return fd
+    except BaseException as error:
+        if fd is not None:
+            os.close(fd)
+        if isinstance(error, OSError):
+            raise ProducerFailure('io') from None
+        raise
+
+
 def file_digest(path, deadline):
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    fd = open_regular(path, deadline)
     try:
         observed, digest = digest_fd(fd, deadline)
         return observed[4], observed[2], digest.hex()
@@ -276,7 +310,7 @@ def verify_native_archive(path, host, deadline):
                 'aarch64-apple-darwin': ('macho', 0x100000c)}
     require(host in machines, 'unsupported_platform')
     kind, machine = machines[host]
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    fd = open_regular(path, deadline)
     try:
         info = os.fstat(fd)
         require(stat.S_ISREG(info.st_mode) and info.st_size <= 2*1024**3, 'input_limit')
@@ -453,7 +487,7 @@ def prepare_inputs(root, *, registry, native, toolchain, deadline):
             check_time(cache_end)
             dest = cargo_home/'registry'/name/rel
             dest.parent.mkdir(parents=True, exist_ok=True)
-            with (source/rel).open('rb') as src, dest.open('xb') as out:
+            with os.fdopen(open_regular(source/rel, cache_end), 'rb') as src, dest.open('xb') as out:
                 while data := src.read(CHUNK):
                     check_time(cache_end)
                     out.write(data)
@@ -468,8 +502,9 @@ def prepare_inputs(root, *, registry, native, toolchain, deadline):
     return tools, hosts[0], env, native_inventory, tool_inventory, cache_inventory, cache_size
 
 
-def closed_json(raw):
-    require(len(raw) <= MIB, 'output_limit')
+def closed_json(raw, *, cap=MIB):
+    require(type(cap) is int and 0 < cap <= 4*MIB, 'invalid_limits')
+    require(len(raw) <= cap, 'output_limit')
     depth, quoted, escaped = 0, False, False
     for byte in raw:
         if quoted:
@@ -494,7 +529,10 @@ def closed_json(raw):
         return result
     def invalid(_):
         require(False)
-    value = json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid)
+    try:
+        value = json.loads(raw, object_pairs_hook=pairs, parse_constant=invalid)
+    except (ValueError, UnicodeError):
+        raise ProducerFailure('protocol') from None
     require(type(value) is dict)
     return value
 
@@ -536,7 +574,8 @@ class CargoEvents:
             require(event.get('features') == self.features and event.get('fresh') is False)
             profile = event.get('profile')
             require(type(profile) is dict and profile.get('test') is False
-                    and profile.get('opt_level') == '0' and profile.get('debuginfo') == 2
+                    and profile.get('opt_level') == '0'
+                    and type(profile.get('debuginfo')) is int and profile.get('debuginfo') == 2
                     and profile.get('debug_assertions') is True
                     and profile.get('overflow_checks') is True)
             executable = event.get('executable')
@@ -579,7 +618,7 @@ class CapturedArtifact:
     def __init__(self, path, deadline):
         require(path == path.resolve(strict=True), 'io')
         self.path, self.deadline = path, deadline
-        self.fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        self.fd = open_regular(path, deadline)
         try:
             self.baseline = digest_fd(self.fd, deadline)
         except BaseException:
@@ -589,7 +628,7 @@ class CapturedArtifact:
     def compare(self):
         require(self.fd is not None and self.path == self.path.resolve(strict=True), 'io')
         require(digest_fd(self.fd, self.deadline) == self.baseline, 'io')
-        other = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+        other = open_regular(self.path, self.deadline)
         try:
             require(digest_fd(other, self.deadline) == self.baseline, 'io')
         finally:
@@ -642,7 +681,7 @@ class BindingSession:
         self.inputs, self.variant = inputs, variant
         self.started = time.monotonic()
         self.deadline = min(suite_deadline, self.started+2400)
-        self.work_end = self.deadline-10
+        self.work_end = self.deadline-DIRECTORY_RESERVE-PROCESS_RESERVE
         self.state = BindingState.NEW
         self.root = None
         self.captured = None
@@ -661,6 +700,7 @@ class BindingSession:
             self.repo, self.registry, self.native, self.toolchain, parent = (
                 p.resolve(strict=True) for p in
                 (i.repo, i.registry, i.native, i.toolchain, i.scratch_parent))
+            self.scratch_parent = parent
             self.free_before = shutil.disk_usage(parent).free
             require(self.free_before >= 20*1024**3, 'input_limit')
             self.root = Path(tempfile.mkdtemp(prefix='producer-binding-', dir=parent))
@@ -729,7 +769,8 @@ class BindingSession:
         planned = closed_json(metadata([str(self.tools['cargo']), 'metadata', '--format-version', '1',
                                        '--no-deps', '--locked', '--offline',
                                        '--manifest-path', str(self.source/'Cargo.toml')],
-                                      cwd=self.source, env=self.env, deadline=self.work_end))
+                                      cwd=self.source, env=self.env, deadline=self.work_end, cap=4*MIB),
+                              cap=4*MIB)
         packages = [p for p in planned['packages'] if p['name'] == 'gaze-mcp-rmcp'
                     and p['manifest_path'] == str(self.source/'crates/gaze-mcp-rmcp/Cargo.toml')]
         require(len(packages) == 1)
@@ -816,7 +857,7 @@ class BindingSession:
             self.state = BindingState.CLOSED
         self.measurements['elapsed_seconds'] = round(time.monotonic()-self.started, 3)
         if self.root is not None:
-            self.measurements['free_delta_bytes'] = self.free_before-shutil.disk_usage(self.repo).free
+            self.measurements['free_delta_bytes'] = self.free_before-shutil.disk_usage(self.scratch_parent).free
 
     @producer_boundary
     def __exit__(self, kind, error, traceback):

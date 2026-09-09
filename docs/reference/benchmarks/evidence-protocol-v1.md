@@ -805,12 +805,20 @@ before its final group-signalling decision. A zombie leader alone is distinguish
 from live descendants, including descendants that closed inherited pipes. Neither
 pipe EOF nor `killpg(..., 0)` is proof that writers are gone. TERM/KILL target only
 the owned group while the leader remains unreaped; no signal is allowed once the
-owner enters wait-only state. Cleanup uncertainty invalidates success. Descendants
+owner enters wait-only state. The leader is observed on every drain iteration;
+after exit, still-open pipes
+get at most two seconds to finish draining inside the remaining work deadline.
+Cleanup uncertainty invalidates success. A successfully returned, assigned
+process is protected through state bookkeeping and cancellation. This does not
+claim ownership of constructor-internal resources that never return to the caller,
+or safety against arbitrary repeated asynchronous exceptions during cleanup.
+Descendants
 that detach or change groups, another child reaper, and same-UID/root adversaries
 are excluded from the contract.
 
-Artifact capture uses `O_NOFOLLOW`, checks a regular file, and hashes bytes from
-the retained fd. Before launch and after bridge cleanup it checks device, inode,
+Inventory, native validation and artifact capture use a shared
+`O_NONBLOCK | O_NOFOLLOW` open and refuse nonregular files before reading.
+Artifact capture hashes bytes from the retained fd. Before launch and after bridge cleanup it checks device, inode,
 size, timestamp, mode and bytes against a fresh non-following open. The fd is a
 comparator, not fd-based execution. Foreign bytes installed before initial capture
 can become the baseline if trusted testimony is forged; this remains unproved.
@@ -851,12 +859,29 @@ Budgets are 20 GiB initial free space, two Cargo jobs, 1,800 seconds per build,
 2,400 seconds per binding entry and 7,200 seconds per suite. Each stream is capped
 at 64 MiB, each JSON line at 1 MiB, event count at 100,000 and nesting at 64, with
 64 KiB reads. Snapshot extraction has a 120-second/64-MiB ceiling plus an
-inventory-derived size bound. Metadata/tool checks have a 30-second/output bound.
-Cleanup reserves TERM two seconds, KILL three seconds and two seconds for final
-completion. The bridge receives the remaining entry deadline. Target sizes are
+inventory-derived size bound. Only ordinary USTAR files and directories are
+supported; PAX/GNU extensions fail closed. Current source path headroom does not
+guarantee future trees fit USTAR. Metadata/tool checks have a 30-second/output
+bound; Cargo metadata alone permits 4 MiB, while Cargo event lines retain 1 MiB.
+Work stops 130 seconds before the entry deadline: 120 seconds are reserved for
+directory retirement and ten for process cleanup. These reserves are inside the
+existing entry and suite ceilings, never extensions. Every helper launch checks
+the remaining suite budget. Process cleanup reserves TERM two seconds, KILL
+three seconds and two seconds for final completion. An expired final deadline
+fails closed and may leave an incompletely retired directory; no unconditional
+filesystem completion guarantee is claimed. The bridge receives the remaining
+entry deadline. Target sizes are
 sampled once per second and at completion; this is a sampled peak, not a disk
 quota. Intermediate target products retire before the next build while the
 control's selected artifact remains available for comparison.
+
+The main CI job caches the exact pinned native archive with the registry and
+target under a new namespace that excludes legacy target-only caches. Cold
+runners bootstrap through the preceding workspace build; warm runners restore
+the native input with the target. Absence still fails setup. Linux cold/warm
+execution, runner configuration and resource sufficiency require CI validation.
+The job and binding step retain their 180-minute and 120-minute ceilings. A prior
+three-build Darwin run took about 254 seconds; this is not a Linux time promise.
 
 The additional fresh builds cost test time and disk space. They strengthen
 reliability and trust without changing restore behavior or runtime integration.
