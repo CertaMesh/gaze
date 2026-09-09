@@ -1,0 +1,9 @@
+{
+  "scope": "synthetic_fixture_only",
+  "population_handle": "0123456789abcdef0123456789abcdef",
+  "membership_order": [
+    "fixture_a",
+    "fixture_b",
+    "fixture_c"
+  ]
+}
