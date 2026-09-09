@@ -21,7 +21,7 @@ Source: [`.github/workflows/publish-crates.yml`](../../../.github/workflows/publ
 - Triggered on `v*` tag pushes (with `workflow_dispatch` dry-run available).
 - Authenticates to crates.io via OIDC trusted-publisher (`rust-lang/crates-io-auth-action`); no long-lived `CARGO_REGISTRY_TOKEN` secret.
 - Derives the publish set and topological order from `cargo metadata` with `cargo run -p xtask -- publish-plan`. Every workspace member with `publish != false` is included automatically, including new crates. The core crate is published as `gaze-pii` while its library target remains `gaze`.
-- Runs a manifest pre-flight before any real publish: `cargo package --no-verify -p <crate>` for each crate in the derived plan. This catches unpublishable workspace dependency manifests before OIDC auth or partial publishing.
+- Runs a manifest pre-flight before any real publish: `cargo package --no-verify --workspace --exclude xtask` for the workspace. Workspace packaging resolves coordinated, not-yet-published dependency versions together. Per-crate packaging would resolve those versions against crates.io before they exist. This catches unpublishable manifests before OIDC auth or partial publishing.
 - Checks crates.io for every planned crate before publishing. If any crate is absent, the workflow fails up front because OIDC trusted publishing cannot first-publish a new crate.
 - Skips crates already at the published version (idempotent re-runs) and retries on index-propagation lag.
 - New crates require a one-time manual seed publish with a crates.io token, followed by trusted-publisher linking, before a tag publish can proceed:
@@ -34,6 +34,35 @@ After the seed publish, add the crate's Trusted Publisher on crates.io for `Cert
 - Browse crates at <https://crates.io/crates/gaze-pii> (and sibling crate pages).
 
 Cutting a release: tag the merge commit on `main` with `vX.Y.Z` and push the tag. Both workflows fire from the same tag push; no manual crates.io step is needed for crates already in the OIDC publish loop.
+
+## Pre-tag model-setup ownership gate
+
+Before the first `gaze-model-setup` publication, run `release.yml` with
+`workflow_dispatch` on the reviewed preparation branch. This path scrubs the
+release text and runs `scripts/gate/model-setup-ownership.sh` on hosted Linux;
+it does not build release assets, create a release, or publish crates.
+
+The ownership gate uses the shipped installer to fetch and strictly verify
+the source-pinned real Kiji FP32 bundle. It checks identical artifact hashes
+before testing a copy owned by a distinct user, uses a foreign-owned working
+directory, and explicitly runs the ignored cross-directory effective-user test.
+It also verifies loose-mode repair with an independent bundle check and
+exact effective-user ownership, 0700 directory modes, and 0600 file modes.
+A separately hashed, readable foreign-owned copy proves setup rejects the
+owner mismatch specifically; the verifier keeps its separate private copy.
+Post-repair hashes and owner/mode inventory are retained in the receipts. Exact test names must report a passing test;
+a zero-test cargo result cannot pass the gate.
+
+After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>
+-f version=0.13.0 -f pr_number=<release-pr>`. Require a successful
+`model-setup-ownership-preflight` job for that exact preparation head before
+tagging. Its `model-setup-ownership-<commit>` artifact
+records the commit, commands, toolchain, model hashes, owner/mode inventory,
+and test results. It contains receipts only; model files are temporary and
+are removed when the gate exits. The script requires an unprivileged Linux
+user with passwordless sudo so real foreign ownership can be constructed.
+The publish plan orders `gaze-recognizers` before `gaze-model-setup` at the
+coordinated release version.
 
 ## Homebrew Tap Location
 

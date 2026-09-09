@@ -688,31 +688,67 @@ mod tests {
         .unwrap();
     }
 
+    #[cfg(unix)]
     #[test]
     #[ignore = "requires a real pinned bundle that is safe to chmod"]
     fn loose_mode_current_user_dir_is_repaired_then_accepted() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+
         let model_dir = PathBuf::from(
             std::env::var_os("GAZE_KIJI_LOOSE_MODEL_DIR")
                 .expect("set GAZE_KIJI_LOOSE_MODEL_DIR to a loose current-euid-owned bundle"),
         );
 
         let outcome = install_kiji_bundle(&InstallOptions {
-            model_dir: Some(model_dir),
+            model_dir: Some(model_dir.clone()),
             precision: KijiDistilbertPrecision::Fp32,
         })
         .unwrap();
 
         assert!(matches!(outcome, InstallOutcome::AlreadyPresent { .. }));
+        verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap();
+        let uid = unsafe { libc::geteuid() };
+        let mut pending = vec![model_dir];
+        while let Some(path) = pending.pop() {
+            let metadata = fs::symlink_metadata(&path).unwrap();
+            assert_eq!(metadata.uid(), uid, "repaired path must retain its owner");
+            assert!(!metadata.file_type().is_symlink());
+            let mode = metadata.permissions().mode() & 0o777;
+            if metadata.is_dir() {
+                assert_eq!(mode, 0o700, "repaired directories must be private");
+                pending.extend(
+                    fs::read_dir(&path)
+                        .unwrap()
+                        .map(|entry| entry.unwrap().path()),
+                );
+            } else {
+                assert!(metadata.is_file());
+                assert_eq!(mode, 0o600, "repaired files must be private");
+            }
+        }
     }
 
+    #[cfg(unix)]
     #[test]
-    #[ignore = "requires a real pinned bundle owned by another uid"]
+    #[ignore = "requires a real pinned bundle in a readable directory owned by another uid"]
     fn foreign_owned_dir_fails_closed() {
+        use std::os::unix::fs::MetadataExt;
+
         let model_dir = PathBuf::from(
             std::env::var_os("GAZE_KIJI_FOREIGN_MODEL_DIR")
-                .expect("set GAZE_KIJI_FOREIGN_MODEL_DIR to a foreign-owned bundle"),
+                .expect("set GAZE_KIJI_FOREIGN_MODEL_DIR to a readable foreign-owned bundle"),
         );
-
+        assert_ne!(fs::symlink_metadata(&model_dir).unwrap().uid(), unsafe {
+            libc::geteuid()
+        });
+        let verification_error =
+            verify_kiji_bundle(&model_dir, KijiDistilbertPrecision::Fp32).unwrap_err();
+        assert!(matches!(
+            &verification_error,
+            SafetyNetError::ModelUnavailable { reason }
+                if reason == "kiji sensitive path owner mismatch"
+        ));
+        let expected_reason = verification_error.to_string();
         let err = install_kiji_bundle(&InstallOptions {
             model_dir: Some(model_dir),
             precision: KijiDistilbertPrecision::Fp32,
@@ -721,7 +757,7 @@ mod tests {
 
         assert!(matches!(
             err,
-            SetupError::NonEmptyInvalidDir { .. } | SetupError::Verify(_)
+            SetupError::NonEmptyInvalidDir { reason, .. } if reason == expected_reason
         ));
     }
 }
