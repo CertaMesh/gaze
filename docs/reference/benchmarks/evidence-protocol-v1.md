@@ -47,9 +47,9 @@ Hazards that must never be serialized or printed:
 * Observer `RedactionEntry` timestamps (`created_at`), `session_id`, source IDs,
   artifact/tokenizer SHA fields; manifests and suspect spans stay private.
 * `scripts/bench/gaze_bench_score.py`: `identified_document_population` persists
-  IDs and is not reused. Its child stderr-to-file runner is not reused either.
-  A future subprocess adapter must drain bounded memory pipes before any private
-  run. Redacting a file afterwards is insufficient.
+  IDs and is not reused. Its legacy scorecard remains synthetic-only, even with
+  the bounded subprocess transport described below. Redacting a file afterwards
+  is insufficient.
 
 Both emitters and consumers recursively validate every path, container type
 (including empty containers), leaf type and vocabulary. Boolean is not integer.
@@ -57,6 +57,79 @@ Refusals contain a closed code only, never an offending key/path/value. Test
 assertions compare private values as booleans with static messages. Canary
 probes cover success, nested refusals, errors, assertions, exceptions, oversize,
 truncation and timeout; an injected private-output mutation must fail them.
+
+## Legacy producer transport boundary
+
+The two Python benchmark calls, `run_config` and
+`collect_validator_measurements`, share `bench_subprocess.py`. On POSIX Linux
+and macOS, it exchanges binary JSONL through nonblocking pipes, draining stderr
+concurrently into discarded bounded chunks. It never persists or prints child
+diagnostics. The compatibility argument `diagnostics_dir` creates no directory
+or file. Newly emitted process metadata omits `stderr_log` and `stderr_bytes`;
+historical scorecards remain readable. No zero byte count or placeholder path
+stands in for an unavailable observation.
+
+Operational defaults are 16 MiB per request frame, 64 MiB per stdout frame,
+64 MiB cumulative stderr per invocation, nesting 64 and 64 KiB I/O chunks.
+Deadlines are 120 seconds for handshake, 300 seconds per exchange including
+writing/encoding/decoding, 21,600 seconds per invocation and 30 seconds for
+normal finish. Failed cleanup escalates from direct-child termination after
+2 seconds to kill and bounded reaping within a further 3 seconds. Those two
+cleanup budgets are deliberately not folded into the invocation budget, so
+termination and reaping stay available after an invocation deadline expires.
+Tests inject smaller limits. These are resource policies, not scientific
+acceptance limits.
+Unsupported platforms refuse before spawning; Windows support is not claimed.
+
+A response must be complete, within limits and strictly decoded/validated.
+Duplicate keys, nonfinite numbers, invalid UTF-8, excessive nesting, extra
+frames and partial EOF refuse; a truncated prefix is never scored. Standard
+output that is readable before the request write is observed complete cannot be
+a reply to that request and is refused, whichever order a readiness batch
+reports the pipes in. Parent exceptions from both calls contain only closed
+codes/phases, without retained payload-bearing exception chains, including when
+the caller is already handling another exception; the reported phase is the
+transport phase that was live when the failure was caught. Cancellation also
+exits through a closed error after cleanup. Malformed transport, timeout or unconfirmed
+cleanup aborts the cell, never yielding a successful scorecard, failed-closed
+protection credit or substitute zero-leak metric. Valid typed pipeline refusals
+retain the existing scoring/accounting behavior. Cleanup targets only the owned
+direct child and closes all parent descriptors; it never kills by name or group
+or waits indefinitely for an inherited pipe writer.
+
+This improves parent-owned diagnostic sinks and lifecycle bounds only. It is
+not a sandbox against arbitrary child filesystem/network writes, crash dumps,
+swap or independently spawned descendants. Producers must be trusted. Existing
+schema-v4 document IDs, population digests, excluded-document records and
+comparison diagnostics are deliberately preserved for the authorized synthetic
+workflow. **Private inputs remain prohibited through these legacy producers and
+exporters.** Labels, ID prefixes and boolean attestations do not authorize a
+private run. A separately reviewed custody, provenance and in-memory
+producer-to-evaluator bridge is still required; unavailable observations and
+producer membership proof remain unmeasured/blocked. This change establishes
+no corpus-fitness, statistical-power or generalization claim.
+
+Focused model-free transport proof uses Python 3.13:
+
+```sh
+python3.13 -m unittest discover -s scripts/bench -p test_bench_subprocess.py
+python3.13 scripts/bench/test_bench_subprocess.py --mutation-proof
+```
+
+The second command mutates code only in isolated test-process memory. Its named
+assertions detect diagnostic file/stdout emission, removed stderr/request
+bounds, accepted frame truncation, bypassed deadlines/cleanup, retained
+exception context under an active caller handler, output accepted before its
+request completed, a stranded write registration, a misreported failure phase,
+a cleanup budget coupled to the invocation budget, and a transport that always
+fails where a scenario requires success. Caller-level failure tests check reaping
+and closed descriptors before the harness emergency reaper runs. A separate
+mutation checks that an error-phase accessor cannot escape the closed boundary.
+Every mutation site is asserted to occur exactly once in the transport source, so a roster entry cannot silently
+drift onto another line. Compilation failures, unrelated errors and watchdog kills
+are not counted as killed mutants. The existing scoring/population/evidence
+regressions remain separate requirements; the compiled validator probe is not
+needed for this synthetic subprocess proof.
 
 ## Receipt schema and stamps
 

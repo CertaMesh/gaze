@@ -2,7 +2,6 @@
 
 import copy
 import hashlib
-import io
 import json
 import socket
 import sys
@@ -331,13 +330,14 @@ class ContractTests(unittest.TestCase):
             "timing": {"total_ms": 1.25},
         }
         process = mock.Mock()
-        process.stdin = io.StringIO()
-        process.stdout = io.StringIO(json.dumps(response) + "\n")
-        process.wait.return_value = 0
+        process.__enter__ = mock.Mock(return_value=process)
+        process.__exit__ = mock.Mock(return_value=False)
+        process.message_deadline = 0
+        process.exchange.side_effect = [response]
         repo_root = Path(benchmark.__file__).resolve().parents[2]
 
         with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
-            with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
+            with mock.patch.object(benchmark, "BenchSubprocess", return_value=process):
                 result = benchmark.run_config(
                     repo_root=repo_root,
                     binary=Path(temporary) / "synthetic-runner",
@@ -570,11 +570,10 @@ class ResponseValidationTests(unittest.TestCase):
             "post_policy_scan_ms": 7.0,
         }
         process = mock.Mock()
-        process.stdin = io.StringIO()
-        process.stdout = io.StringIO(
-            "\n".join((json.dumps(first), json.dumps(second))) + "\n"
-        )
-        process.wait.return_value = 0
+        process.__enter__ = mock.Mock(return_value=process)
+        process.__exit__ = mock.Mock(return_value=False)
+        process.message_deadline = 0
+        process.exchange.side_effect = [first, second]
         repo_root = Path(benchmark.__file__).resolve().parents[2]
         second_document = benchmark.Document(
             uid="synthetic-response-2",
@@ -586,7 +585,7 @@ class ResponseValidationTests(unittest.TestCase):
         )
 
         with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
-            with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
+            with mock.patch.object(benchmark, "BenchSubprocess", return_value=process):
                 result = benchmark.run_config(
                     repo_root=repo_root,
                     binary=Path(temporary) / "synthetic-runner",
@@ -639,19 +638,14 @@ class ResponseValidationTests(unittest.TestCase):
             )
             response["strict_would_reject"] = True
         process = mock.Mock()
-        process.stdin = io.StringIO()
-        process.stdout = io.StringIO(
-            "\n".join(
-                json.dumps(response)
-                for response in (warmup_error, warmup_rejection, scored_rejection)
-            )
-            + "\n"
-        )
-        process.wait.return_value = 0
+        process.__enter__ = mock.Mock(return_value=process)
+        process.__exit__ = mock.Mock(return_value=False)
+        process.message_deadline = 0
+        process.exchange.side_effect = [warmup_error, warmup_rejection, scored_rejection]
         repo_root = Path(benchmark.__file__).resolve().parents[2]
 
         with tempfile.TemporaryDirectory(dir=repo_root) as temporary:
-            with mock.patch.object(benchmark.subprocess, "Popen", return_value=process):
+            with mock.patch.object(benchmark, "BenchSubprocess", return_value=process):
                 result = benchmark.run_config(
                     repo_root=repo_root,
                     binary=Path(temporary) / "synthetic-runner",
