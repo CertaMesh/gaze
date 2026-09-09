@@ -46,8 +46,11 @@ The ownership gate uses the shipped installer to fetch and strictly verify
 the source-pinned real Kiji FP32 bundle. It checks identical artifact hashes
 before testing a copy owned by a distinct user, uses a foreign-owned working
 directory, and explicitly runs the ignored cross-directory effective-user test.
-It also verifies loose-mode repair for the current owner and rejection of a
-foreign-owned installation. Exact test names must report a passing test;
+It also verifies loose-mode repair with an independent bundle check and
+exact effective-user ownership, 0700 directory modes, and 0600 file modes.
+A separately hashed, readable foreign-owned copy proves setup rejects the
+owner mismatch specifically; the verifier keeps its separate private copy.
+Post-repair hashes and owner/mode inventory are retained in the receipts. Exact test names must report a passing test;
 a zero-test cargo result cannot pass the gate.
 
 After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>

@@ -278,7 +278,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `unsupported owner-side index schema 1; supported 2` error (the version is
   checked before the payload shape, so there is no partial or reinterpreted
   load), and a v2 payload carrying duplicate document keys is rejected the
-  same way. Rebuild local indexes by re-running `gaze index ingest <dir>`.
+  same way. Preserve the old encrypted index and its key for recovery, then
+  rebuild into a fresh private directory with
+  `gaze index ingest <dir> --index-path <new-private-directory>`. Reusing the
+  old path fails during load before ingest can clear it. Verify the new index
+  before pointing search and other consumers at its path.
   The `entities: N` metric printed by `gaze index ingest` keeps its meaning
   (indexed document/fingerprint pairs). `FileCorpusIndexStore::hit_count_for_domain`
   was removed (it had no callers). The AEAD/key layer and the sealed-file
