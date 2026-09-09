@@ -74,16 +74,23 @@ Operational defaults are 16 MiB per request frame, 64 MiB per stdout frame,
 Deadlines are 120 seconds for handshake, 300 seconds per exchange including
 writing/encoding/decoding, 21,600 seconds per invocation and 30 seconds for
 normal finish. Failed cleanup escalates from direct-child termination after
-2 seconds to kill and bounded reaping within a further 3 seconds. Tests inject
-smaller limits. These are resource policies, not scientific acceptance limits.
+2 seconds to kill and bounded reaping within a further 3 seconds. Those two
+cleanup budgets are deliberately not folded into the invocation budget, so
+termination and reaping stay available after an invocation deadline expires.
+Tests inject smaller limits. These are resource policies, not scientific
+acceptance limits.
 Unsupported platforms refuse before spawning; Windows support is not claimed.
 
 A response must be complete, within limits and strictly decoded/validated.
 Duplicate keys, nonfinite numbers, invalid UTF-8, excessive nesting, extra
-frames and partial EOF refuse; a truncated prefix is never scored. Parent
-exceptions from both calls contain only closed codes/phases, without retained
-payload-bearing exception chains. Cancellation also exits through a closed
-error after cleanup. Malformed transport, timeout or unconfirmed
+frames and partial EOF refuse; a truncated prefix is never scored. Standard
+output that is readable before the request write is observed complete cannot be
+a reply to that request and is refused, whichever order a readiness batch
+reports the pipes in. Parent exceptions from both calls contain only closed
+codes/phases, without retained payload-bearing exception chains, including when
+the caller is already handling another exception; the reported phase is the
+transport phase that was live when the failure was caught. Cancellation also
+exits through a closed error after cleanup. Malformed transport, timeout or unconfirmed
 cleanup aborts the cell, never yielding a successful scorecard, failed-closed
 protection credit or substitute zero-leak metric. Valid typed pipeline refusals
 retain the existing scoring/accounting behavior. Cleanup targets only the owned
@@ -111,8 +118,13 @@ python3.13 scripts/bench/test_bench_subprocess.py --mutation-proof
 
 The second command mutates code only in isolated test-process memory. Its named
 assertions detect diagnostic file/stdout emission, removed stderr/request
-bounds, accepted frame truncation, bypassed deadlines/cleanup and retained
-exception context. Compilation failures, unrelated errors and watchdog kills
+bounds, accepted frame truncation, bypassed deadlines/cleanup, retained
+exception context under an active caller handler, output accepted before its
+request completed, a stranded write registration, a misreported failure phase,
+a cleanup budget coupled to the invocation budget, and a transport that always
+fails where a scenario requires success. Every mutation site is asserted to
+occur exactly once in the transport source, so a roster entry cannot silently
+drift onto another line. Compilation failures, unrelated errors and watchdog kills
 are not counted as killed mutants. The existing scoring/population/evidence
 regressions remain separate requirements; the compiled validator probe is not
 needed for this synthetic subprocess proof.

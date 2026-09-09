@@ -60,6 +60,21 @@ def child(mode):
             os.write(2, b"x" * 1024)
         time.sleep(2)
         return 0
+    if mode == "bad-json-handshake":
+        os.write(1, b"{bad}\n")
+        return 0
+    if mode == "prefix-idle":
+        os.write(1, b'{"x":')
+        time.sleep(1.5)
+        return 0
+    if mode == "prefix":
+        # Unsolicited stdout only after the request write has started, never finished.
+        os.read(0, 4096)
+        os.write(1, b'{"x":')
+        while not os.read(0, 65536).endswith(b"\n"):
+            pass
+        os.write(1, b"1}\n")
+        return 0
     for line in sys.stdin.buffer:
         request = json.loads(line)
         if mode in ("flood", "flood-excess"):
@@ -161,12 +176,38 @@ def invoke(mode, root, *, late=False, post=False):
     return result, created
 
 
+SUCCESS_MODES = ("score", "score-refusal", "probe")
+
+
+def assert_success_counts(mode, result):
+    """A tolerated failure is not a pass: pin what each success actually produced."""
+    from test_openpii_gaze_bench import ResponseValidationTests
+    uid = ResponseValidationTests().document().uid
+    if mode == "probe":
+        assert result["schema_version"] == score.VALIDATOR_PROBE_PROTOCOL_SCHEMA_VERSION, "success-required"
+        assert list(result["documents"]) == [uid], "success-required"
+        return
+    process_meta, availability = result["process"], result["pipeline_availability"]
+    refused = mode == "score-refusal"
+    assert process_meta["warmup_count"] == 1, "success-required"
+    assert len(process_meta["discarded_warmup_samples"]) == 1, "success-required"
+    assert availability["attempted_documents"] == 1, "success-required"
+    assert availability["completed_documents"] == (0 if refused else 1), "success-required"
+    assert availability["failed_closed_documents"] == (1 if refused else 0), "success-required"
+    assert result["scored_population"]["documents"] == (0 if refused else 1), "success-required"
+    assert result["failed_closed_population"]["documents"] == (1 if refused else 0), "success-required"
+    assert availability["errors"] == (
+        {"safety_net_fallback_residual_suspect": 1} if refused else {}
+    ), "success-required"
+
+
 def boundary_scenario(mode, root):
     os.chdir(root)
     late = mode == "late"
     post = mode == "post"
     actual_mode = "score" if late or post else mode
     error = None
+    result = None
     try:
         result, owners = invoke(actual_mode, root, late=late, post=post)
         process_meta = result.get("process", {})
@@ -180,7 +221,10 @@ def boundary_scenario(mode, root):
         assert CANARY not in rendered, "traceback-boundary"
         error = (caught.code, caught.phase)
     assert not list(root.iterdir()), "file-boundary"
-    if mode not in ("score", "score-refusal", "probe"):
+    if mode in SUCCESS_MODES:
+        assert error is None, "success-required"
+        assert_success_counts(mode, result)
+    else:
         assert error is not None, "failure-required"
     if mode == "uncaught":
         invoke("score-bad", root)
@@ -221,7 +265,8 @@ class TransportTests(unittest.TestCase):
     def test_limits_and_platform_reject_before_spawn(self):
         cases = ({"request_bytes": 0}, {"exchange_seconds": float("nan")},
                  {"finish_seconds": float("inf")}, {"nesting": 65},
-                 {"chunk_bytes": 600000}, {"handshake_seconds": 5}, {"chunk_bytes": True})
+                 {"chunk_bytes": 600000}, {"handshake_seconds": 5}, {"chunk_bytes": True},
+                 {"terminate_seconds": 0}, {"reap_seconds": float("nan")})
         for changes in cases:
             with self.subTest(changes=tuple(changes)), mock.patch.object(transport.subprocess, "Popen") as spawn:
                 with self.assertRaises(transport.ProducerFailure):
@@ -433,8 +478,172 @@ class TransportTests(unittest.TestCase):
                 self.assertTrue(not list(Path(root).iterdir()), "file-boundary")
                 if mode == "uncaught":
                     self.assertTrue(result.returncode != 0 and b"ProducerFailure" in result.stderr, "uncaught-error")
+                elif mode in SUCCESS_MODES:
+                    # An always-failing transport must die here, not merely elsewhere.
+                    self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "success-required")
                 else:
                     self.assertTrue(result.returncode == 0 and not result.stdout and not result.stderr, "boundary-result")
+
+    # ---- review round r1 regressions ------------------------------------------
+
+    def ambient(self, call):
+        """Enter the boundary from inside live, payload-bearing caller handlers."""
+        try:
+            raise ValueError(CANARY)
+        except ValueError:
+            try:
+                raise KeyError(CANARY)
+            except KeyError:
+                with self.assertRaises(transport.ProducerFailure) as failure:
+                    call()
+        error = failure.exception
+        self.assertIsNone(error.__context__, "exception-context")
+        self.assertIsNone(error.__cause__, "exception-context")
+        self.assertNotIn(CANARY, "".join(traceback.format_exception(error)), "exception-context")
+        self.assertNotIn(CANARY, repr(error), "exception-context")
+        return error
+
+    def test_ambient_caller_context_never_crosses_high_level_calls(self):
+        # `raise ... from None` only hides the caller's live exception; it stays attached.
+        with tempfile.TemporaryDirectory() as root:
+            for mode in ("early", "bad-handshake", "score-bad", "score-reason", "probe-bad"):
+                with self.subTest(mode=mode):
+                    self.ambient(lambda mode=mode: invoke(mode, Path(root)))
+
+    def test_ambient_context_cleared_for_validation_and_cancellation(self):
+        with tempfile.TemporaryDirectory() as root:
+            with mock.patch.object(score, "BenchSubprocess") as spawn:
+                error = self.ambient(
+                    lambda: score.collect_validator_measurements(Path(root), [], [CANARY]))
+                spawn.assert_not_called()
+            self.assertEqual(error.code, "payload_processing", "exception-context")
+            owners = []
+            def factory(*args, **kwargs):
+                owner = transport.BenchSubprocess(command("probe"), limits=limits())
+                owners.append(owner)
+                return owner
+            with mock.patch.object(score, "BenchSubprocess", side_effect=factory), mock.patch.object(
+                score, "_validate_validator_probe_handshake", side_effect=KeyboardInterrupt(CANARY)
+            ):
+                error = self.ambient(
+                    lambda: score.collect_validator_measurements(Path(root), [], []))
+            self.assertEqual(error.code, "cancelled", "cancelled-boundary")
+            self.reaped(owners[0])
+
+    def test_ambient_context_cleared_on_context_manager_exit(self):
+        # __exit__ raises outside the decorated boundary and needs the same scrub.
+        owner = self.owner("nonzero")
+        def call():
+            with owner:
+                owner.exchange({"x": 1})
+        error = self.ambient(call)
+        self.assertEqual((error.code, error.phase), ("producer_exit", "finish"), "exception-context")
+        self.reaped(owner)
+
+    def test_ambient_context_cleared_on_cleanup_failure(self):
+        owner = self.owner("ignore")
+        def call():
+            with owner:
+                owner.exchange({"x": 1})
+                owner._wait_exit = mock.Mock(side_effect=OSError(CANARY))
+        error = self.ambient(call)
+        self.assertEqual(error.code, "cleanup", "exception-context")
+        self.reaped(owner)
+
+    def test_early_stdout_prefix_rejected_before_request_completes(self):
+        # A response cannot predate its request, in either selector report order.
+        for reverse in (False, True):
+            with self.subTest(reverse=reverse):
+                owner = self.owner("prefix", chunk_bytes=8192, exchange_seconds=2)
+                with self.assertRaises(transport.ProducerFailure, msg="early-prefix") as failure:
+                    with owner:
+                        real_select = owner.selector.select
+                        def ordered(timeout, _real=real_select, _reverse=reverse):
+                            events = _real(timeout)
+                            return list(reversed(events)) if _reverse else events
+                        with mock.patch.object(owner.selector, "select", side_effect=ordered):
+                            owner.exchange({"text": "x" * 200_000})
+                self.assertEqual(failure.exception.code, "protocol", "early-prefix")
+                self.reaped(owner)
+
+    def test_idle_stdout_before_request_rejected(self):
+        owner = self.owner("prefix-idle")
+        with self.assertRaises(transport.ProducerFailure, msg="idle-prefix") as failure:
+            with owner:
+                time.sleep(0.25)
+                owner.exchange({"x": 1})
+        self.assertEqual(failure.exception.code, "protocol", "idle-prefix")
+        self.reaped(owner)
+
+    def test_transport_failures_carry_the_owner_phase(self):
+        missing = HERE.parent / "definitely-absent-producer-binary"
+        owner = transport.BenchSubprocess([str(missing)], limits=limits())
+        self.addCleanup(lambda: owner.selector.close() if owner.selector is not None else None)
+        with self.assertRaises(transport.ProducerFailure, msg="phase-accuracy") as failure:
+            with owner:
+                pass
+        self.assertEqual(failure.exception.phase, "start", "phase-accuracy")
+        self.assertNotIn(str(missing), str(failure.exception), "phase-accuracy")
+        owner = self.owner("bad-json-handshake")
+        with self.assertRaises(transport.ProducerFailure, msg="phase-accuracy") as failure:
+            with owner:
+                owner.receive_handshake()
+        self.assertEqual(failure.exception.phase, "handshake", "phase-accuracy")
+        self.reaped(owner)
+        for wire in (b"{bad}\n", b'{"x":"\xff"}\n'):
+            with self.subTest(wire=wire):
+                owner = self.owner("raw")
+                with self.assertRaises(transport.ProducerFailure, msg="phase-accuracy") as failure:
+                    with owner:
+                        owner.exchange({"wire": wire.hex()})
+                self.assertEqual(failure.exception.phase, "exchange", "phase-accuracy")
+                self.reaped(owner)
+
+    def test_stdin_registration_released_when_receive_aborts(self):
+        owner = self.owner("blocked-write", stderr_bytes=4096, exchange_seconds=2)
+        with self.assertRaises(transport.ProducerFailure, msg="stdin-registration"):
+            with owner:
+                self.assertTrue(owner.receive_handshake() == {"ready": True}, "child-ready")
+                try:
+                    owner.exchange({"text": "x" * 400_000})
+                except transport.ProducerFailure as first:
+                    self.assertEqual(first.code, "stderr_limit", "stdin-registration")
+                    self.assertNotIn(owner.process.stdin.fileno(),
+                                     {key.fd for key in owner.selector.get_map().values()},
+                                     "stdin-registration")
+                    raise
+        self.reaped(owner)
+
+    def test_cleanup_budget_outlives_the_invocation_budget(self):
+        # Deliberate: termination and reaping stay available after the invocation expires.
+        slow_cleanup = dict(handshake_seconds=0.3, exchange_seconds=0.3, finish_seconds=0.25,
+                            invocation_seconds=0.4, terminate_seconds=0.5, reap_seconds=1.0)
+        try:
+            limits(**slow_cleanup).validate()
+        except transport.ProducerFailure:
+            self.fail("cleanup-budget")
+        owner = self.owner("ignore", **slow_cleanup)
+        with self.assertRaises(transport.ProducerFailure, msg="cleanup-budget") as failure:
+            with owner:
+                owner.exchange({"x": 1})
+                time.sleep(0.45)
+                owner.check_deadline()
+        self.assertEqual(failure.exception.code, "deadline", "cleanup-budget")
+        self.assertTrue(time.monotonic() > owner.invocation_deadline, "cleanup-budget")
+        self.reaped(owner)
+        self.assertEqual(owner.process.returncode, -signal.SIGKILL, "cleanup-budget")
+
+    def test_mutation_roster_sites_are_unique_and_applicable(self):
+        source = Path(transport.__file__).read_text()
+        seen = {}
+        for name, (old, new, target, marker) in MUTATIONS.items():
+            with self.subTest(mutation=name):
+                self.assertEqual(source.count(old), 1, "mutation-roster")
+                self.assertNotIn((old, new), seen, "mutation-roster")
+                seen[(old, new)] = name
+                self.assertNotEqual(old, new, "mutation-roster")
+                self.assertTrue(callable(getattr(TransportTests, target, None)), "mutation-roster")
+                compile(source.replace(old, new, 1), "<mutant>", "exec")
 
 
 MUTATIONS = {
@@ -448,17 +657,35 @@ MUTATIONS = {
                       "test_stderr_budget", "stderr-budget"),
     "request-cap": ("if len(output) + len(data) > self.limits.request_bytes:", "if False:",
                     "test_request_cap_and_preallocation", "request-preallocation"),
-    "frame-truncation": ("if newline != len(frame) - 1 or (request is not None and offset != len(request)):\n                        raise ProducerFailure(\"protocol\", self.phase)",
-                         "if request is not None and offset != len(request):\n                        raise ProducerFailure(\"protocol\", self.phase)\n                    frame = frame[:newline + 1]",
+    "frame-truncation": ("if newline >= 0:\n                        if newline != len(chunk) - 1:\n                            raise ProducerFailure(\"protocol\", self.phase)\n                        complete = True",
+                         "if newline >= 0:\n                        frame = frame[:len(frame) - len(chunk) + newline + 1]\n                        complete = True",
                          "test_malformed_extra_partial_frames", "frame-refusal"),
-    "deadline": ("if time.monotonic() >= deadline:", "if False:",
+    "deadline": ("    def _check(self, deadline):\n        if time.monotonic() >= deadline:",
+                 "    def _check(self, deadline):\n        if False:",
                  "test_write_blocking_and_absolute_deadlines", "absolute-deadline"),
     "cleanup": ("        if self.process is None:\n            return clean",
                 "        return clean\n        if self.process is None:\n            return clean",
                 "test_cleanup_on_processing_exception", "child-reaping"),
-    "context": ("        except Exception:\n            pass",
+    "context": ("        except Exception:\n            phase = _owner_phase(args, phase)",
                 "        except Exception:\n            raise ProducerFailure('payload_processing') from None",
                 "test_boundary_no_exception_context_in_process", "exception-context"),
+    "ambient-context": ("        closed.__cause__ = None\n        closed.__context__ = None",
+                        "        closed.__cause__ = None",
+                        "test_ambient_caller_context_never_crosses_high_level_calls", "exception-context"),
+    "owner-phase": ("    phase = getattr(args[0], \"phase\", None) if args else None", "    phase = None",
+                    "test_transport_failures_carry_the_owner_phase", "phase-accuracy"),
+    "early-prefix": ("                pending = request is not None and offset != len(request)",
+                     "                pending = False",
+                     "test_early_stdout_prefix_rejected_before_request_completes", "early-prefix"),
+    "stdin-registration": ("            if request is not None:\n                # Never strand a write registration, and never mask the first failure.\n                self._unregister(self.process.stdin)",
+                           "            if False:\n                self._unregister(self.process.stdin)",
+                           "test_stdin_registration_released_when_receive_aborts", "stdin-registration"),
+    "always-fail": ("    def exchange(self, request):\n        if self.finished",
+                    "    def exchange(self, request):\n        raise ProducerFailure(\"protocol\", \"exchange\")\n        if self.finished",
+                    "test_boundary_success_and_failure_sinks", "success-required"),
+    "cleanup-budget": ("        if max(self.handshake_seconds, self.exchange_seconds, self.finish_seconds) > self.invocation_seconds:",
+                       "        if max(self.handshake_seconds, self.exchange_seconds, self.finish_seconds,\n               self.terminate_seconds, self.reap_seconds) > self.invocation_seconds:",
+                       "test_cleanup_budget_outlives_the_invocation_budget", "cleanup-budget"),
 }
 
 
@@ -489,7 +716,7 @@ def mutation_proof():
     for name in MUTATIONS:
         environment = {**os.environ, "GAZE_BENCH_TEST_MUTANT": name}
         result = subprocess.run([sys.executable, str(HERE), "--mutant", name],
-                                env=environment, capture_output=True, timeout=20)
+                                env=environment, capture_output=True, timeout=120)
         if result.returncode != 0 or CANARY.encode() in result.stdout + result.stderr:
             print("mutation-proof-failed:" + name)
             return 1

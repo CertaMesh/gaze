@@ -32,6 +32,27 @@ class ProducerFailure(RuntimeError):
         super().__init__(f"{self.code}:{self.phase}")
 
 
+def _owner_phase(args, default):
+    """A bound transport method knows its live phase; a module-level call does not."""
+    phase = getattr(args[0], "phase", None) if args else None
+    return phase if phase in PHASES else default
+
+
+def _raise_closed(code, phase):
+    """Raise a closed failure with no chain, even inside a live caller handler.
+
+    Clearing __context__ before the raise does not survive: the raise statement
+    re-attaches the caller's active exception. Only a bare re-raise skips that.
+    """
+    try:
+        raise ProducerFailure(code, phase) from None
+    except ProducerFailure as closed:
+        closed.__cause__ = None
+        closed.__context__ = None
+        closed.__suppress_context__ = True
+        raise
+
+
 def producer_boundary(function):
     """Drop diagnostic exceptions, including their implicit chained context."""
     @functools.wraps(function)
@@ -42,11 +63,13 @@ def producer_boundary(function):
         except ProducerFailure as error:
             code, phase = error.code, error.phase
         except Exception:
-            pass
+            phase = _owner_phase(args, phase)
         except BaseException:
-            code = "cancelled"
+            # Cancellation stays a closed outcome by contract: the raw signal
+            # exception can carry payload, and every caller must still abort.
+            code, phase = "cancelled", _owner_phase(args, phase)
         # Raising inside except would retain the original private exception.
-        raise ProducerFailure(code, phase) from None
+        _raise_closed(code, phase)
     return wrapped
 
 
@@ -78,6 +101,8 @@ class TransportLimits:
             raise ProducerFailure("invalid_limits", "start")
         if max(self.handshake_seconds, self.exchange_seconds, self.finish_seconds) > self.invocation_seconds:
             raise ProducerFailure("invalid_limits", "start")
+        # terminate_seconds/reap_seconds stay outside that comparison on purpose:
+        # cleanup keeps its own finite budget once the invocation budget expires.
 
 
 class BenchSubprocess:
@@ -125,12 +150,16 @@ class BenchSubprocess:
             self._cleanup()
             raise
 
+    def _unregister(self, stream):
+        if self.selector is None or stream is None:
+            return
+        try:
+            self.selector.unregister(stream)
+        except (KeyError, ValueError):
+            pass
+
     def _close_stream(self, stream):
-        if self.selector is not None:
-            try:
-                self.selector.unregister(stream)
-            except (KeyError, ValueError):
-                pass
+        self._unregister(stream)
         if stream is not None:
             stream.close()
 
@@ -270,39 +299,48 @@ class BenchSubprocess:
         offset = 0
         if request is not None:
             self.selector.register(self.process.stdin, selectors.EVENT_WRITE, "stdin")
-        while True:
-            self._check(deadline)
-            events = self.selector.select(min(0.05, max(0, deadline - time.monotonic())))
-            complete = False
-            for key, _ in events:
+        try:
+            while True:
                 self._check(deadline)
-                if key.data == "stdin":
-                    try:
-                        written = os.write(key.fd, memoryview(request)[offset:offset + self.limits.chunk_bytes])
-                    except BlockingIOError:
+                events = self.selector.select(min(0.05, max(0, deadline - time.monotonic())))
+                # Snapshot before the batch: a response cannot predate its request,
+                # whichever order this batch happens to report stdin and stdout in.
+                pending = request is not None and offset != len(request)
+                complete = False
+                for key, _ in events:
+                    self._check(deadline)
+                    if key.data == "stdin":
+                        try:
+                            written = os.write(key.fd, memoryview(request)[offset:offset + self.limits.chunk_bytes])
+                        except BlockingIOError:
+                            continue
+                        offset += written
+                        if offset == len(request):
+                            self._unregister(self.process.stdin)
                         continue
-                    offset += written
-                    if offset == len(request):
-                        self.selector.unregister(self.process.stdin)
-                    continue
-                chunk = self._read(key)
-                if chunk is None:
-                    continue
-                if key.data == "stderr":
-                    self._stderr(chunk)
-                    continue
-                if not chunk:
-                    raise ProducerFailure("protocol", self.phase)
-                if len(frame) + len(chunk) > self.limits.stdout_bytes:
-                    raise ProducerFailure("output_limit", self.phase)
-                frame.extend(chunk)
-                newline = frame.find(b"\n")
-                if newline >= 0:
-                    if newline != len(frame) - 1 or (request is not None and offset != len(request)):
+                    chunk = self._read(key)
+                    if chunk is None:
+                        continue
+                    if key.data == "stderr":
+                        self._stderr(chunk)
+                        continue
+                    if not chunk or pending:
                         raise ProducerFailure("protocol", self.phase)
-                    complete = True
-            if complete:
-                return self._decode(frame, deadline)
+                    if len(frame) + len(chunk) > self.limits.stdout_bytes:
+                        raise ProducerFailure("output_limit", self.phase)
+                    # Scan only the new bytes; every earlier chunk was newline-free.
+                    newline = chunk.find(b"\n")
+                    frame.extend(chunk)
+                    if newline >= 0:
+                        if newline != len(chunk) - 1:
+                            raise ProducerFailure("protocol", self.phase)
+                        complete = True
+                if complete:
+                    return self._decode(frame, deadline)
+        finally:
+            if request is not None:
+                # Never strand a write registration, and never mask the first failure.
+                self._unregister(self.process.stdin)
 
     @producer_boundary
     def receive_handshake(self):
@@ -401,7 +439,7 @@ class BenchSubprocess:
         finally:
             clean = self._cleanup()
         if not clean:
-            raise ProducerFailure("cleanup", "cleanup")
+            _raise_closed("cleanup", "cleanup")
         if failure is not None:
-            raise ProducerFailure(*failure)
+            _raise_closed(*failure)
         return False
