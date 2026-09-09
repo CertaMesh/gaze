@@ -11,8 +11,6 @@
     "counts": {
       "egress_raw_value_mismatches": 0,
       "egress_token_restore_failures": 0,
-      "false_positive_bytes": 0,
-      "false_positive_occurrences": 0,
       "gold_bytes_planned": 21,
       "gold_bytes_surviving_egress": 0,
       "gold_occurrences_attribution_not_measured": 0,
@@ -36,8 +34,8 @@
       "egress_overlapping_clean_spans": "not_applicable_by_construction",
       "egress_raw_value_mismatches": "egress_reconstructed",
       "egress_token_restore_failures": "egress_reconstructed",
-      "false_positive_bytes": "egress_reconstructed",
-      "false_positive_occurrences": "egress_reconstructed",
+      "false_positive_bytes": "not_measured",
+      "false_positive_occurrences": "not_measured",
       "gold_bytes_planned": "route_native",
       "gold_bytes_surviving_egress": "egress_reconstructed",
       "gold_occurrences_attribution_not_measured": "egress_reconstructed",
@@ -67,18 +65,18 @@
       "cross_language_vocabulary_equality": "NOT_EVALUABLE",
       "declaration_gating": "PASS",
       "egress_integrity_analogues": "PASS",
-      "false_positive_negative_control": "PASS",
+      "false_positive_negative_control": "NOT_EVALUABLE",
       "gold_survival_oracle": "PASS",
       "local_membership_order_proof": "NOT_EVALUABLE",
       "manifest_integrity_six_counter_schema_v4": "BLOCKED",
-      "no_payload_positive_observation": "PASS",
+      "no_payload_positive_observation": "NOT_EVALUABLE",
       "outcome_identities": "PASS",
       "paired_grouped_interval_arithmetic": "NOT_EVALUABLE",
       "per_token_protection_trace": "BLOCKED",
       "planned_inventory_reconciliation": "NOT_EVALUABLE",
       "producer_membership_order_proof": "BLOCKED",
       "receipt_path_allowlist": "PASS",
-      "rejection_is_not_protection": "PASS",
+      "rejection_is_not_protection": "NOT_EVALUABLE",
       "source_attribution_events": "PASS",
       "stamped_field_separation": "PASS",
       "string_byte_reversibility": "PASS",
@@ -96,6 +94,8 @@
         "unknown_egress_route_fragment_observation"
       ],
       "metrics": [
+        "false_positive_bytes",
+        "false_positive_occurrences",
         "protection_trace_items",
         "unknown_egress_lower_bound_cases"
       ]
@@ -115,6 +115,7 @@
     "route_id": "mcp.rmcp.duplex.v1",
     "route_status": {
       "daemon.jsonl.v1": "NOT_IMPLEMENTED",
+      "evaluator.private.v1": "NOT_IMPLEMENTED",
       "mcp.rmcp.duplex.v1": "IMPLEMENTED",
       "ocr.document.v1": "NOT_IMPLEMENTED",
       "proxy.http.v1": "NOT_IMPLEMENTED",
@@ -145,6 +146,7 @@
       "unknown_egress_route_fragment_observation"
     ],
     "CELL_IDS": [
+      "synthetic.evaluator.v1",
       "synthetic.mcp.controlled.v1",
       "synthetic.mcp.core.v1"
     ],
@@ -166,7 +168,10 @@
     ],
     "COUNTING_GRADES": [
       "egress_reconstructed",
+      "observed_subset_lower_bound",
       "observer_native",
+      "planned_inventory",
+      "private_authored_records",
       "route_native"
     ],
     "DECLARATION_FIELDS": [
@@ -184,7 +189,10 @@
       "invariant_enforced_not_counted",
       "not_applicable_by_construction",
       "not_measured",
+      "observed_subset_lower_bound",
       "observer_native",
+      "planned_inventory",
+      "private_authored_records",
       "route_native"
     ],
     "ERROR_CODES": [
@@ -286,6 +294,7 @@
       "UNKNOWN_EGRESS"
     ],
     "POLICY_IDENTITIES": [
+      "authored.records.v1",
       "controlled.email_only.v1",
       "core.rule_floor.v1"
     ],
@@ -372,6 +381,7 @@
     ],
     "ROUTE_IDS": [
       "daemon.jsonl.v1",
+      "evaluator.private.v1",
       "mcp.rmcp.duplex.v1",
       "ocr.document.v1",
       "proxy.http.v1",

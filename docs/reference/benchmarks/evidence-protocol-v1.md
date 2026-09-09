@@ -16,7 +16,9 @@ The Rust route exports aggregates; the Python evaluator consumes independently
 authored in-memory records. There is no route-to-evaluator per-document bridge,
 persisted or salted. Neither component proves detection completeness, corpus
 fitness, generalization, promotion readiness or the historical IBAN discrepancy.
-Other routes remain `NOT_IMPLEMENTED`.
+The evaluator identifies itself as `evaluator.private.v1`, cell
+`synthetic.evaluator.v1`, policy `authored.records.v1`; its receipt marks the MCP
+route NOT_IMPLEMENTED. Only the emitting component is IMPLEMENTED.
 
 ## Boundary and safe failures
 
@@ -89,7 +91,14 @@ An interval has exactly finite numeric `point`, `low`, `high` (low <= high),
 `method_id`, boolean `conditional`, and `basis` (`paired_completed` or
 `full_cell`). No unknown field is accepted at any depth.
 
-Counting grades are `route_native`, `observer_native`, `egress_reconstructed`.
+Counting grades are `route_native`, `observer_native`, `egress_reconstructed`,
+`planned_inventory`, `private_authored_records`, `observed_subset_lower_bound`.
+The last grade means a sum over explicitly observed operands only, never an
+exact full-cell count. The evaluator declares its full per-metric provenance
+in `EVALUATOR_DERIVATIONS`: authored inventory denominators, private authored
+record sums, and not_measured for every unperformed runtime check. Availability
+can downgrade a declared metric to not_measured or an observed subset lower bound;
+it never upgrades provenance merely because a numeric field exists.
 Non-counting grades are `invariant_enforced_not_counted`,
 `not_applicable_by_construction`, `not_measured`. Counts are exactly the
 counting-grade subset of the complete derivation inventory. Every metric at
@@ -100,14 +109,14 @@ Stamps are forbidden in emitted receipts. Structural validation separately
 calls the unchanged `gaze_bench_score.git_metadata(repo_root)` itself to bind
 **validator** code identity. It does not authenticate the producer. The stamp
 `build_attestation` carries `source_revision` (40 lowercase hex), `dirty`,
-`source` (`live_repository` or `test_seam`), `declared_feature_graph_id` and
-`declared_toolchain_id`. The last two are unverified closed declarations.
+`source` (`live_repository` or `test_seam`). It does not invent toolchain or
+feature declarations; those unused stamped fields are removed.
 Without a repository root, only the explicitly fixture-only `attestation_probe`
 seam is allowed. A seam yields NOT_EVALUABLE, never PASS. When a live root is
 provided, live dirty state wins; a probe cannot override it.
 
 Only the private evaluator checks its actual inventory and order against
-custody and adds `local_membership_order_verified` and
+explicit nonempty custody membership_order and adds `local_membership_order_verified` and
 `local_membership_order_proof_method = private_membership_order_v1`.
 External aggregate validation stamps no membership fact. Producer membership
 is NOT_MEASURED and `producer_membership_order_proof` remains BLOCKED.
@@ -119,7 +128,11 @@ Ordered states: `NOT_STARTED`, `COMPLETED`, `FAILED_CLOSED_NO_EGRESS`,
 completed requires actual decoded client response. No-payload requires a
 received error frame with exactly one text content block in the committed
 control vocabulary and no other data-bearing content. Neither client Ok nor
-Err alone classifies dispatch. Wire codes collapse causes and never establish
+Err alone classifies dispatch. The actual result must serialize to exactly the
+allowlisted error shape: no structuredContent, result/content metadata,
+annotations or other data-bearing surfaces. Adversarial classifier tests mutate
+a clone of an actual received safe error, not a claimed production leak.
+The route observes a subset of OUTCOME_STATES; it does not classify ERROR_PROTOCOL. Wire codes collapse causes and never establish
 an underlying Rust error variant.
 
 `planned_case_count == sum(outcomes)`; attempted is derived by subtracting
@@ -133,8 +146,13 @@ in **evaluator-only** fixtures. The rmcp client exposes no partial response;
 T1 adds no wire tap. Thus route `unknown_egress_lower_bound_cases` is
 `not_measured` with no count. A timeout proves only UNKNOWN_EGRESS/no credit.
 Any UNKNOWN_EGRESS, even without an observed fragment, forbids exact leak-family
-intervals. A full-cell interval requires no unknown or not-started outcomes
-and `conditional == false`. Rejection, missing records and errors are never
+intervals. A full-cell interval requires completed outcomes in every relevant arm and
+`conditional == false`. Candidate consumers derive base margins and the paired
+intersection from the asymmetric table. Unknown in either arm blocks paired
+leak intervals; zero pairs permit no numeric paired interval; any noncompleted
+remainder requires conditional=true. An omitted interval means NOT_EVALUABLE,
+so unmeasured metrics need no interval entry. A numeric interval is forbidden
+for observed_subset_lower_bound counts. Rejection, missing records and errors are never
 zero-leak substitutions. Observations on failed/skipped leaves are not counted
 without actual evidence.
 
@@ -143,7 +161,13 @@ NOT_EVALUABLE; only complete all-PASS coverage yields PASS.
 
 ## Private paired estimator
 
-Frozen `PlannedInventory` holds ordered `(key, group_id, stratum, weight)`.
+Frozen `PlannedInventory` holds ordered `(key, group_id, stratum, weight)` and
+optional independently authored gold occurrence/byte denominators. A missing
+plan operand stays unavailable even when both records are absent. DocRecord
+observed_metrics explicitly names evaluated count operands; default numeric
+fields do not establish availability. An observed zero remains numeric. Missing
+records, unobserved unknown frames and failed preflight have no egress counts.
+A mixed cell exports only explicitly graded observed subset sums.
 No duplicate keys; groups have one stratum and one positive finite weight.
 Records cannot alter this metadata. Unknown/duplicate additions are refused.
 Finalization fills absent cases in both arms. The paired set is the intersection
@@ -240,6 +264,11 @@ Logger events still fire when the protection trace is absent. They establish
 event provenance, not per-token causation. `protect_gap` passes None for the
 trace collector; `protection_trace_items` remains not_measured. No second
 detector run, new runtime API or instrumentation is permitted.
+
+Measurement gates require a performed check and evaluated denominator. Missing
+restore/negative/gold checks are NOT_EVALUABLE, ambiguity prevents a gold PASS,
+and actual token swaps or byte mismatches produce FAIL receipts. Tests that
+mutate a restore operand label that receipt as a test-only falsifier.
 
 Restoration compares exact **owner-authorized string bytes**. Parsed JSON
 equality cannot substitute. A JSON-text string with semantically equivalent,
@@ -358,7 +387,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### CELL_IDS
 
-`synthetic.mcp.controlled.v1`, `synthetic.mcp.core.v1`.
+`synthetic.evaluator.v1`, `synthetic.mcp.controlled.v1`, `synthetic.mcp.core.v1`.
 
 ### CLAIM_SCOPES
 
@@ -370,7 +399,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### COUNTING_GRADES
 
-`egress_reconstructed`, `observer_native`, `route_native`.
+`egress_reconstructed`, `observed_subset_lower_bound`, `observer_native`, `planned_inventory`, `private_authored_records`, `route_native`.
 
 ### DECLARATION_FIELDS
 
@@ -378,7 +407,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### DERIVATIONS
 
-`egress_reconstructed`, `invariant_enforced_not_counted`, `not_applicable_by_construction`, `not_measured`, `observer_native`, `route_native`.
+`egress_reconstructed`, `invariant_enforced_not_counted`, `not_applicable_by_construction`, `not_measured`, `observed_subset_lower_bound`, `observer_native`, `planned_inventory`, `private_authored_records`, `route_native`.
 
 ### ERROR_CODES
 
@@ -418,7 +447,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### POLICY_IDENTITIES
 
-`controlled.email_only.v1`, `core.rule_floor.v1`.
+`authored.records.v1`, `controlled.email_only.v1`, `core.rule_floor.v1`.
 
 ### RECEIPT_PATHS
 
@@ -430,7 +459,7 @@ mirrors and the golden vocabulary artifact; arbitrary identifiers are refused.
 
 ### ROUTE_IDS
 
-`daemon.jsonl.v1`, `mcp.rmcp.duplex.v1`, `ocr.document.v1`, `proxy.http.v1`, `session.episode.v1`, `stream.v1`, `structured.core.v1`, `text.clean_for_bench.v1`.
+`daemon.jsonl.v1`, `evaluator.private.v1`, `mcp.rmcp.duplex.v1`, `ocr.document.v1`, `proxy.http.v1`, `session.episode.v1`, `stream.v1`, `structured.core.v1`, `text.clean_for_bench.v1`.
 
 ### ROUTE_STATUSES
 
@@ -481,7 +510,8 @@ focused proof. No new screenshots are needed because no visible output changes.
 
 Additional mutation `MUT-CANARY-RUST` emits a synthetic private value inside the
 canary child; only the parent output-capture test is its targeted kill set.
-The complete roster is 48 mechanisms: 35 Python and 13 Rust opt-in probes.
+The executable roster and targeted proof receipts below determine the probe
+count; there is no fixed-count acceptance target.
 Rust probes run with `python3.13 scripts/bench/test_evidence_eval.py
 --rust-mutation-proof` under the machine lease, modifying only evidence_route.rs
 and restoring its exact committed bytes after each probe.

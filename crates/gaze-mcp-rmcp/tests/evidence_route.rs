@@ -15,8 +15,7 @@ kind = "regex"
 pattern = '([a-z]+@example\.invalid)'
 capture_groups = [1]
 "#;
-    let pack =
-        gaze::Rulepack::load(gaze::RulepackSource::Embedded(PACK)).expect("controlled-rulepack");
+    let pack = must(gaze::Rulepack::load(gaze::RulepackSource::Embedded(PACK)));
     assert!(
         pack.recognizers.len() == 1 && pack.recognizers[0].class == gaze::PiiClass::Email,
         "controlled-class"
@@ -26,15 +25,21 @@ capture_groups = [1]
         class: gaze::PiiClass::Email,
         action: gaze::Action::Tokenize,
     }];
-    let context = gaze::Context::from_json_str(r#"{"dictionaries":{},"class_map":{},"fields":{}}"#)
-        .expect("empty-context");
+    let context = must(gaze::Context::from_json_str(
+        r#"{"dictionaries":{},"class_map":{},"fields":{}}"#,
+    ));
     let locales = gaze::LocaleChain::merge_cli_policy_rulepack_default(
         None,
         None,
         Some(&[gaze::LocaleTag::Global]),
     );
-    gaze_assembly::build_pipeline(&policy, &context, &[pack], &locales, None)
-        .expect("controlled-assembly")
+    must(gaze_assembly::build_pipeline(
+        &policy,
+        &context,
+        &[pack],
+        &locales,
+        None,
+    ))
 }
 
 use async_trait::async_trait;
@@ -52,6 +57,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 use std::time::Duration;
+const MIN_FRAGMENT_BYTES: usize = 8;
 const EMAIL: &str = "alice@example.invalid";
 const FRESH: &str = "bob@example.invalid";
 const PHONE: &str = "+49 1555 0112233";
@@ -328,12 +334,21 @@ async fn call(h: Arc<Host>, args: Value, timeout: bool) -> Option<CallToolResult
     let _ = server.await;
     response
 }
+fn no_payload_surfaces(r: &CallToolResult) -> bool {
+    let Some(t) = r.content.first().and_then(|c| c.raw.as_text()) else {
+        return false;
+    };
+    // Equality closes every serialized data-bearing surface, including future fields.
+    must(serde_json::to_value(r))
+        == json!({"isError":true,"content":[{"type":"text","text":t.text}]})
+}
 fn outcome(r: Option<&CallToolResult>) -> &'static str {
     match r {
         None => "UNKNOWN_EGRESS",
         Some(r) if r.is_error != Some(true) => "COMPLETED",
         Some(r)
-            if r.content.len() == 1
+            if no_payload_surfaces(r)
+                && r.content.len() == 1
                 && r.content[0]
                     .raw
                     .as_text()
@@ -392,9 +407,9 @@ fn occurrence(session: &Session, observed: &str, expected: &str, anchor: bool) -
         return Verdict::Full;
     }
     // Only authored contiguous prefixes are candidates; never infer a trace by diff.
-    for n in (8..expected.len()).rev() {
+    for n in (MIN_FRAGMENT_BYTES..expected.len()).rev() {
         let fragment = prefix(expected, n);
-        if fragment.len() >= 8 && window.contains(fragment) {
+        if fragment.len() >= MIN_FRAGMENT_BYTES && window.contains(fragment) {
             return Verdict::Partial(fragment.len());
         }
     }
@@ -408,7 +423,7 @@ fn occurrence(session: &Session, observed: &str, expected: &str, anchor: bool) -
     Verdict::Unknown
 }
 #[derive(Default)]
-struct Counts(BTreeMap<&'static str, u64>);
+struct Counts(BTreeMap<&'static str, u64>, BTreeMap<&'static str, usize>);
 impl Counts {
     fn add(&mut self, key: &'static str, n: usize) {
         *self.0.entry(key).or_default() += n as u64;
@@ -423,6 +438,15 @@ impl Counts {
         expected: &str,
         anchor: bool,
     ) -> Verdict {
+        *self.1.entry("gold").or_default() += 1;
+        for m in [
+            "gold_occurrences_surviving_egress",
+            "gold_occurrences_partially_surviving_egress",
+            "gold_occurrences_attribution_not_measured",
+            "gold_bytes_surviving_egress",
+        ] {
+            self.add(m, 0);
+        }
         self.add("gold_occurrences_planned", 1);
         self.add("gold_bytes_planned", expected.len());
         let v = occurrence(session, observed, expected, anchor);
@@ -447,6 +471,15 @@ impl Counts {
         expected: &str,
         expected_occurrence: &str,
     ) {
+        *self.1.entry("restore").or_default() += 1;
+        for m in [
+            "leaf_restore_exact",
+            "leaf_restore_decision_failures",
+            "egress_token_restore_failures",
+            "egress_raw_value_mismatches",
+        ] {
+            self.add(m, 0);
+        }
         match session.restore_strict_text_with_provenance(observed) {
             Err(_) => {
                 self.add("egress_token_restore_failures", 1);
@@ -465,6 +498,9 @@ impl Counts {
         }
     }
     fn negative(&mut self, session: &Session, observed: &str, expected: &str) {
+        *self.1.entry("negative").or_default() += 1;
+        self.add("false_positive_occurrences", 0);
+        self.add("false_positive_bytes", 0);
         if occurrence(session, observed, expected, false) == Verdict::Protected {
             self.add("false_positive_occurrences", 1);
             self.add("false_positive_bytes", expected.len());
@@ -505,7 +541,11 @@ const BLOCKED_GATES: &[&str] = &[
     "producer_membership_order_proof",
     "unknown_egress_route_fragment_observation",
 ];
-const CELL_IDS: &[&str] = &["synthetic.mcp.controlled.v1", "synthetic.mcp.core.v1"];
+const CELL_IDS: &[&str] = &[
+    "synthetic.evaluator.v1",
+    "synthetic.mcp.controlled.v1",
+    "synthetic.mcp.core.v1",
+];
 const CLAIM_SCOPES: &[&str] = &["synthetic_harness_capability_only"];
 const CONTROL_REFUSAL_CODES: &[&str] = &[
     "auth-denied",
@@ -520,7 +560,14 @@ const CONTROL_REFUSAL_CODES: &[&str] = &[
     "redaction-failed",
     "response-serialization-failed",
 ];
-const COUNTING_GRADES: &[&str] = &["egress_reconstructed", "observer_native", "route_native"];
+const COUNTING_GRADES: &[&str] = &[
+    "egress_reconstructed",
+    "observed_subset_lower_bound",
+    "observer_native",
+    "planned_inventory",
+    "private_authored_records",
+    "route_native",
+];
 const DECLARATION_FIELDS: &[&str] = &[
     "acceptance_limit",
     "confidence_level",
@@ -536,7 +583,10 @@ const DERIVATIONS: &[&str] = &[
     "invariant_enforced_not_counted",
     "not_applicable_by_construction",
     "not_measured",
+    "observed_subset_lower_bound",
     "observer_native",
+    "planned_inventory",
+    "private_authored_records",
     "route_native",
 ];
 const ERROR_CODES: &[&str] = &[
@@ -625,7 +675,11 @@ const OUTCOME_STATES: &[&str] = &[
     "NOT_STARTED",
     "UNKNOWN_EGRESS",
 ];
-const POLICY_IDENTITIES: &[&str] = &["controlled.email_only.v1", "core.rule_floor.v1"];
+const POLICY_IDENTITIES: &[&str] = &[
+    "authored.records.v1",
+    "controlled.email_only.v1",
+    "core.rule_floor.v1",
+];
 const RECEIPT_PATHS: &[&str] = &[
     "$",
     "$.analysis_declaration",
@@ -709,6 +763,7 @@ const REFUSAL_CODES: &[&str] = &[
 ];
 const ROUTE_IDS: &[&str] = &[
     "daemon.jsonl.v1",
+    "evaluator.private.v1",
     "mcp.rmcp.duplex.v1",
     "ocr.document.v1",
     "proxy.http.v1",
@@ -760,7 +815,7 @@ fn mirrored_vocabularies() -> BTreeMap<&'static str, &'static [&'static str]> {
         ("WEIGHTING_IDS", WEIGHTING_IDS),
     ])
 }
-const PATH_RULES: &str = r#"{"$": ["object", null], "$.analysis_declaration": ["nullable_object", ["acceptance_limit", "confidence_level", "coverage_target", "multiplicity_treatment", "resample_count", "seed", "strata", "weighting"]], "$.analysis_declaration.acceptance_limit": ["number", null], "$.analysis_declaration.confidence_level": ["number", null], "$.analysis_declaration.coverage_target": ["number", null], "$.analysis_declaration.multiplicity_treatment": ["enum", ["synthetic_none"]], "$.analysis_declaration.resample_count": ["positive", null], "$.analysis_declaration.seed": ["int", null], "$.analysis_declaration.strata": ["array", null], "$.analysis_declaration.strata.[]": ["enum", ["synthetic_de", "synthetic_en"]], "$.analysis_declaration.weighting": ["enum", ["inventory_group"]], "$.arm_id": ["enum", ["base", "candidate"]], "$.asymmetric_outcome_table": ["object", ["COMPLETED", "ERROR_PROTOCOL", "FAILED_CLOSED_NO_EGRESS", "NOT_STARTED", "UNKNOWN_EGRESS"]], "$.asymmetric_outcome_table.*": ["object", ["COMPLETED", "ERROR_PROTOCOL", "FAILED_CLOSED_NO_EGRESS", "NOT_STARTED", "UNKNOWN_EGRESS"]], "$.asymmetric_outcome_table.*.*": ["int", null], "$.cell_id": ["enum", ["synthetic.mcp.controlled.v1", "synthetic.mcp.core.v1"]], "$.claim_scope": ["enum", ["synthetic_harness_capability_only"]], "$.class_commitment_table": ["object", ["id", "version"]], "$.class_commitment_table.id": ["enum", ["class-commitments-v1"]], "$.class_commitment_table.version": ["positive", null], "$.counts": ["object", ["egress_authorized_range_bounds_invalid", "egress_authorized_range_non_monotonic", "egress_clean_bounds_invalid", "egress_overlapping_clean_spans", "egress_raw_value_mismatches", "egress_token_restore_failures", "false_positive_bytes", "false_positive_occurrences", "gold_bytes_planned", "gold_bytes_surviving_egress", "gold_occurrences_attribution_not_measured", "gold_occurrences_partially_surviving_egress", "gold_occurrences_planned", "gold_occurrences_surviving_egress", "leaf_restore_decision_failures", "leaf_restore_exact", "manifest_raw_entry_agreement_enforced", "manifest_span_monotonicity_enforced", "manifest_terminal_events", "observer_leaves_observed", "observer_leaves_unobserved", "observer_manifest_spans_observed", "observer_recognizer_source_events", "protected_leaves", "protection_trace_items", "tool_invocations", "unknown_egress_lower_bound_cases"]], "$.counts.*": ["int", null], "$.derivations": ["object", ["egress_authorized_range_bounds_invalid", "egress_authorized_range_non_monotonic", "egress_clean_bounds_invalid", "egress_overlapping_clean_spans", "egress_raw_value_mismatches", "egress_token_restore_failures", "false_positive_bytes", "false_positive_occurrences", "gold_bytes_planned", "gold_bytes_surviving_egress", "gold_occurrences_attribution_not_measured", "gold_occurrences_partially_surviving_egress", "gold_occurrences_planned", "gold_occurrences_surviving_egress", "leaf_restore_decision_failures", "leaf_restore_exact", "manifest_raw_entry_agreement_enforced", "manifest_span_monotonicity_enforced", "manifest_terminal_events", "observer_leaves_observed", "observer_leaves_unobserved", "observer_manifest_spans_observed", "observer_recognizer_source_events", "protected_leaves", "protection_trace_items", "tool_invocations", "unknown_egress_lower_bound_cases"]], "$.derivations.*": ["enum", ["egress_reconstructed", "invariant_enforced_not_counted", "not_applicable_by_construction", "not_measured", "observer_native", "route_native"]], "$.error_codes": ["object", ["auth-denied", "backend-failure", "backend-unavailable", "internal", "invalid-args", "invalid-session-id", "limit-exceeded", "manifest-persistence-failed", "not-found", "redaction-failed", "response-serialization-failed"]], "$.error_codes.*": ["int", null], "$.gate_results": ["object", ["build_attestation_clean_source", "claim_scope_present", "class_commitment_completeness", "class_commitment_schema_load", "cross_language_vocabulary_equality", "declaration_gating", "egress_integrity_analogues", "false_positive_negative_control", "gold_survival_oracle", "local_membership_order_proof", "manifest_integrity_six_counter_schema_v4", "no_payload_positive_observation", "outcome_identities", "paired_grouped_interval_arithmetic", "per_token_protection_trace", "planned_inventory_reconciliation", "producer_membership_order_proof", "receipt_path_allowlist", "rejection_is_not_protection", "source_attribution_events", "stamped_field_separation", "string_byte_reversibility", "unknown_egress_lower_bound", "unknown_egress_route_fragment_observation", "vocabulary_closure"]], "$.gate_results.*": ["enum", ["BLOCKED", "FAIL", "NOT_EVALUABLE", "PASS"]], "$.intervals": ["object", ["egress_authorized_range_bounds_invalid", "egress_authorized_range_non_monotonic", "egress_clean_bounds_invalid", "egress_overlapping_clean_spans", "egress_raw_value_mismatches", "egress_token_restore_failures", "false_positive_bytes", "false_positive_occurrences", "gold_bytes_planned", "gold_bytes_surviving_egress", "gold_occurrences_attribution_not_measured", "gold_occurrences_partially_surviving_egress", "gold_occurrences_planned", "gold_occurrences_surviving_egress", "leaf_restore_decision_failures", "leaf_restore_exact", "manifest_raw_entry_agreement_enforced", "manifest_span_monotonicity_enforced", "manifest_terminal_events", "observer_leaves_observed", "observer_leaves_unobserved", "observer_manifest_spans_observed", "observer_recognizer_source_events", "protected_leaves", "protection_trace_items", "tool_invocations", "unknown_egress_lower_bound_cases"]], "$.intervals.*": ["interval", ["basis", "conditional", "high", "low", "method_id", "point"]], "$.intervals.*.basis": ["enum", ["full_cell", "paired_completed"]], "$.intervals.*.conditional": ["bool", null], "$.intervals.*.high": ["number", null], "$.intervals.*.low": ["number", null], "$.intervals.*.method_id": ["enum", ["grouped_paired_percentile_v1"]], "$.intervals.*.point": ["number", null], "$.not_measured": ["object", ["blocked_gates", "metrics"]], "$.not_measured.blocked_gates": ["array", null], "$.not_measured.blocked_gates.[]": ["enum", ["build_attestation_clean_source", "claim_scope_present", "class_commitment_completeness", "class_commitment_schema_load", "cross_language_vocabulary_equality", "declaration_gating", "egress_integrity_analogues", "false_positive_negative_control", "gold_survival_oracle", "local_membership_order_proof", "manifest_integrity_six_counter_schema_v4", "no_payload_positive_observation", "outcome_identities", "paired_grouped_interval_arithmetic", "per_token_protection_trace", "planned_inventory_reconciliation", "producer_membership_order_proof", "receipt_path_allowlist", "rejection_is_not_protection", "source_attribution_events", "stamped_field_separation", "string_byte_reversibility", "unknown_egress_lower_bound", "unknown_egress_route_fragment_observation", "vocabulary_closure"]], "$.not_measured.metrics": ["array", null], "$.not_measured.metrics.[]": ["enum", ["egress_authorized_range_bounds_invalid", "egress_authorized_range_non_monotonic", "egress_clean_bounds_invalid", "egress_overlapping_clean_spans", "egress_raw_value_mismatches", "egress_token_restore_failures", "false_positive_bytes", "false_positive_occurrences", "gold_bytes_planned", "gold_bytes_surviving_egress", "gold_occurrences_attribution_not_measured", "gold_occurrences_partially_surviving_egress", "gold_occurrences_planned", "gold_occurrences_surviving_egress", "leaf_restore_decision_failures", "leaf_restore_exact", "manifest_raw_entry_agreement_enforced", "manifest_span_monotonicity_enforced", "manifest_terminal_events", "observer_leaves_observed", "observer_leaves_unobserved", "observer_manifest_spans_observed", "observer_recognizer_source_events", "protected_leaves", "protection_trace_items", "tool_invocations", "unknown_egress_lower_bound_cases"]], "$.outcomes": ["object", ["COMPLETED", "ERROR_PROTOCOL", "FAILED_CLOSED_NO_EGRESS", "NOT_STARTED", "UNKNOWN_EGRESS"]], "$.outcomes.*": ["int", null], "$.planned_case_count": ["int", null], "$.policy_identity": ["enum", ["controlled.email_only.v1", "core.rule_floor.v1"]], "$.population_handle": ["handle", null], "$.protocol_id": ["enum", ["gaze-evidence"]], "$.protocol_version": ["version", null], "$.route_id": ["enum", ["daemon.jsonl.v1", "mcp.rmcp.duplex.v1", "ocr.document.v1", "proxy.http.v1", "session.episode.v1", "stream.v1", "structured.core.v1", "text.clean_for_bench.v1"]], "$.route_status": ["object", ["daemon.jsonl.v1", "mcp.rmcp.duplex.v1", "ocr.document.v1", "proxy.http.v1", "session.episode.v1", "stream.v1", "structured.core.v1", "text.clean_for_bench.v1"]], "$.route_status.*": ["enum", ["IMPLEMENTED", "NOT_IMPLEMENTED"]]}"#;
+const PATH_RULES: &str = r#"{"$":["object",null],"$.analysis_declaration":["nullable_object",["acceptance_limit","confidence_level","coverage_target","multiplicity_treatment","resample_count","seed","strata","weighting"]],"$.analysis_declaration.acceptance_limit":["number",null],"$.analysis_declaration.confidence_level":["number",null],"$.analysis_declaration.coverage_target":["number",null],"$.analysis_declaration.multiplicity_treatment":["enum",["synthetic_none"]],"$.analysis_declaration.resample_count":["positive",null],"$.analysis_declaration.seed":["int",null],"$.analysis_declaration.strata":["array",null],"$.analysis_declaration.strata.[]":["enum",["synthetic_de","synthetic_en"]],"$.analysis_declaration.weighting":["enum",["inventory_group"]],"$.arm_id":["enum",["base","candidate"]],"$.asymmetric_outcome_table":["object",["COMPLETED","ERROR_PROTOCOL","FAILED_CLOSED_NO_EGRESS","NOT_STARTED","UNKNOWN_EGRESS"]],"$.asymmetric_outcome_table.*":["object",["COMPLETED","ERROR_PROTOCOL","FAILED_CLOSED_NO_EGRESS","NOT_STARTED","UNKNOWN_EGRESS"]],"$.asymmetric_outcome_table.*.*":["int",null],"$.cell_id":["enum",["synthetic.evaluator.v1","synthetic.mcp.controlled.v1","synthetic.mcp.core.v1"]],"$.claim_scope":["enum",["synthetic_harness_capability_only"]],"$.class_commitment_table":["object",["id","version"]],"$.class_commitment_table.id":["enum",["class-commitments-v1"]],"$.class_commitment_table.version":["positive",null],"$.counts":["object",["egress_authorized_range_bounds_invalid","egress_authorized_range_non_monotonic","egress_clean_bounds_invalid","egress_overlapping_clean_spans","egress_raw_value_mismatches","egress_token_restore_failures","false_positive_bytes","false_positive_occurrences","gold_bytes_planned","gold_bytes_surviving_egress","gold_occurrences_attribution_not_measured","gold_occurrences_partially_surviving_egress","gold_occurrences_planned","gold_occurrences_surviving_egress","leaf_restore_decision_failures","leaf_restore_exact","manifest_raw_entry_agreement_enforced","manifest_span_monotonicity_enforced","manifest_terminal_events","observer_leaves_observed","observer_leaves_unobserved","observer_manifest_spans_observed","observer_recognizer_source_events","protected_leaves","protection_trace_items","tool_invocations","unknown_egress_lower_bound_cases"]],"$.counts.*":["int",null],"$.derivations":["object",["egress_authorized_range_bounds_invalid","egress_authorized_range_non_monotonic","egress_clean_bounds_invalid","egress_overlapping_clean_spans","egress_raw_value_mismatches","egress_token_restore_failures","false_positive_bytes","false_positive_occurrences","gold_bytes_planned","gold_bytes_surviving_egress","gold_occurrences_attribution_not_measured","gold_occurrences_partially_surviving_egress","gold_occurrences_planned","gold_occurrences_surviving_egress","leaf_restore_decision_failures","leaf_restore_exact","manifest_raw_entry_agreement_enforced","manifest_span_monotonicity_enforced","manifest_terminal_events","observer_leaves_observed","observer_leaves_unobserved","observer_manifest_spans_observed","observer_recognizer_source_events","protected_leaves","protection_trace_items","tool_invocations","unknown_egress_lower_bound_cases"]],"$.derivations.*":["enum",["egress_reconstructed","invariant_enforced_not_counted","not_applicable_by_construction","not_measured","observed_subset_lower_bound","observer_native","planned_inventory","private_authored_records","route_native"]],"$.error_codes":["object",["auth-denied","backend-failure","backend-unavailable","internal","invalid-args","invalid-session-id","limit-exceeded","manifest-persistence-failed","not-found","redaction-failed","response-serialization-failed"]],"$.error_codes.*":["int",null],"$.gate_results":["object",["build_attestation_clean_source","claim_scope_present","class_commitment_completeness","class_commitment_schema_load","cross_language_vocabulary_equality","declaration_gating","egress_integrity_analogues","false_positive_negative_control","gold_survival_oracle","local_membership_order_proof","manifest_integrity_six_counter_schema_v4","no_payload_positive_observation","outcome_identities","paired_grouped_interval_arithmetic","per_token_protection_trace","planned_inventory_reconciliation","producer_membership_order_proof","receipt_path_allowlist","rejection_is_not_protection","source_attribution_events","stamped_field_separation","string_byte_reversibility","unknown_egress_lower_bound","unknown_egress_route_fragment_observation","vocabulary_closure"]],"$.gate_results.*":["enum",["BLOCKED","FAIL","NOT_EVALUABLE","PASS"]],"$.intervals":["object",["egress_authorized_range_bounds_invalid","egress_authorized_range_non_monotonic","egress_clean_bounds_invalid","egress_overlapping_clean_spans","egress_raw_value_mismatches","egress_token_restore_failures","false_positive_bytes","false_positive_occurrences","gold_bytes_planned","gold_bytes_surviving_egress","gold_occurrences_attribution_not_measured","gold_occurrences_partially_surviving_egress","gold_occurrences_planned","gold_occurrences_surviving_egress","leaf_restore_decision_failures","leaf_restore_exact","manifest_raw_entry_agreement_enforced","manifest_span_monotonicity_enforced","manifest_terminal_events","observer_leaves_observed","observer_leaves_unobserved","observer_manifest_spans_observed","observer_recognizer_source_events","protected_leaves","protection_trace_items","tool_invocations","unknown_egress_lower_bound_cases"]],"$.intervals.*":["interval",["basis","conditional","high","low","method_id","point"]],"$.intervals.*.basis":["enum",["full_cell","paired_completed"]],"$.intervals.*.conditional":["bool",null],"$.intervals.*.high":["number",null],"$.intervals.*.low":["number",null],"$.intervals.*.method_id":["enum",["grouped_paired_percentile_v1"]],"$.intervals.*.point":["number",null],"$.not_measured":["object",["blocked_gates","metrics"]],"$.not_measured.blocked_gates":["array",null],"$.not_measured.blocked_gates.[]":["enum",["build_attestation_clean_source","claim_scope_present","class_commitment_completeness","class_commitment_schema_load","cross_language_vocabulary_equality","declaration_gating","egress_integrity_analogues","false_positive_negative_control","gold_survival_oracle","local_membership_order_proof","manifest_integrity_six_counter_schema_v4","no_payload_positive_observation","outcome_identities","paired_grouped_interval_arithmetic","per_token_protection_trace","planned_inventory_reconciliation","producer_membership_order_proof","receipt_path_allowlist","rejection_is_not_protection","source_attribution_events","stamped_field_separation","string_byte_reversibility","unknown_egress_lower_bound","unknown_egress_route_fragment_observation","vocabulary_closure"]],"$.not_measured.metrics":["array",null],"$.not_measured.metrics.[]":["enum",["egress_authorized_range_bounds_invalid","egress_authorized_range_non_monotonic","egress_clean_bounds_invalid","egress_overlapping_clean_spans","egress_raw_value_mismatches","egress_token_restore_failures","false_positive_bytes","false_positive_occurrences","gold_bytes_planned","gold_bytes_surviving_egress","gold_occurrences_attribution_not_measured","gold_occurrences_partially_surviving_egress","gold_occurrences_planned","gold_occurrences_surviving_egress","leaf_restore_decision_failures","leaf_restore_exact","manifest_raw_entry_agreement_enforced","manifest_span_monotonicity_enforced","manifest_terminal_events","observer_leaves_observed","observer_leaves_unobserved","observer_manifest_spans_observed","observer_recognizer_source_events","protected_leaves","protection_trace_items","tool_invocations","unknown_egress_lower_bound_cases"]],"$.outcomes":["object",["COMPLETED","ERROR_PROTOCOL","FAILED_CLOSED_NO_EGRESS","NOT_STARTED","UNKNOWN_EGRESS"]],"$.outcomes.*":["int",null],"$.planned_case_count":["int",null],"$.policy_identity":["enum",["authored.records.v1","controlled.email_only.v1","core.rule_floor.v1"]],"$.population_handle":["handle",null],"$.protocol_id":["enum",["gaze-evidence"]],"$.protocol_version":["version",null],"$.route_id":["enum",["daemon.jsonl.v1","evaluator.private.v1","mcp.rmcp.duplex.v1","ocr.document.v1","proxy.http.v1","session.episode.v1","stream.v1","structured.core.v1","text.clean_for_bench.v1"]],"$.route_status":["object",["daemon.jsonl.v1","evaluator.private.v1","mcp.rmcp.duplex.v1","ocr.document.v1","proxy.http.v1","session.episode.v1","stream.v1","structured.core.v1","text.clean_for_bench.v1"]],"$.route_status.*":["enum",["IMPLEMENTED","NOT_IMPLEMENTED"]]}"#;
 fn walk(node: &Value, path: &str, rules: &Value) -> bool {
     if !RECEIPT_PATHS.contains(&path) {
         return false;
@@ -822,12 +877,87 @@ fn receipt_allowlisted(r: &Value) -> bool {
     if !walk(r, "$", &rules) {
         return false;
     }
-    let counts = r["counts"].as_object().expect("counts");
-    let derivations = r["derivations"].as_object().expect("derivations");
-    METRIC_IDS.iter().all(|m| {
-        derivations.contains_key(*m)
-            && counts.contains_key(*m) == COUNTING_GRADES.contains(&text(&derivations[*m]))
-    }) && STAMPED_KEYS.iter().all(|k| r.get(*k).is_none())
+    if RECEIPT_PATHS
+        .iter()
+        .filter(|p| p.matches('.').count() == 1 && **p != "$.asymmetric_outcome_table")
+        .any(|p| r.get(&p[2..]).is_none())
+    {
+        return false;
+    }
+    let counts = r["counts"].as_object().unwrap();
+    let derivations = r["derivations"].as_object().unwrap();
+    let gates = r["gate_results"].as_object().unwrap();
+    let outcomes = r["outcomes"].as_object().unwrap();
+    let exact_keys = |map: &serde_json::Map<String, Value>, keys: &[&str]| {
+        map.len() == keys.len() && keys.iter().all(|k| map.contains_key(*k))
+    };
+    if !exact_keys(derivations, METRIC_IDS)
+        || !exact_keys(gates, GATE_IDS)
+        || !exact_keys(outcomes, OUTCOME_STATES)
+        || !exact_keys(r["route_status"].as_object().unwrap(), ROUTE_IDS)
+        || !exact_keys(
+            r["not_measured"].as_object().unwrap(),
+            &["metrics", "blocked_gates"],
+        )
+        || !exact_keys(
+            r["class_commitment_table"].as_object().unwrap(),
+            &["id", "version"],
+        )
+        || outcomes.values().map(|v| v.as_u64().unwrap()).sum::<u64>()
+            != r["planned_case_count"].as_u64().unwrap()
+    {
+        return false;
+    }
+    let candidate = r["arm_id"] == "candidate";
+    if candidate != r.get("asymmetric_outcome_table").is_some() {
+        return false;
+    }
+    if candidate {
+        let table = r["asymmetric_outcome_table"].as_object().unwrap();
+        if !exact_keys(table, OUTCOME_STATES)
+            || table
+                .values()
+                .any(|v| !exact_keys(v.as_object().unwrap(), OUTCOME_STATES))
+            || OUTCOME_STATES.iter().any(|b| {
+                table
+                    .values()
+                    .map(|row| row[*b].as_u64().unwrap())
+                    .sum::<u64>()
+                    != outcomes[*b].as_u64().unwrap()
+            })
+        {
+            return false;
+        }
+    }
+    let expected_missing: BTreeSet<_> = derivations
+        .iter()
+        .filter_map(|(m, g)| (g == "not_measured").then_some(m.as_str()))
+        .collect();
+    let expected_blocked: BTreeSet<_> = gates
+        .iter()
+        .filter_map(|(g, v)| (v == "BLOCKED").then_some(g.as_str()))
+        .collect();
+    let actual_set = |key| {
+        r["not_measured"][key]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(text)
+            .collect::<BTreeSet<_>>()
+    };
+    expected_missing == actual_set("metrics")
+        && expected_blocked == actual_set("blocked_gates")
+        && BLOCKED_GATES.iter().all(|g| gates[*g] == "BLOCKED")
+        && !(counts
+            .get("observer_leaves_unobserved")
+            .and_then(Value::as_u64)
+            .unwrap_or(0)
+            > 0
+            && gates["source_attribution_events"] == "PASS")
+        && METRIC_IDS
+            .iter()
+            .all(|m| counts.contains_key(*m) == COUNTING_GRADES.contains(&text(&derivations[*m])))
+        && STAMPED_KEYS.iter().all(|k| r.get(*k).is_none())
 }
 fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
     let mut derivations = BTreeMap::new();
@@ -855,6 +985,11 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
             | "egress_token_restore_failures"
             | "egress_raw_value_mismatches" => "egress_reconstructed",
             _ => "route_native",
+        };
+        let grade = if COUNTING_GRADES.contains(&grade) && !c.0.contains_key(m) {
+            "not_measured"
+        } else {
+            grade
         };
         derivations.insert(m, grade);
         if COUNTING_GRADES.contains(&grade) {
@@ -901,24 +1036,62 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
         "counts":counts,"derivations":derivations,"gate_results":gates,"not_measured":{"metrics":["protection_trace_items","unknown_egress_lower_bound_cases"],"blocked_gates":BLOCKED_GATES},
         "analysis_declaration":null,"intervals":{},"error_codes":{}
     });
-    if c.get("gold_occurrences_surviving_egress") > 0
-        || c.get("gold_occurrences_partially_surviving_egress") > 0
-    {
-        r["gate_results"]["gold_survival_oracle"] = json!("FAIL");
-    }
-    if c.get("observer_leaves_unobserved") > 0 {
-        r["gate_results"]["source_attribution_events"] = json!("NOT_EVALUABLE");
-    }
-    if state != "COMPLETED" {
-        for g in [
-            "string_byte_reversibility",
-            "gold_survival_oracle",
-            "false_positive_negative_control",
-            "egress_integrity_analogues",
-        ] {
-            r["gate_results"][g] = json!("NOT_EVALUABLE");
+    r["not_measured"]["metrics"] = json!(
+        derivations
+            .iter()
+            .filter_map(|(m, g)| (*g == "not_measured").then_some(m))
+            .collect::<Vec<_>>()
+    );
+    let gate = |performed: bool, fail: bool, incomplete: bool| {
+        if !performed {
+            "NOT_EVALUABLE"
+        } else if fail {
+            "FAIL"
+        } else if incomplete {
+            "NOT_EVALUABLE"
+        } else {
+            "PASS"
         }
-    }
+    };
+    let restores = c.1.get("restore").copied().unwrap_or(0);
+    r["gate_results"]["string_byte_reversibility"] = json!(gate(
+        restores > 0,
+        c.get("leaf_restore_exact") != restores as u64,
+        false
+    ));
+    r["gate_results"]["egress_integrity_analogues"] = json!(gate(
+        restores > 0,
+        c.get("egress_token_restore_failures") + c.get("egress_raw_value_mismatches") > 0,
+        false
+    ));
+    r["gate_results"]["gold_survival_oracle"] = json!(gate(
+        c.1.contains_key("gold"),
+        c.get("gold_occurrences_surviving_egress")
+            + c.get("gold_occurrences_partially_surviving_egress")
+            > 0,
+        c.get("gold_occurrences_attribution_not_measured") > 0
+    ));
+    r["gate_results"]["false_positive_negative_control"] = json!(gate(
+        c.1.contains_key("negative"),
+        c.get("false_positive_occurrences") > 0,
+        false
+    ));
+    r["gate_results"]["source_attribution_events"] = json!(gate(
+        c.0.contains_key("observer_leaves_unobserved"),
+        false,
+        c.get("observer_leaves_unobserved") > 0
+    ));
+    r["gate_results"]["no_payload_positive_observation"] =
+        json!(if state == "FAILED_CLOSED_NO_EGRESS" {
+            "PASS"
+        } else {
+            "NOT_EVALUABLE"
+        });
+    r["gate_results"]["rejection_is_not_protection"] = json!(if state == "COMPLETED" {
+        "NOT_EVALUABLE"
+    } else {
+        "PASS"
+    });
     assert!(receipt_allowlisted(&r), "emitter-conformance");
     r
 }
@@ -1057,7 +1230,79 @@ async fn undeclared_carrier_has_positive_no_payload_and_unobserved_leaves() {
         "early-leaf-accounting"
     );
     let r = receipt(&c, outcome(Some(&r)), false);
-    assert!(r["counts"]["protected_leaves"] == 0, "no-rejection-credit");
+    assert!(
+        r["counts"].get("protected_leaves").is_none(),
+        "no-rejection-credit"
+    );
+}
+#[tokio::test]
+async fn no_payload_classifier_rejects_extra_surfaces() {
+    let h = host(false, Output::Echo, &["result"], 0, false, fresh_session());
+    let received = call(h, json!({"text":EMAIL,"extra":EMAIL}), false)
+        .await
+        .expect("response");
+    assert!(
+        outcome(Some(&received)) == "FAILED_CLOSED_NO_EGRESS",
+        "safe-error-control"
+    );
+    // In-memory classifier falsifiers cloned from a received frame, not production leaks.
+    for path in [
+        "/structuredContent",
+        "/_meta",
+        "/content/0/_meta",
+        "/content/0/annotations",
+    ] {
+        let mut value = must(serde_json::to_value(&received));
+        let payload = if path.ends_with("annotations") {
+            json!({"audience":["user"]})
+        } else {
+            json!({"synthetic":EMAIL})
+        };
+        if path.starts_with("/content") {
+            value["content"][0][path.rsplit('/').next().unwrap()] = payload;
+        } else {
+            value[&path[1..]] = payload;
+        }
+        let adversarial: CallToolResult = must(serde_json::from_value(value));
+        assert!(
+            outcome(Some(&adversarial)) == "UNKNOWN_EGRESS",
+            "extra-surface-unknown"
+        );
+    }
+}
+#[test]
+fn missing_measurements_and_ambiguous_only_gates() {
+    let c = Counts::default();
+    for state in ["COMPLETED", "UNKNOWN_EGRESS", "FAILED_CLOSED_NO_EGRESS"] {
+        let r = receipt(&c, state, true);
+        assert!(
+            r["counts"].as_object().unwrap().is_empty(),
+            "absent-measurements"
+        );
+        for gate in [
+            "string_byte_reversibility",
+            "egress_integrity_analogues",
+            "false_positive_negative_control",
+            "gold_survival_oracle",
+        ] {
+            assert!(
+                r["gate_results"][gate] == "NOT_EVALUABLE",
+                "unperformed-gate"
+            );
+        }
+    }
+    let mut c = Counts::default();
+    c.score(&fresh_session(), "[[g]]missing", PHONE, true);
+    let r = receipt(&c, "COMPLETED", true);
+    assert!(
+        r["gate_results"]["gold_survival_oracle"] == "NOT_EVALUABLE",
+        "ambiguous-gate"
+    );
+    assert!(
+        r["counts"]["gold_bytes_surviving_egress"] == 0
+            && r["counts"].get("leaf_restore_exact").is_none(),
+        "observed-zero-no-restore"
+    );
 }
 #[tokio::test]
 async fn known_token_continuity() {
@@ -1138,7 +1383,7 @@ async fn timeout_is_unknown_without_partial_wire_observation() {
         r["counts"]
             .get("unknown_egress_lower_bound_cases")
             .is_none()
-            && r["counts"]["protected_leaves"] == 0,
+            && r["counts"].get("protected_leaves").is_none(),
         "unknown-not-zero-or-credit"
     );
 }
@@ -1224,6 +1469,11 @@ async fn integrity_analogues_have_independent_nonzero_falsifiers() {
         c.get("egress_raw_value_mismatches") == 2 && c.get("egress_token_restore_failures") == 0,
         "independent-slot-swap"
     );
+    assert!(
+        receipt(&c, outcome(Some(&r)), true)["gate_results"]["egress_integrity_analogues"]
+            == "FAIL",
+        "swap-gate-fail"
+    );
     let bad = first.replace("Email_1", "Email_999999");
     assert!(
         h.session.restore_strict_text(&bad).is_err(),
@@ -1233,6 +1483,11 @@ async fn integrity_analogues_have_independent_nonzero_falsifiers() {
     assert!(
         c.get("egress_token_restore_failures") == 1 && c.get("leaf_restore_decision_failures") == 1,
         "restore-error-counted"
+    );
+    // This second receipt measures a deliberately mutated restore operand, not route egress.
+    assert!(
+        receipt(&c, "COMPLETED", true)["gate_results"]["egress_integrity_analogues"] == "FAIL",
+        "restore-gate-fail"
     );
 }
 #[tokio::test]
@@ -1262,6 +1517,10 @@ async fn json_text_string_bytes_are_stricter_than_semantic_equality() {
     assert!(
         c.get("leaf_restore_exact") == 0 && restored != ORIGINAL,
         "string-bytes-discriminate"
+    );
+    assert!(
+        receipt(&c, outcome(Some(&r)), true)["gate_results"]["string_byte_reversibility"] == "FAIL",
+        "string-gate-fail"
     );
 }
 #[test]
@@ -1318,6 +1577,23 @@ fn rust_walker_rejects_nested_paths_types_and_forbidden_counts() {
         }
         assert!(!receipt_allowlisted(&bad), "nested-path-type-refusal");
     }
+    for key in ["outcomes", "claim_scope", "gate_results"] {
+        let mut bad = r.clone();
+        bad.as_object_mut().unwrap().remove(key);
+        assert!(!receipt_allowlisted(&bad), "mandatory-receipt-key");
+    }
+    let mut bad = r.clone();
+    bad["outcomes"]["COMPLETED"] = json!(0);
+    assert!(!receipt_allowlisted(&bad), "receipt-outcome-identity");
+    let mut bad = r.clone();
+    bad["not_measured"]["metrics"] = json!([]);
+    assert!(!receipt_allowlisted(&bad), "receipt-not-measured-coherence");
+    let mut bad = r.clone();
+    bad["gate_results"]
+        .as_object_mut()
+        .unwrap()
+        .remove("gold_survival_oracle");
+    assert!(!receipt_allowlisted(&bad), "receipt-gate-coverage");
     let mut bad = r.clone();
     bad["counts"]["protection_trace_items"] = json!(0);
     assert!(!receipt_allowlisted(&bad), "forbidden-count-refusal");

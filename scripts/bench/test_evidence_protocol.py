@@ -188,6 +188,25 @@ class ReceiptTests(unittest.TestCase):
             ep.loads_receipt('{"counts":{},"counts":{}}')
         self.assertTrue(c.exception.code == 'duplicate_json_key')
 
+    def test_both_arm_margins_gate_paired_intervals(self):
+        for state in ['UNKNOWN_EGRESS','NOT_STARTED','FAILED_CLOSED_NO_EGRESS']:
+            self.r = golden(); self.candidate()
+            self.r['asymmetric_outcome_table']['COMPLETED']['COMPLETED'] = 0
+            self.r['asymmetric_outcome_table'][state]['COMPLETED'] = 1
+            self.r['analysis_declaration'] = declaration()
+            self.r['intervals']['gold_bytes_surviving_egress'] = interval()
+            self.refuse('lower_bound_reported_as_exact' if state == 'UNKNOWN_EGRESS' else 'conditional_reported_as_full_cell')
+        self.r = golden(); self.candidate(); self.r['planned_case_count'] = 2
+        self.r['outcomes']['COMPLETED'] = 2
+        self.r['asymmetric_outcome_table']['NOT_STARTED']['COMPLETED'] = 1
+        self.r['analysis_declaration'] = declaration()
+        self.r['intervals']['gold_bytes_surviving_egress'] = interval()
+        self.refuse('conditional_reported_as_full_cell')
+        self.r['intervals']['gold_bytes_surviving_egress']['conditional'] = True
+        ep.validate_structure(self.r)
+        self.r['intervals']['gold_bytes_surviving_egress'].update(basis='full_cell',conditional=False)
+        self.refuse('conditional_reported_as_full_cell')
+
 
 class StampTests(unittest.TestCase):
     def validate(self, **kw):
@@ -210,7 +229,7 @@ class StampTests(unittest.TestCase):
     def test_clean_probe_cannot_override_live_dirty_tree(self):
         with patch.object(ep.legacy, 'git_metadata', return_value={'revision':'1'*40,'dirty':True}) as helper:
             r = self.validate(repo_root=ROOT, attestation_probe={'revision':'0'*40,'dirty':False})
-        self.assertTrue(helper.call_count == 1)
+        self.assertTrue(helper.call_count == 1, 'live-helper-binding')
         self.assertTrue(r['gate_results']['build_attestation_clean_source'] == 'FAIL')
 
     def test_live_repository_attestation_binds_shape_and_gate(self):
@@ -266,22 +285,52 @@ class VocabularyMirrorTests(unittest.TestCase):
             self.assertTrue(set(committed[key]) == set(values), 'vocabulary-mirror')
 
 
+def private_child(exercise):
+    """Fork inherits in-memory mutants; every relative write stays in a disposable cwd."""
+    import os
+    from concurrent.futures import ThreadPoolExecutor
+    out_r,out_w = os.pipe(); err_r,err_w = os.pipe()
+    with tempfile.TemporaryDirectory() as directory:
+        pid = os.fork()
+        if pid == 0:
+            os.close(out_r); os.close(err_r)
+            os.dup2(out_w, 1); os.dup2(err_w, 2)
+            os.close(out_w); os.close(err_w)
+            os.chdir(directory)
+            try:
+                # Python-level redirects also follow the child's private descriptors.
+                with os.fdopen(os.dup(1), 'w') as out, os.fdopen(os.dup(2), 'w') as err, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                    exercise()
+                os._exit(0)
+            except BaseException:
+                os._exit(1)
+        os.close(out_w); os.close(err_w)
+        def drain(fd):
+            with os.fdopen(fd, 'rb') as pipe: return pipe.read()
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            out = pool.submit(drain,out_r); err = pool.submit(drain,err_r)
+            _, status = os.waitpid(pid,0)
+            output, errors = out.result(),err.result()
+        files = bool(list(Path(directory).rglob('*')))
+    return status,output,errors,files
+
+
 class CanaryTests(unittest.TestCase):
     def test_failures_do_not_emit_private_values_or_files(self):
-        secret = 'synthetic-private-canary'; token = '<synthetic-canary_1>'
-        stdout, stderr = io.StringIO(), io.StringIO()
-        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
-            before = set(Path(d).iterdir())
+        def exercise():
+            secret = 'synthetic-private-canary'; token = '<synthetic-canary_1>'
             bad = golden(); bad['not_measured']['extra'] = secret
-            calls = [lambda: ep.validate_structure(golden()), lambda: ep.validate_structure(bad),
-                     lambda: ep.loads_receipt(secret * 30000), lambda: ep.loads_receipt('{"x":"'+secret),
-                     lambda: ep.ReceiptRefused(secret), lambda: ep.ReceiptRefused({'x':token})]
+            calls = [lambda: ep.validate_receipt(golden(), json.loads(CUSTODY.read_text()), attestation_probe={'revision':'0'*40,'dirty':False}),
+                     lambda: ep.validate_structure(bad), lambda: ep.loads_receipt(secret * 30000),
+                     lambda: ep.loads_receipt('{"x":"'+secret), lambda: ep.ReceiptRefused(secret), lambda: ep.ReceiptRefused({'x':token})]
             for call in calls:
                 try: call()
-                except ep.ReceiptRefused as exc:
-                    self.assertTrue(str(exc) in ep.REFUSAL_CODES, 'closed-exception')
-            self.assertTrue(set(Path(d).iterdir()) == before, 'no-private-files')
-        self.assertTrue(secret not in stdout.getvalue()+stderr.getvalue() and token not in stdout.getvalue()+stderr.getvalue(), 'private-output-canary')
+                except ep.ReceiptRefused as exc: assert str(exc) in ep.REFUSAL_CODES
+        status,out,err,files = private_child(exercise)
+        self.assertTrue(status == 0, 'protocol-child-success')
+        self.assertTrue(not out, 'protocol-stdout-boundary')
+        self.assertTrue(not err, 'protocol-stderr-boundary')
+        self.assertTrue(not files, 'protocol-file-boundary')
 
 
 class DirectBoundaryTests(unittest.TestCase):
@@ -310,21 +359,21 @@ def run_mutation_proof():
         ('MUT-VOCAB-CLOSURE-MAPS',ep,'walk',[("require(key in allowed, 'value_out_of_vocabulary')","pass")],'test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_map_keys'),
         ('MUT-VOCAB-CLOSURE-VALUES',ep,'walk',[("require(node in allowed, 'value_out_of_vocabulary')","pass")],'test_evidence_protocol.DirectBoundaryTests.test_closed_dynamic_values'),
         ('MUT-HANDLE-OPACITY',ep,'walk',[("require(type(node) is str and re.fullmatch('[0-9a-f]{32,64}', node) is not None, 'handle_shape_invalid')","pass")],'test_evidence_protocol.ReceiptTests.test_readable_population_handle_in_custody_is_still_refused'),
-        ('MUT-ATTESTATION-BINDING',ep,'validate_receipt',[("require(type(meta['revision']) is str and re.fullmatch('[0-9a-f]{40}', meta['revision']) is not None and type(meta['dirty']) is bool, 'attestation_shape_invalid')","pass")],'test_evidence_protocol.StampTests.test_placeholder_source_revision_is_refused'),
+        ('MUT-ATTESTATION-SHAPE',ep,'validate_receipt',[("require(type(meta['revision']) is str and re.fullmatch('[0-9a-f]{40}', meta['revision']) is not None and type(meta['dirty']) is bool, 'attestation_shape_invalid')","pass")],'test_evidence_protocol.StampTests.test_placeholder_source_revision_is_refused'),
         ('MUT-OUTCOME-IDENTITY',ep,'check_outcome_identities',[("require(sum(o.values()) == r['planned_case_count'], 'outcome_identity_violation')","pass")],'test_evidence_protocol.ReceiptTests.test_planned_count_must_equal_outcome_sum'),
         ('MUT-AGGREGATION',ep,'overall',[("if any(v != 'PASS' for v in gates.values()):","if False:")],'test_evidence_protocol.AggregationTests.test_all_blocked_is_not_evaluable_not_pass'),
         ('MUT-VALIDATOR-ACCEPTS-FORBIDDEN-COUNT',ep,'validate_structure',[("require(all(d[k] in COUNTING_GRADES for k in c), 'counted_non_measurement')","pass")],'test_evidence_protocol.ReceiptTests.test_non_counting_grades_refuse_counts'),
         ('MUT-BLOCKED-BOOKKEEPING',ep,'validate_structure',[("require(set(r['not_measured']['blocked_gates']) == {k for k,v in r['gate_results'].items() if v == 'BLOCKED'}, 'derivation_conflict')","pass")],'test_evidence_protocol.ReceiptTests.test_blocked_gate_absent_from_blocked_gates_is_refused'),
         ('MUT-COUNTING-SUBSET',ep,'validate_structure',[("require(all(k in c for k,v in d.items() if v in COUNTING_GRADES), 'uncounted_measurable_metric')","pass")],'test_evidence_protocol.ReceiptTests.test_actual_measurement_requires_count'),
         ('MUT-INTERVAL-DECLARATION',ep,'validate_structure',[("require(declaration_valid(r['analysis_declaration']), 'interval_without_declaration')","pass")],'test_evidence_protocol.ReceiptTests.test_interval_without_declaration_is_refused'),
-        ('MUT-UNKNOWN-INTERVAL',ep,'validate_structure',[("require(not (r['outcomes']['UNKNOWN_EGRESS'] and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')","pass"),("require(interval['conditional'], 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_unknown_with_no_fragment_still_blocks_exact_interval'),
-        ('MUT-FULL-CELL-BASIS',ep,'validate_structure',[("require(not interval['conditional'] and not r['outcomes']['UNKNOWN_EGRESS'] and not r['outcomes']['NOT_STARTED'], 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_full_cell_requires_complete_known_outcomes'),
+        ('MUT-UNKNOWN-INTERVAL',ep,'validate_structure',[("require(not (unknown and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')","pass"),("require(interval['conditional'], 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_unknown_with_no_fragment_still_blocks_exact_interval'),
+        ('MUT-FULL-CELL-BASIS',ep,'validate_structure',[("require(not interval['conditional'] and not incomplete, 'conditional_reported_as_full_cell')","pass")],'test_evidence_protocol.ReceiptTests.test_full_cell_requires_complete_known_outcomes'),
         ('MUT-CLASS-LOAD',ep,'load_class_commitments',[("pair in {('EMAIL','global'), ('PHONE','de')} and pair not in seen","pair not in seen")],'test_evidence_protocol.ClassCommitmentTests.test_unknown_label_region_pair_is_a_load_error'),
         ('MUT-OBSERVER-COVERAGE',ep,'validate_structure',[("require(r['gate_results']['source_attribution_events'] != 'PASS', 'observer_coverage_incomplete')","pass")],'test_evidence_protocol.ReceiptTests.test_observer_coverage_is_not_inferred_for_unobserved_leaves'),
         ('MUT-CLAIM-SCOPE',ep,'validate_structure',[("MANDATORY_KEYS <= set(r)","MANDATORY_KEYS - {'claim_scope'} <= set(r)")],'test_evidence_protocol.ReceiptTests.test_missing_claim_scope_is_refused'),
         ('MUT-QUANTILE',ee,'quantile',[("math.ceil(probability * len(samples))-1","math.ceil(probability * len(samples))")],'test_evidence_eval.IntervalArithmeticTests.test_non_constant_deltas_match_hand_computed_quantiles'),
         ('MUT-CONDITIONALITY',ee.PrivateEvaluator,'paired_interval',[("conditional=any(self.outcomes(a)['COMPLETED'] != len(self.inventory) for a in ep.ARM_IDS)","conditional=False")],'test_evidence_eval.PairingTests.test_conditional_flag_set_when_remainder_non_empty'),
-        ('MUT-UNKNOWN-LOWER-BOUND',ee.PrivateEvaluator,'aggregate',[("for metric,field in METRIC_FIELDS.items()}","for metric,field in METRIC_FIELDS.items()}\n        result['gold_bytes_surviving_egress'] = 0")],'test_evidence_eval.PairingTests.test_unknown_egress_observed_fragment_is_retained_as_lower_bound'),
+        ('MUT-UNKNOWN-LOWER-BOUND',ee.PrivateEvaluator,'aggregate',[("        return result", "        result['gold_bytes_surviving_egress'] = 0\n        return result")],'test_evidence_eval.PairingTests.test_unknown_egress_observed_fragment_is_retained_as_lower_bound'),
         ('MUT-LOCAL-MEMBERSHIP-PROOF',ee.PrivateEvaluator,'export_receipt',[("tuple(custody.get('membership_order', ())) == self.inventory.keys()","True")],'test_evidence_eval.ExportTests.test_wrong_local_order_fails_membership_proof'),
         ('MUT-REJECTION-CREDIT',ee.PrivateEvaluator,'protected_case_count',[("r.outcome == 'COMPLETED' and r.entities > 0 and r.entities == r.entities_fully_covered","r.outcome == 'FAILED_CLOSED_NO_EGRESS'")],'test_evidence_eval.PairingTests.test_failed_closed_is_not_protection'),
         ('MUT-GROUPING',ee.PrivateEvaluator,'draw_resample',[("result.extend(groups[rng.choice(ids)])","result.append(rng.choice(groups[rng.choice(ids)]))")],'test_evidence_eval.GroupingTests.test_resample_draws_groups_not_records'),
@@ -341,6 +390,20 @@ def run_mutation_proof():
         ('MUT-CANARY-PRIVATE-VALUE',ep,'loads_receipt',[("    require(type(text) is str", "    print('synthetic-private-canary')\n    require(type(text) is str")],'test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files'),
         ('MUT-CONTAINER-TYPES',ep,'walk',[("    if kind == 'nullable_object'", "    if kind == 'object' and node == []: return\n    if kind == 'nullable_object'")],'test_evidence_protocol.DirectBoundaryTests.test_empty_container_types'),
     ])
+    mutations.extend([
+        ('MUT-ATTESTATION-BINDING',ep,'validate_receipt',[("meta = legacy.git_metadata(Path(repo_root))", "meta = attestation_probe")],'test_evidence_protocol.StampTests.test_clean_probe_cannot_override_live_dirty_tree'),
+        ('MUT-EVALUATOR-GRADES',ee.PrivateEvaluator,'derivations',[("result = EVALUATOR_DERIVATIONS.copy()", "result = dict.fromkeys(ep.METRIC_IDS, 'egress_reconstructed')")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
+        ('MUT-EVALUATOR-IDENTITY',ee.PrivateEvaluator,'export_receipt',[("route_id='evaluator.private.v1'", "route_id='mcp.rmcp.duplex.v1'"), ("if k == 'evaluator.private.v1'", "if k == 'mcp.rmcp.duplex.v1'")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
+        ('MUT-EVALUATOR-AVAILABILITY',ee.PrivateEvaluator,'aggregate',[("if values: result[metric] = sum(values)", "result[metric] = sum(values)")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
+        ('MUT-EVALUATOR-EMPTY-STAMP',ee.PrivateEvaluator,'export_receipt',[("bool(self.inventory.keys()) and bool(custody.get('membership_order'))", "True")],'test_evidence_eval.ExportTests.test_empty_or_missing_membership_is_refused'),
+        ('MUT-PAIRED-BASE-MARGIN',ep,'validate_structure',[("margins.append({a:sum(table[a].values()) for a in OUTCOME_STATES})", "pass"), ("paired_count = table['COMPLETED']['COMPLETED']", "paired_count = r['outcomes']['COMPLETED']")],'test_evidence_protocol.ReceiptTests.test_both_arm_margins_gate_paired_intervals'),
+        ('MUT-EVALUATOR-VACUOUS-GATE',ee.PrivateEvaluator,'export_receipt',[("if 'unknown_egress_lower_bound_cases' in r['counts']:", "if True:")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
+    ])
+    for prefix,owner,name,target in [('PROTOCOL',ep,'validate_receipt','test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files'), ('EVALUATOR',ee.PrivateEvaluator,'export_receipt','test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes')]:
+        site = '    r = validate_structure(payload)' if prefix == 'PROTOCOL' else '        self.finalize()'
+        indent = '    ' if prefix == 'PROTOCOL' else '        '
+        for sink,statement in [('STDOUT',"print('synthetic-private-canary')"), ('STDERR',"print('synthetic-private-canary', file=__import__('sys').stderr)"), ('FILE',"Path('synthetic-private-output').write_text('synthetic-private-canary')")]:
+            mutations.append(('MUT-'+prefix+'-'+sink,owner,name,[(site,indent+statement+'\n'+site)],target))
     results=[]
     for identifier,owner,name,edits,target in mutations:
         original=getattr(owner,name); source=inspect.getsource(original)
@@ -353,8 +416,9 @@ def run_mutation_proof():
         try:
             suite=unittest.defaultTestLoader.loadTestsFromName(target)
             output=io.StringIO(); result=unittest.TextTestRunner(stream=output).run(suite)
-            killed=bool(result.failures) and not result.errors and result.testsRun > 0
-            results.append({'id':identifier,'killed':killed,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors)})
+            marker = (identifier.removeprefix('MUT-').lower() + '-boundary') if identifier.startswith(('MUT-PROTOCOL-', 'MUT-EVALUATOR-STD', 'MUT-EVALUATOR-FILE')) else ('protocol-stdout-boundary' if identifier == 'MUT-CANARY-PRIVATE-VALUE' else {'MUT-ATTESTATION-BINDING':'live-helper-binding', 'MUT-EVALUATOR-GRADES':'evaluator-declared-grades', 'MUT-EVALUATOR-IDENTITY':'evaluator-identity', 'MUT-EVALUATOR-AVAILABILITY':'missing-observation-counts', 'MUT-EVALUATOR-VACUOUS-GATE':'unexercised-evaluator-gates'}.get(identifier,'AssertionError'))
+            killed=bool(result.failures) and not result.errors and result.testsRun == 1 and marker in output.getvalue()
+            results.append({'id':identifier,'killed':killed,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors),'failure_marker':marker})
         finally: setattr(owner,name,original)
         if not killed: break
     if all(row['killed'] for row in results):

@@ -10,15 +10,15 @@ from pathlib import Path
 import gaze_bench_score as legacy
 
 ARM_IDS = frozenset(('base', 'candidate'))
-ROUTE_IDS = frozenset(('mcp.rmcp.duplex.v1', 'text.clean_for_bench.v1', 'daemon.jsonl.v1', 'proxy.http.v1', 'structured.core.v1', 'stream.v1', 'session.episode.v1', 'ocr.document.v1'))
+ROUTE_IDS = frozenset(('mcp.rmcp.duplex.v1', 'text.clean_for_bench.v1', 'daemon.jsonl.v1', 'proxy.http.v1', 'structured.core.v1', 'stream.v1', 'session.episode.v1', 'ocr.document.v1', 'evaluator.private.v1'))
 ROUTE_STATUSES = frozenset(('IMPLEMENTED', 'NOT_IMPLEMENTED'))
-CELL_IDS = frozenset(('synthetic.mcp.core.v1', 'synthetic.mcp.controlled.v1'))
-POLICY_IDENTITIES = frozenset(('core.rule_floor.v1', 'controlled.email_only.v1'))
+CELL_IDS = frozenset(('synthetic.mcp.core.v1', 'synthetic.mcp.controlled.v1', 'synthetic.evaluator.v1'))
+POLICY_IDENTITIES = frozenset(('core.rule_floor.v1', 'controlled.email_only.v1', 'authored.records.v1'))
 CLAIM_SCOPES = frozenset(('synthetic_harness_capability_only',))
 TABLE_IDS = frozenset(('class-commitments-v1',))
 OUTCOME_STATES = ('NOT_STARTED', 'COMPLETED', 'FAILED_CLOSED_NO_EGRESS', 'ERROR_PROTOCOL', 'UNKNOWN_EGRESS')
-DERIVATIONS = frozenset(('route_native', 'observer_native', 'egress_reconstructed', 'invariant_enforced_not_counted', 'not_applicable_by_construction', 'not_measured'))
-COUNTING_GRADES = frozenset(('route_native', 'observer_native', 'egress_reconstructed'))
+DERIVATIONS = frozenset(('route_native', 'observer_native', 'egress_reconstructed', 'planned_inventory', 'private_authored_records', 'observed_subset_lower_bound', 'invariant_enforced_not_counted', 'not_applicable_by_construction', 'not_measured'))
+COUNTING_GRADES = frozenset(('route_native', 'observer_native', 'egress_reconstructed', 'planned_inventory', 'private_authored_records', 'observed_subset_lower_bound'))
 GATE_RESULTS = frozenset(('PASS', 'FAIL', 'NOT_EVALUABLE', 'BLOCKED'))
 METHOD_IDS = frozenset(('grouped_paired_percentile_v1',))
 PROOF_METHODS = frozenset(('private_membership_order_v1',))
@@ -170,7 +170,10 @@ def validate_structure(r):
     require(set(r['class_commitment_table']) == {'id', 'version'}, 'missing_mandatory_key')
     require(set(r['not_measured']) == {'metrics', 'blocked_gates'}, 'missing_mandatory_key')
     require(set(r['route_status']) == ROUTE_IDS, 'missing_mandatory_key')
-    require(r['route_status']['mcp.rmcp.duplex.v1'] == 'IMPLEMENTED' and all(v == 'NOT_IMPLEMENTED' for k,v in r['route_status'].items() if k != 'mcp.rmcp.duplex.v1'), 'value_out_of_vocabulary')
+    require(r['route_id'] in ('mcp.rmcp.duplex.v1', 'evaluator.private.v1'), 'protocol_identity_mismatch')
+    require(r['route_status'][r['route_id']] == 'IMPLEMENTED' and all(v == 'NOT_IMPLEMENTED' for k,v in r['route_status'].items() if k != r['route_id']), 'value_out_of_vocabulary')
+    if r['route_id'] == 'evaluator.private.v1':
+        require(r['cell_id'] == 'synthetic.evaluator.v1' and r['policy_identity'] == 'authored.records.v1', 'protocol_identity_mismatch')
     require(set(r['gate_results']) == GATE_IDS, 'gate_coverage_incomplete')
     check_outcome_identities(r)
     d, c = r['derivations'], r['counts']
@@ -182,6 +185,14 @@ def validate_structure(r):
     require(all(r['gate_results'][k] == 'BLOCKED' for k in BLOCKED_GATES), 'derivation_conflict')
     if c.get('observer_leaves_unobserved', 0):
         require(r['gate_results']['source_attribution_events'] != 'PASS', 'observer_coverage_incomplete')
+    margins = [r['outcomes']]
+    paired_count = r['outcomes']['COMPLETED']
+    if r['arm_id'] == 'candidate':
+        table = r['asymmetric_outcome_table']
+        margins.append({a:sum(table[a].values()) for a in OUTCOME_STATES})
+        paired_count = table['COMPLETED']['COMPLETED']
+    unknown = any(o['UNKNOWN_EGRESS'] for o in margins)
+    incomplete = any(o['COMPLETED'] != r['planned_case_count'] for o in margins)
     for metric, interval in r['intervals'].items():
         require(metric in c, 'counted_non_measurement')
         if interval == 'NOT_EVALUABLE':
@@ -189,11 +200,14 @@ def validate_structure(r):
         require(declaration_valid(r['analysis_declaration']), 'interval_without_declaration')
         require(set(interval) == {'point','low','high','method_id','conditional','basis'}, 'missing_mandatory_key')
         require(interval['low'] <= interval['high'], 'wrong_type')
-        require(not (r['outcomes']['UNKNOWN_EGRESS'] and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')
+        require(not (unknown and metric in LEAK_FAMILY_METRIC_IDS), 'lower_bound_reported_as_exact')
         if interval['basis'] == 'full_cell':
-            require(not interval['conditional'] and not r['outcomes']['UNKNOWN_EGRESS'] and not r['outcomes']['NOT_STARTED'], 'conditional_reported_as_full_cell')
-        elif r['outcomes']['COMPLETED'] != r['planned_case_count']:
-            require(interval['conditional'], 'conditional_reported_as_full_cell')
+            require(not interval['conditional'] and not incomplete, 'conditional_reported_as_full_cell')
+        else:
+            require(paired_count > 0, 'conditional_reported_as_full_cell')
+            if incomplete:
+                require(interval['conditional'], 'conditional_reported_as_full_cell')
+        require(d[metric] != 'observed_subset_lower_bound', 'lower_bound_reported_as_exact')
     return copy.deepcopy(r)
 
 
@@ -211,8 +225,7 @@ def validate_receipt(payload, custody, *, repo_root=None, attestation_probe=None
         meta, source = attestation_probe, 'test_seam'
     require(type(meta) is dict and set(meta) == {'revision', 'dirty'}, 'attestation_shape_invalid')
     require(type(meta['revision']) is str and re.fullmatch('[0-9a-f]{40}', meta['revision']) is not None and type(meta['dirty']) is bool, 'attestation_shape_invalid')
-    r['build_attestation'] = dict(source_revision=meta['revision'], dirty=meta['dirty'], source=source,
-                                  declared_feature_graph_id='workspace.default', declared_toolchain_id='rust.workspace_pinned')
+    r['build_attestation'] = dict(source_revision=meta['revision'], dirty=meta['dirty'], source=source)
     r['gate_results']['build_attestation_clean_source'] = 'FAIL' if meta['dirty'] else ('PASS' if source == 'live_repository' else 'NOT_EVALUABLE')
     r['gate_results']['local_membership_order_proof'] = 'NOT_EVALUABLE'
     return r

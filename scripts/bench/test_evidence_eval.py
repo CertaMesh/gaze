@@ -15,14 +15,14 @@ from test_evidence_protocol import declaration, golden, CUSTODY
 
 def inventory():
     return ee.PlannedInventory([
-        ee.PlannedCase('fixture_a','group_a','synthetic_en',1.),
-        ee.PlannedCase('fixture_b','group_a','synthetic_en',1.),
-        ee.PlannedCase('fixture_c','group_b','synthetic_en',2.),
+        ee.PlannedCase('fixture_a','group_a','synthetic_en',1.,2,30),
+        ee.PlannedCase('fixture_b','group_a','synthetic_en',1.,2,30),
+        ee.PlannedCase('fixture_c','group_b','synthetic_en',2.,2,30),
     ])
 
 
 def completed(leak=0, **kw):
-    return ee.DocRecord(outcome='COMPLETED', gold_occurrences=2, gold_bytes=30, gold_bytes_surviving=leak, **kw)
+    return ee.DocRecord(observed_metrics=ee.OBSERVED_METRICS, outcome='COMPLETED', gold_occurrences=2, gold_bytes=30, gold_bytes_surviving=leak, **kw)
 
 
 def paired():
@@ -98,7 +98,7 @@ class PairingTests(unittest.TestCase):
         self.assertTrue(e.paired_interval('gold_bytes_surviving_egress',declaration()) == 'NOT_EVALUABLE')
 
     def test_unknown_egress_observed_fragment_is_retained_as_lower_bound(self):
-        e = ee.PrivateEvaluator(inventory());e.add('base','fixture_a',ee.DocRecord(outcome='UNKNOWN_EGRESS',gold_bytes=30,gold_bytes_surviving=8,gold_occurrences=1,gold_occurrences_partially_surviving=1))
+        e = ee.PrivateEvaluator(inventory());e.add('base','fixture_a',ee.DocRecord(observed_metrics=frozenset(('gold_bytes_surviving_egress','gold_occurrences_partially_surviving_egress')),outcome='UNKNOWN_EGRESS',gold_bytes=30,gold_bytes_surviving=8,gold_occurrences=1,gold_occurrences_partially_surviving=1))
         a = e.aggregate('base')
         self.assertTrue(a['gold_bytes_surviving_egress'] == 8 and a['unknown_egress_lower_bound_cases'] == 1)
         self.assertTrue(e.protected_case_count('base') == 0)
@@ -144,7 +144,7 @@ class GroupingTests(unittest.TestCase):
         self.assertTrue(seen == {2,3,4})
 
     def test_strata_and_weights_are_preserved_within_a_resample(self):
-        inv = ee.PlannedInventory([ee.PlannedCase('a','a','synthetic_en',1.),ee.PlannedCase('b','b','synthetic_de',3.)])
+        inv = ee.PlannedInventory([ee.PlannedCase('a','a','synthetic_en',1.,2,30),ee.PlannedCase('b','b','synthetic_de',3.)])
         e = ee.PrivateEvaluator(inv)
         for k, delta in [('a',2),('b',10)]:
             e.add('base',k,completed()); e.add('candidate',k,completed(delta))
@@ -202,7 +202,7 @@ class ExportTests(unittest.TestCase):
 
     def test_unknown_fragment_export_retains_lower_bound_without_interval(self):
         e = ee.PrivateEvaluator(inventory())
-        e.add('candidate','fixture_a',ee.DocRecord(outcome='UNKNOWN_EGRESS',gold_bytes=30,gold_bytes_surviving=8))
+        e.add('candidate','fixture_a',ee.DocRecord(observed_metrics=frozenset(('gold_bytes_surviving_egress','gold_occurrences_partially_surviving_egress')),outcome='UNKNOWN_EGRESS',gold_bytes=30,gold_bytes_surviving=8))
         r = self.export(evaluator=e)
         self.assertTrue(r['counts']['gold_bytes_surviving_egress'] == 8)
         self.assertTrue(r['intervals']['gold_bytes_surviving_egress'] == 'NOT_EVALUABLE')
@@ -217,14 +217,59 @@ class ExportTests(unittest.TestCase):
         self.assertTrue(c.key not in repr(c))
 
     def test_evaluator_canary_no_output_or_file_writes(self):
-        out,err = io.StringIO(),io.StringIO()
-        e = paired()
-        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(out),contextlib.redirect_stderr(err),patch('builtins.open',side_effect=AssertionError('unexpected-file-open')):
-            e.finalize(); e.aggregate('candidate')
+        from test_evidence_protocol import private_child
+        def exercise():
+            e = paired(); e.finalize(); e.aggregate('candidate')
+            self.export(evaluator=e)
             try: e.add('base','synthetic-private-canary',completed())
-            except ep.ReceiptRefused as error: self.assertTrue(str(error) in ep.REFUSAL_CODES)
-            self.assertTrue(not list(Path(d).iterdir()))
-        self.assertTrue(not out.getvalue() and not err.getvalue(), 'private-output-canary')
+            except ep.ReceiptRefused as error: assert str(error) in ep.REFUSAL_CODES
+            custody = json.loads(CUSTODY.read_text()); custody['membership_order'].reverse()
+            try: self.export(custody=custody)
+            except ep.ReceiptRefused as error: assert str(error) in ep.REFUSAL_CODES
+        status, out, err, files = private_child(exercise)
+        self.assertTrue(status == 0, 'evaluator-child-success')
+        self.assertTrue(not out, 'evaluator-stdout-boundary')
+        self.assertTrue(not err, 'evaluator-stderr-boundary')
+        self.assertTrue(not files, 'evaluator-file-boundary')
+
+    def test_availability_identity_and_full_derivation_map(self):
+        e = ee.PrivateEvaluator(inventory())
+        for state in ['NOT_STARTED','UNKNOWN_EGRESS','FAILED_CLOSED_NO_EGRESS']:
+            e = ee.PrivateEvaluator(inventory()); e.add('candidate','fixture_a',ee.DocRecord(outcome=state))
+            r = self.export(evaluator=e)
+            self.assertTrue(set(r['counts']) == ee.PLAN_METRICS, 'missing-observation-counts')
+            self.assertTrue(r['counts']['gold_bytes_planned'] == 90, 'inventory-plan-count')
+            expected = dict.fromkeys(ep.METRIC_IDS, 'not_measured')
+            for m in ee.PLAN_METRICS: expected[m] = 'planned_inventory'
+            self.assertTrue(r['derivations'] == expected, 'evaluator-declared-grades')
+        r = self.export()
+        self.assertTrue(r['route_id'] == 'evaluator.private.v1' and r['cell_id'] == 'synthetic.evaluator.v1' and r['policy_identity'] == 'authored.records.v1', 'evaluator-identity')
+        self.assertTrue(r['route_status']['mcp.rmcp.duplex.v1'] == 'NOT_IMPLEMENTED', 'evaluator-no-route-claim')
+        expected = dict.fromkeys(ep.METRIC_IDS, 'not_measured')
+        for m in ee.PLAN_METRICS: expected[m] = 'planned_inventory'
+        for m in ee.OBSERVED_METRICS: expected[m] = 'private_authored_records'
+        self.assertTrue(r['derivations'] == expected, 'evaluator-declared-grades')
+        self.assertTrue(r['counts']['false_positive_bytes'] == 0 and 'leaf_restore_exact' not in r['counts'], 'observed-zero-no-restore')
+        self.assertTrue(r['gate_results']['unknown_egress_lower_bound'] == 'NOT_EVALUABLE' and r['gate_results']['rejection_is_not_protection'] == 'NOT_EVALUABLE', 'unexercised-evaluator-gates')
+        template = golden(); template['derivations'] = dict.fromkeys(ep.METRIC_IDS,'route_native')
+        r = paired().export_receipt(template,json.loads(CUSTODY.read_text()),attestation_probe={'revision':'0'*40,'dirty':False})
+        self.assertTrue(r['derivations'] == expected and r['route_id'] == 'evaluator.private.v1', 'caller-cannot-misattribute')
+
+    def test_nonzero_authored_metrics_and_subset_grade(self):
+        e = ee.PrivateEvaluator(inventory())
+        e.add('candidate','fixture_a',completed(gold_occurrences_attribution_not_measured=1,false_positive_occurrences=2,false_positive_bytes=7))
+        r = self.export(evaluator=e)
+        for m,n in [('gold_occurrences_attribution_not_measured',1),('false_positive_occurrences',2),('false_positive_bytes',7)]:
+            self.assertTrue(r['counts'][m] == n and r['derivations'][m] == 'observed_subset_lower_bound', 'nonzero-authored-subset')
+        self.assertTrue(all(v == 'NOT_EVALUABLE' for v in r['intervals'].values()), 'subset-not-exact')
+
+    def test_empty_or_missing_membership_is_refused(self):
+        for custody in [{}, {'membership_order':[]}]:
+            c = json.loads(CUSTODY.read_text()); c.pop('membership_order'); c.update(custody)
+            with self.assertRaises(ep.ReceiptRefused): self.export(evaluator=ee.PrivateEvaluator(ee.PlannedInventory([])),custody=c)
+        c = json.loads(CUSTODY.read_text()); c.pop('membership_order')
+        with self.assertRaises(ep.ReceiptRefused): self.export(custody=c)
+
 
 class CommitmentConsumptionTests(unittest.TestCase):
     def test_evaluator_loads_committed_class_table(self):
@@ -259,6 +304,14 @@ def run_rust_mutation_proof():
         ('MUT-TOKEN-CORRUPTION', [('self.add("egress_token_restore_failures", 1);','self.add("egress_token_restore_failures", 0);')], 'integrity_analogues_have_independent_nonzero_falsifiers'),
         ('MUT-CANARY-RUST', [('    let wire = must(serde_json::to_string(&r));','    eprintln!("{EMAIL}");\n    let wire = must(serde_json::to_string(&r));')], 'private_failure_canary_captures_stdout_stderr_and_files'),
     ]
+    cases.extend([
+        ('MUT-ROUTE-AVAILABILITY', [('COUNTING_GRADES.contains(&grade) && !c.0.contains_key(m)', 'false')], 'missing_measurements_and_ambiguous_only_gates'),
+        ('MUT-EXTRA-SURFACES', [('if no_payload_surfaces(r) && r.content.len() == 1', 'if r.content.len() == 1')], 'no_payload_classifier_rejects_extra_surfaces'),
+        ('MUT-GATE-INTEGRITY', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["egress_integrity_analogues"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'integrity_analogues_have_independent_nonzero_falsifiers'),
+        ('MUT-GATE-STRING', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["string_byte_reversibility"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'json_text_string_bytes_are_stricter_than_semantic_equality'),
+        ('MUT-GATE-GOLD', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["gold_survival_oracle"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'missing_measurements_and_ambiguous_only_gates'),
+        ('MUT-GATE-FP', [('    assert!(receipt_allowlisted(&r), "emitter-conformance");', '    r["gate_results"]["false_positive_negative_control"] = json!("PASS");\n    assert!(receipt_allowlisted(&r), "emitter-conformance");')], 'missing_measurements_and_ambiguous_only_gates'),
+    ])
     env = os.environ.copy()
     env.update(RUSTUP_TOOLCHAIN='1.96.0', RUSTC=str(Path(cargo).with_name('rustc')), RUSTDOC=str(Path(cargo).with_name('rustdoc')))
     markers = {
@@ -270,6 +323,7 @@ def run_rust_mutation_proof():
         'MUT-RAW-VALUE-SWAP':'independent-slot-swap', 'MUT-TOKEN-CORRUPTION':'restore-error-counted',
         'MUT-CANARY-RUST':'private-output-canary',
     }
+    markers.update({'MUT-ROUTE-AVAILABILITY':'absent-measurements', 'MUT-EXTRA-SURFACES':'extra-surface-unknown', 'MUT-GATE-INTEGRITY':'swap-gate-fail', 'MUT-GATE-STRING':'string-gate-fail', 'MUT-GATE-GOLD':'unperformed-gate', 'MUT-GATE-FP':'unperformed-gate'})
     results = []
     for identifier,edits,target in cases:
         mutated = source
