@@ -1,0 +1,21 @@
+{
+  "id": "class-commitments-v1",
+  "version": 1,
+  "scope": "fixture_only_not_a_corpus_commitment",
+  "schema": {
+    "required": ["taxonomy_id", "taxonomy_version", "gold_label", "region", "canonical_class", "commitment", "partial_scope", "designation", "rationale", "source_ids", "model_coverage", "validator_applicability", "normalization_scope", "malformed_rule", "stage_veto_attribution"],
+    "label_regions": {"EMAIL": ["global"], "PHONE": ["de"]},
+    "commitment": ["supported", "partial", "unsupported"],
+    "model_coverage": ["covered", "gap", "unknown"],
+    "designation": ["direct", "contextual"],
+    "source_ids": ["email.controlled.v1", "fixture.phone.owned.v1"],
+    "validator_applicability": ["not_applicable", "not_measured"],
+    "normalization_scope": ["exact_utf8"],
+    "malformed_rule": ["D1_held"],
+    "stage_veto_attribution": ["unknown_not_measured"]
+  },
+  "fixture_rows": [
+    {"taxonomy_id": "synthetic.v1", "taxonomy_version": 1, "gold_label": "EMAIL", "region": "global", "canonical_class": "Email", "commitment": "supported", "partial_scope": "fixture only", "designation": "direct", "rationale": "Authored synthetic direct contact identifier.", "source_ids": ["email.controlled.v1"], "model_coverage": "unknown", "validator_applicability": "not_applicable", "normalization_scope": "exact_utf8", "malformed_rule": "D1_held", "stage_veto_attribution": "unknown_not_measured"},
+    {"taxonomy_id": "synthetic.v1", "taxonomy_version": 1, "gold_label": "PHONE", "region": "de", "canonical_class": "custom:phone", "commitment": "unsupported", "partial_scope": "Controlled email-only fixture; no runtime commitment.", "designation": "direct", "rationale": "Authored synthetic direct contact identifier.", "source_ids": ["fixture.phone.owned.v1"], "model_coverage": "gap", "validator_applicability": "not_measured", "normalization_scope": "exact_utf8", "malformed_rule": "D1_held", "stage_veto_attribution": "unknown_not_measured"}
+  ]
+}
