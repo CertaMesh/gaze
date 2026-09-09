@@ -489,6 +489,7 @@ impl Counts {
                     self.add("leaf_restore_exact", 1);
                 }
                 if r.authorized_output_ranges.len() == 1 {
+                    *self.1.entry("raw_compared").or_default() += 1;
                     self.add("egress_raw_value_mismatches", 0);
                     if &r.text[r.authorized_output_ranges[0].clone()] != expected_occurrence {
                         self.add("egress_raw_value_mismatches", 1);
@@ -499,9 +500,15 @@ impl Counts {
     }
     fn negative(&mut self, session: &Session, observed: &str, expected: &str) {
         *self.1.entry("negative").or_default() += 1;
+        let verdict = occurrence(session, observed, expected, false);
+        // Only full preservation or an exact owned token resolves this predicate.
+        if !matches!(verdict, Verdict::Full | Verdict::Protected) {
+            return;
+        }
+        *self.1.entry("negative_compared").or_default() += 1;
         self.add("false_positive_occurrences", 0);
         self.add("false_positive_bytes", 0);
-        if occurrence(session, observed, expected, false) == Verdict::Protected {
+        if verdict == Verdict::Protected {
             self.add("false_positive_occurrences", 1);
             self.add("false_positive_bytes", expected.len());
         }
@@ -872,6 +879,54 @@ fn walk(node: &Value, path: &str, rules: &Value) -> bool {
         _ => false,
     }
 }
+fn route_derivation(m: &str) -> &'static str {
+    match m {
+        "protection_trace_items" | "unknown_egress_lower_bound_cases" => "not_measured",
+        "egress_clean_bounds_invalid"
+        | "egress_authorized_range_bounds_invalid"
+        | "egress_authorized_range_non_monotonic"
+        | "egress_overlapping_clean_spans" => "not_applicable_by_construction",
+        "manifest_span_monotonicity_enforced" | "manifest_raw_entry_agreement_enforced" => {
+            "invariant_enforced_not_counted"
+        }
+        "observer_leaves_observed"
+        | "observer_leaves_unobserved"
+        | "observer_manifest_spans_observed"
+        | "observer_recognizer_source_events" => "observer_native",
+        "gold_occurrences_surviving_egress"
+        | "gold_occurrences_partially_surviving_egress"
+        | "gold_occurrences_attribution_not_measured"
+        | "gold_bytes_surviving_egress"
+        | "false_positive_occurrences"
+        | "false_positive_bytes"
+        | "egress_token_restore_failures"
+        | "egress_raw_value_mismatches" => "egress_reconstructed",
+        _ => "route_native",
+    }
+}
+fn allowed_derivation(route: &str, metric: &str, grade: &str) -> bool {
+    if grade == "not_measured" {
+        return true;
+    }
+    if route == "evaluator.private.v1" {
+        match metric {
+            "gold_occurrences_planned" | "gold_bytes_planned" => grade == "planned_inventory",
+            "false_positive_occurrences"
+            | "false_positive_bytes"
+            | "unknown_egress_lower_bound_cases" => matches!(
+                grade,
+                "private_authored_records" | "observed_subset_lower_bound"
+            ),
+            m if LEAK_FAMILY_METRIC_IDS.contains(&m) => matches!(
+                grade,
+                "private_authored_records" | "observed_subset_lower_bound"
+            ),
+            _ => false,
+        }
+    } else {
+        grade == route_derivation(metric)
+    }
+}
 fn receipt_allowlisted(r: &Value) -> bool {
     let rules: Value = must(serde_json::from_str(PATH_RULES));
     if !walk(r, "$", &rules) {
@@ -882,6 +937,34 @@ fn receipt_allowlisted(r: &Value) -> bool {
         .filter(|p| p.matches('.').count() == 1 && **p != "$.asymmetric_outcome_table")
         .any(|p| r.get(&p[2..]).is_none())
     {
+        return false;
+    }
+    let route = text(&r["route_id"]);
+    let identity = (text(&r["cell_id"]), text(&r["policy_identity"]));
+    if !match route {
+        "evaluator.private.v1" => identity == ("synthetic.evaluator.v1", "authored.records.v1"),
+        "mcp.rmcp.duplex.v1" => matches!(
+            identity,
+            ("synthetic.mcp.core.v1", "core.rule_floor.v1")
+                | ("synthetic.mcp.controlled.v1", "controlled.email_only.v1")
+        ),
+        _ => false,
+    } || ROUTE_IDS.iter().any(|id| {
+        r["route_status"][*id]
+            != if *id == route {
+                "IMPLEMENTED"
+            } else {
+                "NOT_IMPLEMENTED"
+            }
+    }) {
+        return false;
+    }
+    if r["intervals"].as_object().unwrap().iter().any(|(m, v)| {
+        matches!(
+            m.as_str(),
+            "gold_occurrences_planned" | "gold_bytes_planned"
+        ) && v != "NOT_EVALUABLE"
+    }) {
         return false;
     }
     let counts = r["counts"].as_object().unwrap();
@@ -945,7 +1028,10 @@ fn receipt_allowlisted(r: &Value) -> bool {
             .map(text)
             .collect::<BTreeSet<_>>()
     };
-    expected_missing == actual_set("metrics")
+    derivations
+        .iter()
+        .all(|(m, g)| allowed_derivation(route, m, text(g)))
+        && expected_missing == actual_set("metrics")
         && expected_blocked == actual_set("blocked_gates")
         && BLOCKED_GATES.iter().all(|g| gates[*g] == "BLOCKED")
         && !(counts
@@ -963,30 +1049,15 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
     let mut derivations = BTreeMap::new();
     let mut counts = BTreeMap::new();
     for &m in METRIC_IDS {
-        let grade = match m {
-            "protection_trace_items" | "unknown_egress_lower_bound_cases" => "not_measured",
-            "egress_clean_bounds_invalid"
-            | "egress_authorized_range_bounds_invalid"
-            | "egress_authorized_range_non_monotonic"
-            | "egress_overlapping_clean_spans" => "not_applicable_by_construction",
-            "manifest_span_monotonicity_enforced" | "manifest_raw_entry_agreement_enforced" => {
-                "invariant_enforced_not_counted"
+        let grade = route_derivation(m);
+        let incomplete = match m {
+            "egress_raw_value_mismatches" => c.1.get("raw_compared") != c.1.get("restore"),
+            "false_positive_occurrences" | "false_positive_bytes" => {
+                c.1.get("negative_compared") != c.1.get("negative")
             }
-            "observer_leaves_observed"
-            | "observer_leaves_unobserved"
-            | "observer_manifest_spans_observed"
-            | "observer_recognizer_source_events" => "observer_native",
-            "gold_occurrences_surviving_egress"
-            | "gold_occurrences_partially_surviving_egress"
-            | "gold_occurrences_attribution_not_measured"
-            | "gold_bytes_surviving_egress"
-            | "false_positive_occurrences"
-            | "false_positive_bytes"
-            | "egress_token_restore_failures"
-            | "egress_raw_value_mismatches" => "egress_reconstructed",
-            _ => "route_native",
+            _ => false,
         };
-        let grade = if COUNTING_GRADES.contains(&grade) && !c.0.contains_key(m) {
+        let grade = if COUNTING_GRADES.contains(&grade) && (!c.0.contains_key(m) || incomplete) {
             "not_measured"
         } else {
             grade
@@ -1055,7 +1126,7 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
     r["gate_results"]["egress_integrity_analogues"] = json!(gate(
         restores > 0,
         c.get("egress_token_restore_failures") + c.get("egress_raw_value_mismatches") > 0,
-        !c.0.contains_key("egress_raw_value_mismatches")
+        c.1.get("raw_compared").copied().unwrap_or(0) != restores
     ));
     r["gate_results"]["gold_survival_oracle"] = json!(gate(
         c.1.contains_key("gold"),
@@ -1067,7 +1138,7 @@ fn receipt(c: &Counts, state: &str, controlled: bool) -> Value {
     r["gate_results"]["false_positive_negative_control"] = json!(gate(
         c.1.contains_key("negative"),
         c.get("false_positive_occurrences") > 0,
-        false
+        c.1.get("negative_compared") != c.1.get("negative")
     ));
     r["gate_results"]["source_attribution_events"] = json!(gate(
         c.0.contains_key("observer_leaves_unobserved"),
@@ -1679,4 +1750,215 @@ async fn plain_string_carrier_is_decoded_without_json_reparse() {
         occurrence(&h.session, observed, EMAIL, false) == Verdict::Protected,
         "plain-string-oracle"
     );
+}
+
+#[test]
+fn r2_mixed_raw_comparison_coverage() {
+    let s = fresh_session();
+    let token = must(s.tokenize(&PiiClass::Email, EMAIL));
+    for reverse in [false, true] {
+        for mismatch in [false, true] {
+            let mut c = Counts::default();
+            let mut operands = vec![
+                (token.as_str(), if mismatch { FRESH } else { EMAIL }),
+                ("plain", "plain"),
+            ];
+            if reverse {
+                operands.reverse();
+            }
+            for (observed, expected) in operands {
+                c.restore(&s, observed, expected, expected);
+            }
+            let r = receipt(&c, "COMPLETED", false);
+            assert!(
+                r["counts"].get("egress_raw_value_mismatches").is_none(),
+                "raw-incomplete-count"
+            );
+            assert!(
+                r["derivations"]["egress_raw_value_mismatches"] == "not_measured",
+                "raw-incomplete-grade"
+            );
+            assert!(
+                r["gate_results"]["egress_integrity_analogues"]
+                    == if mismatch { "FAIL" } else { "NOT_EVALUABLE" },
+                "raw-coverage-gate"
+            );
+        }
+    }
+    let mut c = Counts::default();
+    c.restore(&s, &token, EMAIL, EMAIL);
+    let r = receipt(&c, "COMPLETED", false);
+    assert!(
+        r["counts"]["egress_raw_value_mismatches"] == 0
+            && r["gate_results"]["egress_integrity_analogues"] == "PASS",
+        "raw-complete-pass"
+    );
+}
+#[test]
+fn r2_negative_predicate_coverage() {
+    let s = fresh_session();
+    let token = must(s.tokenize(&PiiClass::Email, EMAIL));
+    for values in [
+        vec!["unrelated"],
+        vec![prefix(EMAIL, MIN_FRAGMENT_BYTES)],
+        vec!["unrelated", EMAIL],
+        vec![EMAIL, "unrelated"],
+        vec!["unrelated", token.as_str()],
+        vec![token.as_str(), "unrelated"],
+    ] {
+        let mut c = Counts::default();
+        let fail = values.contains(&token.as_str());
+        for observed in values {
+            c.negative(&s, observed, EMAIL);
+        }
+        let r = receipt(&c, "COMPLETED", false);
+        assert!(
+            r["counts"].get("false_positive_occurrences").is_none()
+                && r["counts"].get("false_positive_bytes").is_none(),
+            "negative-incomplete-count"
+        );
+        assert!(
+            r["derivations"]["false_positive_occurrences"] == "not_measured",
+            "negative-incomplete-grade"
+        );
+        assert!(
+            r["gate_results"]["false_positive_negative_control"]
+                == if fail { "FAIL" } else { "NOT_EVALUABLE" },
+            "negative-coverage-gate"
+        );
+    }
+    let mut c = Counts::default();
+    c.negative(&s, EMAIL, EMAIL);
+    assert!(
+        receipt(&c, "COMPLETED", false)["gate_results"]["false_positive_negative_control"]
+            == "PASS",
+        "negative-complete-pass"
+    );
+}
+#[test]
+fn r2_producer_grade_and_identity_binding() {
+    let base: Value = must(serde_json::from_str::<Value>(GOLDEN))["receipt"].clone();
+    for grade in [
+        "planned_inventory",
+        "private_authored_records",
+        "observed_subset_lower_bound",
+        "observer_native",
+    ] {
+        let mut r = base.clone();
+        r["derivations"]["tool_invocations"] = json!(grade);
+        assert!(!receipt_allowlisted(&r), "producer-metric-grade");
+    }
+    for (cell, policy) in [
+        ("synthetic.evaluator.v1", "authored.records.v1"),
+        ("synthetic.mcp.core.v1", "controlled.email_only.v1"),
+        ("synthetic.mcp.controlled.v1", "core.rule_floor.v1"),
+    ] {
+        let mut r = base.clone();
+        r["cell_id"] = json!(cell);
+        r["policy_identity"] = json!(policy);
+        assert!(!receipt_allowlisted(&r), "producer-cell-policy");
+    }
+    let mut e = base.clone();
+    e["route_id"] = json!("evaluator.private.v1");
+    e["cell_id"] = json!("synthetic.evaluator.v1");
+    e["policy_identity"] = json!("authored.records.v1");
+    for id in ROUTE_IDS {
+        e["route_status"][*id] = json!(if *id == "evaluator.private.v1" {
+            "IMPLEMENTED"
+        } else {
+            "NOT_IMPLEMENTED"
+        });
+    }
+    e["counts"] = json!({"gold_bytes_planned":30});
+    e["derivations"] = json!(
+        METRIC_IDS
+            .iter()
+            .map(|m| (
+                *m,
+                if *m == "gold_bytes_planned" {
+                    "planned_inventory"
+                } else {
+                    "not_measured"
+                }
+            ))
+            .collect::<BTreeMap<_, _>>()
+    );
+    e["not_measured"]["metrics"] = json!(
+        METRIC_IDS
+            .iter()
+            .filter(|m| **m != "gold_bytes_planned")
+            .collect::<Vec<_>>()
+    );
+    assert!(receipt_allowlisted(&e), "honest-evaluator");
+    // Exhaust the closed metric/grade matrix independently of the validator helpers.
+    for evaluator in [false, true] {
+        for metric in METRIC_IDS {
+            let expected = if evaluator {
+                match *metric {
+                    "gold_bytes_planned" | "gold_occurrences_planned" => "planned_inventory",
+                    "gold_occurrences_surviving_egress"
+                    | "gold_occurrences_partially_surviving_egress"
+                    | "gold_occurrences_attribution_not_measured"
+                    | "gold_bytes_surviving_egress"
+                    | "false_positive_occurrences"
+                    | "false_positive_bytes"
+                    | "unknown_egress_lower_bound_cases" => "private_authored_records",
+                    _ => "not_measured",
+                }
+            } else if matches!(
+                *metric,
+                "false_positive_occurrences" | "false_positive_bytes"
+            ) {
+                "egress_reconstructed"
+            } else {
+                text(&base["derivations"][*metric])
+            };
+            for grade in DERIVATIONS {
+                let mut r = if evaluator { e.clone() } else { base.clone() };
+                r["counts"] = json!({});
+                r["intervals"] = json!({});
+                r["derivations"] = json!(
+                    METRIC_IDS
+                        .iter()
+                        .map(|m| (*m, "not_measured"))
+                        .collect::<BTreeMap<_, _>>()
+                );
+                r["derivations"][*metric] = json!(grade);
+                if COUNTING_GRADES.contains(grade) {
+                    r["counts"][*metric] = json!(0);
+                }
+                r["not_measured"]["metrics"] = json!(
+                    METRIC_IDS
+                        .iter()
+                        .filter(|m| r["derivations"][**m] == "not_measured")
+                        .collect::<Vec<_>>()
+                );
+                let valid = *grade == "not_measured"
+                    || *grade == expected
+                    || (evaluator
+                        && expected == "private_authored_records"
+                        && *grade == "observed_subset_lower_bound");
+                assert!(receipt_allowlisted(&r) == valid, "producer-metric-matrix");
+            }
+        }
+    }
+    for grade in [
+        "route_native",
+        "private_authored_records",
+        "observed_subset_lower_bound",
+        "invariant_enforced_not_counted",
+    ] {
+        let mut r = e.clone();
+        r["derivations"]["gold_bytes_planned"] = json!(grade);
+        if grade == "invariant_enforced_not_counted" {
+            r["counts"] = json!({});
+        }
+        assert!(!receipt_allowlisted(&r), "evaluator-metric-grade");
+    }
+}
+#[test]
+fn r2_planned_interval_refused() {
+    let mut r = must(serde_json::from_str::<Value>(GOLDEN))["receipt"].clone();
+    r["intervals"]["gold_bytes_planned"] = json!({"point":0.0,"low":0.0,"high":0.0,"method_id":"grouped_paired_percentile_v1","conditional":false,"basis":"paired_completed"});
+    assert!(!receipt_allowlisted(&r), "planned-interval-refused");
 }

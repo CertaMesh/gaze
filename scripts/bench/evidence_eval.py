@@ -52,11 +52,11 @@ class PlannedInventory:
 class DocRecord:
     observed_metrics: frozenset = frozenset()
     outcome: str = 'NOT_STARTED'
-    gold_occurrences: int = 0
+    gold_occurrences: int | None = None
     gold_occurrences_surviving: int = 0
     gold_occurrences_partially_surviving: int = 0
     gold_occurrences_attribution_not_measured: int = 0
-    gold_bytes: int = 0
+    gold_bytes: int | None = None
     gold_bytes_surviving: int = 0
     false_positive_occurrences: int = 0
     false_positive_bytes: int = 0
@@ -85,6 +85,16 @@ EVALUATOR_DERIVATIONS = {m: ('planned_inventory' if m in PLAN_METRICS else
     'not_measured') for m in ep.METRIC_IDS}
 
 
+def unknown_survival(record):
+    # A positive observation proves OR; proving false needs every operand.
+    metrics = ('gold_bytes_surviving_egress','gold_occurrences_surviving_egress','gold_occurrences_partially_surviving_egress')
+    if any(m in record.observed_metrics and getattr(record, METRIC_FIELDS[m]) > 0 for m in metrics):
+        return True
+    if all(m in record.observed_metrics for m in metrics):
+        return False
+    return None
+
+
 def surviving_bytes(ranges):
     """Use the legacy merge convention without exporting coordinates."""
     ep.require(type(ranges) in (list, tuple), 'wrong_type')
@@ -107,20 +117,28 @@ class PrivateEvaluator:
 
     def add(self, arm, key, record):
         ep.require(type(arm) is str and arm in ep.ARM_IDS, 'inventory_conflict')
-        self.inventory.case(key)
+        planned = self.inventory.case(key)
         ep.require(not self._finalized and key not in self._records[arm], 'inventory_conflict')
         ep.require(type(record) is DocRecord, 'wrong_type')
         ep.require(type(record.outcome) is str and record.outcome in ep.OUTCOME_STATES, 'value_out_of_vocabulary')
         for f in fields(record):
             if f.name not in ('outcome','pii_class','region','restore_exact','restore_decision_success','observed_metrics'):
                 v = getattr(record, f.name)
-                ep.require(type(v) is int and v >= 0, 'wrong_type')
+                ep.require((v is None and f.name in ('gold_occurrences','gold_bytes')) or type(v) is int and v >= 0, 'wrong_type')
         ep.require(type(record.observed_metrics) is frozenset and record.observed_metrics <= OBSERVED_METRICS, 'wrong_type')
         ep.require(all(not getattr(record, METRIC_FIELDS[m]) or m in record.observed_metrics for m in OBSERVED_METRICS), 'derivation_conflict')
         ep.require(not record.observed_metrics or record.outcome in ('COMPLETED','UNKNOWN_EGRESS'), 'derivation_conflict')
         ep.require(type(record.restore_exact) is bool and type(record.restore_decision_success) is bool, 'wrong_type')
         ep.require((record.pii_class, record.region) in {('Email','global'),('custom:phone','de')}, 'class_commitment_invalid')
-        ep.require(record.gold_occurrences_surviving + record.gold_occurrences_partially_surviving + record.gold_occurrences_attribution_not_measured <= record.gold_occurrences and record.gold_bytes_surviving <= record.gold_bytes and record.entities_fully_covered <= record.entities, 'outcome_identity_violation')
+        for field, observed in (
+            ('gold_occurrences', record.gold_occurrences_surviving + record.gold_occurrences_partially_surviving + record.gold_occurrences_attribution_not_measured),
+            ('gold_bytes', record.gold_bytes_surviving),
+        ):
+            authoritative, declared = getattr(planned, field), getattr(record, field)
+            ep.require(authoritative is None or declared is None or authoritative == declared, 'inventory_conflict')
+            bound = authoritative if authoritative is not None else declared
+            ep.require(bound is None or observed <= bound, 'outcome_identity_violation')
+        ep.require(record.entities_fully_covered <= record.entities, 'outcome_identity_violation')
         if record.outcome != 'COMPLETED':
             ep.require(not record.entities_fully_covered and not record.restore_exact and not record.restore_decision_success, 'outcome_identity_violation')
         if record.outcome not in ('COMPLETED','UNKNOWN_EGRESS'):
@@ -187,7 +205,7 @@ class PrivateEvaluator:
             ep.require(all(keys.count(k) == multiplicity for k in members), 'inventory_conflict')
             if not multiplicity:
                 continue
-            delta = 0. if metric in PLAN_METRICS else sum(getattr(self._records['candidate'][k], field) - getattr(self._records['base'][k], field) for k in members) / len(members)
+            delta = sum(getattr(self._records['candidate'][k], field) - getattr(self._records['base'][k], field) for k in members) / len(members)
             numerator, denominator = sampled.get(c.stratum, (0., 0.))
             sampled[c.stratum] = (numerator + delta*c.weight*multiplicity, denominator+c.weight*multiplicity)
         ep.require(set(sampled) == set(original_mass), 'inventory_conflict')
@@ -204,7 +222,7 @@ class PrivateEvaluator:
             return 'NOT_EVALUABLE'
         if metric in ep.LEAK_FAMILY_METRIC_IDS and any(self.outcomes(a)['UNKNOWN_EGRESS'] for a in ep.ARM_IDS):
             return 'NOT_EVALUABLE'
-        if metric in PLAN_METRICS and any(getattr(self.inventory.case(k), METRIC_FIELDS[metric]) is None for k in keys):
+        if metric in PLAN_METRICS:
             return 'NOT_EVALUABLE'
         if metric in OBSERVED_METRICS and any(metric not in self._records[a][k].observed_metrics for a in ep.ARM_IDS for k in keys):
             return 'NOT_EVALUABLE'
@@ -229,8 +247,9 @@ class PrivateEvaluator:
                 values = [getattr(r, field) for r in self._records[arm].values() if metric in r.observed_metrics]
                 if values: result[metric] = sum(values)
         unknown = [r for r in self._records[arm].values() if r.outcome == 'UNKNOWN_EGRESS']
-        if unknown and all(r.observed_metrics & ep.LEAK_FAMILY_METRIC_IDS for r in unknown):
-            result['unknown_egress_lower_bound_cases'] = sum(r.gold_bytes_surviving > 0 or r.gold_occurrences_surviving > 0 or r.gold_occurrences_partially_surviving > 0 for r in unknown)
+        verdicts = [unknown_survival(r) for r in unknown]
+        if any(v is not None for v in verdicts):
+            result['unknown_egress_lower_bound_cases'] = sum(v is True for v in verdicts)
         return result
 
     def derivations(self, arm):
@@ -238,6 +257,8 @@ class PrivateEvaluator:
         counts = self.aggregate(arm)
         for m in result:
             if m not in counts: result[m] = 'not_measured'
+            elif m == 'unknown_egress_lower_bound_cases' and any(r.outcome == 'UNKNOWN_EGRESS' and unknown_survival(r) is None for r in self._records[arm].values()):
+                result[m] = 'observed_subset_lower_bound'
             elif m in OBSERVED_METRICS and any(m not in r.observed_metrics or r.outcome != 'COMPLETED' for r in self._records[arm].values()):
                 result[m] = 'observed_subset_lower_bound'
         return result
@@ -268,7 +289,7 @@ class PrivateEvaluator:
             r['gate_results'][k] = 'PASS'
         if any(r.outcome != 'COMPLETED' for r in self._records[arm].values()):
             r['gate_results']['rejection_is_not_protection'] = 'PASS'
-        if 'unknown_egress_lower_bound_cases' in r['counts']:
+        if r['derivations']['unknown_egress_lower_bound_cases'] == 'private_authored_records':
             r['gate_results']['unknown_egress_lower_bound'] = 'PASS'
         valid = ep.declaration_valid(declaration, {self.inventory.case(k).stratum for k in self.inventory.keys()})
         # Malformed typed declarations are represented as unavailable, never echoed.

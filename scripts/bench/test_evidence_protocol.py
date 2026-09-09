@@ -39,6 +39,43 @@ class ReceiptTests(unittest.TestCase):
     def test_golden_receipt_with_all_non_counting_derivations_is_accepted(self):
         self.assertTrue(ep.validate_structure(self.r) == self.r)
 
+    def test_producer_metric_grade_and_identity_binding(self):
+        from test_evidence_eval import ExportTests
+        evaluator = ExportTests().export()
+        for key in ep.STAMPED_KEYS: evaluator.pop(key, None)
+        for original in (golden(), evaluator):
+            ep.validate_structure(original)
+            for metric, honest in original['derivations'].items():
+                # Counting and construction grades may not migrate to another metric.
+                for forged in ep.DERIVATIONS - {honest, 'not_measured'}:
+                    if honest == 'private_authored_records' and forged == 'observed_subset_lower_bound': continue
+                    self.r = copy.deepcopy(original); self.r['derivations'][metric] = forged
+                    if forged in ep.COUNTING_GRADES: self.r['counts'][metric] = 0
+                    else: self.r['counts'].pop(metric,None)
+                    self.r['not_measured']['metrics'] = sorted(k for k,v in self.r['derivations'].items() if v == 'not_measured')
+                    # Some golden metrics are unavailable, but have a known allowed grade.
+                    allowed_missing = {'false_positive_occurrences':'egress_reconstructed','false_positive_bytes':'egress_reconstructed'}
+                    if original is not evaluator and honest == 'not_measured' and allowed_missing.get(metric) == forged: continue
+                    if original is evaluator and metric == 'unknown_egress_lower_bound_cases' and forged in ('private_authored_records','observed_subset_lower_bound'): continue
+                    with self.assertRaises(ep.ReceiptRefused, msg='producer-metric-grade') as error: ep.validate_structure(self.r)
+                    self.assertTrue(error.exception.code == 'protocol_identity_mismatch', 'producer-metric-grade-code')
+            downgraded = copy.deepcopy(original)
+            downgraded['counts'] = {}; downgraded['derivations'] = dict.fromkeys(ep.METRIC_IDS,'not_measured')
+            downgraded['not_measured']['metrics'] = sorted(ep.METRIC_IDS); downgraded['intervals'] = {}
+            ep.validate_structure(downgraded)
+        for cell in ep.CELL_IDS:
+            for policy in ep.POLICY_IDENTITIES:
+                for original in (golden(),evaluator):
+                    if (cell,policy) == (original['cell_id'],original['policy_identity']): continue
+                    if original is not evaluator and (cell,policy) == ('synthetic.mcp.controlled.v1','controlled.email_only.v1'): continue
+                    self.r = copy.deepcopy(original); self.r.update(cell_id=cell,policy_identity=policy)
+                    with self.assertRaises(ep.ReceiptRefused, msg='producer-cell-policy'): ep.validate_structure(self.r)
+
+    def test_numeric_planned_intervals_refused(self):
+        for metric in ('gold_bytes_planned','gold_occurrences_planned'):
+            self.r = golden(); self.r['analysis_declaration'] = declaration(); self.r['intervals'][metric] = interval()
+            with self.assertRaises(ep.ReceiptRefused, msg='planned-interval-refused'): ep.validate_structure(self.r)
+
     def test_unknown_top_level_key_is_refused(self):
         self.r['clean_text'] = 'private'
         self.refuse('unknown_path')
@@ -302,6 +339,8 @@ def private_child(exercise):
                 with os.fdopen(os.dup(1), 'w') as out, os.fdopen(os.dup(2), 'w') as err, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                     exercise()
                 os._exit(0)
+            except AssertionError as exc:
+                os._exit(2 if exc.args == ('closed-exception',) else 1)
             except BaseException:
                 os._exit(1)
         os.close(out_w); os.close(err_w)
@@ -325,12 +364,31 @@ class CanaryTests(unittest.TestCase):
                      lambda: ep.loads_receipt('{"x":"'+secret), lambda: ep.ReceiptRefused(secret), lambda: ep.ReceiptRefused({'x':token})]
             for call in calls:
                 try: call()
-                except ep.ReceiptRefused as exc: assert str(exc) in ep.REFUSAL_CODES
+                except ep.ReceiptRefused as exc: assert str(exc) in ep.REFUSAL_CODES, 'closed-exception'
         status,out,err,files = private_child(exercise)
+        self.assertTrue(status != 2 << 8, 'protocol-closed-exception')
         self.assertTrue(status == 0, 'protocol-child-success')
         self.assertTrue(not out, 'protocol-stdout-boundary')
         self.assertTrue(not err, 'protocol-stderr-boundary')
         self.assertTrue(not files, 'protocol-file-boundary')
+
+
+class R2ProofDisciplineTests(unittest.TestCase):
+    def test_vocab_tail_records_exact_failure_predicate(self):
+        import inspect
+        source = inspect.getsource(run_mutation_proof).split("vocab = copy.deepcopy(ep.VOCABULARIES)")[1]
+        self.assertTrue('failure_marker' in source and 'mutation_killed(result, output, marker)' in source, 'vocab-tail-predicate')
+
+    def test_mutation_kill_requires_one_failure_zero_errors_and_marker(self):
+        from types import SimpleNamespace
+        for tests,failures,errors,output,expected in [(1,[1],[],'expected',True),(0,[1],[],'expected',False),(2,[1],[],'expected',False),(1,[],[],'expected',False),(1,[1],[1],'expected',False),(1,[1],[],'other',False)]:
+            result = SimpleNamespace(testsRun=tests,failures=failures,errors=errors)
+            self.assertTrue(mutation_killed(result,io.StringIO(output),'expected') == expected, 'mutation-kill-predicate')
+
+    def test_closed_exception_has_static_child_status(self):
+        def exercise(): raise AssertionError('closed-exception')
+        status,out,err,files = private_child(exercise)
+        self.assertTrue(status == 2 << 8 and not out and not err and not files, 'closed-exception-status')
 
 
 class DirectBoundaryTests(unittest.TestCase):
@@ -344,6 +402,10 @@ class DirectBoundaryTests(unittest.TestCase):
     def test_closed_dynamic_values(self):
         for value,path in [('private','$.derivations.*'),('private','$.analysis_declaration.strata.[]')]:
             with self.assertRaises(ep.ReceiptRefused): ep.walk(value,path)
+
+
+def mutation_killed(result, output, marker):
+    return bool(result.failures) and not result.errors and result.testsRun == 1 and marker in output.getvalue()
 
 
 def run_mutation_proof():
@@ -380,7 +442,7 @@ def run_mutation_proof():
     ]
     mutations.extend([
         ('MUT-OUTCOME-COVERAGE',ep,'check_outcome_identities',[("    o = r['outcomes']", "    o = r['outcomes']\n    o.setdefault('NOT_STARTED', 0)")],'test_evidence_protocol.ReceiptTests.test_all_five_states_are_mandatory'),
-        ('MUT-INVENTORY',ee.PrivateEvaluator,'add',[("        self.inventory.case(key)","        pass")],'test_evidence_eval.PlannedInventoryTests.test_unknown_key_is_refused'),
+        ('MUT-INVENTORY',ee.PrivateEvaluator,'add',[("        planned = self.inventory.case(key)","        planned = self.inventory.case(self.inventory.keys()[0])")],'test_evidence_eval.PlannedInventoryTests.test_unknown_key_is_refused'),
         ('MUT-DECLARATION-ABSENT',ee.PrivateEvaluator,'paired_interval',[("        self.finalize()", "        if declaration is None: declaration = __import__('test_evidence_protocol').declaration()\n        self.finalize()")],'test_evidence_eval.DeclarationTests.test_absent_declaration_is_not_evaluable'),
         ('MUT-DECLARATION-PARTIAL',ee.PrivateEvaluator,'paired_interval',[("        self.finalize()", "        if type(declaration) is dict: declaration.setdefault('confidence_level', .5)\n        self.finalize()")],'test_evidence_eval.DeclarationTests.test_partial_declaration_is_not_evaluable'),
         ('MUT-PAIR-HONESTY',ee.PrivateEvaluator,'paired_completed_keys',[("if all(self._records[a][k].outcome == 'COMPLETED' for a in ep.ARM_IDS)","if any(self._records[a][k].outcome == 'COMPLETED' for a in ep.ARM_IDS)")],'test_evidence_eval.PairingTests.test_missing_pair_leaves_intersection_and_is_not_zero_leak'),
@@ -397,7 +459,7 @@ def run_mutation_proof():
         ('MUT-EVALUATOR-AVAILABILITY',ee.PrivateEvaluator,'aggregate',[("if values: result[metric] = sum(values)", "result[metric] = sum(values)")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
         ('MUT-EVALUATOR-EMPTY-STAMP',ee.PrivateEvaluator,'export_receipt',[("bool(self.inventory.keys()) and bool(custody.get('membership_order'))", "True")],'test_evidence_eval.ExportTests.test_empty_or_missing_membership_is_refused'),
         ('MUT-PAIRED-BASE-MARGIN',ep,'validate_structure',[("margins.append({a:sum(table[a].values()) for a in OUTCOME_STATES})", "pass"), ("paired_count = table['COMPLETED']['COMPLETED']", "paired_count = r['outcomes']['COMPLETED']")],'test_evidence_protocol.ReceiptTests.test_both_arm_margins_gate_paired_intervals'),
-        ('MUT-EVALUATOR-VACUOUS-GATE',ee.PrivateEvaluator,'export_receipt',[("if 'unknown_egress_lower_bound_cases' in r['counts']:", "if True:")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
+        ('MUT-EVALUATOR-VACUOUS-GATE',ee.PrivateEvaluator,'export_receipt',[("if r['derivations']['unknown_egress_lower_bound_cases'] == 'private_authored_records':", "if True:")],'test_evidence_eval.ExportTests.test_availability_identity_and_full_derivation_map'),
     ])
     for prefix,owner,name,target in [('PROTOCOL',ep,'validate_receipt','test_evidence_protocol.CanaryTests.test_failures_do_not_emit_private_values_or_files'), ('EVALUATOR',ee.PrivateEvaluator,'export_receipt','test_evidence_eval.ExportTests.test_evaluator_canary_no_output_or_file_writes')]:
         site = '    r = validate_structure(payload)' if prefix == 'PROTOCOL' else '        self.finalize()'
@@ -417,7 +479,7 @@ def run_mutation_proof():
             suite=unittest.defaultTestLoader.loadTestsFromName(target)
             output=io.StringIO(); result=unittest.TextTestRunner(stream=output).run(suite)
             marker = (identifier.removeprefix('MUT-').lower() + '-boundary') if identifier.startswith(('MUT-PROTOCOL-', 'MUT-EVALUATOR-STD', 'MUT-EVALUATOR-FILE')) else ('protocol-stdout-boundary' if identifier == 'MUT-CANARY-PRIVATE-VALUE' else {'MUT-ATTESTATION-BINDING':'live-helper-binding', 'MUT-EVALUATOR-GRADES':'evaluator-declared-grades', 'MUT-EVALUATOR-IDENTITY':'evaluator-identity', 'MUT-EVALUATOR-AVAILABILITY':'missing-observation-counts', 'MUT-EVALUATOR-VACUOUS-GATE':'unexercised-evaluator-gates'}.get(identifier,'AssertionError'))
-            killed=bool(result.failures) and not result.errors and result.testsRun == 1 and marker in output.getvalue()
+            killed=mutation_killed(result, output, marker)
             results.append({'id':identifier,'killed':killed,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors),'failure_marker':marker})
         finally: setattr(owner,name,original)
         if not killed: break
@@ -426,8 +488,9 @@ def run_mutation_proof():
         vocab['METRIC_IDS'] = vocab['METRIC_IDS'] | {'mutation-only'}
         with patch.object(ep, 'VOCABULARIES', vocab):
             target='test_evidence_protocol.VocabularyMirrorTests.test_python_vocabularies_equal_committed_artifact'
-            result=unittest.TextTestRunner(stream=io.StringIO()).run(unittest.defaultTestLoader.loadTestsFromName(target))
-        results.append({'id':'MUT-VOCAB-PY','killed':bool(result.failures) and not result.errors,'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors)})
+            output = io.StringIO(); marker = 'AssertionError'
+            result=unittest.TextTestRunner(stream=output).run(unittest.defaultTestLoader.loadTestsFromName(target))
+        results.append({'id':'MUT-VOCAB-PY','killed':mutation_killed(result, output, marker),'tests_run':result.testsRun,'kill_set':[test.id() for test,_ in result.failures],'errors':len(result.errors),'failure_marker':marker})
     return results
 
 

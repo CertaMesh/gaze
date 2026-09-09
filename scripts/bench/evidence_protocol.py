@@ -162,6 +162,28 @@ def check_outcome_identities(r):
         require(all(sum(t[a][b] for a in OUTCOME_STATES) == o[b] for b in OUTCOME_STATES), 'outcome_identity_violation')
 
 
+def allowed_derivations(route, metric):
+    if route == 'evaluator.private.v1':
+        if metric in ('gold_occurrences_planned','gold_bytes_planned'):
+            return {'planned_inventory','not_measured'}
+        if metric in LEAK_FAMILY_METRIC_IDS or metric in ('false_positive_occurrences','false_positive_bytes','unknown_egress_lower_bound_cases'):
+            return {'private_authored_records','observed_subset_lower_bound','not_measured'}
+        return {'not_measured'}
+    if metric in ('protection_trace_items','unknown_egress_lower_bound_cases'):
+        grade = 'not_measured'
+    elif metric in ('egress_clean_bounds_invalid','egress_authorized_range_bounds_invalid','egress_authorized_range_non_monotonic','egress_overlapping_clean_spans'):
+        grade = 'not_applicable_by_construction'
+    elif metric in ('manifest_span_monotonicity_enforced','manifest_raw_entry_agreement_enforced'):
+        grade = 'invariant_enforced_not_counted'
+    elif metric in ('observer_leaves_observed','observer_leaves_unobserved','observer_manifest_spans_observed','observer_recognizer_source_events'):
+        grade = 'observer_native'
+    elif metric in LEAK_FAMILY_METRIC_IDS or metric in ('false_positive_occurrences','false_positive_bytes','egress_token_restore_failures','egress_raw_value_mismatches'):
+        grade = 'egress_reconstructed'
+    else:
+        grade = 'route_native'
+    return {grade,'not_measured'}
+
+
 def validate_structure(r):
     require(type(r) is dict, 'wrong_type')
     require(not STAMPED_KEYS.intersection(r), 'stamped_key_in_emitted_receipt')
@@ -174,12 +196,15 @@ def validate_structure(r):
     require(r['route_status'][r['route_id']] == 'IMPLEMENTED' and all(v == 'NOT_IMPLEMENTED' for k,v in r['route_status'].items() if k != r['route_id']), 'value_out_of_vocabulary')
     if r['route_id'] == 'evaluator.private.v1':
         require(r['cell_id'] == 'synthetic.evaluator.v1' and r['policy_identity'] == 'authored.records.v1', 'protocol_identity_mismatch')
+    else:
+        require((r['cell_id'], r['policy_identity']) in {('synthetic.mcp.core.v1','core.rule_floor.v1'),('synthetic.mcp.controlled.v1','controlled.email_only.v1')}, 'protocol_identity_mismatch')
     require(set(r['gate_results']) == GATE_IDS, 'gate_coverage_incomplete')
     check_outcome_identities(r)
     d, c = r['derivations'], r['counts']
     require(set(d) == METRIC_IDS, 'derivation_coverage_incomplete')
     require(all(d[k] in COUNTING_GRADES for k in c), 'counted_non_measurement')
     require(all(k in c for k,v in d.items() if v in COUNTING_GRADES), 'uncounted_measurable_metric')
+    require(all(grade in allowed_derivations(r['route_id'], metric) for metric,grade in d.items()), 'protocol_identity_mismatch')
     require(set(r['not_measured']['metrics']) == {k for k,v in d.items() if v == 'not_measured'}, 'derivation_conflict')
     require(set(r['not_measured']['blocked_gates']) == {k for k,v in r['gate_results'].items() if v == 'BLOCKED'}, 'derivation_conflict')
     require(all(r['gate_results'][k] == 'BLOCKED' for k in BLOCKED_GATES), 'derivation_conflict')
@@ -197,6 +222,7 @@ def validate_structure(r):
         require(metric in c, 'counted_non_measurement')
         if interval == 'NOT_EVALUABLE':
             continue
+        require(metric not in ('gold_occurrences_planned','gold_bytes_planned'), 'protocol_identity_mismatch')
         require(declaration_valid(r['analysis_declaration']), 'interval_without_declaration')
         require(set(interval) == {'point','low','high','method_id','conditional','basis'}, 'missing_mandatory_key')
         require(interval['low'] <= interval['high'], 'wrong_type')
