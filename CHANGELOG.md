@@ -105,18 +105,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to explicit English or German credential cues, emitting the reversible
   `custom:security_token` class.
 
-  The [consolidated EN/DE comparison](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md) removed 3,065 leaked SECURITYTOKEN bytes at the
-  rule floor and 2,985 with pass2 NER. Each deterministic cell added 17
-  false-positive bytes, ratios of about 180:1 and 176:1, while the rule matched
-  0 of all 1,024 committed A4 negative documents. Cue anchoring is supported by
-  the corpus asymmetry: 88.1% of SECURITYTOKEN spans have `token` or `secret`
-  in the preceding 64 characters, versus only 1.8% cue context for URL.
+  The [consolidated EN/DE comparison](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
+  measures this rule together with URL detection and discloses both increased
+  false positives and class-level Kiji regressions. Its subtractive baseline
+  is specific to that recognizer wave, not the previous release.
 
   Arm 2 requires at least one unambiguous delimiter between cue and value.
   Whitespace and `:`, `=`, or `#` qualify; `_` and a directly abutting `-` do
-  not. The holdout has 0 of 193 cue-context spans with no delimiter and 0 using
-  direct hyphen alone, so the requirement costs no measured gold coverage.
-  This prevents the safe default from splitting cue-prefixed snake_case
+  not. This prevents the safe default from splitting cue-prefixed snake_case
   identifiers such as tokenization helper names. A4 does not contain this
   identifier class; post-fix dogfooding across project documentation and Rust
   source produced zero SECURITYTOKEN detections.
@@ -390,9 +386,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `remove_overlaps` dropped the whole container, and the clean text carried a
   mid-word token with the head and tail of the identifier raw — for example
   a URL split around an embedded NER name, or an `AKIA…` credential
-  split around `AKIAIOSF`. Measured on the shipped default: 1,522 URL bytes and
-  44 credential bytes leaked this way on the pinned EN/DE corpus; the rule
-  floor was unaffected because it has no NER pass. `resolve_candidates` now
+  split around its prefix. The
+  [structured-containment scorecard](docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md)
+  measures 1,490 fewer leaked URL bytes and 44 fewer credential bytes in the
+  full-stack Kiji resolve cell, with 2 more leaked PASSWORD bytes and 2 fewer
+  ZIP bytes from downstream re-segmentation. The rule floor is unchanged. `resolve_candidates` now
   carries a structured-containment rung (`ConflictTier::StructuredContainment`,
   audit string `structured_containment`): when a custom-class span strictly
   encloses a builtin-class span, the enclosing span keeps the slot and the
