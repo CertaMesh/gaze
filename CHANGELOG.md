@@ -164,6 +164,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`gaze setup` now verifies strict ownership and private file modes even
+  when an existing Kiji bundle lets it skip downloading** (#366–#368).
+  Only a complete tree owned by the current effective user may have loose
+  modes repaired, followed by mandatory verification. Foreign-owned or
+  otherwise invalid non-empty installs fail closed. Reinstall into a private
+  directory owned by the account that runs Gaze, or have the owner correct
+  ownership and permissions before retrying; changing the working directory
+  cannot change the trusted owner. The coordinated publish plan places
+  `gaze-recognizers` 0.13.0 before `gaze-model-setup` 0.13.0.
+
 - **MCP protection intentionally changes runtime compatibility:** custom tools
   must declare trusted object-member and non-sensitive numeric carriers;
   empty primary pipelines now fail closed. Configure the bundled pipeline
