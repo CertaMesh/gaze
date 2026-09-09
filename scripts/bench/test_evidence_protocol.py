@@ -343,12 +343,12 @@ def run_mutation_proof():
     ])
     results=[]
     for identifier,owner,name,edits,target in mutations:
-        original=getattr(owner,name); source=textwrap.dedent(inspect.getsource(original))
+        original=getattr(owner,name); source=inspect.getsource(original)
         for old,new in edits:
             if old not in source: raise AssertionError('mutation-site-missing')
             source=source.replace(old,new)
         namespace=original.__globals__.copy()
-        exec(compile(source,'<evidence-mutation>','exec'),namespace)
+        exec(compile(textwrap.dedent(source),'<evidence-mutation>','exec'),namespace)
         setattr(owner,name,namespace[name])
         try:
             suite=unittest.defaultTestLoader.loadTestsFromName(target)

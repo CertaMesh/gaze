@@ -260,6 +260,15 @@ def run_rust_mutation_proof():
     ]
     env = os.environ.copy()
     env.update(RUSTUP_TOOLCHAIN='1.96.0', RUSTC=str(Path(cargo).with_name('rustc')), RUSTDOC=str(Path(cargo).with_name('rustdoc')))
+    markers = {
+        'MUT-NO-PAYLOAD':'positive-no-payload', 'MUT-VOCAB-RUST':'vocabulary-mirror',
+        'MUT-RUST-WALKER':'nested-path-type-refusal', 'MUT-OBSERVER-RAW-GAP':'completed-single-carrier',
+        'MUT-EMITTER-FORBIDDEN-COUNT':'emitter-conformance', 'MUT-FAILED-FINISH':'failed-finish-retains-committed',
+        'MUT-ROLLBACK':'rollback-no-losing-mappings', 'MUT-LEAK-COMPUTED':'four-exact-verdicts',
+        'MUT-OCCURRENCE-ORACLE':'four-exact-verdicts', 'MUT-STRING-BYTES':'string-bytes-discriminate',
+        'MUT-RAW-VALUE-SWAP':'independent-slot-swap', 'MUT-TOKEN-CORRUPTION':'restore-error-counted',
+        'MUT-CANARY-RUST':'private-output-canary',
+    }
     results = []
     for identifier,edits,target in cases:
         mutated = source
@@ -271,8 +280,8 @@ def run_rust_mutation_proof():
             result = subprocess.run([cargo,'test','--offline','--locked','-p','gaze-mcp-rmcp','--test','evidence_route','--','--exact',target,'--test-threads=1'],cwd=root,env=env,capture_output=True)
             output = result.stdout + result.stderr
             # Compilation failure, panic in an unrelated test, or zero collection is no proof.
-            killed = result.returncode != 0 and b'running 1 test' in output and ('test '+target+' ... FAILED').encode() in output
-            row = dict(id=identifier,killed=killed,tests_run=1 if b'running 1 test' in output else 0,kill_set=[target] if killed else [])
+            killed = result.returncode != 0 and b'running 1 test' in output and ('test '+target+' ... FAILED').encode() in output and markers[identifier].encode() in output
+            row = dict(id=identifier,killed=killed,failure_marker=markers[identifier],tests_run=1 if b'running 1 test' in output else 0,kill_set=[target] if killed else [])
             results.append(row)
             print(json.dumps(row,sort_keys=True),flush=True)
         finally:
