@@ -470,6 +470,12 @@ class InputContextTests(unittest.TestCase):
 
 
 class InputRecheckTests(unittest.TestCase):
+    def test_external_suite_budget_cannot_expand_ceiling(self):
+        for budget in (0, 10, 7201, float('inf'), float('nan')):
+            with self.subTest(budget=budget), self.assertRaises(ProducerFailure) as caught:
+                integration(None, suite_seconds=budget)
+            self.assertEqual(caught.exception.code, 'invalid_limits')
+
     def test_source_and_private_cache_rechecked(self):
         check_inputs = binding.BindingSession.check_inputs
         with fake_build_inputs() as inputs:
@@ -666,10 +672,12 @@ def substitution_refusal(control, foreign, label):
 
 
 @binding.producer_boundary
-def integration(inputs):
+def integration(inputs, *, suite_seconds=7200):
     """Exactly three fresh builds; there is no existing-binary input or skip path."""
     start = time.monotonic()
-    end = start+7200
+    binding.require(type(suite_seconds) in (int, float) and binding.math.isfinite(suite_seconds)
+                    and 10 < suite_seconds <= 7200, 'invalid_limits')
+    end = start+suite_seconds
     checks = lifecycle()
     with binding.BindingSession(inputs, suite_deadline=end) as control:
         control.build()
@@ -731,7 +739,8 @@ def integration(inputs):
         assert control.run_bridge().numeric_verified, 'restored-control-still-valid'
     binding.check_time(end)
     return dict(checks=checks, builds=[control.measurements, no_transport.measurements, alternate.measurements],
-                genuine_builds=3, suite_seconds=round(time.monotonic()-start, 3))
+                genuine_builds=3, suite_seconds=round(time.monotonic()-start, 3),
+                suite_budget_seconds=suite_seconds)
 
 
 def mutation_proof():
@@ -812,12 +821,14 @@ if __name__ == '__main__':
     if '--integration' in sys.argv:
         parser = argparse.ArgumentParser()
         parser.add_argument('--integration', action='store_true')
+        parser.add_argument('--suite-seconds', type=float, default=7200)
         for name in ('repo', 'source-revision', 'registry', 'native', 'toolchain', 'scratch-parent'):
             parser.add_argument('--'+name, required=True)
         args = parser.parse_args()
         try:
             result = integration(binding.Inputs(Path(args.repo), args.source_revision, Path(args.registry),
-                                                Path(args.native), Path(args.toolchain), Path(args.scratch_parent)))
+                                                Path(args.native), Path(args.toolchain), Path(args.scratch_parent)),
+                                 suite_seconds=args.suite_seconds)
             print(json.dumps(result, sort_keys=True))
         except ProducerFailure as error:
             print(json.dumps({'integration': 'failed', 'code': error.code, 'phase': error.phase}))
