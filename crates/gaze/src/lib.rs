@@ -71,3 +71,13 @@ pub use session::{
     SessionTransaction, SessionTransactionError,
 };
 pub use types::{CleanDocument, RawDocument, Value};
+
+/// Unsupported benchmark-only public API. No production or stability guarantee.
+/// Selecting this feature also enables the concrete Redact bridge and test-support APIs.
+#[doc(hidden)]
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+pub mod experimental_benchmark_baseline_lock {
+    pub use crate::pipeline::baseline_lock::{
+        BenchmarkBaselineLock, BenchmarkLockPolicy, BenchmarkLockedText, Disposition,
+    };
+}

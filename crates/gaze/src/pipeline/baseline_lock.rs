@@ -1,4 +1,4 @@
-//! Private synthetic prototype. No production entry point or checked model provider exists yet.
+//! Baseline-preserving request preparation; live access is sealed behind an experimental feature.
 use super::*;
 use crate::normalize::NormalizedText;
 use crate::rule::{ClassRule, DefaultRule};
@@ -29,7 +29,7 @@ impl From<LockError> for Error {
             LockError::ProviderFailed => "LOCK_PROVIDER_FAILED",
             LockError::UnknownLabel => "LOCK_UNKNOWN_LABEL",
         };
-        gaze_types::DetectError::backend("synthetic.baseline_lock", code).into()
+        gaze_types::DetectError::backend("benchmark.baseline_lock", code).into()
     }
 }
 
@@ -40,6 +40,7 @@ enum FrozenRule {
 }
 
 // Construction owns the policy proof; arbitrary Rule implementations are never inspected.
+#[cfg(test)]
 fn baseline_pipeline(
     mut builder: PipelineBuilder,
     rules: &[FrozenRule],
@@ -87,15 +88,16 @@ struct PreparedItem {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Disposition {
+pub enum Disposition {
     Admitted,
     BaselineOverlap,
     SupplementalOverlap,
 }
 
-// Complete is a controlled synthetic assertion, not evidence of vendor window validation.
+// Private completeness: synthetic assertions exist only in tests; live callers use try_detect.
 enum SupplementalBatch {
     Complete(Vec<Candidate>),
+    #[cfg(test)]
     Incomplete,
 }
 
@@ -158,12 +160,7 @@ fn prepare_batch(
         {
             return Err(LockError::InvalidBatch.into());
         }
-        if supplemental
-            && (candidate.source != "synthetic.supplement"
-                || candidate.recognizer_id != "synthetic.supplement"
-                || !(matches!(&candidate.class, PiiClass::Email | PiiClass::Name)
-                    || matches!(&candidate.class, PiiClass::Custom(name) if name == "synthetic")))
-        {
+        if supplemental && !valid_supplement_source(&candidate) {
             return Err(LockError::UnknownLabel.into());
         }
         let mapped = normalized.spans[span.start].0..normalized.spans[span.end - 1].1;
@@ -205,8 +202,10 @@ fn prepare_plan(
     supplemental: SupplementalBatch,
 ) -> Result<PreparedPlan> {
     validate_map(raw, normalized)?;
-    let SupplementalBatch::Complete(extras) = supplemental else {
-        return Err(LockError::Incomplete.into());
+    let extras = match supplemental {
+        SupplementalBatch::Complete(extras) => extras,
+        #[cfg(test)]
+        SupplementalBatch::Incomplete => return Err(LockError::Incomplete.into()),
     };
     let baseline = prepare_batch(pipeline, raw, normalized, baseline, false)?;
     let extras = prepare_batch(pipeline, raw, normalized, extras, true)?;
@@ -253,6 +252,7 @@ struct LockOutput {
     session: Session,
 }
 
+#[cfg(test)]
 #[allow(clippy::too_many_arguments)]
 fn run_request(
     builder: PipelineBuilder,
@@ -268,14 +268,26 @@ fn run_request(
     ) -> std::result::Result<SupplementalBatch, LockError>,
 ) -> Result<LockOutput> {
     let pipeline = baseline_pipeline(builder, rules, kind)?;
+    run_bound_request(&pipeline, raw, [1, 2, 3, 4], locale_chain, dictionaries, supplement)
+}
+
+fn run_bound_request(
+    pipeline: &Pipeline,
+    raw: &str,
+    session_hex: [u8; 4],
+    locale_chain: &[crate::LocaleTag],
+    dictionaries: &DictionaryBundle,
+    supplement: impl FnOnce(&str, &DetectContext<'_>) -> std::result::Result<SupplementalBatch, LockError>,
+) -> Result<LockOutput> {
+    let kind = DocumentKind::Text;
     let normalized = normalize(raw);
     let ctx = DetectContext::new(locale_chain, dictionaries);
     let (baseline, vetoed) = pipeline
         .registry
         .detect_all_resolved(&normalized.text, &ctx)?;
     let extras = supplement(&normalized.text, &ctx)?;
-    let plan = prepare_plan(&pipeline, raw, &normalized, baseline, extras)?;
-    let session = Session::new_with_session_hex_for_tests(crate::Scope::Ephemeral, [1, 2, 3, 4])?;
+    let plan = prepare_plan(pipeline, raw, &normalized, baseline, extras)?;
+    let session = Session::new_with_session_hex_for_tests(crate::Scope::Ephemeral, session_hex)?;
     let mut target = ProtectionTarget::Live(&session);
     // All final items are validated before audit/token side effects. Preserve baseline audit behavior.
     let mapped_baseline = plan
@@ -326,3 +338,129 @@ fn run_request(
 
 #[cfg(test)]
 mod tests;
+
+fn valid_supplement_source(candidate: &Candidate) -> bool {
+    #[cfg(test)]
+    if candidate.source == "synthetic.supplement" && candidate.recognizer_id == candidate.source {
+        return matches!(&candidate.class, PiiClass::Email | PiiClass::Name)
+            || matches!(&candidate.class, PiiClass::Custom(name) if name == "synthetic");
+    }
+    #[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+    {
+        candidate.recognizer_id == candidate.source
+            && valid_redact_source(&candidate.source, &candidate.class)
+    }
+    #[cfg(not(all(feature = "experimental-benchmark-baseline-lock", unix)))]
+    false
+}
+
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+fn valid_redact_source(source: &str, class: &PiiClass) -> bool {
+    let Some(label) = source.strip_prefix("redact-patched-coreml-v1:") else { return false; };
+    label == label.to_ascii_lowercase()
+        && gaze_recognizers::redact_live::label_class(&label.to_ascii_uppercase()).as_ref() == Ok(class)
+}
+
+/// Closed, ordered benchmark rules, validated before assembly or provider construction.
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+pub struct BenchmarkLockPolicy(Vec<FrozenRule>);
+
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+impl TryFrom<Vec<crate::RuleSpec>> for BenchmarkLockPolicy {
+    type Error = Error;
+    fn try_from(rules: Vec<crate::RuleSpec>) -> Result<Self> {
+        let mut closed = Vec::with_capacity(rules.len());
+        for rule in rules {
+            let (class, action) = match rule {
+                crate::RuleSpec::Class { class, action } => (Some(class), action),
+                crate::RuleSpec::Default { action } => (None, action),
+                _ => return Err(LockError::UnsupportedScope.into()),
+            };
+            if !matches!(action, Action::Tokenize | Action::Preserve) {
+                return Err(LockError::UnsupportedAction.into());
+            }
+            closed.push(match class {
+                Some(class) => FrozenRule::Class(class, action),
+                None => FrozenRule::Default(action),
+            });
+        }
+        Ok(Self(closed))
+    }
+}
+
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+impl BenchmarkLockPolicy {
+    /// Consume the independently assembled ruleless baseline, preserving its owned configuration.
+    pub fn bind(self, mut pipeline: Pipeline) -> Result<BenchmarkBaselineLock> {
+        if !pipeline.rules.is_empty() || pipeline.optimization_config.prefix_cache
+            || !pipeline.safety_nets.is_empty() || pipeline.safety_net_registry.is_some() {
+            return Err(LockError::UnsupportedScope.into());
+        }
+        if pipeline.registry.is_empty() { return Err(LockError::MissingBaseline.into()); }
+        for rule in self.0 {
+            let rule: Arc<dyn Rule> = match rule {
+                FrozenRule::Class(class, action) => Arc::new(ClassRule::new(class, action)),
+                FrozenRule::Default(action) => Arc::new(DefaultRule::new(action)),
+            };
+            pipeline.rules.push(rule);
+        }
+        Ok(BenchmarkBaselineLock(pipeline))
+    }
+}
+
+/// Sealed text-only baseline. No mutable pipeline or externally owned request session.
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+pub struct BenchmarkBaselineLock(Pipeline);
+
+/// Published only after full validation and successful shared emission/trace finalization.
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+pub struct BenchmarkLockedText {
+    pub text: String,
+    pub manifest: Vec<EmittedTokenSpan>,
+    pub trace: Vec<GazeLocalProtectionTraceItem>,
+    pub session: Session,
+    pub dispositions: Vec<Disposition>,
+}
+
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+impl BenchmarkBaselineLock {
+    pub fn clean_redact_text(
+        &self, raw: &str, session_hex: [u8; 4], locale_chain: &[crate::LocaleTag],
+        detector: &gaze_recognizers::redact_live::RedactDetector,
+    ) -> Result<BenchmarkLockedText> {
+        let output = run_bound_request(
+            &self.0, raw, session_hex, locale_chain, &DictionaryBundle::default(),
+            |normalized, _| {
+                let detections = detector.try_detect(normalized).map_err(|error| {
+                    if error.message == "incomplete_window" { LockError::Incomplete } else { LockError::ProviderFailed }
+                })?;
+                validate_redact_detections(normalized, &detections)?;
+                Ok(SupplementalBatch::Complete(detections.into_iter().map(candidate_from_legacy_detection).collect()))
+            },
+        )?;
+        Ok(BenchmarkLockedText {
+            text: output.clean.text, manifest: output.clean.manifest, trace: output.trace,
+            session: output.session, dispositions: output.plan.dispositions,
+        })
+    }
+
+    pub fn restore_with_telemetry(&self, session: &Session, text: &str) -> Result<(RestoredText, RestoreTelemetry)> {
+        self.0.restore_with_telemetry(session, text)
+    }
+}
+
+#[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
+fn validate_redact_detections(text: &str, detections: &[Detection]) -> std::result::Result<(), LockError> {
+    if detections.len() > MAX_CANDIDATES { return Err(LockError::InvalidBatch); }
+    let mut end = 0;
+    for detection in detections {
+        if !valid_redact_source(&detection.source, &detection.class) { return Err(LockError::UnknownLabel); }
+        let span = &detection.span;
+        if span.start < end || span.start >= span.end || span.end > text.len()
+            || !text.is_char_boundary(span.start) || !text.is_char_boundary(span.end) {
+            return Err(LockError::InvalidBatch);
+        }
+        end = span.end;
+    }
+    Ok(())
+}

@@ -25,6 +25,8 @@ default = ["bundled-recognizers"]
 bundled-recognizers = ["dep:gaze-recognizers"]
 safety-net = ["gaze-recognizers/safety-net"]
 test-support = []
+# Unsupported public benchmark experiment; never enabled by defaults.
+experimental-benchmark-baseline-lock = ["bundled-recognizers", "gaze-recognizers/redact-live", "test-support"]
 
 [dependencies]
 anyhow = "1"

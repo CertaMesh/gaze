@@ -1,5 +1,5 @@
-#[cfg(test)]
-mod baseline_lock;
+#[cfg(any(test, all(feature = "experimental-benchmark-baseline-lock", unix)))]
+pub(crate) mod baseline_lock;
 mod protection;
 pub use protection::{ProtectionContext, ProtectionError};
 
@@ -3302,27 +3302,22 @@ where
             .try_detect(input)
             .map_err(|err| gaze_types::DetectError::backend(err.recognizer_id, err.message))?
             .into_iter()
-            .map(|detection| {
-                let source = detection.source;
-                Candidate::new(
-                    detection.span,
-                    detection.class,
-                    source.clone(),
-                    1.0,
-                    0,
-                    None,
-                    "counter",
-                    source,
-                    ConflictTier::None,
-                    Vec::new(),
-                )
-            })
+            .map(candidate_from_legacy_detection)
             .collect())
     }
 
     fn token_family(&self) -> &str {
         "counter"
     }
+}
+
+// Legacy detector scores are routing metadata, not model confidence.
+fn candidate_from_legacy_detection(detection: Detection) -> Candidate {
+    let source = detection.source;
+    Candidate::new(
+        detection.span, detection.class, source.clone(), 1.0, 0, None,
+        "counter", source, ConflictTier::None, Vec::new(),
+    )
 }
 
 fn generalize_token(class: &PiiClass) -> String {
