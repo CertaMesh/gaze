@@ -29,7 +29,11 @@ MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
 NO_OPF_MODEL_CONFIG = Path("scripts/bench/no_opf_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
 DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
-QUALITY_CONFIGS = (*score.DEFAULT_CONFIGS, "pass2-ner-redact", "rule-floor-redact")
+REDACT_CONFIGS = (
+    "pass2-ner-redact", "rule-floor-redact",
+    "pass2-ner-redact-semantic-candidate",
+)
+QUALITY_CONFIGS = (*score.DEFAULT_CONFIGS, *REDACT_CONFIGS)
 DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     {
         "config.json",
@@ -810,7 +814,7 @@ def frozen_id_selection(documents: Sequence[score.Document], path: Path):
 
 
 def build_selected_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
-    if not any(config.endswith("-redact") for config in configs):
+    if not any(config in REDACT_CONFIGS for config in configs):
         return dataiku.build_binary(repo_root, configs)
     features = ["redact-live"]
     if any("kiji" in config for config in configs):

@@ -135,6 +135,26 @@ def set_population_split(
         }
 
 
+class SemanticArmSelectionTests(unittest.TestCase):
+    def test_semantic_arm_is_explicit_and_defaults_stay_unchanged(self):
+        candidate = "pass2-ner-redact-semantic-candidate"
+        self.assertEqual(runner.parse_args(["quick", "--config", candidate]).config,
+                         [candidate])
+        self.assertIsNone(runner.parse_args(["quick"]).config)
+        self.assertNotIn(candidate, score.DEFAULT_CONFIGS)
+
+    def test_semantic_only_selection_builds_redact_feature(self):
+        root = Path("/synthetic-checkout")
+        with mock.patch.object(runner.subprocess, "run") as build:
+            binary = runner.build_selected_binary(
+                root, ("pass2-ner-redact-semantic-candidate",))
+        self.assertEqual(binary, root / "target/debug/examples/clean_for_bench")
+        build.assert_called_once_with([
+            "cargo", "build", "--locked", "-q", "-p", "gaze-recognizers",
+            "--example", "clean_for_bench", "--features", "redact-live",
+        ], cwd=root, check=True)
+
+
 class IntegerComparatorTests(unittest.TestCase):
     def test_empty_and_missing_candidates_fail_closed(self) -> None:
         baseline = scorecard()
