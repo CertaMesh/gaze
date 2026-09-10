@@ -30,7 +30,7 @@ The table uses the identical **254 reversible documents, 11,231 gold bytes and
 | Unrestricted `pass2-ner-redact`, repaired bridge | 1,591 | 3,429 | 1,415 | 244 |
 | `pass2-ner-redact-semantic-candidate`, same bridge | 1,734 | 3,239 | 1,225 | 251 |
 
-All three table cells have 254 exact restores. Full-span escapes count gold spans
+All three arms have 254 exact restores. Full-span escapes count gold spans
 lacking complete protection, including partial escapes. Fully surviving gold spans
 are respectively 361, 232 and 241. False-positive bytes are replaced UTF-8 source
 bytes outside the benchmark gold annotations; the annotations treat them as non-PII.
