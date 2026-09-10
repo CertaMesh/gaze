@@ -19,6 +19,8 @@ mod dictionary;
 mod error;
 mod locale_aware;
 mod ner;
+#[cfg(all(feature = "redact-live", unix))]
+pub mod redact_live;
 mod regex;
 #[cfg(feature = "safety-net")]
 pub mod safety_net;

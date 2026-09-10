@@ -25,6 +25,8 @@ enum BenchConfig {
     RuleFloorCore,
     RuleFloorExtended,
     Pass2Ner,
+    Pass2NerRedact,
+    RuleFloorRedact,
     FullStackKijiResolve,
     FullStackOpfResolve,
     Pass3Kiji,
@@ -38,6 +40,8 @@ impl BenchConfig {
             Self::RuleFloorCore => "rule-floor-core",
             Self::RuleFloorExtended => "rule-floor-extended",
             Self::Pass2Ner => "pass2-ner",
+            Self::Pass2NerRedact => "pass2-ner-redact",
+            Self::RuleFloorRedact => "rule-floor-redact",
             Self::FullStackKijiResolve => "full-stack-kiji-resolve",
             Self::FullStackOpfResolve => "full-stack-opf-resolve",
             Self::Pass3Kiji => "pass3-kiji",
@@ -49,7 +53,10 @@ impl BenchConfig {
     fn uses_ner(self) -> bool {
         matches!(
             self,
-            Self::Pass2Ner | Self::FullStackKijiResolve | Self::FullStackOpfResolve
+            Self::Pass2Ner
+                | Self::Pass2NerRedact
+                | Self::FullStackKijiResolve
+                | Self::FullStackOpfResolve
         )
     }
 
@@ -79,6 +86,8 @@ enum BenchmarkBuildError {
     },
     #[error("GAZE_NER_THRESHOLD must contain valid Unicode")]
     NonUnicodeNerThreshold,
+    #[error("Redact primary unavailable: {0}")]
+    Redact(&'static str),
     #[error(transparent)]
     Assembly(#[from] gaze_assembly::BuildError),
     #[error("failed to register safety net for benchmark cell '{cell}': {source}")]
@@ -639,6 +648,8 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "rule-floor-core" => BenchConfig::RuleFloorCore,
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
+                "pass2-ner-redact" => BenchConfig::Pass2NerRedact,
+                "rule-floor-redact" => BenchConfig::RuleFloorRedact,
                 "full-stack-kiji-resolve" => BenchConfig::FullStackKijiResolve,
                 "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
                 "pass3-kiji" => BenchConfig::Pass3Kiji,
@@ -659,7 +670,11 @@ fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> 
     };
     let mut pipeline = assemble_rule_floor(config, ner)?;
     match config {
-        BenchConfig::RuleFloorCore | BenchConfig::RuleFloorExtended | BenchConfig::Pass2Ner => {}
+        BenchConfig::RuleFloorCore
+        | BenchConfig::RuleFloorExtended
+        | BenchConfig::Pass2Ner
+        | BenchConfig::Pass2NerRedact
+        | BenchConfig::RuleFloorRedact => {}
         BenchConfig::FullStackKijiResolve => {
             pipeline = register_kiji_ort(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
@@ -755,6 +770,34 @@ fn assemble_rule_floor(
         None
     };
     let active_locales = benchmark_locale_chain(&policy, &rulepack);
+
+    if matches!(
+        config,
+        BenchConfig::Pass2NerRedact | BenchConfig::RuleFloorRedact
+    ) {
+        #[cfg(all(feature = "redact-live", unix))]
+        {
+            let bridge = std::env::var_os("GAZE_REDACT_BRIDGE")
+                .ok_or(BenchmarkBuildError::Redact("missing_bridge"))?;
+            let model = std::env::var_os("GAZE_REDACT_MODEL_DIR")
+                .ok_or(BenchmarkBuildError::Redact("missing_model"))?;
+            let detector = gaze_recognizers::redact_live::RedactDetector::new(
+                PathBuf::from(bridge),
+                PathBuf::from(model),
+            )
+            .map_err(|e| BenchmarkBuildError::Redact(e.code()))?;
+            return Ok(gaze_assembly::build_pipeline_with_detector(
+                &policy,
+                &empty_context(),
+                &[rulepack],
+                &active_locales,
+                ner_threshold,
+                detector,
+            )?);
+        }
+        #[cfg(not(all(feature = "redact-live", unix)))]
+        return Err(BenchmarkBuildError::Redact("feature_unavailable"));
+    }
 
     Ok(gaze_assembly::build_pipeline(
         &policy,

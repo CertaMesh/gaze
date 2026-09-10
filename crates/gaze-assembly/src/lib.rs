@@ -77,6 +77,44 @@ pub fn build_pipeline(
     active_locales: &LocaleChain,
     ner_threshold: Option<f32>,
 ) -> Result<Pipeline, BuildError> {
+    build_pipeline_injected(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        ner_threshold,
+        |_| {},
+    )
+}
+
+/// Assemble the complete policy floor and add one fallible multiclass detector.
+/// The detector supplements all normal rulepack, dictionary and NER registrations.
+pub fn build_pipeline_with_detector<D: gaze::Detector + 'static>(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+    detector: D,
+) -> Result<Pipeline, BuildError> {
+    build_pipeline_injected(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        ner_threshold,
+        |builder| builder.detector(detector),
+    )
+}
+
+fn build_pipeline_injected(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+    inject: impl FnOnce(&mut registration::AssemblyBuilder),
+) -> Result<Pipeline, BuildError> {
     let mut builder = registration::AssemblyBuilder::default();
     let mut registered_dictionaries = BTreeSet::<String>::new();
     let locale_vocab = merged_locale_vocab(rulepacks, active_locales);
@@ -104,6 +142,8 @@ pub fn build_pipeline(
     )?;
     register_anchor_cue_bundles(&mut builder, rulepacks, active_locales);
     ner::register_ner(&mut builder, policy, ner_threshold)?;
+
+    inject(&mut builder);
 
     if builder.registered_recognizers() == 0 {
         return Err(BuildError::NoRecognizers);

@@ -20,6 +20,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 # phone-parser feature gates phonenumber dep; default-on for gaze-cli, default-off for raw lib.
 default = ["phone-parser"]
 phone-parser = ["dep:phonenumber", "gaze-types/phone-parser"]
+redact-live = []
 safety-net = []
 safety-net-openai = ["safety-net"]
 safety-net-kiji = ["safety-net"]
@@ -102,3 +103,7 @@ required-features = ["safety-net-kiji"]
 [[test]]
 name = "span_batch_probe"
 required-features = ["test-support"]
+
+[[test]]
+name = "redact_live"
+required-features = ["redact-live"]
