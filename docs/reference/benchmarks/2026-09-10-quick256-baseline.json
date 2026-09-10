@@ -1,0 +1,4272 @@
+{
+  "schema_version": 1,
+  "measurement": "Fresh canonical quick256, one measured repetition, zero warmups",
+  "route": "pipeline_text/clean_for_bench",
+  "source": {
+    "accepted_commit": "6e1460c1292d78adf98f69d57f0f917475385db1",
+    "baseline_commit": "7fbb7f62912f5aaa7d432de88910235e5b8acb5e",
+    "only_prerequisite_change": [
+      "scripts/bench/validator_recall_probe/Cargo.lock"
+    ],
+    "unchanged_crates_and_bench_sources_sha256": "5b93c11ba340a361f2458f6e225eedb75bd98d2fdb002e38727b8cedb8a4eacb",
+    "hash_algorithm": "sorted path UTF8 + NUL + SHA256(file bytes), excluding nested lock"
+  },
+  "limitations": [
+    "Leakage and per-language/per-label leakage are TRACE-DERIVED raw-gold coverage, not independently verified surviving bytes in clean output.",
+    "Redact output replay is unverified; reduced trace-derived leakage cannot compensate for irreversible redaction or failed exact restoration.",
+    "CLI defaults, MCP, proxy, daemon and streaming routes NOT_MEASURED.",
+    "Dataiku test data has historical development contamination; frozen sample is development/regression evidence and remaining Dataiku only confirmation within programme.",
+    "Per-success-row counts, actual surviving occurrences, independently observed output bytes and unknown/unattributed-byte bounds NOT_MEASURED; do not interpret missing values as zero.",
+    "First validated response includes process/model startup and first request, not pure model initialization; bootstrap used warm dependency caches.",
+    "Pass2/floor post-policy scan was not enabled; zero suspect counts do not establish a residual scan."
+  ],
+  "frozen_inputs": {
+    "frozen_at": "2026-09-10T08:52:22.903120+00:00",
+    "models": [
+      {
+        "model_id": "davlan-mbert-ner-hrl-onnx",
+        "hf_repo": "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX",
+        "hf_commit": "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8",
+        "runtime": "onnxruntime",
+        "digest_kind": "SHA256SUMS",
+        "bundle_sha": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "observed_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "verified_artifacts": 7
+      },
+      {
+        "model_id": "kiji-distilbert",
+        "digest_kind": "SHA256SUMS",
+        "expected_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f",
+        "observed_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f",
+        "verified_artifacts": 3
+      }
+    ],
+    "sampling": {
+      "strategy": "deterministic-stratified-language-region-v1",
+      "seed": 20260710,
+      "requested_max_documents": 256,
+      "available_population": {
+        "documents": 2910,
+        "entities": 14719,
+        "labels": {
+          "AGE": 210,
+          "BUILDINGNUM": 1437,
+          "CITY": 1571,
+          "COMPANYNAME": 419,
+          "COUNTRY": 365,
+          "CREDITCARDNUMBER": 126,
+          "DATEOFBIRTH": 280,
+          "DRIVERLICENSENUM": 216,
+          "EMAIL": 375,
+          "FIRSTNAME": 2001,
+          "IBAN": 207,
+          "IDCARDNUM": 188,
+          "LICENSEPLATENUM": 215,
+          "NATIONALID": 200,
+          "ORGANIZATION": 3,
+          "PASSPORTID": 224,
+          "PASSWORD": 208,
+          "PHONENUMBER": 359,
+          "REGION": 1,
+          "SECURITYTOKEN": 219,
+          "SSN": 217,
+          "STATE": 913,
+          "STREET": 1384,
+          "SURNAME": 1697,
+          "TAXNUM": 212,
+          "TITLE": 5,
+          "URL": 276,
+          "USERNAME": 101,
+          "ZIP": 1090
+        },
+        "languages": {
+          "de": 1365,
+          "en": 1545
+        },
+        "regions": {
+          "de": 512,
+          "de-AT": 282,
+          "de-CH": 285,
+          "de-DE": 286,
+          "en": 512,
+          "en-AU": 141,
+          "en-CA": 140,
+          "en-GB": 159,
+          "en-IE": 140,
+          "en-NZ": 143,
+          "en-US": 310
+        },
+        "sources": {
+          "DataikuNLP/kiji-pii-training-data": 1886,
+          "gaze-a4-negative-corpus": 1024
+        },
+        "negative_only_documents": 1024
+      },
+      "evaluated_population": {
+        "documents": 256,
+        "entities": 1275,
+        "labels": {
+          "AGE": 22,
+          "BUILDINGNUM": 121,
+          "CITY": 124,
+          "COMPANYNAME": 39,
+          "COUNTRY": 30,
+          "CREDITCARDNUMBER": 17,
+          "DATEOFBIRTH": 23,
+          "DRIVERLICENSENUM": 22,
+          "EMAIL": 32,
+          "FIRSTNAME": 182,
+          "IBAN": 21,
+          "IDCARDNUM": 21,
+          "LICENSEPLATENUM": 17,
+          "NATIONALID": 17,
+          "PASSPORTID": 24,
+          "PASSWORD": 24,
+          "PHONENUMBER": 24,
+          "SECURITYTOKEN": 16,
+          "SSN": 18,
+          "STATE": 79,
+          "STREET": 117,
+          "SURNAME": 137,
+          "TAXNUM": 17,
+          "URL": 24,
+          "USERNAME": 14,
+          "ZIP": 93
+        },
+        "languages": {
+          "de": 120,
+          "en": 136
+        },
+        "regions": {
+          "de": 45,
+          "de-AT": 25,
+          "de-CH": 25,
+          "de-DE": 25,
+          "en": 45,
+          "en-AU": 13,
+          "en-CA": 12,
+          "en-GB": 14,
+          "en-IE": 12,
+          "en-NZ": 13,
+          "en-US": 27
+        },
+        "sources": {
+          "DataikuNLP/kiji-pii-training-data": 166,
+          "gaze-a4-negative-corpus": 90
+        },
+        "negative_only_documents": 90
+      },
+      "evaluated_document_ids": [
+        "neg-de-documentation-network-0005",
+        "neg-en-documentation-network-0056",
+        "dataiku-test-4216",
+        "dataiku-test-1921",
+        "dataiku-test-2559",
+        "neg-de-commerce-identifiers-0034",
+        "dataiku-test-3818",
+        "dataiku-test-4225",
+        "dataiku-test-271",
+        "neg-de-unicode-mixed-language-0050",
+        "neg-en-invalid-identifiers-0001",
+        "neg-en-generic-roles-0057",
+        "dataiku-test-4651",
+        "dataiku-test-1205",
+        "dataiku-test-4429",
+        "neg-de-documentation-network-0001",
+        "dataiku-test-4752",
+        "dataiku-test-3815",
+        "neg-en-invalid-identifiers-0032",
+        "dataiku-test-1843",
+        "neg-en-code-log-syntax-0022",
+        "neg-de-commerce-identifiers-0020",
+        "dataiku-test-2552",
+        "dataiku-test-4278",
+        "dataiku-test-1514",
+        "dataiku-test-415",
+        "neg-en-generic-roles-0049",
+        "dataiku-test-4839",
+        "dataiku-test-2059",
+        "neg-de-code-log-syntax-0063",
+        "dataiku-test-4239",
+        "neg-en-code-log-syntax-0006",
+        "dataiku-test-4122",
+        "neg-de-invalid-identifiers-0046",
+        "dataiku-test-4203",
+        "dataiku-test-3277",
+        "dataiku-test-4263",
+        "neg-de-unicode-mixed-language-0041",
+        "dataiku-test-2766",
+        "neg-en-code-log-syntax-0019",
+        "neg-de-public-entities-0048",
+        "dataiku-test-4269",
+        "dataiku-test-3994",
+        "dataiku-test-4769",
+        "neg-en-commerce-identifiers-0041",
+        "neg-de-commerce-identifiers-0047",
+        "dataiku-test-4538",
+        "dataiku-test-2089",
+        "dataiku-test-3030",
+        "dataiku-test-1461",
+        "dataiku-test-156",
+        "dataiku-test-2057",
+        "dataiku-test-1525",
+        "dataiku-test-2830",
+        "neg-de-unicode-mixed-language-0044",
+        "dataiku-test-3993",
+        "neg-de-documentation-network-0041",
+        "neg-de-documentation-network-0043",
+        "dataiku-test-2767",
+        "neg-en-public-entities-0025",
+        "dataiku-test-2155",
+        "dataiku-test-4568",
+        "dataiku-test-2746",
+        "dataiku-test-283",
+        "neg-de-documentation-network-0058",
+        "dataiku-test-3798",
+        "dataiku-test-340",
+        "dataiku-test-1234",
+        "dataiku-test-4435",
+        "dataiku-test-2954",
+        "dataiku-test-4521",
+        "dataiku-test-2926",
+        "dataiku-test-4103",
+        "dataiku-test-3108",
+        "dataiku-test-2003",
+        "dataiku-test-1695",
+        "neg-en-documentation-network-0022",
+        "dataiku-test-3849",
+        "dataiku-test-3421",
+        "dataiku-test-2701",
+        "neg-de-code-log-syntax-0035",
+        "dataiku-test-4009",
+        "dataiku-test-4503",
+        "dataiku-test-1521",
+        "dataiku-test-4133",
+        "dataiku-test-3886",
+        "dataiku-test-4556",
+        "dataiku-test-1457",
+        "dataiku-test-444",
+        "neg-en-generic-roles-0009",
+        "neg-de-invalid-identifiers-0030",
+        "dataiku-test-4389",
+        "dataiku-test-3118",
+        "dataiku-test-233",
+        "neg-en-unicode-mixed-language-0007",
+        "dataiku-test-1240",
+        "dataiku-test-4851",
+        "dataiku-test-3866",
+        "neg-en-code-log-syntax-0038",
+        "dataiku-test-4792",
+        "dataiku-test-4781",
+        "neg-en-unicode-mixed-language-0012",
+        "neg-de-unicode-mixed-language-0025",
+        "dataiku-test-1631",
+        "dataiku-test-2346",
+        "dataiku-test-462",
+        "neg-en-code-log-syntax-0031",
+        "neg-de-unicode-mixed-language-0039",
+        "dataiku-test-2078",
+        "dataiku-test-4283",
+        "dataiku-test-2111",
+        "dataiku-test-10",
+        "dataiku-test-2903",
+        "dataiku-test-4293",
+        "dataiku-test-1581",
+        "neg-en-generic-roles-0029",
+        "neg-de-generic-roles-0034",
+        "neg-en-invalid-identifiers-0063",
+        "neg-de-generic-roles-0056",
+        "neg-de-code-log-syntax-0025",
+        "dataiku-test-4361",
+        "dataiku-test-3657",
+        "dataiku-test-690",
+        "neg-en-public-entities-0028",
+        "neg-de-unicode-mixed-language-0051",
+        "neg-de-commerce-identifiers-0005",
+        "dataiku-test-2596",
+        "dataiku-test-699",
+        "dataiku-test-2495",
+        "neg-de-generic-roles-0058",
+        "dataiku-test-3525",
+        "dataiku-test-2560",
+        "neg-en-code-log-syntax-0053",
+        "dataiku-test-4674",
+        "dataiku-test-2475",
+        "neg-de-temporal-numeric-0015",
+        "neg-en-unicode-mixed-language-0050",
+        "dataiku-test-2617",
+        "dataiku-test-2305",
+        "dataiku-test-1432",
+        "dataiku-test-4196",
+        "neg-de-temporal-numeric-0022",
+        "dataiku-test-845",
+        "dataiku-test-2064",
+        "neg-en-invalid-identifiers-0058",
+        "neg-de-temporal-numeric-0060",
+        "dataiku-test-753",
+        "dataiku-test-461",
+        "dataiku-test-4325",
+        "neg-en-invalid-identifiers-0034",
+        "dataiku-test-5121",
+        "dataiku-test-3655",
+        "dataiku-test-2642",
+        "dataiku-test-1173",
+        "dataiku-test-1903",
+        "dataiku-test-3901",
+        "neg-en-public-entities-0060",
+        "dataiku-test-1451",
+        "dataiku-test-1164",
+        "dataiku-test-757",
+        "dataiku-test-4826",
+        "neg-en-temporal-numeric-0041",
+        "dataiku-test-1674",
+        "neg-en-unicode-mixed-language-0000",
+        "dataiku-test-4754",
+        "neg-de-temporal-numeric-0027",
+        "neg-en-public-entities-0055",
+        "dataiku-test-4716",
+        "dataiku-test-3171",
+        "neg-de-temporal-numeric-0024",
+        "dataiku-test-4864",
+        "neg-en-invalid-identifiers-0052",
+        "neg-de-commerce-identifiers-0046",
+        "dataiku-test-2066",
+        "dataiku-test-3799",
+        "dataiku-test-3032",
+        "dataiku-test-3728",
+        "neg-en-generic-roles-0025",
+        "dataiku-test-3477",
+        "neg-en-public-entities-0011",
+        "dataiku-test-3387",
+        "dataiku-test-2677",
+        "dataiku-test-4753",
+        "dataiku-test-352",
+        "neg-en-public-entities-0059",
+        "dataiku-test-3996",
+        "neg-en-public-entities-0046",
+        "dataiku-test-3643",
+        "neg-en-public-entities-0050",
+        "dataiku-test-3205",
+        "dataiku-test-1423",
+        "neg-de-unicode-mixed-language-0056",
+        "dataiku-test-4711",
+        "neg-en-public-entities-0019",
+        "neg-en-code-log-syntax-0055",
+        "dataiku-test-2525",
+        "neg-de-public-entities-0046",
+        "dataiku-test-1895",
+        "dataiku-test-4553",
+        "dataiku-test-3089",
+        "dataiku-test-3078",
+        "neg-en-unicode-mixed-language-0013",
+        "dataiku-test-5006",
+        "neg-en-public-entities-0004",
+        "neg-de-commerce-identifiers-0040",
+        "neg-en-code-log-syntax-0027",
+        "neg-de-temporal-numeric-0047",
+        "dataiku-test-2159",
+        "neg-de-code-log-syntax-0062",
+        "dataiku-test-1233",
+        "dataiku-test-1629",
+        "dataiku-test-225",
+        "neg-en-documentation-network-0018",
+        "dataiku-test-3519",
+        "dataiku-test-292",
+        "dataiku-test-2758",
+        "dataiku-test-1377",
+        "neg-de-documentation-network-0024",
+        "neg-de-code-log-syntax-0056",
+        "dataiku-test-2453",
+        "dataiku-test-1530",
+        "neg-en-unicode-mixed-language-0048",
+        "neg-de-invalid-identifiers-0043",
+        "dataiku-test-2522",
+        "neg-de-generic-roles-0036",
+        "neg-de-public-entities-0063",
+        "dataiku-test-5066",
+        "neg-de-commerce-identifiers-0019",
+        "neg-de-unicode-mixed-language-0040",
+        "neg-de-documentation-network-0039",
+        "neg-de-unicode-mixed-language-0046",
+        "neg-en-public-entities-0015",
+        "dataiku-test-2685",
+        "dataiku-test-2737",
+        "dataiku-test-783",
+        "dataiku-test-1928",
+        "neg-en-generic-roles-0031",
+        "dataiku-test-32",
+        "dataiku-test-2997",
+        "dataiku-test-2544",
+        "neg-en-documentation-network-0057",
+        "neg-en-invalid-identifiers-0023",
+        "dataiku-test-3028",
+        "dataiku-test-4070",
+        "neg-en-public-entities-0032",
+        "neg-de-unicode-mixed-language-0002",
+        "dataiku-test-1796",
+        "dataiku-test-3378",
+        "dataiku-test-2397",
+        "dataiku-test-2237",
+        "dataiku-test-4693",
+        "dataiku-test-3397",
+        "dataiku-test-3877",
+        "dataiku-test-3719",
+        "dataiku-test-1692",
+        "dataiku-test-597"
+      ],
+      "evaluated_document_ids_digest": {
+        "algorithm": "sha256",
+        "value": "3993b14aeded90b056854d29172de148424b6e7b0eb967395e6b78de2fbbce36"
+      }
+    },
+    "hashes": {
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze/target/bench-data/dataiku-en-de/test.parquet": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/Cargo.lock": "cb56b08c6457ea46c6cf6ce0377590a6e89ef7b6bbf1ca6609398480c4ecba56",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/crates/gaze-recognizers/benches/ner_models.toml": "24e7288532f981fbf805ba8131d7dc69e0c72b66c27876b8723fd2d0e5a405ae",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/no_opf_models.toml": "5d136e2698a001060295eb237e94955047c1893e168f2d6e0dfbbe4db5263134",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/uv.lock": "2d2c6f4f73f3249d682757a4e0f729318f354fa7583396f6c02fc5c0f303d48f",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/run_no_opf_benchmark.py": "d4eeb18c7feb3978aaab4193d9b32a217b7433fd243147e617faf444c7c33af5",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/gaze_bench_score.py": "c4c3e4f9b5c4fdaf52002b183b28b0fb077858387663cd7f6c9d2143b44a1b86",
+      "/Users/krishankoenig/Library/Caches/ort.pyke.io/dfbin/aarch64-apple-darwin/612739f75438dc0a075461e1fb454226b4a1eb175e60a7271ba966bbbb972cd4/libonnxruntime.a": "4d53c916ea95f09203324f9aad7b76f75c16d8a4bc98f8a949ea0ac73c07604d",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/validator_recall_probe/Cargo.lock": "92427c64324cd6b4e226ad045fccfd94555e45825094aa35507b8701bb5ea16e",
+      "original_validator_lock": "b57adde24d383808b7cdfc5403b45d74dcdaca8ef1016c9c0034790bc3248d42",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/model.onnx": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/tokenizer.json": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/tokenizer_config.json": "470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/config.json": "8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/vocab.txt": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/labels.json": "8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb",
+      "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/labels.json": "d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97",
+      "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/model.onnx": "b5f77096d0d9f425d34a2e263f8a2dfb845cdc757dc00c7a1e69e9cbb93115d5",
+      "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/tokenizer.json": "cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34"
+    },
+    "route": "pipeline_text/clean_for_bench",
+    "contamination": "Development/regression evidence; remaining Dataiku only confirmation within programme."
+  },
+  "hashes": {
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze/target/bench-data/dataiku-en-de/test.parquet": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/Cargo.lock": "cb56b08c6457ea46c6cf6ce0377590a6e89ef7b6bbf1ca6609398480c4ecba56",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/crates/gaze-recognizers/benches/ner_models.toml": "24e7288532f981fbf805ba8131d7dc69e0c72b66c27876b8723fd2d0e5a405ae",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/no_opf_models.toml": "5d136e2698a001060295eb237e94955047c1893e168f2d6e0dfbbe4db5263134",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/uv.lock": "2d2c6f4f73f3249d682757a4e0f729318f354fa7583396f6c02fc5c0f303d48f",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/run_no_opf_benchmark.py": "d4eeb18c7feb3978aaab4193d9b32a217b7433fd243147e617faf444c7c33af5",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/gaze_bench_score.py": "c4c3e4f9b5c4fdaf52002b183b28b0fb077858387663cd7f6c9d2143b44a1b86",
+    "/Users/krishankoenig/Library/Caches/ort.pyke.io/dfbin/aarch64-apple-darwin/612739f75438dc0a075461e1fb454226b4a1eb175e60a7271ba966bbbb972cd4/libonnxruntime.a": "4d53c916ea95f09203324f9aad7b76f75c16d8a4bc98f8a949ea0ac73c07604d",
+    "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/scripts/bench/validator_recall_probe/Cargo.lock": "92427c64324cd6b4e226ad045fccfd94555e45825094aa35507b8701bb5ea16e",
+    "original_validator_lock": "b57adde24d383808b7cdfc5403b45d74dcdaca8ef1016c9c0034790bc3248d42",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/model.onnx": "1213fdd405d295768b0d41d8214062f2f278f0e3acff6af67d8fd47360d2be0f",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/tokenizer.json": "bf1b59b7b11c95f194f51708d918eea378e09d05f84c0e1656dc5180e8117088",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/tokenizer_config.json": "470cff6e0353b08e2a6e9b4f61729ecdc47ccb3ced335fa5520e9ce334572d59",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/config.json": "8e5caefadaf9923a9e7d3de42ca97780c68fc4d83519d333f141b299e40af638",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/special_tokens_map.json": "b6d346be366a7d1d48332dbc9fdf3bf8960b5d879522b7799ddba59e76237ee3",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/vocab.txt": "fe0fda7c425b48c516fc8f160d594c8022a0808447475c1a7c6d6479763f310c",
+    "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl/labels.json": "8498e2bafc017a793571c3c2f7092390a93a757f5ca45004f21db2560a8c6fdb",
+    "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/labels.json": "d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97",
+    "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/model.onnx": "b5f77096d0d9f425d34a2e263f8a2dfb845cdc757dc00c7a1e69e9cbb93115d5",
+    "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert/tokenizer.json": "cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34"
+  },
+  "run": {
+    "binary_sha256": {
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/target/debug/examples/clean_for_bench": "f3ca96fe2af97d424af072a5c225752650dacbe2b1047cc98b21e40528a2e3a2",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-baseline-7369/target/validator-recall-probe/debug/validator-recall-probe": "5a8ba2cf701bd37d6c013ff8109ee592058e5213fd9375c589bc985ea493c16e"
+    },
+    "command": [
+      "uv",
+      "run",
+      "--project",
+      "scripts/bench",
+      "--locked",
+      "python",
+      "scripts/bench/run_no_opf_benchmark.py",
+      "quick",
+      "--quick-documents",
+      "256",
+      "--seed",
+      "20260710",
+      "--warmups",
+      "0",
+      "--measured-repetitions",
+      "1",
+      "--dataset",
+      "/Users/krishankoenig/Workspace/EmpireTwo/gaze/target/bench-data/dataiku-en-de/test.parquet",
+      "--model-dir",
+      "/Users/krishankoenig/.local/share/gaze/models/davlan-mbert-ner-hrl",
+      "--kiji-model-dir",
+      "/Users/krishankoenig/.local/share/gaze/models/kiji-distilbert",
+      "--output-dir",
+      "target/bench-data/quality-baseline-7369",
+      "--no-download",
+      "--skip-build"
+    ],
+    "started_at": "2026-09-10T08:59:16.974737+00:00",
+    "toolchain": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+    "seconds": 94.5284516250249,
+    "exit_code": 4
+  },
+  "build_attempts": [
+    [
+      {
+        "step": "uv-sync",
+        "seconds": 0.047126500168815255,
+        "exit_code": 0,
+        "command": [
+          "uv",
+          "sync",
+          "--project",
+          "scripts/bench",
+          "--locked"
+        ]
+      },
+      {
+        "step": "workspace-bootstrap",
+        "seconds": 157.27183362515643,
+        "exit_code": 101,
+        "command": [
+          "cargo",
+          "build",
+          "--workspace",
+          "--all-features",
+          "--locked",
+          "--offline",
+          "-j",
+          "2"
+        ]
+      }
+    ],
+    [
+      {
+        "step": "uv-sync",
+        "seconds": 0.0450486249756068,
+        "exit_code": 0
+      },
+      {
+        "step": "workspace-bootstrap",
+        "seconds": 6.08492112508975,
+        "exit_code": 0
+      },
+      {
+        "step": "clean-binary",
+        "seconds": 33.158298374852166,
+        "exit_code": 0
+      },
+      {
+        "step": "validator-binary",
+        "seconds": 0.061720750061795115,
+        "exit_code": 101
+      }
+    ],
+    [
+      {
+        "step": "uv-sync",
+        "seconds": 0.01592174987308681,
+        "exit_code": 0,
+        "command": [
+          "uv",
+          "sync",
+          "--project",
+          "scripts/bench",
+          "--locked"
+        ]
+      },
+      {
+        "step": "workspace-bootstrap",
+        "seconds": 0.27280391682870686,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--workspace",
+          "--all-features",
+          "--locked",
+          "--offline",
+          "-j",
+          "2"
+        ]
+      },
+      {
+        "step": "clean-binary",
+        "seconds": 0.17576320795342326,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "-j",
+          "2",
+          "-p",
+          "gaze-recognizers",
+          "--example",
+          "clean_for_bench",
+          "--features",
+          "safety-net-kiji"
+        ]
+      },
+      {
+        "step": "validator-binary",
+        "seconds": 47.3773886251729,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "-j",
+          "2",
+          "--manifest-path",
+          "scripts/bench/validator_recall_probe/Cargo.toml",
+          "--target-dir",
+          "target/validator-recall-probe"
+        ]
+      }
+    ],
+    [
+      {
+        "step": "uv-sync",
+        "seconds": 0.01578583405353129,
+        "exit_code": 0,
+        "command": [
+          "uv",
+          "sync",
+          "--project",
+          "scripts/bench",
+          "--locked"
+        ]
+      },
+      {
+        "step": "workspace-bootstrap",
+        "seconds": 0.280380749842152,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--workspace",
+          "--all-features",
+          "--locked",
+          "--offline",
+          "-j",
+          "2"
+        ]
+      },
+      {
+        "step": "clean-binary",
+        "seconds": 0.1704086249228567,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "-j",
+          "2",
+          "-p",
+          "gaze-recognizers",
+          "--example",
+          "clean_for_bench",
+          "--features",
+          "safety-net-kiji"
+        ]
+      },
+      {
+        "step": "validator-binary",
+        "seconds": 0.10925683309324086,
+        "exit_code": 0,
+        "command": [
+          "cargo",
+          "build",
+          "--locked",
+          "--offline",
+          "-j",
+          "2",
+          "--manifest-path",
+          "scripts/bench/validator_recall_probe/Cargo.toml",
+          "--target-dir",
+          "target/validator-recall-probe"
+        ]
+      }
+    ]
+  ],
+  "build_command_seconds_total": 245.08665854204446,
+  "population": {
+    "documents": 256,
+    "entities": 1275,
+    "labels": {
+      "AGE": 22,
+      "BUILDINGNUM": 121,
+      "CITY": 124,
+      "COMPANYNAME": 39,
+      "COUNTRY": 30,
+      "CREDITCARDNUMBER": 17,
+      "DATEOFBIRTH": 23,
+      "DRIVERLICENSENUM": 22,
+      "EMAIL": 32,
+      "FIRSTNAME": 182,
+      "IBAN": 21,
+      "IDCARDNUM": 21,
+      "LICENSEPLATENUM": 17,
+      "NATIONALID": 17,
+      "PASSPORTID": 24,
+      "PASSWORD": 24,
+      "PHONENUMBER": 24,
+      "SECURITYTOKEN": 16,
+      "SSN": 18,
+      "STATE": 79,
+      "STREET": 117,
+      "SURNAME": 137,
+      "TAXNUM": 17,
+      "URL": 24,
+      "USERNAME": 14,
+      "ZIP": 93
+    },
+    "languages": {
+      "de": 120,
+      "en": 136
+    },
+    "regions": {
+      "de": 45,
+      "de-AT": 25,
+      "de-CH": 25,
+      "de-DE": 25,
+      "en": 45,
+      "en-AU": 13,
+      "en-CA": 12,
+      "en-GB": 14,
+      "en-IE": 12,
+      "en-NZ": 13,
+      "en-US": 27
+    },
+    "sources": {
+      "DataikuNLP/kiji-pii-training-data": 166,
+      "gaze-a4-negative-corpus": 90
+    },
+    "negative_only_documents": 90
+  },
+  "available_population": {
+    "documents": 2910,
+    "entities": 14719,
+    "labels": {
+      "AGE": 210,
+      "BUILDINGNUM": 1437,
+      "CITY": 1571,
+      "COMPANYNAME": 419,
+      "COUNTRY": 365,
+      "CREDITCARDNUMBER": 126,
+      "DATEOFBIRTH": 280,
+      "DRIVERLICENSENUM": 216,
+      "EMAIL": 375,
+      "FIRSTNAME": 2001,
+      "IBAN": 207,
+      "IDCARDNUM": 188,
+      "LICENSEPLATENUM": 215,
+      "NATIONALID": 200,
+      "ORGANIZATION": 3,
+      "PASSPORTID": 224,
+      "PASSWORD": 208,
+      "PHONENUMBER": 359,
+      "REGION": 1,
+      "SECURITYTOKEN": 219,
+      "SSN": 217,
+      "STATE": 913,
+      "STREET": 1384,
+      "SURNAME": 1697,
+      "TAXNUM": 212,
+      "TITLE": 5,
+      "URL": 276,
+      "USERNAME": 101,
+      "ZIP": 1090
+    },
+    "languages": {
+      "de": 1365,
+      "en": 1545
+    },
+    "regions": {
+      "de": 512,
+      "de-AT": 282,
+      "de-CH": 285,
+      "de-DE": 286,
+      "en": 512,
+      "en-AU": 141,
+      "en-CA": 140,
+      "en-GB": 159,
+      "en-IE": 140,
+      "en-NZ": 143,
+      "en-US": 310
+    },
+    "sources": {
+      "DataikuNLP/kiji-pii-training-data": 1886,
+      "gaze-a4-negative-corpus": 1024
+    },
+    "negative_only_documents": 1024
+  },
+  "validator_gold_census": {
+    "AGE": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 210,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "BUILDINGNUM": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1437,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "CITY": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1571,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "COMPANYNAME": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 419,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "COUNTRY": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 365,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "CREDITCARDNUMBER": {
+      "applicability": "applicable",
+      "validator_kinds": [
+        "luhn"
+      ],
+      "gold_spans": 126,
+      "validator_passed_gold_spans": 30,
+      "validator_failed_gold_spans": 96
+    },
+    "DATEOFBIRTH": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 280,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "DRIVERLICENSENUM": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 216,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "EMAIL": {
+      "applicability": "applicable",
+      "validator_kinds": [
+        "email_rfc"
+      ],
+      "gold_spans": 375,
+      "validator_passed_gold_spans": 375,
+      "validator_failed_gold_spans": 0
+    },
+    "FIRSTNAME": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 2001,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "IBAN": {
+      "applicability": "applicable",
+      "validator_kinds": [
+        "iban_mod97"
+      ],
+      "gold_spans": 207,
+      "validator_passed_gold_spans": 140,
+      "validator_failed_gold_spans": 67
+    },
+    "IDCARDNUM": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 188,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "LICENSEPLATENUM": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 215,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "NATIONALID": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 200,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "ORGANIZATION": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 3,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "PASSPORTID": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 224,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "PASSWORD": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 208,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "PHONENUMBER": {
+      "applicability": "applicable",
+      "validator_kinds": [
+        "e164_phone",
+        "e164_phone_national_de",
+        "e164_phone_national_us"
+      ],
+      "gold_spans": 359,
+      "validator_passed_gold_spans": 318,
+      "validator_failed_gold_spans": 41
+    },
+    "REGION": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "SECURITYTOKEN": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 219,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "SSN": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 217,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "STATE": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 913,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "STREET": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1384,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "SURNAME": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1697,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "TAXNUM": {
+      "applicability": "applicable",
+      "validator_kinds": [
+        "de_steuer_id_mod1110"
+      ],
+      "gold_spans": 212,
+      "validator_passed_gold_spans": 2,
+      "validator_failed_gold_spans": 210
+    },
+    "TITLE": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 5,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "URL": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 276,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "USERNAME": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 101,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    },
+    "ZIP": {
+      "applicability": "not_applicable",
+      "validator_kinds": [],
+      "gold_spans": 1090,
+      "validator_passed_gold_spans": null,
+      "validator_failed_gold_spans": null
+    }
+  },
+  "parameters": {
+    "profile": "quick",
+    "configs": [
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-kiji-resolve"
+    ],
+    "max_documents": 256,
+    "sampling_seed": 20260710,
+    "ner_threshold": 0.3,
+    "warmup_count": 0,
+    "measured_repetitions": 1,
+    "opf": false
+  },
+  "cells": [
+    {
+      "config": "rule-floor-extended",
+      "counts": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "failed_closed_documents": 0,
+        "scored_documents": 256,
+        "documents_without_leaks": 90,
+        "documents_with_leaks": 166,
+        "pii_utf8_bytes": 11316,
+        "gold_entities": 1275,
+        "fully_covered_entities": 213,
+        "uncovered_entities": 1062,
+        "false_positive_utf8_bytes": 439,
+        "documents_with_false_positives": 16,
+        "contract_documents": 256,
+        "restore_exact_documents": 256,
+        "restore_failures": 0,
+        "restore_success_decisions": 256,
+        "restore_decision_failures": 0,
+        "manifest_valid_documents": 256,
+        "manifest_invalid_documents": 0,
+        "manifest_integrity_errors": 0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_unscanned_documents": 256,
+        "residual_suspects": 0,
+        "redact_actions": 0,
+        "trace_derived_leaked_labeled_utf8_bytes": 8075,
+        "strict_would_reject_documents": 0,
+        "planned_documents": 256,
+        "unprocessed_documents": 0,
+        "runtime_protocol_errors": 0,
+        "actual_refused_documents": 0,
+        "documents_with_redact": 0,
+        "negative_false_positive_utf8_bytes": 368,
+        "positive_false_positive_utf8_bytes": 71
+      },
+      "process": {
+        "wall_seconds": 2.3240152918733656,
+        "documents_per_second": 259.187619718673,
+        "start_to_first_response_ms": 1097.3915418144315,
+        "cold_start_to_first_validated_response_ms": 1097.3915418144315,
+        "warmup_count": 0,
+        "discarded_warmup_samples": []
+      },
+      "pipeline_contract": {
+        "documents": 256,
+        "restore_exact_documents": 256,
+        "restore_exact_rate": 1.0,
+        "restore_success_decisions": 256,
+        "restore_success_decision_rate": 1.0,
+        "manifest_spans": 237,
+        "manifest_valid_documents": 256,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 0,
+        "initial_actionable_suspects": 0,
+        "initial_class_mismatches": 0,
+        "strict_would_reject_documents": 0,
+        "strict_acceptance_rate": 1.0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_suspects": 0,
+        "final_protection_trace_items": 237,
+        "tokenize_actions": 237,
+        "redact_actions": 0,
+        "documents_with_redact": 0,
+        "post_policy_zero_suspect_documents": 0,
+        "post_policy_zero_suspect_rate": null
+      },
+      "pipeline_availability": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "per_language": {
+        "de": {
+          "documents": 120,
+          "zero_leak_document_rate": 0.375,
+          "documents_without_leaks": 45,
+          "documents_with_false_positives": 11,
+          "utf8_bytes": {
+            "pii": 5004,
+            "predicted": 1673,
+            "true_positive": 1399,
+            "false_positive": 274,
+            "leaked": 3605,
+            "precision": 0.8362223550508069,
+            "recall": 0.2795763389288569,
+            "leak_rate": 0.7204236610711431,
+            "f1": 0.4190504717687584,
+            "f2": 0.3225137166305501,
+            "false_positive_rate": 0.007251938702591112
+          },
+          "entities": {
+            "gold": 585,
+            "fully_covered": 97,
+            "overlapped": 97,
+            "exact_boundary": 95,
+            "full_coverage_recall": 0.1658119658119658,
+            "overlap_recall": 0.1658119658119658,
+            "exact_boundary_recall": 0.1623931623931624
+          },
+          "prediction_spans": {
+            "total": 113,
+            "overlapped_gold": 95,
+            "overlap_precision": 0.8407079646017699
+          }
+        },
+        "en": {
+          "documents": 136,
+          "zero_leak_document_rate": 0.33088235294117646,
+          "documents_without_leaks": 45,
+          "documents_with_false_positives": 5,
+          "utf8_bytes": {
+            "pii": 6312,
+            "predicted": 2007,
+            "true_positive": 1842,
+            "false_positive": 165,
+            "leaked": 4470,
+            "precision": 0.9177877428998505,
+            "recall": 0.29182509505703425,
+            "leak_rate": 0.7081749049429658,
+            "f1": 0.442841687702849,
+            "f2": 0.3379196477710512,
+            "false_positive_rate": 0.004330708661417323
+          },
+          "entities": {
+            "gold": 690,
+            "fully_covered": 116,
+            "overlapped": 116,
+            "exact_boundary": 115,
+            "full_coverage_recall": 0.1681159420289855,
+            "overlap_recall": 0.1681159420289855,
+            "exact_boundary_recall": 0.16666666666666666
+          },
+          "prediction_spans": {
+            "total": 124,
+            "overlapped_gold": 115,
+            "overlap_precision": 0.9274193548387096
+          }
+        }
+      },
+      "per_label_recall": {
+        "AGE": {
+          "entities": 22,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 44,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 44
+        },
+        "BUILDINGNUM": {
+          "entities": 121,
+          "fully_covered": 3,
+          "overlapped": 3,
+          "full_coverage_recall": 0.024793388429752067,
+          "overlap_recall": 0.024793388429752067,
+          "utf8_bytes": 268,
+          "covered_utf8_bytes": 5,
+          "byte_recall": 0.018656716417910446,
+          "leaked_utf8_bytes": 263
+        },
+        "CITY": {
+          "entities": 124,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 886,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 886
+        },
+        "COMPANYNAME": {
+          "entities": 39,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 485,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 485
+        },
+        "COUNTRY": {
+          "entities": 30,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 271,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 271
+        },
+        "CREDITCARDNUMBER": {
+          "entities": 17,
+          "fully_covered": 4,
+          "overlapped": 4,
+          "full_coverage_recall": 0.23529411764705882,
+          "overlap_recall": 0.23529411764705882,
+          "utf8_bytes": 245,
+          "covered_utf8_bytes": 73,
+          "byte_recall": 0.2979591836734694,
+          "leaked_utf8_bytes": 172
+        },
+        "DATEOFBIRTH": {
+          "entities": 23,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 253,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 253
+        },
+        "DRIVERLICENSENUM": {
+          "entities": 22,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.6818181818181818,
+          "overlap_recall": 0.6818181818181818,
+          "utf8_bytes": 243,
+          "covered_utf8_bytes": 149,
+          "byte_recall": 0.6131687242798354,
+          "leaked_utf8_bytes": 94
+        },
+        "EMAIL": {
+          "entities": 32,
+          "fully_covered": 32,
+          "overlapped": 32,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 787,
+          "covered_utf8_bytes": 787,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "FIRSTNAME": {
+          "entities": 182,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 917,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 917
+        },
+        "IBAN": {
+          "entities": 21,
+          "fully_covered": 13,
+          "overlapped": 13,
+          "full_coverage_recall": 0.6190476190476191,
+          "overlap_recall": 0.6190476190476191,
+          "utf8_bytes": 471,
+          "covered_utf8_bytes": 289,
+          "byte_recall": 0.613588110403397,
+          "leaked_utf8_bytes": 182
+        },
+        "IDCARDNUM": {
+          "entities": 21,
+          "fully_covered": 12,
+          "overlapped": 12,
+          "full_coverage_recall": 0.5714285714285714,
+          "overlap_recall": 0.5714285714285714,
+          "utf8_bytes": 206,
+          "covered_utf8_bytes": 120,
+          "byte_recall": 0.5825242718446602,
+          "leaked_utf8_bytes": 86
+        },
+        "LICENSEPLATENUM": {
+          "entities": 17,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 131,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 131
+        },
+        "NATIONALID": {
+          "entities": 17,
+          "fully_covered": 12,
+          "overlapped": 12,
+          "full_coverage_recall": 0.7058823529411765,
+          "overlap_recall": 0.7058823529411765,
+          "utf8_bytes": 189,
+          "covered_utf8_bytes": 133,
+          "byte_recall": 0.7037037037037037,
+          "leaked_utf8_bytes": 56
+        },
+        "PASSPORTID": {
+          "entities": 24,
+          "fully_covered": 23,
+          "overlapped": 23,
+          "full_coverage_recall": 0.9583333333333334,
+          "overlap_recall": 0.9583333333333334,
+          "utf8_bytes": 218,
+          "covered_utf8_bytes": 208,
+          "byte_recall": 0.9541284403669725,
+          "leaked_utf8_bytes": 10
+        },
+        "PASSWORD": {
+          "entities": 24,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 263,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 263
+        },
+        "PHONENUMBER": {
+          "entities": 24,
+          "fully_covered": 16,
+          "overlapped": 16,
+          "full_coverage_recall": 0.6666666666666666,
+          "overlap_recall": 0.6666666666666666,
+          "utf8_bytes": 345,
+          "covered_utf8_bytes": 237,
+          "byte_recall": 0.6869565217391305,
+          "leaked_utf8_bytes": 108
+        },
+        "SECURITYTOKEN": {
+          "entities": 16,
+          "fully_covered": 13,
+          "overlapped": 13,
+          "full_coverage_recall": 0.8125,
+          "overlap_recall": 0.8125,
+          "utf8_bytes": 318,
+          "covered_utf8_bytes": 249,
+          "byte_recall": 0.7830188679245284,
+          "leaked_utf8_bytes": 69
+        },
+        "SSN": {
+          "entities": 18,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.8333333333333334,
+          "overlap_recall": 0.8333333333333334,
+          "utf8_bytes": 193,
+          "covered_utf8_bytes": 175,
+          "byte_recall": 0.9067357512953368,
+          "leaked_utf8_bytes": 18
+        },
+        "STATE": {
+          "entities": 79,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 628,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 628
+        },
+        "STREET": {
+          "entities": 117,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 1591,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 1591
+        },
+        "SURNAME": {
+          "entities": 137,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 894,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 894
+        },
+        "TAXNUM": {
+          "entities": 17,
+          "fully_covered": 6,
+          "overlapped": 6,
+          "full_coverage_recall": 0.35294117647058826,
+          "overlap_recall": 0.35294117647058826,
+          "utf8_bytes": 195,
+          "covered_utf8_bytes": 71,
+          "byte_recall": 0.3641025641025641,
+          "leaked_utf8_bytes": 124
+        },
+        "URL": {
+          "entities": 24,
+          "fully_covered": 21,
+          "overlapped": 21,
+          "full_coverage_recall": 0.875,
+          "overlap_recall": 0.875,
+          "utf8_bytes": 674,
+          "covered_utf8_bytes": 610,
+          "byte_recall": 0.9050445103857567,
+          "leaked_utf8_bytes": 64
+        },
+        "USERNAME": {
+          "entities": 14,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 151,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 151
+        },
+        "ZIP": {
+          "entities": 93,
+          "fully_covered": 28,
+          "overlapped": 28,
+          "full_coverage_recall": 0.3010752688172043,
+          "overlap_recall": 0.3010752688172043,
+          "utf8_bytes": 457,
+          "covered_utf8_bytes": 140,
+          "byte_recall": 0.3063457330415755,
+          "leaked_utf8_bytes": 317
+        }
+      },
+      "per_negative_category": {
+        "code_log_syntax": {
+          "documents": 13,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 13,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "commerce_identifiers": {
+          "documents": 8,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 8,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "documentation_network": {
+          "documents": 11,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 11,
+          "documents_with_false_positives": 11,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 317,
+            "true_positive": 0,
+            "false_positive": 317,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.14751046998604
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 22,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "generic_roles": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "invalid_identifiers": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 3,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 51,
+            "true_positive": 0,
+            "false_positive": 51,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.025172754195459033
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 3,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "public_entities": {
+          "documents": 15,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 15,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "temporal_numeric": {
+          "documents": 7,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 7,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "unicode_mixed_language": {
+          "documents": 16,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 16,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        }
+      },
+      "validator_recall_by_label": {
+        "AGE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "BUILDINGNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 121,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CITY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 124,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COMPANYNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 39,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COUNTRY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 30,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CREDITCARDNUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "luhn"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 4,
+          "validator_failed_gold_spans": 13,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 4,
+            "overlapped": 4,
+            "full_coverage_recall": 0.23529411764705882,
+            "overlap_recall": 0.23529411764705882,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 73,
+            "byte_recall": 0.2979591836734694,
+            "leaked_utf8_bytes": 172
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 12,
+            "overlapped": 12,
+            "full_coverage_recall": 0.7058823529411765,
+            "overlap_recall": 0.7058823529411765,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 225,
+            "byte_recall": 0.9183673469387755,
+            "leaked_utf8_bytes": 20
+          }
+        },
+        "DATEOFBIRTH": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 23,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "DRIVERLICENSENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "EMAIL": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "email_rfc"
+          ],
+          "gold_spans": 32,
+          "validator_passed_gold_spans": 32,
+          "validator_failed_gold_spans": 0,
+          "validator_backed_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          },
+          "shape_only_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "FIRSTNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 182,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "IBAN": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "iban_mod97"
+          ],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": 13,
+          "validator_failed_gold_spans": 8,
+          "validator_backed_recall": {
+            "entities": 21,
+            "fully_covered": 1,
+            "overlapped": 1,
+            "full_coverage_recall": 0.047619047619047616,
+            "overlap_recall": 0.047619047619047616,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 24,
+            "byte_recall": 0.050955414012738856,
+            "leaked_utf8_bytes": 447
+          },
+          "shape_only_recall": {
+            "entities": 21,
+            "fully_covered": 6,
+            "overlapped": 6,
+            "full_coverage_recall": 0.2857142857142857,
+            "overlap_recall": 0.2857142857142857,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 164,
+            "byte_recall": 0.3481953290870488,
+            "leaked_utf8_bytes": 307
+          }
+        },
+        "IDCARDNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "LICENSEPLATENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "NATIONALID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSPORTID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSWORD": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PHONENUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "e164_phone",
+            "e164_phone_national_de",
+            "e164_phone_national_us"
+          ],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": 20,
+          "validator_failed_gold_spans": 4,
+          "validator_backed_recall": {
+            "entities": 24,
+            "fully_covered": 16,
+            "overlapped": 16,
+            "full_coverage_recall": 0.6666666666666666,
+            "overlap_recall": 0.6666666666666666,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 237,
+            "byte_recall": 0.6869565217391305,
+            "leaked_utf8_bytes": 108
+          },
+          "shape_only_recall": {
+            "entities": 24,
+            "fully_covered": 24,
+            "overlapped": 24,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 345,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "SECURITYTOKEN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 16,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SSN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 18,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STATE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 79,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STREET": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 117,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SURNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 137,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "TAXNUM": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "de_steuer_id_mod1110"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 0,
+          "validator_failed_gold_spans": 17,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          }
+        },
+        "URL": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "USERNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 14,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "ZIP": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 93,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        }
+      }
+    },
+    {
+      "config": "pass2-ner",
+      "counts": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "failed_closed_documents": 0,
+        "scored_documents": 256,
+        "documents_without_leaks": 105,
+        "documents_with_leaks": 151,
+        "pii_utf8_bytes": 11316,
+        "gold_entities": 1275,
+        "fully_covered_entities": 903,
+        "uncovered_entities": 372,
+        "false_positive_utf8_bytes": 2648,
+        "documents_with_false_positives": 176,
+        "contract_documents": 256,
+        "restore_exact_documents": 256,
+        "restore_failures": 0,
+        "restore_success_decisions": 256,
+        "restore_decision_failures": 0,
+        "manifest_valid_documents": 256,
+        "manifest_invalid_documents": 0,
+        "manifest_integrity_errors": 0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_unscanned_documents": 256,
+        "residual_suspects": 0,
+        "redact_actions": 0,
+        "trace_derived_leaked_labeled_utf8_bytes": 2463,
+        "strict_would_reject_documents": 0,
+        "planned_documents": 256,
+        "unprocessed_documents": 0,
+        "runtime_protocol_errors": 0,
+        "actual_refused_documents": 0,
+        "documents_with_redact": 0,
+        "negative_false_positive_utf8_bytes": 628,
+        "positive_false_positive_utf8_bytes": 2020
+      },
+      "process": {
+        "wall_seconds": 24.229376249946654,
+        "documents_per_second": 18.466541197589535,
+        "start_to_first_response_ms": 9977.26779198274,
+        "cold_start_to_first_validated_response_ms": 9977.26779198274,
+        "warmup_count": 0,
+        "discarded_warmup_samples": []
+      },
+      "pipeline_contract": {
+        "documents": 256,
+        "restore_exact_documents": 256,
+        "restore_exact_rate": 1.0,
+        "restore_success_decisions": 256,
+        "restore_success_decision_rate": 1.0,
+        "manifest_spans": 1069,
+        "manifest_valid_documents": 256,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 0,
+        "initial_actionable_suspects": 0,
+        "initial_class_mismatches": 0,
+        "strict_would_reject_documents": 0,
+        "strict_acceptance_rate": 1.0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_suspects": 0,
+        "final_protection_trace_items": 1069,
+        "tokenize_actions": 1069,
+        "redact_actions": 0,
+        "documents_with_redact": 0,
+        "post_policy_zero_suspect_documents": 0,
+        "post_policy_zero_suspect_rate": null
+      },
+      "pipeline_availability": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "per_language": {
+        "de": {
+          "documents": 120,
+          "zero_leak_document_rate": 0.44166666666666665,
+          "documents_without_leaks": 53,
+          "documents_with_false_positives": 81,
+          "utf8_bytes": {
+            "pii": 5004,
+            "predicted": 5180,
+            "true_positive": 4016,
+            "false_positive": 1164,
+            "leaked": 988,
+            "precision": 0.7752895752895753,
+            "recall": 0.8025579536370904,
+            "leak_rate": 0.19744204636290963,
+            "f1": 0.7886881382560881,
+            "f2": 0.796951897126528,
+            "false_positive_rate": 0.030807506021226477
+          },
+          "entities": {
+            "gold": 585,
+            "fully_covered": 417,
+            "overlapped": 420,
+            "exact_boundary": 299,
+            "full_coverage_recall": 0.7128205128205128,
+            "overlap_recall": 0.717948717948718,
+            "exact_boundary_recall": 0.5111111111111111
+          },
+          "prediction_spans": {
+            "total": 487,
+            "overlapped_gold": 365,
+            "overlap_precision": 0.7494866529774127
+          }
+        },
+        "en": {
+          "documents": 136,
+          "zero_leak_document_rate": 0.38235294117647056,
+          "documents_without_leaks": 52,
+          "documents_with_false_positives": 95,
+          "utf8_bytes": {
+            "pii": 6312,
+            "predicted": 6321,
+            "true_positive": 4837,
+            "false_positive": 1484,
+            "leaked": 1475,
+            "precision": 0.7652270210409745,
+            "recall": 0.766318124207858,
+            "leak_rate": 0.23368187579214195,
+            "f1": 0.7657721839626376,
+            "f2": 0.7660996547245716,
+            "false_positive_rate": 0.0389501312335958
+          },
+          "entities": {
+            "gold": 690,
+            "fully_covered": 486,
+            "overlapped": 492,
+            "exact_boundary": 340,
+            "full_coverage_recall": 0.7043478260869566,
+            "overlap_recall": 0.7130434782608696,
+            "exact_boundary_recall": 0.4927536231884058
+          },
+          "prediction_spans": {
+            "total": 582,
+            "overlapped_gold": 423,
+            "overlap_precision": 0.7268041237113402
+          }
+        }
+      },
+      "per_label_recall": {
+        "AGE": {
+          "entities": 22,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 44,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 44
+        },
+        "BUILDINGNUM": {
+          "entities": 121,
+          "fully_covered": 4,
+          "overlapped": 4,
+          "full_coverage_recall": 0.03305785123966942,
+          "overlap_recall": 0.03305785123966942,
+          "utf8_bytes": 268,
+          "covered_utf8_bytes": 7,
+          "byte_recall": 0.026119402985074626,
+          "leaked_utf8_bytes": 261
+        },
+        "CITY": {
+          "entities": 124,
+          "fully_covered": 124,
+          "overlapped": 124,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 886,
+          "covered_utf8_bytes": 886,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "COMPANYNAME": {
+          "entities": 39,
+          "fully_covered": 38,
+          "overlapped": 38,
+          "full_coverage_recall": 0.9743589743589743,
+          "overlap_recall": 0.9743589743589743,
+          "utf8_bytes": 485,
+          "covered_utf8_bytes": 468,
+          "byte_recall": 0.9649484536082474,
+          "leaked_utf8_bytes": 17
+        },
+        "COUNTRY": {
+          "entities": 30,
+          "fully_covered": 29,
+          "overlapped": 29,
+          "full_coverage_recall": 0.9666666666666667,
+          "overlap_recall": 0.9666666666666667,
+          "utf8_bytes": 271,
+          "covered_utf8_bytes": 260,
+          "byte_recall": 0.959409594095941,
+          "leaked_utf8_bytes": 11
+        },
+        "CREDITCARDNUMBER": {
+          "entities": 17,
+          "fully_covered": 4,
+          "overlapped": 4,
+          "full_coverage_recall": 0.23529411764705882,
+          "overlap_recall": 0.23529411764705882,
+          "utf8_bytes": 245,
+          "covered_utf8_bytes": 73,
+          "byte_recall": 0.2979591836734694,
+          "leaked_utf8_bytes": 172
+        },
+        "DATEOFBIRTH": {
+          "entities": 23,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 253,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 253
+        },
+        "DRIVERLICENSENUM": {
+          "entities": 22,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.6818181818181818,
+          "overlap_recall": 0.6818181818181818,
+          "utf8_bytes": 243,
+          "covered_utf8_bytes": 149,
+          "byte_recall": 0.6131687242798354,
+          "leaked_utf8_bytes": 94
+        },
+        "EMAIL": {
+          "entities": 32,
+          "fully_covered": 32,
+          "overlapped": 32,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 787,
+          "covered_utf8_bytes": 787,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "FIRSTNAME": {
+          "entities": 182,
+          "fully_covered": 180,
+          "overlapped": 180,
+          "full_coverage_recall": 0.989010989010989,
+          "overlap_recall": 0.989010989010989,
+          "utf8_bytes": 917,
+          "covered_utf8_bytes": 908,
+          "byte_recall": 0.990185387131952,
+          "leaked_utf8_bytes": 9
+        },
+        "IBAN": {
+          "entities": 21,
+          "fully_covered": 13,
+          "overlapped": 13,
+          "full_coverage_recall": 0.6190476190476191,
+          "overlap_recall": 0.6190476190476191,
+          "utf8_bytes": 471,
+          "covered_utf8_bytes": 289,
+          "byte_recall": 0.613588110403397,
+          "leaked_utf8_bytes": 182
+        },
+        "IDCARDNUM": {
+          "entities": 21,
+          "fully_covered": 12,
+          "overlapped": 12,
+          "full_coverage_recall": 0.5714285714285714,
+          "overlap_recall": 0.5714285714285714,
+          "utf8_bytes": 206,
+          "covered_utf8_bytes": 120,
+          "byte_recall": 0.5825242718446602,
+          "leaked_utf8_bytes": 86
+        },
+        "LICENSEPLATENUM": {
+          "entities": 17,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 131,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 131
+        },
+        "NATIONALID": {
+          "entities": 17,
+          "fully_covered": 12,
+          "overlapped": 12,
+          "full_coverage_recall": 0.7058823529411765,
+          "overlap_recall": 0.7058823529411765,
+          "utf8_bytes": 189,
+          "covered_utf8_bytes": 133,
+          "byte_recall": 0.7037037037037037,
+          "leaked_utf8_bytes": 56
+        },
+        "PASSPORTID": {
+          "entities": 24,
+          "fully_covered": 23,
+          "overlapped": 23,
+          "full_coverage_recall": 0.9583333333333334,
+          "overlap_recall": 0.9583333333333334,
+          "utf8_bytes": 218,
+          "covered_utf8_bytes": 208,
+          "byte_recall": 0.9541284403669725,
+          "leaked_utf8_bytes": 10
+        },
+        "PASSWORD": {
+          "entities": 24,
+          "fully_covered": 0,
+          "overlapped": 2,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.08333333333333333,
+          "utf8_bytes": 263,
+          "covered_utf8_bytes": 10,
+          "byte_recall": 0.03802281368821293,
+          "leaked_utf8_bytes": 253
+        },
+        "PHONENUMBER": {
+          "entities": 24,
+          "fully_covered": 16,
+          "overlapped": 16,
+          "full_coverage_recall": 0.6666666666666666,
+          "overlap_recall": 0.6666666666666666,
+          "utf8_bytes": 345,
+          "covered_utf8_bytes": 237,
+          "byte_recall": 0.6869565217391305,
+          "leaked_utf8_bytes": 108
+        },
+        "SECURITYTOKEN": {
+          "entities": 16,
+          "fully_covered": 13,
+          "overlapped": 13,
+          "full_coverage_recall": 0.8125,
+          "overlap_recall": 0.8125,
+          "utf8_bytes": 318,
+          "covered_utf8_bytes": 249,
+          "byte_recall": 0.7830188679245284,
+          "leaked_utf8_bytes": 69
+        },
+        "SSN": {
+          "entities": 18,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.8333333333333334,
+          "overlap_recall": 0.8333333333333334,
+          "utf8_bytes": 193,
+          "covered_utf8_bytes": 175,
+          "byte_recall": 0.9067357512953368,
+          "leaked_utf8_bytes": 18
+        },
+        "STATE": {
+          "entities": 79,
+          "fully_covered": 69,
+          "overlapped": 70,
+          "full_coverage_recall": 0.8734177215189873,
+          "overlap_recall": 0.8860759493670886,
+          "utf8_bytes": 628,
+          "covered_utf8_bytes": 608,
+          "byte_recall": 0.9681528662420382,
+          "leaked_utf8_bytes": 20
+        },
+        "STREET": {
+          "entities": 117,
+          "fully_covered": 113,
+          "overlapped": 117,
+          "full_coverage_recall": 0.9658119658119658,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 1591,
+          "covered_utf8_bytes": 1571,
+          "byte_recall": 0.9874292897548711,
+          "leaked_utf8_bytes": 20
+        },
+        "SURNAME": {
+          "entities": 137,
+          "fully_covered": 136,
+          "overlapped": 137,
+          "full_coverage_recall": 0.9927007299270073,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 894,
+          "covered_utf8_bytes": 893,
+          "byte_recall": 0.9988814317673378,
+          "leaked_utf8_bytes": 1
+        },
+        "TAXNUM": {
+          "entities": 17,
+          "fully_covered": 6,
+          "overlapped": 6,
+          "full_coverage_recall": 0.35294117647058826,
+          "overlap_recall": 0.35294117647058826,
+          "utf8_bytes": 195,
+          "covered_utf8_bytes": 71,
+          "byte_recall": 0.3641025641025641,
+          "leaked_utf8_bytes": 124
+        },
+        "URL": {
+          "entities": 24,
+          "fully_covered": 21,
+          "overlapped": 22,
+          "full_coverage_recall": 0.875,
+          "overlap_recall": 0.9166666666666666,
+          "utf8_bytes": 674,
+          "covered_utf8_bytes": 616,
+          "byte_recall": 0.913946587537092,
+          "leaked_utf8_bytes": 58
+        },
+        "USERNAME": {
+          "entities": 14,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 151,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 151
+        },
+        "ZIP": {
+          "entities": 93,
+          "fully_covered": 28,
+          "overlapped": 28,
+          "full_coverage_recall": 0.3010752688172043,
+          "overlap_recall": 0.3010752688172043,
+          "utf8_bytes": 457,
+          "covered_utf8_bytes": 140,
+          "byte_recall": 0.3063457330415755,
+          "leaked_utf8_bytes": 317
+        }
+      },
+      "per_negative_category": {
+        "code_log_syntax": {
+          "documents": 13,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 13,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "commerce_identifiers": {
+          "documents": 8,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 8,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "documentation_network": {
+          "documents": 11,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 11,
+          "documents_with_false_positives": 11,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 317,
+            "true_positive": 0,
+            "false_positive": 317,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.14751046998604
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 22,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "generic_roles": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "invalid_identifiers": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 3,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 51,
+            "true_positive": 0,
+            "false_positive": 51,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.025172754195459033
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 3,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "public_entities": {
+          "documents": 15,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 15,
+          "documents_with_false_positives": 15,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 260,
+            "true_positive": 0,
+            "false_positive": 260,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.12126865671641791
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 45,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "temporal_numeric": {
+          "documents": 7,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 7,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        },
+        "unicode_mixed_language": {
+          "documents": 16,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 16,
+          "documents_with_false_positives": 0,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 0,
+            "true_positive": 0,
+            "false_positive": 0,
+            "leaked": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 1.0,
+            "f2": 1.0,
+            "false_positive_rate": 0.0
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 0,
+            "overlapped_gold": 0,
+            "overlap_precision": 1.0
+          }
+        }
+      },
+      "validator_recall_by_label": {
+        "AGE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "BUILDINGNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 121,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CITY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 124,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COMPANYNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 39,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COUNTRY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 30,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CREDITCARDNUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "luhn"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 4,
+          "validator_failed_gold_spans": 13,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 4,
+            "overlapped": 4,
+            "full_coverage_recall": 0.23529411764705882,
+            "overlap_recall": 0.23529411764705882,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 73,
+            "byte_recall": 0.2979591836734694,
+            "leaked_utf8_bytes": 172
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 12,
+            "overlapped": 12,
+            "full_coverage_recall": 0.7058823529411765,
+            "overlap_recall": 0.7058823529411765,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 225,
+            "byte_recall": 0.9183673469387755,
+            "leaked_utf8_bytes": 20
+          }
+        },
+        "DATEOFBIRTH": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 23,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "DRIVERLICENSENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "EMAIL": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "email_rfc"
+          ],
+          "gold_spans": 32,
+          "validator_passed_gold_spans": 32,
+          "validator_failed_gold_spans": 0,
+          "validator_backed_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          },
+          "shape_only_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "FIRSTNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 182,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "IBAN": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "iban_mod97"
+          ],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": 13,
+          "validator_failed_gold_spans": 8,
+          "validator_backed_recall": {
+            "entities": 21,
+            "fully_covered": 1,
+            "overlapped": 1,
+            "full_coverage_recall": 0.047619047619047616,
+            "overlap_recall": 0.047619047619047616,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 24,
+            "byte_recall": 0.050955414012738856,
+            "leaked_utf8_bytes": 447
+          },
+          "shape_only_recall": {
+            "entities": 21,
+            "fully_covered": 6,
+            "overlapped": 6,
+            "full_coverage_recall": 0.2857142857142857,
+            "overlap_recall": 0.2857142857142857,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 164,
+            "byte_recall": 0.3481953290870488,
+            "leaked_utf8_bytes": 307
+          }
+        },
+        "IDCARDNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "LICENSEPLATENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "NATIONALID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSPORTID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSWORD": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PHONENUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "e164_phone",
+            "e164_phone_national_de",
+            "e164_phone_national_us"
+          ],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": 20,
+          "validator_failed_gold_spans": 4,
+          "validator_backed_recall": {
+            "entities": 24,
+            "fully_covered": 16,
+            "overlapped": 16,
+            "full_coverage_recall": 0.6666666666666666,
+            "overlap_recall": 0.6666666666666666,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 237,
+            "byte_recall": 0.6869565217391305,
+            "leaked_utf8_bytes": 108
+          },
+          "shape_only_recall": {
+            "entities": 24,
+            "fully_covered": 24,
+            "overlapped": 24,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 345,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "SECURITYTOKEN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 16,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SSN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 18,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STATE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 79,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STREET": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 117,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SURNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 137,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "TAXNUM": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "de_steuer_id_mod1110"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 0,
+          "validator_failed_gold_spans": 17,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          }
+        },
+        "URL": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "USERNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 14,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "ZIP": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 93,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        }
+      }
+    },
+    {
+      "config": "full-stack-kiji-resolve",
+      "counts": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "failed_closed_documents": 0,
+        "scored_documents": 256,
+        "documents_without_leaks": 106,
+        "documents_with_leaks": 150,
+        "pii_utf8_bytes": 11316,
+        "gold_entities": 1275,
+        "fully_covered_entities": 911,
+        "uncovered_entities": 364,
+        "false_positive_utf8_bytes": 15385,
+        "documents_with_false_positives": 223,
+        "contract_documents": 256,
+        "restore_exact_documents": 201,
+        "restore_failures": 55,
+        "restore_success_decisions": 256,
+        "restore_decision_failures": 0,
+        "manifest_valid_documents": 256,
+        "manifest_invalid_documents": 0,
+        "manifest_integrity_errors": 0,
+        "post_policy_scanned_documents": 256,
+        "post_policy_unscanned_documents": 0,
+        "residual_suspects": 30,
+        "redact_actions": 142,
+        "trace_derived_leaked_labeled_utf8_bytes": 2293,
+        "strict_would_reject_documents": 164,
+        "planned_documents": 256,
+        "unprocessed_documents": 0,
+        "runtime_protocol_errors": 0,
+        "actual_refused_documents": 0,
+        "documents_with_redact": 55,
+        "negative_false_positive_utf8_bytes": 3967,
+        "positive_false_positive_utf8_bytes": 11418
+      },
+      "process": {
+        "wall_seconds": 63.3476907920558,
+        "documents_per_second": 5.964253259597746,
+        "start_to_first_response_ms": 23351.503000129014,
+        "cold_start_to_first_validated_response_ms": 23351.503000129014,
+        "warmup_count": 0,
+        "discarded_warmup_samples": []
+      },
+      "pipeline_contract": {
+        "documents": 256,
+        "restore_exact_documents": 201,
+        "restore_exact_rate": 0.78515625,
+        "restore_success_decisions": 256,
+        "restore_success_decision_rate": 1.0,
+        "manifest_spans": 3455,
+        "manifest_valid_documents": 256,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 2551,
+        "initial_actionable_suspects": 2528,
+        "initial_class_mismatches": 23,
+        "strict_would_reject_documents": 164,
+        "strict_acceptance_rate": 0.359375,
+        "post_policy_scanned_documents": 256,
+        "post_policy_suspects": 30,
+        "final_protection_trace_items": 3597,
+        "tokenize_actions": 3455,
+        "redact_actions": 142,
+        "documents_with_redact": 55,
+        "post_policy_zero_suspect_documents": 234,
+        "post_policy_zero_suspect_rate": 0.9140625
+      },
+      "pipeline_availability": {
+        "attempted_documents": 256,
+        "completed_documents": 256,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "per_language": {
+        "de": {
+          "documents": 120,
+          "zero_leak_document_rate": 0.44166666666666665,
+          "documents_without_leaks": 53,
+          "documents_with_false_positives": 119,
+          "utf8_bytes": {
+            "pii": 5004,
+            "predicted": 17319,
+            "true_positive": 4063,
+            "false_positive": 13256,
+            "leaked": 941,
+            "precision": 0.23459784052197008,
+            "recall": 0.8119504396482814,
+            "leak_rate": 0.1880495603517186,
+            "f1": 0.36401917305021725,
+            "f2": 0.5441274943082899,
+            "false_positive_rate": 0.35084561839980943
+          },
+          "entities": {
+            "gold": 585,
+            "fully_covered": 420,
+            "overlapped": 433,
+            "exact_boundary": 300,
+            "full_coverage_recall": 0.717948717948718,
+            "overlap_recall": 0.7401709401709402,
+            "exact_boundary_recall": 0.5128205128205128
+          },
+          "prediction_spans": {
+            "total": 2800,
+            "overlapped_gold": 380,
+            "overlap_precision": 0.1357142857142857
+          }
+        },
+        "en": {
+          "documents": 136,
+          "zero_leak_document_rate": 0.3897058823529412,
+          "documents_without_leaks": 53,
+          "documents_with_false_positives": 104,
+          "utf8_bytes": {
+            "pii": 6312,
+            "predicted": 7089,
+            "true_positive": 4960,
+            "false_positive": 2129,
+            "leaked": 1352,
+            "precision": 0.6996755536747072,
+            "recall": 0.7858048162230672,
+            "leak_rate": 0.2141951837769328,
+            "f1": 0.7402432654279532,
+            "f2": 0.766923338590469,
+            "false_positive_rate": 0.055879265091863514
+          },
+          "entities": {
+            "gold": 690,
+            "fully_covered": 491,
+            "overlapped": 516,
+            "exact_boundary": 342,
+            "full_coverage_recall": 0.7115942028985507,
+            "overlap_recall": 0.7478260869565218,
+            "exact_boundary_recall": 0.4956521739130435
+          },
+          "prediction_spans": {
+            "total": 797,
+            "overlapped_gold": 469,
+            "overlap_precision": 0.588456712672522
+          }
+        }
+      },
+      "per_label_recall": {
+        "AGE": {
+          "entities": 22,
+          "fully_covered": 0,
+          "overlapped": 0,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.0,
+          "utf8_bytes": 44,
+          "covered_utf8_bytes": 0,
+          "byte_recall": 0.0,
+          "leaked_utf8_bytes": 44
+        },
+        "BUILDINGNUM": {
+          "entities": 121,
+          "fully_covered": 4,
+          "overlapped": 4,
+          "full_coverage_recall": 0.03305785123966942,
+          "overlap_recall": 0.03305785123966942,
+          "utf8_bytes": 268,
+          "covered_utf8_bytes": 7,
+          "byte_recall": 0.026119402985074626,
+          "leaked_utf8_bytes": 261
+        },
+        "CITY": {
+          "entities": 124,
+          "fully_covered": 124,
+          "overlapped": 124,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 886,
+          "covered_utf8_bytes": 886,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "COMPANYNAME": {
+          "entities": 39,
+          "fully_covered": 39,
+          "overlapped": 39,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 485,
+          "covered_utf8_bytes": 485,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "COUNTRY": {
+          "entities": 30,
+          "fully_covered": 29,
+          "overlapped": 30,
+          "full_coverage_recall": 0.9666666666666667,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 271,
+          "covered_utf8_bytes": 262,
+          "byte_recall": 0.966789667896679,
+          "leaked_utf8_bytes": 9
+        },
+        "CREDITCARDNUMBER": {
+          "entities": 17,
+          "fully_covered": 4,
+          "overlapped": 4,
+          "full_coverage_recall": 0.23529411764705882,
+          "overlap_recall": 0.23529411764705882,
+          "utf8_bytes": 245,
+          "covered_utf8_bytes": 73,
+          "byte_recall": 0.2979591836734694,
+          "leaked_utf8_bytes": 172
+        },
+        "DATEOFBIRTH": {
+          "entities": 23,
+          "fully_covered": 0,
+          "overlapped": 1,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.043478260869565216,
+          "utf8_bytes": 253,
+          "covered_utf8_bytes": 5,
+          "byte_recall": 0.019762845849802372,
+          "leaked_utf8_bytes": 248
+        },
+        "DRIVERLICENSENUM": {
+          "entities": 22,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.6818181818181818,
+          "overlap_recall": 0.6818181818181818,
+          "utf8_bytes": 243,
+          "covered_utf8_bytes": 149,
+          "byte_recall": 0.6131687242798354,
+          "leaked_utf8_bytes": 94
+        },
+        "EMAIL": {
+          "entities": 32,
+          "fully_covered": 32,
+          "overlapped": 32,
+          "full_coverage_recall": 1.0,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 787,
+          "covered_utf8_bytes": 787,
+          "byte_recall": 1.0,
+          "leaked_utf8_bytes": 0
+        },
+        "FIRSTNAME": {
+          "entities": 182,
+          "fully_covered": 181,
+          "overlapped": 181,
+          "full_coverage_recall": 0.9945054945054945,
+          "overlap_recall": 0.9945054945054945,
+          "utf8_bytes": 917,
+          "covered_utf8_bytes": 912,
+          "byte_recall": 0.9945474372955289,
+          "leaked_utf8_bytes": 5
+        },
+        "IBAN": {
+          "entities": 21,
+          "fully_covered": 14,
+          "overlapped": 17,
+          "full_coverage_recall": 0.6666666666666666,
+          "overlap_recall": 0.8095238095238095,
+          "utf8_bytes": 471,
+          "covered_utf8_bytes": 306,
+          "byte_recall": 0.6496815286624203,
+          "leaked_utf8_bytes": 165
+        },
+        "IDCARDNUM": {
+          "entities": 21,
+          "fully_covered": 12,
+          "overlapped": 13,
+          "full_coverage_recall": 0.5714285714285714,
+          "overlap_recall": 0.6190476190476191,
+          "utf8_bytes": 206,
+          "covered_utf8_bytes": 122,
+          "byte_recall": 0.5922330097087378,
+          "leaked_utf8_bytes": 84
+        },
+        "LICENSEPLATENUM": {
+          "entities": 17,
+          "fully_covered": 0,
+          "overlapped": 6,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.35294117647058826,
+          "utf8_bytes": 131,
+          "covered_utf8_bytes": 13,
+          "byte_recall": 0.09923664122137404,
+          "leaked_utf8_bytes": 118
+        },
+        "NATIONALID": {
+          "entities": 17,
+          "fully_covered": 12,
+          "overlapped": 12,
+          "full_coverage_recall": 0.7058823529411765,
+          "overlap_recall": 0.7058823529411765,
+          "utf8_bytes": 189,
+          "covered_utf8_bytes": 133,
+          "byte_recall": 0.7037037037037037,
+          "leaked_utf8_bytes": 56
+        },
+        "PASSPORTID": {
+          "entities": 24,
+          "fully_covered": 23,
+          "overlapped": 23,
+          "full_coverage_recall": 0.9583333333333334,
+          "overlap_recall": 0.9583333333333334,
+          "utf8_bytes": 218,
+          "covered_utf8_bytes": 208,
+          "byte_recall": 0.9541284403669725,
+          "leaked_utf8_bytes": 10
+        },
+        "PASSWORD": {
+          "entities": 24,
+          "fully_covered": 1,
+          "overlapped": 13,
+          "full_coverage_recall": 0.041666666666666664,
+          "overlap_recall": 0.5416666666666666,
+          "utf8_bytes": 263,
+          "covered_utf8_bytes": 75,
+          "byte_recall": 0.28517110266159695,
+          "leaked_utf8_bytes": 188
+        },
+        "PHONENUMBER": {
+          "entities": 24,
+          "fully_covered": 16,
+          "overlapped": 16,
+          "full_coverage_recall": 0.6666666666666666,
+          "overlap_recall": 0.6666666666666666,
+          "utf8_bytes": 345,
+          "covered_utf8_bytes": 237,
+          "byte_recall": 0.6869565217391305,
+          "leaked_utf8_bytes": 108
+        },
+        "SECURITYTOKEN": {
+          "entities": 16,
+          "fully_covered": 14,
+          "overlapped": 15,
+          "full_coverage_recall": 0.875,
+          "overlap_recall": 0.9375,
+          "utf8_bytes": 318,
+          "covered_utf8_bytes": 263,
+          "byte_recall": 0.8270440251572327,
+          "leaked_utf8_bytes": 55
+        },
+        "SSN": {
+          "entities": 18,
+          "fully_covered": 15,
+          "overlapped": 15,
+          "full_coverage_recall": 0.8333333333333334,
+          "overlap_recall": 0.8333333333333334,
+          "utf8_bytes": 193,
+          "covered_utf8_bytes": 175,
+          "byte_recall": 0.9067357512953368,
+          "leaked_utf8_bytes": 18
+        },
+        "STATE": {
+          "entities": 79,
+          "fully_covered": 72,
+          "overlapped": 73,
+          "full_coverage_recall": 0.9113924050632911,
+          "overlap_recall": 0.9240506329113924,
+          "utf8_bytes": 628,
+          "covered_utf8_bytes": 615,
+          "byte_recall": 0.9792993630573248,
+          "leaked_utf8_bytes": 13
+        },
+        "STREET": {
+          "entities": 117,
+          "fully_covered": 113,
+          "overlapped": 117,
+          "full_coverage_recall": 0.9658119658119658,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 1591,
+          "covered_utf8_bytes": 1571,
+          "byte_recall": 0.9874292897548711,
+          "leaked_utf8_bytes": 20
+        },
+        "SURNAME": {
+          "entities": 137,
+          "fully_covered": 136,
+          "overlapped": 137,
+          "full_coverage_recall": 0.9927007299270073,
+          "overlap_recall": 1.0,
+          "utf8_bytes": 894,
+          "covered_utf8_bytes": 893,
+          "byte_recall": 0.9988814317673378,
+          "leaked_utf8_bytes": 1
+        },
+        "TAXNUM": {
+          "entities": 17,
+          "fully_covered": 6,
+          "overlapped": 7,
+          "full_coverage_recall": 0.35294117647058826,
+          "overlap_recall": 0.4117647058823529,
+          "utf8_bytes": 195,
+          "covered_utf8_bytes": 73,
+          "byte_recall": 0.37435897435897436,
+          "leaked_utf8_bytes": 122
+        },
+        "URL": {
+          "entities": 24,
+          "fully_covered": 21,
+          "overlapped": 22,
+          "full_coverage_recall": 0.875,
+          "overlap_recall": 0.9166666666666666,
+          "utf8_bytes": 674,
+          "covered_utf8_bytes": 616,
+          "byte_recall": 0.913946587537092,
+          "leaked_utf8_bytes": 58
+        },
+        "USERNAME": {
+          "entities": 14,
+          "fully_covered": 0,
+          "overlapped": 3,
+          "full_coverage_recall": 0.0,
+          "overlap_recall": 0.21428571428571427,
+          "utf8_bytes": 151,
+          "covered_utf8_bytes": 20,
+          "byte_recall": 0.13245033112582782,
+          "leaked_utf8_bytes": 131
+        },
+        "ZIP": {
+          "entities": 93,
+          "fully_covered": 28,
+          "overlapped": 30,
+          "full_coverage_recall": 0.3010752688172043,
+          "overlap_recall": 0.3225806451612903,
+          "utf8_bytes": 457,
+          "covered_utf8_bytes": 142,
+          "byte_recall": 0.31072210065645517,
+          "leaked_utf8_bytes": 315
+        }
+      },
+      "per_negative_category": {
+        "code_log_syntax": {
+          "documents": 13,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 13,
+          "documents_with_false_positives": 4,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 30,
+            "true_positive": 0,
+            "false_positive": 30,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.013043478260869565
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 14,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "commerce_identifiers": {
+          "documents": 8,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 8,
+          "documents_with_false_positives": 7,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 715,
+            "true_positive": 0,
+            "false_positive": 715,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.3869047619047619
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 115,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "documentation_network": {
+          "documents": 11,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 11,
+          "documents_with_false_positives": 11,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 601,
+            "true_positive": 0,
+            "false_positive": 601,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.2796649604467194
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 113,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "generic_roles": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 4,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 236,
+            "true_positive": 0,
+            "false_positive": 236,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.17757712565838976
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 27,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "invalid_identifiers": {
+          "documents": 10,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 10,
+          "documents_with_false_positives": 3,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 279,
+            "true_positive": 0,
+            "false_positive": 279,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.1377097729516288
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 76,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "public_entities": {
+          "documents": 15,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 15,
+          "documents_with_false_positives": 15,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 578,
+            "true_positive": 0,
+            "false_positive": 578,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.269589552238806
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 79,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "temporal_numeric": {
+          "documents": 7,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 7,
+          "documents_with_false_positives": 6,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 286,
+            "true_positive": 0,
+            "false_positive": 286,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.3907103825136612
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 100,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        },
+        "unicode_mixed_language": {
+          "documents": 16,
+          "zero_leak_document_rate": 1.0,
+          "documents_without_leaks": 16,
+          "documents_with_false_positives": 16,
+          "utf8_bytes": {
+            "pii": 0,
+            "predicted": 1242,
+            "true_positive": 0,
+            "false_positive": 1242,
+            "leaked": 0,
+            "precision": 0.0,
+            "recall": 1.0,
+            "leak_rate": 0.0,
+            "f1": 0.0,
+            "f2": 0.0,
+            "false_positive_rate": 0.48955459203783996
+          },
+          "entities": {
+            "gold": 0,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "exact_boundary": 0,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "exact_boundary_recall": 1.0
+          },
+          "prediction_spans": {
+            "total": 387,
+            "overlapped_gold": 0,
+            "overlap_precision": 0.0
+          }
+        }
+      },
+      "validator_recall_by_label": {
+        "AGE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "BUILDINGNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 121,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CITY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 124,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COMPANYNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 39,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "COUNTRY": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 30,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "CREDITCARDNUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "luhn"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 4,
+          "validator_failed_gold_spans": 13,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 4,
+            "overlapped": 4,
+            "full_coverage_recall": 0.23529411764705882,
+            "overlap_recall": 0.23529411764705882,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 73,
+            "byte_recall": 0.2979591836734694,
+            "leaked_utf8_bytes": 172
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 12,
+            "overlapped": 12,
+            "full_coverage_recall": 0.7058823529411765,
+            "overlap_recall": 0.7058823529411765,
+            "utf8_bytes": 245,
+            "covered_utf8_bytes": 225,
+            "byte_recall": 0.9183673469387755,
+            "leaked_utf8_bytes": 20
+          }
+        },
+        "DATEOFBIRTH": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 23,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "DRIVERLICENSENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 22,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "EMAIL": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "email_rfc"
+          ],
+          "gold_spans": 32,
+          "validator_passed_gold_spans": 32,
+          "validator_failed_gold_spans": 0,
+          "validator_backed_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          },
+          "shape_only_recall": {
+            "entities": 32,
+            "fully_covered": 32,
+            "overlapped": 32,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 787,
+            "covered_utf8_bytes": 787,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "FIRSTNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 182,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "IBAN": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "iban_mod97"
+          ],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": 13,
+          "validator_failed_gold_spans": 8,
+          "validator_backed_recall": {
+            "entities": 21,
+            "fully_covered": 1,
+            "overlapped": 1,
+            "full_coverage_recall": 0.047619047619047616,
+            "overlap_recall": 0.047619047619047616,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 24,
+            "byte_recall": 0.050955414012738856,
+            "leaked_utf8_bytes": 447
+          },
+          "shape_only_recall": {
+            "entities": 21,
+            "fully_covered": 6,
+            "overlapped": 6,
+            "full_coverage_recall": 0.2857142857142857,
+            "overlap_recall": 0.2857142857142857,
+            "utf8_bytes": 471,
+            "covered_utf8_bytes": 164,
+            "byte_recall": 0.3481953290870488,
+            "leaked_utf8_bytes": 307
+          }
+        },
+        "IDCARDNUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 21,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "LICENSEPLATENUM": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "NATIONALID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSPORTID": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PASSWORD": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "PHONENUMBER": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "e164_phone",
+            "e164_phone_national_de",
+            "e164_phone_national_us"
+          ],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": 20,
+          "validator_failed_gold_spans": 4,
+          "validator_backed_recall": {
+            "entities": 24,
+            "fully_covered": 16,
+            "overlapped": 16,
+            "full_coverage_recall": 0.6666666666666666,
+            "overlap_recall": 0.6666666666666666,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 237,
+            "byte_recall": 0.6869565217391305,
+            "leaked_utf8_bytes": 108
+          },
+          "shape_only_recall": {
+            "entities": 24,
+            "fully_covered": 24,
+            "overlapped": 24,
+            "full_coverage_recall": 1.0,
+            "overlap_recall": 1.0,
+            "utf8_bytes": 345,
+            "covered_utf8_bytes": 345,
+            "byte_recall": 1.0,
+            "leaked_utf8_bytes": 0
+          }
+        },
+        "SECURITYTOKEN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 16,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SSN": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 18,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STATE": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 79,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "STREET": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 117,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "SURNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 137,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "TAXNUM": {
+          "applicability": "applicable",
+          "validator_kinds": [
+            "de_steuer_id_mod1110"
+          ],
+          "gold_spans": 17,
+          "validator_passed_gold_spans": 0,
+          "validator_failed_gold_spans": 17,
+          "validator_backed_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          },
+          "shape_only_recall": {
+            "entities": 17,
+            "fully_covered": 0,
+            "overlapped": 0,
+            "full_coverage_recall": 0.0,
+            "overlap_recall": 0.0,
+            "utf8_bytes": 195,
+            "covered_utf8_bytes": 0,
+            "byte_recall": 0.0,
+            "leaked_utf8_bytes": 195
+          }
+        },
+        "URL": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 24,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "USERNAME": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 14,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        },
+        "ZIP": {
+          "applicability": "not_applicable",
+          "validator_kinds": [],
+          "gold_spans": 93,
+          "validator_passed_gold_spans": null,
+          "validator_failed_gold_spans": null,
+          "validator_backed_recall": null,
+          "shape_only_recall": null
+        }
+      }
+    }
+  ],
+  "readiness": {
+    "schema_version": 1,
+    "kind": "release_readiness",
+    "status": "failed",
+    "passed": false,
+    "failures": [
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "restore_failures",
+        "actual": 55,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "strict_rejections",
+        "actual": 164,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "documents_with_leaks",
+        "actual": 150,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "leaked_labeled_utf8_bytes",
+        "actual": 2293,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "uncovered_entities",
+        "actual": 364,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "residual_suspects",
+        "actual": 30,
+        "required": 0
+      },
+      {
+        "config": "full-stack-kiji-resolve",
+        "gate": "redact_actions",
+        "actual": 142,
+        "required": 0
+      },
+      {
+        "gate": "full_profile_required",
+        "reason": "a sampled quick run cannot establish release readiness"
+      }
+    ]
+  },
+  "scorecard_sha256": "7599c4c3bf14454a45890eb6608e55e840ac5e03067e9caddbc58682973699f7",
+  "verification": [
+    "Source clean at inference; production/scorer unchanged from accepted base.",
+    "All required full model/dataset hashes validated before inference.",
+    "Frozen ID digest matches scorecard; all three scored ID sets exactly equal frozen population.",
+    "All 768 planned cell-documents scored; zero actual refusals, protocol/runtime errors and unprocessed rows.",
+    "All per-cell correctness counts reconcile; readiness exit4 is completed bad-quality evidence."
+  ],
+  "self_review": {
+    "Verdict": "implement",
+    "Opportunity": "local package version consistency in existing nested lockfile",
+    "Why": "Removes stale 0.12.x local package entries while preserving every registry pin and runtime/scoring invariant.",
+    "Scope": "Four nested Cargo.lock version lines only; sanitized measurement report. No production or evaluator behavior change.",
+    "Validation": "Locked offline workspace, clean producer and validator builds pass; exact frozen populations and aggregate counts reconcile; all model/data hashes verified."
+  }
+}
