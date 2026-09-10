@@ -202,11 +202,13 @@ fn prepare_plan(
     supplemental: SupplementalBatch,
 ) -> Result<PreparedPlan> {
     validate_map(raw, normalized)?;
+    #[cfg(test)]
     let extras = match supplemental {
         SupplementalBatch::Complete(extras) => extras,
-        #[cfg(test)]
         SupplementalBatch::Incomplete => return Err(LockError::Incomplete.into()),
     };
+    #[cfg(not(test))]
+    let SupplementalBatch::Complete(extras) = supplemental;
     let baseline = prepare_batch(pipeline, raw, normalized, baseline, false)?;
     let extras = prepare_batch(pipeline, raw, normalized, extras, true)?;
     let mut admitted: Vec<PreparedItem> = Vec::new();
