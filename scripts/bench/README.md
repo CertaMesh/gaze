@@ -215,6 +215,8 @@ lease reference, every sample and exact interval parity. Mutable revision names,
 identical sources, changed class contracts and local dependency drift are refused.
 The dependency guard covers `evidence_protocol.py`, `gaze_bench_score.py`, and its
 transitive import `bench_subprocess.py`; both arms' hashes are recorded.
+Import-time vocabulary data is also checked: the exact `embedded/*.toml` file
+set and bytes, plus `no_opf_models.toml` metadata. No weights are loaded.
 The pinned revision above is the verified baseline for this candidate; another
 revision must also satisfy those equality guards. The lease reference
 records the operator's serialization claim; the tool does not acquire a lease
