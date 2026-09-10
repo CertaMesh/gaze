@@ -2,15 +2,17 @@
 
 [![Crates.io](https://img.shields.io/crates/v/gaze-pii.svg)](https://crates.io/crates/gaze-pii) [![License](https://img.shields.io/crates/l/gaze-pii.svg)](https://github.com/CertaMesh/gaze#license) [![docs.rs](https://docs.rs/gaze-pii/badge.svg)](https://docs.rs/gaze-pii) [![Tests](https://github.com/CertaMesh/gaze/actions/workflows/test.yml/badge.svg)](https://github.com/CertaMesh/gaze/actions/workflows/test.yml) [![GitHub stars](https://img.shields.io/github/stars/CertaMesh/gaze?style=social)](https://github.com/CertaMesh/gaze/stargazers)
 
-**Deterministic, reversible PII pseudonymization for agentic LLM workflows — zero PII to the model, restorable replies, every token auditable.**
+**Reversible PII pseudonymization for agentic LLM workflows. We aim for zero leaked PII, with restorable replies and auditable tokens.**
+
+**Measured performance (2026-09-10):** On the pinned quick256 EN/DE development sample (166 Dataiku public records + 90 synthetic A4 negatives), the integrated `pass2-ner` control (`pipeline_text/clean_for_bench`, no SafetyNet) covered **8,853/11,316 annotated PII UTF-8 bytes (78.23%)**, while **2,463/11,316 (21.77%) survived in actual output**. All 256 rows completed and restored exactly, with no refusals, unmeasured rows, or restore failures. It also replaced **2,648 non-PII UTF-8 bytes**. [Measurement details](docs/reference/benchmarks/2026-09-10-redact-output-quality.md). These results cover this benchmark route and sample; default CLI/MCP parity is unmeasured.
 
 *Pre-1.0, API stabilizing. Reversibility is guaranteed across minor versions — manifests written by an older minor restore on a newer minor (see [`UPGRADE.md`](UPGRADE.md)).*
 
 Gaze is open-source privacy infrastructure for organisations that must meet GDPR or the EU AI Act while still using third-party LLMs. The detection layer and rulepacks are dual-licensed Apache-2.0 OR MIT — every PII recognizer that ships here is a contribution to a public commons that any privacy-sensitive project can audit, adopt, or extend.
 
-Your agent never sees a real email, phone number, or order ID. Your server keeps the only manifest that can read those tokens back. Detection is regex, validator, and locale-cue driven — every emitted token traces to a versioned recognizer, not to a second model's opinion of what was sensitive.
+Gaze replaces detected emails, phone numbers, and order IDs with tokens before the text reaches your agent. Your server keeps the only manifest that can read those tokens back. Every emitted token traces to a versioned recognizer, including configured local neural detectors alongside regex, validator, and locale-cue detection.
 
-**Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it keeps real PII out of the model and restores it in the reply.
+**Scope:** outbound PII control with reversibility. Gaze is *not* a guardrail, prompt-injection defense, or content-safety filter — it replaces detected PII with tokens and restores those tokens in the reply.
 
 ## Quickstart
 
@@ -19,18 +21,18 @@ Three commands from zero to redacting real PII:
 ```sh
 cargo install gaze-cli --version 0.13.0                     # `gaze setup` ships in the default build
 gaze setup                                                   # installs + SHA-verifies the NER model, writes ./gaze.toml, runs a doctor check
-echo "Contact Markus Gottschaue at markus@acme.com" | gaze clean --policy gaze.toml
+echo "Contact Dr. Schmidt at alice@example.invalid" | gaze clean --policy gaze.toml
 ```
 
 ```text
 {"clean_text":"Contact <Name_1> at <Email_1>", "entries":[{"class":"Name",...},{"class":"Email",...}], ...}
 ```
 
-`gaze setup` fetches the pinned, SHA-verified NER model into your data dir, generates a working policy wired to it, and confirms detection runs — no manual model fetch or flag-wrangling. The model never sees `Markus Gottschaue` or `markus@acme.com`; rehydrate the reply with `gaze restore` on the same per-session manifest.
+`gaze setup` fetches the pinned, SHA-verified NER model into your data dir, generates a working policy wired to it, and confirms detection runs — no manual model fetch or flag-wrangling. In the output shown above, the detected name and email are replaced with tokens; rehydrate the reply with `gaze restore` on the same per-session manifest.
 
 Want explicit control over rulepacks, locales, and the observer-only SafetyNet? See [Manual setup](#manual-setup).
 
-## In production: AI support drafts that never see the customer
+## In production: AI support drafts from pseudonymized context
 
 [`CertaMesh/gaze-ghostwriter`](https://github.com/CertaMesh/gaze-ghostwriter) is a Laravel package that watches a support inbox over IMAP and drafts replies with an LLM. The application does the data lookup. Gaze pseudonymizes the resulting context. The LLM only composes prose.
 
@@ -103,7 +105,7 @@ Each feature, what you get, where the proof lives.
 - **10 validator-backed national IDs across 5 locale packs, 3 locale-gated regex IDs.** Aadhaar (Verhoeff), NIR (MOD-97 variant), Steuer-ID (MOD 11,10), BSN (MOD-11), CPF + CNPJ (MOD-11), NHS (MOD-11), US SSN, UK NINO, Indian PAN. Adopters in BR / FR / NL / IN / UK / US get coverage with one `--locale` flag. Full table in [Detection coverage](#detection-coverage).
 - **Defense in depth, observer-only.** Regex, dictionary, and optional NER form the detection floor. Every detector's `detect` returns a `Result`, so a backend failure fails **closed** — it aborts outbound redaction instead of silently returning an empty result, and long NER inputs (>512 tokens) are scanned in overlapping tokenizer-token windows so nothing slips past the model unscanned ([P0 #908](docs/explanation/detection/ner-failclosed.md)). Pass-3 SafetyNet runs *after* tokenization, against the already-clean text plus the manifest, and can flag suspect bytes the rules missed — but it cannot mutate the clean output or the manifest. Two backends ship: the OpenAI Privacy Filter and the Apache-2.0 Kiji DistilBERT bundle (26 PII classes, ~8.8 MB). Contract: [`docs/explanation/safety-net/safety-nets.md`](docs/explanation/safety-net/safety-nets.md).
 - **Fail closed everywhere.** Ambiguous matches are tokenized, never silently passed. Unknown validators or normalizers fail at policy load — no degraded mode. Strict-mode SafetyNet exits `3` with `{"error":"SafetyNet","exit":3,"variant":"SuspectedLeak"}` and stdout stays empty.
-- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) all redact correctly. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
+- **Agentic shapes are first-class.** Tool-call JSON arguments, SSE-streamed deltas, multi-turn sessions with evolving manifest state, and structured documents (PNG / JPG / PDF → Tesseract → `SafeBundle`) are supported redaction inputs. The MCP runtime in [`gaze-mcp-core`](crates/gaze-mcp-core/) puts the same chokepoint between agent tool calls and source systems.
 - **Multi-provider HTTP proxy with a daemon.** `gaze proxy start` puts a PII chokepoint in front of **API-key-authenticated** traffic to OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` — i.e. when an SDK or agent authenticates with `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `GOOGLE_API_KEY`. Consumer subscription tiers (ChatGPT Plus, Claude.ai, Gemini Advanced) use browser sessions and web endpoints and are outside this public proxy contract. SSE streams and tool-call argument JSON are accumulated chunk-by-chunk before redaction. The strict Anthropic profile proves each full request and response; see its [public contract](docs/explanation/proxy/anthropic-messages-contract.md). Subcommands `serve`, `start`, `stop`, `status`, `logs`, `restart`, plus opt-in `install-launchd` / `install-systemd-user`. See [`crates/gaze-proxy/README.md`](crates/gaze-proxy/README.md).
 - **Opt-in local inspection dashboard (default-off).** `gaze proxy serve --dashboard` pairs an isolated, memory-only dashboard child that renders the proxy's provider-visible traffic — and, only with explicit per-domain risk acknowledgements, owner-raw or owner-restored payloads — on a fresh loopback origin behind a one-shot pairing token. **Enabling it expands your local trusted computing base:** captured payloads become visible to the paired browser session. The dashboard never ships in the default build (`gaze-cli` `dashboard` cargo feature, default-off), never persists payloads, and any activation failure disables only the dashboard while the proxy keeps serving. See [Run the local dashboard](docs/how-to/dashboard/run-local-dashboard.md) and the [dashboard trust boundary](docs/explanation/dashboard/trust-boundary.md).
 - **OSS document ingestion.** `gaze document clean ./input.pdf --out ./safe-bundle/` OCRs PNG/JPG/PDF through Tesseract, runs the recognized text through the standard pipeline, and writes a `SafeBundle` — `clean.md` + `manifest.json` + `report.json`. Layout report v2 surfaces per-page OCR confidence, multi-column segmentation, table-cell preservation, and vector-PDF fallback when PDFs have selectable text. Plug in alternative OCR drivers via the `OcrBackend` trait. Adopter quickstart: [`docs/how-to/document/ingest-documents.md`](docs/how-to/document/ingest-documents.md). Full bundle contract: [`docs/explanation/document/document-extension.md`](docs/explanation/document/document-extension.md).
@@ -111,7 +113,7 @@ Each feature, what you get, where the proof lives.
 
 ## How it fits your stack
 
-Three execution layers, one core invariant: PII crosses the agent boundary only as manifest-backed tokens.
+Three execution layers share manifest-backed tokenization and restore. Detection coverage depends on the configured recognizers and policy.
 
 ```text
   Direct library          MCP source chokepoint        HTTP proxy in front of LLM
@@ -307,7 +309,7 @@ printf '%s' 'Contact alice@example.invalid for details.' \
 
 `--openai-filter-device` accepts `auto` (default; the upstream `opf` picks), `cpu`, `cuda`, or `mps`.
 
-A clean run produces a `leak_report` block alongside the usual JSON; `suspect_count = 0` is the contract for "no leaks":
+A clean run produces a `leak_report` block alongside the usual JSON; `suspect_count = 0` means **no suspects detected**, not proof that no PII was missed:
 
 ```json
 {
@@ -353,7 +355,7 @@ printf '%s' 'Contact alice@example.invalid for details.' \
       --kiji-distilbert-model-dir ~/.local/share/gaze/models/kiji-distilbert
 ```
 
-The output shape is the same `leak_report` block shown above; `suspect_count = 0` remains the contract for "no leaks". The Kiji model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json`. Missing artifacts fail closed before subprocess spawn with `{"error":"SafetyNetArtifactMissing","exit":2,...}`.
+The output shape is the same `leak_report` block shown above; `suspect_count = 0` means **no suspects detected**, not proof that no PII was missed. The Kiji model directory must contain `SHA256SUMS`, `labels.json`, `model.onnx`, and `tokenizer.json`. Missing artifacts fail closed before subprocess spawn with `{"error":"SafetyNetArtifactMissing","exit":2,...}`.
 
 Full Kiji setup, backend switching, and failure-mode notes: [`docs/how-to/safety-net/set-up-kiji-safetynet.md`](docs/how-to/safety-net/set-up-kiji-safetynet.md).
 
