@@ -3203,8 +3203,13 @@ fn indexed_detection_from_candidate(
     candidate: Candidate,
     registry: &RecognizerRegistry,
 ) -> IndexedDetection {
-    let mut trace_source_ids = candidate.merged_sources.clone();
-    trace_source_ids.push(candidate.recognizer_id.clone());
+    // The resolver joins same-span IDs with '+'. Trace entries carry atomic IDs.
+    let trace_source_ids = candidate
+        .merged_sources
+        .iter()
+        .chain(std::iter::once(&candidate.recognizer_id))
+        .flat_map(|source| source.split('+').map(str::to_owned))
+        .collect();
     let membership = registry
         .family_policy()
         .membership(&candidate.recognizer_id);
@@ -3688,6 +3693,48 @@ mod tests {
             .register_safety_net(safety_net)
             .build()
             .expect("pipeline")
+    }
+
+    #[test]
+    fn protection_trace_keeps_merged_primary_source_ids_atomic() {
+        let text = "alice@example.invalid";
+        let pipeline = Pipeline::builder()
+            .detector(FixedDetector {
+                detections: vec![
+                    Detection::new(0..text.len(), PiiClass::Email, "email.fixture"),
+                    Detection::new(
+                        0..text.len(),
+                        PiiClass::Email,
+                        "redact-patched-coreml-v1:email",
+                    ),
+                ],
+            })
+            .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
+            .build()
+            .expect("pipeline");
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let (clean, manifest, _, trace) = pipeline
+            .clean_text_with_safety_net_policy_detect_context_and_protection_trace(
+                &session,
+                text,
+                &[crate::LocaleTag::Global],
+                &DictionaryBundle::default(),
+                SafetyNetPolicy::new(SafetyNetMode::Strict, SafetyNetFallback::Redact),
+            )
+            .expect("traced clean");
+        assert_eq!(trace.len(), 1);
+        assert_eq!(
+            trace[0].source_ids(),
+            &[
+                "email.fixture".to_string(),
+                "redact-patched-coreml-v1:email".to_string()
+            ]
+        );
+        assert_eq!(manifest.len(), 1);
+        let CleanDocument::Text(clean) = clean else {
+            panic!("expected text");
+        };
+        assert_eq!(session.restore(&clean).expect("restore"), text);
     }
 
     #[test]
