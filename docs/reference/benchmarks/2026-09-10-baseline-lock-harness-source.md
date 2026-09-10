@@ -11,7 +11,7 @@ Branch: `agent/baseline-lock-quality-7414`.
 Exact accepted base: `b62ebb82a4b99092e866b421b637fe72534745ea`.
 Parent: `4e756074c1e5d70e6b9d97aed752519e9648a39b`, containing measured runner ancestry `1cd67a27e1eab96bfcc84145a89fbdb1bbe99afa`.
 Implementation commits: `0539d89ff0baf6952eecdc65daa0e6fc472d1531` and `0fb884616b6d061a1648c3607d0506cbf4056d3d`.
-The report packaging commit follows these; the final handoff identifies its exact HEAD and patch SHA.
+Source-review corrections follow the original packaging commit; the final handoff identifies the exact updated HEAD and patch SHA.
 Any later runtime must build from that final clean checkout HEAD, not the earlier implementation HEAD.
 
 Whoami was the first coordination call and identified worker7414/project4. Claimed the task through MemPalace.
@@ -33,15 +33,15 @@ Only four executable/test files plus this report change:
 - `scripts/bench/run_no_opf_benchmark.py`: three added lines register `pass2-ner-redact-baseline-lock-candidate` and add `benchmark-baseline-lock` only when selected. Existing three arms keep exact build feature selection and default configs are unchanged.
 - `scripts/bench/baseline_lock_stage.py`: fresh required UTC deadline; fixed exact stage commands; clean pre/post HEAD plus tracked-source digest, selected environment, toolchain executable hashes, output/log hashes and create-new receipts. Reuses the unchanged tracked supervisor's `supervise(..., deadline=...)`, including absolute and monotonic caps and owned detached-descendant cleanup.
 - `scripts/bench/baseline_lock_dev.py`: separate four-arm driver, original frozen loader and scorer reused. Distinct audit files per arm/phase/reference build, full planned rows, typed count-only lock-audit join, reference equivalence, genuine synthetic smoke, unchanged comparisons and extra per-row count invariant.
-- `scripts/bench/test_baseline_lock_dev.py`:15 synthetic test methods written, not executed.
+- `scripts/bench/test_baseline_lock_dev.py`:19 synthetic test methods written, not executed.
 
 Source hashes:
 
 | File | SHA256 |
 | --- | --- |
-| baseline_lock_dev.py | 76881c929606a4d5c14fe479a56fb61ac5a61bfb7b70fbbb2aaf7dde1ffc7816 |
-| baseline_lock_stage.py | b8ee17770af2c7b64ba3880d8cf27e71922c97c696d8798a053bd3f78cf3033c |
-| test_baseline_lock_dev.py | a0de81f0e6d35816909af7ea8fc5f7447894bafa152d10227f6e7ce5c684c4e4 |
+| baseline_lock_dev.py | 55a5c5e35ce6f53f302fb199f28b86af1b919cd53017070aa14a2fab0ef33be2 |
+| baseline_lock_stage.py | 4ce72ea77b9cc2a9a1fc46ada179b032e3cc702480e9434b823c22d6f08de3e7 |
+| test_baseline_lock_dev.py | e35104eeb78fe7c759e41b96d0a0a1775ef204eff5ceed3c693816d99bf4766d |
 | run_no_opf_benchmark.py | 01db3462fdf04894c32741278fbd04c7db5c176d6023e8c7e4ef80a17a42923e |
 
 Unchanged tracked supervisor SHA256: `755a053768028c72db2312542056e087e69d7bbcf768bc1e7acda5f808b2f564`.
@@ -69,11 +69,13 @@ Baseline FPs remain locked; additions may add FP or refusals. Count non-regressi
 The candidate audit is concretely `baseline-lock-candidate-v1`, request ordinal and lifecycle status; only `batch_complete` includes admitted/baseline_overlap/supplemental_overlap integers.
 No coordinates or spans are inferred from these counts. Lifecycle counts must be absent; complete-empty has explicit zeros. Ordered begin/batch/terminal binding, exact keys/types,4096 candidate limit,1024-byte record limit and8MiB file bound are checked. Malformed records are not copied to output; valid preceding records and unknown remaining rows persist with schema_valid=false.
 Missing final success cannot validate a successful output. Source inspection confirms successful producer publication follows final audit write+flush. A successful audit followed by failed stdout remains unmeasured output, never protected output.
+Duplicate JSON object keys are rejected before schema validation, including duplicated ordinal, policy, status or count keys. The valid prefix and all unknown planned rows survive a rejected line.
+Evidence binding separately reports schema validity, full planned terminal coverage and per-row terminal consistency. Sparse/malformed evidence cannot pass overall binding even when unknown outputs are unmeasured. Valid terminal refusals/errors can complete failure evidence; this never changes failed/unmeasured output into protection. A completed reversible output requires request_success; a fail_closed output requires request_refusal. An entirely refused but completely audited run can pass evidence binding while failing unchanged quality gates.
 The semantic arm keeps its distinct existing normalized-span audit schema and joiner. No normalized semantic interval is treated as a raw lock interval or saved PII byte.
 
 ## Meaningful planned validation, not executed
 
-The15 new synthetic methods cover refusal ordering, omitted lifecycle counts, complete-empty, missing final terminal, malformed/wrong-policy records, unknown fields, mismatched ordinals, duplicate batches, boolean/negative/over-cap counts, partial trailing records, missing audit, flushed-audit/failed-output separation and create-new path isolation.
+The19 new synthetic methods cover refusal ordering, omitted lifecycle counts, complete-empty, missing final terminal, malformed/wrong-policy records, unknown fields, mismatched ordinals, duplicate batches, boolean/negative/over-cap counts, partial trailing records, missing audit, flushed-audit/failed-output separation and create-new path isolation. Literal duplicate-field JSON lines prevent a dict-based test from erasing its own falsifier. Sparse unknown/unmeasured rows, complete refusal evidence and malformed complete evidence exercise the separate completeness/consistency gate. Hostile inherited Cargo target overrides and command-to-hashed-output path consistency have a synthetic guard.
 They also cover per-row regression hidden by aggregate improvement, extra FP, equal-count non-containment, unavailable/refused rows and empty common populations, the shared four-arm denominator, validator failure before any producer call, exactly four singleton arms/zero warmups, smoke missing/duplicate/stale/wrong-row/reference/flush failures, and stale receipt source/command/output/deadline/cleanup/log rejection.
 Feature tests require exact unchanged argv for the prior Redact arms, ordinary pass2 fallback and marker only for the new arm.
 Existing runner, actual-output observer, legacy driver and detached timeout/SIGINT supervisor suites are additional required stages.
@@ -99,14 +101,14 @@ Do not invoke the driver directly, bypass receipts, override resources/hooks or 
 1. `workspace-bootstrap`: normal workspace/all-features build, locked/offline/jobs2.
 2. `reference-build`: same-checkout clean_for_bench with safety-net-kiji,redact-live in an isolated reference target directory.
 3. `producer-build`: same-checkout producer with safety-net-kiji,redact-live,benchmark-baseline-lock.
-4. `validator-build`: same-checkout validator manifest with gaze-recognizers/benchmark-baseline-lock, locked/offline/jobs2, dedicated validator target.
+4. `validator-build`: unchanged same-checkout validator functional route, locked/offline/jobs2, explicit dedicated native validator target directory. No experimental feature flag. Root explicitly superseded the initial validator-marker requirement: recognizers forwards its marker through a dev-dependency alias, while the validator uses recognizers as a normal dependency and has no wrapper caller. The marker was not a feature-activation or parity proof. Only the candidate producer requests benchmark-baseline-lock; synthetic producer-reference equivalence remains a separate gate.
 5. Separate `python-tests`, `runner-tests`, `observer-tests`, `legacy-driver-tests`, `supervisor-tests` stages. All must pass on final clean source.
 6. `freeze`: validate all nine stage receipts, binary/model/toolchain/source hashes, exact ID/source-gold contract; write exclusive freeze.
 7. `smoke`: seven synthetic requests total, one per four feature-build arms and one per three reference-build arms. Compare every serialized semantic response field excluding timing in memory for the three reference arms. Actual Gaze observer validates manifest replay/restore; augmented outputs require exact raw12..33 tokenization and zero surviving gold. Original Redact arms require Redact provenance; lock may retain baseline provenance. Complete lock audit proves provider completion independently of which candidates survived. Exact arm set, one synthetic row each, freeze digest and successful smoke-stage output hashes are prerequisites for DEV. This is synthetic reference equivalence, not full-corpus byte equivalence.
 8. `dev`: exactly1024 producer requests plus256 validator requests, no duplicate corpus inference. Persist full output proofs, audit joins, common denominator and unchanged comparisons. Exit1 can be a valid negative quality result and is retained; it is not a rerun instruction.
 9. Root immediately verifies cleanup/owned_remaining0 and releases the machine, then harvests receipts and artifacts. No follow-up run or candidate promotion is automatic.
 
-Environment retains Rust1.96.0 executable paths and hashes, jobs2, locked/offline builds, disabled ORT download and exact cached ORT path. PATH explicitly includes the toolchain, standard Homebrew and system tool locations. Audit destination/locale/Python optimization overrides are removed. This binds the declared selected environment and executable hashes, not every inherited OS/environment byte.
+Environment retains Rust1.96.0 executable paths and hashes, jobs2, locked/offline builds, disabled ORT download and exact cached ORT path. PATH explicitly includes the toolchain, standard Homebrew and system tool locations. Audit destination/locale/Python optimization overrides and inherited CARGO_TARGET_DIR/CARGO_BUILD_TARGET are removed before child invocation. Workspace/producer explicitly target `target`, reference targets `target/quality-7414/reference-build`, validator targets `target/validator-recall-probe`; hashed paths match these native debug outputs. No new architecture is selected. This binds the declared selected environment and executable hashes, not every inherited OS/environment byte.
 Every child stage is supervised using the original reviewed implementation, with a fresh explicit absolute deadline and its monotonic cap; owned separately grouped bridge descendants are cleaned even after normal parent exit. Bound metadata finalization follows child cleanup as in the existing custody design.
 Build/freeze/smoke logs and outputs are hashed. DEV output hashes are retained even for negative/failing stages. Creation markers prevent a second attempt silently replacing the first.
 
@@ -124,7 +126,7 @@ Verdict: implement.
 Opportunity: the existing explicit arm registry, a small separate stage-command contract and concrete lock-audit parser.
 Why: removes suffix-based candidate feature ambiguity, audit-file collisions, shifted request joins, false-zero lifecycle counts, stale custody and aggregate-only masking without changing the scorer or core ownership.
 Scope: four benchmark source/test files and this report. Reuse existing frozen loader, scorer/comparator and reviewed supervisor. No general provider registry, new scorer API, core/assembly/SDK changes or speculative abstraction.
-Validation: read-only source/caller review, accepted artifact/report exact equality, source hashes, signature/DCO/clean checks and whitespace checks. Fifteen new synthetic tests plus existing suites and all runtime stages remain unexecuted pending independent source review and root grant.
+Validation: read-only source/caller review, accepted artifact/report exact equality, source hashes, signature/DCO/clean checks and whitespace checks. Nineteen new synthetic tests plus existing suites and all runtime stages remain unexecuted pending independent source review and root grant. Reviewer7415's duplicate-key, sparse-audit and Cargo target custody MUSTs are addressed in source; final independent acceptance remains pending.
 
 Next action: root7342 harvest the exact source-ready patch and commission independent source review. Root alone grants runtime and closes loops.
 

@@ -43,12 +43,12 @@ def commands(deadline):
     base = ["cargo", "build", "--locked", "--offline", "-j", "2"]
     example = ["-p", "gaze-recognizers", "--example", "clean_for_bench"]
     result = {
-        "workspace-bootstrap": base + ["--workspace", "--all-features"],
+        "workspace-bootstrap": base + ["--workspace", "--all-features", "--target-dir", "target"],
         "reference-build": base + example + ["--features", "safety-net-kiji,redact-live",
                                              "--target-dir", str(ROOT / "reference-build")],
-        "producer-build": base + example + ["--features", "safety-net-kiji,redact-live,benchmark-baseline-lock"],
+        "producer-build": base + example + ["--features", "safety-net-kiji,redact-live,benchmark-baseline-lock",
+                                            "--target-dir", "target"],
         "validator-build": base + ["--manifest-path", "scripts/bench/validator_recall_probe/Cargo.toml",
-                                   "--features", "gaze-recognizers/benchmark-baseline-lock",
                                    "--target-dir", "target/validator-recall-probe"],
     }
     for name, module in (("python-tests", "test_baseline_lock_dev.py"),
@@ -79,7 +79,8 @@ def environment():
     toolchain = Path.home() / ".rustup/toolchains/1.96.0-aarch64-apple-darwin/bin"
     values["PATH"] = str(toolchain) + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     # No inherited audit destinations, locale override, or Python assertion bypass.
-    values.update(GAZE_REDACT_ADMISSION_AUDIT_FILE=None, PYTHONOPTIMIZE=None)
+    values.update(GAZE_REDACT_ADMISSION_AUDIT_FILE=None, PYTHONOPTIMIZE=None,
+                  CARGO_TARGET_DIR=None, CARGO_BUILD_TARGET=None)
     return values
 
 
@@ -87,6 +88,16 @@ def toolchain_hashes():
     toolchain = Path.home() / ".rustup/toolchains/1.96.0-aarch64-apple-darwin/bin"
     return {str(path): digest(path) for path in
             [*(toolchain / name for name in ("cargo", "rustc", "rustdoc")), Path(supervisor.PYTHON)]}
+
+
+def build_environment(source):
+    env = dict(source)
+    for key, value in environment().items():
+        if value is None:
+            env.pop(key, None)
+        else:
+            env[key] = value
+    return env
 
 
 def output_hashes(repo, name):
@@ -138,12 +149,7 @@ def main():
     before = source_state(repo)
     assert before["clean"]
     selected = environment()
-    env = os.environ.copy()
-    for key, value in selected.items():
-        if value is None:
-            env.pop(key, None)
-        else:
-            env[key] = value
+    env = build_environment(os.environ)
     command = commands(args.deadline_utc)[args.step]
     record = {"step": args.step, "command": command, "source_before": before,
               "effective_environment": selected, "toolchain_sha256": toolchain_hashes(),

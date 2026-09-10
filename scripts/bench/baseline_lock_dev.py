@@ -28,6 +28,15 @@ def audit_path(out, phase, arm, variant="candidate"):
     return out / f"{phase}-{variant}-{arm}.jsonl"
 
 
+def unique_object(pairs):
+    record = {}
+    for key, value in pairs:
+        if key in record:
+            raise ValueError("duplicate audit key")
+        record[key] = value
+    return record
+
+
 def lock_audit(path, ids):
     """Validate the concrete count-only schema; keep unknown distinct from complete-empty."""
     rows = [{"request": i + 1, "document_id": uid, "terminal": "unknown", "records": []}
@@ -45,7 +54,7 @@ def lock_audit(path, ids):
         with path.open("rb") as handle:
             while line := handle.readline(1025):
                 assert len(line) <= 1024 and line.endswith(b"\n")
-                record = json.loads(line)
+                record = json.loads(line, object_pairs_hook=unique_object)
                 assert isinstance(record, dict) and record.get("policy") == LOCK_POLICY
                 status = record.get("status")
                 assert status in LIFECYCLES | {"batch_complete"}
@@ -117,14 +126,22 @@ def audit_output_binding(audit, proof):
     rows = proof["rows"]
     assert [row["document_id"] for row in audit["rows"]] == [row["document_id"] for row in rows]
     bad = []
+    mismatched = []
     for evidence, output in zip(audit["rows"], rows):
         # A flushed success audit can precede a failed stdout write. It cannot promote an output row.
         if output["outcome"] == "completed_reversible" and evidence["terminal"] != "request_success":
             bad.append(output["document_id"])
-    return {"passed": audit["schema_valid"] and audit["file_present"] and not bad
-            and any(row["outcome"] == "completed_reversible" for row in rows),
+        expected = {"completed_reversible": "request_success", "completed_nonreversible": "request_success",
+                    "restore_failure": "request_success", "fail_closed": "request_refusal"}.get(output["outcome"])
+        if expected is not None and evidence["terminal"] != expected:
+            mismatched.append(output["document_id"])
+    unknown = sum(row["terminal"] == "unknown" for row in audit["rows"])
+    complete = bool(rows) and audit["file_present"] and unknown == 0
+    return {"passed": audit["schema_valid"] and complete and not mismatched,
+            "schema_valid": audit["schema_valid"], "planned_terminal_coverage_complete": complete,
+            "row_terminals_consistent": not mismatched, "terminal_mismatch_rows": mismatched,
             "successful_output_without_terminal_audit": bad,
-            "unknown_terminal_rows": sum(row["terminal"] == "unknown" for row in audit["rows"])}
+            "unknown_terminal_rows": unknown}
 
 
 def smoke_document():

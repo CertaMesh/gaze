@@ -75,6 +75,57 @@ class AuditTests(unittest.TestCase):
         self.assertFalse(value["schema_valid"])
         self.assertEqual(value["rows"][0]["terminal"], "unknown")
 
+    def test_literal_duplicate_json_keys_never_become_valid_evidence(self):
+        # Literal bytes are essential: a Python dict would erase the duplicate before encoding.
+        lines = [
+            b'{"policy":"baseline-lock-candidate-v1","request":9,"request":1,"status":"request_begin"}\n',
+            b'{"policy":"wrong","policy":"baseline-lock-candidate-v1","request":1,"status":"request_begin"}\n',
+            b'{"policy":"baseline-lock-candidate-v1","request":1,"status":"request_error","status":"request_begin"}\n',
+        ]
+        for line in lines:
+            value = self.joined([], line)
+            self.assertFalse(value["schema_valid"])
+            self.assertEqual(value["rows"][0]["records"], [])
+        value = self.joined([lifecycle(1, "request_begin")],
+            b'{"policy":"baseline-lock-candidate-v1","request":1,"status":"batch_complete",'
+            b'"admitted":4097,"admitted":0,"baseline_overlap":0,"supplemental_overlap":0}\n')
+        self.assertFalse(value["schema_valid"])
+        self.assertEqual(value["rows"][0]["records"], [lifecycle(1, "request_begin")])
+        self.assertEqual(value["rows"][0]["terminal"], "unknown")
+
+    def test_sparse_audit_fails_even_when_missing_outputs_are_unmeasured(self):
+        records = [lifecycle(1, "request_begin"), complete(1), lifecycle(1, "request_success")]
+        outputs = {"rows": [{"document_id": uid, "outcome": outcome} for uid, outcome in
+                            (("synthetic-a", "completed_reversible"),
+                             ("synthetic-b", "unmeasured"), ("synthetic-c", "fail_closed"))]}
+        sparse = self.joined(records)
+        result = dev.audit_output_binding(sparse, outputs)
+        self.assertFalse(result["passed"])
+        self.assertEqual(result["unknown_terminal_rows"], 2)
+        self.assertFalse(result["planned_terminal_coverage_complete"])
+        self.assertEqual(sparse["rows"][1]["records"], [])
+        complete_audit = self.joined(records + [lifecycle(2, "request_begin"), lifecycle(2, "request_error"),
+                                               lifecycle(3, "request_begin"), lifecycle(3, "request_refusal")])
+        self.assertTrue(dev.audit_output_binding(complete_audit, outputs)["passed"])
+        self.assertEqual(outputs["rows"][1]["outcome"], "unmeasured")
+
+    def test_complete_refusals_are_failure_evidence_not_protection(self):
+        records = []
+        for ordinal in (1, 2, 3):
+            records.extend([lifecycle(ordinal, "request_begin"), lifecycle(ordinal, "request_refusal")])
+        audit = self.joined(records)
+        outputs = {"rows": [{"document_id": row["document_id"], "outcome": "fail_closed"} for row in audit["rows"]]}
+        result = dev.audit_output_binding(audit, outputs)
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["planned_terminal_coverage_complete"])
+        self.assertTrue(result["row_terminals_consistent"])
+        self.assertTrue(all(row["outcome"] == "fail_closed" for row in outputs["rows"]))
+        outputs["rows"][0]["outcome"] = "completed_reversible"
+        self.assertFalse(dev.audit_output_binding(audit, outputs)["passed"])
+        audit["schema_valid"] = False
+        outputs["rows"][0]["outcome"] = "fail_closed"
+        self.assertFalse(dev.audit_output_binding(audit, outputs)["passed"])
+
     def test_success_audit_does_not_promote_failed_output(self):
         audit = self.joined([lifecycle(1, "request_begin"), complete(1), lifecycle(1, "request_success")])
         proof = {"rows": [{"document_id": uid, "outcome": "unmeasured"}
@@ -215,6 +266,29 @@ class SmokeTests(unittest.TestCase):
 
 
 class StageTests(unittest.TestCase):
+    def test_hostile_inherited_targets_cannot_redirect_hashed_build_outputs(self):
+        env = stage.build_environment({"CARGO_TARGET_DIR": "/synthetic/elsewhere",
+                                       "CARGO_BUILD_TARGET": "synthetic-other-triple"})
+        self.assertNotIn("CARGO_TARGET_DIR", env)
+        self.assertNotIn("CARGO_BUILD_TARGET", env)
+        commands = stage.commands("2099-01-01T00:00:00+00:00")
+        expected = {"workspace-bootstrap": Path("target"), "producer-build": stage.PRODUCER,
+                    "reference-build": stage.REFERENCE, "validator-build": stage.VALIDATOR}
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            for name, output in expected.items():
+                command = commands[name]
+                target = Path(command[command.index("--target-dir") + 1])
+                self.assertNotIn("--target", command)
+                if name == "workspace-bootstrap":
+                    self.assertEqual(target, output)
+                    continue
+                suffix = Path("debug/validator-recall-probe") if name == "validator-build" else Path("debug/examples/clean_for_bench")
+                self.assertEqual(target / suffix, output)
+                (repo / output).parent.mkdir(parents=True, exist_ok=True)
+                (repo / output).write_bytes(b"synthetic build output")
+                self.assertEqual(stage.output_hashes(repo, name), {str(output): stage.digest(repo / output)})
+
     def test_explicit_deadline_all_builds_locked_offline_same_checkout_and_marker(self):
         deadline = "2099-01-01T00:00:00+00:00"  # Synthetic contract only, never a runtime default.
         commands = stage.commands(deadline)
@@ -222,7 +296,10 @@ class StageTests(unittest.TestCase):
             self.assertIn("--locked", commands[name])
             self.assertIn("--offline", commands[name])
         self.assertIn("safety-net-kiji,redact-live,benchmark-baseline-lock", commands["producer-build"])
-        self.assertIn("gaze-recognizers/benchmark-baseline-lock", commands["validator-build"])
+        self.assertNotIn("--features", commands["validator-build"])
+        self.assertEqual(commands["producer-build"][-2:], ["--target-dir", "target"])
+        self.assertIsNone(stage.environment()["CARGO_TARGET_DIR"])
+        self.assertIsNone(stage.environment()["CARGO_BUILD_TARGET"])
         self.assertNotIn("benchmark-baseline-lock", ",".join(commands["reference-build"]))
         self.assertEqual(commands["dev"][-1], deadline)
         with self.assertRaises(ValueError):
