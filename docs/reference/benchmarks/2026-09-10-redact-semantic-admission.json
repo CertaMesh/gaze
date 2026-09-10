@@ -1,0 +1,72 @@
+{
+  "status": "scoped_verification_passed_quality_unmeasured",
+  "source_commit": "31bb13eb4302069c38987755e14a50600533b24b",
+  "base_commit": "69f5ef9ef8d6d0f62025ae27c50eacb5339eb968",
+  "toolchain": "1.96",
+  "jobs": 2,
+  "offline": true,
+  "ort": "explicit pre-existing cached static aarch64-apple-darwin library",
+  "models_invoked": false,
+  "corpus_read": false,
+  "total_tests_passed": 26,
+  "producer_sha256": "85de1a908bd8575599c81d20bd4c2c1b2788d372e8165972d9d932e4e5d21f70",
+  "checks": [
+    {
+      "name": "types",
+      "command": "rustup run 1.96 cargo test --offline -p gaze-types --features phone-parser phone_candidate",
+      "exit_code": 0,
+      "tests_passed": 2,
+      "log_sha256": "e0e7f11308fa8bb14ac8b02737d4f68b11b86db534cd139555c8ba2c064f2115"
+    },
+    {
+      "name": "producer-tests",
+      "command": "rustup run 1.96 cargo test --offline -p gaze-recognizers --features redact-live --example clean_for_bench semantic_admission",
+      "exit_code": 0,
+      "tests_passed": 11,
+      "log_sha256": "386bd768e9c83905f97fbfa33ae1d73aea01723ca542a6f375ddcdd6348d73a6"
+    },
+    {
+      "name": "assembly",
+      "command": "rustup run 1.96 cargo test --offline -p gaze-assembly --lib injected_context_recognizer_counts_without_weakening_empty_floor_guard",
+      "exit_code": 0,
+      "tests_passed": 1,
+      "log_sha256": "f594891518a635e7e178ce2d42beb42802c391281ac1c5d30f2df18b97e9aa2c"
+    },
+    {
+      "name": "batch",
+      "command": "rustup run 1.96 cargo test --offline -p gaze-recognizers --features redact-live --lib redact_live::tests",
+      "exit_code": 0,
+      "tests_passed": 4,
+      "log_sha256": "f54348b5df192dade2580685cc1afbdc86c11c3f92e999be4ed61142830edf00"
+    },
+    {
+      "name": "validators",
+      "command": "rustup run 1.96 cargo test --offline -p gaze-recognizers --features redact-live --test validator_veto",
+      "exit_code": 0,
+      "tests_passed": 8,
+      "log_sha256": "8bec8092dbcecf592d930f95d9bcb2a4fbd9aab64b1a4de87c67adf3a64c672a"
+    },
+    {
+      "name": "clippy",
+      "command": "rustup run 1.96 cargo clippy --offline -p gaze-types -p gaze-assembly -p gaze-recognizers --features gaze-recognizers/redact-live,gaze-recognizers/safety-net-kiji,gaze-recognizers/safety-net-openai --lib --example clean_for_bench -- -D warnings",
+      "exit_code": 0,
+      "tests_passed": null,
+      "log_sha256": "8a6b9bdb3a47a7e73794d3d9beacaf459d6fdaa3b9de4cbf20816e7202e5b5e6"
+    },
+    {
+      "name": "build",
+      "command": "rustup run 1.96 cargo build --offline -p gaze-recognizers --features redact-live,safety-net-kiji,safety-net-openai --example clean_for_bench",
+      "exit_code": 0,
+      "tests_passed": null,
+      "log_sha256": "16b3af0a176b48b4b8adbf357ef64c0e6e14d4d961ae77fd7fecb0d1eb1024c0"
+    }
+  ],
+  "additional_checks": [
+    "scoped rustfmt --check passed",
+    "git diff --check passed"
+  ],
+  "remaining": [
+    "root final independent review",
+    "paired actual-output recall/false-positive/availability/restore evaluation"
+  ]
+}
