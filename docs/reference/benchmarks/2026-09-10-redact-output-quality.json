@@ -33603,12 +33603,12 @@
     }
   ],
   "runtime_release": {
-    "at": "2026-09-10T09:48:00Z",
     "lease_released": true,
     "scratchpad": 6185,
     "revision": 102,
     "own_terminal": 7378,
-    "jobs_remaining": 0
+    "jobs_remaining": 0,
+    "utc_minute": "2026-09-10T09:48Z"
   },
   "source_metadata_changes": [
     "Lowercase validated Redact label in source ID; source-ID consumers/custom policies may observe intentional casing change.",
@@ -33647,5 +33647,15 @@
     "target/quality-7377/paired-final/quick/output-proof-v1/repetition-1/pass2-ner.json": "346e479c83ca8882207c354fcb82f2ee3b9b2cf4c46816c72db69943a8d32efe",
     "target/quality-7377/paired-comparison-pass2-ner-redact.json": "845ce6292ce1fe140d129d479e41ab8da06a1eb16fe0bf28e29b15d2eff39838",
     "target/quality-7377/paired-comparison-rule-floor-redact.json": "df433123f5c910f3b8996ca0639087040c8bd57135c58cecf5444fd43c0151e0"
-  }
+  },
+  "false_positive_definition": "UTF-8 source bytes outside benchmark gold PII annotations that were replaced; treated as non-PII by those annotations",
+  "report_verification": [
+    "All768 final rows schema-validated and population-complete",
+    "Both comparator documents recompute exactly from embedded sidecars",
+    "Frozen ordered dev/complement digests match embedded arrays",
+    "Integrated control2463surviving/2648FP/256restore matches frozen baseline integers",
+    "Raw input/output/manifest/token payload fields absent throughout JSON; manifest_spans fields are integer counts",
+    "Final producer and validator hashes match build-and-smoke proof",
+    "Original failure-sidecar evidence retained separately from final measured outcomes"
+  ]
 }

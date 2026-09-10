@@ -6,6 +6,8 @@ This measures Gaze `pipeline_text/clean_for_bench` output, using replay-verified
 
 ## Paired result
 
+False-positive (FP) bytes are UTF-8 source bytes outside the benchmark gold PII annotations that Gaze replaced. They are treated as non-PII by those annotations.
+
 All arms planned the same 256 documents, 11,316 gold UTF-8 bytes and 1,275 gold spans. The control completed and restored all 256. Each candidate completed and restored 250, refused the same six, and left 85 gold bytes unavailable for measurement. Refusals receive no zero-leak credit. There were zero unmeasured outcomes, restore failures, or irreversible redactions in the completed final run.
 
 The comparison below uses the **same 250 completed, reversible documents and 11,231 gold bytes** in each arm.
@@ -26,7 +28,7 @@ For the complete 256-row control, surviving PII is 2,463/11,316 bytes, FP is 2,6
 
 Both candidates have six `fail_closed` outcomes with reason `recognizer_detect` and stage `clean`: three German and three English rows, comprising four A4 Unicode/mixed-language negatives and two Dataiku positives. Their unavailable gold total is 85 bytes. The underlying private bridge error codes were not retained. Alignment, numeric failure, timeout and other causes are **unknown**, not inferred from the category or source capabilities.
 
-FP attribution by predicted class and vendor disposition is also **not retained**. Saved per-gold-label recall is not a substitute for FP class attribution. Vendor disposition counters are diagnostic rather than exhaustive, and no DEV disposition distribution can be reconstructed from these artifacts. Further diagnosis requires separately authorized instrumentation; this report performed no new inference.
+FP attribution by predicted class and vendor disposition is also **not retained**. Saved per-gold-label recall is not a substitute for FP class attribution. Vendor disposition counters are diagnostic rather than exhaustive, and no DEV disposition distribution can be reconstructed from these artifacts. Further diagnosis requires separate instrumentation; this report performed no new inference.
 
 Available A4 category FP byte counts, control to augmentation, are: invalid identifiers 51 to 519; code/log syntax 0 to 169; Unicode/mixed-language 0 to 63; commerce identifiers 0 to 51. Documentation/network stays 317, public entities 260, generic roles 0, and temporal/numeric 0. Unicode/mixed-language has 12 completed of 16 planned rows in each candidate; all other negative categories complete. This is 628 to 1,379 A4 FP bytes, an increase of 751. Common positive-row FP rises from 1,980 to 2,014, accounting for the remaining 34-byte increase. Replacement has A4 FP 1,245; its public-entity FP is 126 and the other category totals match augmentation. Full category/language/count distributions are in the JSON.
 
