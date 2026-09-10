@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import copy
 
 import redact_repaired_dev as dev
 
@@ -35,6 +36,24 @@ class AdmissionJoinTests(unittest.TestCase):
         self.assertEqual(result["rows"][0]["terminal"], "unknown")
         with self.assertRaises(AssertionError):
             self.joined([{"request": 2, "status": "request_begin"}])
+
+
+class SmokeBindingTests(unittest.TestCase):
+    def test_empty_missing_stale_and_duplicate_rows_refuse(self):
+        row = {"outcome": "completed_reversible", "surviving_bytes": 0,
+               "exact_restore_count": 1, "redact_count": 0,
+               "actual_redact_exact_raw_interval": True}
+        good = {"freeze_sha256": "synthetic-freeze", "arms": {
+            arm: [copy.deepcopy(row)] for arm in dev.ARMS[1:]}}
+        dev.validate_smoke(good, "synthetic-freeze")
+        missing = copy.deepcopy(good)
+        del missing["arms"][dev.ARMS[1]]
+        duplicate = copy.deepcopy(good)
+        duplicate["arms"][dev.ARMS[1]].append(row)
+        for bad in ({}, {"freeze_sha256": "synthetic-freeze", "arms": {}},
+                    missing, duplicate, dict(good, freeze_sha256="stale")):
+            with self.assertRaises((AssertionError, KeyError)):
+                dev.validate_smoke(bad, "synthetic-freeze")
 
 
 if __name__ == "__main__":

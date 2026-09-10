@@ -12,6 +12,7 @@ import dataiku_en_de_gaze_bench as dataiku
 import gaze_bench_score as score
 import run_no_opf_benchmark as runner
 from bench_subprocess import BenchSubprocess
+import redact_repaired_stage as stage
 
 IDS_SHA = "3993b14aeded90b056854d29172de148424b6e7b0eb967395e6b78de2fbbce36"
 FILE_SHA = "5a37e640fa43c3808a8d5aae2965a5c2e72eb815a0b7363fa82f89e3ff943427"
@@ -29,6 +30,33 @@ def write_new(path, value):
     with path.open("x") as handle:
         json.dump(value, handle, indent=2)
         handle.write("\n")
+
+
+def validate_receipt(repo, out, name, head):
+    path = out.parent / (name + ".json")
+    receipt = json.loads(path.read_text())
+    assert receipt["exit_code"] == 0 and receipt["status"] == "exited"
+    assert receipt["source_head"] == head
+    assert receipt["source_before"] == receipt["source_after"] == {"head": head, "clean": True}
+    assert receipt["command"] == stage.intended_commands()[name]
+    assert receipt["effective_environment"] == stage.selected_environment()
+    assert receipt["stage_sha256"] == digest(Path(stage.__file__))
+    assert receipt["deadline_utc"] == stage.DEADLINE_UTC
+    assert receipt["cleanup_reserve_seconds"] == stage.CLEANUP_RESERVE
+    assert receipt["owned_remaining"] == 0
+    assert receipt["output_sha256"] == stage.output_hashes(repo, name)
+    return digest(path)
+
+
+def validate_smoke(smoke, freeze_digest):
+    assert smoke["freeze_sha256"] == freeze_digest
+    assert set(smoke["arms"]) == set(ARMS[1:])
+    for rows in smoke["arms"].values():
+        assert isinstance(rows, list) and len(rows) == 1
+        row = rows[0]
+        assert row["outcome"] == "completed_reversible"
+        assert row["surviving_bytes"] == 0 and row["exact_restore_count"] == 1
+        assert row["redact_count"] == 0 and row["actual_redact_exact_raw_interval"] is True
 
 
 def verify_private_model():
@@ -134,6 +162,7 @@ def joined_audit(path, ids):
 
 def run(args):
     os.environ.pop("GAZE_NER_LOCALE", None)
+    assert stage.time.time() < stage.DEADLINE - stage.CLEANUP_RESERVE
     repo = Path(__file__).resolve().parents[2]
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -148,10 +177,9 @@ def run(args):
     models = runner.validate_required_models(repo, davlan, kiji)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=repo)
-    for name in ("workspace-bootstrap", "producer-build", "validator-build",
-                 "python-tests", "runner-tests", "observer-tests"):
-        receipt = json.loads((out.parent / (name + ".json")).read_text())
-        assert receipt["exit_code"] == 0 and receipt["source_head"] == head
+    receipts = {name: validate_receipt(repo, out, name, head) for name in (
+        "workspace-bootstrap", "producer-build", "validator-build", "python-tests",
+        "runner-tests", "observer-tests", "supervisor-tests")}
     pins = {"source_head": head, "producer_sha256": digest(binary),
             "validator_sha256": digest(validator), "bridge_sha256": digest(bridge),
             "private_model_manifest_sha256": verify_private_model(),
@@ -159,6 +187,10 @@ def run(args):
             "source_contract": score.output_source_contract(docs), "arms": ARMS,
             "threshold": 0.3, "redact_threshold": 0.6, "org_enabled": True,
             "warmups": 0, "repetitions": 1,
+            "stage_sha256": digest(Path(stage.__file__)),
+            "deadline_utc": stage.DEADLINE_UTC,
+            "cleanup_reserve_seconds": stage.CLEANUP_RESERVE,
+            "receipt_sha256": receipts,
             "effective_environment": {
                 "GAZE_NER_LOCALE": None, "GAZE_NER_THRESHOLD": "0.3",
                 "GAZE_NER_MODEL_DIR": str(davlan),
@@ -172,6 +204,8 @@ def run(args):
         return 0
     frozen = json.loads((out / "freeze.json").read_text())
     assert json.loads(json.dumps(pins)) == frozen
+    freeze_receipt_digest = validate_receipt(repo, out, "freeze", head)
+    freeze_digest = digest(out / "freeze.json")
     environment = dict(os.environ)
     if args.phase == "smoke":
         smoke = score.Document("synthetic-fullwidth-smoke", "😀 plain\n\tＳｃｈｍｉｄｔ  end",
@@ -193,17 +227,19 @@ def run(args):
                         for source in item["provenance"]["source_ids"])
                 for item in trace)
             results[arm] = [row]
-        write_new(out / "smoke.json", results)
-        assert all(rows[0]["outcome"] == "completed_reversible"
-                   and rows[0]["surviving_bytes"] == 0
-                   and rows[0]["actual_redact_exact_raw_interval"] for rows in results.values())
+        smoke_result = {"freeze_sha256": freeze_digest, "arms": results}
+        write_new(out / "smoke.json", smoke_result)
+        validate_smoke(smoke_result, freeze_digest)
         return 0
     smoke = json.loads((out / "smoke.json").read_text())
-    assert all(rows[0]["outcome"] == "completed_reversible"
-               and rows[0]["surviving_bytes"] == 0
-               and rows[0]["actual_redact_exact_raw_interval"] for rows in smoke.values())
+    validate_smoke(smoke, freeze_digest)
+    smoke_receipt_digest = validate_receipt(repo, out, "smoke", head)
     environment["GAZE_REDACT_ADMISSION_AUDIT_FILE"] = pins["admission_audit"]
-    write_new(out / "dev-started.json", {"source_head": head, "planned": 256})
+    write_new(out / "dev-started.json", {
+        "source_head": head, "planned": 256, "freeze_sha256": freeze_digest,
+        "freeze_receipt_sha256": freeze_receipt_digest,
+        "smoke_receipt_sha256": smoke_receipt_digest,
+        "smoke_sha256": digest(out / "smoke.json")})
     measurements = score.collect_validator_measurements(validator, docs, ids)
     try:
         runs, repetitions = runner.execute_measurements(
