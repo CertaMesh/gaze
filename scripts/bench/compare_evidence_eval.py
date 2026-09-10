@@ -21,6 +21,8 @@ DEPENDENCIES = (
     'scripts/bench/gaze_bench_score.py',
     'scripts/bench/bench_subprocess.py',
 )
+RULEPACK_DIR = 'crates/gaze-recognizers/embedded'
+MODEL_DECLARATION = 'scripts/bench/no_opf_models.toml'
 
 
 def emit(record):
@@ -106,6 +108,24 @@ def main():
             parser.error(f'baseline and candidate dependency differ: {path}')
         dependency_hashes[path] = dict(baseline_sha256=hashlib.sha256(baseline_bytes).hexdigest(),
                                       candidate_sha256=hashlib.sha256(current_bytes).hexdigest())
+    # gaze_bench_score initializes its vocabulary from these files at import time.
+    baseline_rulepacks = {path for path in git_bytes(
+        'ls-tree', '-r', '--name-only', revision, '--', RULEPACK_DIR).decode().splitlines()
+        if str(Path(path).parent) == RULEPACK_DIR and path.endswith('.toml')}
+    current_rulepacks = {str(path.relative_to(ROOT)) for path in (ROOT / RULEPACK_DIR).glob('*.toml')}
+    if baseline_rulepacks != current_rulepacks:
+        parser.error('baseline and candidate rulepack inventories differ')
+    initialization_data = {}
+    for path in sorted(baseline_rulepacks | {MODEL_DECLARATION}):
+        try:
+            baseline_bytes = git_bytes('show', f'{revision}:{path}')
+            current_bytes = (ROOT / path).read_bytes()
+        except (subprocess.CalledProcessError, OSError):
+            parser.error('baseline or candidate initialization data is unavailable locally')
+        if baseline_bytes != current_bytes:
+            parser.error(f'baseline and candidate initialization data differ: {path}')
+        initialization_data[path] = dict(baseline_sha256=hashlib.sha256(baseline_bytes).hexdigest(),
+                                        candidate_sha256=hashlib.sha256(current_bytes).hexdigest())
     candidate_source = (ROOT / SOURCE).read_bytes()
     if source == candidate_source:
         parser.error('baseline and candidate sources are identical; comparison would be vacuous')
@@ -115,6 +135,7 @@ def main():
               candidate_source_sha256=hashlib.sha256(candidate_source).hexdigest(),
               candidate_source_dirty=bool(git_bytes('status', '--porcelain', '--', SOURCE)),
               dependencies=dependency_hashes,
+              initialization_data=initialization_data,
               class_contract_sha256=hashlib.sha256(contract).hexdigest(),
               python=sys.version, platform=platform.platform(),
               command=[sys.executable, *sys.argv], mode=args.mode,

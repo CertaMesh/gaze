@@ -23,9 +23,14 @@ class ComparisonRefusalTests(unittest.TestCase):
         contract = Path('docs/reference/benchmarks/class-commitments-v1.json')
         (self.root / contract).parent.mkdir(parents=True)
         shutil.copyfile(ROOT / contract, self.root / contract)
+        rulepacks = Path('crates/gaze-recognizers/embedded')
+        (self.root / rulepacks).mkdir(parents=True)
+        for path in (ROOT / rulepacks).glob('*.toml'):
+            shutil.copyfile(path, self.root / rulepacks / path.name)
+        shutil.copyfile(ROOT / 'scripts/bench/no_opf_models.toml', scripts / 'no_opf_models.toml')
         self.env = dict(os.environ, GIT_CONFIG_NOSYSTEM='1', GIT_CONFIG_GLOBAL=os.devnull)
         self.git('init', '--quiet')
-        self.git('add', 'scripts/bench', str(contract))
+        self.git('add', 'scripts/bench', str(contract), str(rulepacks))
         self.git('-c', 'user.name=Synthetic Fixture', '-c', 'user.email=fixture@example.invalid',
                  'commit', '--quiet', '-m', 'synthetic comparison fixture')
         self.revision = self.git('rev-parse', 'HEAD').stdout.strip()
@@ -75,6 +80,23 @@ class ComparisonRefusalTests(unittest.TestCase):
 
     def test_timing_without_lease_is_refused(self):
         self.refused(self.revision, 'timing requires --machine-lease', mode='timing')
+
+    def test_import_time_data_drift_is_refused(self):
+        rulepack = next((self.root / 'crates/gaze-recognizers/embedded').glob('*.toml'))
+        for path in (rulepack, self.root / 'scripts/bench/no_opf_models.toml'):
+            with self.subTest(data=path.name):
+                original = path.read_bytes()
+                try:
+                    path.write_bytes(original + b'\n# synthetic data drift\n')
+                    self.refused(self.revision, 'initialization data differ')
+                finally:
+                    path.write_bytes(original)
+        extra = rulepack.parent / 'synthetic-added.toml'
+        extra.write_text('')
+        self.refused(self.revision, 'rulepack inventories differ')
+        extra.unlink()
+        rulepack.unlink()
+        self.refused(self.revision, 'rulepack inventories differ')
 
 
 if __name__ == '__main__':
