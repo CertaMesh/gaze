@@ -132,6 +132,7 @@ def joined_audit(path, ids):
 
 
 def run(args):
+    os.environ.pop("GAZE_NER_LOCALE", None)
     repo = Path(__file__).resolve().parents[2]
     out = args.output.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -146,7 +147,8 @@ def run(args):
     models = runner.validate_required_models(repo, davlan, kiji)
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip()
     assert not subprocess.check_output(["git", "status", "--porcelain"], cwd=repo)
-    for name in ("workspace-bootstrap", "producer-build", "validator-build", "python-tests"):
+    for name in ("workspace-bootstrap", "producer-build", "validator-build",
+                 "python-tests", "runner-tests", "observer-tests"):
         receipt = json.loads((out.parent / (name + ".json")).read_text())
         assert receipt["exit_code"] == 0 and receipt["source_head"] == head
     pins = {"source_head": head, "producer_sha256": digest(binary),
@@ -156,6 +158,13 @@ def run(args):
             "source_contract": score.output_source_contract(docs), "arms": ARMS,
             "threshold": 0.3, "redact_threshold": 0.6, "org_enabled": True,
             "warmups": 0, "repetitions": 1,
+            "effective_environment": {
+                "GAZE_NER_LOCALE": None, "GAZE_NER_THRESHOLD": "0.3",
+                "GAZE_NER_MODEL_DIR": str(davlan),
+                "GAZE_REDACT_BRIDGE": str(bridge),
+                "GAZE_REDACT_MODEL_DIR": os.environ["GAZE_REDACT_MODEL_DIR"],
+                "DAL_APP_ID": "gaze-local-redact-primary",
+                "DAL_COREML_COMPUTE_UNITS": "all"},
             "admission_audit": str(out / "admission.jsonl")}
     if args.phase == "freeze":
         write_new(out / "freeze.json", pins)
