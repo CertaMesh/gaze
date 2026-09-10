@@ -1216,6 +1216,7 @@ fn register_locale_aware(pipeline: Pipeline) -> Result<Pipeline, Box<dyn std::er
         ))
 }
 
+#[cfg(any(feature = "safety-net-kiji", feature = "safety-net-openai"))]
 fn benchmark_subprocess_timeout() -> Result<std::time::Duration, Box<dyn std::error::Error>> {
     let seconds = match std::env::var("GAZE_TEST_SUBPROCESS_TIMEOUT_SECS") {
         Ok(value) => value.parse::<u64>()?,
@@ -1376,8 +1377,11 @@ mod tests {
     use super::*;
     use gaze::RawDocument;
 
+    #[cfg(feature = "safety-net-kiji")]
     const PRODUCER_DETERMINISM_CHILD: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_CHILD";
+    #[cfg(feature = "safety-net-kiji")]
     const PRODUCER_DETERMINISM_BEGIN: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_BEGIN";
+    #[cfg(feature = "safety-net-kiji")]
     const PRODUCER_DETERMINISM_END: &str = "GAZE_BENCH_PRODUCER_DETERMINISM_END";
 
     fn rule_floor_response(fixture_id: &str, locale: &str, text: &str) -> Response {
