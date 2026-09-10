@@ -180,3 +180,26 @@ uv run --project scripts/bench python -m unittest discover -s scripts/bench
 
 CI does not download models or run either benchmark profile. The authoritative
 full model run and baseline/error-bucket analysis belong to A6.
+
+## Paired evaluator throughput (synthetic only)
+
+Measure confidence-interval computation independently of detector inference:
+
+```bash
+uv run --project scripts/bench --locked python scripts/bench/benchmark_evidence_eval.py \
+  --groups 500 --resamples 64 --repetitions 5
+```
+
+The tool generates 999 count-only cases in 500 groups across two synthetic
+strata, with unequal group sizes and weights. It times the complete paired
+interval call after one discarded warmup; fixture construction is excluded.
+Output includes every timing and the interval, and inconsistent repeated
+intervals fail the command. It reads no corpus or model. This measures evaluator
+throughput only, not detection quality, pipeline latency or release readiness.
+
+For a before/after comparison, run this same tool with each evaluator revision
+on the same host and Python environment, alternate run order, and require exact
+interval equality. Keep source revisions and timing samples with the result.
+The estimator counts resampled case multiplicities once, then checks that every
+member of a group appears equally often. This removes repeated list scans while
+preserving group weighting, arithmetic order and the existing refusal rules.

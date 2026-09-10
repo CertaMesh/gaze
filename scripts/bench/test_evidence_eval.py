@@ -203,6 +203,23 @@ class IntervalArithmeticTests(unittest.TestCase):
         actual = {round(e._estimate('gold_bytes_surviving_egress',e.draw_resample(2,i)),8) for i in range(100)}
         self.assertTrue(actual == {round(x,8) for x in expected})
 
+    def test_partial_group_draw_is_refused(self):
+        e = paired()
+        for draw in [
+            ['fixture_a', 'fixture_c'],
+            ['fixture_a', 'fixture_b', 'fixture_b', 'fixture_c'],
+        ]:
+            with self.subTest(draw=draw), self.assertRaises(ep.ReceiptRefused) as error:
+                e._estimate('gold_bytes_surviving_egress', draw)
+            self.assertEqual(error.exception.code, 'inventory_conflict')
+
+    def test_repeated_group_keeps_its_weight_and_member_average(self):
+        # Group A has mean delta 4 and weight 1; B has delta -9 and weight 2.
+        e = paired()
+        result = e._estimate('gold_bytes_surviving_egress',
+            ['fixture_a', 'fixture_b'] * 3 + ['fixture_c'])
+        self.assertEqual(result, (3 * 4 - 2 * 9) / 5)
+
     def test_legacy_byte_helpers_overlap_adjacency_unicode(self):
         for spans, expected in [([(0,4),(2,8)],8), ([(0,4),(4,8)],8), ([(0,2),(4,8)],6), ([(0,len('äö'.encode())),(2,6)],6)]:
             self.assertTrue(ee.surviving_bytes(spans) == expected)

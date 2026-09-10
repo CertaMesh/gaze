@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import copy
+from collections import Counter
 from dataclasses import dataclass, fields
 import math
 import random
@@ -197,12 +198,14 @@ class PrivateEvaluator:
         groups = self._groups()
         original_mass = {}
         sampled = {}
+        # Count once: repeated list scans make each bootstrap estimate quadratic.
+        multiplicities = Counter(keys)
         # A group appears as its full record block, repeated once for each draw.
         for g, members in groups.items():
             c = self.inventory.case(members[0])
             original_mass[c.stratum] = original_mass.get(c.stratum, 0.) + c.weight
-            multiplicity = keys.count(members[0])
-            ep.require(all(keys.count(k) == multiplicity for k in members), 'inventory_conflict')
+            multiplicity = multiplicities[members[0]]
+            ep.require(all(multiplicities[k] == multiplicity for k in members), 'inventory_conflict')
             if not multiplicity:
                 continue
             delta = sum(getattr(self._records['candidate'][k], field) - getattr(self._records['base'][k], field) for k in members) / len(members)
