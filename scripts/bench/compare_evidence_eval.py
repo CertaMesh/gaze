@@ -13,10 +13,6 @@ import subprocess
 import sys
 import tempfile
 
-import benchmark_evidence_eval as benchmark
-import evidence_eval as candidate
-
-
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = 'scripts/bench/evidence_eval.py'
 CONTRACT = 'docs/reference/benchmarks/class-commitments-v1.json'
@@ -35,7 +31,9 @@ def git_bytes(*args):
     return subprocess.check_output(['git', *args], cwd=ROOT, stderr=subprocess.PIPE)
 
 
-def compare(baseline, mode):
+def compare(baseline, candidate, mode):
+    import benchmark_evidence_eval as benchmark
+
     if mode != 'timing':
         cases = 0
         for groups in (2, 7, 25):
@@ -108,7 +106,7 @@ def main():
             parser.error(f'baseline and candidate dependency differ: {path}')
         dependency_hashes[path] = dict(baseline_sha256=hashlib.sha256(baseline_bytes).hexdigest(),
                                       candidate_sha256=hashlib.sha256(current_bytes).hexdigest())
-    candidate_source = Path(candidate.__file__).read_bytes()
+    candidate_source = (ROOT / SOURCE).read_bytes()
     if source == candidate_source:
         parser.error('baseline and candidate sources are identical; comparison would be vacuous')
     emit(dict(scope='generated_counts_only', baseline_revision=revision,
@@ -127,6 +125,8 @@ def main():
               machine_lease=args.machine_lease,
               timing_requires_no_concurrent_owned_jobs=args.mode != 'parity'))
     # Preserve the module's real relative contract lookup, with byte-identical data.
+    import evidence_eval as candidate
+
     with tempfile.TemporaryDirectory(prefix='gaze-evaluator-comparison-') as directory:
         root = Path(directory)
         path = root / SOURCE
@@ -140,7 +140,7 @@ def main():
         sys.modules[spec.name] = baseline
         try:
             spec.loader.exec_module(baseline)
-            compare(baseline, args.mode)
+            compare(baseline, candidate, args.mode)
         finally:
             del sys.modules[spec.name]
 
