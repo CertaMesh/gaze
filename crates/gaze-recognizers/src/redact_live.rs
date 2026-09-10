@@ -343,7 +343,7 @@ fn validate(reply: Reply, id: u64, text: &str) -> Result<Vec<Detection>, BridgeE
             Ok(Detection::new(
                 span.start..span.end,
                 class,
-                format!("{SOURCE}:{}", span.label),
+                format!("{SOURCE}:{}", span.label.to_ascii_lowercase()),
             ))
         })
         .collect()
@@ -398,6 +398,13 @@ mod tests {
             "spans":[{"start":0,"end":1,"label":"GIVEN_NAME","score":0.8}],
             "dispositions":{"threshold":0,"arbitration":0,"cleanup":0,"special_tokens":2},"error":null
         })).unwrap()
+    }
+    #[test]
+    fn validated_batch_emits_canonical_metadata_source_id() {
+        let detections = validate(reply(), 1, "a").unwrap();
+        assert_eq!(detections[0].source, "redact-patched-coreml-v1:given_name");
+        assert_eq!(detections[0].class, PiiClass::Name);
+        assert_eq!(detections[0].span, 0..1);
     }
     #[test]
     fn full_batch_rejects_malformed_metadata_before_any_span_survives() {

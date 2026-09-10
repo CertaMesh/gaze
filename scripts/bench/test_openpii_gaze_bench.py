@@ -812,6 +812,7 @@ class ResponseValidationTests(unittest.TestCase):
         item["class"] = "custom:family:payment-card-or-iban"
         item["provenance"]["source_ids"] = [
             "kiji",
+            "redact-patched-coreml-v1:given_name",
             "rule.iban",
         ]
         benchmark.validate_response(self.trace_document(), response)
