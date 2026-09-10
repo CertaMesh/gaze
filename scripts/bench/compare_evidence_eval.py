@@ -20,6 +20,11 @@ import evidence_eval as candidate
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = 'scripts/bench/evidence_eval.py'
 CONTRACT = 'docs/reference/benchmarks/class-commitments-v1.json'
+DEPENDENCIES = (
+    'scripts/bench/evidence_protocol.py',
+    'scripts/bench/gaze_bench_score.py',
+    'scripts/bench/bench_subprocess.py',
+)
 
 
 def emit(record):
@@ -27,7 +32,7 @@ def emit(record):
 
 
 def git_bytes(*args):
-    return subprocess.check_output(['git', *args], cwd=ROOT)
+    return subprocess.check_output(['git', *args], cwd=ROOT, stderr=subprocess.PIPE)
 
 
 def compare(baseline, mode):
@@ -81,13 +86,28 @@ def main():
         parser.error('--baseline-revision must be a full lowercase commit hash')
     if args.mode != 'parity' and not args.machine_lease:
         parser.error('timing requires --machine-lease and no concurrent owned jobs')
-    revision = git_bytes('rev-parse', '--verify', args.baseline_revision + '^{commit}').decode().strip()
+    try:
+        revision = git_bytes('rev-parse', '--verify', args.baseline_revision + '^{commit}').decode().strip()
+    except subprocess.CalledProcessError:
+        parser.error('baseline commit is unavailable locally')
     if revision != args.baseline_revision:
         parser.error('--baseline-revision must identify the commit itself')
-    source = git_bytes('show', f'{revision}:{SOURCE}')
     contract = (ROOT / CONTRACT).read_bytes()
-    if git_bytes('show', f'{revision}:{CONTRACT}') != contract:
+    try:
+        source = git_bytes('show', f'{revision}:{SOURCE}')
+        baseline_contract = git_bytes('show', f'{revision}:{CONTRACT}')
+        baseline_dependencies = {path: git_bytes('show', f'{revision}:{path}') for path in DEPENDENCIES}
+    except subprocess.CalledProcessError:
+        parser.error('baseline evaluator, contract, or dependency is unavailable locally')
+    if baseline_contract != contract:
         parser.error('baseline and candidate class contracts differ')
+    dependency_hashes = {}
+    for path, baseline_bytes in baseline_dependencies.items():
+        current_bytes = (ROOT / path).read_bytes()
+        if baseline_bytes != current_bytes:
+            parser.error(f'baseline and candidate dependency differ: {path}')
+        dependency_hashes[path] = dict(baseline_sha256=hashlib.sha256(baseline_bytes).hexdigest(),
+                                      candidate_sha256=hashlib.sha256(current_bytes).hexdigest())
     candidate_source = Path(candidate.__file__).read_bytes()
     if source == candidate_source:
         parser.error('baseline and candidate sources are identical; comparison would be vacuous')
@@ -95,6 +115,8 @@ def main():
               baseline_source_sha256=hashlib.sha256(source).hexdigest(),
               candidate_revision=git_bytes('rev-parse', 'HEAD').decode().strip(),
               candidate_source_sha256=hashlib.sha256(candidate_source).hexdigest(),
+              candidate_source_dirty=bool(git_bytes('status', '--porcelain', '--', SOURCE)),
+              dependencies=dependency_hashes,
               class_contract_sha256=hashlib.sha256(contract).hexdigest(),
               python=sys.version, platform=platform.platform(),
               command=[sys.executable, *sys.argv], mode=args.mode,

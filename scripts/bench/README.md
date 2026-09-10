@@ -210,11 +210,17 @@ The comparison checks exact intervals for 30 seed/group combinations, then
 alternates four timing rounds with a discarded warmup per arm. `--mode parity`
 runs only the untimed comparisons; `--mode timing` runs only paired measurements.
 Output records the full baseline revision, both evaluator source SHA256 hashes,
-the verified shared class-contract hash, Python/platform, command/configuration,
+the verified shared class-contract and dependency hashes, Python/platform, command/configuration,
 lease reference, every sample and exact interval parity. Mutable revision names,
-identical sources and changed class contracts are refused. The lease reference
+identical sources, changed class contracts and local dependency drift are refused.
+The dependency guard covers `evidence_protocol.py`, `gaze_bench_score.py`, and its
+transitive import `bench_subprocess.py`; both arms' hashes are recorded.
+The pinned revision above is the verified baseline for this candidate; another
+revision must also satisfy those equality guards. The lease reference
 records the operator's serialization claim; the tool does not acquire a lease
 or detect unrelated host work. Run without concurrent owned jobs.
+Keep raw output local because it includes command paths and lease identifiers;
+share only sanitized source hashes, configuration, parity and timing records.
 
 The estimator counts resampled case multiplicities once, then checks that every
 member of a group appears equally often. This removes repeated list scans while
