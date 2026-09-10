@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Missing, malformed, or nonfinite NER model outputs now fail detection instead
+  of silently succeeding with empty results.
+
 ## [0.13.0] - 2026-09-09
 
 ### Added

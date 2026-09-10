@@ -120,9 +120,6 @@ fn nonfinite_and_out_of_range_scores_fail_before_threshold() {
         );
         assert!(detect(&ProbeRecognizer::new(constant(vec![item])), "a").is_err());
     }
-    let nan = f64::NAN;
-    assert!([nan].into_iter().any(|score| !score.is_finite()));
-    assert_eq!([nan].into_iter().filter(|score| *score >= 0.5).count(), 0);
     for score in [0.0, 1.0] {
         let mut item = raw(0, 1, "PERSON");
         item.score = score;
@@ -609,6 +606,7 @@ fn stale_owner_net_coordinates_are_not_clean_coordinates_counterfixture() {
     // owner endpoint crosses a known raw suffix instead of relying on token shape.
     let raw_owner = "Synthetic Example ".repeat(token.len() + 1);
     let owned = session.tokenize(&PiiClass::Name, &raw_owner).unwrap();
+    assert!(owned.is_ascii());
     assert!(raw_owner.len() > owned.len());
     let input = format!("{owned}{}", " x".repeat(raw_owner.len()));
     for stale in [false, true] {
