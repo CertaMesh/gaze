@@ -98,3 +98,7 @@ harness = false
 name = "runtime_comparison"
 harness = false
 required-features = ["safety-net-kiji"]
+
+[[test]]
+name = "span_batch_probe"
+required-features = ["test-support"]
