@@ -227,3 +227,10 @@ share only sanitized source hashes, configuration, parity and timing records.
 The estimator counts resampled case multiplicities once, then checks that every
 member of a group appears equally often. This removes repeated list scans while
 preserving group weighting, arithmetic order and the existing refusal rules.
+
+### Actual-output quality comparison
+
+Use `--output-proof` for count-only replay-verified per-row sidecars, and
+`--evaluate-ids-file` to reuse frozen IDs. See [the v1 source contract and paired
+comparison command](output-proof-v1.md). Existing scorecard-v4 metrics remain
+trace-derived; sidecar comparison adds availability and restoration gates.
