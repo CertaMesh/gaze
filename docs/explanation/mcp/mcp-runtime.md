@@ -2,7 +2,7 @@
 
 ### Scope
 
-`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
+`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
 
 `gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, see `gaze-proxy` (planned for v0.8 — multi-vendor reverse proxy supporting Anthropic, OpenAI, Gemini).
 
@@ -26,14 +26,15 @@ Every tool call traverses this sequence in order:
 | 1 | Validate transport-supplied session id via `SessionIdPolicy` | `DispatchError::SessionId`; **no manifest row** |
 | 2 | Look up tool in `ToolRegistry` | `DispatchError::UnknownTool`; **no manifest row** |
 | 3 | Authorize via `AuthHook::authorize_agent` or `_operator` (driven by `ToolDescriptor::tier`) | `DispatchError::Auth`; **no manifest row** |
-| 4 | Redact raw args via `gaze::Pipeline::redact` (string leaves) | `DispatchError::Redaction`; **no manifest row** |
+| 4 | Preflight argument carriers, then protect raw args via `gaze::Pipeline::protect_text_transaction` (the staged args transaction commits after `begin_call`) | `DispatchError::Carrier` / `DispatchError::Protection` for preflight and protect — **no manifest row**; `DispatchError::Transaction` for the post-begin commit — **fail_call written first** |
 | 5 | `ManifestStore::begin_call(BeginCallContext)` | `DispatchError::Manifest`; **no manifest row written** |
 | 6 | Build the sealed `ToolCtx` (only construction site in the crate) | — |
 | 7 | `Tool::invoke(&ctx).await` | `DispatchError::ToolError`; **fail_call written first** |
-| 8 | Redact response payload | `DispatchError::Redaction`; **fail_call written first** |
-| 9 | Compute out-of-row `SnapshotRef` over redacted bytes | `DispatchError::ResponseSerialization`; **fail_call written first** |
-| 10 | `ManifestStore::finish_call(handle, snapshot)` | `DispatchError::Manifest` |
-| — | Return redacted response | — |
+| 8 | For `ResponseRedaction::Apply`, preflight response carriers, then stage response protection via `gaze::Pipeline::protect_text_transaction`. Operator-tier `BypassByOperator` uses the raw payload with no preflight, protection, or response transaction; agent-tier bypass is rejected | `DispatchError::Carrier` / `DispatchError::Protection`, or `DispatchError::Redaction` for the agent-bypass rejection; **fail_call written first** |
+| 9 | Compute out-of-row `SnapshotRef` over the response payload (protected for `Apply`, raw for operator bypass) | `DispatchError::ResponseSerialization`; **fail_call written first** |
+| 10 | Commit the staged response transaction, if present, after snapshot computation | `DispatchError::Transaction`; **fail_call written first** |
+| 11 | `ManifestStore::finish_call(handle, snapshot)` | `DispatchError::Manifest` |
+| — | Return the response payload (protected for `Apply`, raw for operator bypass) | — |
 
 The first three steps are pre-manifest by design: a denied request leaves
 no audit-log noise. Once `begin_call` returns Ok, the dispatcher
