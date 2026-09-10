@@ -1699,12 +1699,17 @@ def run_config(
     base_environment: Mapping[str, str] | None = None,
     warmup_count: int = 0,
     validator_measurements: Mapping[str, object] | None = None,
+    output_rows: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if not documents:
         raise ValueError(f"{config}: cannot run an empty document cell")
     attempted_document_ids = [document.uid for document in documents]
     if len(set(attempted_document_ids)) != len(attempted_document_ids):
         raise ValueError(f"{config}: document IDs must be unique within a run")
+    if output_rows is not None:
+        if output_rows:
+            raise ValueError("output rows must start empty")
+        output_rows.extend(planned_output_row(document) for document in documents)
     if warmup_count < 0:
         raise ValueError("warmup_count must be non-negative")
     environment = (
@@ -1807,6 +1812,8 @@ def run_config(
             )
         for index, document in enumerate(documents):
             response, _ = exchange(document)
+            if output_rows is not None:
+                output_rows[index] = observe_output(document, response)
             if "pipeline_error_code" in response:
                 failed_closed_documents.append(
                     {
@@ -2961,3 +2968,352 @@ def compare_performance(
         "comparisons": comparisons,
         "failures": failures,
     }
+
+
+OUTPUT_PROOF_SCHEMA_VERSION = 1
+ROW_OUTCOMES = frozenset({
+    "completed_reversible", "completed_nonreversible", "fail_closed",
+    "restore_failure", "unmeasured",
+})
+PROOF_REASONS = frozenset({
+    "protocol_error", "backend_or_protocol_error", "manifest_integrity",
+    "manifest_mapping", "output_replay", "invalid_gold",
+})
+VERIFIED_COUNTS = (
+    "verified_covered_bytes", "surviving_bytes", "false_positive_bytes",
+    "full_span_escapes", "fully_surviving_spans",
+)
+
+
+class OutputProofError(ValueError):
+    """A closed reason, never producer values or input fragments."""
+
+    def __init__(self, reason: str):
+        self.reason = reason if reason in PROOF_REASONS else "protocol_error"
+        super().__init__(self.reason)
+
+
+def verify_output_replay(document: Document, response: dict[str, object]) -> list[Span]:
+    """Verify positional replacement/deletion, conditional on token integrity.
+
+    Detection normalizes input, but pipeline.rs copies ORIGINAL untouched bytes.
+    Final trace deletions already absorb evicted overlapping manifest entries.
+    No token spelling or no-shared-byte heuristic establishes provenance here.
+    """
+    try:
+        validate_response(document, response)
+    except (ResponseValidationError, KeyError, TypeError, ValueError):
+        raise OutputProofError("protocol_error") from None
+    if "pipeline_error_code" in response:
+        raise OutputProofError("protocol_error")
+    integrity = response["manifest_integrity"]
+    if any(integrity[field] != 0 for field in MANIFEST_INTEGRITY_FIELDS - {"spans"}):
+        raise OutputProofError("manifest_integrity")
+    raw = document.text.encode("utf-8")
+    clean = response["clean_text"].encode("utf-8")
+    raw_boundaries = set(char_to_byte_offsets(document.text))
+    clean_boundaries = set(char_to_byte_offsets(response["clean_text"]))
+    manifest = response["manifest_spans"]
+    by_raw = {}
+    raw_end = clean_end = 0
+    for span in manifest:
+        start, end = span["raw_start"], span["raw_end"]
+        cstart, cend = span["clean_start"], span["clean_end"]
+        if not (
+            raw_end <= start < end <= len(raw)
+            and clean_end <= cstart < cend <= len(clean)
+            and start in raw_boundaries and end in raw_boundaries
+            and cstart in clean_boundaries and cend in clean_boundaries
+        ):
+            raise OutputProofError("manifest_mapping")
+        by_raw[(start, end, span["class"])] = (cstart, cend)
+        raw_end, clean_end = end, cend
+    expected = bytearray()
+    cursor = 0
+    for item in response["final_protection_trace"]:
+        start, end = item["raw_start"], item["raw_end"]
+        expected.extend(raw[cursor:start])
+        if item["action"] == "tokenize":
+            cstart, cend = by_raw[(start, end, item["class"])]
+            # Equality alone misses forged offsets into another identical token.
+            if cstart != len(expected):
+                raise OutputProofError("manifest_mapping")
+            expected.extend(clean[cstart:cend])
+        cursor = end
+    expected.extend(raw[cursor:])
+    if bytes(expected) != clean:
+        raise OutputProofError("output_replay")
+    return final_trace_predictions(document, response)
+
+
+def planned_output_row(document: Document) -> dict[str, object]:
+    boundaries = set(char_to_byte_offsets(document.text))
+    if any(
+        type(span.start) is not int or type(span.end) is not int
+        or not 0 <= span.start < span.end <= len(document.text.encode("utf-8"))
+        or span.start not in boundaries or span.end not in boundaries
+        for span in document.spans
+    ):
+        raise OutputProofError("invalid_gold")
+    return {
+        "document_id": document.uid,
+        "outcome": "unmeasured", "stage": None,
+        "reason": "backend_or_protocol_error",
+        "gold_bytes": interval_length(merge_intervals(
+            (span.start, span.end) for span in document.spans
+        )),
+        "gold_spans": len(document.spans),
+        "negative": not document.spans,
+        **{field: None for field in VERIFIED_COUNTS},
+        "exact_restore_count": None, "redact_count": None,
+    }
+
+
+def observe_output(document: Document, response: object) -> dict[str, object]:
+    """Precedence: invalid protocol/proof, refusal, restore failure, completion.
+
+    A nonexact restore caused solely by deletion is nonreversible completion;
+    a restore decision failure still wins even when `exact` is true.
+    """
+    row = planned_output_row(document)
+    try:
+        response = validate_response(document, response)
+    except (ResponseValidationError, KeyError, TypeError, ValueError):
+        row["reason"] = "protocol_error"
+        return row
+    if "pipeline_error_code" in response:
+        row.update(outcome="fail_closed", stage=response["pipeline_error_stage"],
+                   reason=response["pipeline_error_code"])
+        return row
+    try:
+        predictions = verify_output_replay(document, response)
+    except OutputProofError as error:
+        row["reason"] = error.reason
+        return row
+    row["exact_restore_count"] = int(response["restore"]["exact"])
+    row["redact_count"] = sum(
+        item["action"] == "redact" for item in response["final_protection_trace"]
+    )
+    protected = merge_intervals((span.start, span.end) for span in predictions)
+    gold = merge_intervals((span.start, span.end) for span in document.spans)
+    covered = intersection_length(gold, protected)
+    row.update(
+        verified_covered_bytes=covered,
+        surviving_bytes=row["gold_bytes"] - covered,
+        false_positive_bytes=interval_length(protected) - covered,
+        full_span_escapes=sum(
+            not interval_is_covered((span.start, span.end), protected)
+            for span in document.spans
+        ),
+        fully_surviving_spans=sum(
+            not interval_overlaps((span.start, span.end), protected)
+            for span in document.spans
+        ),
+        reason=None,
+    )
+    restore = response["restore"]
+    if restore["decision"] != "success" or (
+        not restore["exact"] and row["redact_count"] == 0
+    ):
+        row.update(outcome="restore_failure", reason="restore_failure")
+    elif row["redact_count"]:
+        row["outcome"] = "completed_nonreversible"
+    else:
+        row["outcome"] = "completed_reversible"
+    return row
+
+
+def output_source_contract(documents: Sequence[Document]) -> dict[str, object]:
+    """Hash the exact selected source/gold contract; retain no source payload."""
+    population = identified_document_population(document.uid for document in documents)
+    digest = hashlib.sha256()
+    for document in sorted(documents, key=lambda value: value.uid):
+        payload = json.dumps([
+            document.uid, document.text, document.language, document.region,
+            document.source_dataset, document.negative_category,
+            [(span.start, span.end, span.label) for span in document.spans],
+        ], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        digest.update(len(payload).to_bytes(8, "big"))
+        digest.update(payload)
+    return {"planned_population": population, "source_gold_sha256": digest.hexdigest()}
+
+
+def output_proof_sidecar(config: str, contract: dict[str, object],
+                         rows: Sequence[dict[str, object]]) -> dict[str, object]:
+    sidecar = {
+        "schema_version": OUTPUT_PROOF_SCHEMA_VERSION,
+        "route": "pipeline_text/clean_for_bench", "config": config,
+        "source_contract": contract, "rows": list(rows),
+    }
+    _validated_output_rows(sidecar)
+    return sidecar
+
+
+def _validated_output_rows(sidecar: Mapping[str, object]) -> dict[str, dict[str, object]]:
+    if sidecar.get("schema_version") != OUTPUT_PROOF_SCHEMA_VERSION:
+        raise ValueError("unsupported output proof schema")
+    if sidecar.get("route") != "pipeline_text/clean_for_bench":
+        raise ValueError("unsupported output proof route")
+    contract = sidecar["source_contract"]
+    population = contract["planned_population"]
+    ids = population["document_ids"]
+    if not ids or identified_document_population(ids) != population:
+        raise ValueError("invalid planned population")
+    if not re.fullmatch(r"[0-9a-f]{64}", contract["source_gold_sha256"]):
+        raise ValueError("invalid source contract digest")
+    indexed = {}
+    fields = {
+        "document_id", "outcome", "stage", "reason", "gold_bytes", "gold_spans",
+        "negative", "exact_restore_count", "redact_count", *VERIFIED_COUNTS,
+    }
+    for row in sidecar["rows"]:
+        if set(row) != fields or row["outcome"] not in ROW_OUTCOMES:
+            raise ValueError("invalid output row schema")
+        uid = row["document_id"]
+        if uid in indexed or uid not in ids:
+            raise ValueError("duplicate or unplanned output row")
+        for field in ("gold_bytes", "gold_spans"):
+            if type(row[field]) is not int or row[field] < 0:
+                raise ValueError("invalid gold count")
+        if type(row["negative"]) is not bool or row["negative"] != (row["gold_spans"] == 0):
+            raise ValueError("invalid negative row")
+        outcome = row["outcome"]
+        measured = outcome in {"completed_reversible", "completed_nonreversible", "restore_failure"}
+        for field in VERIFIED_COUNTS:
+            value = row[field]
+            if measured:
+                if type(value) is not int or value < 0:
+                    raise ValueError("missing verified count")
+            elif value is not None:
+                raise ValueError("unverified count must be null")
+        if measured:
+            if row["verified_covered_bytes"] + row["surviving_bytes"] != row["gold_bytes"]:
+                raise ValueError("inconsistent byte counts")
+            if not 0 <= row["fully_surviving_spans"] <= row["full_span_escapes"] <= row["gold_spans"]:
+                raise ValueError("inconsistent span counts")
+        for field in ("exact_restore_count", "redact_count"):
+            value = row[field]
+            if not measured and value is not None:
+                raise ValueError("unverified restoration count must be null")
+            if measured and value is None:
+                raise ValueError("missing restoration count")
+            if value is not None and (type(value) is not int or value < 0):
+                raise ValueError("invalid restoration count")
+        if row["exact_restore_count"] not in (None, 0, 1):
+            raise ValueError("invalid exact restore count")
+        if outcome == "completed_reversible" and (
+            row["exact_restore_count"] != 1 or row["redact_count"] != 0
+        ):
+            raise ValueError("invalid reversible completion")
+        if outcome == "completed_nonreversible" and (
+            row["exact_restore_count"] != 0 or not row["redact_count"]
+        ):
+            raise ValueError("invalid nonreversible completion")
+        if outcome == "fail_closed":
+            if row["stage"] not in PIPELINE_FAILURE_STAGES or row["reason"] not in PIPELINE_FAILURE_REASONS:
+                raise ValueError("invalid refusal")
+        elif row["stage"] is not None:
+            raise ValueError("unexpected outcome stage")
+        if outcome == "unmeasured" and row["reason"] not in PROOF_REASONS:
+            raise ValueError("invalid unmeasured reason")
+        if outcome.startswith("completed_") and row["reason"] is not None:
+            raise ValueError("unexpected completion reason")
+        if outcome == "restore_failure" and row["reason"] != "restore_failure":
+            raise ValueError("invalid restore failure reason")
+        indexed[uid] = row
+    if set(indexed) != set(ids):
+        raise ValueError("missing planned output row")
+    return indexed
+
+
+def compare_output_proofs(candidate: Mapping[str, object],
+                          baseline: Mapping[str, object]) -> dict[str, object]:
+    """Paired quality gains and lost availability stay separate and explicit."""
+    cand = _validated_output_rows(candidate)
+    base = _validated_output_rows(baseline)
+    if candidate["source_contract"] != baseline["source_contract"]:
+        raise ValueError("paired source/gold/planned-ID contract mismatch")
+    for uid in base:
+        if any(base[uid][key] != cand[uid][key] for key in ("gold_bytes", "gold_spans", "negative")):
+            raise ValueError("paired gold count mismatch")
+    completed = {"completed_reversible", "completed_nonreversible"}
+    base_completed = {uid for uid, row in base.items() if row["outcome"] in completed}
+    cand_completed = {uid for uid, row in cand.items() if row["outcome"] in completed}
+    common = base_completed & cand_completed
+    reversible = {uid for uid in common if base[uid]["outcome"] == cand[uid]["outcome"] == "completed_reversible"}
+
+    def totals(rows, ids):
+        return {field: sum(rows[uid][field] for uid in ids) for field in VERIFIED_COUNTS}
+
+    def paired(ids):
+        before, after = totals(base, ids), totals(cand, ids)
+        return {
+            "population": identified_document_population(ids),
+            "baseline": before, "candidate": after,
+            "candidate_minus_baseline": {key: after[key] - before[key] for key in before},
+        }
+
+    outcomes = {
+        arm: {outcome: sum(row["outcome"] == outcome for row in rows.values())
+              for outcome in sorted(ROW_OUTCOMES)}
+        for arm, rows in (("baseline", base), ("candidate", cand))
+    }
+    lost = base_completed - cand_completed
+    transitions = Counter((base[uid]["outcome"], cand[uid]["outcome"]) for uid in base)
+    paired_completed = paired(common)
+    delta = paired_completed["candidate_minus_baseline"]
+    failures = []
+    if not common or delta["surviving_bytes"] >= 0:
+        failures.append("no_verified_byte_improvement")
+    if delta["full_span_escapes"] > 0:
+        failures.append("more_full_span_escapes")
+    if delta["false_positive_bytes"] > 0 or any(
+        cand[uid]["false_positive_bytes"] > base[uid]["false_positive_bytes"]
+        for uid in common if base[uid]["negative"]
+    ):
+        failures.append("false_positive_or_negative_regression")
+    # A different refused row cannot be offset by recovering an unrelated row.
+    if lost or any(outcomes["candidate"][kind] > outcomes["baseline"][kind]
+                   for kind in ("fail_closed", "restore_failure", "unmeasured")):
+        failures.append("additional_refusal_or_error")
+    if outcomes["candidate"]["restore_failure"] or any(
+        cand[uid]["outcome"] != "completed_reversible" for uid in cand_completed
+    ):
+        failures.append("incomplete_restoration")
+    return {
+        "schema_version": OUTPUT_PROOF_SCHEMA_VERSION,
+        "passed": not failures, "failures": failures,
+        "planned_population": candidate["source_contract"]["planned_population"],
+        "outcomes": outcomes,
+        "common_completed": paired_completed, "common_reversible": paired(reversible),
+        "transitions": [{"baseline": a, "candidate": b, "documents": count}
+                        for (a, b), count in sorted(transitions.items())],
+        "baseline_completed": {
+            "population": identified_document_population(base_completed),
+            "baseline": totals(base, base_completed),
+            "candidate_measured": totals(cand, common),
+            "candidate_unavailable": identified_document_population(lost),
+            "unavailable_gold_bytes": sum(base[uid]["gold_bytes"] for uid in lost),
+        },
+        "gained_availability": identified_document_population(cand_completed - base_completed),
+    }
+
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Compare count-only output proof sidecars")
+    parser.add_argument("--candidate", type=Path, required=True)
+    parser.add_argument("--baseline", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    try:
+        comparison = compare_output_proofs(
+            json.loads(args.candidate.read_text()), json.loads(args.baseline.read_text())
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        print("invalid_output_proof_contract", file=sys.stderr)
+        sys.exit(2)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(comparison, indent=2, sort_keys=True) + "\n")
+    sys.exit(0 if comparison["passed"] else 1)

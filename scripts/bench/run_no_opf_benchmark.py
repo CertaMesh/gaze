@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ MODEL_CONFIG = Path("crates/gaze-recognizers/benches/ner_models.toml")
 NO_OPF_MODEL_CONFIG = Path("scripts/bench/no_opf_models.toml")
 DEFAULT_DAVLAN_MODEL = Path("~/.local/share/gaze/models/davlan-mbert-ner-hrl")
 DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
+QUALITY_CONFIGS = (*score.DEFAULT_CONFIGS, "pass2-ner-redact", "rule-floor-redact")
 DAVLAN_RUNTIME_ARTIFACTS = frozenset(
     {
         "config.json",
@@ -82,6 +84,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("profile", choices=("quick", "full"))
     parser.add_argument("--seed", type=int, default=score.DEFAULT_SAMPLE_SEED)
     parser.add_argument("--quick-documents", type=int, default=QUICK_DOCUMENTS)
+    parser.add_argument("--evaluate-ids-file", type=Path,
+                        help="Frozen JSON array of IDs, in evaluation order")
+    parser.add_argument("--output-proof", action="store_true",
+                        help="Write versioned count-only actual-output sidecars")
+    parser.add_argument("--config", action="append", choices=QUALITY_CONFIGS,
+                        help="Named benchmark arm; repeat to select multiple arms")
     parser.add_argument(
         "--dataset",
         type=Path,
@@ -466,36 +474,74 @@ def execute_measurements(
     measured_repetitions: int,
     validator_measurements: Mapping[str, object] | None = None,
     source_environment: Mapping[str, str] | None = None,
+    configs: Sequence[str] | None = None,
+    output_proof_dir: Path | None = None,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     if measured_repetitions <= 0:
         raise CandidateError("measured repetitions must be positive")
     if warmup_count < 0:
         raise CandidateError("warmup count must be non-negative")
-    configs = tuple(score.DEFAULT_CONFIGS)
+    configs = tuple(score.DEFAULT_CONFIGS if configs is None else configs)
+    if (
+        not configs or len(set(configs)) != len(configs)
+        or any(config not in QUALITY_CONFIGS for config in configs)
+    ):
+        raise CandidateError("config selection must be nonempty and unique")
     if any("opf" in config.lower() for config in configs):
         raise CandidateError("canonical no-OPF config set unexpectedly contains OPF")
     environment = build_no_opf_environment(source_environment or os.environ)
     repetition_runs: list[list[dict[str, object]]] = []
     provenance: list[dict[str, object]] = []
+    proof_contract = (
+        score.output_source_contract(documents) if output_proof_dir is not None else None
+    )
+
+    def write_proof(config, repetition, rows):
+        if output_proof_dir is not None:
+            write_json(
+                output_proof_dir / f"repetition-{repetition}" / f"{config}.json",
+                score.output_proof_sidecar(config, proof_contract, rows),
+            )
+
+    if output_proof_dir is not None:
+        # Even an early backend failure leaves every planned arm/row accounted for.
+        for repetition in range(1, measured_repetitions + 1):
+            for config in configs:
+                write_proof(config, repetition, [
+                    score.planned_output_row(document) for document in documents
+                ])
     for repetition in range(1, measured_repetitions + 1):
         current: list[dict[str, object]] = []
         for config in configs:
-            run = score.run_config(
-                repo_root,
-                binary,
-                config,
-                documents,
-                davlan_model,
-                kiji_model,
-                None,
-                None,
-                None,
-                threshold,
-                diagnostics_dir / f"repetition-{repetition}",
-                base_environment=environment,
-                warmup_count=warmup_count,
-                validator_measurements=validator_measurements,
-            )
+            output_rows = [] if output_proof_dir is not None else None
+            proof_options = {"output_rows": output_rows} if output_rows is not None else {}
+            try:
+                run = score.run_config(
+                    repo_root,
+                    binary,
+                    config,
+                    documents,
+                    davlan_model,
+                    kiji_model,
+                    None,
+                    None,
+                    None,
+                    threshold,
+                    diagnostics_dir / f"repetition-{repetition}",
+                    base_environment=environment,
+                    warmup_count=warmup_count,
+                    validator_measurements=validator_measurements,
+                    **proof_options,
+                )
+            except BaseException:
+                # An invocation-level protocol error (including trailing output)
+                # invalidates the arm, not just whichever row was read last.
+                if output_rows is not None:
+                    output_rows[:] = [score.planned_output_row(document) for document in documents]
+                raise
+            finally:
+                if output_rows is not None:
+                    write_proof(config, repetition, output_rows)
             current.append(run)
         repetition_runs.append(current)
         provenance.append(
@@ -740,6 +786,42 @@ def validate_cli_guards(args: argparse.Namespace) -> None:
         )
 
 
+def frozen_id_selection(documents: Sequence[score.Document], path: Path):
+    try:
+        ids = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        raise CandidateError("cannot read frozen ID array") from None
+    if not isinstance(ids, list) or not ids or any(type(uid) is not str or not uid for uid in ids):
+        raise CandidateError("frozen IDs must be a nonempty string array")
+    if len(set(ids)) != len(ids):
+        raise CandidateError("duplicate frozen ID")
+    indexed = {document.uid: document for document in documents}
+    if len(indexed) != len(documents) or any(uid not in indexed for uid in ids):
+        raise CandidateError("missing frozen ID or duplicate source ID")
+    selected = [indexed[uid] for uid in ids]
+    return selected, {
+        "strategy": "frozen-ids-v1", "seed": None,
+        "requested_max_documents": len(ids),
+        "available_population": score.population_summary(documents),
+        "evaluated_population": score.population_summary(selected),
+        "evaluated_document_ids": ids,
+        "evaluated_document_ids_digest": score.document_ids_digest(ids),
+    }
+
+
+def build_selected_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
+    if not any(config.endswith("-redact") for config in configs):
+        return dataiku.build_binary(repo_root, configs)
+    features = ["redact-live"]
+    if any("kiji" in config for config in configs):
+        features.append("safety-net-kiji")
+    subprocess.run([
+        "cargo", "build", "--locked", "-q", "-p", "gaze-recognizers",
+        "--example", "clean_for_bench", "--features", ",".join(features),
+    ], cwd=repo_root, check=True)
+    return repo_root / "target/debug/examples/clean_for_bench"
+
+
 def run(args: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[2]
     if args.compare_baseline is not None:
@@ -747,6 +829,9 @@ def run(args: argparse.Namespace) -> int:
     if args.accept_baseline is not None:
         args.accept_baseline = repo_path(repo_root, args.accept_baseline)
     validate_cli_guards(args)
+    configs = tuple(getattr(args, "config", None) or score.DEFAULT_CONFIGS)
+    ids_file = getattr(args, "evaluate_ids_file", None)
+    proof_enabled = getattr(args, "output_proof", False)
     output_dir = repo_path(repo_root, args.output_dir) / args.profile
     dataset_path = repo_path(repo_root, args.dataset)
     negative_path = repo_path(repo_root, args.negative_corpus)
@@ -769,13 +854,16 @@ def run(args: argparse.Namespace) -> int:
     documents, sampling_report = score.stratified_sample(
         available_documents, max_documents, seed=args.seed
     )
-    if args.profile == "full" and len(documents) != len(available_documents):
+    if ids_file is not None:
+        documents, sampling_report = frozen_id_selection(available_documents, repo_path(repo_root, ids_file))
+        max_documents = len(documents)
+    if args.profile == "full" and ids_file is None and len(documents) != len(available_documents):
         raise CandidateError("full profile did not select the complete corpus")
 
     binary = (
         repo_root / "target/debug/examples/clean_for_bench"
         if args.skip_build
-        else dataiku.build_binary(repo_root, tuple(score.DEFAULT_CONFIGS))
+        else build_selected_binary(repo_root, configs)
     )
     if not binary.is_file():
         raise CandidateError(f"benchmark binary is missing: {binary}")
@@ -802,6 +890,8 @@ def run(args: argparse.Namespace) -> int:
         warmup_count=args.warmups,
         measured_repetitions=args.measured_repetitions,
         validator_measurements=validator_measurements,
+        configs=configs,
+        output_proof_dir=output_dir / "output-proof-v1" if proof_enabled else None,
     )
     metadata, dataset_report = composite_dataset_report(dataiku_report, negative_report)
     dataset_report["validator_gold_census"] = score.validator_gold_census(
@@ -814,7 +904,7 @@ def run(args: argparse.Namespace) -> int:
         sampling_report=sampling_report,
         parameters={
             "profile": args.profile,
-            "configs": list(score.DEFAULT_CONFIGS),
+            "configs": list(configs),
             "max_documents": max_documents,
             "sampling_seed": args.seed,
             "ner_threshold": args.threshold,
