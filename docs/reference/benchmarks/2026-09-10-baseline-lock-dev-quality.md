@@ -73,7 +73,7 @@ Receipt directory: `/Users/krishankoenig/Workspace/EmpireTwo/gaze-quality-7414/t
 - `legacy-driver-tests`: exit 0, 0.177551s, remaining 0; `03634b2a9137b25f2b16f2857a88815271e0cc7dd5b1a5cf01a41eaa36cf0cc7`.
 - `supervisor-tests`: exit 0, 6.284519s, remaining 0; `c09937a7e081170470ae653693df93b795aba1cface86f6346668866f72ab238`.
 - `freeze`: exit 0, 1.313733s, remaining 0; `692c7b1130c4df15187660155f62d95a2c03f9f55cfc546754b7203a97840478`.
-- `smoke`: exit 0, 75.656295s, remaining 0; `5d28e2d3895aceb10cd00331e6a585987a072a76c327b9f1019e4df71c135914`.
+- `smoke`: exit 0, 75.656295s, remaining 0; `90322000d72ee3e753c04b1e4532a30610e802c4d5d23f29e3caf82fa3fa29a6`.
 - `dev`: exit 1, 377.948281s, remaining 0; `504288f3ac40d0b5f694e2a8135e72e8abb43e279bee2eb5aaca760730411edc`.
 
 The Python suites passed **85 tests**: new harness19, runner37, observer24, legacy driver3, supervisor2. Seven synthetic smoke requests passed four actual output/manifest/restore checks and three same-source reference semantic-response comparisons. Three augmentation arms passed exact synthetic raw12..33 coverage. Synthetic implementation coverage is not corpus-byte identity proof.
