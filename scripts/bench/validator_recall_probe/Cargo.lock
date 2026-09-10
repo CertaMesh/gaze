@@ -406,7 +406,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
 name = "gaze-assembly"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "gaze-pii",
  "gaze-recognizers",
@@ -418,7 +418,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-pii"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -443,7 +443,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-recognizers"
-version = "0.12.1"
+version = "0.13.0"
 dependencies = [
  "aho-corasick",
  "gaze-types",
@@ -465,7 +465,7 @@ dependencies = [
 
 [[package]]
 name = "gaze-types"
-version = "0.12.0"
+version = "0.13.0"
 dependencies = [
  "phonenumber",
  "serde",
