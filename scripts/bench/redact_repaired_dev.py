@@ -102,26 +102,27 @@ def joined_audit(path, ids):
     """Join full planned request order, including failed requests, without guessing."""
     rows = []
     current = None
-    for line in path.open():
-        record = json.loads(line)
-        status = record.get("status")
-        if status == "request_begin":
-            assert current is None
-            ordinal = record["request"]
-            assert ordinal == len(rows) + 1 and ordinal <= len(ids)
-            current = {"request": ordinal, "document_id": ids[ordinal - 1],
-                       "terminal": "unknown", "records": [record]}
-        elif status in {"request_success", "request_refusal", "request_error"}:
-            assert current is not None and record["request"] == current["request"]
-            current["records"].append(record)
-            current["terminal"] = status
-            rows.append(current)
-            current = None
-        elif current is not None:
-            # Keep complete normalized batch spans/dispositions, including unknowns.
-            current["records"].append(record)
-        else:
-            raise ValueError("unbound audit record")
+    with path.open() as handle:
+        for line in handle:
+            record = json.loads(line)
+            status = record.get("status")
+            if status == "request_begin":
+                assert current is None
+                ordinal = record["request"]
+                assert ordinal == len(rows) + 1 and ordinal <= len(ids)
+                current = {"request": ordinal, "document_id": ids[ordinal - 1],
+                           "terminal": "unknown", "records": [record]}
+            elif status in {"request_success", "request_refusal", "request_error"}:
+                assert current is not None and record["request"] == current["request"]
+                current["records"].append(record)
+                current["terminal"] = status
+                rows.append(current)
+                current = None
+            elif current is not None:
+                # Keep complete normalized batch spans/dispositions, including unknowns.
+                current["records"].append(record)
+            else:
+                raise ValueError("unbound audit record")
     if current is not None:
         rows.append(current)
     for ordinal in range(len(rows) + 1, len(ids) + 1):
