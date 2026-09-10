@@ -65,6 +65,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
       - name: Free disk space (ubuntu-latest preinstalled bloat removal)
         uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # main
@@ -105,9 +106,10 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+            ~/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671
+          key: ${{ runner.os }}-cargo-test-native-v2-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-test-
+            ${{ runner.os }}-cargo-test-native-v2-
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
       - name: README version check
@@ -126,6 +128,30 @@ jobs:
         run: cargo build --locked --offline -p gaze-mcp-rmcp --example evidence_bridge
       - name: Test real synthetic rmcp bridge
         run: python3 scripts/bench/test_evidence_bridge.py --integration --binary target/debug/examples/evidence_bridge
+      - name: Prepare Python for private build binding
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: 0.11.16
+      - name: Install binding test interpreter before offline execution
+        run: uv python install 3.13
+      - name: Test private fresh-build producer binding
+        timeout-minutes: 120
+        shell: bash
+        run: |
+          set -euo pipefail
+          binding_cargo="$(rustup which cargo)"
+          binding_toolchain="$(dirname "$(dirname "$binding_cargo")")"
+          binding_revision="$(git rev-parse HEAD)"
+          # ort-sys 2.0.0-rc.12 dist.txt: CPU-only Linux x86_64 distribution.
+          # Prior workspace builds provide this archive. No search or fallback.
+          binding_native="$HOME/.cache/ort.pyke.io/dfbin/x86_64-unknown-linux-gnu/acc1cba79c337594ead1d88ca72516147aa60054c84217b53399a31caa5ba671"
+          test -f "$binding_native/libonnxruntime.a"
+          test ! -L "$binding_native/libonnxruntime.a"
+          UV_OFFLINE=1 uv run --no-project --python 3.13 python \
+            scripts/bench/test_producer_build_binding.py --integration \
+            --repo "$GITHUB_WORKSPACE" --source-revision "$binding_revision" \
+            --registry "$HOME/.cargo/registry" --native "$binding_native" \
+            --toolchain "$binding_toolchain" --scratch-parent "$RUNNER_TEMP"
 
   benchmark-model-free:
     name: benchmark model-free Python tests
