@@ -98,7 +98,6 @@ Generated artifacts are under ignored `target/bench-data/no-opf/<profile>/`:
 | `regression-status.json` | baseline-relative integer-count ratchet verdict |
 | `release-readiness-status.json` | candidate-only absolute correctness verdict |
 | `performance-status.json` | separately configured p95 `clean_ms` comparison |
-| `logs/` | subprocess stderr by repetition and config |
 
 Regression and release readiness are deliberately independent. Regression uses
 integer counts with zero tolerance and fails closed on missing, empty, invalid,
@@ -162,9 +161,9 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py \
   --accept-baseline-confirm I_HAVE_REVIEWED_FULL_RESULTS
 ```
 
-Review `scorecard-v4.json`, all three status files, `diagnostics.json`, and the
-stderr logs before using that command. Quick results and failed candidates can
-never replace a baseline.
+Review `scorecard-v4.json`, all three status files, and `diagnostics.json`
+before using that command. Quick results and failed candidates can never
+replace a baseline.
 
 To initialize a baseline only when the target does not yet exist, omit
 `--compare-baseline` but keep the full profile and exact confirmation. The
