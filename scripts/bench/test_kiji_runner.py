@@ -66,16 +66,19 @@ def load_runner() -> types.ModuleType:
     ort_stub.InferenceSession = object
     tokenizers_stub = types.ModuleType("tokenizers")
     tokenizers_stub.Tokenizer = object
-    sys.modules["numpy"] = numpy_stub
-    sys.modules["onnxruntime"] = ort_stub
-    sys.modules["tokenizers"] = tokenizers_stub
 
     runner_path = Path(__file__).with_name("kiji-runner.py")
     spec = importlib.util.spec_from_file_location("kiji_runner_under_test", runner_path)
     if spec is None or spec.loader is None:
         raise RuntimeError("unable to load Kiji runner")
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    # Keep model stubs local so other tests can import real native dependencies.
+    with mock.patch.dict(sys.modules, {
+        "numpy": numpy_stub,
+        "onnxruntime": ort_stub,
+        "tokenizers": tokenizers_stub,
+    }):
+        spec.loader.exec_module(module)
     return module
 
 
