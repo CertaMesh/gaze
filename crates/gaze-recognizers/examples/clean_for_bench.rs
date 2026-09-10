@@ -1,3 +1,7 @@
+#[cfg(all(feature = "benchmark-baseline-lock", unix))]
+#[path = "clean_for_bench/baseline_lock.rs"]
+mod baseline_lock;
+
 #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
 #[path = "clean_for_bench/semantic_admission.rs"]
 mod semantic_admission;
@@ -29,6 +33,8 @@ enum BenchConfig {
     RuleFloorCore,
     RuleFloorExtended,
     Pass2Ner,
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    Pass2NerRedactBaselineLock,
     Pass2NerRedact,
     RuleFloorRedact,
     Pass2NerRedactSemantic,
@@ -46,6 +52,8 @@ impl BenchConfig {
             Self::RuleFloorCore => "rule-floor-core",
             Self::RuleFloorExtended => "rule-floor-extended",
             Self::Pass2Ner => "pass2-ner",
+            #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+            Self::Pass2NerRedactBaselineLock => "pass2-ner-redact-baseline-lock-candidate",
             Self::Pass2NerRedact => "pass2-ner-redact",
             Self::RuleFloorRedact => "rule-floor-redact",
             Self::Pass2NerRedactSemantic => "pass2-ner-redact-semantic-candidate",
@@ -66,6 +74,8 @@ impl BenchConfig {
     }
 
     fn uses_ner(self) -> bool {
+        #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+        if self == Self::Pass2NerRedactBaselineLock { return true; }
         matches!(
             self,
             Self::Pass2Ner
@@ -221,7 +231,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         None
     };
-    let full = build_pipeline_internal(
+    let full = build_producer(
         config,
         #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
         audit.clone(),
@@ -239,17 +249,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let outcome = if let Some(audit) = &audit {
             audit.request(
                 request_ordinal,
-                || handle_request(config, &full, request),
+                || full.handle(config, request_ordinal, request),
                 |outcome| match outcome {
                     Outcome::Success(_) => "request_success",
                     Outcome::PipelineError { .. } => "request_refusal",
                 },
             )
         } else {
-            handle_request(config, &full, request)
+            full.handle(config, request_ordinal, request)
         };
         #[cfg(not(all(feature = "redact-live", feature = "phone-parser", unix)))]
-        let outcome = handle_request(config, &full, request);
+        let outcome = full.handle(config, request_ordinal, request);
         match outcome? {
             Outcome::Success(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
@@ -268,6 +278,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+enum Producer {
+    Ordinary(Pipeline),
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    Locked(baseline_lock::Producer),
+}
+impl Producer {
+    fn handle(&self, config: BenchConfig, _ordinal: u64, request: Request) -> Result<Outcome, Box<dyn std::error::Error>> {
+        match self {
+            Self::Ordinary(pipeline) => handle_request(config, pipeline, request),
+            #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+            Self::Locked(producer) => producer.handle(_ordinal, request),
+        }
+    }
+}
+fn build_producer(
+    config: BenchConfig,
+    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<semantic_admission::AuditSink>,
+) -> Result<Producer, Box<dyn std::error::Error>> {
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    if config == BenchConfig::Pass2NerRedactBaselineLock {
+        return Ok(Producer::Locked(baseline_lock::Producer::build()?));
+    }
+    Ok(Producer::Ordinary(build_pipeline_internal(
+        config,
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        audit,
+    )?))
 }
 
 fn handle_request(
@@ -311,6 +350,33 @@ fn handle_request(
         return Err("expected text clean document".into());
     };
 
+    observe_clean(
+        config, RestoreSource::Ordinary(full), request.fixture_id, raw_text, session,
+        clean_text, manifest, report, final_protection_trace, locale_chain, clean_ms,
+    )
+}
+
+enum RestoreSource<'a> {
+    Ordinary(&'a Pipeline),
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    Locked(&'a gaze::experimental_benchmark_baseline_lock::BenchmarkBaselineLock),
+}
+impl RestoreSource<'_> {
+    fn restore_with_telemetry(&self, session: &Session, text: &str) -> gaze::Result<(gaze::RestoredText, gaze::RestoreTelemetry)> {
+        match self {
+            Self::Ordinary(pipeline) => pipeline.restore_with_telemetry(session, text),
+            #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+            Self::Locked(pipeline) => pipeline.restore_with_telemetry(session, text),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn observe_clean(
+    config: BenchConfig, full: RestoreSource<'_>, fixture_id: String, raw_text: String,
+    session: Session, clean_text: String, manifest: Vec<EmittedTokenSpan>, report: gaze::LeakReport,
+    final_protection_trace: Vec<GazeLocalProtectionTraceItem>, locale_chain: Vec<LocaleTag>, clean_ms: f64,
+) -> Result<Outcome, Box<dyn std::error::Error>> {
     let integrity = manifest_integrity(&session, &raw_text, &clean_text, &manifest);
     let restore_start = Instant::now();
     let (restored, restore_telemetry) = full.restore_with_telemetry(&session, &clean_text)?;
@@ -328,6 +394,11 @@ fn handle_request(
         config,
         BenchConfig::FullStackKijiResolve | BenchConfig::FullStackOpfResolve
     ) {
+        let full = match &full {
+            RestoreSource::Ordinary(full) => full,
+            #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+            RestoreSource::Locked(_) => return Err("locked producer cannot scan safety nets".into()),
+        };
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
             Ok(result) => result,
@@ -336,7 +407,7 @@ fn handle_request(
                 let reason = pipeline_failure_reason(&error)
                     .ok_or("unclassified post-policy pipeline error variant")?;
                 return Ok(Outcome::PipelineError {
-                    fixture_id: request.fixture_id,
+                    fixture_id,
                     stage: "post_policy_scan",
                     reason,
                     total_ms: clean_ms,
@@ -376,7 +447,7 @@ fn handle_request(
         })
         .collect::<Vec<_>>();
     Ok(Outcome::Success(Response {
-        fixture_id: request.fixture_id,
+        fixture_id,
         clean_text,
         manifest_spans,
         pre_safety_text_len: None,
@@ -696,6 +767,8 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "rule-floor-core" => BenchConfig::RuleFloorCore,
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
+                #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+                "pass2-ner-redact-baseline-lock-candidate" => BenchConfig::Pass2NerRedactBaselineLock,
                 "pass2-ner-redact" => BenchConfig::Pass2NerRedact,
                 "rule-floor-redact" => BenchConfig::RuleFloorRedact,
                 "pass2-ner-redact-semantic-candidate" => BenchConfig::Pass2NerRedactSemantic,
@@ -727,6 +800,10 @@ fn build_pipeline_internal(
         semantic_admission::AuditSink,
     >,
 ) -> Result<Pipeline, BenchmarkBuildError> {
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    if config == BenchConfig::Pass2NerRedactBaselineLock {
+        return Err(BenchmarkBuildError::Redact("candidate_requires_sealed_producer"));
+    }
     let ner = if config.uses_ner() {
         Some(ner_settings_from_env()?)
     } else {
@@ -739,6 +816,8 @@ fn build_pipeline_internal(
         audit,
     )?;
     match config {
+        #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+        BenchConfig::Pass2NerRedactBaselineLock => return Err(BenchmarkBuildError::Redact("candidate_requires_sealed_producer")),
         BenchConfig::RuleFloorCore
         | BenchConfig::RuleFloorExtended
         | BenchConfig::Pass2Ner
