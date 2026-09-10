@@ -32,6 +32,7 @@ DEFAULT_KIJI_MODEL = Path("~/.local/share/gaze/models/kiji-distilbert")
 REDACT_CONFIGS = (
     "pass2-ner-redact", "rule-floor-redact",
     "pass2-ner-redact-semantic-candidate",
+    "pass2-ner-redact-baseline-lock-candidate",
 )
 QUALITY_CONFIGS = (*score.DEFAULT_CONFIGS, *REDACT_CONFIGS)
 DAVLAN_RUNTIME_ARTIFACTS = frozenset(
@@ -817,6 +818,8 @@ def build_selected_binary(repo_root: Path, configs: tuple[str, ...]) -> Path:
     if not any(config in REDACT_CONFIGS for config in configs):
         return dataiku.build_binary(repo_root, configs)
     features = ["redact-live"]
+    if "pass2-ner-redact-baseline-lock-candidate" in configs:
+        features.append("benchmark-baseline-lock")
     if any("kiji" in config for config in configs):
         features.append("safety-net-kiji")
     subprocess.run([
