@@ -268,7 +268,14 @@ fn run_request(
     ) -> std::result::Result<SupplementalBatch, LockError>,
 ) -> Result<LockOutput> {
     let pipeline = baseline_pipeline(builder, rules, kind)?;
-    run_bound_request(&pipeline, raw, [1, 2, 3, 4], locale_chain, dictionaries, supplement)
+    run_bound_request(
+        &pipeline,
+        raw,
+        [1, 2, 3, 4],
+        locale_chain,
+        dictionaries,
+        supplement,
+    )
 }
 
 fn run_bound_request(
@@ -277,7 +284,10 @@ fn run_bound_request(
     session_hex: [u8; 4],
     locale_chain: &[crate::LocaleTag],
     dictionaries: &DictionaryBundle,
-    supplement: impl FnOnce(&str, &DetectContext<'_>) -> std::result::Result<SupplementalBatch, LockError>,
+    supplement: impl FnOnce(
+        &str,
+        &DetectContext<'_>,
+    ) -> std::result::Result<SupplementalBatch, LockError>,
 ) -> Result<LockOutput> {
     let kind = DocumentKind::Text;
     let normalized = normalize(raw);
@@ -356,9 +366,12 @@ fn valid_supplement_source(candidate: &Candidate) -> bool {
 
 #[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
 fn valid_redact_source(source: &str, class: &PiiClass) -> bool {
-    let Some(label) = source.strip_prefix("redact-patched-coreml-v1:") else { return false; };
+    let Some(label) = source.strip_prefix("redact-patched-coreml-v1:") else {
+        return false;
+    };
     label == label.to_ascii_lowercase()
-        && gaze_recognizers::redact_live::label_class(&label.to_ascii_uppercase()).as_ref() == Ok(class)
+        && gaze_recognizers::redact_live::label_class(&label.to_ascii_uppercase()).as_ref()
+            == Ok(class)
 }
 
 /// Closed, ordered benchmark rules, validated before assembly or provider construction.
@@ -392,11 +405,16 @@ impl TryFrom<Vec<crate::RuleSpec>> for BenchmarkLockPolicy {
 impl BenchmarkLockPolicy {
     /// Consume the independently assembled ruleless baseline, preserving its owned configuration.
     pub fn bind(self, mut pipeline: Pipeline) -> Result<BenchmarkBaselineLock> {
-        if !pipeline.rules.is_empty() || pipeline.optimization_config.prefix_cache
-            || !pipeline.safety_nets.is_empty() || pipeline.safety_net_registry.is_some() {
+        if !pipeline.rules.is_empty()
+            || pipeline.optimization_config.prefix_cache
+            || !pipeline.safety_nets.is_empty()
+            || pipeline.safety_net_registry.is_some()
+        {
             return Err(LockError::UnsupportedScope.into());
         }
-        if pipeline.registry.is_empty() { return Err(LockError::MissingBaseline.into()); }
+        if pipeline.registry.is_empty() {
+            return Err(LockError::MissingBaseline.into());
+        }
         for rule in self.0 {
             let rule: Arc<dyn Rule> = match rule {
                 FrozenRule::Class(class, action) => Arc::new(ClassRule::new(class, action)),
@@ -425,39 +443,73 @@ pub struct BenchmarkLockedText {
 #[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
 impl BenchmarkBaselineLock {
     pub fn clean_redact_text(
-        &self, raw: &str, session_hex: [u8; 4], locale_chain: &[crate::LocaleTag],
+        &self,
+        raw: &str,
+        session_hex: [u8; 4],
+        locale_chain: &[crate::LocaleTag],
         detector: &gaze_recognizers::redact_live::RedactDetector,
     ) -> Result<BenchmarkLockedText> {
         let output = run_bound_request(
-            &self.0, raw, session_hex, locale_chain, &DictionaryBundle::default(),
+            &self.0,
+            raw,
+            session_hex,
+            locale_chain,
+            &DictionaryBundle::default(),
             |normalized, _| {
                 let detections = detector.try_detect(normalized).map_err(|error| {
-                    if error.message == "incomplete_window" { LockError::Incomplete } else { LockError::ProviderFailed }
+                    if error.message == "incomplete_window" {
+                        LockError::Incomplete
+                    } else {
+                        LockError::ProviderFailed
+                    }
                 })?;
                 validate_redact_detections(normalized, &detections)?;
-                Ok(SupplementalBatch::Complete(detections.into_iter().map(candidate_from_legacy_detection).collect()))
+                Ok(SupplementalBatch::Complete(
+                    detections
+                        .into_iter()
+                        .map(candidate_from_legacy_detection)
+                        .collect(),
+                ))
             },
         )?;
         Ok(BenchmarkLockedText {
-            text: output.clean.text, manifest: output.clean.manifest, trace: output.trace,
-            session: output.session, dispositions: output.plan.dispositions,
+            text: output.clean.text,
+            manifest: output.clean.manifest,
+            trace: output.trace,
+            session: output.session,
+            dispositions: output.plan.dispositions,
         })
     }
 
-    pub fn restore_with_telemetry(&self, session: &Session, text: &str) -> Result<(RestoredText, RestoreTelemetry)> {
+    pub fn restore_with_telemetry(
+        &self,
+        session: &Session,
+        text: &str,
+    ) -> Result<(RestoredText, RestoreTelemetry)> {
         self.0.restore_with_telemetry(session, text)
     }
 }
 
 #[cfg(all(feature = "experimental-benchmark-baseline-lock", unix))]
-fn validate_redact_detections(text: &str, detections: &[Detection]) -> std::result::Result<(), LockError> {
-    if detections.len() > MAX_CANDIDATES { return Err(LockError::InvalidBatch); }
+fn validate_redact_detections(
+    text: &str,
+    detections: &[Detection],
+) -> std::result::Result<(), LockError> {
+    if detections.len() > MAX_CANDIDATES {
+        return Err(LockError::InvalidBatch);
+    }
     let mut end = 0;
     for detection in detections {
-        if !valid_redact_source(&detection.source, &detection.class) { return Err(LockError::UnknownLabel); }
+        if !valid_redact_source(&detection.source, &detection.class) {
+            return Err(LockError::UnknownLabel);
+        }
         let span = &detection.span;
-        if span.start < end || span.start >= span.end || span.end > text.len()
-            || !text.is_char_boundary(span.start) || !text.is_char_boundary(span.end) {
+        if span.start < end
+            || span.start >= span.end
+            || span.end > text.len()
+            || !text.is_char_boundary(span.start)
+            || !text.is_char_boundary(span.end)
+        {
             return Err(LockError::InvalidBatch);
         }
         end = span.end;

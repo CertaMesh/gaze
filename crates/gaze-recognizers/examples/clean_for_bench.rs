@@ -80,7 +80,9 @@ impl BenchConfig {
 
     fn uses_ner(self) -> bool {
         #[cfg(all(feature = "benchmark-baseline-lock", unix))]
-        if self == Self::Pass2NerRedactBaselineLock { return true; }
+        if self == Self::Pass2NerRedactBaselineLock {
+            return true;
+        }
         matches!(
             self,
             Self::Pass2Ner
@@ -291,7 +293,12 @@ enum Producer {
     Locked(baseline_lock::Producer),
 }
 impl Producer {
-    fn handle(&self, config: BenchConfig, _ordinal: u64, request: Request) -> Result<Outcome, Box<dyn std::error::Error>> {
+    fn handle(
+        &self,
+        config: BenchConfig,
+        _ordinal: u64,
+        request: Request,
+    ) -> Result<Outcome, Box<dyn std::error::Error>> {
         match self {
             Self::Ordinary(pipeline) => handle_request(config, pipeline, request),
             #[cfg(all(feature = "benchmark-baseline-lock", unix))]
@@ -301,7 +308,9 @@ impl Producer {
 }
 fn build_producer(
     config: BenchConfig,
-    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<semantic_admission::AuditSink>,
+    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<
+        semantic_admission::AuditSink,
+    >,
 ) -> Result<Producer, Box<dyn std::error::Error>> {
     #[cfg(all(feature = "benchmark-baseline-lock", unix))]
     if config.uses_baseline_lock() {
@@ -356,8 +365,17 @@ fn handle_request(
     };
 
     observe_clean(
-        config, RestoreSource::Ordinary(full), request.fixture_id, raw_text, session,
-        clean_text, manifest, report, final_protection_trace, locale_chain, clean_ms,
+        config,
+        RestoreSource::Ordinary(full),
+        request.fixture_id,
+        raw_text,
+        session,
+        clean_text,
+        manifest,
+        report,
+        final_protection_trace,
+        locale_chain,
+        clean_ms,
     )
 }
 
@@ -367,7 +385,11 @@ enum RestoreSource<'a> {
     Locked(&'a gaze::experimental_benchmark_baseline_lock::BenchmarkBaselineLock),
 }
 impl RestoreSource<'_> {
-    fn restore_with_telemetry(&self, session: &Session, text: &str) -> gaze::Result<(gaze::RestoredText, gaze::RestoreTelemetry)> {
+    fn restore_with_telemetry(
+        &self,
+        session: &Session,
+        text: &str,
+    ) -> gaze::Result<(gaze::RestoredText, gaze::RestoreTelemetry)> {
         match self {
             Self::Ordinary(pipeline) => pipeline.restore_with_telemetry(session, text),
             #[cfg(all(feature = "benchmark-baseline-lock", unix))]
@@ -378,9 +400,17 @@ impl RestoreSource<'_> {
 
 #[allow(clippy::too_many_arguments)]
 fn observe_clean(
-    config: BenchConfig, full: RestoreSource<'_>, fixture_id: String, raw_text: String,
-    session: Session, clean_text: String, manifest: Vec<EmittedTokenSpan>, report: gaze::LeakReport,
-    final_protection_trace: Vec<GazeLocalProtectionTraceItem>, locale_chain: Vec<LocaleTag>, clean_ms: f64,
+    config: BenchConfig,
+    full: RestoreSource<'_>,
+    fixture_id: String,
+    raw_text: String,
+    session: Session,
+    clean_text: String,
+    manifest: Vec<EmittedTokenSpan>,
+    report: gaze::LeakReport,
+    final_protection_trace: Vec<GazeLocalProtectionTraceItem>,
+    locale_chain: Vec<LocaleTag>,
+    clean_ms: f64,
 ) -> Result<Outcome, Box<dyn std::error::Error>> {
     let integrity = manifest_integrity(&session, &raw_text, &clean_text, &manifest);
     let restore_start = Instant::now();
@@ -402,7 +432,9 @@ fn observe_clean(
         let full = match &full {
             RestoreSource::Ordinary(full) => full,
             #[cfg(all(feature = "benchmark-baseline-lock", unix))]
-            RestoreSource::Locked(_) => return Err("locked producer cannot scan safety nets".into()),
+            RestoreSource::Locked(_) => {
+                return Err("locked producer cannot scan safety nets".into())
+            }
         };
         let post_policy_scan_start = Instant::now();
         let post_policy = match full.scan_safety_nets(&session, &clean_text, &locale_chain) {
@@ -773,7 +805,9 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "rule-floor-extended" => BenchConfig::RuleFloorExtended,
                 "pass2-ner" => BenchConfig::Pass2Ner,
                 #[cfg(all(feature = "benchmark-baseline-lock", unix))]
-                "pass2-ner-redact-baseline-lock-candidate" => BenchConfig::Pass2NerRedactBaselineLock,
+                "pass2-ner-redact-baseline-lock-candidate" => {
+                    BenchConfig::Pass2NerRedactBaselineLock
+                }
                 "pass2-ner-redact" => BenchConfig::Pass2NerRedact,
                 "rule-floor-redact" => BenchConfig::RuleFloorRedact,
                 "pass2-ner-redact-semantic-candidate" => BenchConfig::Pass2NerRedactSemantic,
@@ -807,7 +841,9 @@ fn build_pipeline_internal(
 ) -> Result<Pipeline, BenchmarkBuildError> {
     #[cfg(all(feature = "benchmark-baseline-lock", unix))]
     if config == BenchConfig::Pass2NerRedactBaselineLock {
-        return Err(BenchmarkBuildError::Redact("candidate_requires_sealed_producer"));
+        return Err(BenchmarkBuildError::Redact(
+            "candidate_requires_sealed_producer",
+        ));
     }
     let ner = if config.uses_ner() {
         Some(ner_settings_from_env()?)
@@ -822,7 +858,11 @@ fn build_pipeline_internal(
     )?;
     match config {
         #[cfg(all(feature = "benchmark-baseline-lock", unix))]
-        BenchConfig::Pass2NerRedactBaselineLock => return Err(BenchmarkBuildError::Redact("candidate_requires_sealed_producer")),
+        BenchConfig::Pass2NerRedactBaselineLock => {
+            return Err(BenchmarkBuildError::Redact(
+                "candidate_requires_sealed_producer",
+            ))
+        }
         BenchConfig::RuleFloorCore
         | BenchConfig::RuleFloorExtended
         | BenchConfig::Pass2Ner
