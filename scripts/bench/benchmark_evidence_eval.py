@@ -12,27 +12,27 @@ import evidence_eval as ee
 METRIC = 'gold_bytes_surviving_egress'
 
 
-def synthetic_evaluator(groups):
+def synthetic_evaluator(groups, module=ee):
     cases = []
     for group in range(groups):
         for member in range(1 + group % 3):
-            cases.append(ee.PlannedCase(
+            cases.append(module.PlannedCase(
                 f'case_{group}_{member}', f'group_{group}',
                 ('synthetic_en', 'synthetic_de')[group % 2],
                 float(1 + group % 5), gold_bytes=100,
             ))
-    evaluator = ee.PrivateEvaluator(ee.PlannedInventory(cases))
+    evaluator = module.PrivateEvaluator(module.PlannedInventory(cases))
     for index, case in enumerate(cases):
         for arm, count in [('base', index % 31), ('candidate', (index * 7) % 29)]:
-            evaluator.add(arm, case.key, ee.DocRecord(
+            evaluator.add(arm, case.key, module.DocRecord(
                 observed_metrics=frozenset((METRIC,)), outcome='COMPLETED',
                 gold_bytes_surviving=count,
             ))
     return evaluator.finalize()
 
 
-def measure(groups=500, resamples=64, repetitions=5):
-    evaluator = synthetic_evaluator(groups)
+def measure(groups=500, resamples=64, repetitions=5, module=ee):
+    evaluator = synthetic_evaluator(groups, module)
     declaration = dict(
         confidence_level=.95, resample_count=resamples, seed=20260910,
         strata=['synthetic_en', 'synthetic_de'], weighting='inventory_group',

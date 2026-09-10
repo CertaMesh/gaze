@@ -197,9 +197,25 @@ Output includes every timing and the interval, and inconsistent repeated
 intervals fail the command. It reads no corpus or model. This measures evaluator
 throughput only, not detection quality, pipeline latency or release readiness.
 
-For a before/after comparison, run this same tool with each evaluator revision
-on the same host and Python environment, alternate run order, and require exact
-interval equality. Keep source revisions and timing samples with the result.
+For a reproducible before/after comparison, first acquire the exclusive machine
+lease and stop other owned checks, then run:
+
+```bash
+uv run --offline --project scripts/bench --locked python scripts/bench/compare_evidence_eval.py \
+  --baseline-revision ea3f59872c732025ba911c663e551386c5700c14 \
+  --machine-lease '<active lease reference>'
+```
+
+The comparison checks exact intervals for 30 seed/group combinations, then
+alternates four timing rounds with a discarded warmup per arm. `--mode parity`
+runs only the untimed comparisons; `--mode timing` runs only paired measurements.
+Output records the full baseline revision, both evaluator source SHA256 hashes,
+the verified shared class-contract hash, Python/platform, command/configuration,
+lease reference, every sample and exact interval parity. Mutable revision names,
+identical sources and changed class contracts are refused. The lease reference
+records the operator's serialization claim; the tool does not acquire a lease
+or detect unrelated host work. Run without concurrent owned jobs.
+
 The estimator counts resampled case multiplicities once, then checks that every
 member of a group appears equally often. This removes repeated list scans while
 preserving group weighting, arithmetic order and the existing refusal rules.
