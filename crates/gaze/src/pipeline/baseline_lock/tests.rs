@@ -648,7 +648,7 @@ fn locale_fallback_score_filtering_remain_baseline_owned() {
     let second = Arc::new(AtomicUsize::new(0));
     let locales = [
         crate::LocaleTag::parse("de-DE").unwrap(),
-        crate::LocaleTag::Global,
+        crate::LocaleTag::parse("en-US").unwrap(),
     ];
     let build = || {
         Pipeline::builder()
@@ -760,7 +760,7 @@ fn family_resolution_and_missing_anchor_are_frozen_before_supplement() {
         );
         assert_eq!(
             output.plan.baseline[0].candidate.class,
-            PiiClass::custom("family:synthetic-family")
+            PiiClass::family("synthetic-family")
         );
         prove_output("abcd efgh", &output);
     }
