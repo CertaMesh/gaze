@@ -107,6 +107,26 @@ pub fn build_pipeline_with_detector<D: gaze::Detector + 'static>(
     )
 }
 
+/// Assemble the complete policy floor and add one context-aware recognizer.
+/// The injected recognizer participates in the same registration count as the floor.
+pub fn build_pipeline_with_recognizer<R: gaze::Recognizer + 'static>(
+    policy: &gaze::Policy,
+    context: &Context,
+    rulepacks: &[Rulepack],
+    active_locales: &LocaleChain,
+    ner_threshold: Option<f32>,
+    recognizer: R,
+) -> Result<Pipeline, BuildError> {
+    build_pipeline_injected(
+        policy,
+        context,
+        rulepacks,
+        active_locales,
+        ner_threshold,
+        |builder| builder.recognizer(recognizer),
+    )
+}
+
 fn build_pipeline_injected(
     policy: &gaze::Policy,
     context: &Context,

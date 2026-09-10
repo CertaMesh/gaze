@@ -1680,3 +1680,41 @@ fn uncovered_family_classes_ignores_family_rule_shadowed_by_default() {
         "a family rule shadowed by an earlier default rule is dead code and must stay flagged: {uncovered:?}"
     );
 }
+
+#[test]
+fn injected_context_recognizer_counts_without_weakening_empty_floor_guard() {
+    struct Injected;
+    impl gaze::Recognizer for Injected {
+        fn id(&self) -> &str {
+            "synthetic-injected"
+        }
+        fn supported_class(&self) -> &PiiClass {
+            &PiiClass::Name
+        }
+        fn token_family(&self) -> &str {
+            "counter"
+        }
+        fn detect(
+            &self,
+            _: &str,
+            _: &gaze::DetectContext<'_>,
+        ) -> Result<Vec<gaze::Candidate>, gaze::registry::DetectError> {
+            Ok(Vec::new())
+        }
+    }
+    let policy = empty_policy();
+    let locales = LocaleChain::from_tags(vec![LocaleTag::EnUs]);
+    assert!(matches!(
+        build_pipeline(&policy, &empty_context(), &[], &locales, None),
+        Err(BuildError::NoRecognizers)
+    ));
+    assert!(build_pipeline_with_recognizer(
+        &policy,
+        &empty_context(),
+        &[],
+        &locales,
+        None,
+        Injected
+    )
+    .is_ok());
+}

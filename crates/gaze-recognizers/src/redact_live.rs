@@ -442,6 +442,40 @@ mod tests {
         assert_eq!(validate(r, 1, "a").unwrap_err(), BridgeError::Protocol);
     }
     #[test]
+    fn later_raw_failure_is_not_hidden_by_an_earlier_semantically_invalid_card() {
+        for failure in [
+            BridgeError::Nonfinite,
+            BridgeError::Alignment,
+            BridgeError::UnknownLabel,
+            BridgeError::IncompleteWindow,
+        ] {
+            let mut r = reply();
+            r.spans = vec![
+                Span {
+                    start: 0,
+                    end: 16,
+                    label: "CREDIT_CARD".into(),
+                    score: 0.99,
+                },
+                Span {
+                    start: 17,
+                    end: 21,
+                    label: "EMAIL".into(),
+                    score: 0.99,
+                },
+            ];
+            match failure {
+                BridgeError::Nonfinite => r.spans[1].score = f64::NAN,
+                BridgeError::Alignment => r.spans[1].start = 18,
+                BridgeError::UnknownLabel => r.spans[1].label = "UNKNOWN".into(),
+                BridgeError::IncompleteWindow => r.completed_windows = 0,
+                _ => unreachable!(),
+            }
+            assert_eq!(validate(r, 1, "4111111111111112 😀").unwrap_err(), failure);
+        }
+    }
+
+    #[test]
     fn empty_completed_batch_is_distinct_from_incomplete() {
         let mut r = reply();
         r.spans.clear();

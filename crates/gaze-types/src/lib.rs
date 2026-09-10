@@ -726,22 +726,95 @@ fn e164_phone_check(input: &str) -> bool {
 
 #[cfg(feature = "phone-parser")]
 fn validate_phone_national(region: Region, input: &str) -> Option<String> {
-    let country = match region {
-        Region::De => phonenumber::country::DE,
-        Region::Us => phonenumber::country::US,
-    };
-    let expected_code = match region {
-        Region::De => 49,
-        Region::Us => 1,
-    };
+    let (country, _) = phone_region_contract(region);
     let number = phonenumber::parse(Some(country), input).ok()?;
-    if number.country().code() != expected_code {
-        return None;
+    phone_national_accepted(region, input, &number)
+        .then(|| number.format().mode(phonenumber::Mode::E164).to_string())
+}
+
+#[cfg(feature = "phone-parser")]
+fn phone_region_contract(region: Region) -> (phonenumber::country::Id, u16) {
+    match region {
+        Region::De => (phonenumber::country::DE, 49),
+        Region::Us => (phonenumber::country::US, 1),
     }
-    if number.is_valid() || is_safe_fixture_phone(region, input) {
-        return Some(number.format().mode(phonenumber::Mode::E164).to_string());
+}
+
+#[cfg(feature = "phone-parser")]
+fn phone_national_accepted(region: Region, input: &str, number: &phonenumber::PhoneNumber) -> bool {
+    number.country().code() == phone_region_contract(region).1
+        && (number.is_valid() || is_safe_fixture_phone(region, input))
+}
+
+/// Conservative, text-free result for experimental candidate admission.
+/// This does not change the existing validator-veto or canonical-form contracts.
+#[cfg(feature = "phone-parser")]
+#[doc(hidden)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhoneCandidateAdmission {
+    Accept,
+    NotApplicable,
+    SemanticInvalid,
+    Error,
+}
+
+/// Experimental national-phone admission using the existing region/fixture contract.
+/// Callers must select a region from explicit document locale, never from guesses.
+/// Unsupported characters and failed international forms are retained. Parser data
+/// errors are distinct from internal errors; no parser error text is exposed.
+#[cfg(feature = "phone-parser")]
+#[doc(hidden)]
+pub fn phone_candidate_admission(region: Region, input: &str) -> PhoneCandidateAdmission {
+    use PhoneCandidateAdmission::*;
+    if !input.bytes().all(|b| {
+        b.is_ascii_digit()
+            || b.is_ascii_whitespace()
+            || matches!(b, b'+' | b'-' | b'.' | b'/' | b'(' | b')')
+    }) {
+        return NotApplicable;
     }
-    None
+    let (country, expected_code) = phone_region_contract(region);
+    let Some(metadata) = phonenumber::metadata::DATABASE.by_id(country.as_ref()) else {
+        return Error;
+    };
+    let digits = input
+        .bytes()
+        .filter(u8::is_ascii_digit)
+        .map(char::from)
+        .collect::<String>();
+    // Reuse the pinned parser's IDD metadata rather than inventing dialing prefixes.
+    let international = input.contains('+')
+        || metadata
+            .international_prefix()
+            .and_then(|pattern| pattern.find(&digits))
+            .is_some_and(|m| m.start() == 0);
+    match phonenumber::parse(Some(country), input) {
+        Ok(number) if phone_national_accepted(region, input, &number) => Accept,
+        Ok(number)
+            if international
+                || number.country().code() != expected_code
+                || number.code().source() != phonenumber::country::Source::Default =>
+        {
+            NotApplicable
+        }
+        Ok(_) => SemanticInvalid,
+        Err(error) => phone_candidate_parse_error(error, international),
+    }
+}
+
+#[cfg(feature = "phone-parser")]
+fn phone_candidate_parse_error(
+    error: phonenumber::ParseError,
+    international: bool,
+) -> PhoneCandidateAdmission {
+    use phonenumber::ParseError as Parse;
+    use PhoneCandidateAdmission::*;
+    match error {
+        Parse::MalformedInteger(_) => Error,
+        Parse::InvalidCountryCode | Parse::TooShortAfterIdd => NotApplicable,
+        Parse::NoNumber | Parse::TooShortNsn | Parse::TooLong if international => NotApplicable,
+        Parse::NoNumber | Parse::TooShortNsn | Parse::TooLong => SemanticInvalid,
+    }
 }
 
 #[cfg(feature = "phone-parser")]
@@ -3713,4 +3786,76 @@ fn canonical_other(raw: &str) -> String {
         .chain(rest)
         .collect::<Vec<_>>()
         .join("-")
+}
+
+#[cfg(all(test, feature = "phone-parser"))]
+mod phone_candidate_tests {
+    use super::*;
+
+    #[test]
+    fn candidate_parser_errors_have_closed_data_applicability_and_internal_mapping() {
+        use phonenumber::ParseError as Parse;
+        use PhoneCandidateAdmission::*;
+        for error in [Parse::NoNumber, Parse::TooShortNsn, Parse::TooLong] {
+            assert_eq!(
+                phone_candidate_parse_error(error.clone(), false),
+                SemanticInvalid
+            );
+            assert_eq!(phone_candidate_parse_error(error, true), NotApplicable);
+        }
+        for error in [Parse::InvalidCountryCode, Parse::TooShortAfterIdd] {
+            assert_eq!(
+                phone_candidate_parse_error(error.clone(), false),
+                NotApplicable
+            );
+            assert_eq!(phone_candidate_parse_error(error, true), NotApplicable);
+        }
+        let malformed = "synthetic".parse::<u64>().unwrap_err();
+        assert_eq!(
+            phone_candidate_parse_error(Parse::MalformedInteger(malformed.clone()), false),
+            Error
+        );
+        assert_eq!(
+            phone_candidate_parse_error(Parse::MalformedInteger(malformed), true),
+            Error
+        );
+    }
+
+    #[test]
+    fn candidate_reuses_fixture_contract_without_changing_canonical_validation() {
+        for (region, raw) in [
+            (Region::De, "01555 0112233"),
+            (Region::De, "+49 1555 0112233"),
+            (Region::Us, "+1-555-0100"),
+        ] {
+            assert!(ValidatorKind::E164PhoneNational(region)
+                .canonical_form(raw)
+                .is_some());
+            assert_eq!(
+                phone_candidate_admission(region, raw),
+                PhoneCandidateAdmission::Accept
+            );
+        }
+        for (region, raw) in [
+            (Region::De, "+999 123"),
+            (Region::De, "00 999 123"),
+            (Region::Us, "011 999 123"),
+            (Region::De, "１２３"),
+            (Region::De, "1\u{a0}2"),
+        ] {
+            assert_eq!(
+                phone_candidate_admission(region, raw),
+                PhoneCandidateAdmission::NotApplicable
+            );
+        }
+        for raw in ["1", "123456789012345678901234567890"] {
+            assert_eq!(
+                phone_candidate_admission(Region::De, raw),
+                PhoneCandidateAdmission::SemanticInvalid
+            );
+            assert!(ValidatorKind::E164PhoneNational(Region::De)
+                .canonical_form(raw)
+                .is_none());
+        }
+    }
 }

@@ -1,3 +1,7 @@
+#[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+#[path = "clean_for_bench/semantic_admission.rs"]
+mod semantic_admission;
+
 use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -27,6 +31,8 @@ enum BenchConfig {
     Pass2Ner,
     Pass2NerRedact,
     RuleFloorRedact,
+    Pass2NerRedactSemantic,
+    RuleFloorRedactSemantic,
     FullStackKijiResolve,
     FullStackOpfResolve,
     Pass3Kiji,
@@ -42,6 +48,8 @@ impl BenchConfig {
             Self::Pass2Ner => "pass2-ner",
             Self::Pass2NerRedact => "pass2-ner-redact",
             Self::RuleFloorRedact => "rule-floor-redact",
+            Self::Pass2NerRedactSemantic => "pass2-ner-redact-semantic-candidate",
+            Self::RuleFloorRedactSemantic => "rule-floor-redact-semantic-candidate",
             Self::FullStackKijiResolve => "full-stack-kiji-resolve",
             Self::FullStackOpfResolve => "full-stack-opf-resolve",
             Self::Pass3Kiji => "pass3-kiji",
@@ -50,11 +58,19 @@ impl BenchConfig {
         }
     }
 
+    fn uses_semantic_admission(self) -> bool {
+        matches!(
+            self,
+            Self::Pass2NerRedactSemantic | Self::RuleFloorRedactSemantic
+        )
+    }
+
     fn uses_ner(self) -> bool {
         matches!(
             self,
             Self::Pass2Ner
                 | Self::Pass2NerRedact
+                | Self::Pass2NerRedactSemantic
                 | Self::FullStackKijiResolve
                 | Self::FullStackOpfResolve
         )
@@ -194,7 +210,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = parse_config()?;
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
-    let full = build_pipeline(config)?;
+    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+    let audit = if config.uses_semantic_admission() {
+        let path = std::env::var_os("GAZE_REDACT_ADMISSION_AUDIT_FILE")
+            .ok_or(BenchmarkBuildError::Redact("missing_admission_audit"))?;
+        Some(
+            semantic_admission::AuditSink::new(&PathBuf::from(path))
+                .map_err(|_| BenchmarkBuildError::Redact("admission_audit_open"))?,
+        )
+    } else {
+        None
+    };
+    let full = build_pipeline_internal(
+        config,
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        audit.clone(),
+    )?;
+    let mut request_ordinal = 0u64;
 
     for line in stdin.lock().lines() {
         let line = line?;
@@ -202,7 +234,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         let request: Request = serde_json::from_str(&line)?;
-        match handle_request(config, &full, request)? {
+        request_ordinal = request_ordinal.checked_add(1).ok_or("request limit")?;
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        let outcome = if let Some(audit) = &audit {
+            audit.request(
+                request_ordinal,
+                || handle_request(config, &full, request),
+                |outcome| match outcome {
+                    Outcome::Success(_) => "request_success",
+                    Outcome::PipelineError { .. } => "request_refusal",
+                },
+            )
+        } else {
+            handle_request(config, &full, request)
+        };
+        #[cfg(not(all(feature = "redact-live", feature = "phone-parser", unix)))]
+        let outcome = handle_request(config, &full, request);
+        match outcome? {
             Outcome::Success(response) => {
                 serde_json::to_writer(&mut stdout, &response)?;
                 stdout.write_all(b"\n")?;
@@ -650,6 +698,8 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
                 "pass2-ner" => BenchConfig::Pass2Ner,
                 "pass2-ner-redact" => BenchConfig::Pass2NerRedact,
                 "rule-floor-redact" => BenchConfig::RuleFloorRedact,
+                "pass2-ner-redact-semantic-candidate" => BenchConfig::Pass2NerRedactSemantic,
+                "rule-floor-redact-semantic-candidate" => BenchConfig::RuleFloorRedactSemantic,
                 "full-stack-kiji-resolve" => BenchConfig::FullStackKijiResolve,
                 "full-stack-opf-resolve" => BenchConfig::FullStackOpfResolve,
                 "pass3-kiji" => BenchConfig::Pass3Kiji,
@@ -662,19 +712,40 @@ fn parse_config() -> Result<BenchConfig, Box<dyn std::error::Error>> {
     Ok(config)
 }
 
+#[cfg(test)]
 fn build_pipeline(config: BenchConfig) -> Result<Pipeline, BenchmarkBuildError> {
+    build_pipeline_internal(
+        config,
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        None,
+    )
+}
+
+fn build_pipeline_internal(
+    config: BenchConfig,
+    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<
+        semantic_admission::AuditSink,
+    >,
+) -> Result<Pipeline, BenchmarkBuildError> {
     let ner = if config.uses_ner() {
         Some(ner_settings_from_env()?)
     } else {
         None
     };
-    let mut pipeline = assemble_rule_floor(config, ner)?;
+    let mut pipeline = assemble_rule_floor_internal(
+        config,
+        ner,
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        audit,
+    )?;
     match config {
         BenchConfig::RuleFloorCore
         | BenchConfig::RuleFloorExtended
         | BenchConfig::Pass2Ner
         | BenchConfig::Pass2NerRedact
-        | BenchConfig::RuleFloorRedact => {}
+        | BenchConfig::RuleFloorRedact
+        | BenchConfig::Pass2NerRedactSemantic
+        | BenchConfig::RuleFloorRedactSemantic => {}
         BenchConfig::FullStackKijiResolve => {
             pipeline = register_kiji_ort(pipeline).map_err(|source| {
                 BenchmarkBuildError::SafetyNetRegistration {
@@ -747,9 +818,25 @@ fn ner_settings_from_env() -> Result<NerSettings, BenchmarkBuildError> {
     })
 }
 
+#[cfg(test)]
 fn assemble_rule_floor(
     config: BenchConfig,
     ner: Option<NerSettings>,
+) -> Result<Pipeline, BenchmarkBuildError> {
+    assemble_rule_floor_internal(
+        config,
+        ner,
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        None,
+    )
+}
+
+fn assemble_rule_floor_internal(
+    config: BenchConfig,
+    ner: Option<NerSettings>,
+    #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<
+        semantic_admission::AuditSink,
+    >,
 ) -> Result<Pipeline, BenchmarkBuildError> {
     let bundle = if config.uses_extended_rule_floor() {
         "core-extended"
@@ -770,6 +857,33 @@ fn assemble_rule_floor(
         None
     };
     let active_locales = benchmark_locale_chain(&policy, &rulepack);
+
+    if config.uses_semantic_admission() {
+        #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))]
+        {
+            let bridge = std::env::var_os("GAZE_REDACT_BRIDGE")
+                .ok_or(BenchmarkBuildError::Redact("missing_bridge"))?;
+            let model = std::env::var_os("GAZE_REDACT_MODEL_DIR")
+                .ok_or(BenchmarkBuildError::Redact("missing_model"))?;
+            let audit = audit.ok_or(BenchmarkBuildError::Redact("missing_admission_audit"))?;
+            let detector = gaze_recognizers::redact_live::RedactDetector::new(
+                PathBuf::from(bridge),
+                PathBuf::from(model),
+            )
+            .map_err(|e| BenchmarkBuildError::Redact(e.code()))?;
+            let recognizer = semantic_admission::SemanticRecognizer::with_audit(detector, audit);
+            return Ok(gaze_assembly::build_pipeline_with_recognizer(
+                &policy,
+                &empty_context(),
+                &[rulepack],
+                &active_locales,
+                ner_threshold,
+                recognizer,
+            )?);
+        }
+        #[cfg(not(all(feature = "redact-live", feature = "phone-parser", unix)))]
+        return Err(BenchmarkBuildError::Redact("feature_unavailable"));
+    }
 
     if matches!(
         config,
