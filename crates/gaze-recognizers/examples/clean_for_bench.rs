@@ -66,6 +66,11 @@ impl BenchConfig {
         }
     }
 
+    #[cfg(all(feature = "benchmark-baseline-lock", unix))]
+    fn uses_baseline_lock(self) -> bool {
+        matches!(self, Self::Pass2NerRedactBaselineLock)
+    }
+
     fn uses_semantic_admission(self) -> bool {
         matches!(
             self,
@@ -299,7 +304,7 @@ fn build_producer(
     #[cfg(all(feature = "redact-live", feature = "phone-parser", unix))] audit: Option<semantic_admission::AuditSink>,
 ) -> Result<Producer, Box<dyn std::error::Error>> {
     #[cfg(all(feature = "benchmark-baseline-lock", unix))]
-    if config == BenchConfig::Pass2NerRedactBaselineLock {
+    if config.uses_baseline_lock() {
         return Ok(Producer::Locked(baseline_lock::Producer::build()?));
     }
     Ok(Producer::Ordinary(build_pipeline_internal(

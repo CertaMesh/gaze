@@ -8,7 +8,37 @@ use std::fs::OpenOptions;
 pub(super) struct Producer {
     baseline: BenchmarkBaselineLock,
     detector: RedactDetector,
-    audit: RefCell<Box<dyn Write>>,
+    audit: RefCell<Audit>,
+}
+
+const MAX_AUDIT_BYTES: usize = 8 * 1024 * 1024;
+
+struct Audit {
+    writer: Box<dyn Write>,
+    // Reserve before writing, then poison on any failure; partial writes cannot reopen capacity.
+    bytes_reserved: usize,
+    failure: Option<AuditError>,
+}
+impl Audit {
+    fn new(writer: Box<dyn Write>) -> Self {
+        Self { writer, bytes_reserved: 0, failure: None }
+    }
+}
+
+#[derive(Debug, Clone, Copy, thiserror::Error)]
+enum AuditError {
+    #[error("LOCK_AUDIT_LIMIT")]
+    Limit,
+    #[error("LOCK_AUDIT_BUSY")]
+    Busy,
+    #[error("LOCK_AUDIT_WRITE")]
+    Write,
+}
+
+enum Lifecycle { Begin, Success, Refusal, Error }
+enum AuditEvent<'a> {
+    Lifecycle(Lifecycle),
+    BatchComplete(&'a [Disposition]),
 }
 
 // Same Pass2Ner recipe; the test-only NER-free variant proves assembly plumbing, not model parity.
@@ -56,41 +86,67 @@ impl Producer {
         let path = std::env::var_os("GAZE_REDACT_ADMISSION_AUDIT_FILE").ok_or(BenchmarkBuildError::Redact("missing_admission_audit"))?;
         let audit = OpenOptions::new().write(true).create_new(true).open(path)
             .map_err(|_| BenchmarkBuildError::Redact("admission_audit_open"))?;
-        Ok(Self { baseline, detector, audit: RefCell::new(Box::new(audit)) })
+        Ok(Self { baseline, detector, audit: RefCell::new(Audit::new(Box::new(audit))) })
     }
 
-    fn evidence(&self, ordinal: u64, status: &'static str, dispositions: &[Disposition]) -> Result<(), Box<dyn std::error::Error>> {
-        if dispositions.len() > 4096 { return Err("LOCK_AUDIT_LIMIT".into()); }
-        let counts = dispositions.iter().fold([0usize; 3], |mut counts, disposition| {
-            counts[match disposition {
-                Disposition::Admitted => 0,
-                Disposition::BaselineOverlap => 1,
-                Disposition::SupplementalOverlap => 2,
-            }] += 1;
-            counts
+    fn evidence(&self, ordinal: u64, event: AuditEvent<'_>) -> Result<(), Box<dyn std::error::Error>> {
+        let mut audit = self.audit.try_borrow_mut().map_err(|_| AuditError::Busy)?;
+        if let Some(error) = audit.failure { return Err(error.into()); }
+        let mut record = serde_json::json!({
+            "policy": "baseline-lock-candidate-v1", "request": ordinal,
         });
-        let record = serde_json::json!({
-            "policy": "baseline-lock-candidate-v1", "request": ordinal, "status": status,
-            "admitted": counts[0], "baseline_overlap": counts[1], "supplemental_overlap": counts[2],
-        });
+        let status = match event {
+            AuditEvent::Lifecycle(lifecycle) => match lifecycle {
+                Lifecycle::Begin => "request_begin",
+                Lifecycle::Success => "request_success",
+                Lifecycle::Refusal => "request_refusal",
+                Lifecycle::Error => "request_error",
+            },
+            AuditEvent::BatchComplete(dispositions) => {
+                if dispositions.len() > 4096 {
+                    audit.failure = Some(AuditError::Limit);
+                    return Err(AuditError::Limit.into());
+                }
+                let counts = dispositions.iter().fold([0usize; 3], |mut counts, disposition| {
+                    counts[match disposition {
+                        Disposition::Admitted => 0,
+                        Disposition::BaselineOverlap => 1,
+                        Disposition::SupplementalOverlap => 2,
+                    }] += 1;
+                    counts
+                });
+                record["admitted"] = counts[0].into();
+                record["baseline_overlap"] = counts[1].into();
+                record["supplemental_overlap"] = counts[2].into();
+                "batch_complete"
+            }
+        };
+        record["status"] = status.into();
         let mut bytes = serde_json::to_vec(&record)?;
-        if bytes.len() > 1024 { return Err("LOCK_AUDIT_LIMIT".into()); }
         bytes.push(b'\n');
-        let mut audit = self.audit.try_borrow_mut().map_err(|_| "LOCK_AUDIT_BUSY")?;
-        audit.write_all(&bytes).and_then(|_| audit.flush()).map_err(|_| "LOCK_AUDIT_WRITE")?;
+        let next = audit.bytes_reserved.checked_add(bytes.len());
+        if bytes.len() > 1024 || next.is_none_or(|next| next > MAX_AUDIT_BYTES) {
+            audit.failure = Some(AuditError::Limit);
+            return Err(AuditError::Limit.into());
+        }
+        audit.bytes_reserved = next.ok_or(AuditError::Limit)?;
+        if audit.writer.write_all(&bytes).and_then(|_| audit.writer.flush()).is_err() {
+            audit.failure = Some(AuditError::Write);
+            return Err(AuditError::Write.into());
+        }
         Ok(())
     }
 
     pub(super) fn handle(&self, ordinal: u64, request: Request) -> Result<Outcome, Box<dyn std::error::Error>> {
-        self.evidence(ordinal, "request_begin", &[])?;
+        self.evidence(ordinal, AuditEvent::Lifecycle(Lifecycle::Begin))?;
         let result = self.clean(ordinal, request);
         let status = match &result {
-            Ok(Outcome::Success(_)) => "request_success",
-            Ok(Outcome::PipelineError { .. }) => "request_refusal",
-            Err(_) => "request_error",
+            Ok(Outcome::Success(_)) => Lifecycle::Success,
+            Ok(Outcome::PipelineError { .. }) => Lifecycle::Refusal,
+            Err(_) => Lifecycle::Error,
         };
         // No successful response reaches stdout until final audit write and flush succeed.
-        self.evidence(ordinal, status, &[])?;
+        self.evidence(ordinal, AuditEvent::Lifecycle(status))?;
         result
     }
 
@@ -108,7 +164,7 @@ impl Producer {
                 return Ok(Outcome::PipelineError { fixture_id: request.fixture_id, stage: "clean", reason, total_ms: clean_ms });
             }
         };
-        self.evidence(ordinal, "batch_complete", &output.dispositions)?;
+        self.evidence(ordinal, AuditEvent::BatchComplete(&output.dispositions))?;
         observe_clean(
             BenchConfig::Pass2NerRedactBaselineLock, RestoreSource::Locked(&self.baseline),
             request.fixture_id, request.text, output.session, output.text, output.manifest,
@@ -153,7 +209,7 @@ for line in sys.stdin:
         value
     }
     fn synthetic_producer(detector: RedactDetector, audit: Box<dyn Write>) -> Producer {
-        Producer { baseline: assemble(None, false).unwrap(), detector, audit: RefCell::new(audit) }
+        Producer { baseline: assemble(None, false).unwrap(), detector, audit: RefCell::new(Audit::new(audit)) }
     }
     #[test]
     fn embedded_assembly_empty_supplement_matches_all_observed_fields() {
@@ -171,6 +227,7 @@ for line in sys.stdin:
     #[test]
     fn original_three_arms_keep_ordinary_dispatch_and_direct_pipeline_results() {
         for config in [BenchConfig::Pass2Ner, BenchConfig::Pass2NerRedact, BenchConfig::Pass2NerRedactSemantic] {
+            assert!(!config.uses_baseline_lock(), "production build_producer must select the ordinary recipe");
             let rulepack = load_bundled_rulepack("core-extended").unwrap();
             let policy = benchmark_policy(&rulepack, true);
             let locales = benchmark_locale_chain(&policy, &rulepack);
@@ -198,7 +255,6 @@ for line in sys.stdin:
             let CleanDocument::Text(text) = clean else { panic!("text required"); };
             let restored = pipeline.restore_with_telemetry(&session, &text).unwrap();
             let runtime = super::super::Producer::Ordinary(pipeline);
-            assert!(matches!(&runtime, super::super::Producer::Ordinary(_)));
             let actual = semantic_fields(runtime.handle(config, 1, request(raw)).unwrap());
             assert_eq!(actual["clean_text"], text);
             assert_eq!(actual["manifest_spans"], serde_json::to_value(serialize_manifest(manifest)).unwrap());
@@ -209,7 +265,19 @@ for line in sys.stdin:
         }
     }
 
-    struct AuditProbe { writes: Rc<RefCell<Vec<Vec<u8>>>>, fail_at: usize }
+    #[test]
+    fn production_selection_enables_only_the_separate_candidate_arm() {
+        for config in [BenchConfig::RuleFloorCore, BenchConfig::RuleFloorExtended,
+            BenchConfig::Pass2Ner, BenchConfig::Pass2NerRedact, BenchConfig::RuleFloorRedact,
+            BenchConfig::Pass2NerRedactSemantic, BenchConfig::RuleFloorRedactSemantic,
+            BenchConfig::FullStackKijiResolve, BenchConfig::FullStackOpfResolve,
+            BenchConfig::Pass3Kiji, BenchConfig::Pass3Opf, BenchConfig::Pass3LocaleAware] {
+            assert!(!config.uses_baseline_lock());
+        }
+        assert!(BenchConfig::Pass2NerRedactBaselineLock.uses_baseline_lock());
+    }
+
+    struct AuditProbe { writes: Rc<RefCell<Vec<Vec<u8>>>>, fail_at: usize, fail_flush_at: usize }
     impl Write for AuditProbe {
         fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
             let mut writes = self.writes.borrow_mut();
@@ -217,21 +285,82 @@ for line in sys.stdin:
             if writes.len() == self.fail_at { return Err(std::io::Error::other("synthetic failure")); }
             Ok(bytes.len())
         }
-        fn flush(&mut self) -> std::io::Result<()> { Ok(()) }
+        fn flush(&mut self) -> std::io::Result<()> {
+            if self.writes.borrow().len() == self.fail_flush_at {
+                Err(std::io::Error::other("synthetic flush failure"))
+            } else { Ok(()) }
+        }
     }
     #[test]
     fn audit_begin_batch_and_finalization_failures_never_release_success() {
-        for fail_at in [1, 2, 3, usize::MAX] {
+        for (fail_at, fail_flush_at) in [(1, usize::MAX), (2, usize::MAX), (3, usize::MAX),
+            (usize::MAX, 1), (usize::MAX, 2), (usize::MAX, 3), (usize::MAX, usize::MAX)] {
             let (_dir, detector) = bridge(json!([]));
             let writes = Rc::new(RefCell::new(Vec::new()));
-            let producer = synthetic_producer(detector, Box::new(AuditProbe { writes: writes.clone(), fail_at }));
+            let producer = synthetic_producer(detector, Box::new(AuditProbe { writes: writes.clone(), fail_at, fail_flush_at }));
             let result = producer.handle(1, request("alice@example.invalid"));
-            if fail_at == usize::MAX {
+            if fail_at == usize::MAX && fail_flush_at == usize::MAX {
                 assert!(matches!(result, Ok(Outcome::Success(_))));
                 let records = writes.borrow().iter().map(|bytes| serde_json::from_slice::<Value>(bytes).unwrap()).collect::<Vec<_>>();
                 assert_eq!(records.iter().map(|record| record["status"].as_str().unwrap()).collect::<Vec<_>>(), ["request_begin", "batch_complete", "request_success"]);
                 assert!(!serde_json::to_string(&records).unwrap().contains("alice@example.invalid"));
-            } else { assert!(result.is_err()); }
+            } else {
+                assert!(result.is_err());
+                let count = writes.borrow().len();
+                assert!(producer.handle(2, request("alice@example.invalid")).is_err());
+                assert_eq!(writes.borrow().len(), count, "audit failure must remain closed");
+            }
+        }
+    }
+
+    #[test]
+    fn lifecycle_records_omit_counts_and_only_complete_batches_report_zero() {
+        let (_dir, detector) = bridge(json!([]));
+        let writes = Rc::new(RefCell::new(Vec::new()));
+        let producer = synthetic_producer(detector, Box::new(AuditProbe {
+            writes: writes.clone(), fail_at: usize::MAX, fail_flush_at: usize::MAX,
+        }));
+        for lifecycle in [Lifecycle::Begin, Lifecycle::Refusal, Lifecycle::Error, Lifecycle::Success] {
+            producer.evidence(1, AuditEvent::Lifecycle(lifecycle)).unwrap();
+        }
+        producer.evidence(1, AuditEvent::BatchComplete(&[])).unwrap();
+        producer.evidence(2, AuditEvent::BatchComplete(&[Disposition::Admitted, Disposition::BaselineOverlap])).unwrap();
+        let records = writes.borrow().iter().map(|bytes| serde_json::from_slice::<Value>(bytes).unwrap()).collect::<Vec<_>>();
+        for lifecycle in &records[..4] {
+            for key in ["admitted", "baseline_overlap", "supplemental_overlap"] {
+                assert!(lifecycle.get(key).is_none(), "unknown batch must not report zero");
+            }
+        }
+        for key in ["admitted", "baseline_overlap", "supplemental_overlap"] { assert_eq!(records[4][key], 0); }
+        assert_eq!(records[5]["admitted"], 1);
+        assert_eq!(records[5]["baseline_overlap"], 1);
+    }
+
+    #[test]
+    fn total_audit_cap_including_final_record_refuses_without_more_writes() {
+        let (_dir, detector) = bridge(json!([]));
+        let writes = Rc::new(RefCell::new(Vec::new()));
+        let producer = synthetic_producer(detector, Box::new(AuditProbe {
+            writes: writes.clone(), fail_at: usize::MAX, fail_flush_at: usize::MAX,
+        }));
+        assert!(matches!(producer.handle(1, request("alice@example.invalid")), Ok(Outcome::Success(_))));
+        let lengths = writes.borrow().iter().map(Vec::len).collect::<Vec<_>>();
+        let total: usize = lengths.iter().sum();
+        assert_eq!(lengths.len(), 3);
+        // Same ordinal gives identical record sizes. Each boundary fails one byte before it fits.
+        for allowed in [lengths[0] - 1, lengths[0] + lengths[1] - 1, total - 1] {
+            let (_dir, detector) = bridge(json!([]));
+            let writes = Rc::new(RefCell::new(Vec::new()));
+            let producer = synthetic_producer(detector, Box::new(AuditProbe {
+                writes: writes.clone(), fail_at: usize::MAX, fail_flush_at: usize::MAX,
+            }));
+            producer.audit.borrow_mut().bytes_reserved = MAX_AUDIT_BYTES - allowed;
+            assert!(producer.handle(1, request("alice@example.invalid")).is_err());
+            assert!(producer.audit.borrow().bytes_reserved <= MAX_AUDIT_BYTES);
+            assert!(writes.borrow().iter().map(Vec::len).sum::<usize>() <= allowed);
+            let count = writes.borrow().len();
+            assert!(producer.handle(2, request("alice@example.invalid")).is_err());
+            assert_eq!(writes.borrow().len(), count);
         }
     }
     #[test]
