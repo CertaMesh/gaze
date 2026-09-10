@@ -1,3 +1,5 @@
+#[cfg(test)]
+mod baseline_lock;
 mod protection;
 pub use protection::{ProtectionContext, ProtectionError};
 
@@ -1010,7 +1012,7 @@ impl Pipeline {
         document_kind: DocumentKind,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+        protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
     ) -> Result<CleanText> {
         let normalized = normalize(text);
         let spans = &normalized.spans;
@@ -1044,14 +1046,36 @@ impl Pipeline {
         }
 
         detections.sort_by_key(|d| d.detection.span.start);
+        self.emit_text_plan(
+            target,
+            text,
+            field_name,
+            document_kind,
+            detections.into_iter().map(|detection| (detection, None)),
+            protection_trace,
+        )
+    }
+
+    // The normal route evaluates rules lazily; the guarded prototype supplies frozen actions.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_text_plan(
+        &self,
+        target: &mut ProtectionTarget<'_, '_>,
+        text: &str,
+        field_name: Option<&str>,
+        document_kind: DocumentKind,
+        detections: impl ExactSizeIterator<Item = (IndexedDetection, Option<Action>)>,
+        mut protection_trace: Option<&mut ProtectionTraceCollector<'_>>,
+    ) -> Result<CleanText> {
         let mut out = String::with_capacity(text.len());
         let mut emitted = Vec::with_capacity(detections.len());
         let mut cursor = 0usize;
 
-        for detection in detections {
+        for (detection, frozen_action) in detections {
             let raw = text[detection.detection.span.clone()].to_string();
-            let context = build_context(field_name);
-            let action = self.action_for(&detection.detection, &context);
+            let action = frozen_action.unwrap_or_else(|| {
+                self.action_for(&detection.detection, &build_context(field_name))
+            });
             if protection_trace.is_some() && !matches!(action, Action::Tokenize | Action::Preserve)
             {
                 return Err(Error::UnsupportedActionVariant);
