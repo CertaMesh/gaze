@@ -7,28 +7,9 @@ use crate::resolver::resolve_candidates_with_policy_and_anchors;
 pub use gaze_types::{Candidate, DetectContext, DetectError, Recognizer};
 use gaze_types::{CollisionMembership, LocaleBasis, LocaleChain, LocaleTag, PiiClass};
 
-pub trait Validator: Send + Sync {
-    fn id(&self) -> &str;
-    fn validate(&self, raw: &str) -> ValidationResult;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
-pub enum ValidationResult {
-    Valid,
-    Invalid,
-    Indeterminate,
-}
-
-pub trait Canonicalizer: Send + Sync {
-    fn canonicalize(&self, raw: &str) -> Option<String>;
-}
-
 pub struct RecognizerRegistry {
     entries: Vec<Arc<dyn Recognizer>>,
     recognizers_by_id: HashMap<String, Arc<dyn Recognizer>>,
-    validators: HashMap<String, Arc<dyn Validator>>,
-    canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     family_policy: FamilyPolicyTable,
     anchor_resolver: AnchorResolver,
 }
@@ -529,14 +510,6 @@ impl RecognizerRegistry {
         self.recognizers_by_id.get(id)
     }
 
-    pub fn validators(&self) -> &HashMap<String, Arc<dyn Validator>> {
-        &self.validators
-    }
-
-    pub fn canonicalizers(&self) -> &HashMap<String, Arc<dyn Canonicalizer>> {
-        &self.canonicalizers
-    }
-
     pub fn family_policy(&self) -> &FamilyPolicyTable {
         &self.family_policy
     }
@@ -549,8 +522,6 @@ fn min_score(_class: &PiiClass) -> f32 {
 #[derive(Default)]
 pub struct RecognizerRegistryBuilder {
     entries: Vec<Arc<dyn Recognizer>>,
-    validators: HashMap<String, Arc<dyn Validator>>,
-    canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     collision_memberships: HashMap<String, CollisionMembership>,
     anchor_resolver: AnchorResolver,
 }
@@ -597,8 +568,6 @@ impl RecognizerRegistryBuilder {
         RecognizerRegistry {
             entries: self.entries,
             recognizers_by_id,
-            validators: self.validators,
-            canonicalizers: self.canonicalizers,
             family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
             anchor_resolver: self.anchor_resolver,
         }

@@ -52,8 +52,8 @@ pub use policy::{
 };
 pub use redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 pub use registry::{
-    Candidate, Canonicalizer, DetectContext, FamilyPolicyTable, Recognizer, RecognizerRegistry,
-    RecognizerRegistryBuilder, ValidationResult, Validator,
+    Candidate, DetectContext, FamilyPolicyTable, Recognizer, RecognizerRegistry,
+    RecognizerRegistryBuilder,
 };
 pub use resolver::{resolve_candidates, resolve_candidates_with_policy};
 pub use rule::{Action, ClassRule, ColumnRule, DefaultRule, Rule, RuleContext};

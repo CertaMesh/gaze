@@ -56,7 +56,7 @@ For restore, scan the LLM response with `gaze::token_shape::pattern()` and call 
 | Pipeline execution | `Pipeline`, `PipelineBuilder`, `Error`, `Result` |
 | Sessions and restore | `Session`, `Scope`, `SensitiveSnapshot` |
 | Policy model | `Policy`, `PolicyError`, `RuleSpec`, `RulepackPolicy`, `NerPolicy`, `SessionPolicy`, `SessionScope` |
-| Recognizer API | `Recognizer`, `RecognizerRegistry`, `DetectContext`, `Candidate`, `Validator`, `Canonicalizer` |
+| Recognizer API | `Recognizer`, `RecognizerRegistry`, `DetectContext`, `Candidate` |
 | Locale chain | `LocaleChain`, `LocaleTag`, `LocaleError` |
 | Rulepacks | `Rulepack`, `RulepackSource`, `RulepackError`, `RecognizerSpec`, `TokenSpec`, `LocaleData` |
 | Rules and classes | `PiiClass`, `Action`, `ClassRule`, `ColumnRule`, `DefaultRule`, `Rule` |
