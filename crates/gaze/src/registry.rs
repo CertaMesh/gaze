@@ -549,8 +549,6 @@ fn min_score(_class: &PiiClass) -> f32 {
 #[derive(Default)]
 pub struct RecognizerRegistryBuilder {
     entries: Vec<Arc<dyn Recognizer>>,
-    validators: HashMap<String, Arc<dyn Validator>>,
-    canonicalizers: HashMap<String, Arc<dyn Canonicalizer>>,
     collision_memberships: HashMap<String, CollisionMembership>,
     anchor_resolver: AnchorResolver,
 }
@@ -597,8 +595,8 @@ impl RecognizerRegistryBuilder {
         RecognizerRegistry {
             entries: self.entries,
             recognizers_by_id,
-            validators: self.validators,
-            canonicalizers: self.canonicalizers,
+            validators: HashMap::new(),
+            canonicalizers: HashMap::new(),
             family_policy: FamilyPolicyTable::from_memberships(self.collision_memberships),
             anchor_resolver: self.anchor_resolver,
         }
