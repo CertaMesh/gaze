@@ -284,17 +284,6 @@ fn read_file_response(path: &Path, ctx: &ToolCtx<'_>) -> Result<DocumentToolResp
     })
 }
 
-#[cfg(not(feature = "ocr-tesseract"))]
-fn read_file_response(
-    _path: &PathBuf,
-    _ctx: &ToolCtx<'_>,
-) -> Result<DocumentToolResponse, ToolError> {
-    Err(ToolError::BackendUnavailable(
-        "rebuild gaze-document with `--features ocr-tesseract` to enable `gaze_read_file`"
-            .to_string(),
-    ))
-}
-
 #[cfg(feature = "ocr-tesseract")]
 fn source_kind(kind: InputKind) -> &'static str {
     match crate::bundle::kind_label(kind) {
@@ -319,11 +308,6 @@ fn map_document_error(err: DocumentError) -> ToolError {
         }
         other => ToolError::internal(other),
     }
-}
-
-#[cfg(not(feature = "ocr-tesseract"))]
-fn map_document_error(err: crate::DocumentError) -> ToolError {
-    ToolError::internal(err)
 }
 
 fn format_text_markdown(text: &str) -> String {
