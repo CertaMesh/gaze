@@ -249,7 +249,8 @@ def common_four_arm_summary(proofs):
 
 
 def run(args):
-    assert __debug__
+    if not __debug__:
+        raise RuntimeError("assertion guards required")
     assert stage.supervisor.time.time() < stage.deadline_value(args.deadline_utc) - stage.supervisor.CLEANUP_RESERVE
     repo = Path(__file__).resolve().parents[2]
     out = repo / stage.PAIRED

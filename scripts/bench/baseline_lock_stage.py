@@ -77,7 +77,7 @@ def source_state(repo):
 def environment():
     values = supervisor.selected_environment()
     toolchain = Path.home() / ".rustup/toolchains/1.96.0-aarch64-apple-darwin/bin"
-    values["PATH"] = str(toolchain) + ":/usr/bin:/bin:/usr/sbin:/sbin"
+    values["PATH"] = str(toolchain) + ":/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
     # No inherited audit destinations, locale override, or Python assertion bypass.
     values.update(GAZE_REDACT_ADMISSION_AUDIT_FILE=None, PYTHONOPTIMIZE=None)
     return values
@@ -123,7 +123,8 @@ def validate_receipt(repo, name, state, deadline):
 
 
 def main():
-    assert __debug__
+    if not __debug__:
+        raise RuntimeError("assertion guards required")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("step", choices=(*PREREQUISITES, "freeze", "smoke", "dev"))
     parser.add_argument("--deadline-utc", required=True)
