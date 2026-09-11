@@ -196,6 +196,7 @@ const REDACTION_LOG_COLUMNS: &[ColumnSpec] = &[
     ColumnSpec { name: "restore_manifest_bypass_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "restore_fresh_pii_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
     ColumnSpec { name: "restore_phase_mask", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
+    ColumnSpec { name: "restore_trap_shape_count", sql_type: "INTEGER", constraint: ColumnConstraint::Nullable, migrate: true, backfill: None },
 ];
 impl SqliteLogger {
     pub fn new(path: &Path) -> Result<Self> {
@@ -274,7 +275,7 @@ impl SqliteLogger {
             .lock()
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         conn.execute(
-            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
+            "INSERT INTO redaction_log (source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
             params![
                 entry.source,
                 entry.recognizer_id,
@@ -310,6 +311,7 @@ impl SqliteLogger {
                 entry.restore_manifest_bypass_count.map(|value| value as i64),
                 entry.restore_fresh_pii_count.map(|value| value as i64),
                 entry.restore_phase_mask.map(i64::from),
+                entry.restore_trap_shape_count.map(|value| value as i64),
             ],
         )
         .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -323,7 +325,7 @@ impl SqliteLogger {
             .map_err(|_| AuditError::Sqlite("sqlite mutex poisoned".to_string()))?;
         let mut stmt = conn
             .prepare(
-                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask FROM redaction_log",
+                "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, backend_silently_dropped, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, restore_trap_shape_count FROM redaction_log",
             )
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
         let rows = stmt
@@ -369,6 +371,8 @@ impl SqliteLogger {
                 entry.restore_fresh_pii_count =
                     row.get::<_, Option<i64>>(21)?.map(|value| value as u64);
                 entry.restore_phase_mask = row.get::<_, Option<i64>>(22)?.map(|value| value as u32);
+                entry.restore_trap_shape_count =
+                    row.get::<_, Option<i64>>(23)?.map(|value| value as u64);
                 Ok(entry)
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;
@@ -431,6 +435,7 @@ impl SqliteLogger {
                     restore_manifest_bypass_count: row.get(33)?,
                     restore_fresh_pii_count: row.get(34)?,
                     restore_phase_mask: row.get(35)?,
+                    restore_trap_shape_count: row.get(36)?,
                 })
             })
             .map_err(|err| AuditError::Sqlite(err.to_string()))?;

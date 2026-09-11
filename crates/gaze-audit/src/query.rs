@@ -89,6 +89,7 @@ pub struct AuditLogRow {
     pub restore_manifest_bypass_count: Option<i64>,
     pub restore_fresh_pii_count: Option<i64>,
     pub restore_phase_mask: Option<i64>,
+    pub restore_trap_shape_count: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -156,6 +157,7 @@ pub const AUDIT_RESTRICTED_COLUMNS: &[&str] = &[
     "restore_manifest_bypass_count",
     "restore_fresh_pii_count",
     "restore_phase_mask",
+    "restore_trap_shape_count",
 ];
 
 pub const SAFETY_NET_RESTRICTED_COLUMNS: &[&str] = &[
@@ -573,11 +575,11 @@ mod tests {
     fn generated_sql_is_byte_identical_for_column_presence_matrix() {
         assert_eq!(
             build_with_columns(&OPTIONAL_COLUMNS),
-            "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask FROM redaction_log ORDER BY rowid"
+            "SELECT source, recognizer_id, recognizer_version_id, class, action, field_name, document_kind, conflict_loser, decided_by, created_at, session_id, snapshot_scheme, snapshot_alg, snapshot_key_version, validator_fail_reason, ambiguity_record, collision_family, collision_variant, fallback_triggered, provenance_stage, provenance_model_id, provenance_model_version, provenance_artifact_sha256, provenance_tokenizer_sha256, provenance_locale_resolved, provenance_locale_match_kind, provenance_canonical_class, provenance_native_class, provenance_confidence, provenance_merged_from, restore_policy, restore_decision, restore_unknown_token_count, restore_manifest_bypass_count, restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count FROM redaction_log ORDER BY rowid"
         );
         assert_eq!(
             build_with_columns(&[]),
-            "SELECT source, NULL AS recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, NULL AS created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, 'SHA-256' AS snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, NULL AS ambiguity_record, NULL AS collision_family, NULL AS collision_variant, NULL AS fallback_triggered, NULL AS provenance_stage, NULL AS provenance_model_id, NULL AS provenance_model_version, NULL AS provenance_artifact_sha256, NULL AS provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, NULL AS provenance_locale_match_kind, NULL AS provenance_canonical_class, NULL AS provenance_native_class, NULL AS provenance_confidence, NULL AS provenance_merged_from, NULL AS restore_policy, NULL AS restore_decision, NULL AS restore_unknown_token_count, NULL AS restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, NULL AS restore_phase_mask FROM redaction_log ORDER BY rowid"
+            "SELECT source, NULL AS recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, NULL AS created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, 'SHA-256' AS snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, NULL AS ambiguity_record, NULL AS collision_family, NULL AS collision_variant, NULL AS fallback_triggered, NULL AS provenance_stage, NULL AS provenance_model_id, NULL AS provenance_model_version, NULL AS provenance_artifact_sha256, NULL AS provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, NULL AS provenance_locale_match_kind, NULL AS provenance_canonical_class, NULL AS provenance_native_class, NULL AS provenance_confidence, NULL AS provenance_merged_from, NULL AS restore_policy, NULL AS restore_decision, NULL AS restore_unknown_token_count, NULL AS restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, NULL AS restore_phase_mask, NULL AS restore_trap_shape_count FROM redaction_log ORDER BY rowid"
         );
         let mixed = [
             "created_at",
@@ -597,7 +599,7 @@ mod tests {
         ];
         assert_eq!(
             build_with_columns(&mixed),
-            "SELECT source, recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, ambiguity_record, NULL AS collision_family, collision_variant, NULL AS fallback_triggered, provenance_stage, NULL AS provenance_model_id, provenance_model_version, NULL AS provenance_artifact_sha256, provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, provenance_locale_match_kind, NULL AS provenance_canonical_class, provenance_native_class, NULL AS provenance_confidence, provenance_merged_from, NULL AS restore_policy, restore_decision, NULL AS restore_unknown_token_count, restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, restore_phase_mask FROM redaction_log ORDER BY rowid"
+            "SELECT source, recognizer_id, NULL AS recognizer_version_id, class, action, field_name, document_kind, conflict_loser, 'none' AS decided_by, created_at, NULL AS session_id, 'gaze.snapshot.v1.sha256-salted' AS snapshot_scheme, snapshot_alg, NULL AS snapshot_key_version, NULL AS validator_fail_reason, ambiguity_record, NULL AS collision_family, collision_variant, NULL AS fallback_triggered, provenance_stage, NULL AS provenance_model_id, provenance_model_version, NULL AS provenance_artifact_sha256, provenance_tokenizer_sha256, NULL AS provenance_locale_resolved, provenance_locale_match_kind, NULL AS provenance_canonical_class, provenance_native_class, NULL AS provenance_confidence, provenance_merged_from, NULL AS restore_policy, restore_decision, NULL AS restore_unknown_token_count, restore_manifest_bypass_count, NULL AS restore_fresh_pii_count, restore_phase_mask, NULL AS restore_trap_shape_count FROM redaction_log ORDER BY rowid"
         );
     }
 

@@ -317,6 +317,7 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             restore_manifest_bypass_count: None,
             restore_fresh_pii_count: None,
             restore_phase_mask: None,
+            restore_trap_shape_count: None,
         },
         AuditLogRow {
             source: "dictionary".to_string(),
@@ -355,6 +356,7 @@ fn legacy_rows() -> Vec<AuditLogRow> {
             restore_manifest_bypass_count: None,
             restore_fresh_pii_count: None,
             restore_phase_mask: None,
+            restore_trap_shape_count: None,
         },
     ]
 }

@@ -225,6 +225,15 @@ pub struct RestoredTextWithProvenance {
     pub authorized_output_ranges: Vec<Range<usize>>,
 }
 
+/// Owner-side restoration and the classification of its remaining token shapes.
+/// No debug or serialization surface: restored values and unknown shapes may be sensitive.
+pub(crate) struct RestoreAssessment {
+    pub(crate) restored: RestoredTextWithProvenance,
+    pub(crate) unknown_tokens: Vec<String>,
+    pub(crate) manifest_bypass_count: u64,
+    pub(crate) trap_shape_count: u64,
+}
+
 /// Closed failures produced while committing a staged session transaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -623,7 +632,7 @@ impl Session {
     }
 
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
-        restore_strict_text_with_provenance_from_state(&self.state_snapshot(), text)
+        restore_classified_strict_text_from_state(&self.state_snapshot(), text)
             .map(|restored| restored.text)
     }
 
@@ -631,7 +640,7 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_strict_text_with_provenance_from_state(&self.state_snapshot(), text)
+        restore_classified_strict_text_from_state(&self.state_snapshot(), text)
     }
 
     pub fn restore_strict_text_with_events(
@@ -641,8 +650,12 @@ impl Session {
         let state = self.state_snapshot();
         let events =
             restore_boundary_events(text, &authorized_structural_values_from_state(&state));
-        let restored = restore_strict_text_with_provenance_from_state(&state, text)?.text;
+        let restored = restore_classified_strict_text_from_state(&state, text)?.text;
         Ok((restored, events))
+    }
+
+    pub(crate) fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
+        assess_restore_text_from_state(&self.state_snapshot(), text)
     }
 
     pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
@@ -1187,6 +1200,14 @@ fn restore_strict_text_with_provenance_from_state(
     text: &str,
 ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
     let tokens = validated_restore_tokens(state, text)?;
+    Ok(restore_tokens_with_provenance(state, text, tokens))
+}
+
+fn restore_tokens_with_provenance(
+    state: &SessionState,
+    text: &str,
+    tokens: Vec<StrictRestoreToken>,
+) -> RestoredTextWithProvenance {
     let mut restored = String::with_capacity(text.len());
     let mut authorized_output_ranges = Vec::<Range<usize>>::with_capacity(tokens.len());
     let mut cursor = 0usize;
@@ -1213,10 +1234,85 @@ fn restore_strict_text_with_provenance_from_state(
         cursor = token.end;
     }
     restored.push_str(&text[cursor..]);
-    Ok(RestoredTextWithProvenance {
+    RestoredTextWithProvenance {
         text: restored,
         authorized_output_ranges,
-    })
+    }
+}
+
+fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<RestoreAssessment> {
+    // Substitution and classification share one immutable manifest generation.
+    let regex = match &state.restore_regex_cache {
+        Some((generation, regex)) if *generation == state.generation => Some(Arc::clone(regex)),
+        _ => build_restore_regex(state)?,
+    };
+    let tokens = regex
+        .as_ref()
+        .map(|regex| {
+            regex
+                .find_iter(text)
+                .map(|matched| StrictRestoreToken {
+                    start: matched.start(),
+                    end: matched.end(),
+                    parsed: parsed_restore_token(matched.as_str()),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let restored = restore_tokens_with_provenance(state, text, tokens);
+    Ok(classify_restore_output(state, restored))
+}
+
+fn classify_restore_output(
+    state: &SessionState,
+    restored: RestoredTextWithProvenance,
+) -> RestoreAssessment {
+    let mut unknown_tokens = Vec::new();
+    let mut manifest_bypass_count = 0;
+    let mut trap_shape_count = 0;
+    let mut cursor = 0;
+    for matched in crate::token_shape::pattern().find_iter(&restored.text) {
+        let trap = crate::token_shape::is_trap(matched.as_str());
+        trap_shape_count += u64::from(trap);
+        while restored
+            .authorized_output_ranges
+            .get(cursor)
+            .is_some_and(|range| range.end <= matched.start())
+        {
+            cursor += 1;
+        }
+        if restored
+            .authorized_output_ranges
+            .get(cursor)
+            .is_some_and(|range| range.start <= matched.start() && matched.end() <= range.end)
+        {
+            continue;
+        }
+        if trap {
+            manifest_bypass_count += 1;
+        } else if !state.value_by_token.contains_key(matched.as_str()) {
+            unknown_tokens.push(matched.as_str().to_owned());
+        }
+    }
+    RestoreAssessment {
+        restored,
+        unknown_tokens,
+        manifest_bypass_count,
+        trap_shape_count,
+    }
+}
+
+fn restore_classified_strict_text_from_state(
+    state: &SessionState,
+    text: &str,
+) -> Result<RestoredTextWithProvenance> {
+    // Keep malformed/nested input rejection before any owner-side substitution.
+    strict_restore_tokens(text)?;
+    let assessment = assess_restore_text_from_state(state, text)?;
+    if let Some(unknown) = assessment.unknown_tokens.first() {
+        return Err(unknown_token_error(unknown));
+    }
+    Ok(assessment.restored)
 }
 
 fn validate_token_shapes_from_state(
