@@ -18,7 +18,8 @@ and the pipeline aborts outbound redaction on recognizer failure.
 - `gaze`: `RecognizerRegistry::detect_all` and `detect_all_resolved` propagate
   errors; `pipeline::Error` gains a recognizer-detection variant.
 - `gaze-recognizers`: regex, dictionary, anchored, and NER recognizers implement
-  the fallible contract. NER no longer maps backend failure to an empty result.
+  the fallible contract. NER maps neither backend failure nor malformed
+  model output to an empty result (see Model Output Boundary).
 - `gaze-cli`, `gaze-assembly`, and `gaze-mcp-core`: consume the existing core
   pipeline `Result`, so recognizer failures surface as core pipeline errors.
 
@@ -32,6 +33,39 @@ from leaving the pipeline.
 
 Long NER input is scanned through bounded overlapping chunks before backend
 execution; chunk failures are propagated as recognizer errors.
+
+## Model Output Boundary
+
+The fallible contract above only holds if the backend actually reports a
+failure. Between the ONNX session and the BIO decode there is a second
+boundary -- the raw output tensor -- and a malformed tensor there must not be
+read as "this document contains no PII".
+
+`OrtBackend::detect` funnels every model result through one validation
+function before any label selection, softmax, or span filtering runs. These
+four conditions each fail closed with `NerRuntimeError::Output`, never with an
+empty span list:
+
+| Model output | Outcome |
+| --- | --- |
+| No output tensor at all | `Output("missing logits tensor")` |
+| Rank/dimensions other than `[1, seq_len, num_labels]` | `Output("invalid logits tensor shape")` |
+| Flat buffer length != `seq_len * num_labels` | `Output("invalid logits dimensions")` |
+| Any non-finite value (`NaN`, `+Inf`, `-Inf`) | `Output("nonfinite logits")` |
+
+The non-finite scan covers every value in the tensor, including `O` rows,
+low-confidence rows, and special-token rows. Restricting it to the argmax
+label or to above-threshold rows would let corruption hide behind exactly the
+rows the decoder discards -- and `NaN` loses every `>` comparison in the
+argmax fold, so a corrupt row silently reports `O` with maximum plausibility.
+
+An empty result stays representable only where it is genuinely correct: an
+empty token sequence, zero-width offsets, or a well-formed tensor whose spans
+all fall outside the document.
+
+This mirrors the Kiji DistilBERT safety-net decoder, which already rejects
+invalid classifier width, mismatched offsets, bad logit length, and non-finite
+values. The ORT NER path was the outlier, not the precedent.
 
 ## Long-Input Chunking Invariant
 

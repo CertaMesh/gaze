@@ -96,22 +96,44 @@ impl NerBackend for OrtBackend {
             .run(inputs)
             .map_err(|err| NerRuntimeError::Inference(err.to_string()))?;
 
-        let logits = match outputs.iter().next() {
-            Some((_, value)) => value,
-            None => return Ok(Vec::new()),
+        let Some((_, value)) = outputs.iter().next() else {
+            return decode_output(labels, id2label, offsets, None, input);
         };
-        let (shape_obj, flat) = logits
+        let (shape, flat) = value
             .try_extract_tensor::<f32>()
-            .map_err(|err| NerRuntimeError::Output(err.to_string()))?;
-        let shape: Vec<usize> = shape_obj.iter().map(|d| *d as usize).collect();
-        if shape.len() != 3 || shape[0] != 1 || shape[1] != seq_len {
-            return Ok(Vec::new());
-        }
-
-        Ok(decode_logits(
-            labels, id2label, offsets, flat, seq_len, shape[2], input,
-        ))
+            .map_err(|_| NerRuntimeError::Output("expected a float32 logits tensor".into()))?;
+        decode_output(labels, id2label, offsets, Some((shape, flat)), input)
     }
+}
+
+/// Validate the model boundary before any label selection or span filtering.
+fn decode_output(
+    labels: &LabelMap,
+    id2label: &[String],
+    offsets: &[(usize, usize)],
+    output: Option<(&[i64], &[f32])>,
+    input: &str,
+) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+    let (shape, logits) =
+        output.ok_or_else(|| NerRuntimeError::Output("missing logits tensor".into()))?;
+    if shape.len() != 3
+        || shape[0] != 1
+        || usize::try_from(shape[1]).ok() != Some(offsets.len())
+        || usize::try_from(shape[2]).ok() != Some(id2label.len())
+    {
+        return Err(NerRuntimeError::Output(
+            "invalid logits tensor shape".into(),
+        ));
+    }
+    decode_logits(
+        labels,
+        id2label,
+        offsets,
+        logits,
+        offsets.len(),
+        id2label.len(),
+        input,
+    )
 }
 
 /// Post-inference decode step: per-subword argmax + softmax confidence, then
@@ -128,7 +150,18 @@ fn decode_logits(
     seq_len: usize,
     num_labels: usize,
     input: &str,
-) -> Vec<NerSpanResult> {
+) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+    if num_labels == 0
+        || num_labels != id2label.len()
+        || offsets.len() != seq_len
+        || seq_len.checked_mul(num_labels) != Some(logits.len())
+    {
+        return Err(NerRuntimeError::Output("invalid logits dimensions".into()));
+    }
+    // Include O, low-confidence labels, and special tokens: none may hide corruption.
+    if logits.iter().any(|value| !value.is_finite()) {
+        return Err(NerRuntimeError::Output("nonfinite logits".into()));
+    }
     let mut subword_labels: Vec<&str> = Vec::with_capacity(seq_len);
     let mut subword_scores: Vec<f32> = Vec::with_capacity(seq_len);
     for pos in 0..seq_len {
@@ -152,10 +185,16 @@ fn decode_logits(
     // `input` is the text the tokenizer offsets index into; the merge reads
     // joiner bytes between tokens from it. Provenance (`ner/ort`) is attached
     // later by `NerRecognizer` / `NerDetector::try_detect`, never here.
-    NerDetector::merge_bio_span_results(labels, offsets, &subword_labels, &subword_scores, input)
-        .into_iter()
-        .filter(|span| span.span.end <= input.len())
-        .collect()
+    Ok(NerDetector::merge_bio_span_results(
+        labels,
+        offsets,
+        &subword_labels,
+        &subword_scores,
+        input,
+    )
+    .into_iter()
+    .filter(|span| span.span.end <= input.len())
+    .collect())
 }
 
 fn tokenized_chunk_ranges(
@@ -273,6 +312,7 @@ mod tests {
             ID2LABEL.len(),
             input,
         )
+        .unwrap()
     }
 
     /// Axis 1 / axis 3: the joiner between `Anne` and `Marie` is read from the
@@ -335,9 +375,197 @@ mod tests {
             2,
             ID2LABEL.len(),
             input,
-        );
+        )
+        .unwrap();
         assert_eq!(out.len(), 1, "out-of-range span must be dropped: {out:?}");
         assert_eq!(out[0].span, 0..4);
         assert_eq!(out[0].class, PiiClass::Name);
+    }
+
+    struct SyntheticLogitsBackend {
+        invalid: f32,
+    }
+
+    impl NerBackend for SyntheticLogitsBackend {
+        fn chunk_ranges(&self, _input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+            Ok(vec![0..4, 5..9])
+        }
+
+        fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            let mut values = logits(&["B-PER"]);
+            // A valid first chunk must not escape if a later chunk is corrupt.
+            if input == "Beta" {
+                values[0] = self.invalid;
+            }
+            decode_output(
+                &labels(),
+                &id2label(),
+                &[(0, 4)],
+                Some((&[1, 1, 5], &values)),
+                input,
+            )
+        }
+    }
+
+    fn corrupt_recognizer(invalid: f32) -> crate::ner::NerRecognizer {
+        crate::ner::NerRecognizer {
+            detector: NerDetector {
+                model_dir: std::path::PathBuf::new(),
+                backend_kind: crate::ner::NerBackendKind::Ort,
+                recognizer_version_id: "ner.synthetic.v1".into(),
+                locale: None,
+                threshold: 0.99,
+                backend: std::sync::Arc::new(SyntheticLogitsBackend { invalid }),
+            },
+        }
+    }
+
+    #[test]
+    fn invalid_output_reaches_fallible_callers_before_filtering() {
+        use gaze_types::{DetectContext, Detector, DictionaryBundle, Recognizer};
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[], &dictionaries);
+        for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let recognizer = corrupt_recognizer(invalid);
+            assert!(
+                recognizer.detector.try_detect("Anna Beta").is_err(),
+                "corrupt logits must fail the whole chunked detection"
+            );
+            assert!(
+                Recognizer::detect(&recognizer, "Anna Beta", &ctx).is_err(),
+                "threshold filtering must not hide corrupt logits"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_output_blocks_pipeline_clean_output() {
+        use gaze::{Pipeline, RawDocument, Scope, Session};
+        let pipeline = Pipeline::builder()
+            .recognizer(corrupt_recognizer(f32::NAN))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert!(matches!(
+            pipeline.redact(&session, RawDocument::Text("Anna Beta".into())),
+            Err(gaze::Error::RecognizerDetect(
+                gaze_types::DetectError::Backend { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "ner detector backend failure is fail-closed")]
+    fn invalid_output_infallible_detector_panics() {
+        use gaze_types::Detector;
+        corrupt_recognizer(f32::NAN).detector.detect("Anna Beta");
+    }
+
+    #[test]
+    fn invalid_output_rejects_every_nonfinite_label_and_special_token() {
+        for tag in ID2LABEL {
+            for index in 0..ID2LABEL.len() {
+                for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                    let mut values = logits(&[tag]);
+                    values[index] = invalid;
+                    for (input, offsets) in [("Anna", [(0, 4)]), ("", [(0, 0)])] {
+                        let err = decode_output(
+                            &labels(),
+                            &id2label(),
+                            &offsets,
+                            Some((&[1, 1, 5], &values)),
+                            input,
+                        )
+                        .unwrap_err();
+                        assert!(matches!(err, NerRuntimeError::Output(_)));
+                        assert_eq!(err.to_string(), "logits extract failed: nonfinite logits");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn invalid_output_rejects_missing_and_malformed_tensors() {
+        assert!(matches!(
+            decode_output(&labels(), &id2label(), &[(0, 4)], None, "Anna"),
+            Err(NerRuntimeError::Output(_))
+        ));
+        for shape in [
+            vec![],
+            vec![1, 5],
+            vec![2, 1, 5],
+            vec![1, 2, 5],
+            vec![1, 1, 0],
+            vec![1, 1, 4],
+            vec![1, 1, 6],
+            vec![1, -1, 5],
+            vec![1, 1, -1],
+        ] {
+            assert!(matches!(
+                decode_output(
+                    &labels(),
+                    &id2label(),
+                    &[(0, 4)],
+                    Some((&shape, &[0.0; 5])),
+                    "Anna"
+                ),
+                Err(NerRuntimeError::Output(_))
+            ));
+        }
+        for values in [vec![], vec![0.0; 4], vec![0.0; 6]] {
+            assert!(matches!(
+                decode_output(
+                    &labels(),
+                    &id2label(),
+                    &[(0, 4)],
+                    Some((&[1, 1, 5], &values)),
+                    "Anna"
+                ),
+                Err(NerRuntimeError::Output(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn valid_output_preserves_empty_special_tokens_and_finite_score_oracle() {
+        assert!(
+            decode_output(&labels(), &id2label(), &[], Some((&[1, 0, 5], &[])), "")
+                .unwrap()
+                .is_empty()
+        );
+        assert!(decode_output(
+            &labels(),
+            &id2label(),
+            &[(0, 0)],
+            Some((&[1, 1, 5], &logits(&["B-PER"]))),
+            ""
+        )
+        .unwrap()
+        .is_empty());
+        assert!(decode_output(
+            &labels(),
+            &id2label(),
+            &[(0, 4)],
+            Some((&[1, 1, 5], &[0.0; 5])),
+            "Anna"
+        )
+        .unwrap()
+        .is_empty());
+        // Independent f64 probability oracle, without the decoder's max subtraction.
+        let values = [0.0f32, 2.0, 1.0, -1.0, -2.0];
+        let expected = 2.0f64.exp() / values.iter().map(|v| f64::from(*v).exp()).sum::<f64>();
+        let out = decode_output(
+            &labels(),
+            &id2label(),
+            &[(0, 4)],
+            Some((&[1, 1, 5], &values)),
+            "Anna",
+        )
+        .unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].span, 0..4);
+        assert_eq!(out[0].class, PiiClass::Name);
+        assert!((f64::from(out[0].score) - expected).abs() < 1e-6);
     }
 }
