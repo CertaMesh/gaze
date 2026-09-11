@@ -1335,6 +1335,53 @@ class ScorecardComparisonTests(unittest.TestCase):
 
 
 class DataikuSelectionTests(unittest.TestCase):
+    def test_real_parquet_preserves_unicode_and_nested_mask_byte_offsets(self) -> None:
+        import pyarrow
+        import pyarrow.parquet as parquet
+
+        rows = [
+            {
+                "language": "German",
+                "country": "Germany",
+                "text": "Grüße 🌍: Dr. Schmidt; alice@example.invalid",
+                "privacy_mask": [
+                    {"start": 9, "end": 20, "value": "Dr. Schmidt", "label": "GIVENNAME"},
+                    {"start": 22, "end": 43, "value": "alice@example.invalid", "label": "EMAIL"},
+                ],
+            },
+            {
+                "language": "English",
+                "country": "United Kingdom",
+                "text": "Café 🌍 without entities",
+                "privacy_mask": [],
+            },
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "synthetic.parquet"
+            parquet.write_table(pyarrow.Table.from_pylist(rows), path)
+            # Bind the production integrity check to this local synthetic fixture.
+            with mock.patch.multiple(
+                dataiku_benchmark,
+                DATASET_BYTES=path.stat().st_size,
+                DATASET_SHA256=hashlib.sha256(path.read_bytes()).hexdigest(),
+                DATASET_ROWS=len(rows),
+            ):
+                documents, report = dataiku_benchmark.load_documents(path)
+
+        self.assertEqual([document.text for document in documents], [row["text"] for row in rows])
+        self.assertEqual(
+            documents[0].spans,
+            (benchmark.Span(14, 25, "GIVENNAME"), benchmark.Span(27, 48, "EMAIL")),
+        )
+        for span, mask in zip(documents[0].spans, rows[0]["privacy_mask"], strict=True):
+            self.assertEqual(
+                documents[0].text.encode("utf-8")[span.start:span.end],
+                mask["value"].encode("utf-8"),
+            )
+        self.assertEqual(documents[1].spans, ())
+        self.assertEqual(report["integrity"]["selected_entities"], 2)
+        self.assertEqual(report["selection"]["negative_only_documents"], 1)
+
     def test_load_documents_counts_selected_english_and_german_rows(self) -> None:
         rows = [
             {
