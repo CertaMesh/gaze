@@ -340,4 +340,85 @@ mod tests {
         assert_eq!(out[0].span, 0..4);
         assert_eq!(out[0].class, PiiClass::Name);
     }
+
+    struct SyntheticLogitsBackend {
+        invalid: f32,
+    }
+
+    impl NerBackend for SyntheticLogitsBackend {
+        fn chunk_ranges(&self, _input: &str) -> Result<Vec<Range<usize>>, NerRuntimeError> {
+            Ok(vec![0..4, 5..9])
+        }
+
+        fn detect(&self, input: &str) -> Result<Vec<NerSpanResult>, NerRuntimeError> {
+            let mut values = logits(&["B-PER"]);
+            // A valid first chunk must not escape if a later chunk is corrupt.
+            if input == "Beta" {
+                values[0] = self.invalid;
+            }
+            Ok(decode_logits(
+                &labels(),
+                &id2label(),
+                &[(0, 4)],
+                &values,
+                1,
+                5,
+                input,
+            ))
+        }
+    }
+
+    fn corrupt_recognizer(invalid: f32) -> crate::ner::NerRecognizer {
+        crate::ner::NerRecognizer {
+            detector: NerDetector {
+                model_dir: std::path::PathBuf::new(),
+                backend_kind: crate::ner::NerBackendKind::Ort,
+                recognizer_version_id: "ner.synthetic.v1".into(),
+                locale: None,
+                threshold: 0.99,
+                backend: std::sync::Arc::new(SyntheticLogitsBackend { invalid }),
+            },
+        }
+    }
+
+    #[test]
+    fn invalid_output_reaches_fallible_callers_before_filtering() {
+        use gaze_types::{DetectContext, Detector, DictionaryBundle, Recognizer};
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[], &dictionaries);
+        for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let recognizer = corrupt_recognizer(invalid);
+            assert!(
+                recognizer.detector.try_detect("Anna Beta").is_err(),
+                "corrupt logits must fail the whole chunked detection"
+            );
+            assert!(
+                Recognizer::detect(&recognizer, "Anna Beta", &ctx).is_err(),
+                "threshold filtering must not hide corrupt logits"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_output_blocks_pipeline_clean_output() {
+        use gaze::{Pipeline, RawDocument, Scope, Session};
+        let pipeline = Pipeline::builder()
+            .recognizer(corrupt_recognizer(f32::NAN))
+            .build()
+            .unwrap();
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        assert!(matches!(
+            pipeline.redact(&session, RawDocument::Text("Anna Beta".into())),
+            Err(gaze::Error::RecognizerDetect(
+                gaze_types::DetectError::Backend { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    #[should_panic(expected = "ner detector backend failure is fail-closed")]
+    fn invalid_output_infallible_detector_panics() {
+        use gaze_types::Detector;
+        corrupt_recognizer(f32::NAN).detector.detect("Anna Beta");
+    }
 }
