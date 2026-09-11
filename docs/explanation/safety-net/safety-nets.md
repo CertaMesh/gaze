@@ -19,7 +19,9 @@ both shipped backends against the same 150-fixture coverage-loop corpus. Kiji
 DistilBERT fp32 stays at `0.125000` macro strict recall across locales; the
 opt-in int8 dynamic-quantized Kiji artifact also stays at `0.125000` macro
 strict recall across locales in direct-detector mode. Full numbers, pins, and
-caveats are in [`docs/reference/benchmarks/v0.9-safety-net-benchmark.md`](../../reference/benchmarks/v0.9-safety-net-benchmark.md).
+caveats are in [`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix);
+the original v0.9 report is archived at the `v0.13.0` tag as
+[v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md).
 
 This document describes the safety-net contract introduced in v0.6 through
 PR #91. The first shipped backend is the OpenAI Privacy Filter

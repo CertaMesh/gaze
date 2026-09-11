@@ -73,7 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   national-ID span; the rule floor adds one false-positive document. A4 negative
   results are unchanged. Kiji also loses coverage on LICENSEPLATENUM, ZIP, and
   PASSWORD, and the scorecard's strict regression comparison does not pass.
-  See the [measured scorecard, hardware, and limits](docs/reference/benchmarks/v0.12-3025a-cfb3aed-scorecard.md)
+  See the [measured scorecard, hardware, and limits](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025a-cfb3aed-scorecard.md)
   and [benchmark runner](scripts/bench/run_no_opf_benchmark.py). The passport check digit and the Swiss AHV
   EAN-13 check digit are real validators, but the synthetic corpus carries no
   valid check digits, so no validator is attached. The passport shape is a single
@@ -113,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every adopter of the default bundle, not only for configurations that
   auto-activate locale-gated recognizers.
 
-  The [consolidated scorecard](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
+  The [consolidated scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
   records the measured EN/DE coverage and A4 negative results. Bare-host URLs
   without a scheme or `www.` prefix remain outside this rule's scope because
   they also occur in the negative corpus.
@@ -131,7 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   to explicit English or German credential cues, emitting the reversible
   `custom:security_token` class.
 
-  The [consolidated EN/DE comparison](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
+  The [consolidated EN/DE comparison](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md)
   measures this rule together with URL detection and discloses both increased
   false positives and class-level Kiji regressions. Its subtractive baseline
   is specific to that recognizer wave, not the previous release.
@@ -171,7 +171,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the numeric shapes are resolved by the new `government-id` collision family
   (`ssn` 10 beats `tax-number` 20 beats `national-id` 30; lower wins).
 
-  The [shipped scorecard](docs/reference/benchmarks/v0.12-government-id-scorecard.md)
+  The [shipped scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-government-id-scorecard.md)
   measures the deterministic cells at 3,194 fewer leaked bytes each and 9 more
   false-positive bytes: rule floor adds 1 false-positive document, while pass2
   adds none. The full-stack Kiji `resolve` cell removes 3,093 leaked bytes and
@@ -427,7 +427,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   mid-word token with the head and tail of the identifier raw — for example
   a URL split around an embedded NER name, or an `AKIA…` credential
   split around its prefix. The
-  [structured-containment scorecard](docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md)
+  [structured-containment scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md)
   measures 1,490 fewer leaked URL bytes and 44 fewer credential bytes in the
   full-stack Kiji resolve cell, with 2 more leaked PASSWORD bytes and 2 fewer
   ZIP bytes from downstream re-segmentation. The rule floor is unchanged. `resolve_candidates` now
@@ -450,7 +450,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   aligned columns, long padding and non-breaking spaces stay covered — and one optional separator).
   This is a grammar-only change: cue
   vocabulary and value shapes are unchanged, so the set of eligible value shapes did not move.
-  Measured in the [connector scorecard](docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md), on the shipped default (`full-stack-kiji-resolve`),
+  Measured in the [connector scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md), on the shipped default (`full-stack-kiji-resolve`),
   against the slice-U merge (`56e1a3d`): 1,802 fewer leaked labelled bytes — SSN −526,
   DRIVERLICENSENUM −582, IDCARDNUM −384, NATIONALID −205, TAXNUM −95. On the deterministic rule
   floor, 190 more entities fully covered for zero false-positive movement (rule and pass2
@@ -685,8 +685,8 @@ Benchmark numbers above describe the named historical candidate/base pairs.
 They are not a fresh measurement of this release head and must not be added
 together as an end-to-end release gain. The
 [benchmark runner](scripts/bench/run_no_opf_benchmark.py),
-[consolidated scorecard and machine specification](docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md),
-[post-wave scorecard](docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md),
+[consolidated scorecard and machine specification](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md),
+[post-wave scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md),
 and linked slice scorecards retain corpus pins, hardware, failed-closed
 accounting, false positives, and known class regressions. No universal
 PII-detection or exact-restore rate is claimed. Safety-net `Redact` fallback
@@ -1041,7 +1041,7 @@ model pins: [`docs/benchmarks.md`](docs/benchmarks.md).
   populated across locale buckets, and latency snapshots cover the 150-fixture
   direct-mode corpus. (Axis 4 trust.)
 - **Multi-NER leaderboard** (PR #245 `4a4338d`): published
-  `docs/research/v0.9-ner-model-leaderboard.md`; Kiji selected as the v0.9
+  [`v0.9-ner-model-leaderboard.md`](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-ner-model-leaderboard.md); Kiji selected as the v0.9
   default per shipped class-map measurement. (Axis 4 trust, Axis 5 ergonomics.)
 - **Audit NER-provenance schema migration** (PR #238 `b030038`): `gaze-audit`
   adds eleven nullable provenance columns to `redaction_log` for future NER
@@ -1102,7 +1102,7 @@ model pins: [`docs/benchmarks.md`](docs/benchmarks.md).
   `cargo run -p xtask -- ci-feature-matrix` on `origin/main` commit `79ba82f`
   (`v0.9.0-rc.1`) before promoting the release notes. Measured on: Apple M5 Max
   / macOS 26.5; see [`docs/benchmarks.md`](docs/benchmarks.md) and
-  `docs/research/v0.9.0-rc1-combined-revalidation.md`.
+  [`v0.9.0-rc1-combined-revalidation.md`](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9.0-rc1-combined-revalidation.md).
 - The PR #240 checkpoint-pinning caveat remains scoped to benchmark
   reproducibility: the old release checksum URL returned the expected pre-tag
   404, so the validation used the local Kiji cache after checksum verification.
@@ -1162,8 +1162,8 @@ Bundle unification + versioned recognizer lineage + Kiji-style defense-in-depth 
 - **Three locale-gated regex recognizers** (v0.8 Tier 3, PR #208 `7348690`): US SSN, UK NINO, and Indian PAN. All ship at `safety_tier = "locale_gated"` — no bare 9-digit / 10-character shapes activate without explicit locale + cue context. PAN extends the existing `locale-in` pack from Tier 2 in place. (Axis 1 reliability, Axis 4 trust.)
 - **Corpus rework v2 implementation** (PR #205 `aa9c5fc`): the 61 stochastic status-quo templates + the `fixture_variants` mechanism are replaced with 150 deliberate scenarios. Each scenario declares its expected emissions including `recognizer_version_id` from day one. `fake` crate added as an xtask-only dev dependency; seed pinned in a documented `COVERAGE_CORPUS_SEED` constant. `baseline.json` fully re-snapped. (Axis 4 trust.)
 - **`UPGRADE.md`** (PR #206 `492573d`): per-minor migration guide complementing `CHANGELOG.md`, with v0.7.x → v0.8.0 TL;DR + backfill summaries for v0.4 → v0.7.
-- **`docs/research/v0.8-kiji-class-gap.md`** (PR #210 `eba350a`): coverage map of all 26 Kiji PII classes against gaze's recognizers — 6 beat-via-Tier-2, 1 beat-via-Tier-3, 16 observer-only-via-Tier-2.5, 3 parity, 0 deferred.
-- **`docs/research/v0.8-kiji-benchmark.md`** (PR #209 `b875381`): two-mode (direct-detector + observer-residual) benchmark methodology headlining strict span leak rate, with a rule-floor snapshot pinned to corpus + Gaze tag. Kiji direct-detector + observer-residual cells deferred (no pinned model SHA yet — tracked as v0.8.x follow-up).
+- **[`v0.8-kiji-class-gap.md`](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md)** (PR #210 `eba350a`): coverage map of all 26 Kiji PII classes against gaze's recognizers — 6 beat-via-Tier-2, 1 beat-via-Tier-3, 16 observer-only-via-Tier-2.5, 3 parity, 0 deferred.
+- **[`v0.8-kiji-benchmark.md`](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md)** (PR #209 `b875381`): two-mode (direct-detector + observer-residual) benchmark methodology headlining strict span leak rate, with a rule-floor snapshot pinned to corpus + Gaze tag. Kiji direct-detector + observer-residual cells deferred (no pinned model SHA yet — tracked as v0.8.x follow-up).
 - **`ARCHITECTURE.md`** (PR #211 `fd130ac`): 14.8 KiB repo-root architecture overview of how the ten workspace crates fit together, with eight numbered Key Design Decisions and a one-diagram view of the redact/restore path.
 - **`gaze-proxy` crate at v0.8.0** (PR #212 `503d0f9`): new published workspace crate. Multi-provider HTTP proxy with an adapter/driver pattern that serves OpenAI's `/v1/chat/completions`, Anthropic's `/v1/messages`, and Gemini's `/v1beta/models/*:{generateContent,streamGenerateContent}` without translation. SSE streaming and tool-call argument reconstruction wired through `gaze::Pipeline` (chunk-split PII spans inside `tool_calls.function.arguments` are accumulated and redacted before leaving the proxy). Daemon-mode subcommands `gaze proxy {serve,start,stop,status,logs,restart}` plus opt-in `install-launchd` / `install-systemd-user` installers. Feature-gated on `gaze-cli` as `--features proxy`, off by default. (Axis 3 agentic-first, Axis 5 ergonomics.)
 

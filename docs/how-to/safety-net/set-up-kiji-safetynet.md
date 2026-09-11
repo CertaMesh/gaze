@@ -360,13 +360,13 @@ fixtures whenever possible.
 
 - [`docs/explanation/safety-net/safety-nets.md`](../../explanation/safety-net/safety-nets.md) is the
   full SafetyNet contract reference.
-- [`docs/reference/benchmarks/v0.8-kiji-class-gap.md`](../../reference/benchmarks/v0.8-kiji-class-gap.md)
-  explains how the upstream 26-class taxonomy maps into Gaze's current
+- [v0.8 Kiji class-taxonomy gap](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md), archived at the
+  `v0.13.0` tag, explains how the upstream 26-class taxonomy maps into Gaze's
   deterministic and observer-only coverage story.
-- [`docs/reference/benchmarks/v0.8-kiji-benchmark.md`](../../reference/benchmarks/v0.8-kiji-benchmark.md)
-  records the benchmark methodology and measured subset status.
-- [`docs/reference/benchmarks/safety-net-benchmark.md`](../../reference/benchmarks/safety-net-benchmark.md)
-  records the v0.9 backend × locale × mode snapshot shape.
+- [v0.8 Kiji benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md), archived at the same tag,
+  records the original benchmark methodology and measured subset status.
+- [`docs/reference/benchmarks/README.md`](../../reference/benchmarks/README.md#safety-net-matrix)
+  records the current backend × locale × mode snapshot shape and the backend pins.
 - [`crates/gaze-cli/README.md`][cli-safety-net] lists the full CLI flag and
   exit-code surface.
 

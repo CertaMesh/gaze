@@ -1,29 +1,84 @@
-# Benchmark Index and Methodology
+# Gaze Benchmarks
 
-This is the canonical reproducibility index and methodology for Gaze benchmark
-evidence through v0.12. Public release notes and benchmark claims should link
-here so the evidence class, runner, pins, and interpretation remain explicit.
+The single benchmark document for Gaze. It carries the current release's
+measured numbers as a table and as charts, the methodology behind them, and the
+commands to reproduce them.
 
-## How to Read Metric Headers
+Everything under [Current release](#current-release), [Charts](#charts), and
+[Release history](#release-history) is **generated** from
+[`release-history.json`](release-history.json) by
+[`scripts/bench/render_benchmark_doc.py`](../../../scripts/bench/render_benchmark_doc.py).
+Do not hand-edit inside the `<!-- BEGIN GENERATED -->` markers; CI re-renders
+and fails on drift.
 
-Quantitative result headers use one accessible direction marker plus a written
-goal: `↑` means **higher is better**, `↓` means **lower is better**, `↔` means
-an **exact or invariant target**, and `info` marks a **descriptive or support
-field with no optimization direction**. Historical performance evidence without
-a contractual threshold uses `goal lower`, `goal higher`, or
+| Section | Contents |
+| --- | --- |
+| [What we measure, and how](#what-we-measure-and-how) | corpora, arms, metrics, goals |
+| [A scorecard measures the corpus, not the recognizer](#a-scorecard-measures-the-corpus-not-the-recognizer) | how to read these numbers honestly |
+| [Current release](#current-release) | the headline table |
+| [Charts](#charts) | per-arm and release-over-release |
+| [Release history](#release-history) | one row per released version |
+| [Safety-Net Matrix](#safety-net-matrix) | backend pins and matrix shape |
+| [NER Model Leaderboard](#ner-model-leaderboard) | candidate backends |
+| [How to reproduce](#how-to-reproduce) | commands, harness, hardware |
+| [Evidence before the release gate](#evidence-before-the-release-gate) | archived per-PR reports |
+
+Related contracts kept as separate documents:
+
+- [`evidence-protocol-v1.md`](evidence-protocol-v1.md) — normative contract for
+  the optional offline T1 evidence path (route observations, synthetic paired
+  arithmetic, recursive aggregate receipt validation). Explicitly **not** an
+  end-to-end paired evaluation of route observations.
+- [`negative-corpus-annotation-contract.md`](negative-corpus-annotation-contract.md)
+  — synthetic EN/DE hard-negative annotation and zero-PII contract.
+- [`class-commitments-v1.json`](class-commitments-v1.json) — fixture-only
+  class-commitment schema and its two fixture rows. Scope is
+  `fixture_only_not_a_corpus_commitment`; it is not a corpus commitment.
+
+---
+
+## What we measure, and how
+
+### The question
+
+Would annotated PII bytes reach a downstream LLM? Gold spans and Gaze
+prediction spans are merged before their intersection is measured in **UTF-8
+bytes**. Label matching is deliberately not part of the primary score:
+pseudonymization safety depends first on covering the bytes, and Gaze's class
+vocabulary does not match every source taxonomy exactly. Per-label recall still
+exposes class-shaped gaps.
+
+### How to read metric headers
+
+Result headers use one direction marker plus a written goal: `↑` **higher is
+better**, `↓` **lower is better**, `↔` an **exact or invariant target**, `info`
+a **descriptive field with no optimization direction**. Historical evidence
+without a contractual threshold uses `goal lower` / `goal higher` /
 `goal no regression`; it does not invent a numeric gate.
 
-`info` is intentional for support counts, observed configuration/version
-columns in mixed-metric row tables, diagnostic partitions, and deltas whose
-favorable sign depends on the metric. Pin, evidence, command, rationale, and
-category tables remain plain because they are not optimization results.
+`info` is intentional for support counts, observed configuration columns in
+mixed-metric tables, diagnostic partitions, and deltas whose favorable sign
+depends on the metric. Pin, evidence, command, rationale, and category tables
+stay plain because they are not optimization results.
 
-## Zero-Leak Production Goals
+### The three arms
 
-These are production scorecard targets, not claims about historical reports.
-Current measured values live in the
-[v0.12 whole-pipeline baseline](v0.12-en-de-whole-pipeline-baseline.md) and its
-[schema-v3 scorecard](v0.12-no-opf-scorecard-v3.json).
+Every release scorecard runs the same three configurations:
+
+| Arm | What it is |
+| --- | --- |
+| `rule-floor-extended` | the shipped deterministic recognizers alone |
+| `pass2-ner` | that floor plus the configured `NerRecognizer` (threshold `0.3` by default) |
+| `full-stack-kiji-resolve` | **the shipped default** — Pass 2 plus the in-process Kiji SafetyNet under the shipped `Resolve`/`Redact` policy, with exact-restore checks, manifest-integrity checks, and a post-policy SafetyNet scan |
+
+An optional `full-stack-opf-resolve` arm exercises the OpenAI Privacy Filter
+through the same contract. It is excluded from the default run because it needs
+a separately installed verified 2.6 GB checkpoint and a warmed daemon, and it
+has a measured fail-closed invalid-output rate.
+
+### Zero-leak production goals
+
+Production scorecard targets, not claims about any particular historical report:
 
 | Production metric | Direction and goal |
 | --- | --- |
@@ -37,122 +92,420 @@ Current measured values live in the
 | Actionable residual suspects | ↓ lower is better; goal 0 |
 | Production/benchmark divergence | ↔ invariant target; goal 0 |
 | False-positive bytes/documents and clean-document changes | ↔ invariant ratchet; goal no regression |
-| *Ratchet exception (gold noise)* | A slice may raise holdout false-positive bytes only by spans that are genuine identifiers the corpus gold does not label, and only when the A4 negative corpus does not move at all (bytes and documents, every category); each such span is enumerated shape-normalised in the slice's `.md` with the reason it is real, and the reviewer re-confirms the list — never tune a rule to skip real PII to keep the counter flat |
-| Complete three-cell correctness integers | ↔ exact target; goal equality across two full runs |
+| *Ratchet exception (gold noise)* | A change may raise holdout false-positive bytes only by spans that are genuine identifiers the corpus gold does not label, and only when the A4 negative corpus does not move at all (bytes and documents, every category); each such span is enumerated shape-normalised with the reason it is real, and the reviewer re-confirms the list — never tune a rule to skip real PII to keep the counter flat |
 
-## Committed Benchmark Evidence Index
+The scorecard is **non-compensating**: safety, reversibility, trust,
+availability, precision, and latency are reported as separate axes. Latency is
+compared only after the correctness gates pass.
 
-This table links every committed file directly under this directory other than
-this README. "Current" means evidence for the active v0.12 scorecard;
-supplemental and historical reports retain their original bounded claims and do
-not imply that they meet current production targets.
+### Primary corpus — English/German synthetic holdout
 
-| File | Role | Evidence class |
+The primary product-language corpus is the English and German rows of the
+upstream test split of
+[`DataikuNLP/kiji-pii-training-data`](https://huggingface.co/datasets/DataikuNLP/kiji-pii-training-data),
+paired with the complete committed A4 EN/DE hard-negative corpus. The split is
+**evaluation-only**: it must never enter Gaze training, fine-tuning, prompt
+examples, dictionaries, rule authoring, or threshold selection.
+
+| Field | Pinned value |
+| --- | --- |
+| Repository | `DataikuNLP/kiji-pii-training-data` |
+| Revision | `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b` |
+| File | `data/test-00000-of-00001.parquet` |
+| License | `Apache-2.0` |
+| Declared data kind | synthetic PII only |
+| Full test rows | `5,150` |
+| File bytes | `2,013,107` |
+| SHA-256 | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
+| Selected English rows | `1,033` |
+| Selected German rows | `853` |
+| Selected annotations | `14,719` |
+| Observed selected labels | `29` |
+| Selection seed | Not applicable; the complete pinned EN/DE selection is used without sampling or shuffling |
+| Negative corpus | [`crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl`](../../../crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl) |
+
+The runner refuses any file whose byte size or digest differs. It also verifies
+the full row count, validates every selected annotation boundary and annotated
+substring, and converts source character offsets to UTF-8 byte offsets before
+scoring.
+
+The word `kiji` in the dataset name does **not** mean this benchmark uses
+Gaze's Kiji SafetyNet model. Gaze's Kiji backend is the separately pinned
+`onnx-community/distilbert-NER-ONNX` bundle; the runner records both model
+directories independently.
+
+**Limits.** Every selected row contains annotated PII, so the split measures
+false-positive bytes only within positive documents and cannot replace a
+negative-only corpus — hence the paired A4 negatives. Synthetic templates
+underrepresent OCR errors, streaming boundaries, JSON tool calls, tenant
+identifiers, and ambiguous natural language. The test split is isolated from
+training, but upstream train and test data may share a generator and templates:
+if a future model uses another split from the same repository, that score is
+**same-generator evaluation** and cannot be its only promotion gate.
+
+### Secondary corpus — OpenPII micro, multilingual
+
+The validation split of `ai4privacy/pii-masking-micro-100k` is retained as a
+secondary multilingual masking holdout and Unicode-offset stress test,
+including its Japanese slice. The same evaluation-only rule applies.
+
+| Field | Pinned value |
+| --- | --- |
+| Repository | `ai4privacy/pii-masking-micro-100k` |
+| Revision | `3cd59c65631280839f830d3ba96dcdfe1785cab1` |
+| File | `data/validation.jsonl` |
+| License | `CC-BY-4.0` |
+| Declared data kind | synthetic PII only |
+| Rows | `9,990` |
+| Bytes | `32,536,978` |
+| SHA-256 | `bb15da1b5fbb11b3cc6fd4c95eca256197573ecd066230eb3c1fe6898f27a578` |
+| Annotations | `72,087` |
+| Observed labels | `26` (a small tail beyond the 19 advertised on the dataset card; the runner reports observed counts rather than dropping it) |
+
+Two additional recall slices are published for this corpus: **direct
+identifiers** (names, contact details, account identifiers, addresses) and
+**contextual PII** (dates, ages, titles, sex, gender, time, amount, currency).
+All labels stay in the primary all-PII score; the slices do not weaken the
+fail-closed contract.
+
+**Datasets evaluated and rejected.** PIIMB has an excellent masking-oriented,
+character-level methodology with negative sentences, but its assembled
+benchmark is CC BY-NC 4.0 and so cannot be the default reproducible corpus for
+Gaze's unrestricted adopter workflow. REDACT is useful as a future curated
+secondary evaluation, but its files require access approval. Neither constraint
+justifies weakening the current synthetic holdout gate.
+
+---
+
+## A scorecard measures the corpus, not the recognizer
+
+These numbers score one synthetic EN/DE holdout. A perfect row here is evidence
+about **this corpus**, not proof that a recognizer is complete — shapes the
+corpus does not contain are unmeasured. Recall claims about a rule change need a
+direct differential probe, not a scorecard row.
+
+Two consequences worth stating plainly:
+
+1. **Consolidating N rules into one is a widening only if the shared form is a
+   superset of every original, including the loosest.** A clean scorecard across
+   all three arms has previously coexisted with a real recall regression on
+   whitespace shapes this corpus happens not to contain.
+2. **False-positive bytes are a ratchet, not a free variable.** They are
+   reported beside recall precisely so precision cannot be traded away silently
+   to make a leak counter fall.
+
+---
+
+## Current release
+
+<!-- BEGIN GENERATED: current-release -->
+
+> **No release has been measured yet.** The table and charts below fill in when a release runs the harness and appends its row. Produce one with the commands in [How to reproduce](#how-to-reproduce).
+
+<!-- END GENERATED: current-release -->
+
+---
+
+## Charts
+
+<!-- BEGIN GENERATED: charts -->
+
+> Charts render once at least one release row exists in [`release-history.json`](release-history.json).
+
+<!-- END GENERATED: charts -->
+
+---
+
+## Release history
+
+One row per released version. Every row's numbers come from the
+`scorecard-vX.Y.Z.json` named in that row, which stays committed as the
+machine-readable evidence.
+
+<!-- BEGIN GENERATED: history -->
+
+| Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
+| --- | --- | --- | --- | --- | ---: |
+| *none yet* | — | — | — | — | — |
+
+<!-- END GENERATED: history -->
+
+Rows marked *(provisional)* were not measured on the released tree; their note
+records what was measured instead.
+
+---
+
+## Safety-Net Matrix
+
+The tracked benchmark snapshot lives at
+[`crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json).
+`cargo bench -p gaze-recognizers --features safety-net-kiji,safety-net-openai --bench safety_net_matrix`
+validates that the snapshot pins match runtime constants and prints the JSON for
+CI logs.
+
+Current status: `opf_kiji_direct_run_v1_observer_residual_deferred` —
+direct-detector cells are populated for Kiji DistilBERT and OpenAI Privacy
+Filter; observer-residual cells remain deferred pending the cleaned-output
+harness.
+
+### Matrix shape
+
+The snapshot schema is version 2, keyed by backend, locale, and mode:
+
+| Dimension | Values |
+| --- | --- |
+| Backends | `kiji_distilbert`, `openai_privacy_filter` |
+| Locales | `Global`, `EnUs`, `DeDe` |
+| Modes | `direct_detector`, `observer_residual` |
+
+That is 12 cells. Each `direct_detector` cell carries nullable precision,
+recall, F1, and per-class metrics. Each `observer_residual` cell also carries
+nullable `observer_residual_recall`, `agreement_with_rule_floor`,
+`expansion_fraction`, `contradiction_fraction`, and `novel_tp_over_rule_floor`.
+
+The top-level `strict_span_leak_rate` block is mode-independent and records one
+nullable headline field per backend-locale pair. It measures end-to-end
+fail-closed behavior rather than detector precision/recall.
+
+Kiji and OPF direct-detector fields are populated from pinned local backend
+runs. **Observer-residual cells remain `null`** until their separate
+cleaned-output harness runs are captured. Publishing observer-residual claims
+without those pins would violate the axis-4 trust contract.
+
+### Backend integrity pins
+
+Kiji DistilBERT:
+
+| Pin | Value |
+| --- | --- |
+| Source repo | `onnx-community/distilbert-NER-ONNX` |
+| Source commit | `3a19fe9404a4469d91aa3d551558a97f68872f67` |
+| Bundle SHA256 (fp32) | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
+| Bundle SHA256 (int8) | `6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb` |
+| Model SHA256 | `b5f77096d0d9f425d34a2e263f8a2dfb845cdc757dc00c7a1e69e9cbb93115d5` |
+| Tokenizer SHA256 | `cb26b43c98e8266ae3e99c2a583cf8315d73b33a17e6b20b4df7ff1f22392d34` |
+| Label-map SHA256 | `d3753ce580a9d43b113d779c712494bd61341285317beec49cc1e848b86f9a97` |
+
+OpenAI Privacy Filter:
+
+| Pin | Value |
+| --- | --- |
+| Source repo | `openai/privacy-filter` |
+| Source commit | `f7f00ca7fb869683eb732c010299d901457f19c3` |
+| Checkpoint bundle SHA256 | `4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae` |
+| Required checkpoint artifacts | `["config.json", "dtypes.json", "model.safetensors", "viterbi_calibration.json"]` |
+
+OPF publishes a source repository and an `opf` Python CLI that downloads its
+checkpoint into `~/.opf/privacy_filter` by default, or into the directory
+selected by `OPF_CHECKPOINT` / `--checkpoint`. It does not publish a GitHub
+release binary, so Gaze does not pin a binary checksum — the source commit and
+checkpoint bundle are the trust anchors. The bundle hash was captured from a
+clean local `opf download` on 2026-05-15 and is SHA256 over the Kiji-style
+line-per-file `SHA256SUMS` manifest for the required artifact list in
+declaration order.
+
+### Runnable paths
+
+```bash
+python3 scripts/bench/kiji-bench-scorer.py --repo-root . --mode all --measure-latency --precision int8 --model-dir "$HOME/.cache/gaze/<kiji-int8-bundle>" --python python3
+python3 scripts/bench/opf-bench-scorer.py --repo-root . --mode all --measure-latency --python python3
+cargo bench -p gaze-recognizers --bench safety_net_matrix
+GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND=ort cargo bench -p gaze-recognizers --features safety-net-kiji --bench safety_net_matrix
+```
+
+| Evidence | Path |
+| --- | --- |
+| Matrix snapshot | [`crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json) |
+| Perf snapshot | [`crates/gaze-recognizers/benches/safety_net_perf_snapshot.json`](../../../crates/gaze-recognizers/benches/safety_net_perf_snapshot.json) |
+| Bench source | [`crates/gaze-recognizers/benches/safety_net_matrix.rs`](../../../crates/gaze-recognizers/benches/safety_net_matrix.rs) |
+
+Claims currently supported by this surface:
+
+| Claim | Evidence |
+| --- | --- |
+| Kiji int8 observer-residual macro recall `0.666667` | `safety_net_matrix_snapshot.json`, `kiji_distilbert_int8` observer-residual locale cells |
+| Kiji int8 F1 delta `0.000` versus fp32 Kiji | same snapshot, matching fp32/int8 direct and observer cells across locales |
+| Kiji int8 one-shot cold start `271.909583ms` | `safety_net_perf_snapshot.json` |
+
+Earlier rc-cycle fp32 warm-p50 and int8 cold-start headlines are **not** present
+in the committed final snapshots. Do not cite them unless a runnable snapshot is
+added.
+
+---
+
+## NER Model Leaderboard
+
+Compares pinned Hugging Face NER candidates as Gaze safety-net backends on the
+committed 150-fixture coverage-loop corpus. Configuration lives in
+[`crates/gaze-recognizers/benches/ner_models.toml`](../../../crates/gaze-recognizers/benches/ner_models.toml);
+evidence is written to
+[`crates/gaze-recognizers/benches/ner_models_snapshot.json`](../../../crates/gaze-recognizers/benches/ner_models_snapshot.json).
+
+Measured 2026-05-15 on macOS 26.5 arm64, Apple M5 Max. The scorer used Python
+3.10.20 for the Tiny/Mobile/Mini candidates; Kiji warm ORT rows used the Rust
+ORT backend. Corpus: 150 fixtures, `target/coverage-report.json` SHA256
+`760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c`.
+
+Macro averages are across the committed `Global`, `EnUs`, and `DeDe` locale
+cells. Warm p50 keeps the model/session loaded over the same 150 direct fixture
+texts, except Kiji ORT warm rows, which use the live ORT bench fixture.
+
+| Model info | HF repo @ commit info | License info | Params info | Bundle size ↓ (goal lower) | Direct recall ↑ (goal 1.000) | Observer recall ↑ (goal 1.000) | Warm p50 ↓ (goal no regression) |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| **Kiji DistilBERT int8 ORT** (shipped default) | same source, local int8 artifact | Apache-2.0 | 66M | 63MB model | 0.125 | 0.667 | 1.849ms |
+| Kiji DistilBERT fp32 ORT | `onnx-community/distilbert-NER-ONNX@3a19fe9` | Apache-2.0 | 66M | 249MB model | 0.125 | 0.667 | 2.562ms |
+| openobscure TinyBERT4L PII NER int8 | `openobscure/tinybert4l-pii-ner-int8@f8399a9` | Apache-2.0 | 14M | 13.95MB | 0.070 | 0.271 | 1.087ms |
+| mrm8488 MobileBERT NER | `mrm8488/mobilebert-finetuned-ner@3f9a1f3` | MIT | 25M | 94.29MB | 0.124 | 0.661 | 16.494ms |
+| osiria MiniLM-L6-H384 Italian NER | `osiria/minilm-l6-h384-italian-cased-ner@125c646` | MIT | 22.6M | 174.30MB | 0.124 | 0.667 | 4.703ms |
+
+Full leaderboard, including the larger multilingual candidates. `Median ms` is
+the scorer's direct-mode one-shot subprocess median, **not** warm in-process
+latency:
+
+| Rank info | Model info | License info | Shippable default? info | Direct P/R/F1 ↑ (goal 1.000 each) | Observer-residual P/R/F1 ↑ (goal 1.000 each) | Median ms ↓ (goal no regression) |
+| ---: | --- | --- | --- | ---: | ---: | ---: |
+| 1 | Davlan multilingual BERT-NER (HRL) | AFL-3.0 | Yes | 0.558 / 0.125 / 0.200 | 0.518 / 0.661 / 0.558 | 1911.349 |
+| 2 | Babelscape WikiNeural Multilingual | CC-BY-NC-SA-4.0 | No, non-commercial | 0.476 / 0.125 / 0.194 | 0.507 / 0.667 / 0.547 | 1786.361 |
+| 3 | osiria MiniLM-L6-H384 Italian NER | MIT | Yes, locale caveat | 0.117 / 0.124 / 0.105 | 0.206 / 0.667 / 0.264 | 1566.991 |
+| 4 | mrm8488 MobileBERT NER | MIT | Yes | 0.232 / 0.124 / 0.141 | 0.362 / 0.661 / 0.369 | 1760.778 |
+| 5 | dslim/bert-base-NER (English) | MIT | Yes | 0.300 / 0.124 / 0.152 | 0.290 / 0.655 / 0.323 | 1737.297 |
+| 6 | Kiji DistilBERT | Apache-2.0 | Yes | 0.247 / 0.125 / 0.140 | 0.246 / 0.667 / 0.287 | 163.161 |
+| 7 | openobscure TinyBERT4L PII NER int8 | Apache-2.0 | Yes, recall caveat | 0.424 / 0.070 / 0.113 | 0.478 / 0.271 / 0.296 | 76.548 |
+
+### Which backend to pick
+
+| Need | Use | Reason |
 | --- | --- | --- |
-| [dataiku-en-de-holdout.md](dataiku-en-de-holdout.md) | Primary synthetic EN/DE holdout provenance, reservation, and scoring contract | Contract/dataset description |
-| [negative-corpus-annotation-contract.md](negative-corpus-annotation-contract.md) | Synthetic EN/DE hard-negative annotation and zero-PII contract | Contract/dataset description |
-| [openpii-micro-holdout.md](openpii-micro-holdout.md) | Secondary multilingual synthetic holdout provenance and scoring contract | Contract/dataset description |
-| [safety-net-benchmark.md](safety-net-benchmark.md) | SafetyNet matrix architecture, modes, and null-cell contract | Contract/dataset description |
-| [evidence-protocol-v1.md](evidence-protocol-v1.md) | Normative contract for the optional offline T1 evidence path (route observations, synthetic paired arithmetic, recursive aggregate receipt validation); explicitly not an end-to-end paired evaluation of route observations | Contract/dataset description |
-| [class-commitments-v1.json](class-commitments-v1.json) | Fixture-only class-commitment schema and its two fixture rows; explicitly not a corpus commitment (scope `fixture_only_not_a_corpus_commitment`) | Contract/dataset description |
-| [v0.12-consolidated-post-wave-scorecard.md](v0.12-consolidated-post-wave-scorecard.md) | Composed effect of the two drained `core` recognizers, measured on shipped main | Current evidence |
-| [v0.12-consolidated-post-wave-base-scorecard-v4.json](v0.12-consolidated-post-wave-base-scorecard-v4.json) | Schema-v4 scorecard for the BASE half of that comparison (not an accepted baseline) | Current evidence |
-| [v0.12-consolidated-post-wave-candidate-scorecard-v4.json](v0.12-consolidated-post-wave-candidate-scorecard-v4.json) | Schema-v4 scorecard for the CANDIDATE half of that comparison (not an accepted baseline) | Current evidence |
-| [v0.12-kiji-decoder-scorecard.md](v0.12-kiji-decoder-scorecard.md) | Kiji LOC/ORG label-permutation fix, pinned label registry, and shared fail-closed decoder comparison for PR #425, with document-level restore attribution | Current evidence |
-| [v0.12-kiji-decoder-base-scorecard-v4.json](v0.12-kiji-decoder-base-scorecard-v4.json) | Schema-v4 scorecard for the BASE half of the Kiji decoder comparison (not an accepted baseline) | Current evidence |
-| [v0.12-kiji-decoder-candidate-scorecard-v4.json](v0.12-kiji-decoder-candidate-scorecard-v4.json) | Schema-v4 scorecard for the CANDIDATE half of the Kiji decoder comparison (not an accepted baseline) | Current evidence |
-| [v0.12-locale-basis-drain-scorecard.md](v0.12-locale-basis-drain-scorecard.md) | Mixed locale-basis drain comparison on current main | Current evidence |
-| [v0.12-locale-basis-drain-base-scorecard-v4.json](v0.12-locale-basis-drain-base-scorecard-v4.json) | Schema-v4 BASE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
-| [v0.12-locale-basis-drain-candidate-scorecard-v4.json](v0.12-locale-basis-drain-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard for the locale-basis comparison (not an accepted baseline) | Current evidence |
-| [v0.12-government-id-scorecard.md](v0.12-government-id-scorecard.md) | Government-ID recognizer cluster (SSN / NATIONALID / DRIVERLICENSENUM / TAXNUM) comparison on current main | Current evidence |
-| [v0.12-government-id-base-scorecard-v4.json](v0.12-government-id-base-scorecard-v4.json) | Schema-v4 BASE scorecard for the government-ID comparison (not an accepted baseline) | Current evidence |
-| [v0.12-government-id-candidate-scorecard-v4.json](v0.12-government-id-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard for the government-ID comparison (not an accepted baseline) | Current evidence |
-| [v0.12-post-wave-a8f7182-scorecard.md](v0.12-post-wave-a8f7182-scorecard.md) | Full-profile comparison of `main` at `a8f7182` against `18fd9e2` (PR #427 merge), covering the fifteen unscored merges #433–#447 including the shipped-default safety-net leak fix (#436) | Current evidence |
-| [v0.12-post-wave-a8f7182-base-scorecard-v4.json](v0.12-post-wave-a8f7182-base-scorecard-v4.json) | Schema-v4 BASE scorecard (`18fd9e2`) for the post-wave comparison (not an accepted baseline) | Current evidence |
-| [v0.12-post-wave-a8f7182-candidate-scorecard-v4.json](v0.12-post-wave-a8f7182-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`a8f7182`, run 1) for the post-wave comparison (not an accepted baseline) | Current evidence |
-| [v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json](v0.12-post-wave-a8f7182-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`a8f7182`), the two-run determinism evidence for the post-wave comparison (not an accepted baseline) | Current evidence |
-| [v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-d64d7e3-scorecard-v4.json) | Bisect run at `d64d7e3` (parent of #436) for the post-wave comparison; identical to BASE (not an accepted baseline) | Current evidence |
-| [v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json](v0.12-post-wave-a8f7182-bisect-6ad0efe-scorecard-v4.json) | Bisect run at `6ad0efe` (#436 merge) for the post-wave comparison (not an accepted baseline) | Current evidence |
-| [v0.12-3025u-bfcf264-scorecard.md](v0.12-3025u-bfcf264-scorecard.md) | #3025 slice U: structured-containment resolver rung (`ConflictTier::StructuredContainment`) at `bfcf264` against `main` `8d87468`, with the span-by-span set of changed arbitration outcomes and the enumerated gold-noise FP exception | Current evidence |
-| [v0.12-3025u-bfcf264-candidate-scorecard-v4.json](v0.12-3025u-bfcf264-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`bfcf264`, run 1) for the slice-U comparison; BASE is the committed `a8f7182` candidate scorecard, whose runtime tree equals `8d87468` (not an accepted baseline) | Current evidence |
-| [v0.12-3025u-bfcf264-candidate-run2-scorecard-v4.json](v0.12-3025u-bfcf264-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`bfcf264`), the two-run determinism evidence for the slice-U comparison (not an accepted baseline) | Current evidence |
-| [v0.12-3025g-edfb167-scorecard.md](v0.12-3025g-edfb167-scorecard.md) | #3025 slice G: shared cue→value connector grammar for the five SSN / government-ID recognizers at the merged head `edfb167` (`e35d24d` + the PR #450 review's B1 whitespace fix) against the slice-U merge `56e1a3d`, with the span-by-span changed-outcome set, the four Kiji re-segmentation residuals named, and the corpus-invisible B1 fix | Current evidence |
-| [v0.12-3025g-edfb167-candidate-scorecard-v4.json](v0.12-3025g-edfb167-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`edfb167`, merged head) for the slice-G comparison; BASE is U's committed `bfcf264` scorecard, whose runtime tree equals `56e1a3d` (not an accepted baseline) | Current evidence |
-| [v0.12-3025g-e35d24d-candidate-scorecard-v4.json](v0.12-3025g-e35d24d-candidate-scorecard-v4.json) | Determinism anchor, run 1: the pre-B1-fix `e35d24d` connector, byte-identical on the corpus to `edfb167` (not an accepted baseline) | Current evidence |
-| [v0.12-3025g-e35d24d-candidate-run2-scorecard-v4.json](v0.12-3025g-e35d24d-candidate-run2-scorecard-v4.json) | Determinism anchor, run 2 (`e35d24d`): the exact two-run determinism proof carried forward for the merged head (not an accepted baseline) | Current evidence |
-| [v0.12-3025a-cfb3aed-scorecard.md](v0.12-3025a-cfb3aed-scorecard.md) | #3025 slice A: `passport.cue_anchored` + extended `national_id.cue_anchored` at `cfb3aed` against the slice-G merge `def702a`, with the span-by-span changed-outcome set, the eleven Kiji re-segmentation residuals named, and the single enumerated gold-noise national-ID false positive | Current evidence |
-| [v0.12-3025a-cfb3aed-candidate-scorecard-v4.json](v0.12-3025a-cfb3aed-candidate-scorecard-v4.json) | Schema-v4 CANDIDATE scorecard (`cfb3aed`, run 1) for the slice-A comparison; BASE is G's committed `edfb167` scorecard, whose runtime tree equals `def702a` (not an accepted baseline) | Current evidence |
-| [v0.12-3025a-cfb3aed-candidate-run2-scorecard-v4.json](v0.12-3025a-cfb3aed-candidate-run2-scorecard-v4.json) | Second full CANDIDATE run (`cfb3aed`), the two-run determinism evidence for the slice-A comparison (not an accepted baseline) | Current evidence |
-| [v0.12-en-de-whole-pipeline-baseline.md](v0.12-en-de-whole-pipeline-baseline.md) | Human-readable authoritative no-OPF whole-pipeline baseline | Current evidence |
-| [v0.12-no-opf-error-buckets.md](v0.12-no-opf-error-buckets.md) | Prioritized analysis of current no-OPF Kiji error buckets | Current evidence |
-| [v0.12-no-opf-scorecard-v3.json](v0.12-no-opf-scorecard-v3.json) | Normalized machine-readable three-cell schema-v3 scorecard | Current evidence |
-| [v0.12-openpii-baseline.md](v0.12-openpii-baseline.md) | External multilingual OpenPII baseline | Supplemental evidence |
-| [v0.12-opf-daemon-sample.md](v0.12-opf-daemon-sample.md) | Warm OPF diagnostic sample outside the default no-OPF run | Supplemental evidence |
-| [v0.8-kiji-benchmark.md](v0.8-kiji-benchmark.md) | Original bounded Kiji-only matrix | Historical evidence |
-| [v0.8-kiji-class-gap.md](v0.8-kiji-class-gap.md) | Historical Kiji taxonomy and class-gap assessment | Historical evidence |
-| [v0.9-gaze-pipeline-benchmark.md](v0.9-gaze-pipeline-benchmark.md) | Coverage-loop end-to-end pipeline quality and performance | Historical evidence |
-| [v0.9-ner-model-leaderboard.md](v0.9-ner-model-leaderboard.md) | Pinned NER candidate comparison | Historical evidence |
-| [v0.9-runtime-comparison.md](v0.9-runtime-comparison.md) | ORT, tract, and Candle runtime comparison | Historical evidence |
-| [v0.9-safety-net-benchmark.md](v0.9-safety-net-benchmark.md) | Consolidated Kiji-versus-OPF matrix and latency snapshot | Historical evidence |
-| [v0.9.0-rc1-combined-revalidation.md](v0.9.0-rc1-combined-revalidation.md) | Combined release-candidate revalidation | Historical evidence |
+| `<50MB` total model bundle | openobscure TinyBERT4L PII NER int8 | Only measured candidate below 50MB and the fastest warm p50. **Not** a Kiji replacement where observer-residual recall matters. |
+| `<100ms` warm p50 with recall preserved | Kiji DistilBERT int8 ORT | Warm p50 `1.849ms`, recall matches fp32 Kiji under the existing int8 gate. |
+| Highest recall among permissive tiny candidates | osiria MiniLM-L6-H384 Italian NER | Ties Kiji observer recall here, but it is Italian-native and its 174MB bundle misses the low-spec storage target. |
 
-## Runners, Sources, Configs, and Snapshots
+Low-spec reference read:
 
-The index below owns the organized implementation inventory. The scoped
-evidence-path tables later in this page preserve the original report context.
+| Reference profile target | Pass? | Recommendation |
+| --- | ---: | --- |
+| 1vCPU / 1GB RAM, `<50MB` bundle | Partial | TinyBERT is the only measured `<50MB` bundle and should fit the storage envelope, but observer recall drops to 0.271. Not a safe default. |
+| 1vCPU / 1GB RAM, `<100ms` warm p50 with recall preserved | Yes by host-proxy latency; not cgroup-proven | Kiji int8 ORT: `1.849ms` warm p50 on this host, identical scorer recall to fp32. A true 1vCPU/1GB cgroup or VM run remains the final deployment proof. |
 
-### Locked Python Harness
+**Screening notes.** `onnx-community/TinyBERT-finetuned-NER-ONNX` and
+`adel-cybral/TinyBERT-finetuned-NER` did not publish a clean permissive license
+in HF metadata and were skipped; `openobscure/tinybert4l-pii-ner-int8` is
+Apache-2.0 and was pinned, but it is a PII-specific TinyBERT head rather than a
+strict CoNLL clone. `SKNahin/NER_MobileBert` was skipped for missing license
+metadata. No permissive English or multilingual general MiniLM NER head with the
+desired PER/LOC/ORG/MISC fit was found.
 
-| File | Role |
+**Interpretation.** The tiny-candidate tier did not produce a default flip.
+TinyBERT wins size and warm latency but loses too much residual recall for the
+reliability axis. MobileBERT nearly preserves Kiji recall but is slower in the
+subprocess scorer and larger than the low-spec storage target. Kiji DistilBERT
+int8 ORT remains the shipped default; use TinyBERT only where a `<50MB` bundle
+is a hard constraint and the recall drop is explicitly accepted.
+
+### Runnable paths
+
+```bash
+python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model kiji-distilbert --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
+python3 scripts/bench/ner-warm-latency.py --repo-root .
+```
+
+---
+
+## How to reproduce
+
+### The release run
+
+Each release measures its own tree. The two steps below are the whole contract:
+
+```bash
+# 1. Produce the scorecard on the release commit.
+uv sync --project scripts/bench --locked
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full \
+  --seed 20260710 --no-download
+
+# 2. Commit it under its release name and regenerate this document.
+cp target/bench-data/no-opf/scorecard-v4.json \
+   docs/reference/benchmarks/scorecard-vX.Y.Z.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
+  --version vX.Y.Z \
+  --machine "<CPU, cores, RAM, OS and build>" \
+  --append-history
+```
+
+A quick smoke run uses the scorer's seeded stratified sampler instead of the
+complete corpus:
+
+```bash
+uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py quick --no-download
+```
+
+The first run may omit `--no-download`; the runner fetches and verifies the
+pinned 2 MB Parquet file under ignored `target/bench-data/`.
+
+`--machine` is required because the scorecard schema does not capture the host.
+It is the one hand-carried reproducibility field, and it is recorded per release
+in [`release-history.json`](release-history.json). Use a placeholder for any
+path: `$HOME/...`, `~/...`, `<model-cache>/...`. **Never publish an absolute
+home directory.**
+
+### Where the numbers come from
+
+The rendered table is a projection of the schema-v4 scorecard. This mapping is
+the contract, enforced by
+[`scripts/bench/test_render_benchmark_doc.py`](../../../scripts/bench/test_render_benchmark_doc.py),
+which mutates each source path in turn and requires the rendered value to move:
+
+| Column | Scorecard JSON path |
 | --- | --- |
-| [scripts/bench/README.md](../../../scripts/bench/README.md) | Canonical runner contract, setup, outputs, verdicts, and baseline acceptance |
-| [scripts/bench/pyproject.toml](../../../scripts/bench/pyproject.toml) | Locked Python project configuration |
-| [scripts/bench/uv.lock](../../../scripts/bench/uv.lock) | Exact Python dependency lock |
-| [scripts/bench/no_opf_models.toml](../../../scripts/bench/no_opf_models.toml) | Canonical no-OPF model and producer-ID configuration |
-| [scripts/bench/run_no_opf_benchmark.py](../../../scripts/bench/run_no_opf_benchmark.py) | Canonical local no-OPF regression entry point |
-| [scripts/bench/dataiku_en_de_gaze_bench.py](../../../scripts/bench/dataiku_en_de_gaze_bench.py) | Dataiku EN/DE whole-pipeline producer |
-| [scripts/bench/openpii_gaze_bench.py](../../../scripts/bench/openpii_gaze_bench.py) | Secondary OpenPII producer and scorer |
-| [scripts/bench/gaze_bench_score.py](../../../scripts/bench/gaze_bench_score.py) | Shared scorecard, comparator, and verdict logic |
-| [scripts/bench/gaze-pipeline-bench.py](../../../scripts/bench/gaze-pipeline-bench.py) | Coverage-loop pipeline snapshot generator |
-| [scripts/bench/kiji-bench-scorer.py](../../../scripts/bench/kiji-bench-scorer.py) | Kiji direct and observer-residual scorer |
-| [scripts/bench/opf-bench-scorer.py](../../../scripts/bench/opf-bench-scorer.py) | OPF direct and observer-residual scorer |
-| [scripts/bench/ner-bench-scorer.py](../../../scripts/bench/ner-bench-scorer.py) | NER model-matrix scorer |
-| [scripts/bench/ner-warm-latency.py](../../../scripts/bench/ner-warm-latency.py) | Warm NER latency runner |
-| [scripts/bench/kiji-runner.py](../../../scripts/bench/kiji-runner.py) | Kiji subprocess adapter used by benchmark scorers |
-| [scripts/bench/onnx-token-classification-runner.py](../../../scripts/bench/onnx-token-classification-runner.py) | Generic ONNX token-classification adapter |
-| [scripts/bench/transformers-runner.py](../../../scripts/bench/transformers-runner.py) | Transformers token-classification adapter |
-| [scripts/bench/opf_daemon.py](../../../scripts/bench/opf_daemon.py) | Warm OPF diagnostic daemon and client bridge |
-| [scripts/bench/safety_net_bench_lib.py](../../../scripts/bench/safety_net_bench_lib.py) | Shared fixture loading and strict scoring support |
-| [scripts/bench/quantize-kiji-int8.py](../../../scripts/bench/quantize-kiji-int8.py) | Pinned Kiji int8 artifact preparation helper |
-| [scripts/bench/test_run_no_opf_benchmark.py](../../../scripts/bench/test_run_no_opf_benchmark.py) | Model-free canonical-runner contract tests |
-| [scripts/bench/test_openpii_gaze_bench.py](../../../scripts/bench/test_openpii_gaze_bench.py) | Model-free OpenPII harness tests |
+| Arm | `runs[].config` |
+| Gold PII bytes | `runs[].metrics.utf8_bytes.pii` |
+| Surviving PII bytes | `runs[].metrics.utf8_bytes.leaked` |
+| Leak rate | `runs[].metrics.utf8_bytes.leak_rate` |
+| False-positive bytes | `runs[].metrics.utf8_bytes.false_positive` |
+| Byte precision | `runs[].metrics.utf8_bytes.precision` |
+| Zero-leak documents | `runs[].metrics.zero_leak_document_rate` |
+| Restore exact | `runs[].pipeline_contract.restore_exact_rate` |
+| Manifest valid | `runs[].pipeline_contract.manifest_valid_document_rate` |
+| Availability | `runs[].pipeline_availability.completion_rate` |
+| Failed closed | `runs[].pipeline_availability.failed_closed_documents` |
+| clean p95 ms | `runs[].latency_ms.clean_ms.p95` |
 
-### Rust Benchmarks and Committed Evidence
+Provenance rows come from `gaze.revision`, `gaze.dirty`, `generated_at`,
+`dataset.repository`, `dataset.revision`, `dataset.integrity`,
+`parameters.profile`, `parameters.sampling_seed`, `parameters.ner_threshold`,
+and `runner_provenance.entry_point`. A scorecard with `gaze.dirty: true` is
+refused: a release row has to be reproducible.
 
-| File | Role |
-| --- | --- |
-| [clean_for_bench.rs](../../../crates/gaze-recognizers/examples/clean_for_bench.rs) | Long-lived pipeline producer for coverage-loop benchmarking |
-| [safety_net_matrix.rs](../../../crates/gaze-recognizers/benches/safety_net_matrix.rs) | SafetyNet matrix and in-process warm benchmark source |
-| [runtime_comparison.rs](../../../crates/gaze-recognizers/benches/runtime_comparison.rs) | ORT/tract/Candle comparison source |
-| [pipeline_end_to_end.rs](../../../crates/gaze/benches/pipeline_end_to_end.rs) | End-to-end pipeline snapshot assertion source |
-| [tier4_pipeline_gating.rs](../../../crates/gaze/benches/tier4_pipeline_gating.rs) | Tier 4 gating benchmark source |
-| [ner_models.toml](../../../crates/gaze-recognizers/benches/ner_models.toml) | Research NER model-matrix configuration |
-| [ner_models_snapshot.json](../../../crates/gaze-recognizers/benches/ner_models_snapshot.json) | Committed NER leaderboard snapshot |
-| [safety_net_matrix_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json) | Committed SafetyNet quality matrix |
-| [safety_net_perf_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_perf_snapshot.json) | Committed one-shot SafetyNet performance snapshot |
-| [gaze_pipeline_bench_snapshot.json](../../../crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json) | Committed end-to-end pipeline snapshot |
+Verify that the committed document still matches its history file:
 
-### Committed Corpus Inputs
+```bash
+python3 scripts/bench/render_benchmark_doc.py --check
+```
 
-| Path | Role |
-| --- | --- |
-| [coverage-loop corpus](../../../crates/gaze-recognizers/testdata/coverage-loop/corpus) | Synthetic 150-fixture historical benchmark corpus |
-| [coverage-loop build manifest](../../../crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json) | Corpus build provenance and pins |
-| [EN/DE negative corpus](../../../crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl) | Complete committed hard-negative input for the primary scorecard |
+This runs in CI on every pull request. It is stdlib-only and needs no corpus, no
+model, and no network.
 
-## Hardware Spec Template
+### The runner's other outputs
 
-Fill this out for every published or PR-local benchmark run:
+Beyond `scorecard-v4.json`, `run_no_opf_benchmark.py` writes a Markdown summary,
+per-language / per-label / per-negative-category diagnostics, and separate
+machine-readable regression and release-readiness verdicts under ignored
+`target/bench-data/no-opf/`. Regression uses zero-tolerance integer-count
+ratchets. Release readiness is an independent candidate-only verdict.
+Performance tolerance is separately configured and informational by default.
+
+Required model bundles are verified before any cell starts. Warmups, measured
+repetitions, discarded warmup samples, and external cold-start to first
+validated response are Python-runner provenance; response latency consumes the
+producer's honest `clean_ms`. See
+[`scripts/bench/README.md`](../../../scripts/bench/README.md) for model
+locations, planning runtime, and the guarded baseline-acceptance command.
+
+### Hardware spec template
+
+Fill this out for every published or PR-local benchmark run; the `--machine`
+string should summarise it:
 
 | Field | Value |
 | --- | --- |
@@ -171,249 +524,119 @@ Fill this out for every published or PR-local benchmark run:
 Do not publish absolute home paths. Use `$HOME/...`, `~/...`, or
 `<model-cache>/...`.
 
-## Coverage-Loop Corpus
+### Locked Python harness
 
-Most v0.9 benchmarks use the committed synthetic coverage-loop corpus:
-
-| Field | Value |
+| File | Role |
 | --- | --- |
-| Corpus path | `crates/gaze-recognizers/testdata/coverage-loop/corpus` |
-| Fixture count | `150` |
-| Corpus SHA256 | `c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f` |
-| Coverage report SHA256 | `760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c` |
-| Build manifest | `crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json` |
+| [scripts/bench/README.md](../../../scripts/bench/README.md) | Canonical runner contract, setup, outputs, verdicts, baseline acceptance |
+| [scripts/bench/pyproject.toml](../../../scripts/bench/pyproject.toml) | Locked Python project configuration |
+| [scripts/bench/uv.lock](../../../scripts/bench/uv.lock) | Exact Python dependency lock |
+| [scripts/bench/no_opf_models.toml](../../../scripts/bench/no_opf_models.toml) | Canonical no-OPF model and producer-ID configuration |
+| [scripts/bench/run_no_opf_benchmark.py](../../../scripts/bench/run_no_opf_benchmark.py) | Canonical local no-OPF regression entry point |
+| [scripts/bench/gaze_bench_score.py](../../../scripts/bench/gaze_bench_score.py) | Shared scorecard, comparator, and verdict logic |
+| [scripts/bench/render_benchmark_doc.py](../../../scripts/bench/render_benchmark_doc.py) | Renders this document's generated sections from the release history |
+| [scripts/bench/dataiku_en_de_gaze_bench.py](../../../scripts/bench/dataiku_en_de_gaze_bench.py) | Dataiku EN/DE whole-pipeline producer |
+| [scripts/bench/openpii_gaze_bench.py](../../../scripts/bench/openpii_gaze_bench.py) | Secondary OpenPII producer and scorer |
+| [scripts/bench/gaze-pipeline-bench.py](../../../scripts/bench/gaze-pipeline-bench.py) | Coverage-loop pipeline snapshot generator |
+| [scripts/bench/kiji-bench-scorer.py](../../../scripts/bench/kiji-bench-scorer.py) | Kiji direct and observer-residual scorer |
+| [scripts/bench/opf-bench-scorer.py](../../../scripts/bench/opf-bench-scorer.py) | OPF direct and observer-residual scorer |
+| [scripts/bench/ner-bench-scorer.py](../../../scripts/bench/ner-bench-scorer.py) | NER model-matrix scorer |
+| [scripts/bench/ner-warm-latency.py](../../../scripts/bench/ner-warm-latency.py) | Warm NER latency runner |
+| [scripts/bench/kiji-runner.py](../../../scripts/bench/kiji-runner.py) | Kiji subprocess adapter |
+| [scripts/bench/onnx-token-classification-runner.py](../../../scripts/bench/onnx-token-classification-runner.py) | Generic ONNX token-classification adapter |
+| [scripts/bench/transformers-runner.py](../../../scripts/bench/transformers-runner.py) | Transformers token-classification adapter |
+| [scripts/bench/opf_daemon.py](../../../scripts/bench/opf_daemon.py) | Warm OPF diagnostic daemon and client bridge |
+| [scripts/bench/safety_net_bench_lib.py](../../../scripts/bench/safety_net_bench_lib.py) | Shared fixture loading and strict scoring support |
+| [scripts/bench/quantize-kiji-int8.py](../../../scripts/bench/quantize-kiji-int8.py) | Pinned Kiji int8 artifact preparation helper |
 
-The corpus is synthetic by design and must remain free of real PII.
+### Rust benchmarks and committed snapshots
 
-## Primary English/German Synthetic Holdout
-
-The primary product-language scorecard uses English and German rows from the
-pinned test split of Dataiku's synthetic Kiji PII corpus. It covers the complete
-Gaze path: deterministic recognizers, Pass 2 NER, Kiji SafetyNet discovery,
-Resolve promotion, fallback, exact restore, manifest integrity, post-policy
-scan, precision, and warm latency.
-
-Canonical local paths:
-
-```bash
-uv sync --project scripts/bench --locked
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py quick --no-download
-uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full --no-download --compare-baseline target/bench-data/no-opf/baseline.json
-```
-
-The first run may omit `--no-download`; the runner fetches and verifies the
-pinned Parquet test file under ignored `target/bench-data/`.
-
-Evidence paths:
-
-| Field | Value |
+| File | Role |
 | --- | --- |
-| Dataset and scoring contract | `docs/reference/benchmarks/dataiku-en-de-holdout.md` |
-| Current whole-pipeline baseline | `docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md` |
-| Normalized no-OPF schema-v3 scorecard | `docs/reference/benchmarks/v0.12-no-opf-scorecard-v3.json` |
-| Prioritized no-OPF Kiji error buckets | `docs/reference/benchmarks/v0.12-no-opf-error-buckets.md` |
-| Warm OpenAI Privacy Filter sample | `docs/reference/benchmarks/v0.12-opf-daemon-sample.md` |
-| Canonical benchmark runner | `scripts/bench/run_no_opf_benchmark.py` |
-| Runner contract and outputs | `scripts/bench/README.md` |
-| Dataset revision | `DataikuNLP/kiji-pii-training-data@0275550f0b1f1b8f2dc9356fd31ac1c788b8228b` |
-| Test-file SHA256 | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
+| [clean_for_bench.rs](../../../crates/gaze-recognizers/examples/clean_for_bench.rs) | Long-lived pipeline producer for coverage-loop benchmarking |
+| [safety_net_matrix.rs](../../../crates/gaze-recognizers/benches/safety_net_matrix.rs) | SafetyNet matrix and in-process warm benchmark source |
+| [runtime_comparison.rs](../../../crates/gaze-recognizers/benches/runtime_comparison.rs) | ORT/tract/Candle comparison source |
+| [pipeline_end_to_end.rs](../../../crates/gaze/benches/pipeline_end_to_end.rs) | End-to-end pipeline snapshot assertion source |
+| [tier4_pipeline_gating.rs](../../../crates/gaze/benches/tier4_pipeline_gating.rs) | Tier 4 gating benchmark source |
+| [ner_models.toml](../../../crates/gaze-recognizers/benches/ner_models.toml) | NER model-matrix configuration |
+| [ner_models_snapshot.json](../../../crates/gaze-recognizers/benches/ner_models_snapshot.json) | Committed NER leaderboard snapshot |
+| [safety_net_matrix_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json) | Committed SafetyNet quality matrix |
+| [safety_net_perf_snapshot.json](../../../crates/gaze-recognizers/benches/safety_net_perf_snapshot.json) | Committed one-shot SafetyNet performance snapshot |
+| [gaze_pipeline_bench_snapshot.json](../../../crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json) | Committed end-to-end pipeline snapshot |
 
-The upstream test split is reserved from training. The canonical runner pairs
-its complete English/German selection with the complete committed A4 EN/DE
-negative corpus at
-`crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl`. Quick runs use the
-scorer's seeded stratified sampler; full runs use the complete combined corpus.
-
-The runner writes a schema-v3 scorecard, Markdown summary, per-language,
-per-label, and per-negative-category diagnostics, plus separate machine-readable
-regression and release-readiness verdicts under ignored
-`target/bench-data/no-opf/`. Regression uses zero-tolerance integer-count
-ratchets. Release readiness is an independent candidate-only verdict.
-Performance tolerance is separately configured and informational by default.
-
-Required model bundles are verified before any cell starts. Warmups, measured
-repetitions, discarded warmup samples, and external cold-start to the first
-validated response are Python-runner provenance; response latency consumes the
-producer's honest `clean_ms`. See `scripts/bench/README.md` for model locations,
-planning runtime, output details, and the guarded baseline-acceptance command.
-
-The optional OPF cell is intentionally not part of the default run. It requires
-a verified 2.6 GB checkpoint and a warmed local daemon, and it currently has a
-measured fail-closed invalid-output rate. Use the supplemental OPF report and
-explicit `full-stack-opf-resolve` config when evaluating that backend.
-
-## Secondary Multilingual Synthetic Holdout
-
-The secondary multilingual holdout uses only the validation split from
-Ai4Privacy's OpenPII Micro corpus. It is synthetic, CC BY 4.0 licensed,
-SHA-256 pinned, and reserved from all Gaze model training and threshold tuning.
-It retains Japanese and 29 other languages as Unicode-offset and out-of-scope
-language stress tests; it is no longer the English/German headline dataset.
-
-Runnable path:
-
-```bash
-python3 scripts/bench/openpii_gaze_bench.py --no-download
-```
-
-The first run may omit `--no-download`; the script fetches the pinned validation
-file into ignored `target/bench-data/`, then verifies its byte size and SHA-256.
-
-Evidence paths:
-
-| Field | Value |
-| --- | --- |
-| Dataset and scoring contract | `docs/reference/benchmarks/openpii-micro-holdout.md` |
-| Current v0.12 baseline | `docs/reference/benchmarks/v0.12-openpii-baseline.md` |
-| Benchmark runner | `scripts/bench/openpii_gaze_bench.py` |
-| Dataset revision | `ai4privacy/pii-masking-micro-100k@3cd59c65631280839f830d3ba96dcdfe1785cab1` |
-| Validation SHA256 | `bb15da1b5fbb11b3cc6fd4c95eca256197573ecd066230eb3c1fe6898f27a578` |
-
-Generated result JSON stays under `target/bench-data/` unless a reviewed,
-hardware-qualified snapshot is deliberately promoted into the repository.
-
-## Safety-Net Matrix and Perf
-
-Measures strict span precision, recall, F1, and strict leak rate for Kiji
-DistilBERT, Kiji int8, and OpenAI Privacy Filter in direct-detector and
-observer-residual modes. The perf snapshot measures one-shot CLI wrapper
-latency separately from in-process ORT warm latency.
-
-Runnable paths:
-
-```bash
-python3 scripts/bench/kiji-bench-scorer.py --repo-root . --mode all --measure-latency --precision int8 --model-dir "$HOME/.cache/gaze/<kiji-int8-bundle>" --python python3
-python3 scripts/bench/opf-bench-scorer.py --repo-root . --mode all --measure-latency --python python3
-cargo bench -p gaze-recognizers --bench safety_net_matrix
-GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" GAZE_SAFETY_NET_MATRIX_KIJI_BACKEND=ort cargo bench -p gaze-recognizers --features safety-net-kiji --bench safety_net_matrix
-```
-
-Evidence paths:
-
-| Field | Value |
-| --- | --- |
-| Matrix snapshot | `crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json` |
-| Perf snapshot | `crates/gaze-recognizers/benches/safety_net_perf_snapshot.json` |
-| Methodology doc | `docs/reference/benchmarks/v0.9-safety-net-benchmark.md` |
-| Kiji source | `onnx-community/distilbert-NER-ONNX@3a19fe9404a4469d91aa3d551558a97f68872f67` |
-| Kiji fp32 bundle SHA256 | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
-| Kiji int8 bundle SHA256 | `6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb` |
-| OPF source | `openai/privacy-filter@f7f00ca7fb869683eb732c010299d901457f19c3` |
-| OPF checkpoint bundle SHA256 | `4680158333621f3f344f58366f59612d52eff67ce6f46cff7becede5be1853ae` |
-
-Measured v0.9 release-note claims from this surface:
-
-| Claim | Evidence |
-| --- | --- |
-| Kiji int8 observer-residual macro recall `0.666667` | `safety_net_matrix_snapshot.json` cells for `kiji_distilbert_int8` observer-residual locales |
-| Kiji int8 F1 delta `0.000` versus fp32 Kiji | same snapshot, matching Kiji fp32/int8 direct and observer cells across locales |
-| Kiji int8 one-shot cold start `271.909583ms` in the committed perf snapshot | `safety_net_perf_snapshot.json` |
-
-The earlier rc-cycle fp32 warm-p50 and int8 cold-start headlines are not present
-in the committed final snapshots. Do not cite them in public release notes
-unless a runnable snapshot is added.
-
-## NER Model Leaderboard
-
-Measures candidate NER safety-net backends on the same 150-fixture corpus and
-records model pins, license caveats, class-map behavior, and warm latency where
-available.
-
-Runnable paths:
-
-```bash
-python3 scripts/bench/ner-bench-scorer.py --repo-root . --python python3 --mode all --model kiji-distilbert --model openobscure-tinybert4l-pii-ner-int8 --model mrm8488-mobilebert-ner --model osiria-minilm-italian-ner
-python3 scripts/bench/ner-warm-latency.py --repo-root .
-```
-
-Evidence paths:
-
-| Field | Value |
-| --- | --- |
-| Config | `crates/gaze-recognizers/benches/ner_models.toml` |
-| Snapshot | `crates/gaze-recognizers/benches/ner_models_snapshot.json` |
-| Methodology doc | `docs/reference/benchmarks/v0.9-ner-model-leaderboard.md` |
-| Kiji fp32 bundle SHA256 | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
-| Kiji int8 bundle SHA256 | `6e7f238f38c5ee7977052ec391f6a8c68bbef038091f2ecff4747cc2268210cb` |
-
-Measured v0.9 release-note claims from this surface:
-
-| Claim | Evidence |
-| --- | --- |
-| Kiji int8 ORT warm p50 `1.849ms` | `ner_models_snapshot.json` `kiji-distilbert-int8.warm_latency.warm_p50_ms` |
-| Kiji int8 direct recall matches fp32 Kiji at `0.125` and observer macro recall is `0.667` | `ner_models_snapshot.json` and `safety_net_matrix_snapshot.json` |
-
-## Runtime Comparison
-
-Measures ORT, tract, and candle Kiji runtime cold start and warm p50/p95 latency.
-The benchmark requires a local Kiji model directory and asserts that non-ORT
-runtimes produce the same span set as the ORT baseline.
-
-Runnable path:
+Runtime comparison (ORT vs tract vs candle; asserts non-ORT runtimes produce the
+same span set as the ORT baseline):
 
 ```bash
 GAZE_KIJI_DISTILBERT_MODEL_DIR="$HOME/.cache/gaze/<kiji-bundle>" cargo bench -p gaze-recognizers --features safety-net-kiji,runtime-tract,runtime-candle --bench runtime_comparison
 ```
 
-Evidence paths:
-
-| Field | Value |
-| --- | --- |
-| Bench | `crates/gaze-recognizers/benches/runtime_comparison.rs` |
-| Methodology doc | `docs/reference/benchmarks/v0.9-runtime-comparison.md` |
-| Kiji fp32 bundle SHA256 | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
-
-## End-to-End Pipeline
-
-Measures full Gaze pipeline behavior over rule-floor, pass3 Kiji, pass3 OPF,
-and locale-aware configurations. `pass1_ms` is matching rule-floor wall clock;
-`pass3_ms` is full-pipeline minus rule-floor delta for Pass-3 configs.
-
-Runnable paths:
+End-to-end pipeline (`pass1_ms` is matching rule-floor wall clock; `pass3_ms` is
+full-pipeline minus the rule-floor delta for Pass-3 configs):
 
 ```bash
 python3 scripts/bench/gaze-pipeline-bench.py --repo-root . --no-update
 cargo bench -p gaze-pii --bench pipeline_end_to_end
 ```
 
-Evidence paths:
-
-| Field | Value |
-| --- | --- |
-| Snapshot generator | `scripts/bench/gaze-pipeline-bench.py` |
-| Bench snapshot assertion | `crates/gaze/benches/pipeline_end_to_end.rs` |
-| Snapshot | `crates/gaze-recognizers/benches/gaze_pipeline_bench_snapshot.json` |
-| Methodology doc | `docs/reference/benchmarks/v0.9-gaze-pipeline-benchmark.md` |
-
-## Tier 4 Pipeline Gating
-
-Measures opt-in observer-only skip gates, capitals heuristic, prefix cache, and
-length-bucketing hooks. The benchmark asserts zero SafetyNet suspects for every
-config in its synthetic fixture set.
-
-Runnable path:
+Tier 4 pipeline gating (opt-in observer-only skip gates, capitals heuristic,
+prefix cache, length bucketing; asserts zero SafetyNet suspects for every config
+in its synthetic fixture set). Contract:
+[`docs/explanation/pipeline/tier4-pipeline-gating.md`](../../explanation/pipeline/tier4-pipeline-gating.md).
 
 ```bash
 cargo bench -p gaze-pii --bench tier4_pipeline_gating --all-features
 ```
 
-Evidence paths:
+### Coverage-loop corpus
+
+Used by the SafetyNet matrix, the NER leaderboard, and the pipeline benches:
 
 | Field | Value |
 | --- | --- |
-| Bench | `crates/gaze/benches/tier4_pipeline_gating.rs` |
-| Methodology doc | `docs/explanation/pipeline/tier4-pipeline-gating.md` |
+| Corpus path | [`crates/gaze-recognizers/testdata/coverage-loop/corpus`](../../../crates/gaze-recognizers/testdata/coverage-loop/corpus) |
+| Fixture count | `150` |
+| Corpus SHA256 | `c6e78cca59df550fad18e59e9877da03da82c73b80c2368e5233d76353ccfa2f` |
+| Coverage report SHA256 | `760f96163a68ce5f7dbc0409aa5109aa1a3ed190001536647e1881ba9d40a49c` |
+| Build manifest | [`crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json`](../../../crates/gaze-recognizers/testdata/coverage-loop/build-manifest.json) |
 
-Measured v0.9 release-note claims from this surface:
+The corpus is synthetic by design and must remain free of real PII.
 
-| Claim | Evidence |
+---
+
+## Evidence before the release gate
+
+Before v0.14.0, benchmark evidence was committed per pull request rather than
+per release: a BASE half, a CANDIDATE half, two-run determinism repeats, and
+bisect probes for each change. Those files did their job at review time, and
+none of them was measured on a released tree — several were measured on branch
+heads that squash-merge has since removed from history.
+
+They are no longer carried in the working tree. Every one remains readable at
+the `v0.13.0` tag, and the links below are pinned there permanently:
+
+| Report | Era |
 | --- | --- |
-| SafetyNet calls can drop from `300` to `0` on the synthetic numeric fixture set | `tier4_pipeline_gating` bench output |
-| Prefix cache reduces detector bytes by `52.7%` and latency by `50.8%` in the documented local run | `docs/explanation/pipeline/tier4-pipeline-gating.md` |
+| [v0.12 consolidated post-wave scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-consolidated-post-wave-scorecard.md) | v0.12 |
+| [v0.12 post-wave scorecard (`a8f7182`)](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-post-wave-a8f7182-scorecard.md) | v0.12 |
+| [v0.12 government-ID scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-government-id-scorecard.md) | v0.12 |
+| [v0.12 Kiji decoder scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-kiji-decoder-scorecard.md) | v0.12 |
+| [v0.12 locale-basis drain scorecard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-locale-basis-drain-scorecard.md) | v0.12 |
+| [#3025 slice U — structured containment](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025u-bfcf264-scorecard.md) | v0.12 |
+| [#3025 slice G — shared gov-ID connector](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025g-edfb167-scorecard.md) | v0.12 |
+| [#3025 slice A — passport + national_id](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-3025a-cfb3aed-scorecard.md) | v0.12 |
+| [v0.12 EN/DE whole-pipeline baseline](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-en-de-whole-pipeline-baseline.md) | v0.12 |
+| [v0.12 no-OPF Kiji error buckets](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-no-opf-error-buckets.md) | v0.12 |
+| [v0.12 OpenPII external baseline](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-openpii-baseline.md) | v0.12 |
+| [v0.12 warm OPF daemon sample](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.12-opf-daemon-sample.md) | v0.12 |
+| [v0.9 safety-net benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-safety-net-benchmark.md) | v0.9 |
+| [v0.9 NER model leaderboard](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-ner-model-leaderboard.md) | v0.9 |
+| [v0.9 runtime comparison](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-runtime-comparison.md) | v0.9 |
+| [v0.9 Gaze pipeline benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9-gaze-pipeline-benchmark.md) | v0.9 |
+| [v0.9.0-rc.1 combined revalidation](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.9.0-rc1-combined-revalidation.md) | v0.9 |
+| [v0.8 Kiji benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md) | v0.8 |
+| [v0.8 Kiji class-taxonomy gap](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md) | v0.8 |
 
-## Final Revalidation
-
-The final rc revalidation report composes the benchmark surfaces above and adds
-a release-readiness interpretation. It is not a separate harness.
-
-Evidence path: `docs/reference/benchmarks/v0.9.0-rc1-combined-revalidation.md`.
+Their raw schema-v3 and schema-v4 scorecard JSONs are at the same tag. Historical
+reports retain their original bounded claims and do **not** imply that they meet
+current production targets.

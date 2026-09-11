@@ -169,6 +169,45 @@ To initialize a baseline only when the target does not yet exist, omit
 `--compare-baseline` but keep the full profile and exact confirmation. The
 runner refuses to overwrite an existing file through this initialization path.
 
+## Publishing a release scorecard
+
+Every release measures its own tree and updates the single benchmark document.
+After a full run on the release commit:
+
+```bash
+cp target/bench-data/no-opf/full/scorecard-v4.json \
+   docs/reference/benchmarks/scorecard-vX.Y.Z.json
+uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
+  --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
+  --version vX.Y.Z \
+  --machine "<CPU, cores, RAM, OS and build>" \
+  --append-history
+```
+
+`render_benchmark_doc.py` appends one release-keyed row to
+`docs/reference/benchmarks/release-history.json` and re-renders the generated
+sections of `docs/reference/benchmarks/README.md` (headline table, charts,
+history). `--machine` is required: the scorecard schema does not capture the
+host, so it is the one hand-carried reproducibility field. A scorecard produced
+from a dirty tree is refused.
+
+Provenance a released row cannot omit — the corpus `sha256` and its per-component
+digests, the evaluated population, and every pinned model bundle — is validated
+on the way in and again when the history file is loaded. A missing one is a hard
+error, never an `n/a` cell: a published number that names no evidence is worse
+than no row at all. The renderer contract tests bind that shape to a real
+harness scorecard committed at `scripts/bench/fixtures/real-scorecard-v4.json`
+(see `fixtures/make_real_scorecard_fixture.py` for its provenance and how to
+re-derive it after a schema change).
+
+`--check` re-renders from the history file and fails if the committed document
+has drifted. It is stdlib-only and needs no corpus, model, or network, so it
+runs on every pull request in `.github/workflows/docs.yml`:
+
+```bash
+python3 scripts/bench/render_benchmark_doc.py --check
+```
+
 ## Model-free verification
 
 Normal CI runs only the locked Python tests:

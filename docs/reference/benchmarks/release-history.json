@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "comment": "Release-keyed benchmark history. One entry per released version, appended by scripts/bench/render_benchmark_doc.py --append-history from that release's committed scorecard-vX.Y.Z.json.",
+  "shipped_default_arm": "full-stack-kiji-resolve",
+  "releases": []
+}

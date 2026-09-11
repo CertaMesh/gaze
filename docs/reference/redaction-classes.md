@@ -258,7 +258,8 @@ benchmark labels **0-covered and 0-overlapped** at the deterministic rule floor:
 The tracked Kiji gap analysis independently classifies company and street
 extraction as safety-net/NER gaps and explains why first-name and surname labels
 are not checksum-validatable
-(`docs/reference/benchmarks/v0.8-kiji-class-gap.md:32-58`).
+([v0.8 Kiji class-taxonomy gap, lines 32-58](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md#L32-L58),
+archived at the `v0.13.0` tag).
 
 A broad deterministic rule for these free-text classes would be a
 false-positive catastrophe. Their benchmark mass is an NER problem, not an
