@@ -236,6 +236,26 @@ fn strict_session_malformed_nested_and_atomic_failure_contracts_remain() {
 }
 
 #[test]
+fn incomplete_prefixed_wrappers_fail_shared_assessment() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    for text in [
+        "<deadbeef:Email_1 suffix",
+        "<deadbeef:Custom:class_alpha_1 suffix",
+    ] {
+        assert_unknown(&session, text);
+        let token = session
+            .tokenize(&PiiClass::custom("class_alpha"), text)
+            .unwrap();
+        assert_success(&session, &token, text, 0);
+        let (_, telemetry) = pipeline()
+            .restore_with_telemetry(&session, &format!("{token} {text}"))
+            .unwrap();
+        assert_eq!(telemetry.unknown_token_count, 1);
+        assert_eq!(telemetry.manifest_bypass_count, 0);
+    }
+}
+
+#[test]
 fn strict_literal_restore_survives_existing_snapshot_format() {
     let session = Session::new(Scope::Conversation("synthetic-restore".into())).unwrap();
     let raw = "Kunde_7 alice@example.invalid";
