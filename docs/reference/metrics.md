@@ -743,6 +743,47 @@ error: `{"error":"<Variant>","exit":<N>, ...}`.
 > adopter-facing surface and is documented in
 > [`crates/gaze-cli/README.md`](../../crates/gaze-cli/README.md).
 
+## Restore telemetry
+
+Source: [`RestoreTelemetry`](../../crates/gaze-types/src/lib.rs) and the shared
+[`Session` restore assessment](../../crates/gaze/src/session.rs). Available through
+pipeline restore telemetry and CLI `restore --telemetry`; audit persistence is
+selected with `--audit-db`. The counter split and `trap_shape_count` are Unreleased.
+
+| Field | Meaning | Audit column |
+|---|---|---|
+| `unknown_token_count` | Session-prefixed token-shape matches absent from the active map and outside authorized output ranges. This alone drives Strict/Lenient decisions. | `restore_unknown_token_count` |
+| `manifest_bypass_count` | Unprefixed trap matches outside authorized output ranges. Audit-only lexical suspicion, not proof of PII bypass. | `restore_manifest_bypass_count` |
+| `trap_shape_count` | All unprefixed trap matches in restored text, including authorized output. Additive JSON field with a serde default of zero. | `restore_trap_shape_count`, nullable for old rows |
+| `fresh_pii_detected_count` | Fresh-PII scan findings. Zero in the token-shape assessment, which does not execute that detector. | `restore_fresh_pii_count` |
+
+`restore_policy` retains `strict` and `lenient`. With no unknown prefixed tokens,
+`restore_decision` is `success`, even when trap/bypass counts are positive.
+Otherwise Strict reports `failed` and Lenient reports `partial`. These spellings
+are unchanged, including the exact observer-facing string `success`. Audit uses
+`restore_policy` and `restore_decision` with the same values.
+
+`phase_execution_mask` (audit: `restore_phase_mask`) records manifest lookup
+(bit 0), unknown-token scan (bit 1), and trap/manifest-bypass scan (bit 2).
+The shared assessment sets these three bits, mask `7`. It does not set the
+fresh-PII scan bit (bit 3). Structural restore events remain a separate opt-in
+path; the lexical trap scan does not imply that structural detection ran.
+
+Authorized ranges are output byte ranges produced by manifest substitutions.
+Only fully contained matches are exempt from unknown/bypass counts. The ranges
+and matched strings are owner-side data and are never audit telemetry.
+
+Previously `unknown_token_count` and `manifest_bypass_count` were aliases of one
+post-restore count. Historical rows retain that old meaning and remain unchanged.
+Some historical `failed` decisions become `success` on new runs because bare or
+authorized token-like literals no longer block. This is a restore-semantics change,
+not evidence of better detection. Byte-exact restoration and detection metrics
+remain independent. New telemetry readers accept missing `trap_shape_count`;
+strict older JSON readers that reject unknown fields may require an update.
+Audit queries project missing columns as NULL; writers add the nullable column
+without backfilling historical rows. Rust callers constructing `AuditLogRow`
+literals must supply the new optional field. Snapshot payload versions are unchanged.
+
 ## Companion architecture docs
 
 - [`docs/explanation/detection/ambiguity-side-channel.md`](../explanation/detection/ambiguity-side-channel.md) — `ambiguity_record`, `validator_fail_reason`, `collision_*` schema.

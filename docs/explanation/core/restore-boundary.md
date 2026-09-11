@@ -19,7 +19,7 @@ The restore boundary is where pseudonymous content becomes owner-side sensitive 
 The invariant is:
 
 1. A sensitive value may be re-materialized only when the active restore context has a manifest entry that authorizes that exact token-to-value mapping.
-2. Unknown, stale, cross-session, or malformed tokens fail closed instead of being guessed or passed through as raw values.
+2. Unresolved session-prefixed placeholders fail closed. Session strict APIs also reject malformed and nested token syntax. Bare identifier-like text is an audit signal, never authority to re-materialize a value.
 3. Restore-side checks must be deterministic and auditable. A restore decision must be traceable to the active manifest, the structural recognizer that observed unauthorized raw sensitive data, or restore telemetry metadata.
 4. Restore must not silently expand scope. If a later phase wants identity-sensitive policy, it must be explicit, opt-in, and separately approved.
 
@@ -41,11 +41,41 @@ Phase A makes the manifest the only authority for re-materialization.
 Expected behavior:
 
 - Known token in the active manifest: restore to the manifest-authorized value.
-- Unknown token: return a typed restore failure.
+- Unresolved token with a session prefix, including an unissued ordinal under the active prefix: return a typed restore failure.
 - Token known to another session or tenant: return a typed restore failure.
 - Malformed token: return a typed restore failure.
 
-The important property is that restore never guesses. A token-shaped value without an active manifest grant is not proof of authorization.
+Restore never guesses a mapping. A token-shaped value without an active manifest
+grant is not proof of authorization. Ordinary unprefixed literals such as
+`Kunde_7`, `ORDER_12345`, `run_1`, and legacy `<Email_1>` are preserved and counted
+as audit-only traps; they are not treated as unresolved session placeholders.
+This reverses the previous bare-shape blocking behavior in pipeline, Session,
+and CLI restore.
+
+The classifier is owned by `Session::assess_restore_text`. It restores exact
+manifest keys and scans the result using one immutable session view. Matches
+fully contained in `authorized_output_ranges`, the UTF-8 output ranges written
+by authorized substitutions, do not count as unknowns or manifest bypasses.
+Adjacent unknowns and matches crossing a substitution boundary remain subject
+to classification. No original-text allowlist or new snapshot state is stored.
+
+The API failure contracts remain distinct:
+
+- `Pipeline::restore_with_policy_telemetry` returns restored text and telemetry.
+  A positive `unknown_token_count` produces `failed` under Strict or `partial`
+  under Lenient; zero produces the existing exact spelling `success`.
+- `Session::restore_strict_text`, its provenance/events variants, and the MCP
+  operator `restore_strict` tool return a typed error on unresolved prefixed
+  tokens. Session strict parsing also retains malformed/nested input rejection.
+- CLI strict restore exits 3 for unresolved prefixed tokens. Tolerant restore
+  preserves them and returns warnings plus `partial` telemetry when requested.
+  CLI uses the same assessment for output, warnings, telemetry, and audit.
+- Transaction token validation and committed-snapshot restore used by the proxy
+  retain their separate strict contract. Proxy residual DLP is unchanged.
+
+A `success` decision is a restore-classification result, not a byte-equality
+claim or a detection-quality certificate. Byte-exact inverse equality and PII
+detection metrics must be evaluated independently.
 
 ## Phase B: Unauthorized Raw-PII Detection
 
@@ -59,7 +89,17 @@ Phase B distinguishes:
 - Fresh raw sensitive data: a model, tool, or integration inserts a new structural sensitive value during restore.
 - Wrong-context restore: an integration uses the wrong manifest, session, or tenant boundary.
 
-Blocking behavior is deferred until telemetry shows an acceptable false-positive profile. v0.10 Phase B records evidence without turning restore into a broad judgment layer.
+Blocking behavior is deferred until telemetry shows an acceptable false-positive
+profile. Structural raw-PII checks remain audit-only and opt-in. The lightweight
+token-shape audit scan in restore telemetry is always run: `manifest_bypass_count`
+counts unprefixed trap shapes outside authorized substitutions. It is a lexical
+suspicion count, not proof that raw PII bypassed the manifest. It never drives
+the Strict decision. `trap_shape_count` counts all unprefixed trap matches,
+including those inside authorized values. A bare literal can therefore produce
+`unknown_token_count = 0`, `manifest_bypass_count = 1`, and `success`.
+
+Neither counter claims that a fresh-PII detector executed. The fresh-PII phase bit
+remains unset when that detector did not run.
 
 ## Phase D: Restore Audit Telemetry
 
@@ -73,7 +113,13 @@ Telemetry should support questions like:
 - Which structural recognizer observed unauthorized raw sensitive data?
 - Was Phase B running in audit-only mode?
 
-The audit surface must preserve Gaze's existing trust posture: no raw sensitive values in audit rows, explicit provenance, and closed typed outcomes where practical.
+The audit surface contains counts and existing decision/policy spellings, never
+matched text, offsets, original values, or hashes of those values. The additive
+`restore_trap_shape_count` audit column is nullable for historical rows; existing
+rows are not rewritten. Telemetry JSON defaults a missing `trap_shape_count` to
+zero for compatibility. Session snapshot payload versions and token grammar
+are unchanged. See the [metrics reference](../../reference/metrics.md#restore-telemetry)
+for field semantics.
 
 ## Risks Addressed By Phase A And Phase B
 
