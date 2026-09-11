@@ -1330,7 +1330,7 @@ fn classify_restore_output(
         {
             continue;
         }
-        if trap {
+        if crate::token_shape::is_bare_identifier(matched.as_str()) {
             manifest_bypass_count += 1;
         } else if !state.value_by_token.contains_key(matched.as_str()) {
             unknown_tokens.push(matched.as_str().to_owned());
