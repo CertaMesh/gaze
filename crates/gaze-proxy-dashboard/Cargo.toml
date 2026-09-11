@@ -1,6 +1,6 @@
 [package]
 name = "gaze-proxy-dashboard"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 rust-version = "1.85"
 license = "Apache-2.0 OR MIT"
@@ -10,8 +10,8 @@ repository = "https://github.com/CertaMesh/gaze"
 [dependencies]
 base64 = "0.22.1"
 getrandom = "0.3.4"
-gaze-inspection = { path = "../gaze-inspection", version = "0.13.0" }
-gaze-types = { path = "../gaze-types", version = "0.13.0" }
+gaze-inspection = { path = "../gaze-inspection", version = "0.14.0" }
+gaze-types = { path = "../gaze-types", version = "0.14.0" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 sha2 = "0.10.9"

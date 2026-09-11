@@ -54,7 +54,7 @@ Post-repair hashes and owner/mode inventory are retained in the receipts. Exact 
 a zero-test cargo result cannot pass the gate.
 
 After review, dispatch with `gh workflow run release.yml --ref <preparation-branch>
--f version=0.13.0 -f pr_number=<release-pr>`. Require a successful
+-f version=0.14.0 -f pr_number=<release-pr>`. Require a successful
 `model-setup-ownership-preflight` job for that exact preparation head before
 tagging. Its `model-setup-ownership-<commit>` artifact
 records the commit, commands, toolchain, model hashes, owner/mode inventory,
