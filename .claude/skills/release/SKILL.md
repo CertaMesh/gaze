@@ -83,7 +83,7 @@ After the workflows finish:
    `gaze-token-bridge`, and `gaze-cli`. A count that does not match the plan is a
    partial publish, not a pass.
 4. Update the orchestrator scratchpad with released URLs:
-   GitHub Release URL plus the 11 crates.io URLs.
+   GitHub Release URL plus one crates.io URL per crate in the publish plan.
 
 ## Escalation Rules
 
@@ -101,5 +101,5 @@ After the workflows finish:
 
 Do not just push a tag and hope. A Gaze release is complete only when the
 pre-flight gates are green, the tag was explicitly authorized, both workflows
-succeeded, all 11 crates report the expected version, and the orchestrator
+succeeded, every crate in the publish plan reports the expected version, and the orchestrator
 scratchpad records the shipped URLs.

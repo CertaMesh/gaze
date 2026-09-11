@@ -2140,7 +2140,7 @@ parallel — the CLI protocol is the stable seam.
 - **Homebrew SHAs are placeholders** until the workflow publishes the
   darwin binaries; follow-up commit fills them.
 
-[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.14.0...HEAD
 [0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4
