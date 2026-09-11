@@ -4541,3 +4541,12 @@ fn strict_legacy_placeholder_fails_and_tolerant_warns() {
         assert_eq!(response["restore_warning"][0]["token"], shape);
     }
 }
+
+#[test]
+fn strict_incomplete_prefixed_wrapper_fails() {
+    let (_, blob, _) = clean_ok("ordinary prose");
+    let (code, stdout, stderr) = restore_json(&blob, "<deadbeef:Custom:class_alpha_1 suffix");
+    assert_eq!(code, Some(3));
+    assert!(stdout.is_empty());
+    assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
+}
