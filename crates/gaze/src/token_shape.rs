@@ -104,6 +104,23 @@ pub fn is_trap(match_text: &str) -> bool {
     !starts_with_session_prefix(match_text)
 }
 
+/// Whether a token-shape match is only a broad bare identifier literal.
+/// Wrapped, prefixed, and legacy emitted formats still require manifest authority.
+/// This does not narrow the global token-shape grammar or its DLP consumers.
+pub fn is_bare_identifier(match_text: &str) -> bool {
+    let Some((name, ordinal)) = match_text.rsplit_once('_') else {
+        return false;
+    };
+    name.as_bytes().first().is_some_and(u8::is_ascii_alphabetic)
+        && name.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        && !ordinal.is_empty()
+        && ordinal.bytes().all(|byte| byte.is_ascii_digit())
+        // Built-in class names also identify legacy bracketless placeholders.
+        && !BUILTIN_CLASS_NAMES.iter().any(|class| {
+            name == *class || name == class.to_ascii_lowercase()
+        })
+}
+
 fn build_pattern() -> String {
     let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
     let builtin_lower_alt = BUILTIN_CLASS_NAMES

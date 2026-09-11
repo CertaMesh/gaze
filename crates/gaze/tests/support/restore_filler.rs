@@ -18,7 +18,7 @@ pub fn filler() -> impl Strategy<Value = String> {
             && !text.contains("Dr. Schmidt")
             && !gaze::token_shape::pattern()
                 .find_iter(text)
-                .any(|matched| gaze::token_shape::starts_with_session_prefix(matched.as_str()))
+                .any(|matched| !gaze::token_shape::is_bare_identifier(matched.as_str()))
     })
 }
 
