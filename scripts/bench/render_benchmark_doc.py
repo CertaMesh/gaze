@@ -43,15 +43,6 @@ SHIPPED_DEFAULT_ARM = "full-stack-kiji-resolve"
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
 
-#: Provenance a released row may not omit. A blank here would be a published
-#: number nobody can reproduce, so every one of these fails closed rather than
-#: rendering `n/a` — the failure mode that shipped `Corpus sha256 | n/a`.
-REQUIRED_PROVENANCE = (
-    ("dataset", "integrity", "sha256"),
-    ("dataset", "evaluated_population", "documents"),
-    ("dataset", "evaluated_population", "entities"),
-)
-
 # Scorecard JSON path -> history field. This table IS the contract between the
 # harness output and every number the document prints; `test_render_benchmark_doc`
 # mutates each source path and asserts the extracted value moves.
@@ -89,6 +80,101 @@ BLOCK_NAMES = ("current-release", "charts", "history")
 
 class RenderError(Exception):
     """Raised for malformed input; the CLI turns it into exit code 2."""
+
+
+# --------------------------------------------------------------------------
+# provenance predicates
+#
+# One vocabulary for all three doors. `--append-history` validates on the way
+# in, `validate_history` re-validates what `--check` renders from, and the
+# renderer reads its provenance cells through these same calls. A value that is
+# not a digest therefore cannot reach the document by any path, and dropping a
+# fallback back in at the render site stays a change the tests can see.
+# --------------------------------------------------------------------------
+
+
+def _require_hex64(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not HEX64_RE.match(value):
+        raise RenderError(
+            f"{where} must be a 64-character lowercase hex digest, got {value!r}; "
+            "a released row names the evidence it was measured on, so this is "
+            "refused rather than rendered as n/a"
+        )
+    return value
+
+
+def _require_nonneg_int(value: Any, where: str) -> int:
+    # `isinstance(True, int)` is True, and a stray `True` would publish as
+    # `1 documents`, so bools are refused explicitly.
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise RenderError(
+            f"{where} must be a non-negative integer, got {value!r}; the "
+            "document has to state the population its numbers describe"
+        )
+    return value
+
+
+def _require_component_digests(integrity: Any, where: str) -> dict[str, str]:
+    """Every per-component corpus digest, validated and normalised as one unit."""
+    if not isinstance(integrity, Mapping):
+        raise RenderError(f"{where} dataset.integrity must be an object")
+    components = integrity.get("component_sha256", {})
+    if not isinstance(components, Mapping):
+        raise RenderError(
+            f"{where} dataset.integrity.component_sha256 must be an object, "
+            f"got {components!r}"
+        )
+    return {
+        str(name): _require_hex64(
+            digest, f"{where} dataset.integrity.component_sha256.{name}"
+        )
+        for name, digest in sorted(components.items())
+    }
+
+
+def _require_model_bundles(provenance: Any, where: str) -> list[dict[str, str]]:
+    """The SHA pins a row ran against. Empty is a fact; vague is not."""
+    if not isinstance(provenance, Mapping):
+        raise RenderError(f"{where} provenance must be an object")
+    bundles = provenance.get("model_bundles")
+    if not isinstance(bundles, list):
+        raise RenderError(
+            f"{where} model_bundles must be an array (empty is fine for a "
+            "rule-only run); this repo pins model bundles by SHA, so a released "
+            "number names the ones it ran"
+        )
+    pinned: list[dict[str, str]] = []
+    for bundle in bundles:
+        if not isinstance(bundle, Mapping):
+            raise RenderError(f"{where} every model bundle must be an object")
+        model_id = bundle.get("model_id")
+        if not isinstance(model_id, str) or not model_id:
+            raise RenderError(
+                f"{where} every model bundle needs a non-empty model_id, "
+                f"got {model_id!r}"
+            )
+        pinned.append(
+            {
+                "model_id": model_id,
+                "expected_sha256": _require_hex64(
+                    bundle.get("expected_sha256"),
+                    f"{where} model bundle {model_id} expected_sha256",
+                ),
+            }
+        )
+    return pinned
+
+
+#: Provenance a released row may not omit, paired with the predicate its value
+#: must satisfy. Presence alone was the hole: an entry whose `sha256` read
+#: `"n/a"` published that string with `--check` green. A new required field is
+#: one row here rather than a new branch at each of the three doors.
+REQUIRED_PROVENANCE: tuple[tuple[tuple[str, ...], Any], ...] = (
+    (("scorecard_sha256",), _require_hex64),
+    (("dataset", "integrity", "sha256"), _require_hex64),
+    (("dataset", "evaluated_population", "documents"), _require_nonneg_int),
+    (("dataset", "evaluated_population", "entities"), _require_nonneg_int),
+)
 
 
 # --------------------------------------------------------------------------
@@ -183,9 +269,11 @@ def validate_history(history: Mapping[str, Any]) -> None:
             missing = [field for field in ARM_FIELD_SOURCES if field not in block]
             if missing:
                 raise RenderError(f"{version}/{arm}: missing fields {missing}")
-        # `--check` renders from this file alone, so the provenance guard has to
-        # sit here as well as at extraction or the CI path stays ungated.
-        for path in REQUIRED_PROVENANCE:
+        # `--check` renders from this file alone, so the provenance guard has
+        # to sit here as well as at extraction or the CI path stays ungated --
+        # and it has to check the *values*. A key that is present but holds
+        # `"n/a"` is exactly the published cell this document exists to refuse.
+        for path, require in REQUIRED_PROVENANCE:
             node: Any = entry
             for key in path:
                 if not isinstance(node, Mapping) or key not in node:
@@ -193,10 +281,11 @@ def validate_history(history: Mapping[str, Any]) -> None:
                         f"{version}: history entry is missing {'.'.join(path)}"
                     )
                 node = node[key]
-        if not isinstance(
-            (entry.get("provenance") or {}).get("model_bundles"), list
-        ):
-            raise RenderError(f"{version}: history entry is missing provenance.model_bundles")
+            require(node, f"{version}: history {'.'.join(path)}")
+        _require_component_digests(
+            (entry.get("dataset") or {}).get("integrity"), f"{version}: history"
+        )
+        _require_model_bundles(entry.get("provenance") or {}, f"{version}: history")
 
 
 def version_sort_key(version: str) -> tuple[Any, ...]:
@@ -226,16 +315,6 @@ def write_history(path: Path, history: Mapping[str, Any]) -> None:
 # --------------------------------------------------------------------------
 # scorecard -> history entry
 # --------------------------------------------------------------------------
-
-
-def _require_hex64(value: Any, where: str) -> str:
-    if not isinstance(value, str) or not HEX64_RE.match(value):
-        raise RenderError(
-            f"{where} must be a 64-character lowercase hex digest, got {value!r}; "
-            "a released row names the evidence it was measured on, so this is "
-            "refused rather than rendered as n/a"
-        )
-    return value
 
 
 def _dig(node: Any, path: Sequence[str], where: str) -> Any:
@@ -305,15 +384,7 @@ def history_entry_from_scorecard(
     corpus_sha256 = _require_hex64(
         integrity.get("sha256"), "scorecard dataset.integrity.sha256"
     )
-    components = integrity.get("component_sha256", {})
-    if not isinstance(components, Mapping):
-        raise RenderError("scorecard dataset.integrity.component_sha256 must be an object")
-    component_sha256 = {
-        str(name): _require_hex64(
-            digest, f"scorecard dataset.integrity.component_sha256.{name}"
-        )
-        for name, digest in sorted(components.items())
-    }
+    component_sha256 = _require_component_digests(integrity, "scorecard")
 
     population = dataset.get("evaluated_population")
     if not isinstance(population, Mapping):
@@ -321,39 +392,14 @@ def history_entry_from_scorecard(
             "scorecard dataset.evaluated_population must be an object; the "
             "document has to state the population its numbers describe"
         )
-    counts: dict[str, int] = {}
-    for key in ("documents", "entities"):
-        value = population.get(key)
-        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-            raise RenderError(
-                f"scorecard dataset.evaluated_population.{key} must be a "
-                f"non-negative integer, got {value!r}"
-            )
-        counts[key] = value
+    counts = {
+        key: _require_nonneg_int(
+            population.get(key), f"scorecard dataset.evaluated_population.{key}"
+        )
+        for key in ("documents", "entities")
+    }
 
-    bundles = provenance.get("model_bundles")
-    if not isinstance(bundles, list):
-        raise RenderError(
-            "scorecard runner_provenance.model_bundles must be an array (empty "
-            "is fine for a rule-only run); this repo pins model bundles by SHA, "
-            "so a released number names the ones it ran"
-        )
-    model_bundles: list[dict[str, str]] = []
-    for bundle in bundles:
-        if not isinstance(bundle, Mapping):
-            raise RenderError("every runner_provenance.model_bundles entry must be an object")
-        model_id = bundle.get("model_id")
-        if not isinstance(model_id, str) or not model_id:
-            raise RenderError("every model bundle needs a non-empty model_id")
-        model_bundles.append(
-            {
-                "model_id": model_id,
-                "expected_sha256": _require_hex64(
-                    bundle.get("expected_sha256"),
-                    f"model bundle {model_id} expected_sha256",
-                ),
-            }
-        )
+    model_bundles = _require_model_bundles(provenance, "scorecard runner_provenance")
 
     return {
         "version": version,
@@ -415,7 +461,23 @@ def render_current_release(history: Mapping[str, Any]) -> str:
     integrity = dataset.get("integrity") or {}
     population = dataset.get("evaluated_population") or {}
     parameters = entry.get("parameters") or {}
-    bundles = (entry.get("provenance") or {}).get("model_bundles") or []
+    # Read every provenance cell through the guard that validates it, so a
+    # fallback reintroduced here changes behaviour the tests can see rather
+    # than silently publishing whatever the history file happens to hold.
+    bundles = _require_model_bundles(entry.get("provenance") or {}, "history")
+    scorecard_sha256 = _require_hex64(
+        entry.get("scorecard_sha256"), "history scorecard_sha256"
+    )
+    corpus_sha256 = _require_hex64(
+        integrity.get("sha256"), "history dataset.integrity.sha256"
+    )
+    components = _require_component_digests(integrity, "history")
+    documents = _require_nonneg_int(
+        population.get("documents"), "history dataset.evaluated_population.documents"
+    )
+    entities = _require_nonneg_int(
+        population.get("entities"), "history dataset.evaluated_population.entities"
+    )
     lines.extend(
         [
             "| Provenance | Value |",
@@ -427,17 +489,16 @@ def render_current_release(history: Mapping[str, Any]) -> str:
             f"| Harness | [`{entry['harness_entry']}`]"
             f"(../../../{entry['harness_entry']}) |",
             f"| Scorecard | [`{entry['scorecard']}`]({entry['scorecard']}) |",
-            f"| Scorecard sha256 | `{entry['scorecard_sha256']}` |",
+            f"| Scorecard sha256 | `{scorecard_sha256}` |",
             f"| Corpus | `{dataset.get('repository')}` @ `{dataset.get('revision')}` |",
-            f"| Corpus sha256 | `{integrity['sha256']}` |",
+            f"| Corpus sha256 | `{corpus_sha256}` |",
         ]
     )
-    for component, digest in sorted((integrity.get("component_sha256") or {}).items()):
+    for component, digest in components.items():
         lines.append(f"| Corpus component `{component}` | `{digest}` |")
     lines.extend(
         [
-            f"| Population | {int(population['documents']):,} documents / "
-            f"{int(population['entities']):,} entities |",
+            f"| Population | {documents:,} documents / {entities:,} entities |",
             f"| Profile | `{parameters.get('profile')}` |",
             f"| Seed | `{parameters.get('sampling_seed')}` |",
             f"| NER threshold | `{parameters.get('ner_threshold')}` |",

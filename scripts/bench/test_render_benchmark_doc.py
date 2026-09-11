@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -21,6 +23,19 @@ import render_benchmark_doc as render
 #: A real harness scorecard, trimmed to the fields the renderer reads.
 #: See fixtures/make_real_scorecard_fixture.py for provenance and re-derivation.
 REAL_SCORECARD = Path(__file__).resolve().parent / "fixtures" / "real-scorecard-v4.json"
+
+#: The module as CI invokes it: a subprocess, so the check-door tests key on
+#: the exit code the workflow reads, not an in-process return value.
+MODULE = Path(__file__).resolve().parent / "render_benchmark_doc.py"
+
+#: Distinguishes "this key is absent" from "this key holds None" in the tamper
+#: matrices below; both must be refused, for different reasons.
+_MISSING = object()
+
+
+def _label(path) -> str:
+    """Readable subTest label for a path that may index into a list."""
+    return ".".join(str(key) for key in path)
 
 
 def _arm(seed: int) -> dict:
@@ -722,6 +737,247 @@ class RequiredProvenanceGuardTest(unittest.TestCase):
         )
         self.assertIn("no neural backend", rendered)
         self.assertNotIn("n/a", rendered)
+
+
+class HistoryProvenanceValueGuardTest(unittest.TestCase):
+    """The `--check` door must validate digest *values*, not key presence.
+
+    `history_entry_from_scorecard` has always run every digest through
+    `_require_hex64`; `validate_history` only checked that the key existed. CI
+    renders from `release-history.json` alone, so a hand-edited file carrying
+    `"n/a"` published that exact string with the gate green -- the failure this
+    change exists to eliminate, reached through the door meant to stop it.
+    """
+
+    #: Values that occupy a digest slot without being one. `"n/a"` is the exact
+    #: published string being kept out; the rest are the near-misses a hand-edit
+    #: or a half-finished schema migration produces.
+    NON_DIGESTS = (
+        "n/a",
+        "N/A",
+        "",
+        None,
+        "f" * 63,
+        "f" * 65,
+        "F" * 64,
+        "g" * 64,
+        0,
+        ["f" * 64],
+    )
+
+    #: A population count is printed as `{value:,}`; anything that is not a
+    #: non-negative int either publishes a lie or crashes at the format site.
+    NON_COUNTS = (-1, -2910, "lots", "2910", 2910.0, None, True, [2910])
+
+    def _history_with(self, path, value):
+        broken = copy.deepcopy(history())
+        node = broken["releases"][-1]
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = value
+        return broken
+
+    def _assert_all_refused(self, path, values):
+        for value in values:
+            with self.subTest(path=_label(path), value=value):
+                with self.assertRaises(render.RenderError):
+                    render.validate_history(self._history_with(path, value))
+
+    def test_corpus_digest_value_is_validated_on_the_history_path(self):
+        self._assert_all_refused(("dataset", "integrity", "sha256"), self.NON_DIGESTS)
+
+    def test_every_component_digest_value_is_validated(self):
+        components = history()["releases"][-1]["dataset"]["integrity"][
+            "component_sha256"
+        ]
+        self.assertTrue(components, "fixture must carry component digests")
+        for component in components:
+            self._assert_all_refused(
+                ("dataset", "integrity", "component_sha256", component),
+                self.NON_DIGESTS,
+            )
+
+    def test_a_broken_component_digest_map_is_refused(self):
+        for value in (None, "n/a", [], 0):
+            with self.subTest(value=value):
+                with self.assertRaises(render.RenderError):
+                    render.validate_history(
+                        self._history_with(
+                            ("dataset", "integrity", "component_sha256"), value
+                        )
+                    )
+
+    def test_every_model_bundle_digest_value_is_validated(self):
+        bundles = history()["releases"][-1]["provenance"]["model_bundles"]
+        self.assertTrue(bundles, "fixture must carry model bundles")
+        for index in range(len(bundles)):
+            self._assert_all_refused(
+                ("provenance", "model_bundles", index, "expected_sha256"),
+                self.NON_DIGESTS,
+            )
+
+    def test_every_model_bundle_needs_a_non_empty_model_id(self):
+        for value in ("", None, 0, ["kiji"]):
+            with self.subTest(value=value):
+                with self.assertRaises(render.RenderError):
+                    render.validate_history(
+                        self._history_with(
+                            ("provenance", "model_bundles", 0, "model_id"), value
+                        )
+                    )
+
+    def test_a_model_bundle_entry_must_be_an_object(self):
+        broken = copy.deepcopy(history())
+        broken["releases"][-1]["provenance"]["model_bundles"][0] = "kiji-distilbert"
+        with self.assertRaises(render.RenderError):
+            render.validate_history(broken)
+
+    def test_scorecard_digest_value_is_validated(self):
+        self._assert_all_refused(("scorecard_sha256",), self.NON_DIGESTS)
+
+    def test_population_counts_are_validated(self):
+        for key in ("documents", "entities"):
+            self._assert_all_refused(
+                ("dataset", "evaluated_population", key), self.NON_COUNTS
+            )
+
+    def test_the_guard_refuses_bad_values_without_refusing_good_ones(self):
+        render.validate_history(history("v0.13.0", "v0.14.0"))
+
+
+class RenderSiteRefusesNonDigestsTest(unittest.TestCase):
+    """The printer reads provenance through the same predicate that guards it.
+
+    Guarding only upstream would make a reintroduced `n/a` fallback at the
+    render site unreachable, and therefore untestable: "renderer falls back to
+    n/a" has to stay a mutation this suite can kill.
+    """
+
+    def _render_with(self, path, value):
+        item = copy.deepcopy(entry())
+        node = item
+        for key in path[:-1]:
+            node = node[key]
+        if value is _MISSING:
+            del node[path[-1]]
+        else:
+            node[path[-1]] = value
+        return render.render_current_release(history_of(item))
+
+    def test_missing_or_non_digest_provenance_never_renders(self):
+        for path in (
+            ("dataset", "integrity", "sha256"),
+            ("provenance", "model_bundles", 0, "expected_sha256"),
+            ("scorecard_sha256",),
+        ):
+            for value in (_MISSING, "n/a", None, ""):
+                with self.subTest(path=_label(path), value=value):
+                    with self.assertRaises(render.RenderError):
+                        self._render_with(path, value)
+
+    def test_a_component_digest_may_be_absent_but_never_a_non_digest(self):
+        """The boundary between omitted evidence and a false claim.
+
+        Nothing records which components an entry *should* carry, so a dropped
+        key can only ever print one row fewer -- it cannot publish something
+        untrue. A key that is present must hold a real digest.
+        """
+        path = ("dataset", "integrity", "component_sha256", "dataiku")
+        rendered = self._render_with(path, _MISSING)
+        self.assertNotIn("`dataiku`", rendered)
+        self.assertNotIn("n/a", rendered)
+        for value in ("n/a", None, ""):
+            with self.subTest(value=value):
+                with self.assertRaises(render.RenderError):
+                    self._render_with(path, value)
+
+    def test_missing_or_non_integer_population_never_renders(self):
+        for key in ("documents", "entities"):
+            for value in (_MISSING, "n/a", None, -1):
+                with self.subTest(key=key, value=value):
+                    with self.assertRaises(render.RenderError):
+                        self._render_with(
+                            ("dataset", "evaluated_population", key), value
+                        )
+
+    def test_a_well_formed_entry_still_renders_every_provenance_row(self):
+        rendered = render.render_current_release(history_of(entry()))
+        self.assertIn(f"| Corpus sha256 | `{'f' * 64}` |", rendered)
+        self.assertIn(f"| Scorecard sha256 | `{'0' * 64}` |", rendered)
+        self.assertIn("2,910 documents / 14,719 entities", rendered)
+        self.assertNotIn("n/a", rendered)
+
+
+class CheckDoorTest(unittest.TestCase):
+    """The reviewer's reproduction, driven through the real CLI entry point.
+
+    `--check` is what CI runs, and it never reads a scorecard. A subprocess is
+    the honest shape here: it exercises the process exit code the workflow
+    actually keys on, not an in-process return value.
+    """
+
+    def _run_check(self, root):
+        return subprocess.run(
+            [
+                sys.executable,
+                str(MODULE),
+                "--doc",
+                str(root / "README.md"),
+                "--history",
+                str(root / "release-history.json"),
+                "--check",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+    def test_check_refuses_a_history_that_would_publish_na(self):
+        for path in (
+            ("dataset", "integrity", "sha256"),
+            ("dataset", "integrity", "component_sha256", "dataiku"),
+            ("provenance", "model_bundles", 0, "expected_sha256"),
+            ("scorecard_sha256",),
+        ):
+            with self.subTest(path=_label(path)):
+                with tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+                    doc_path = root / "README.md"
+                    doc_path.write_text(DOC, encoding="utf-8")
+                    broken = copy.deepcopy(history())
+                    node = broken["releases"][-1]
+                    for key in path[:-1]:
+                        node = node[key]
+                    node[path[-1]] = "n/a"
+                    (root / "release-history.json").write_text(
+                        json.dumps(broken), encoding="utf-8"
+                    )
+                    result = self._run_check(root)
+                    # Exit 2 is the RenderError path; exit 1 only means the
+                    # document drifted. Asserting "non-zero" would pass on a
+                    # stale README without the guard ever running.
+                    self.assertEqual(
+                        result.returncode,
+                        2,
+                        "--check must refuse the non-digest itself, not merely "
+                        f"report drift: rc={result.returncode} {result.stdout}",
+                    )
+                    self.assertNotIn("n/a", result.stdout)
+                    self.assertNotIn("n/a", doc_path.read_text(encoding="utf-8"))
+
+    def test_check_still_passes_on_a_well_formed_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scorecard-v0.14.0.json").write_text("{}", encoding="utf-8")
+            (root / "release-history.json").write_text(
+                json.dumps(history()), encoding="utf-8"
+            )
+            (root / "README.md").write_text(
+                render.apply_blocks(DOC, history()), encoding="utf-8"
+            )
+            result = self._run_check(root)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("is in sync", result.stdout)
 
 
 if __name__ == "__main__":
