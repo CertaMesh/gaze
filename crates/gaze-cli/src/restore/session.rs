@@ -93,17 +93,6 @@ pub(crate) fn restore_pass2_validate(
         }
         let matched_text = matched.as_str();
         if gaze::token_shape::is_trap(matched_text) {
-            match mode {
-                RestoreMode::Strict => {
-                    return Err(CliError::UnknownToken {
-                        token: matched_text.to_string(),
-                    })
-                }
-                RestoreMode::Tolerant => warnings.push(RestoreWarning {
-                    variant: "UnknownToken".to_string(),
-                    token: matched_text.to_string(),
-                }),
-            }
             continue;
         }
         if session.contains_token(matched_text) {
