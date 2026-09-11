@@ -4518,13 +4518,26 @@ fn strict_literal_roundtrip_agrees_with_telemetry_and_audit() {
 }
 
 #[test]
-fn strict_legacy_placeholder_is_audited_without_warning() {
-    let (_, blob, _) = clean_ok("ordinary prose");
-    let (code, stdout, _) = restore_json_with_args(&["--telemetry"], &blob, "<Email_1>");
-    assert_eq!(code, Some(0));
-    let response: Value = serde_json::from_slice(&stdout).unwrap();
-    assert_eq!(response["text"], "<Email_1>");
-    assert_eq!(response["restore_telemetry"]["manifest_bypass_count"], 1);
-    assert_eq!(response["restore_telemetry"]["restore_decision"], "success");
-    assert!(response.get("restore_warning").is_none());
+fn strict_legacy_placeholder_fails_and_tolerant_warns() {
+    let (clean, blob, _) = clean_ok("alice@example.invalid");
+    for shape in [
+        "<Email_1>",
+        "location_7",
+        "email1@gaze-fake.invalid",
+        "<Custom:class_alpha_1>",
+    ] {
+        let input = format!("{clean} {shape}");
+        let (code, stdout, stderr) = restore_json_with_args(&["--telemetry"], &blob, &input);
+        assert_eq!(code, Some(3));
+        assert!(stdout.is_empty());
+        assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
+        let (code, stdout, _) =
+            restore_json_with_args(&["--telemetry", "--restore-mode=tolerant"], &blob, &input);
+        assert_eq!(code, Some(0));
+        let response: Value = serde_json::from_slice(&stdout).unwrap();
+        assert_eq!(response["restore_telemetry"]["unknown_token_count"], 1);
+        assert_eq!(response["restore_telemetry"]["manifest_bypass_count"], 0);
+        assert_eq!(response["restore_telemetry"]["restore_decision"], "partial");
+        assert_eq!(response["restore_warning"][0]["token"], shape);
+    }
 }

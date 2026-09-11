@@ -150,6 +150,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn restore_strict_rejects_canonical_legacy_after_mapped_token() {
+        let pipeline = gaze::Pipeline::builder().build().unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&gaze::PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        for shape in [
+            "<Email_1>",
+            "location_7",
+            "email1@gaze-fake.invalid",
+            "<Custom:class_alpha_1>",
+        ] {
+            let err = RestoreStrictTool::new()
+                .invoke(&ctx(
+                    &pipeline,
+                    &session,
+                    &NullManifest,
+                    json!({"text": format!("{token} {shape}")}),
+                ))
+                .await
+                .expect_err("unmapped canonical placeholder must fail");
+            assert_eq!(err.class(), "not-found");
+        }
+    }
+
+    #[tokio::test]
     async fn restore_strict_fails_closed_on_unknown_token() {
         let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
         let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");

@@ -10,6 +10,15 @@ use gaze_recognizers::RegexDetector;
 use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 
+#[path = "support/restore_filler.rs"]
+mod restore_filler;
+
+#[test]
+fn generated_corpus_contains_identifier_literals() {
+    restore_filler::assert_identifier_coverage(restore_filler::filler());
+    restore_filler::assert_identifier_coverage(document_case().prop_map(|case| case.text));
+}
+
 #[derive(Debug, Clone)]
 struct DocumentCase {
     text: String,
@@ -50,25 +59,7 @@ fn deterministic_pipeline() -> Pipeline {
 }
 
 fn filler_segment() -> impl Strategy<Value = Segment> {
-    proptest::string::string_regex(r"[\p{L}\p{N}\p{P}\p{Z}\p{M}\x{1F600}-\x{1F64F}]{0,40}")
-        .expect("valid filler regex")
-        .prop_filter(
-            "filler contains no tracked PII, restore-token delimiters, or prefixed placeholders",
-            |text| {
-                !text.contains('@')
-                    && !text.contains('<')
-                    && !text.contains('>')
-                    && !text.contains("+1-555")
-                    && !text.contains("+44-7700")
-                    && !text.contains("+49 1555")
-                    && !text.contains("Dr. Schmidt")
-                    // Bare identifiers are ordinary source text. Only prefixed
-                    // placeholders require an active manifest grant.
-                    && !gaze::token_shape::pattern().find_iter(text).any(|matched|
-                        gaze::token_shape::starts_with_session_prefix(matched.as_str()))
-            },
-        )
-        .prop_map(Segment::Filler)
+    restore_filler::filler().prop_map(Segment::Filler)
 }
 
 fn detected_pii_segment() -> impl Strategy<Value = Segment> {
@@ -83,8 +74,7 @@ fn detected_pii_segment() -> impl Strategy<Value = Segment> {
 
 fn document_case() -> impl Strategy<Value = DocumentCase> {
     prop::collection::vec(
-        prop_oneof![5 => filler_segment(), 2 => detected_pii_segment(),
-            2 => "[A-Za-z][a-z]{1,8}_[0-9]{1,5}".prop_map(Segment::Filler)],
+        prop_oneof![5 => filler_segment(), 2 => detected_pii_segment()],
         1..24,
     )
     .prop_map(|segments| {

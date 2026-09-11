@@ -66,22 +66,55 @@ fn strict_restore_accepts_lowercase_log_identifiers() {
 #[test]
 fn strict_roundtrip_accepts_authorized_value_containing_shape() {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    for raw in ["record ORDER_12345", "record <deadbeef:Email_999>"] {
+    for raw in [
+        "record ORDER_12345",
+        "record <deadbeef:Email_999>",
+        "record <Email_1>",
+        "record location_7",
+    ] {
         let token = session.tokenize(&PiiClass::custom("record"), raw).unwrap();
         assert_success(&session, &format!("π/{token}."), &format!("π/{raw}."), 0);
     }
 }
 
 #[test]
-fn strict_restore_counts_legacy_placeholder_without_blocking() {
+fn strict_restore_rejects_unmapped_canonical_legacy_formats() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     for text in [
         "<Email_1>",
         "<Name_99>",
+        "<Foo_5>",
+        "<foo_1>",
+        "<Custom:class_alpha_1>",
+        "custom:class_alpha_1",
+        "Email_7",
         "email1@example.test",
+        "email1@gaze-fake.invalid",
         "location_7",
+        "name_1",
+        "organization_1",
+        "email_1",
     ] {
-        assert_success(&session, text, text, 1);
+        assert_unknown(&session, text);
+    }
+}
+
+#[test]
+fn appended_canonical_placeholders_fail_after_valid_clean() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let p = pipeline();
+    let clean = clean(&p, &session, "alice@example.invalid");
+    for unknown in [
+        "<Email_1>".to_string(),
+        format!("<{}:Email_999>", session.session_hex()),
+        "<deadbeef:Email_999>".to_string(),
+    ] {
+        let input = format!("{clean} {unknown}");
+        let (_, telemetry) = p.restore_with_telemetry(&session, &input).unwrap();
+        assert_eq!(telemetry.restore_decision, RestoreDecision::Failed);
+        assert_eq!(telemetry.unknown_token_count, 1);
+        assert_eq!(telemetry.manifest_bypass_count, 0);
+        assert!(session.restore_strict_text(&input).is_err());
     }
 }
 
@@ -270,7 +303,7 @@ fn synthetic_trace_matches_production_restore_decision() {
 }
 
 #[test]
-fn differential_enumeration_only_relaxes_traps_and_authorized_output() {
+fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output() {
     // Expected directions come from the counter-split contract, independently of the classifier.
     let labels = [
         "bare_upper",
@@ -332,17 +365,17 @@ fn differential_enumeration_only_relaxes_traps_and_authorized_output() {
                 });
             let new_failed = telemetry.restore_decision == RestoreDecision::Failed;
             let expected_old = !matches!(category, 2 | 6);
-            let expected_new = matches!(category, 3 | 4 | 7 | 10);
+            let expected_new = matches!(category, 3 | 4 | 5 | 7 | 10);
             assert_eq!(old_failed, expected_old, "old {}", labels[category]);
             assert_eq!(new_failed, expected_new, "new {}", labels[category]);
             if old_failed != new_failed {
                 assert!(old_failed && !new_failed);
-                assert!(matches!(category, 0 | 1 | 5 | 8 | 9));
+                assert!(matches!(category, 0 | 1 | 8 | 9));
                 divergences[category] += 1;
             }
         }
     }
-    assert_eq!(divergences, [400, 400, 0, 0, 0, 400, 0, 0, 400, 400, 0]);
+    assert_eq!(divergences, [400, 400, 0, 0, 0, 0, 0, 0, 400, 400, 0]);
     for (label, count) in labels.iter().zip(divergences) {
         println!("{label}: cases=400 failed_to_success={count}");
     }
