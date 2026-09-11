@@ -1002,7 +1002,7 @@ fn cascade_llm_hallucination_still_trapped() {
     });
     assert_session_scoped_custom_token(&tokens[0]);
 
-    let text = format!("Known {} and unknown <unknown:Email_99>.", tokens[0]);
+    let text = format!("Known {} and unknown <deadbeef:Email_99>.", tokens[0]);
     let (code, stdout, stderr) = restore_json(&blob, &text);
 
     assert_eq!(
@@ -1014,14 +1014,17 @@ fn cascade_llm_hallucination_still_trapped() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "Email_99" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<deadbeef:Email_99>" })
     );
 }
 
 #[test]
 fn cascade_trap_boundary_crossing_not_exempted() {
-    let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("name_ref"), "Foo").unwrap()]);
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s
+            .tokenize(&PiiClass::custom("name_ref"), "deadbeef:email")
+            .unwrap()]
+    });
     assert_session_scoped_custom_token(&tokens[0]);
 
     let text = format!("{}_7", tokens[0]);
@@ -1036,7 +1039,7 @@ fn cascade_trap_boundary_crossing_not_exempted() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "Foo_7" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "deadbeef:email_7" })
     );
 }
 
@@ -3937,7 +3940,10 @@ fn t20_restore_custom_hallucination_exits_3() {
         vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
     });
 
-    let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
+    let text = format!(
+        "Order {} and <deadbeef:Custom:fake_id_99> are shipped.",
+        tokens[0]
+    );
     let (code, stdout, stderr) = restore_json(&blob, &text);
     assert_eq!(
         code,
@@ -3948,7 +3954,7 @@ fn t20_restore_custom_hallucination_exits_3() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "<Custom:fake_id_99>" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<deadbeef:Custom:fake_id_99>" })
     );
 }
 

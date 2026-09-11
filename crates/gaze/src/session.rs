@@ -1350,6 +1350,19 @@ fn restore_classified_strict_text_from_state(
 ) -> Result<RestoredTextWithProvenance> {
     // Keep malformed/nested input rejection before any owner-side substitution.
     strict_restore_tokens(text)?;
+    for (start, _) in text.match_indices('<') {
+        let candidate = &text[start..];
+        if !crate::token_shape::starts_with_session_prefix(candidate) {
+            continue;
+        }
+        // An incomplete wrapper can otherwise be seen as only a bare inner trap.
+        let end = candidate[1..]
+            .find(|ch: char| ch == '<' || ch == '>' || ch.is_whitespace())
+            .map_or(candidate.len(), |offset| offset + 1);
+        if candidate.as_bytes().get(end) != Some(&b'>') {
+            return Err(unknown_token_error(&candidate[..end]));
+        }
+    }
     let assessment = assess_restore_text_from_state(state, text)?;
     if let Some(unknown) = assessment.unknown_tokens.first() {
         return Err(unknown_token_error(unknown));
