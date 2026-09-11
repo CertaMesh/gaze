@@ -14,9 +14,8 @@ use gaze_recognizers::{
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
-    SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
-    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
+    SafetyNetError,
 };
 use thiserror::Error;
 
@@ -477,22 +476,12 @@ impl Pipeline {
         text: &str,
         policy: RestorePolicy,
     ) -> Result<(RestoredText, RestoreTelemetry)> {
-        let mut telemetry = RestoreTelemetry::new(policy);
-        telemetry.phase_execution_mask |= RESTORE_PHASE_MANIFEST_LOOKUP;
         let assessment = session.assess_restore_text(text)?;
-        telemetry.phase_execution_mask |=
-            RESTORE_PHASE_UNKNOWN_TOKEN_SCAN | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
-        let unknown_token_count = assessment.unknown_tokens.len() as u64;
-        telemetry.unknown_token_count = unknown_token_count;
-        telemetry.manifest_bypass_count = assessment.manifest_bypass_count;
-        telemetry.trap_shape_count = assessment.trap_shape_count;
-        telemetry.restore_decision = match (policy, unknown_token_count) {
-            (_, 0) => RestoreDecision::Success,
-            (RestorePolicy::Strict, _) => RestoreDecision::Failed,
-            (RestorePolicy::Lenient, _) => RestoreDecision::Partial,
-            (_, _) => RestoreDecision::Failed,
-        };
-        Ok((RestoredText::new(assessment.restored.text), telemetry))
+        let telemetry = assessment.telemetry(policy);
+        Ok((
+            RestoredText::new(assessment.into_restored().text),
+            telemetry,
+        ))
     }
 
     pub fn with_pipeline_optimizations(mut self, config: PipelineOptimizationConfig) -> Pipeline {
@@ -3326,6 +3315,10 @@ mod tests {
     use crate::detector::{Detection, PiiClass};
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
+    use gaze_types::{
+        RestoreDecision, RESTORE_PHASE_MANIFEST_BYPASS_SCAN, RESTORE_PHASE_MANIFEST_LOOKUP,
+        RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    };
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
