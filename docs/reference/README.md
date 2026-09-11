@@ -30,8 +30,10 @@ behind a contract, follow through to [explanation](../explanation/README.md).
 ## Benchmarks
 
 Public benchmark claims must trace to the canonical
-**[benchmark index and methodology](benchmarks/README.md)**. It links every
-committed benchmark report and scorecard through v0.12, classifies current,
-supplemental, contractual, and historical evidence, and inventories the
-runners, locked configuration, sources, snapshots, metric directions, and
-production goals.
+**[Gaze Benchmarks](benchmarks/README.md)** document. It carries the current
+release's measured numbers as a table and as charts, the corpora and scoring
+contract behind them, the safety-net and NER leaderboard surfaces, the commands
+to reproduce every figure, and a per-release history. Numbers are regenerated
+from each release's committed scorecard by
+[`scripts/bench/render_benchmark_doc.py`](../../scripts/bench/render_benchmark_doc.py),
+and CI fails if the document drifts from that evidence.

@@ -313,7 +313,7 @@ at `gaze-types/src/lib.rs:1623`. Implementations under
 `crates/gaze-recognizers/benches/safety_net_matrix_snapshot.json`. Deep-dives:
 [`docs/explanation/safety-net/safety-nets.md`](../explanation/safety-net/safety-nets.md),
 [`docs/explanation/safety-net/safety-net-modes.md`](../explanation/safety-net/safety-net-modes.md),
-[`docs/reference/benchmarks/safety-net-benchmark.md`](benchmarks/safety-net-benchmark.md).
+[`docs/reference/benchmarks/README.md`](benchmarks/README.md#safety-net-matrix).
 
 ### 3.1 Per-suspect metrics (`LeakSuspect`)
 
@@ -358,7 +358,7 @@ records per-cell metrics produced by
 `cargo bench -p gaze-recognizers --features safety-net-kiji,safety-net-openai --bench safety_net_matrix`.
 The schema is version 2; cells are keyed by `backend × locale × mode`
 (`{kiji_distilbert, openai_privacy_filter} × {Global, EnUs, DeDe} × {direct_detector, observer_residual}`).
-See [`docs/reference/benchmarks/safety-net-benchmark.md`](benchmarks/safety-net-benchmark.md).
+See [`docs/reference/benchmarks/README.md`](benchmarks/README.md#matrix-shape).
 
 **Top-level (mode-independent):**
 
@@ -387,12 +387,12 @@ In addition to the `direct_detector` fields:
 | `contradiction_fraction` | Fraction of safety-net spans that contradict a rule-floor span (class mismatch). | Nullable f64 | v0.8 |
 | `novel_tp_over_rule_floor` | True-positive safety-net spans with no rule-floor coverage, normalized by rule-floor TP. | Nullable f64 | v0.8 |
 
-Methodology: [`docs/reference/benchmarks/v0.8-kiji-benchmark.md`](benchmarks/v0.8-kiji-benchmark.md).
-Class-gap reference: [`docs/reference/benchmarks/v0.8-kiji-class-gap.md`](benchmarks/v0.8-kiji-class-gap.md).
+Methodology: [v0.8 Kiji benchmark](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-benchmark.md), archived at the
+`v0.13.0` tag. Class-gap reference: [v0.8 Kiji class-taxonomy gap](https://github.com/CertaMesh/gaze/blob/v0.13.0/docs/reference/benchmarks/v0.8-kiji-class-gap.md).
 Result cells are `null` until pinned local backend commands and model
 directories are available — publishing numeric Kiji or OPF claims without
 those pins violates the Axis 4 trust contract
-([`safety-net-benchmark.md`](benchmarks/safety-net-benchmark.md)).
+([benchmark contract](benchmarks/README.md#safety-net-matrix)).
 
 ### 3.4 Mode + fallback observability
 
@@ -411,12 +411,12 @@ deployments (see [`safety-net-modes.md`](../explanation/safety-net/safety-net-mo
 > `gaze-cli/src/pipeline/run.rs:792-820`). File a follow-up todo if structured
 > per-suspect-class counters are needed.
 
-### 3.5 Backend integrity pins (`safety-net-benchmark.md`)
+### 3.5 Backend integrity pins
 
-The benchmark doc declares backend pins (Kiji DistilBERT bundle SHA, model
+The benchmark document declares backend pins (Kiji DistilBERT bundle SHA, model
 SHA, tokenizer SHA, label-map SHA; OpenAI Privacy Filter source commit).
 These pins are part of the Axis 4 evidence trail. Pin values are tracked in
-[`docs/reference/benchmarks/safety-net-benchmark.md`](benchmarks/safety-net-benchmark.md)
+[`docs/reference/benchmarks/README.md`](benchmarks/README.md#backend-integrity-pins)
 and enforced via the `safety-net-sanity` xtask gate plus the `model-SHA`
 integrity check in the Kiji backend.
 
@@ -792,7 +792,7 @@ literals must supply the new optional field. Snapshot payload versions are uncha
 - [`docs/explanation/detection/anchor-resolution.md`](../explanation/detection/anchor-resolution.md) — `mandatory_anchor`, `ConflictTier::AnchoredContext`.
 - [`docs/explanation/safety-net/safety-nets.md`](../explanation/safety-net/safety-nets.md) — Pass-3 observer contract, trait shape, manifest invariants.
 - [`docs/explanation/safety-net/safety-net-modes.md`](../explanation/safety-net/safety-net-modes.md) — `resolve` / `redact` / `fallback` modes and `decided_by` extensions.
-- [`docs/reference/benchmarks/safety-net-benchmark.md`](benchmarks/safety-net-benchmark.md) — `safety_net_matrix` snapshot pins + matrix shape.
+- [`docs/reference/benchmarks/README.md`](benchmarks/README.md#safety-net-matrix) — `safety_net_matrix` snapshot pins + matrix shape.
 - [`docs/explanation/mcp/mcp-runtime.md`](../explanation/mcp/mcp-runtime.md) — `ToolCtx` seal, dispatch ordering, manifest persistence.
 - [`docs/explanation/document/document-extension.md`](../explanation/document/document-extension.md) — signed snapshot envelope.
 - [`docs/explanation/policy/locale-chain.md`](../explanation/policy/locale-chain.md) — 4-tier locale resolution.

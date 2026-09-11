@@ -432,8 +432,8 @@ The audit DB is opened read-only by `query` and `export`. The exported column se
 - Detection floor is regex + validator + locale cue. Tenant-specific PII needs a custom recognizer.
 - Linux x86_64 binaries link against glibc 2.39+ (Ubuntu 24.04, Debian 13, RHEL 10, or newer). Older distros: build from source.
 - No Intel macOS, no musl, no Windows binaries today. Build from source.
-- v0.9 NER model leaderboard: [`docs/reference/benchmarks/v0.9-ner-model-leaderboard.md`](docs/reference/benchmarks/v0.9-ner-model-leaderboard.md). Kiji DistilBERT (Apache-2.0) ships as default per the leaderboard's strategic read.
-- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in [`docs/reference/benchmarks/v0.9-safety-net-benchmark.md`](docs/reference/benchmarks/v0.9-safety-net-benchmark.md); observer-residual mode remains deferred.
+- NER model leaderboard: [`docs/reference/benchmarks/README.md`](docs/reference/benchmarks/README.md#ner-model-leaderboard). Kiji DistilBERT (Apache-2.0) ships as default per the leaderboard's strategic read.
+- SafetyNet benchmark cells for Kiji DistilBERT and OpenAI Privacy Filter direct-detector mode are populated in the [safety-net matrix](docs/reference/benchmarks/README.md#safety-net-matrix); observer-residual mode remains deferred.
 - `gaze-proxy` ships OpenAI / Anthropic / Gemini adapters. Certificate management, PAC mode, Electron integration, transparent interception, browser sessions, and consumer subscription endpoints are outside its public contract.
 
 ## Use from Rust
