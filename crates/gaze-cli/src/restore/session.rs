@@ -200,7 +200,7 @@ mod tests {
     #[test]
     fn pass2_cursor_scan_traps_adjacent_hallucinated_tokens_outside_substituted_span() {
         let session = empty_session();
-        let text = "Alice_1<Email_999>";
+        let text = "Alice_1<deadbeef:Email_999>";
         let spans = std::iter::once(0..7).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
@@ -217,7 +217,7 @@ mod tests {
             "cursor must advance past the adjacent completed substitution span"
         );
         match restore_pass2_validate(text, &spans, &session, RestoreMode::Strict) {
-            Err(CliError::UnknownToken { token }) => assert_eq!(token, "<Email_999>"),
+            Err(CliError::UnknownToken { token }) => assert_eq!(token, "<deadbeef:Email_999>"),
             Err(other) => panic!("unexpected error: {other:?}"),
             Ok(_) => panic!("expected adjacent hallucinated token to fail"),
         }
@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn pass2_cursor_scan_tolerant_mode_reports_first_unknown_token() {
         let session = empty_session();
-        let text = "Alice_1 <Email_999> <Name_100>";
+        let text = "Alice_1 <deadbeef:Email_999> <deadbeef:Name_100>";
         let spans = std::iter::once(0..7).collect::<Vec<_>>();
         let mut cursor = 0usize;
 
@@ -240,6 +240,6 @@ mod tests {
             restore_pass2_validate(text, &spans, &session, RestoreMode::Tolerant).unwrap();
 
         assert_eq!(warnings[0].variant, "UnknownToken");
-        assert_eq!(warnings[0].token, "<Email_999>");
+        assert_eq!(warnings[0].token, "<deadbeef:Email_999>");
     }
 }

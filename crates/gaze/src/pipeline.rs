@@ -3557,7 +3557,7 @@ mod tests {
         let CleanDocument::Text(clean) = clean else {
             panic!("expected text");
         };
-        let input = format!("{clean} <Email_999> <Name_100>");
+        let input = format!("{clean} <deadbeef:Email_999> <deadbeef:Name_100> FOO_12 run_1");
 
         let (restored, telemetry) = pipeline
             .restore_with_policy_telemetry(&session, &input, RestorePolicy::Lenient)

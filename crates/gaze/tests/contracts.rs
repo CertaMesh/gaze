@@ -149,7 +149,7 @@ fn restore_text_ignores_unicode_digits_in_innocent_token_like_text() {
 fn restore_strict_text_still_rejects_ascii_shaped_unknown_token() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let err = session
-        .restore_strict_text("Email_999")
+        .restore_strict_text("<deadbeef:Email_999>")
         .expect_err("strict restore must reject absent ASCII token shapes");
 
     match err {
@@ -160,7 +160,7 @@ fn restore_strict_text_still_rejects_ascii_shaped_unknown_token() {
         } => {
             assert_eq!(class, PiiClass::Email);
             assert_eq!(ordinal, 999);
-            assert_eq!(raw, "Email_999");
+            assert_eq!(raw, "<deadbeef:Email_999>");
         }
         other => panic!("expected UnknownToken, got {other:?}"),
     }
@@ -172,24 +172,9 @@ fn token_shape_finds_bare_generic_literal_in_raw_text() {
 }
 
 #[test]
-fn restore_strict_text_rejects_bare_generic_unknown_token() {
+fn restore_strict_text_accepts_bare_generic_literal() {
     let session = Session::new(Scope::Ephemeral).expect("session");
-    let err = session
-        .restore_strict_text("a_0%")
-        .expect_err("strict restore must reject unmanifested bare generic token shapes");
-
-    match err {
-        Error::UnknownToken {
-            class,
-            ordinal,
-            raw,
-        } => {
-            assert_eq!(class, PiiClass::Custom("a".to_string()));
-            assert_eq!(ordinal, 0);
-            assert_eq!(raw, "a_0");
-        }
-        other => panic!("expected UnknownToken, got {other:?}"),
-    }
+    assert_eq!(session.restore_strict_text("a_0%").unwrap(), "a_0%");
 }
 
 #[test]

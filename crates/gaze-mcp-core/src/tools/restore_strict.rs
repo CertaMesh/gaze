@@ -124,7 +124,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restore_strict_round_trips_clean_then_restore() {
+    async fn restore_strict_round_trips_identifier_literal_and_mapped_token() {
         let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
         let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
         let token = session
@@ -138,14 +138,14 @@ mod tests {
                 &pipeline,
                 &session,
                 &manifest,
-                json!({ "text": format!("Hi {token}") }),
+                json!({ "text": format!("Kunde_7 Hi {token}") }),
             ))
             .await
             .expect("restore response");
 
         assert_eq!(
             response.payload,
-            json!({ "text": "Hi alice@example.invalid" })
+            json!({ "text": "Kunde_7 Hi alice@example.invalid" })
         );
     }
 
