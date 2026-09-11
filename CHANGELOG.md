@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Strict restore no longer falsely fails on bare identifier-shaped literals such
+  as `Kunde_7`, `ORDER_12345`, or `FOO_12`, or on token-like content produced by
+  authorized manifest substitutions. Core pipeline telemetry, Session strict
+  restore, the MCP `restore_strict` tool, and CLI restore share the counter split:
+  Strict no longer blocks on bare identifier-shaped literals outside authorized
+  ranges (moved to audit-only `manifest_bypass`); it still blocks on any unmapped
+  canonical placeholder (own-prefix, foreign-prefix, legacy wrapped) and on
+  incomplete prefixed wrappers. Legacy emitted formats remain blocking too.
+  This deliberately narrows the heuristic rejection boundary. Added
+  serde-defaulted `trap_shape_count` telemetry and nullable
+  `restore_trap_shape_count` audit metadata. Snapshot formats and token grammar
+  are unchanged. Some historical `failed` decisions become `success` on new
+  runs; byte-exact restore and PII detection metrics are independent.
+
 ## [0.13.0] - 2026-09-09
 
 ### Added

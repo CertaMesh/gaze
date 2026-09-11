@@ -808,8 +808,8 @@ fn t02_canary_absent_in_clean_reappears_in_restore() {
 #[test]
 fn t03_unknown_token_pascalcase_shape() {
     let (_, blob, _) = clean_ok("Email is alice@example.invalid please.");
-    // Session has <Email_1>. LLM invents <Email_999>.
-    let (code, stdout, stderr) = restore_json(&blob, "Your <Email_999> is queued.");
+    // Session has <Email_1>. LLM invents <deadbeef:Email_999>.
+    let (code, stdout, stderr) = restore_json(&blob, "Your <deadbeef:Email_999> is queued.");
     assert_eq!(
         code,
         Some(3),
@@ -819,7 +819,7 @@ fn t03_unknown_token_pascalcase_shape() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "<Email_999>" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<deadbeef:Email_999>" })
     );
 }
 
@@ -830,11 +830,12 @@ fn t03_unknown_token_pascalcase_shape() {
 #[test]
 fn t04_unknown_token_lowercase_formatpreserve_shape() {
     // Stub pipeline has only an email Tokenize rule — it cannot emit
-    // lowercase FormatPreserve shapes like `location_7`. Session therefore
+    // lowercase FormatPreserve shapes like `deadbeef:location_7`. Session therefore
     // has no matching token; Pass 1 is a no-op and Pass 2's lowercase-shape
     // arm catches the LLM hallucination.
     let (_, blob, _) = clean_ok("No PII here.");
-    let (code, stdout, stderr) = restore_json(&blob, "Your location_7 order arrives soon.");
+    let (code, stdout, stderr) =
+        restore_json(&blob, "Your deadbeef:location_7 order arrives soon.");
     assert_eq!(
         code,
         Some(3),
@@ -844,14 +845,14 @@ fn t04_unknown_token_lowercase_formatpreserve_shape() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "location_7" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "deadbeef:location_7" })
     );
 }
 
 #[test]
 fn t04b_tolerant_restore_reports_warning_and_preserves_text() {
     let (_, blob, _) = clean_ok("No PII here.");
-    let text = "Your location_7 order arrives soon.";
+    let text = "Your deadbeef:location_7 order arrives soon.";
     let (code, stdout, stderr) = restore_json_with_args(&["--restore-mode=tolerant"], &blob, text);
 
     assert_eq!(code, Some(0), "stderr={}", String::from_utf8_lossy(&stderr));
@@ -860,7 +861,7 @@ fn t04b_tolerant_restore_reports_warning_and_preserves_text() {
     assert_eq!(resp["text"].as_str().unwrap(), text);
     assert_eq!(
         resp["restore_warning"],
-        json!([{ "variant": "UnknownToken", "token": "location_7" }])
+        json!([{ "variant": "UnknownToken", "token": "deadbeef:location_7" }])
     );
 }
 
@@ -1001,7 +1002,7 @@ fn cascade_llm_hallucination_still_trapped() {
     });
     assert_session_scoped_custom_token(&tokens[0]);
 
-    let text = format!("Known {} and unknown <unknown:Email_99>.", tokens[0]);
+    let text = format!("Known {} and unknown <deadbeef:Email_99>.", tokens[0]);
     let (code, stdout, stderr) = restore_json(&blob, &text);
 
     assert_eq!(
@@ -1013,14 +1014,17 @@ fn cascade_llm_hallucination_still_trapped() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "Email_99" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<deadbeef:Email_99>" })
     );
 }
 
 #[test]
 fn cascade_trap_boundary_crossing_not_exempted() {
-    let (blob, tokens) =
-        build_blob_and_tokens(|s| vec![s.tokenize(&PiiClass::custom("name_ref"), "Foo").unwrap()]);
+    let (blob, tokens) = build_blob_and_tokens(|s| {
+        vec![s
+            .tokenize(&PiiClass::custom("name_ref"), "deadbeef:email")
+            .unwrap()]
+    });
     assert_session_scoped_custom_token(&tokens[0]);
 
     let text = format!("{}_7", tokens[0]);
@@ -1035,7 +1039,7 @@ fn cascade_trap_boundary_crossing_not_exempted() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "Foo_7" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "deadbeef:email_7" })
     );
 }
 
@@ -1308,7 +1312,7 @@ fn s4_audit_query_and_export_return_filtered_metadata_rows() {
     );
     let stdout = String::from_utf8(query.stdout).unwrap();
     assert!(stdout.starts_with(
-        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\n"
+        "source\trecognizer_id\trecognizer_version_id\tclass\taction\tfield_name\tdocument_kind\tconflict_loser\tdecided_by\tcreated_at\tsession_id\tsnapshot_scheme\tsnapshot_alg\tsnapshot_key_version\tvalidator_fail_reason\tambiguity_record\tcollision_family\tcollision_variant\tfallback_triggered\tprovenance_stage\tprovenance_model_id\tprovenance_model_version\tprovenance_artifact_sha256\tprovenance_tokenizer_sha256\tprovenance_locale_resolved\tprovenance_locale_match_kind\tprovenance_canonical_class\tprovenance_native_class\tprovenance_confidence\tprovenance_merged_from\trestore_policy\trestore_decision\trestore_unknown_token_count\trestore_manifest_bypass_count\trestore_fresh_pii_count\trestore_phase_mask\trestore_trap_shape_count\n"
     ));
     assert!(
         stdout
@@ -3936,7 +3940,10 @@ fn t20_restore_custom_hallucination_exits_3() {
         vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
     });
 
-    let text = format!("Order {} and <Custom:fake_id_99> are shipped.", tokens[0]);
+    let text = format!(
+        "Order {} and <deadbeef:Custom:fake_id_99> are shipped.",
+        tokens[0]
+    );
     let (code, stdout, stderr) = restore_json(&blob, &text);
     assert_eq!(
         code,
@@ -3947,7 +3954,7 @@ fn t20_restore_custom_hallucination_exits_3() {
     );
     assert_eq!(
         parse_stderr_variant(&stderr),
-        json!({ "error": "UnknownToken", "exit": 3, "token": "<Custom:fake_id_99>" })
+        json!({ "error": "UnknownToken", "exit": 3, "token": "<deadbeef:Custom:fake_id_99>" })
     );
 }
 
@@ -4447,4 +4454,99 @@ action = "tokenize"
         stderr.contains("warning:") && stderr.contains("custom:family:payment-card-or-iban"),
         "warning must keep firing while the leak is live, got: {stderr}"
     );
+}
+
+#[test]
+fn strict_literal_roundtrip_agrees_with_telemetry_and_audit() {
+    let raw = "Grüße Kunde_7 ORDER_12345 FOO_12 alice@example.invalid";
+    let (clean, blob, _) = clean_ok(raw);
+    let dir = tempdir().unwrap();
+    for telemetry in [false, true] {
+        for audit in [false, true] {
+            let audit_path = dir
+                .path()
+                .join(format!("restore-{telemetry}-{audit}.sqlite"));
+            let audit_arg = format!("--audit-db={}", audit_path.display());
+            let mut args = vec!["--restore-mode=strict"];
+            if telemetry {
+                args.push("--telemetry");
+            }
+            if audit {
+                args.push(&audit_arg);
+            }
+            let (code, stdout, stderr) = restore_json_with_args(&args, &blob, &clean);
+            assert_eq!(code, Some(0), "{}", String::from_utf8_lossy(&stderr));
+            let response: Value = serde_json::from_slice(&stdout).unwrap();
+            assert_eq!(response["text"], raw);
+            if telemetry {
+                assert_eq!(response["restore_telemetry"]["restore_decision"], "success");
+                assert_eq!(response["restore_telemetry"]["unknown_token_count"], 0);
+                assert_eq!(response["restore_telemetry"]["manifest_bypass_count"], 3);
+                assert_eq!(response["restore_telemetry"]["trap_shape_count"], 3);
+            }
+            if audit {
+                let rows = SqliteLogger::query(
+                    &audit_path,
+                    &AuditFilter {
+                        restore_events_only: true,
+                        ..AuditFilter::default()
+                    },
+                )
+                .unwrap();
+                assert_eq!(rows.len(), 1);
+                assert_eq!(rows[0].restore_decision.as_deref(), Some("success"));
+                assert_eq!(rows[0].restore_unknown_token_count, Some(0));
+                assert_eq!(rows[0].restore_manifest_bypass_count, Some(3));
+            }
+        }
+    }
+    for mode in ["--restore-mode=strict", "--restore-mode=tolerant"] {
+        let input = format!("{clean} <deadbeef:Email_999>");
+        let (code, stdout, _) = restore_json_with_args(&[mode, "--telemetry"], &blob, &input);
+        if mode.ends_with("=strict") {
+            assert_eq!(code, Some(3));
+        } else {
+            assert_eq!(code, Some(0));
+            let response: Value = serde_json::from_slice(&stdout).unwrap();
+            assert_eq!(response["restore_telemetry"]["restore_decision"], "partial");
+            assert_eq!(
+                response["restore_warning"][0]["token"],
+                "<deadbeef:Email_999>"
+            );
+        }
+    }
+}
+
+#[test]
+fn strict_legacy_placeholder_fails_and_tolerant_warns() {
+    let (clean, blob, _) = clean_ok("alice@example.invalid");
+    for shape in [
+        "<Email_1>",
+        "location_7",
+        "email1@gaze-fake.invalid",
+        "<Custom:class_alpha_1>",
+    ] {
+        let input = format!("{clean} {shape}");
+        let (code, stdout, stderr) = restore_json_with_args(&["--telemetry"], &blob, &input);
+        assert_eq!(code, Some(3));
+        assert!(stdout.is_empty());
+        assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
+        let (code, stdout, _) =
+            restore_json_with_args(&["--telemetry", "--restore-mode=tolerant"], &blob, &input);
+        assert_eq!(code, Some(0));
+        let response: Value = serde_json::from_slice(&stdout).unwrap();
+        assert_eq!(response["restore_telemetry"]["unknown_token_count"], 1);
+        assert_eq!(response["restore_telemetry"]["manifest_bypass_count"], 0);
+        assert_eq!(response["restore_telemetry"]["restore_decision"], "partial");
+        assert_eq!(response["restore_warning"][0]["token"], shape);
+    }
+}
+
+#[test]
+fn strict_incomplete_prefixed_wrapper_fails() {
+    let (_, blob, _) = clean_ok("ordinary prose");
+    let (code, stdout, stderr) = restore_json(&blob, "<deadbeef:Custom:class_alpha_1 suffix");
+    assert_eq!(code, Some(3));
+    assert!(stdout.is_empty());
+    assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
 }

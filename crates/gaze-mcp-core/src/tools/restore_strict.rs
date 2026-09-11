@@ -1,11 +1,12 @@
 //! `restore_strict` operator-tier tool. Like `restore` but rejects partial
-//! restorations — every token in the input string must be in the manifest
-//! or the call fails.
+//! restorations: every unmapped canonical placeholder causes failure.
+//! Ordinary bare identifier shapes are preserved.
 //!
-//! The body takes a `text` argument, scans it with `gaze::token_shape::pattern`,
-//! and delegates restoration to the private `restore_strict_text` helper below.
-//! If any token-shaped span is not owned by the session, the whole call fails
-//! closed with `ToolError::NotFound`; otherwise the response bypasses agent
+//! The body delegates to the core pipeline strict restore path, which uses
+//! manifest substitution provenance and rejects malformed/nested token input.
+//! Unmapped canonical placeholders and incomplete prefixed wrappers fail closed
+//! with `ToolError::NotFound`;
+//! otherwise the response bypasses agent
 //! redaction under the operator-tier contract.
 
 use async_trait::async_trait;
@@ -124,7 +125,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn restore_strict_round_trips_clean_then_restore() {
+    async fn restore_strict_round_trips_identifier_literal_and_mapped_token() {
         let pipeline = gaze::Pipeline::builder().build().expect("pipeline");
         let session = gaze::Session::new(gaze::Scope::Ephemeral).expect("session");
         let token = session
@@ -138,15 +139,41 @@ mod tests {
                 &pipeline,
                 &session,
                 &manifest,
-                json!({ "text": format!("Hi {token}") }),
+                json!({ "text": format!("Kunde_7 Hi {token}") }),
             ))
             .await
             .expect("restore response");
 
         assert_eq!(
             response.payload,
-            json!({ "text": "Hi alice@example.invalid" })
+            json!({ "text": "Kunde_7 Hi alice@example.invalid" })
         );
+    }
+
+    #[tokio::test]
+    async fn restore_strict_rejects_canonical_legacy_after_mapped_token() {
+        let pipeline = gaze::Pipeline::builder().build().unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&gaze::PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        for shape in [
+            "<Email_1>",
+            "location_7",
+            "email1@gaze-fake.invalid",
+            "<Custom:class_alpha_1>",
+        ] {
+            let err = RestoreStrictTool::new()
+                .invoke(&ctx(
+                    &pipeline,
+                    &session,
+                    &NullManifest,
+                    json!({"text": format!("{token} {shape}")}),
+                ))
+                .await
+                .expect_err("unmapped canonical placeholder must fail");
+            assert_eq!(err.class(), "not-found");
+        }
     }
 
     #[tokio::test]

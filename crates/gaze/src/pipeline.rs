@@ -12,9 +12,8 @@ use gaze_recognizers::{
 use gaze_types::{
     AmbiguityReason, AmbiguityRecord, CollisionMembership, EmittedTokenSpan, FallbackReason,
     LeakKind, LeakReport, LeakReportTelemetry, LeakSuspect, Manifest, RedactionLogError,
-    RedactionLogger, RestoreDecision, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet,
-    SafetyNetContext, SafetyNetError, RESTORE_PHASE_MANIFEST_BYPASS_SCAN,
-    RESTORE_PHASE_MANIFEST_LOOKUP, RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    RedactionLogger, RestorePolicy, RestoreTelemetry, RestoredText, SafetyNet, SafetyNetContext,
+    SafetyNetError,
 };
 use thiserror::Error;
 
@@ -475,21 +474,12 @@ impl Pipeline {
         text: &str,
         policy: RestorePolicy,
     ) -> Result<(RestoredText, RestoreTelemetry)> {
-        let mut telemetry = RestoreTelemetry::new(policy);
-        telemetry.phase_execution_mask |= RESTORE_PHASE_MANIFEST_LOOKUP;
-        let restored = restore_known_tokens(session, text)?;
-        telemetry.phase_execution_mask |=
-            RESTORE_PHASE_UNKNOWN_TOKEN_SCAN | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
-        let unknown_token_count = count_unknown_restore_tokens(session, &restored);
-        telemetry.unknown_token_count = unknown_token_count;
-        telemetry.manifest_bypass_count = unknown_token_count;
-        telemetry.restore_decision = match (policy, unknown_token_count) {
-            (_, 0) => RestoreDecision::Success,
-            (RestorePolicy::Strict, _) => RestoreDecision::Failed,
-            (RestorePolicy::Lenient, _) => RestoreDecision::Partial,
-            (_, _) => RestoreDecision::Failed,
-        };
-        Ok((RestoredText::new(restored), telemetry))
+        let assessment = session.assess_restore_text(text)?;
+        let telemetry = assessment.telemetry(policy);
+        Ok((
+            RestoredText::new(assessment.into_restored().text),
+            telemetry,
+        ))
     }
 
     pub fn with_pipeline_optimizations(mut self, config: PipelineOptimizationConfig) -> Pipeline {
@@ -2675,31 +2665,6 @@ fn replace_clean_span_checked(
     Ok(())
 }
 
-fn restore_known_tokens(session: &Session, text: &str) -> Result<String> {
-    let Some(re) = session.restore_regex()? else {
-        return Ok(text.to_string());
-    };
-    let mut out = String::with_capacity(text.len());
-    let mut last = 0usize;
-    for matched in re.find_iter(text) {
-        out.push_str(&text[last..matched.start()]);
-        out.push_str(&session.restore_strict(matched.as_str())?);
-        last = matched.end();
-    }
-    out.push_str(&text[last..]);
-    Ok(out)
-}
-
-fn count_unknown_restore_tokens(session: &Session, text: &str) -> u64 {
-    crate::token_shape::pattern()
-        .find_iter(text)
-        .filter(|matched| {
-            let matched_text = matched.as_str();
-            crate::token_shape::is_trap(matched_text) || !session.contains_token(matched_text)
-        })
-        .count() as u64
-}
-
 fn adjust_emitted_span(
     existing: &EmittedTokenSpan,
     edited: &Range<usize>,
@@ -3318,6 +3283,10 @@ mod tests {
     use crate::detector::{Detection, PiiClass};
     use crate::rule::{ClassRule, DefaultRule};
     use crate::session::{Scope, Session};
+    use gaze_types::{
+        RestoreDecision, RESTORE_PHASE_MANIFEST_BYPASS_SCAN, RESTORE_PHASE_MANIFEST_LOOKUP,
+        RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+    };
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Mutex;
 
@@ -3557,7 +3526,7 @@ mod tests {
         let CleanDocument::Text(clean) = clean else {
             panic!("expected text");
         };
-        let input = format!("{clean} <Email_999> <Name_100>");
+        let input = format!("{clean} <deadbeef:Email_999> <deadbeef:Name_100> FOO_12 run_1");
 
         let (restored, telemetry) = pipeline
             .restore_with_policy_telemetry(&session, &input, RestorePolicy::Lenient)

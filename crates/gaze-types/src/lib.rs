@@ -170,8 +170,13 @@ impl RestoreDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct RestoreTelemetry {
+    /// Unmapped canonical placeholders or incomplete prefixed wrappers outside authorized output.
     pub unknown_token_count: u64,
+    /// Audit-only broad bare identifier shapes outside authorized restore output.
     pub manifest_bypass_count: u64,
+    /// All unprefixed trap shapes in restored text, including authorized values.
+    #[serde(default)]
+    pub trap_shape_count: u64,
     pub fresh_pii_detected_count: u64,
     pub restore_policy: RestorePolicy,
     pub restore_decision: RestoreDecision,
@@ -183,6 +188,7 @@ impl RestoreTelemetry {
         Self {
             unknown_token_count: 0,
             manifest_bypass_count: 0,
+            trap_shape_count: 0,
             fresh_pii_detected_count: 0,
             restore_policy,
             restore_decision: RestoreDecision::Success,
@@ -2232,6 +2238,7 @@ pub struct RedactionEntry {
     pub restore_manifest_bypass_count: Option<u64>,
     pub restore_fresh_pii_count: Option<u64>,
     pub restore_phase_mask: Option<u32>,
+    pub restore_trap_shape_count: Option<u64>,
 }
 
 impl Serialize for RedactionEntry {
@@ -2276,6 +2283,7 @@ impl Serialize for RedactionEntry {
             self.restore_manifest_bypass_count.is_some(),
             self.restore_fresh_pii_count.is_some(),
             self.restore_phase_mask.is_some(),
+            self.restore_trap_shape_count.is_some(),
         ]
         .into_iter()
         .filter(|value| *value)
@@ -2352,6 +2360,9 @@ impl Serialize for RedactionEntry {
         if let Some(value) = self.restore_fresh_pii_count {
             state.serialize_field("restore_fresh_pii_count", &value)?;
         }
+        if let Some(value) = self.restore_trap_shape_count {
+            state.serialize_field("restore_trap_shape_count", &value)?;
+        }
         if let Some(value) = self.restore_phase_mask {
             state.serialize_field("restore_phase_mask", &value)?;
         }
@@ -2408,6 +2419,7 @@ impl RedactionEntry {
             restore_manifest_bypass_count: None,
             restore_fresh_pii_count: None,
             restore_phase_mask: None,
+            restore_trap_shape_count: None,
         }
     }
 
@@ -2453,6 +2465,7 @@ impl RedactionEntry {
         self.restore_manifest_bypass_count = Some(telemetry.manifest_bypass_count);
         self.restore_fresh_pii_count = Some(telemetry.fresh_pii_detected_count);
         self.restore_phase_mask = Some(telemetry.phase_execution_mask);
+        self.restore_trap_shape_count = Some(telemetry.trap_shape_count);
         self
     }
 
@@ -3279,6 +3292,7 @@ mod redaction_logger_tests {
             restore_manifest_bypass_count: None,
             restore_fresh_pii_count: None,
             restore_phase_mask: None,
+            restore_trap_shape_count: None,
         };
 
         let trait_object: &dyn RedactionLogger = &logger;

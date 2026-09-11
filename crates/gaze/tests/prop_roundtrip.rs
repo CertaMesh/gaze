@@ -10,6 +10,15 @@ use gaze_recognizers::RegexDetector;
 use proptest::prelude::*;
 use proptest::test_runner::Config as ProptestConfig;
 
+#[path = "support/restore_filler.rs"]
+mod restore_filler;
+
+#[test]
+fn generated_corpus_contains_identifier_literals() {
+    restore_filler::assert_identifier_coverage(restore_filler::filler());
+    restore_filler::assert_identifier_coverage(document_case().prop_map(|case| case.text));
+}
+
 #[derive(Debug, Clone)]
 struct DocumentCase {
     text: String,
@@ -50,26 +59,7 @@ fn deterministic_pipeline() -> Pipeline {
 }
 
 fn filler_segment() -> impl Strategy<Value = Segment> {
-    proptest::string::string_regex(r"[\p{L}\p{N}\p{P}\p{Z}\p{M}\x{1F600}-\x{1F64F}]{0,40}")
-        .expect("valid filler regex")
-        .prop_filter(
-            "filler contains no tracked PII, restore-token delimiters, or token-shaped literals",
-            |text| {
-                !text.contains('@')
-                    && !text.contains('<')
-                    && !text.contains('>')
-                    && !text.contains("+1-555")
-                    && !text.contains("+44-7700")
-                    && !text.contains("+49 1555")
-                    && !text.contains("Dr. Schmidt")
-                    // Random filler can spell a bracketless token shape (e.g. `j_6`),
-                    // which strict restore correctly rejects fail-closed as an
-                    // `UnknownToken`. Exclude anything the product's own token-shape
-                    // DLP net would trap so the round-trip invariant holds.
-                    && !gaze::token_shape::contains_token(text)
-            },
-        )
-        .prop_map(Segment::Filler)
+    restore_filler::filler().prop_map(Segment::Filler)
 }
 
 fn detected_pii_segment() -> impl Strategy<Value = Segment> {
