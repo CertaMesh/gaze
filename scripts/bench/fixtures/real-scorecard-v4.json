@@ -1,0 +1,883 @@
+{
+  "schema_version": 4,
+  "generated_at": "2026-08-19T04:26:35.500796+00:00",
+  "gaze": {
+    "revision": "cfb3aed79e5625cc94f4423bfd04283401327d8e",
+    "dirty": false
+  },
+  "dataset": {
+    "repository": "DataikuNLP/kiji-pii-training-data+gaze",
+    "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1",
+    "file": "data/test-00000-of-00001.parquet+crates/xtask/fixtures/negative_corpus/en_de_negative.jsonl",
+    "license": "Apache-2.0 + CC0-1.0 synthetic",
+    "synthetic_only": true,
+    "reserved_from_training": true,
+    "selection_policy": "complete EN/DE holdout plus complete committed A4 negatives",
+    "integrity": {
+      "sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+      "component_sha256": {
+        "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+        "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+      }
+    },
+    "available_population": {
+      "documents": 2910,
+      "entities": 14719,
+      "labels": {
+        "AGE": 210,
+        "BUILDINGNUM": 1437,
+        "CITY": 1571,
+        "COMPANYNAME": 419,
+        "COUNTRY": 365,
+        "CREDITCARDNUMBER": 126,
+        "DATEOFBIRTH": 280,
+        "DRIVERLICENSENUM": 216,
+        "EMAIL": 375,
+        "FIRSTNAME": 2001,
+        "IBAN": 207,
+        "IDCARDNUM": 188,
+        "LICENSEPLATENUM": 215,
+        "NATIONALID": 200,
+        "ORGANIZATION": 3,
+        "PASSPORTID": 224,
+        "PASSWORD": 208,
+        "PHONENUMBER": 359,
+        "REGION": 1,
+        "SECURITYTOKEN": 219,
+        "SSN": 217,
+        "STATE": 913,
+        "STREET": 1384,
+        "SURNAME": 1697,
+        "TAXNUM": 212,
+        "TITLE": 5,
+        "URL": 276,
+        "USERNAME": 101,
+        "ZIP": 1090
+      },
+      "languages": {
+        "de": 1365,
+        "en": 1545
+      },
+      "regions": {
+        "de": 512,
+        "de-AT": 282,
+        "de-CH": 285,
+        "de-DE": 286,
+        "en": 512,
+        "en-AU": 141,
+        "en-CA": 140,
+        "en-GB": 159,
+        "en-IE": 140,
+        "en-NZ": 143,
+        "en-US": 310
+      },
+      "sources": {
+        "DataikuNLP/kiji-pii-training-data": 1886,
+        "gaze-a4-negative-corpus": 1024
+      },
+      "negative_only_documents": 1024
+    },
+    "evaluated_population": {
+      "documents": 2910,
+      "entities": 14719,
+      "languages": {
+        "de": 1365,
+        "en": 1545
+      },
+      "sources": {
+        "DataikuNLP/kiji-pii-training-data": 1886,
+        "gaze-a4-negative-corpus": 1024
+      },
+      "negative_only_documents": 1024
+    },
+    "selection": {
+      "documents": 2910,
+      "entities": 14719,
+      "labels": {
+        "AGE": 210,
+        "BUILDINGNUM": 1437,
+        "CITY": 1571,
+        "COMPANYNAME": 419,
+        "COUNTRY": 365,
+        "CREDITCARDNUMBER": 126,
+        "DATEOFBIRTH": 280,
+        "DRIVERLICENSENUM": 216,
+        "EMAIL": 375,
+        "FIRSTNAME": 2001,
+        "IBAN": 207,
+        "IDCARDNUM": 188,
+        "LICENSEPLATENUM": 215,
+        "NATIONALID": 200,
+        "ORGANIZATION": 3,
+        "PASSPORTID": 224,
+        "PASSWORD": 208,
+        "PHONENUMBER": 359,
+        "REGION": 1,
+        "SECURITYTOKEN": 219,
+        "SSN": 217,
+        "STATE": 913,
+        "STREET": 1384,
+        "SURNAME": 1697,
+        "TAXNUM": 212,
+        "TITLE": 5,
+        "URL": 276,
+        "USERNAME": 101,
+        "ZIP": 1090
+      },
+      "languages": {
+        "de": 1365,
+        "en": 1545
+      },
+      "regions": {
+        "de": 512,
+        "de-AT": 282,
+        "de-CH": 285,
+        "de-DE": 286,
+        "en": 512,
+        "en-AU": 141,
+        "en-CA": 140,
+        "en-GB": 159,
+        "en-IE": 140,
+        "en-NZ": 143,
+        "en-US": 310
+      },
+      "sources": {
+        "DataikuNLP/kiji-pii-training-data": 1886,
+        "gaze-a4-negative-corpus": 1024
+      },
+      "negative_only_documents": 1024
+    }
+  },
+  "scoring": {
+    "primary_unit": "UTF-8 bytes",
+    "primary_scope": "label-agnostic whole-pipeline PII pseudonymization",
+    "adjacent_and_overlapping_spans_are_merged": true,
+    "full_entity_coverage_requires_every_byte": true,
+    "direct_identifier_labels": [
+      "ACCOUNTNUM",
+      "BANKNAME",
+      "BUILDINGNUM",
+      "CITY",
+      "CREDITCARDNUMBER",
+      "DRIVERLICENSENUM",
+      "EMAIL",
+      "GIVENNAME",
+      "IDCARDNUM",
+      "ORGANISATION",
+      "PASSPORTNUM",
+      "SOCIALNUM",
+      "STREET",
+      "SURNAME",
+      "TAXNUM",
+      "TELEPHONENUM",
+      "URL",
+      "ZIPCODE"
+    ],
+    "non_compensating_axes": [
+      "safety",
+      "reversibility",
+      "manifest_integrity",
+      "strict_availability",
+      "precision",
+      "latency"
+    ],
+    "notes": [
+      "All labeled PII bytes are included in the primary safety score.",
+      "A protected byte counts for safety even when its action is not reversible.",
+      "Restore, manifest, pipeline, and telemetry failures remain separate hard failures.",
+      "Final protection evidence contains offsets, classes, counts, and stable IDs only; never PII values.",
+      "Per-cell scored and failed-closed populations are sorted synthetic document-ID sets with SHA-256 digests.",
+      "Failed-closed reason and stage counts reconcile exactly to the identified excluded documents.",
+      "Validator-backed and validator-bypassed shape-only recall are additive diagnostics and do not alter existing counters.",
+      "Labels without an applicable validator are explicitly not_applicable; null pass/fail and recall fields are never numeric zero.",
+      "Latency is considered only after correctness gates pass."
+    ],
+    "comparison_gates": {
+      "correctness": "zero-tolerance integer-count ratchets; ratios are diagnostics only",
+      "release_readiness": "production cell must have zero correctness failures",
+      "population": "candidate and baseline dataset provenance plus per-cell scored and failed-closed document sets must match",
+      "performance": "clean_ms p95 uses a separately configured tolerance and is informational by default"
+    }
+  },
+  "parameters": {
+    "profile": "full",
+    "configs": [
+      "rule-floor-extended",
+      "pass2-ner",
+      "full-stack-kiji-resolve"
+    ],
+    "max_documents": null,
+    "sampling_seed": 20260710,
+    "ner_threshold": 0.3,
+    "warmup_count": 1,
+    "measured_repetitions": 1,
+    "opf": false
+  },
+  "runs": [
+    {
+      "config": "rule-floor-extended",
+      "failed_closed_population": {
+        "documents": 0,
+        "document_ids": [],
+        "document_ids_digest": {
+          "algorithm": "sha256",
+          "value": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "excluded_documents": [],
+        "reason_counts": {},
+        "stage_counts": {}
+      },
+      "metrics": {
+        "documents": 2910,
+        "zero_leak_document_rate": 0.35223367697594504,
+        "documents_without_leaks": 1025,
+        "documents_with_false_positives": 227,
+        "utf8_bytes": {
+          "pii": 130282,
+          "predicted": 41855,
+          "true_positive": 36432,
+          "false_positive": 5423,
+          "leaked": 93850,
+          "precision": 0.8704336399474376,
+          "recall": 0.27963955112755406,
+          "leak_rate": 0.720360448872446,
+          "f1": 0.4232907509716098,
+          "f2": 0.3235621679517854,
+          "false_positive_rate": 0.006543645014196199
+        },
+        "entities": {
+          "gold": 14719,
+          "fully_covered": 2441,
+          "overlapped": 2461,
+          "exact_boundary": 2367,
+          "full_coverage_recall": 0.16584007065697398,
+          "overlap_recall": 0.16719885861811265,
+          "exact_boundary_recall": 0.16081255520076093
+        },
+        "prediction_spans": {
+          "total": 2742,
+          "overlapped_gold": 2397,
+          "overlap_precision": 0.8741794310722101
+        }
+      },
+      "pipeline_contract": {
+        "documents": 2910,
+        "restore_exact_documents": 2910,
+        "restore_exact_rate": 1.0,
+        "restore_success_decisions": 2905,
+        "restore_success_decision_rate": 0.9982817869415808,
+        "manifest_spans": 2742,
+        "manifest_valid_documents": 2910,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 0,
+        "initial_actionable_suspects": 0,
+        "initial_class_mismatches": 0,
+        "strict_would_reject_documents": 0,
+        "strict_acceptance_rate": 1.0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_suspects": 0,
+        "final_protection_trace_items": 2742,
+        "tokenize_actions": 2742,
+        "redact_actions": 0,
+        "documents_with_redact": 0,
+        "post_policy_zero_suspect_documents": 0,
+        "post_policy_zero_suspect_rate": null
+      },
+      "pipeline_availability": {
+        "attempted_documents": 2910,
+        "completed_documents": 2910,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "latency_ms": {
+        "clean_ms": {
+          "mean": 1.671275787628866,
+          "median": 0.8858955,
+          "p95": 4.074964099999995,
+          "p99": 9.739093219999997,
+          "max": 440.16425
+        },
+        "restore_ms": {
+          "mean": 0.5358630969072165,
+          "median": 0.40937500000000004,
+          "p95": 1.7201373499999995,
+          "p99": 2.1681724399999984,
+          "max": 2.809875
+        }
+      },
+      "warm_latency_ms": {
+        "clean_ms": {
+          "mean": 1.671691832932279,
+          "median": 0.887041,
+          "p95": 4.075741199999999,
+          "p99": 9.739323640000002,
+          "max": 440.16425
+        },
+        "restore_ms": {
+          "mean": 0.5358794503265727,
+          "median": 0.409292,
+          "p95": 1.7202331999999998,
+          "p99": 2.168278280000001,
+          "max": 2.809875
+        }
+      },
+      "process": {
+        "wall_seconds": 8.952788750000764,
+        "documents_per_second": 598.345292501818,
+        "start_to_first_response_ms": 1893.891541985795,
+        "cold_start_to_first_validated_response_ms": 1893.891541985795,
+        "warmup_count": 1,
+        "discarded_warmup_samples": [
+          {
+            "sample": 1,
+            "round_trip_ms": 1885.6267080118414,
+            "clean_ms": 7.770875,
+            "restore_ms": 2.6606249999999996,
+            "post_policy_scan_ms": null,
+            "correctness": {
+              "leaked_labeled_utf8_bytes": 0,
+              "uncovered_entities": 0,
+              "restore_failures": 0,
+              "manifest_invalid_documents": 0,
+              "strict_rejections": 0,
+              "residual_suspects": 0,
+              "redact_actions": 0
+            }
+          }
+        ],
+        "stderr_log": "target/bench-data/no-opf/full/logs/repetition-1/rule-floor-extended.stderr.log",
+        "stderr_bytes": 0
+      }
+    },
+    {
+      "config": "pass2-ner",
+      "failed_closed_population": {
+        "documents": 0,
+        "document_ids": [],
+        "document_ids_digest": {
+          "algorithm": "sha256",
+          "value": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "excluded_documents": [],
+        "reason_counts": {},
+        "stage_counts": {}
+      },
+      "metrics": {
+        "documents": 2910,
+        "zero_leak_document_rate": 0.40446735395189004,
+        "documents_without_leaks": 1177,
+        "documents_with_false_positives": 1944,
+        "utf8_bytes": {
+          "pii": 130282,
+          "predicted": 131312,
+          "true_positive": 103282,
+          "false_positive": 28030,
+          "leaked": 27000,
+          "precision": 0.7865389301815523,
+          "recall": 0.7927572496584332,
+          "leak_rate": 0.2072427503415668,
+          "f1": 0.7896358479170011,
+          "f2": 0.7915057323278769,
+          "false_positive_rate": 0.033822306794748194
+        },
+        "entities": {
+          "gold": 14719,
+          "fully_covered": 10547,
+          "overlapped": 10694,
+          "exact_boundary": 7583,
+          "full_coverage_recall": 0.7165568313064746,
+          "overlap_recall": 0.7265439228208438,
+          "exact_boundary_recall": 0.5151844554657246
+        },
+        "prediction_spans": {
+          "total": 12261,
+          "overlapped_gold": 9285,
+          "overlap_precision": 0.7572791778810863
+        }
+      },
+      "pipeline_contract": {
+        "documents": 2910,
+        "restore_exact_documents": 2910,
+        "restore_exact_rate": 1.0,
+        "restore_success_decisions": 2905,
+        "restore_success_decision_rate": 0.9982817869415808,
+        "manifest_spans": 12261,
+        "manifest_valid_documents": 2910,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 0,
+        "initial_actionable_suspects": 0,
+        "initial_class_mismatches": 0,
+        "strict_would_reject_documents": 0,
+        "strict_acceptance_rate": 1.0,
+        "post_policy_scanned_documents": 0,
+        "post_policy_suspects": 0,
+        "final_protection_trace_items": 12261,
+        "tokenize_actions": 12261,
+        "redact_actions": 0,
+        "documents_with_redact": 0,
+        "post_policy_zero_suspect_documents": 0,
+        "post_policy_zero_suspect_rate": null
+      },
+      "pipeline_availability": {
+        "attempted_documents": 2910,
+        "completed_documents": 2910,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "latency_ms": {
+        "clean_ms": {
+          "mean": 53.68437874639176,
+          "median": 48.9557705,
+          "p95": 79.450367,
+          "p99": 92.76587515999985,
+          "max": 482.209291
+        },
+        "restore_ms": {
+          "mean": 0.9901670910652921,
+          "median": 0.8303335000000001,
+          "p95": 2.410854049999999,
+          "p99": 3.0297699699999963,
+          "max": 5.098916999999999
+        }
+      },
+      "warm_latency_ms": {
+        "clean_ms": {
+          "mean": 53.67786372258508,
+          "median": 48.954083000000004,
+          "p95": 79.45069199999999,
+          "p99": 92.77670392000009,
+          "max": 482.209291
+        },
+        "restore_ms": {
+          "mean": 0.9903093939498109,
+          "median": 0.83075,
+          "p95": 2.4110416,
+          "p99": 3.030031640000002,
+          "max": 5.098916999999999
+        }
+      },
+      "process": {
+        "wall_seconds": 170.60172229100135,
+        "documents_per_second": 18.62739261124843,
+        "start_to_first_response_ms": 9997.586874989793,
+        "cold_start_to_first_validated_response_ms": 9997.586874989793,
+        "warmup_count": 1,
+        "discarded_warmup_samples": [
+          {
+            "sample": 1,
+            "round_trip_ms": 9994.568583992077,
+            "clean_ms": 87.65991700000001,
+            "restore_ms": 2.618291,
+            "post_policy_scan_ms": null,
+            "correctness": {
+              "leaked_labeled_utf8_bytes": 0,
+              "uncovered_entities": 0,
+              "restore_failures": 0,
+              "manifest_invalid_documents": 0,
+              "strict_rejections": 0,
+              "residual_suspects": 0,
+              "redact_actions": 0
+            }
+          }
+        ],
+        "stderr_log": "target/bench-data/no-opf/full/logs/repetition-1/pass2-ner.stderr.log",
+        "stderr_bytes": 0
+      }
+    },
+    {
+      "config": "full-stack-kiji-resolve",
+      "failed_closed_population": {
+        "documents": 0,
+        "document_ids": [],
+        "document_ids_digest": {
+          "algorithm": "sha256",
+          "value": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+        },
+        "excluded_documents": [],
+        "reason_counts": {},
+        "stage_counts": {}
+      },
+      "metrics": {
+        "documents": 2910,
+        "zero_leak_document_rate": 0.4061855670103093,
+        "documents_without_leaks": 1182,
+        "documents_with_false_positives": 2509,
+        "utf8_bytes": {
+          "pii": 130282,
+          "predicted": 273379,
+          "true_positive": 105103,
+          "false_positive": 168276,
+          "leaked": 25179,
+          "precision": 0.3844589379579265,
+          "recall": 0.8067346218203589,
+          "leak_rate": 0.19326537817964107,
+          "f1": 0.5207488461852892,
+          "f2": 0.6614353303369259,
+          "false_positive_rate": 0.20304967885098274
+        },
+        "entities": {
+          "gold": 14719,
+          "fully_covered": 10650,
+          "overlapped": 11072,
+          "exact_boundary": 7633,
+          "full_coverage_recall": 0.7235545893063388,
+          "overlap_recall": 0.7522250152863645,
+          "exact_boundary_recall": 0.5185814253685712
+        },
+        "prediction_spans": {
+          "total": 39459,
+          "overlapped_gold": 9948,
+          "overlap_precision": 0.25210978483996044
+        }
+      },
+      "pipeline_contract": {
+        "documents": 2910,
+        "restore_exact_documents": 2282,
+        "restore_exact_rate": 0.784192439862543,
+        "restore_success_decisions": 2905,
+        "restore_success_decision_rate": 0.9982817869415808,
+        "manifest_spans": 37852,
+        "manifest_valid_documents": 2910,
+        "manifest_valid_document_rate": 1.0,
+        "manifest_integrity_errors": {
+          "invalid_clean_bounds": 0,
+          "invalid_raw_bounds": 0,
+          "non_monotonic_raw_spans": 0,
+          "overlapping_clean_spans": 0,
+          "raw_value_mismatches": 0,
+          "token_restore_failures": 0
+        },
+        "initial_safety_net_suspects": 27374,
+        "initial_actionable_suspects": 27198,
+        "initial_class_mismatches": 176,
+        "strict_would_reject_documents": 1860,
+        "strict_acceptance_rate": 0.3608247422680413,
+        "post_policy_scanned_documents": 2910,
+        "post_policy_suspects": 323,
+        "final_protection_trace_items": 39459,
+        "tokenize_actions": 37852,
+        "redact_actions": 1607,
+        "documents_with_redact": 628,
+        "post_policy_zero_suspect_documents": 2683,
+        "post_policy_zero_suspect_rate": 0.9219931271477664
+      },
+      "pipeline_availability": {
+        "attempted_documents": 2910,
+        "completed_documents": 2910,
+        "completion_rate": 1.0,
+        "failed_closed_documents": 0,
+        "errors": {},
+        "error_stages": {}
+      },
+      "latency_ms": {
+        "clean_ms": {
+          "mean": 118.75719118178694,
+          "median": 107.99699999999999,
+          "p95": 201.85690229999997,
+          "p99": 310.0666531899999,
+          "max": 1170.9270000000001
+        },
+        "post_policy_scan_ms": {
+          "mean": 39.152273861855676,
+          "median": 31.527438000000004,
+          "p95": 89.39869215,
+          "p99": 122.11642808999909,
+          "max": 346.914834
+        },
+        "restore_ms": {
+          "mean": 1.6990525048109966,
+          "median": 1.2101255000000002,
+          "p95": 4.334206399999997,
+          "p99": 5.339330029999997,
+          "max": 12.680458999999999
+        }
+      },
+      "warm_latency_ms": {
+        "clean_ms": {
+          "mean": 118.75231269542797,
+          "median": 107.932459,
+          "p95": 201.86040859999997,
+          "p99": 310.07333528000004,
+          "max": 1170.9270000000001
+        },
+        "post_policy_scan_ms": {
+          "mean": 39.15112691234101,
+          "median": 31.526584000000003,
+          "p95": 89.3987588,
+          "p99": 122.17947308000046,
+          "max": 346.914834
+        },
+        "restore_ms": {
+          "mean": 1.6990918549329668,
+          "median": 1.2099170000000001,
+          "p95": 4.3348917999999985,
+          "p99": 5.339543360000001,
+          "max": 12.680458999999999
+        }
+      },
+      "process": {
+        "wall_seconds": 492.85040925000794,
+        "documents_per_second": 8.420542706077104,
+        "start_to_first_response_ms": 25719.811292015947,
+        "cold_start_to_first_validated_response_ms": 25719.811292015947,
+        "warmup_count": 1,
+        "discarded_warmup_samples": [
+          {
+            "sample": 1,
+            "round_trip_ms": 25716.418334021,
+            "clean_ms": 15844.341042,
+            "restore_ms": 1.7129580000000002,
+            "post_policy_scan_ms": 42.442875,
+            "correctness": {
+              "leaked_labeled_utf8_bytes": 0,
+              "uncovered_entities": 0,
+              "restore_failures": 1,
+              "manifest_invalid_documents": 0,
+              "strict_rejections": 1,
+              "residual_suspects": 0,
+              "redact_actions": 1
+            }
+          }
+        ],
+        "stderr_log": "target/bench-data/no-opf/full/logs/repetition-1/full-stack-kiji-resolve.stderr.log",
+        "stderr_bytes": 0
+      }
+    }
+  ],
+  "runner_provenance": {
+    "entry_point": "scripts/bench/run_no_opf_benchmark.py",
+    "profile": "full",
+    "model_bundles": [
+      {
+        "model_id": "davlan-mbert-ner-hrl-onnx",
+        "hf_repo": "onnx-community/bert-base-multilingual-cased-ner-hrl-ONNX",
+        "hf_commit": "cfe67b1c1c4c91c1b26ac192955fc0971e62d8c8",
+        "runtime": "onnxruntime",
+        "digest_kind": "SHA256SUMS",
+        "bundle_sha": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "observed_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16",
+        "verified_artifacts": 7
+      },
+      {
+        "model_id": "kiji-distilbert",
+        "digest_kind": "SHA256SUMS",
+        "expected_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f",
+        "observed_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f",
+        "verified_artifacts": 3
+      }
+    ],
+    "warmup_count": 1,
+    "measured_repetitions": 1,
+    "repetitions": [
+      {
+        "repetition": 1,
+        "runs": [
+          {
+            "config": "rule-floor-extended",
+            "cold_start_to_first_validated_response_ms": 1893.891541985795,
+            "warmup_count": 1,
+            "discarded_warmup_samples": [
+              {
+                "sample": 1,
+                "round_trip_ms": 1885.6267080118414,
+                "clean_ms": 7.770875,
+                "restore_ms": 2.6606249999999996,
+                "post_policy_scan_ms": null,
+                "correctness": {
+                  "leaked_labeled_utf8_bytes": 0,
+                  "uncovered_entities": 0,
+                  "restore_failures": 0,
+                  "manifest_invalid_documents": 0,
+                  "strict_rejections": 0,
+                  "residual_suspects": 0,
+                  "redact_actions": 0
+                }
+              }
+            ],
+            "clean_ms": {
+              "mean": 1.671275787628866,
+              "median": 0.8858955,
+              "p95": 4.074964099999995,
+              "p99": 9.739093219999997,
+              "max": 440.16425
+            }
+          },
+          {
+            "config": "pass2-ner",
+            "cold_start_to_first_validated_response_ms": 9997.586874989793,
+            "warmup_count": 1,
+            "discarded_warmup_samples": [
+              {
+                "sample": 1,
+                "round_trip_ms": 9994.568583992077,
+                "clean_ms": 87.65991700000001,
+                "restore_ms": 2.618291,
+                "post_policy_scan_ms": null,
+                "correctness": {
+                  "leaked_labeled_utf8_bytes": 0,
+                  "uncovered_entities": 0,
+                  "restore_failures": 0,
+                  "manifest_invalid_documents": 0,
+                  "strict_rejections": 0,
+                  "residual_suspects": 0,
+                  "redact_actions": 0
+                }
+              }
+            ],
+            "clean_ms": {
+              "mean": 53.68437874639176,
+              "median": 48.9557705,
+              "p95": 79.450367,
+              "p99": 92.76587515999985,
+              "max": 482.209291
+            }
+          },
+          {
+            "config": "full-stack-kiji-resolve",
+            "cold_start_to_first_validated_response_ms": 25719.811292015947,
+            "warmup_count": 1,
+            "discarded_warmup_samples": [
+              {
+                "sample": 1,
+                "round_trip_ms": 25716.418334021,
+                "clean_ms": 15844.341042,
+                "restore_ms": 1.7129580000000002,
+                "post_policy_scan_ms": 42.442875,
+                "correctness": {
+                  "leaked_labeled_utf8_bytes": 0,
+                  "uncovered_entities": 0,
+                  "restore_failures": 1,
+                  "manifest_invalid_documents": 0,
+                  "strict_rejections": 1,
+                  "residual_suspects": 0,
+                  "redact_actions": 1
+                }
+              }
+            ],
+            "clean_ms": {
+              "mean": 118.75719118178694,
+              "median": 107.99699999999999,
+              "p95": 201.85690229999997,
+              "p99": 310.0666531899999,
+              "max": 1170.9270000000001
+            }
+          }
+        ]
+      }
+    ],
+    "latency_source": "validated response timing.clean_ms",
+    "cold_start_metric": "external process start to first validated response",
+    "validator_recall_probe": {
+      "protocol_schema_version": 1,
+      "manifest": "scripts/bench/validator_recall_probe/Cargo.toml",
+      "validator_recognizers": [
+        {
+          "id": "aadhaar.in",
+          "class": "custom:aadhaar",
+          "validator_kind": "aadhaar_verhoeff"
+        },
+        {
+          "id": "bsn.nl",
+          "class": "custom:bsn",
+          "validator_kind": "bsn_mod11"
+        },
+        {
+          "id": "card.structural",
+          "class": "custom:credit_card",
+          "validator_kind": "luhn"
+        },
+        {
+          "id": "cnpj.br",
+          "class": "custom:cnpj",
+          "validator_kind": "cnpj_mod11"
+        },
+        {
+          "id": "cpf.br",
+          "class": "custom:cpf",
+          "validator_kind": "cpf_mod11"
+        },
+        {
+          "id": "email.global",
+          "class": "email",
+          "validator_kind": "email_rfc"
+        },
+        {
+          "id": "eth.address",
+          "class": "custom:eth_address",
+          "validator_kind": "eth_eip55"
+        },
+        {
+          "id": "iban.structural",
+          "class": "custom:iban",
+          "validator_kind": "iban_mod97"
+        },
+        {
+          "id": "ip.v4",
+          "class": "custom:ip_address",
+          "validator_kind": "ipv4_parse"
+        },
+        {
+          "id": "ip.v6",
+          "class": "custom:ip_address",
+          "validator_kind": "ipv6_parse"
+        },
+        {
+          "id": "nhs.uk",
+          "class": "custom:nhs_number",
+          "validator_kind": "uk_nhs_mod11"
+        },
+        {
+          "id": "nir.fr",
+          "class": "custom:nir",
+          "validator_kind": "fr_nir_mod97"
+        },
+        {
+          "id": "phone.e164.spaced",
+          "class": "custom:phone",
+          "validator_kind": "e164_phone"
+        },
+        {
+          "id": "phone.national.de",
+          "class": "custom:phone",
+          "validator_kind": "e164_phone_national_de"
+        },
+        {
+          "id": "phone.national.us",
+          "class": "custom:phone",
+          "validator_kind": "e164_phone_national_us"
+        },
+        {
+          "id": "phone.structural",
+          "class": "custom:phone",
+          "validator_kind": "e164_phone"
+        },
+        {
+          "id": "steuer_id.de",
+          "class": "custom:steuer_id",
+          "validator_kind": "de_steuer_id_mod1110"
+        }
+      ]
+    }
+  }
+}

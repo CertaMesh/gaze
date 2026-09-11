@@ -41,6 +41,16 @@ SCORECARD_SCHEMA_VERSION = 4
 SHIPPED_DEFAULT_ARM = "full-stack-kiji-resolve"
 
 VERSION_RE = re.compile(r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$")
+HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+
+#: Provenance a released row may not omit. A blank here would be a published
+#: number nobody can reproduce, so every one of these fails closed rather than
+#: rendering `n/a` — the failure mode that shipped `Corpus sha256 | n/a`.
+REQUIRED_PROVENANCE = (
+    ("dataset", "integrity", "sha256"),
+    ("dataset", "evaluated_population", "documents"),
+    ("dataset", "evaluated_population", "entities"),
+)
 
 # Scorecard JSON path -> history field. This table IS the contract between the
 # harness output and every number the document prints; `test_render_benchmark_doc`
@@ -173,6 +183,40 @@ def validate_history(history: Mapping[str, Any]) -> None:
             missing = [field for field in ARM_FIELD_SOURCES if field not in block]
             if missing:
                 raise RenderError(f"{version}/{arm}: missing fields {missing}")
+        # `--check` renders from this file alone, so the provenance guard has to
+        # sit here as well as at extraction or the CI path stays ungated.
+        for path in REQUIRED_PROVENANCE:
+            node: Any = entry
+            for key in path:
+                if not isinstance(node, Mapping) or key not in node:
+                    raise RenderError(
+                        f"{version}: history entry is missing {'.'.join(path)}"
+                    )
+                node = node[key]
+        if not isinstance(
+            (entry.get("provenance") or {}).get("model_bundles"), list
+        ):
+            raise RenderError(f"{version}: history entry is missing provenance.model_bundles")
+
+
+def version_sort_key(version: str) -> tuple[Any, ...]:
+    """Order releases by semver, prerelease before its release.
+
+    Comparing only the numeric core makes `v0.14.0-rc.1` and `v0.14.0` sort
+    equal, and since `releases[-1]` drives the whole Current release section a
+    tie would publish whichever happened to be appended last.
+    """
+    core, _, prerelease = version.lstrip("v").partition("-")
+    numbers = tuple(int(part) for part in core.split("."))
+    if not prerelease:
+        return numbers + (1, ())
+    # Numeric identifiers compare numerically and rank below alphanumeric ones;
+    # the leading 0/1 keeps the two kinds comparable instead of raising.
+    identifiers = tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in prerelease.split(".")
+    )
+    return numbers + (0, identifiers)
 
 
 def write_history(path: Path, history: Mapping[str, Any]) -> None:
@@ -182,6 +226,16 @@ def write_history(path: Path, history: Mapping[str, Any]) -> None:
 # --------------------------------------------------------------------------
 # scorecard -> history entry
 # --------------------------------------------------------------------------
+
+
+def _require_hex64(value: Any, where: str) -> str:
+    if not isinstance(value, str) or not HEX64_RE.match(value):
+        raise RenderError(
+            f"{where} must be a 64-character lowercase hex digest, got {value!r}; "
+            "a released row names the evidence it was measured on, so this is "
+            "refused rather than rendered as n/a"
+        )
+    return value
 
 
 def _dig(node: Any, path: Sequence[str], where: str) -> Any:
@@ -246,6 +300,61 @@ def history_entry_from_scorecard(
         }
 
     integrity = dataset.get("integrity")
+    if not isinstance(integrity, Mapping):
+        raise RenderError("scorecard dataset.integrity must be an object")
+    corpus_sha256 = _require_hex64(
+        integrity.get("sha256"), "scorecard dataset.integrity.sha256"
+    )
+    components = integrity.get("component_sha256", {})
+    if not isinstance(components, Mapping):
+        raise RenderError("scorecard dataset.integrity.component_sha256 must be an object")
+    component_sha256 = {
+        str(name): _require_hex64(
+            digest, f"scorecard dataset.integrity.component_sha256.{name}"
+        )
+        for name, digest in sorted(components.items())
+    }
+
+    population = dataset.get("evaluated_population")
+    if not isinstance(population, Mapping):
+        raise RenderError(
+            "scorecard dataset.evaluated_population must be an object; the "
+            "document has to state the population its numbers describe"
+        )
+    counts: dict[str, int] = {}
+    for key in ("documents", "entities"):
+        value = population.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            raise RenderError(
+                f"scorecard dataset.evaluated_population.{key} must be a "
+                f"non-negative integer, got {value!r}"
+            )
+        counts[key] = value
+
+    bundles = provenance.get("model_bundles")
+    if not isinstance(bundles, list):
+        raise RenderError(
+            "scorecard runner_provenance.model_bundles must be an array (empty "
+            "is fine for a rule-only run); this repo pins model bundles by SHA, "
+            "so a released number names the ones it ran"
+        )
+    model_bundles: list[dict[str, str]] = []
+    for bundle in bundles:
+        if not isinstance(bundle, Mapping):
+            raise RenderError("every runner_provenance.model_bundles entry must be an object")
+        model_id = bundle.get("model_id")
+        if not isinstance(model_id, str) or not model_id:
+            raise RenderError("every model bundle needs a non-empty model_id")
+        model_bundles.append(
+            {
+                "model_id": model_id,
+                "expected_sha256": _require_hex64(
+                    bundle.get("expected_sha256"),
+                    f"model bundle {model_id} expected_sha256",
+                ),
+            }
+        )
+
     return {
         "version": version,
         "commit": gaze["revision"],
@@ -257,8 +366,13 @@ def history_entry_from_scorecard(
         "dataset": {
             "repository": dataset.get("repository"),
             "revision": dataset.get("revision"),
-            "integrity": integrity if isinstance(integrity, Mapping) else {},
+            "integrity": {
+                "sha256": corpus_sha256,
+                "component_sha256": component_sha256,
+            },
+            "evaluated_population": counts,
         },
+        "provenance": {"model_bundles": model_bundles},
         "parameters": {
             "profile": parameters.get("profile"),
             "sampling_seed": parameters.get("sampling_seed"),
@@ -299,10 +413,12 @@ def render_current_release(history: Mapping[str, Any]) -> str:
 
     dataset = entry.get("dataset") or {}
     integrity = dataset.get("integrity") or {}
+    population = dataset.get("evaluated_population") or {}
     parameters = entry.get("parameters") or {}
+    bundles = (entry.get("provenance") or {}).get("model_bundles") or []
     lines.extend(
         [
-            "| Provenance info | Value info |",
+            "| Provenance | Value |",
             "| --- | --- |",
             f"| Release | `{entry['version']}` |",
             f"| Commit | `{entry['commit']}` |",
@@ -313,14 +429,29 @@ def render_current_release(history: Mapping[str, Any]) -> str:
             f"| Scorecard | [`{entry['scorecard']}`]({entry['scorecard']}) |",
             f"| Scorecard sha256 | `{entry['scorecard_sha256']}` |",
             f"| Corpus | `{dataset.get('repository')}` @ `{dataset.get('revision')}` |",
-            f"| Corpus {integrity.get('algorithm', 'sha256')} | "
-            f"`{integrity.get('value', 'n/a')}` |",
+            f"| Corpus sha256 | `{integrity['sha256']}` |",
+        ]
+    )
+    for component, digest in sorted((integrity.get("component_sha256") or {}).items()):
+        lines.append(f"| Corpus component `{component}` | `{digest}` |")
+    lines.extend(
+        [
+            f"| Population | {int(population['documents']):,} documents / "
+            f"{int(population['entities']):,} entities |",
             f"| Profile | `{parameters.get('profile')}` |",
             f"| Seed | `{parameters.get('sampling_seed')}` |",
             f"| NER threshold | `{parameters.get('ner_threshold')}` |",
-            "",
         ]
     )
+    if bundles:
+        for bundle in bundles:
+            lines.append(
+                f"| Model bundle `{bundle['model_id']}` | "
+                f"`{bundle['expected_sha256']}` |"
+            )
+    else:
+        lines.append("| Model bundles | *none — no neural backend in this run* |")
+    lines.append("")
 
     headers = ["Arm info"] + [column[0] for column in ARM_COLUMNS]
     lines.append("| " + " | ".join(headers) + " |")
@@ -533,12 +664,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 note=args.note,
             )
             history["releases"].append(entry)
-            history["releases"].sort(
-                key=lambda item: [
-                    int(part)
-                    for part in item["version"].lstrip("v").split("-")[0].split(".")
-                ]
-            )
+            history["releases"].sort(key=lambda item: version_sort_key(item["version"]))
             validate_history(history)
             write_history(args.history, history)
 

@@ -191,6 +191,15 @@ history). `--machine` is required: the scorecard schema does not capture the
 host, so it is the one hand-carried reproducibility field. A scorecard produced
 from a dirty tree is refused.
 
+Provenance a released row cannot omit — the corpus `sha256` and its per-component
+digests, the evaluated population, and every pinned model bundle — is validated
+on the way in and again when the history file is loaded. A missing one is a hard
+error, never an `n/a` cell: a published number that names no evidence is worse
+than no row at all. The renderer contract tests bind that shape to a real
+harness scorecard committed at `scripts/bench/fixtures/real-scorecard-v4.json`
+(see `fixtures/make_real_scorecard_fixture.py` for its provenance and how to
+re-derive it after a schema change).
+
 `--check` re-renders from the history file and fails if the committed document
 has drifted. It is stdlib-only and needs no corpus, model, or network, so it
 runs on every pull request in `.github/workflows/docs.yml`:

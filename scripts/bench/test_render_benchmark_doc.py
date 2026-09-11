@@ -18,6 +18,10 @@ from pathlib import Path
 
 import render_benchmark_doc as render
 
+#: A real harness scorecard, trimmed to the fields the renderer reads.
+#: See fixtures/make_real_scorecard_fixture.py for provenance and re-derivation.
+REAL_SCORECARD = Path(__file__).resolve().parent / "fixtures" / "real-scorecard-v4.json"
+
 
 def _arm(seed: int) -> dict:
     return {
@@ -59,11 +63,24 @@ def scorecard(revision: str = "a" * 40, dirty: bool = False) -> dict:
         "dataset": {
             "repository": "DataikuNLP/kiji-pii-training-data+gaze",
             "revision": "0275550+a4-negative-v1",
-            "integrity": {"algorithm": "sha256", "value": "f" * 64},
+            # Shape is production's, verified against REAL_SCORECARD below: a
+            # top-level `sha256` plus a per-component map. Hand-inventing this
+            # block is what published the corpus digest as `n/a`.
+            "integrity": {
+                "sha256": "f" * 64,
+                "component_sha256": {"dataiku": "a" * 64, "negative_corpus": "b" * 64},
+            },
+            "evaluated_population": {"documents": 2910, "entities": 14719},
         },
         "parameters": {"profile": "full", "sampling_seed": 20260710, "ner_threshold": 0.3},
         "runs": runs,
-        "runner_provenance": {"entry_point": "scripts/bench/run_no_opf_benchmark.py"},
+        "runner_provenance": {
+            "entry_point": "scripts/bench/run_no_opf_benchmark.py",
+            "model_bundles": [
+                {"model_id": "kiji-distilbert", "expected_sha256": "c" * 64},
+                {"model_id": "davlan-mbert-ner-hrl-onnx", "expected_sha256": "d" * 64},
+            ],
+        },
     }
 
 
@@ -75,6 +92,13 @@ def entry(version: str = "v0.14.0", **kwargs) -> dict:
         scorecard_filename=f"scorecard-{version}.json",
         scorecard_sha256="0" * 64,
     )
+
+
+def history_of(item: dict) -> dict:
+    """Wrap one already-extracted entry in an otherwise empty history."""
+    value = render.empty_history()
+    value["releases"].append(item)
+    return value
 
 
 def history(*versions: str) -> dict:
@@ -221,6 +245,42 @@ class RenderMutationTest(unittest.TestCase):
                     render.apply_blocks(DOC, mutated),
                     f"{field} is not reflected in the rendered document",
                 )
+
+    def test_nested_provenance_fields_move_the_document(self):
+        """The blocks that live under `dataset` / `provenance` in the entry.
+
+        These are the ones that regressed: the corpus digest rendered from keys
+        no scorecard emits, so the cell was constant `n/a` and no assertion on
+        the flat fields above could see it.
+        """
+        baseline = render.apply_blocks(DOC, history())
+        for path, value in (
+            (("dataset", "integrity", "sha256"), "9" * 64),
+            (("dataset", "integrity", "component_sha256", "dataiku"), "9" * 64),
+            (("dataset", "integrity", "component_sha256", "negative_corpus"), "9" * 64),
+            (("dataset", "evaluated_population", "documents"), 4242),
+            (("dataset", "evaluated_population", "entities"), 4242),
+            (("provenance", "model_bundles", 0, "expected_sha256"), "9" * 64),
+            (("provenance", "model_bundles", 1, "model_id"), "some-other-model"),
+        ):
+            with self.subTest(path=".".join(str(part) for part in path)):
+                mutated = copy.deepcopy(history())
+                node = mutated["releases"][-1]
+                for key in path[:-1]:
+                    node = node[key]
+                node[path[-1]] = value
+                self.assertNotEqual(
+                    baseline,
+                    render.apply_blocks(DOC, mutated),
+                    f"{path} is not reflected in the rendered document",
+                )
+
+    def test_no_required_provenance_cell_renders_as_na(self):
+        """`n/a` in the provenance table means a field silently went missing."""
+        rendered = render.render_current_release(history())
+        for line in rendered.splitlines():
+            if line.startswith("|") and "n/a" in line:
+                self.fail(f"provenance table renders a missing field as n/a: {line}")
 
 
 class RowCountTest(unittest.TestCase):
@@ -423,6 +483,245 @@ class CommittedDocumentTest(unittest.TestCase):
 
     def test_committed_document_is_in_sync(self):
         self.assertEqual(render.main(["--check"]), 0)
+
+
+class VersionOrderTest(unittest.TestCase):
+    """`releases[-1]` drives the Current release section, so ties are unsafe."""
+
+    def test_prerelease_sorts_before_its_release(self):
+        ordered = sorted(
+            ["v0.14.0", "v0.14.0-rc.2", "v0.13.0", "v0.14.0-rc.1", "v0.14.1"],
+            key=render.version_sort_key,
+        )
+        self.assertEqual(
+            ordered,
+            ["v0.13.0", "v0.14.0-rc.1", "v0.14.0-rc.2", "v0.14.0", "v0.14.1"],
+        )
+
+    def test_a_release_and_its_prerelease_never_compare_equal(self):
+        self.assertNotEqual(
+            render.version_sort_key("v0.14.0"),
+            render.version_sort_key("v0.14.0-rc.1"),
+        )
+
+    def test_alphanumeric_and_numeric_identifiers_are_comparable(self):
+        ordered = sorted(
+            ["v1.0.0-alpha", "v1.0.0-1", "v1.0.0-alpha.1"],
+            key=render.version_sort_key,
+        )
+        self.assertEqual(ordered, ["v1.0.0-1", "v1.0.0-alpha", "v1.0.0-alpha.1"])
+
+
+class RealScorecardShapeTest(unittest.TestCase):
+    """The hand-written fixture must agree with a real harness scorecard.
+
+    `scorecard()` above is convenient but invented, and an invented shape is
+    exactly how `integrity.algorithm` / `integrity.value` — keys the harness has
+    never emitted — passed 28 green tests while publishing `Corpus sha256|n/a`
+    on every real release row. These tests bind the fixture to real bytes.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.real = json.loads(REAL_SCORECARD.read_text(encoding="utf-8"))
+
+    def test_fixture_file_is_present_and_is_a_v4_scorecard(self):
+        self.assertEqual(self.real["schema_version"], render.SCORECARD_SCHEMA_VERSION)
+
+    def _shape(self, value):
+        """Key structure only; values are irrelevant to a shape comparison."""
+        if isinstance(value, dict):
+            return {key: self._shape(item) for key, item in sorted(value.items())}
+        if isinstance(value, list):
+            return [self._shape(value[0])] if value else []
+        return type(value).__name__
+
+    def test_hand_written_integrity_block_matches_the_real_one(self):
+        self.assertEqual(
+            self._shape(scorecard()["dataset"]["integrity"]),
+            self._shape(self.real["dataset"]["integrity"]),
+            "the hand-written integrity block has drifted from the harness shape",
+        )
+
+    def test_hand_written_provenance_blocks_are_a_subset_of_the_real_ones(self):
+        for block, keys in (
+            (("dataset", "evaluated_population"), None),
+            (("runner_provenance",), ("entry_point", "model_bundles")),
+        ):
+            node_fixture = scorecard()
+            node_real = self.real
+            for key in block:
+                node_fixture = node_fixture[key]
+                node_real = node_real[key]
+            for key in keys or node_fixture:
+                with self.subTest(block=".".join(block), key=key):
+                    self.assertIn(key, node_real)
+
+    def test_real_scorecard_renders_its_corpus_digest_and_components(self):
+        integrity = self.real["dataset"]["integrity"]
+        rendered = render.render_current_release(
+            history_of(
+                render.history_entry_from_scorecard(
+                    self.real,
+                    version="v0.14.0",
+                    machine="Test host, 1 core, 1 GB",
+                    scorecard_filename="scorecard-v0.14.0.json",
+                    scorecard_sha256="0" * 64,
+                )
+            )
+        )
+        self.assertIn(f"| Corpus sha256 | `{integrity['sha256']}` |", rendered)
+        for component, digest in integrity["component_sha256"].items():
+            self.assertIn(f"`{component}`", rendered)
+            self.assertIn(digest, rendered)
+        self.assertNotIn("n/a", rendered)
+
+    def test_real_scorecard_renders_population_and_model_bundles(self):
+        rendered = render.render_current_release(
+            history_of(
+                render.history_entry_from_scorecard(
+                    self.real,
+                    version="v0.14.0",
+                    machine="m",
+                    scorecard_filename="scorecard-v0.14.0.json",
+                    scorecard_sha256="0" * 64,
+                )
+            )
+        )
+        population = self.real["dataset"]["evaluated_population"]
+        self.assertIn(f"{population['documents']:,} documents", rendered)
+        self.assertIn(f"{population['entities']:,} entities", rendered)
+        for bundle in self.real["runner_provenance"]["model_bundles"]:
+            self.assertIn(f"`{bundle['model_id']}`", rendered)
+            self.assertIn(bundle["expected_sha256"], rendered)
+
+    def test_real_scorecard_round_trips_through_the_cli(self):
+        """End to end: append the real scorecard, render, then `--check`."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            scorecard_path = root / "scorecard-v0.14.0.json"
+            scorecard_path.write_text(json.dumps(self.real), encoding="utf-8")
+            history_path = root / "release-history.json"
+            history_path.write_text(
+                json.dumps(render.empty_history()), encoding="utf-8"
+            )
+            doc_path = root / "README.md"
+            doc_path.write_text(DOC, encoding="utf-8")
+            argv = ["--doc", str(doc_path), "--history", str(history_path)]
+            self.assertEqual(
+                render.main(
+                    argv
+                    + [
+                        "--append-history",
+                        "--scorecard",
+                        str(scorecard_path),
+                        "--version",
+                        "v0.14.0",
+                        "--machine",
+                        "Test host, 1 core, 1 GB",
+                    ]
+                ),
+                0,
+            )
+            written = doc_path.read_text(encoding="utf-8")
+            self.assertIn(self.real["dataset"]["integrity"]["sha256"], written)
+            self.assertEqual(render.main(argv + ["--check"]), 0)
+
+
+class RequiredProvenanceGuardTest(unittest.TestCase):
+    """A missing provenance field must fail loudly, never render as `n/a`.
+
+    This is the durable half of the fix: with these guards the *next* schema
+    move turns the suite red instead of publishing a blank cell, so the test
+    fixture's fidelity stops being the only thing standing between a schema
+    change and a released document that claims a digest it does not have.
+    """
+
+    def _reject(self, mutate):
+        broken = scorecard()
+        mutate(broken)
+        with self.assertRaises(render.RenderError):
+            render.history_entry_from_scorecard(
+                broken,
+                version="v0.14.0",
+                machine="m",
+                scorecard_filename="scorecard-v0.14.0.json",
+                scorecard_sha256="0" * 64,
+            )
+
+    def test_missing_integrity_block_is_refused(self):
+        self._reject(lambda card: card["dataset"].pop("integrity"))
+
+    def test_missing_corpus_digest_is_refused(self):
+        self._reject(lambda card: card["dataset"]["integrity"].pop("sha256"))
+
+    def test_non_hex_corpus_digest_is_refused(self):
+        self._reject(
+            lambda card: card["dataset"]["integrity"].update({"sha256": "not-a-digest"})
+        )
+
+    def test_legacy_algorithm_value_shape_is_refused(self):
+        """The shape the renderer used to read is not a valid scorecard."""
+        self._reject(
+            lambda card: card["dataset"].update(
+                {"integrity": {"algorithm": "sha256", "value": "f" * 64}}
+            )
+        )
+
+    def test_missing_evaluated_population_is_refused(self):
+        self._reject(lambda card: card["dataset"].pop("evaluated_population"))
+
+    def test_missing_model_bundles_is_refused(self):
+        self._reject(lambda card: card["runner_provenance"].pop("model_bundles"))
+
+    def test_model_bundle_without_a_digest_is_refused(self):
+        self._reject(
+            lambda card: card["runner_provenance"]["model_bundles"][0].pop(
+                "expected_sha256"
+            )
+        )
+
+    def test_history_file_missing_provenance_is_refused(self):
+        """The `--check` door: CI renders from this file, not the scorecard.
+
+        A guard only at extraction would let a hand-edited history file publish
+        a blank, because `--check` never reads a scorecard.
+        """
+        for path in (
+            ("dataset", "integrity", "sha256"),
+            ("dataset", "evaluated_population", "documents"),
+            ("dataset", "evaluated_population", "entities"),
+            ("provenance", "model_bundles"),
+        ):
+            with self.subTest(path=".".join(path)):
+                broken = copy.deepcopy(history())
+                node = broken["releases"][-1]
+                for key in path[:-1]:
+                    node = node[key]
+                del node[path[-1]]
+                with self.assertRaises(render.RenderError):
+                    render.validate_history(broken)
+
+    def test_a_well_formed_history_still_validates(self):
+        render.validate_history(history("v0.13.0", "v0.14.0"))
+
+    def test_empty_model_bundle_list_is_allowed(self):
+        """A rule-only run pins no model; that is a fact, not a missing field."""
+        card = scorecard()
+        card["runner_provenance"]["model_bundles"] = []
+        rendered = render.render_current_release(
+            history_of(
+                render.history_entry_from_scorecard(
+                    card,
+                    version="v0.14.0",
+                    machine="m",
+                    scorecard_filename="scorecard-v0.14.0.json",
+                    scorecard_sha256="0" * 64,
+                )
+            )
+        )
+        self.assertIn("no neural backend", rendered)
+        self.assertNotIn("n/a", rendered)
 
 
 if __name__ == "__main__":
