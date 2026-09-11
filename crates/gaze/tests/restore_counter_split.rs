@@ -192,6 +192,8 @@ fn strict_session_malformed_nested_and_atomic_failure_contracts_remain() {
         .unwrap();
     for input in [
         "<Email_>".to_string(),
+        "<deadbeef:Email_1 suffix".to_string(),
+        "<deadbeef:Custom:record_1 suffix".to_string(),
         format!("<{token}>"),
         format!("{token} <deadbeef:Email_999>"),
     ] {
