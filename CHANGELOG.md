@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ORT NER backend now fails closed on missing, malformed, or nonfinite model
+  output instead of returning zero detections. A missing output tensor, a
+  tensor whose rank/dimensions are not `[1, seq_len, num_labels]`, a flat
+  buffer whose length does not match those dimensions, and any non-finite
+  (`NaN`/`Inf`) logit each raise a typed `NerRuntimeError::Output`, which the
+  recognizer boundary surfaces as `DetectError::Backend` and the pipeline
+  surfaces as `Error::RecognizerDetect`. Previously the first two cases
+  returned `Ok` with an empty span list and the third was never checked, so a
+  corrupt model output was indistinguishable from a document containing no
+  PII and raw PII was forwarded downstream.
 - Strict restore no longer falsely fails on bare identifier-shaped literals such
   as `Kunde_7`, `ORDER_12345`, or `FOO_12`, or on token-like content produced by
   authorized manifest substitutions. Core pipeline telemetry, Session strict
