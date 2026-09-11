@@ -1,11 +1,11 @@
 //! `restore_strict` operator-tier tool. Like `restore` but rejects partial
-//! restorations — every token in the input string must be in the manifest
-//! or the call fails.
+//! restorations: every unresolved session-prefixed placeholder causes failure.
+//! Ordinary bare identifier shapes are preserved.
 //!
-//! The body takes a `text` argument, scans it with `gaze::token_shape::pattern`,
-//! and delegates restoration to the private `restore_strict_text` helper below.
-//! If any token-shaped span is not owned by the session, the whole call fails
-//! closed with `ToolError::NotFound`; otherwise the response bypasses agent
+//! The body delegates to the core pipeline strict restore path, which uses
+//! manifest substitution provenance and rejects malformed/nested token input.
+//! Any unresolved prefixed span fails closed with `ToolError::NotFound`;
+//! otherwise the response bypasses agent
 //! redaction under the operator-tier contract.
 
 use async_trait::async_trait;

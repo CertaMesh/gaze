@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Missing, malformed, or nonfinite NER model outputs now fail detection instead
   of silently succeeding with empty results.
+- Strict restore no longer falsely fails on bare identifier-shaped literals such
+  as `Kunde_7`, `ORDER_12345`, or `FOO_12`, or on token-like content produced by
+  authorized manifest substitutions. Core pipeline telemetry, Session strict
+  restore, the MCP `restore_strict` tool, and CLI restore share the counter split:
+  unresolved own-prefix and foreign-prefix placeholders still fail; unprefixed
+  and legacy placeholder shapes are now audited rather than blocking. Added
+  serde-defaulted `trap_shape_count` telemetry and nullable
+  `restore_trap_shape_count` audit metadata. Snapshot formats and token grammar
+  are unchanged. Some historical `failed` decisions become `success` on new
+  runs; byte-exact restore and PII detection metrics are independent.
 
 ## [0.13.0] - 2026-09-09
 
