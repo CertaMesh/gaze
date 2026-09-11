@@ -6,12 +6,12 @@ use std::path::Path;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 
-use gaze::{Pipeline, RestorePolicy, RestoreTelemetry, SensitiveSnapshot, Session};
+use gaze::{RestorePolicy, RestoreTelemetry, SensitiveSnapshot, Session};
 
 use crate::error::{CliError, RestoreMode};
 use crate::io::{read_stdin_bytes, require_json_format};
 use crate::restore::manifest::{RestoreRequest, RestoreResponse};
-use crate::restore::session::{restore_pass1, restore_pass2_validate};
+use crate::restore::session::restore_pass2_validate;
 
 pub(crate) fn run_restore(
     format: &str,
@@ -44,14 +44,11 @@ pub(crate) fn run_restore(
             _ => CliError::Pipeline,
         })?;
 
-    let pass1 = restore_pass1(&session, &request.text)?;
+    let assessment = session
+        .assess_restore_text(&request.text)
+        .map_err(|_| CliError::Pipeline)?;
     let restore_telemetry = if telemetry_enabled || audit_db.is_some() {
-        let pipeline = Pipeline::builder()
-            .build()
-            .map_err(|_| CliError::Pipeline)?;
-        let (_, telemetry) = pipeline
-            .restore_with_policy_telemetry(&session, &request.text, restore_policy(restore_mode))
-            .map_err(|_| CliError::Pipeline)?;
+        let telemetry = assessment.telemetry(restore_policy(restore_mode));
         if let Some(path) = audit_db {
             persist_restore_telemetry(path, &session, telemetry.clone())?;
         }
@@ -59,15 +56,10 @@ pub(crate) fn run_restore(
     } else {
         None
     };
-    let restore_warning = restore_pass2_validate(
-        &pass1.text,
-        &pass1.substitution_spans,
-        &session,
-        restore_mode,
-    )?;
+    let restore_warning = restore_pass2_validate(&assessment, restore_mode)?;
 
     let response = RestoreResponse {
-        text: pass1.text,
+        text: assessment.into_restored().text,
         restore_warning,
         restore_telemetry,
     };

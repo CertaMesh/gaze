@@ -66,7 +66,7 @@ pub use sandbox::{
     ExecPolicy, Sandbox, SandboxError, SandboxPlan, UntrustedExecRequest, ValidatedExecRequest,
 };
 pub use session::{
-    CommittedSessionSnapshot, RestoreError, RestoreEvent, RestoreEventKind,
+    CommittedSessionSnapshot, RestoreAssessment, RestoreError, RestoreEvent, RestoreEventKind,
     RestoredTextWithProvenance, Scope, SensitiveSnapshot, Session, SessionSnapshotEntry,
     SessionTransaction, SessionTransactionError,
 };

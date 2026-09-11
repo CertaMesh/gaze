@@ -17,7 +17,11 @@ use sha2::{Digest, Sha256};
 use crate::detector::PiiClass;
 use crate::policy::{Policy, SessionScope};
 use crate::{Error, Result};
-use gaze_types::DocumentExtension;
+use gaze_types::{
+    DocumentExtension, RestoreDecision, RestorePolicy, RestoreTelemetry,
+    RESTORE_PHASE_MANIFEST_BYPASS_SCAN, RESTORE_PHASE_MANIFEST_LOOKUP,
+    RESTORE_PHASE_UNKNOWN_TOKEN_SCAN,
+};
 
 const DEFAULT_PERSISTENT_TTL_SECS: u64 = 86_400;
 const DEFAULT_COUNTER_FAMILY: &str = "counter";
@@ -227,11 +231,42 @@ pub struct RestoredTextWithProvenance {
 
 /// Owner-side restoration and the classification of its remaining token shapes.
 /// No debug or serialization surface: restored values and unknown shapes may be sensitive.
-pub(crate) struct RestoreAssessment {
+#[non_exhaustive]
+pub struct RestoreAssessment {
     pub(crate) restored: RestoredTextWithProvenance,
     pub(crate) unknown_tokens: Vec<String>,
     pub(crate) manifest_bypass_count: u64,
     pub(crate) trap_shape_count: u64,
+}
+
+impl RestoreAssessment {
+    /// Unresolved prefixed shapes in output order, never suitable for audit logging.
+    pub fn unknown_tokens(&self) -> &[String] {
+        &self.unknown_tokens
+    }
+
+    /// Consume the assessment and return owner-side text with substitution provenance.
+    pub fn into_restored(self) -> RestoredTextWithProvenance {
+        self.restored
+    }
+
+    /// Derive metadata-only counters and the existing strict/lenient decision vocabulary.
+    pub fn telemetry(&self, policy: RestorePolicy) -> RestoreTelemetry {
+        let mut telemetry = RestoreTelemetry::new(policy);
+        telemetry.phase_execution_mask = RESTORE_PHASE_MANIFEST_LOOKUP
+            | RESTORE_PHASE_UNKNOWN_TOKEN_SCAN
+            | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
+        telemetry.unknown_token_count = self.unknown_tokens.len() as u64;
+        telemetry.manifest_bypass_count = self.manifest_bypass_count;
+        telemetry.trap_shape_count = self.trap_shape_count;
+        telemetry.restore_decision = match (policy, telemetry.unknown_token_count) {
+            (_, 0) => RestoreDecision::Success,
+            (RestorePolicy::Strict, _) => RestoreDecision::Failed,
+            (RestorePolicy::Lenient, _) => RestoreDecision::Partial,
+            (_, _) => RestoreDecision::Failed,
+        };
+        telemetry
+    }
 }
 
 /// Closed failures produced while committing a staged session transaction.
@@ -555,28 +590,30 @@ impl Session {
         self.state_snapshot().prefix_cache.len()
     }
 
-    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
+    fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
         let captured = self.state_snapshot();
-        if let Some((cache_generation, regex)) = &captured.restore_regex_cache {
-            if *cache_generation == captured.generation {
-                return Ok(Some(Arc::clone(regex)));
-            }
+        if captured
+            .restore_regex_cache
+            .as_ref()
+            .is_some_and(|(generation, _)| *generation == captured.generation)
+        {
+            return Ok(captured);
         }
-
         let Some(regex) = build_restore_regex(&captured)? else {
-            return Ok(None);
+            return Ok(captured);
         };
-
+        let mut next = (*captured).clone();
+        next.restore_regex_cache = Some((next.generation, regex));
+        let next = Arc::new(next);
         let mut boundary = self
             .state
             .write()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if boundary.generation == captured.generation {
-            let mut next = (**boundary).clone();
-            next.restore_regex_cache = Some((next.generation, Arc::clone(&regex)));
-            *boundary = Arc::new(next);
+            *boundary = Arc::clone(&next);
         }
-        Ok(Some(regex))
+        // A concurrent writer must not switch the map beneath this restore.
+        Ok(next)
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -632,7 +669,7 @@ impl Session {
     }
 
     pub fn restore_strict_text(&self, text: &str) -> std::result::Result<String, RestoreError> {
-        restore_classified_strict_text_from_state(&self.state_snapshot(), text)
+        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
             .map(|restored| restored.text)
     }
 
@@ -640,22 +677,27 @@ impl Session {
         &self,
         text: &str,
     ) -> std::result::Result<RestoredTextWithProvenance, RestoreError> {
-        restore_classified_strict_text_from_state(&self.state_snapshot(), text)
+        restore_classified_strict_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
     }
 
     pub fn restore_strict_text_with_events(
         &self,
         text: &str,
     ) -> std::result::Result<(String, Vec<RestoreEvent>), RestoreError> {
-        let state = self.state_snapshot();
+        let state = self.restore_state_snapshot()?;
         let events =
             restore_boundary_events(text, &authorized_structural_values_from_state(&state));
         let restored = restore_classified_strict_text_from_state(&state, text)?.text;
         Ok((restored, events))
     }
 
-    pub(crate) fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
-        assess_restore_text_from_state(&self.state_snapshot(), text)
+    /// Restore known manifest tokens and classify remaining shapes using one immutable view.
+    ///
+    /// Unknown prefixed shapes are reported in the assessment rather than returned as an
+    /// error. Use `restore_strict_text` when malformed input and unresolved tokens must
+    /// return a typed error. Bare/legacy shapes are audit-only in both APIs.
+    pub fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
+        assess_restore_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
     }
 
     pub fn restore_boundary_events(&self, text: &str) -> Vec<RestoreEvent> {
@@ -2834,10 +2876,11 @@ mod tests {
         );
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
-        let regex = session
-            .restore_regex()
-            .expect("restore regex")
-            .expect("non-empty restore regex");
+        let restore_state = session.restore_state_snapshot().expect("restore state");
+        let (_, regex) = restore_state
+            .restore_regex_cache
+            .as_ref()
+            .expect("non-empty regex");
         assert!(regex.is_match(&token));
         let state = session.state_snapshot();
         assert_eq!(state.token_by_value.len(), state.value_by_token.len());
