@@ -1,6 +1,6 @@
 [package]
 name = "gaze-proxy"
-version = "0.13.0"
+version = "0.14.0"
 edition = "2021"
 rust-version = "1.89"
 license.workspace = true
@@ -27,8 +27,8 @@ chrono = { version = "0.4", optional = true, default-features = false, features 
 dirs = { version = "6", optional = true }
 fs2 = { version = "0.4", optional = true }
 futures-util = "0.3"
-gaze = { path = "../gaze", version = "0.13.0", package = "gaze-pii" }
-gaze-assembly = { path = "../gaze-assembly", version = "0.13.0" }
+gaze = { path = "../gaze", version = "0.14.0", package = "gaze-pii" }
+gaze-assembly = { path = "../gaze-assembly", version = "0.14.0" }
 gaze-inspection = { workspace = true }
 gaze-types = { workspace = true }
 getrandom = "0.3"
@@ -51,7 +51,7 @@ uuid = { version = "1", features = ["v4"] }
 zeroize = "1"
 
 [dev-dependencies]
-gaze = { path = "../gaze", version = "0.13.0", package = "gaze-pii", features = ["test-support"] }
-gaze-recognizers = { path = "../gaze-recognizers", version = "0.13.0" }
+gaze = { path = "../gaze", version = "0.14.0", package = "gaze-pii", features = ["test-support"] }
+gaze-recognizers = { path = "../gaze-recognizers", version = "0.14.0" }
 tempfile = "3"
 tower = { version = "0.5", features = ["util"] }

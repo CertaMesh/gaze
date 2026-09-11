@@ -7,31 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-09-11
+
 ### Fixed
 
-- ORT NER backend now fails closed on missing, malformed, or nonfinite model
-  output instead of returning zero detections. A missing output tensor, a
-  tensor whose rank/dimensions are not `[1, seq_len, num_labels]`, a flat
-  buffer whose length does not match those dimensions, and any non-finite
-  (`NaN`/`Inf`) logit each raise a typed `NerRuntimeError::Output`, which the
-  recognizer boundary surfaces as `DetectError::Backend` and the pipeline
-  surfaces as `Error::RecognizerDetect`. Previously the first two cases
-  returned `Ok` with an empty span list and the third was never checked, so a
-  corrupt model output was indistinguishable from a document containing no
-  PII and raw PII was forwarded downstream.
-- Strict restore no longer falsely fails on bare identifier-shaped literals such
-  as `Kunde_7`, `ORDER_12345`, or `FOO_12`, or on token-like content produced by
-  authorized manifest substitutions. Core pipeline telemetry, Session strict
-  restore, the MCP `restore_strict` tool, and CLI restore share the counter split:
-  Strict no longer blocks on bare identifier-shaped literals outside authorized
-  ranges (moved to audit-only `manifest_bypass`); it still blocks on any unmapped
-  canonical placeholder (own-prefix, foreign-prefix, legacy wrapped) and on
-  incomplete prefixed wrappers. Legacy emitted formats remain blocking too.
-  This deliberately narrows the heuristic rejection boundary. Added
-  serde-defaulted `trap_shape_count` telemetry and nullable
-  `restore_trap_shape_count` audit metadata. Snapshot formats and token grammar
-  are unchanged. Some historical `failed` decisions become `success` on new
-  runs; byte-exact restore and PII detection metrics are independent.
+- **The ORT NER backend fails closed on missing, malformed, and nonfinite model
+  output** (#474). A missing output tensor, a tensor whose rank or dimensions are
+  not `[1, seq_len, num_labels]`, a flat buffer whose length does not match those
+  dimensions, and any non-finite (`NaN` or `Inf`) logit each raise a typed
+  `NerRuntimeError::Output`, which the recognizer boundary surfaces as
+  `DetectError::Backend` and the pipeline surfaces as `Error::RecognizerDetect`.
+  The first two cases previously returned `Ok` with an empty span list and the
+  third was never checked, so a corrupt model output was indistinguishable from a
+  document that contains no PII, and raw PII was forwarded downstream with no
+  error and no audit trail. `NaN` was the sharpest case: it loses every comparison
+  in the argmax fold, so a fully corrupt logit row decoded as label `O` at maximum
+  apparent confidence. The backend also validates `shape[2]` against `id2label`
+  instead of trusting it, removing an out-of-bounds slice. Detection is fail-closed
+  again on this path. See
+  [NER fail-closed](docs/explanation/detection/ner-failclosed.md).
+- **Strict restore no longer falsely fails on identifier-shaped literals** (#473).
+  A byte-exact inverse containing `Kunde_7`, `ORDER_12345`, or `FOO_12` previously
+  reported `failed` because one post-restore lexical count was assigned to both
+  `unknown_token_count` and `manifest_bypass_count`. Core pipeline telemetry,
+  Session strict restore, the MCP `restore_strict` tool, and CLI restore now share
+  one provenance-aware classifier: bare identifier-shaped literals outside
+  authorized ranges are audit-only `manifest_bypass`, while every unmapped
+  canonical placeholder (own-prefix, foreign-prefix, legacy wrapped) and every
+  incomplete prefixed wrapper still blocks. Legacy emitted formats remain
+  blocking. The change deliberately narrows the heuristic rejection boundary and
+  keeps the release aligned with the project contract: fail closed, preserve
+  reversibility, keep PII out of agent-visible surfaces. Serde-defaulted
+  `trap_shape_count` telemetry and nullable `restore_trap_shape_count` audit
+  metadata are additive. Snapshot formats and token grammar are unchanged. Some
+  historical `failed` decisions become `success` on new runs; byte-exact restore
+  and PII detection metrics are independent.
+
+### Changed
+
+- **`RecognizerRegistryBuilder` dropped its private always-empty `validators` and
+  `canonicalizers` maps** (#469) and initializes both once in `build()`. The
+  public surface is preserved: `Validator`, `Canonicalizer`, `ValidationResult`,
+  both the root and `gaze::registry` import paths, registry storage, both typed
+  map accessors, and the README contract. An external integration regression
+  implements the public traits and pins the existing empty-map behaviour.
+- **The benchmark scorer and validator-probe calls bounded their subprocess I/O**
+  (#455). Both use bounded, nonblocking JSONL pipes, discard child stderr in
+  memory, and return closed errors after cleaning up the direct child.
+  Malformed, incomplete, oversized, or out-of-order responses abort the cell
+  instead of producing a scorecard. The `diagnostics_dir` argument is still
+  accepted, but new results omit `stderr_log` and `stderr_bytes`; historical
+  scorecards remain readable.
+- **PyArrow moved to 23.0.1 and pytest to 9.0.3** (#466), with a regression that
+  writes a synthetic Parquet file through real PyArrow and drives the existing
+  `dataiku_en_de_gaze_bench.load_documents` integrity path. The new PyArrow lock
+  keeps `manylinux_2_28` wheels and drops `manylinux_2_17`, so prebuilt wheels on
+  glibc-based Linux require glibc 2.28 or newer. Production loader code is
+  unchanged.
+- **`quinn-proto` moved from 0.11.14 to 0.11.16** (#470) as a lock-only update.
+
+### Added
+
+- **Offline evidence contracts and a scored synthetic MCP evaluation** (#454).
+  A strict aggregate receipt validator, a private grouped paired evaluator,
+  fixture-only class commitments, and one scored real rmcp duplex route keep
+  planned inventory, observed counts, missing observations, provenance, and gate
+  results distinct. Missing observations never become measured zero, and
+  incomplete checks cannot produce PASS. The addition is synthetic harness
+  capability only; no production source, detector, rulepack, workflow, or
+  dependency changed.
+- **A synthetic bridge connecting scored MCP observations to paired evaluation**
+  (#456), built on the same Rust scorer, parent-owned occurrence slots, and an
+  in-memory evaluator. The bridge rejects inconsistent identities, missing
+  measurement coverage, and invalid outcome rows; protocol, processing, deadline,
+  or child-cleanup failures abort the cell before success can be returned.
+- **Verified isolated builds for synthetic producer artifacts** (#459). A
+  parent-owned build session creates a verified Git snapshot and empty target,
+  validates Cargo's selected artifact, retains its file descriptor, runs that
+  exact path through the bridge, and re-checks identity and bytes before cleanup
+  can report success.
+
+### Removed
+
+- **`crates/gaze/build.rs` and its Cargo registration** (#467). The pinned
+  `ort-sys` native-link implementation already owns the Darwin clang runtime
+  search path and link library, so the removal retires duplicate native-link
+  ownership rather than an absent transitive dependency.
+- **Two unreachable `not(feature = "ocr-tesseract")` fallback functions in the
+  `gaze-document` MCP module** (#468). The `mcp` feature requires
+  `ocr-tesseract` and the module compiles only for `mcp`, so neither fallback
+  can exist in a supported feature graph.
+
+### Documentation
+
+- AGENTS.md requires signed commits and no longer requires a message prefix (#463).
+- The benchmark index gained rows for `evidence-protocol-v1.md` and
+  `class-commitments-v1.json` (#464).
+- The MCP chokepoint documentation describes carrier preflight and staged
+  protection, and places response snapshot computation before transaction commit
+  and `finish_call`; operator-tier `BypassByOperator` is distinguished from the
+  protected agent path (#465). Runtime code is unchanged.
+- The benchmark README dropped the stale `logs/` artifact row and its
+  stderr-log review step (#472).
+
+### Benchmarks
+
+- Benchmarks: see `docs/reference/benchmarks` (v0.14.0 scorecard).
 
 ## [0.13.0] - 2026-09-09
 
@@ -2060,6 +2141,7 @@ parallel — the CLI protocol is the stable seam.
   darwin binaries; follow-up commit fills them.
 
 [Unreleased]: https://github.com/CertaMesh/gaze/compare/v0.13.0...HEAD
+[0.14.0]: https://github.com/CertaMesh/gaze/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/CertaMesh/gaze/compare/v0.12.0...v0.13.0
 [0.6.4]: https://github.com/EmpireTwo/gaze/compare/v0.6.3...v0.6.4
 [0.6.3]: https://github.com/EmpireTwo/gaze/compare/v0.6.2...v0.6.3
