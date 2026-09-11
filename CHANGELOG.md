@@ -15,8 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   as `Kunde_7`, `ORDER_12345`, or `FOO_12`, or on token-like content produced by
   authorized manifest substitutions. Core pipeline telemetry, Session strict
   restore, the MCP `restore_strict` tool, and CLI restore share the counter split:
-  unresolved own-prefix and foreign-prefix placeholders still fail; unprefixed
-  and legacy placeholder shapes are now audited rather than blocking. Added
+  Strict no longer blocks on bare identifier-shaped literals outside authorized
+  ranges (moved to audit-only `manifest_bypass`); it still blocks on any unmapped
+  canonical placeholder (own-prefix, foreign-prefix, legacy wrapped) and on
+  incomplete prefixed wrappers. Legacy emitted formats remain blocking too.
+  This deliberately narrows the heuristic rejection boundary. Added
   serde-defaulted `trap_shape_count` telemetry and nullable
   `restore_trap_shape_count` audit metadata. Snapshot formats and token grammar
   are unchanged. Some historical `failed` decisions become `success` on new

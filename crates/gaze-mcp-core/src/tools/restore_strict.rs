@@ -1,10 +1,11 @@
 //! `restore_strict` operator-tier tool. Like `restore` but rejects partial
-//! restorations: every unresolved session-prefixed placeholder causes failure.
+//! restorations: every unmapped canonical placeholder causes failure.
 //! Ordinary bare identifier shapes are preserved.
 //!
 //! The body delegates to the core pipeline strict restore path, which uses
 //! manifest substitution provenance and rejects malformed/nested token input.
-//! Any unresolved prefixed span fails closed with `ToolError::NotFound`;
+//! Unmapped canonical placeholders and incomplete prefixed wrappers fail closed
+//! with `ToolError::NotFound`;
 //! otherwise the response bypasses agent
 //! redaction under the operator-tier contract.
 

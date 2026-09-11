@@ -752,12 +752,12 @@ selected with `--audit-db`. The counter split and `trap_shape_count` are Unrelea
 
 | Field | Meaning | Audit column |
 |---|---|---|
-| `unknown_token_count` | Session-prefixed token-shape matches absent from the active map and outside authorized output ranges. This alone drives Strict/Lenient decisions. | `restore_unknown_token_count` |
-| `manifest_bypass_count` | Unprefixed trap matches outside authorized output ranges. Audit-only lexical suspicion, not proof of PII bypass. | `restore_manifest_bypass_count` |
+| `unknown_token_count` | Canonical placeholders absent from the active map, plus incomplete prefixed wrappers, outside authorized output ranges. This alone drives Strict/Lenient decisions. | `restore_unknown_token_count` |
+| `manifest_bypass_count` | Broad bare identifier matches outside authorized output ranges. Audit-only lexical suspicion, not proof of PII bypass. | `restore_manifest_bypass_count` |
 | `trap_shape_count` | All unprefixed trap matches in restored text, including authorized output. Additive JSON field with a serde default of zero. | `restore_trap_shape_count`, nullable for old rows |
 | `fresh_pii_detected_count` | Fresh-PII scan findings. Zero in the token-shape assessment, which does not execute that detector. | `restore_fresh_pii_count` |
 
-`restore_policy` retains `strict` and `lenient`. With no unknown prefixed tokens,
+`restore_policy` retains `strict` and `lenient`. With no unknown canonical placeholders or incomplete prefixed wrappers,
 `restore_decision` is `success`, even when trap/bypass counts are positive.
 Otherwise Strict reports `failed` and Lenient reports `partial`. These spellings
 are unchanged, including the exact observer-facing string `success`. Audit uses

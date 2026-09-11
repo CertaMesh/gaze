@@ -19,7 +19,7 @@ The restore boundary is where pseudonymous content becomes owner-side sensitive 
 The invariant is:
 
 1. A sensitive value may be re-materialized only when the active restore context has a manifest entry that authorizes that exact token-to-value mapping.
-2. Unresolved session-prefixed placeholders fail closed. Session strict APIs also reject malformed and nested token syntax. Bare identifier-like text is an audit signal, never authority to re-materialize a value.
+2. Unmapped canonical placeholders and incomplete prefixed wrappers fail closed. Session strict APIs also reject malformed and nested token syntax. Bare identifier-like text is an audit signal, never authority to re-materialize a value.
 3. Restore-side checks must be deterministic and auditable. A restore decision must be traceable to the active manifest, the structural recognizer that observed unauthorized raw sensitive data, or restore telemetry metadata.
 4. Restore must not silently expand scope. If a later phase wants identity-sensitive policy, it must be explicit, opt-in, and separately approved.
 
@@ -41,16 +41,23 @@ Phase A makes the manifest the only authority for re-materialization.
 Expected behavior:
 
 - Known token in the active manifest: restore to the manifest-authorized value.
-- Unresolved token with a session prefix, including an unissued ordinal under the active prefix: return a typed restore failure.
+- Unmapped canonical placeholder, including own-prefix, foreign-prefix, legacy wrapped, and legacy emitted formats: return a typed restore failure.
+- Incomplete prefixed wrapper: return a typed restore failure.
 - Token known to another session or tenant: return a typed restore failure.
 - Malformed token: return a typed restore failure.
 
-Restore never guesses a mapping. A token-shaped value without an active manifest
-grant is not proof of authorization. Ordinary unprefixed literals such as
-`Kunde_7`, `ORDER_12345`, `run_1`, and legacy `<Email_1>` are preserved and counted
-as audit-only traps; they are not treated as unresolved session placeholders.
-This reverses the previous bare-shape blocking behavior in pipeline, Session,
-and CLI restore.
+Restore never guesses a mapping. Strict no longer blocks on bare identifier-shaped
+literals outside authorized ranges (moved to audit-only `manifest_bypass`); it still
+blocks on any unmapped canonical placeholder (own-prefix, foreign-prefix, legacy
+wrapped) and on incomplete prefixed wrappers. Legacy emitted formats such as
+`location_7`, `custom:class_alpha_1`, and `email1@gaze-fake.invalid` also remain
+blocking. Only broad bare identifiers such as `Kunde_7`, `ORDER_12345`, and `run_1`
+move to audit-only.
+
+This deliberately removes the former bare-identifier rejection boundary in
+pipeline, Session/MCP, and CLI restore. The trade improves exact round-trips and
+ordinary prose handling without granting any new token-to-value mapping. It is
+a narrower heuristic rejection net, not evidence of improved PII detection.
 
 The classifier is owned by `Session::assess_restore_text`. It restores exact
 manifest keys and scans the result using one immutable session view. Matches
@@ -65,9 +72,10 @@ The API failure contracts remain distinct:
   A positive `unknown_token_count` produces `failed` under Strict or `partial`
   under Lenient; zero produces the existing exact spelling `success`.
 - `Session::restore_strict_text`, its provenance/events variants, and the MCP
-  operator `restore_strict` tool return a typed error on unresolved prefixed
-  tokens. Session strict parsing also retains malformed/nested input rejection.
-- CLI strict restore exits 3 for unresolved prefixed tokens. Tolerant restore
+  operator `restore_strict` tool return a typed error on unmapped canonical
+  placeholders and incomplete prefixed wrappers. Session strict parsing also retains malformed/nested input rejection.
+- CLI strict restore exits 3 for unmapped canonical placeholders and incomplete
+  prefixed wrappers. Tolerant restore
   preserves them and returns warnings plus `partial` telemetry when requested.
   CLI uses the same assessment for output, warnings, telemetry, and audit.
 - Transaction token validation and committed-snapshot restore used by the proxy
@@ -92,10 +100,10 @@ Phase B distinguishes:
 Blocking behavior is deferred until telemetry shows an acceptable false-positive
 profile. Structural raw-PII checks remain audit-only and opt-in. The lightweight
 token-shape audit scan in restore telemetry is always run: `manifest_bypass_count`
-counts unprefixed trap shapes outside authorized substitutions. It is a lexical
+counts broad bare identifier shapes outside authorized substitutions. It is a lexical
 suspicion count, not proof that raw PII bypassed the manifest. It never drives
 the Strict decision. `trap_shape_count` counts all unprefixed trap matches,
-including those inside authorized values. A bare literal can therefore produce
+including canonical legacy shapes and those inside authorized values. A bare literal can therefore produce
 `unknown_token_count = 0`, `manifest_bypass_count = 1`, and `success`.
 
 Neither counter claims that a fresh-PII detector executed. The fresh-PII phase bit

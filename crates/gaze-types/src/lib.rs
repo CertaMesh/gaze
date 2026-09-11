@@ -170,9 +170,9 @@ impl RestoreDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct RestoreTelemetry {
-    /// Unresolved session-prefixed shapes outside authorized restore output.
+    /// Unmapped canonical placeholders or incomplete prefixed wrappers outside authorized output.
     pub unknown_token_count: u64,
-    /// Audit-only trap shapes outside authorized restore output.
+    /// Audit-only broad bare identifier shapes outside authorized restore output.
     pub manifest_bypass_count: u64,
     /// All unprefixed trap shapes in restored text, including authorized values.
     #[serde(default)]
