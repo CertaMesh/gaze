@@ -992,12 +992,16 @@ mod tests {
         let logger = SqliteLogger::new(temp_db.path()).unwrap();
         let mut telemetry = RestoreTelemetry::new(RestorePolicy::Lenient);
         telemetry.unknown_token_count = 2;
-        telemetry.manifest_bypass_count = 2;
+        telemetry.manifest_bypass_count = 3;
         telemetry.fresh_pii_detected_count = 0;
         telemetry.restore_decision = RestoreDecision::Partial;
         telemetry.phase_execution_mask = RESTORE_PHASE_MANIFEST_LOOKUP
             | RESTORE_PHASE_UNKNOWN_TOKEN_SCAN
             | RESTORE_PHASE_MANIFEST_BYPASS_SCAN;
+
+        let mut wire = serde_json::to_value(&telemetry).unwrap();
+        wire["trap_shape_count"] = serde_json::json!(4);
+        let telemetry: RestoreTelemetry = serde_json::from_value(wire).unwrap();
 
         logger
             .log(
@@ -1025,10 +1029,19 @@ mod tests {
         )
         .unwrap();
         assert_eq!(rows.len(), 1);
+        let connection = Connection::open(temp_db.path()).unwrap();
+        let traps: Option<i64> = connection
+            .query_row(
+                "SELECT restore_trap_shape_count FROM redaction_log",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(traps, Some(4));
         assert_eq!(rows[0].restore_policy.as_deref(), Some("lenient"));
         assert_eq!(rows[0].restore_decision.as_deref(), Some("partial"));
         assert_eq!(rows[0].restore_unknown_token_count, Some(2));
-        assert_eq!(rows[0].restore_manifest_bypass_count, Some(2));
+        assert_eq!(rows[0].restore_manifest_bypass_count, Some(3));
         assert_eq!(rows[0].restore_fresh_pii_count, Some(0));
         assert_eq!(
             rows[0].restore_phase_mask,

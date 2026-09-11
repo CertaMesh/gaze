@@ -53,7 +53,7 @@ fn filler_segment() -> impl Strategy<Value = Segment> {
     proptest::string::string_regex(r"[\p{L}\p{N}\p{P}\p{Z}\p{M}\x{1F600}-\x{1F64F}]{0,40}")
         .expect("valid filler regex")
         .prop_filter(
-            "filler contains no tracked PII, restore-token delimiters, or token-shaped literals",
+            "filler contains no tracked PII, restore-token delimiters, or prefixed placeholders",
             |text| {
                 !text.contains('@')
                     && !text.contains('<')
@@ -62,11 +62,10 @@ fn filler_segment() -> impl Strategy<Value = Segment> {
                     && !text.contains("+44-7700")
                     && !text.contains("+49 1555")
                     && !text.contains("Dr. Schmidt")
-                    // Random filler can spell a bracketless token shape (e.g. `j_6`),
-                    // which strict restore correctly rejects fail-closed as an
-                    // `UnknownToken`. Exclude anything the product's own token-shape
-                    // DLP net would trap so the round-trip invariant holds.
-                    && !gaze::token_shape::contains_token(text)
+                    // Bare identifiers are ordinary source text. Only prefixed
+                    // placeholders require an active manifest grant.
+                    && !gaze::token_shape::pattern().find_iter(text).any(|matched|
+                        gaze::token_shape::starts_with_session_prefix(matched.as_str()))
             },
         )
         .prop_map(Segment::Filler)
@@ -84,7 +83,8 @@ fn detected_pii_segment() -> impl Strategy<Value = Segment> {
 
 fn document_case() -> impl Strategy<Value = DocumentCase> {
     prop::collection::vec(
-        prop_oneof![5 => filler_segment(), 2 => detected_pii_segment()],
+        prop_oneof![5 => filler_segment(), 2 => detected_pii_segment(),
+            2 => "[A-Za-z][a-z]{1,8}_[0-9]{1,5}".prop_map(Segment::Filler)],
         1..24,
     )
     .prop_map(|segments| {
