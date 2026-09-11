@@ -2,5 +2,90 @@
   "schema_version": 1,
   "comment": "Release-keyed benchmark history. One entry per released version, appended by scripts/bench/render_benchmark_doc.py --append-history from that release's committed scorecard-vX.Y.Z.json.",
   "shipped_default_arm": "full-stack-kiji-resolve",
-  "releases": []
+  "releases": [
+    {
+      "version": "v0.14.0",
+      "commit": "f66a3f2b86691956c596a53273635188971f59e8",
+      "date": "2026-09-11",
+      "scorecard": "scorecard-v0.14.0.json",
+      "scorecard_sha256": "364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81",
+      "machine": "MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71)",
+      "harness_entry": "scripts/bench/run_no_opf_benchmark.py",
+      "dataset": {
+        "repository": "DataikuNLP/kiji-pii-training-data+gaze",
+        "revision": "0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1",
+        "integrity": {
+          "sha256": "11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2",
+          "component_sha256": {
+            "dataiku": "916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d",
+            "negative_corpus": "d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116"
+          }
+        },
+        "evaluated_population": {
+          "documents": 2910,
+          "entities": 14719
+        }
+      },
+      "provenance": {
+        "model_bundles": [
+          {
+            "model_id": "davlan-mbert-ner-hrl-onnx",
+            "expected_sha256": "7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16"
+          },
+          {
+            "model_id": "kiji-distilbert",
+            "expected_sha256": "c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f"
+          }
+        ]
+      },
+      "parameters": {
+        "profile": "full",
+        "sampling_seed": 20260710,
+        "ner_threshold": 0.3
+      },
+      "provisional": false,
+      "note": "",
+      "arms": {
+        "rule-floor-extended": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 93850,
+          "leak_rate": 0.720360448872446,
+          "false_positive_utf8_bytes": 5423,
+          "byte_precision": 0.8704336399474376,
+          "zero_leak_document_rate": 0.35223367697594504,
+          "restore_exact_rate": 1.0,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 3.9749401
+        },
+        "pass2-ner": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 27000,
+          "leak_rate": 0.2072427503415668,
+          "false_positive_utf8_bytes": 28030,
+          "byte_precision": 0.7865389301815523,
+          "zero_leak_document_rate": 0.40446735395189004,
+          "restore_exact_rate": 1.0,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 76.4361974
+        },
+        "full-stack-kiji-resolve": {
+          "gold_pii_utf8_bytes": 130282,
+          "surviving_pii_utf8_bytes": 25179,
+          "leak_rate": 0.19326537817964107,
+          "false_positive_utf8_bytes": 168276,
+          "byte_precision": 0.3844589379579265,
+          "zero_leak_document_rate": 0.4061855670103093,
+          "restore_exact_rate": 0.784192439862543,
+          "manifest_valid_document_rate": 1.0,
+          "availability_completion_rate": 1.0,
+          "failed_closed_documents": 0,
+          "clean_ms_p95": 195.8646645499999
+        }
+      }
+    }
+  ]
 }

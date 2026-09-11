@@ -200,7 +200,33 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: current-release -->
 
-> **No release has been measured yet.** The table and charts below fill in when a release runs the harness and appends its row. Produce one with the commands in [How to reproduce](#how-to-reproduce).
+**v0.14.0** — measured on the released tree.
+
+| Provenance | Value |
+| --- | --- |
+| Release | `v0.14.0` |
+| Commit | `f66a3f2b86691956c596a53273635188971f59e8` |
+| Measured | 2026-09-11 |
+| Machine | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) |
+| Harness | [`scripts/bench/run_no_opf_benchmark.py`](../../../scripts/bench/run_no_opf_benchmark.py) |
+| Scorecard | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) |
+| Scorecard sha256 | `364f6643ffa6e7a5793ee2924ddfe0b834ce0cebe2a4b223fa3689456d686c81` |
+| Corpus | `DataikuNLP/kiji-pii-training-data+gaze` @ `0275550f0b1f1b8f2dc9356fd31ac1c788b8228b+a4-negative-v1` |
+| Corpus sha256 | `11614c80f6d0fe78feb4c592fc9674efac08d73fe5549ad1bed8dd057b7592d2` |
+| Corpus component `dataiku` | `916c63792345bf3c2e0888941b3d14526c43b7c7fe8af60e0d283fed71b1234d` |
+| Corpus component `negative_corpus` | `d9e5807b9f9152932973214e38e1c44a75e9a413f53b5c8954fba0f3f25b1116` |
+| Population | 2,910 documents / 14,719 entities |
+| Profile | `full` |
+| Seed | `20260710` |
+| NER threshold | `0.3` |
+| Model bundle `davlan-mbert-ner-hrl-onnx` | `7b0b9d0d200bf7f3a39654257f8723998316600852edff8404834eb7edfc5c16` |
+| Model bundle `kiji-distilbert` | `c129e135d86698e67c4836456212666f94a56ceaf995acd60532f557b3120d2f` |
+
+| Arm info | Gold PII bytes info | Surviving PII bytes ↓ | Leak rate ↓ | False-positive bytes ↔ | Byte precision ↑ | Zero-leak documents ↑ | Restore exact ↑ | Manifest valid ↑ | Availability ↑ | Failed closed ↓ | clean p95 ms ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `rule-floor-extended` | 130,282 | 93,850 | 72.0360% | 5,423 | 0.870434 | 35.2234% | 100.0000% | 100.0000% | 100.0000% | 0 | 3.97 |
+| `pass2-ner` | 130,282 | 27,000 | 20.7243% | 28,030 | 0.786539 | 40.4467% | 100.0000% | 100.0000% | 100.0000% | 0 | 76.44 |
+| `full-stack-kiji-resolve` **(shipped default)** | 130,282 | 25,179 | 19.3265% | 168,276 | 0.384459 | 40.6186% | 78.4192% | 100.0000% | 100.0000% | 0 | 195.86 |
 
 <!-- END GENERATED: current-release -->
 
@@ -210,7 +236,19 @@ Two consequences worth stating plainly:
 
 <!-- BEGIN GENERATED: charts -->
 
-> Charts render once at least one release row exists in [`release-history.json`](release-history.json).
+**Surviving PII bytes per arm — v0.14.0.** Lower is better; the goal is zero.
+
+```mermaid
+xychart-beta
+    title "Surviving PII bytes per arm - v0.14.0"
+    x-axis ["rule-floor-extended", "pass2-ner", "full-stack-kiji-resolve"]
+    y-axis "Surviving PII bytes (lower is better)" 0 --> 104000
+    bar [93850, 27000, 25179]
+```
+
+**Trend across releases — `full-stack-kiji-resolve`.**
+
+> One measured release so far (1 point). The trend chart renders from two releases onward.
 
 <!-- END GENERATED: charts -->
 
@@ -226,12 +264,40 @@ machine-readable evidence.
 
 | Release | Measured | Commit | Machine | Scorecard | Surviving PII bytes ↓ |
 | --- | --- | --- | --- | --- | ---: |
-| *none yet* | — | — | — | — | — |
+| v0.14.0 | 2026-09-11 | `f66a3f2` | MacBook Pro, Apple M5 Max, 18 cores, 64 GB, macOS 26.5 (25F71) | [`scorecard-v0.14.0.json`](scorecard-v0.14.0.json) | 25,179 |
 
 <!-- END GENERATED: history -->
 
 Rows marked *(provisional)* were not measured on the released tree; their note
 records what was measured instead.
+
+### Per-release notes
+
+**v0.14.0.** Measured on `f66a3f2b`, whose `crates/` tree is identical to the
+release branch head; the tag lands on the release merge commit and differs from
+the measured tree only in docs and version pins.
+
+- **Release readiness failed (harness exit 4).** This is the standing outcome on
+  this corpus, not a new regression: the readiness gate has never passed here.
+  The production cell reports non-zero leaked bytes, documents with leaks,
+  uncovered entities, strict rejections, residual suspects, and final redact
+  actions, each against a goal of zero.
+- **Restore exact is 78.4% by design, not by defect.** The 628 documents that do
+  not restore exactly are exactly the 628 where the SafetyNet took its one-way
+  `redact` fallback instead of `resolve`. Redacted bytes are irreversible by
+  design, so those documents cannot round-trip; `2,910 - 628 = 2,282`
+  reconciles. Every manifest-integrity counter, token restore failures included,
+  is zero, and the restore-success decision rate is 1.0. This is documented
+  fallback behaviour, and it is not the strict-scan false-failure class fixed in
+  #473.
+- **The release-over-release comparison is informal.** No `--compare-baseline`
+  was passed, so `regression-status.json` reports `not_compared`. Read by hand
+  against the last committed full run at `a8f7182` over a byte-identical scored
+  population, production surviving PII bytes fell 21.3% (31,995 to 25,179) and
+  production false-positive bytes rose by 113 (+0.07%). That rise is
+  holdout-side only: the A4 negative corpus did not move at all, in bytes,
+  documents, or any of its eight categories. A gated run would put those 113
+  bytes through the gold-noise ratchet exception above.
 
 ---
 
