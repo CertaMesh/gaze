@@ -331,14 +331,18 @@ fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output(
         "own_mapped",
         "own_unmapped",
         "foreign",
-        "legacy",
+        "legacy_wrapped",
         "fp_mapped",
         "fp_foreign",
         "authorized_trap",
         "authorized_prefixed",
         "fp_own_unmapped",
+        "legacy_lowercase",
+        "legacy_email",
+        "legacy_custom",
+        "legacy_generic_wrapped",
     ];
-    let mut divergences = [0usize; 11];
+    let mut divergences = [0usize; 15];
     let p = pipeline();
     for ordinal in 1..=400 {
         let session = Session::new(Scope::Ephemeral).unwrap();
@@ -375,6 +379,10 @@ fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output(
             trap,
             authorized,
             format!("email{}.{own}@gaze-fake.invalid", ordinal + 1000),
+            format!("location_{ordinal}"),
+            format!("email{ordinal}@gaze-fake.invalid"),
+            format!("custom:class_alpha_{ordinal}"),
+            format!("<literal_{ordinal}>"),
         ];
         for (category, input) in inputs.iter().enumerate() {
             let (restored, telemetry) = p.restore_with_telemetry(&session, input).unwrap();
@@ -385,7 +393,7 @@ fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output(
                 });
             let new_failed = telemetry.restore_decision == RestoreDecision::Failed;
             let expected_old = !matches!(category, 2 | 6);
-            let expected_new = matches!(category, 3 | 4 | 5 | 7 | 10);
+            let expected_new = matches!(category, 3 | 4 | 5 | 7 | 10..=14);
             assert_eq!(old_failed, expected_old, "old {}", labels[category]);
             assert_eq!(new_failed, expected_new, "new {}", labels[category]);
             if old_failed != new_failed {
@@ -395,7 +403,10 @@ fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output(
             }
         }
     }
-    assert_eq!(divergences, [400, 400, 0, 0, 0, 0, 0, 0, 400, 400, 0]);
+    assert_eq!(
+        divergences,
+        [400, 400, 0, 0, 0, 0, 0, 0, 400, 400, 0, 0, 0, 0, 0]
+    );
     for (label, count) in labels.iter().zip(divergences) {
         println!("{label}: cases=400 failed_to_success={count}");
     }
