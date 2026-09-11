@@ -240,7 +240,8 @@ pub struct RestoreAssessment {
 }
 
 impl RestoreAssessment {
-    /// Unresolved prefixed shapes in output order, never suitable for audit logging.
+    /// Unresolved canonical placeholders or incomplete wrappers in output order.
+    /// Never suitable for audit logging.
     pub fn unknown_tokens(&self) -> &[String] {
         &self.unknown_tokens
     }
@@ -354,11 +355,8 @@ pub struct CommittedSessionSnapshot {
 ///    original PII.
 /// 4. Send only the cleaned text to the LLM.
 /// 5. After the LLM responds, call [`Session::import`] with `SensitiveSnapshot::from(bytes)`.
-/// 6. For each token in the LLM response, call [`Session::restore_strict`] (or
-///    [`Session::restore`]).
-///
-/// There is no `Pipeline::restore_text` method - full-text restore is performed by scanning tokens
-/// with [`crate::token_shape::pattern`] and calling `restore_strict` per token.
+/// 6. Call [`Session::restore_strict_text`] on the complete LLM response. Keep its
+///    restored output on the owner side.
 ///
 /// Document workflows use the same restore root. Call [`Session::export_with_extension`] only when
 /// writing a `gaze-document` bundle that needs signed integrity hashes and codec provenance; plain
@@ -368,7 +366,7 @@ pub struct CommittedSessionSnapshot {
 ///
 /// ```rust
 /// use gaze::{
-///     token_shape, Action, ClassRule, CleanDocument, DefaultRule, Detection, Detector, PiiClass,
+///     Action, ClassRule, CleanDocument, DefaultRule, Detection, Detector, PiiClass,
 ///     Pipeline, RawDocument, Scope, SensitiveSnapshot, Session,
 /// };
 ///
@@ -405,15 +403,8 @@ pub struct CommittedSessionSnapshot {
 ///
 /// // Restore on the owner side after the LLM responds.
 /// let restored_session = Session::import(SensitiveSnapshot::from(blob))?;
-/// let mut restored = String::new();
-/// let mut last = 0;
-/// for m in token_shape::pattern().find_iter(&clean) {
-///     restored.push_str(&clean[last..m.start()]);
-///     restored.push_str(&restored_session.restore_strict(m.as_str())?);
-///     last = m.end();
-/// }
-/// restored.push_str(&clean[last..]);
-/// assert_eq!(restored, "alice@example.invalid"); // fixture-cited(crates/gaze/src/session.rs:session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter)
+/// let restored = restored_session.restore_strict_text(&format!("Kunde_7 {clean}"))?;
+/// assert_eq!(restored, "Kunde_7 alice@example.invalid"); // fixture-cited(crates/gaze/src/session.rs:session::tests::snapshot_round_trip_two_families_same_class_raw_preserved_under_shared_counter)
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 ///
@@ -693,9 +684,9 @@ impl Session {
 
     /// Restore known manifest tokens and classify remaining shapes using one immutable view.
     ///
-    /// Unknown prefixed shapes are reported in the assessment rather than returned as an
+    /// Unknown canonical placeholders are reported in the assessment rather than returned as an
     /// error. Use `restore_strict_text` when malformed input and unresolved tokens must
-    /// return a typed error. Bare/legacy shapes are audit-only in both APIs.
+    /// return a typed error. Only broad bare identifiers are audit-only in both APIs.
     pub fn assess_restore_text(&self, text: &str) -> Result<RestoreAssessment> {
         assess_restore_text_from_state(self.restore_state_snapshot()?.as_ref(), text)
     }
@@ -1313,27 +1304,41 @@ fn classify_restore_output(
     let mut manifest_bypass_count = 0;
     let mut trap_shape_count = 0;
     let mut cursor = 0;
-    for matched in crate::token_shape::pattern().find_iter(&restored.text) {
-        let trap = crate::token_shape::is_trap(matched.as_str());
-        trap_shape_count += u64::from(trap);
+    let mut matches = crate::token_shape::pattern()
+        .find_iter(&restored.text)
+        .map(|matched| {
+            trap_shape_count += u64::from(crate::token_shape::is_trap(matched.as_str()));
+            matched.range()
+        })
+        .chain(incomplete_prefixed_wrappers(&restored.text))
+        .collect::<Vec<_>>();
+    // A wrapper and its inner lexical match represent one unresolved placeholder.
+    matches.sort_unstable_by_key(|range| (range.start, std::cmp::Reverse(range.end)));
+    let mut previous_end = 0;
+    for matched in matches {
+        if matched.start < previous_end {
+            continue;
+        }
+        previous_end = matched.end;
+        let matched_text = &restored.text[matched.clone()];
         while restored
             .authorized_output_ranges
             .get(cursor)
-            .is_some_and(|range| range.end <= matched.start())
+            .is_some_and(|range| range.end <= matched.start)
         {
             cursor += 1;
         }
         if restored
             .authorized_output_ranges
             .get(cursor)
-            .is_some_and(|range| range.start <= matched.start() && matched.end() <= range.end)
+            .is_some_and(|range| range.start <= matched.start && matched.end <= range.end)
         {
             continue;
         }
-        if crate::token_shape::is_bare_identifier(matched.as_str()) {
+        if crate::token_shape::is_bare_identifier(matched_text) {
             manifest_bypass_count += 1;
-        } else if !state.value_by_token.contains_key(matched.as_str()) {
-            unknown_tokens.push(matched.as_str().to_owned());
+        } else if !state.value_by_token.contains_key(matched_text) {
+            unknown_tokens.push(matched_text.to_owned());
         }
     }
     RestoreAssessment {
@@ -1344,25 +1349,25 @@ fn classify_restore_output(
     }
 }
 
+fn incomplete_prefixed_wrappers(text: &str) -> impl Iterator<Item = Range<usize>> + '_ {
+    text.match_indices('<').filter_map(|(start, _)| {
+        let candidate = &text[start..];
+        if !crate::token_shape::starts_with_session_prefix(candidate) {
+            return None;
+        }
+        let end = candidate[1..]
+            .find(|ch: char| ch == '<' || ch == '>' || ch.is_whitespace())
+            .map_or(candidate.len(), |offset| offset + 1);
+        (candidate.as_bytes().get(end) != Some(&b'>')).then_some(start..start + end)
+    })
+}
+
 fn restore_classified_strict_text_from_state(
     state: &SessionState,
     text: &str,
 ) -> Result<RestoredTextWithProvenance> {
     // Keep malformed/nested input rejection before any owner-side substitution.
     strict_restore_tokens(text)?;
-    for (start, _) in text.match_indices('<') {
-        let candidate = &text[start..];
-        if !crate::token_shape::starts_with_session_prefix(candidate) {
-            continue;
-        }
-        // An incomplete wrapper can otherwise be seen as only a bare inner trap.
-        let end = candidate[1..]
-            .find(|ch: char| ch == '<' || ch == '>' || ch.is_whitespace())
-            .map_or(candidate.len(), |offset| offset + 1);
-        if candidate.as_bytes().get(end) != Some(&b'>') {
-            return Err(unknown_token_error(&candidate[..end]));
-        }
-    }
     let assessment = assess_restore_text_from_state(state, text)?;
     if let Some(unknown) = assessment.unknown_tokens.first() {
         return Err(unknown_token_error(unknown));
