@@ -32,6 +32,7 @@ const CHILD_PURGED: u8 = 0x90;
 const CHILD_STOPPED: u8 = 0x92;
 const CONTROL_SOCKET_ENV: &str = "GAZE_DASHBOARD_CONTROL_SOCKET_V1";
 const INSPECTION_SOCKET_ENV: &str = "GAZE_DASHBOARD_INSPECTION_SOCKET_V1";
+const PURGE_REQUEST_SOCKET_ENV: &str = "GAZE_DASHBOARD_PURGE_REQUEST_SOCKET_V1";
 
 /// Intentional secure launch-secret delivery boundary.
 pub trait PairingDelivery: Send + 'static {
@@ -53,6 +54,7 @@ where
 pub struct SpawnedDashboardChild {
     child: Option<Child>,
     control: UnixStream,
+    purge_request: UnixStream,
     inspection: Option<UnixStream>,
     paired_authority: Option<SocketAddrV4>,
     socket_dir: Option<PathBuf>,
@@ -73,6 +75,7 @@ impl SpawnedDashboardChild {
         let socket_dir = create_socket_dir()?;
         let control_path = socket_dir.join("control.sock");
         let inspection_path = socket_dir.join("inspection.sock");
+        let purge_request_path = socket_dir.join("purge_request.sock");
         let control_listener = match UnixListener::bind(&control_path) {
             Ok(listener) => listener,
             Err(_) => {
@@ -91,8 +94,18 @@ impl SpawnedDashboardChild {
                 ));
             }
         };
+        let purge_request_listener = match UnixListener::bind(&purge_request_path) {
+            Ok(listener) => listener,
+            Err(_) => {
+                cleanup_socket_dir(&socket_dir);
+                return Err(DashboardError::new(
+                    DashboardErrorCode::InvalidInheritedHandle,
+                ));
+            }
+        };
         if control_listener.set_nonblocking(true).is_err()
             || inspection_listener.set_nonblocking(true).is_err()
+            || purge_request_listener.set_nonblocking(true).is_err()
         {
             cleanup_socket_dir(&socket_dir);
             return Err(DashboardError::new(
@@ -101,6 +114,7 @@ impl SpawnedDashboardChild {
         }
         command.env(CONTROL_SOCKET_ENV, &control_path);
         command.env(INSPECTION_SOCKET_ENV, &inspection_path);
+        command.env(PURGE_REQUEST_SOCKET_ENV, &purge_request_path);
         let mut child = match command.spawn() {
             Ok(child) => child,
             Err(_) => {
@@ -114,9 +128,11 @@ impl SpawnedDashboardChild {
         let accepted = (|| {
             let control = accept_owned_channel(&control_listener, &mut child, expected_pid)?;
             let inspection = accept_owned_channel(&inspection_listener, &mut child, expected_pid)?;
-            Ok::<_, DashboardError>((control, inspection))
+            let purge_request =
+                accept_owned_channel(&purge_request_listener, &mut child, expected_pid)?;
+            Ok::<_, DashboardError>((control, inspection, purge_request))
         })();
-        let (control, inspection) = match accepted {
+        let (control, inspection, purge_request) = match accepted {
             Ok(channels) => channels,
             Err(error) => {
                 let _ = child.kill();
@@ -131,9 +147,16 @@ impl SpawnedDashboardChild {
         control
             .set_write_timeout(Some(Duration::from_secs(2)))
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        purge_request
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        purge_request
+            .set_write_timeout(Some(Duration::from_secs(2)))
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         Ok(Self {
             child: Some(child),
             control,
+            purge_request,
             inspection: Some(inspection),
             paired_authority: None,
             socket_dir: Some(socket_dir),
@@ -154,11 +177,13 @@ impl SpawnedDashboardChild {
     }
 
     pub(crate) fn take_browser_purge_request(&mut self) -> bool {
-        let _ = self.control.set_nonblocking(true);
+        let _ = self.purge_request.set_nonblocking(true);
         let mut byte = [0_u8; 1];
-        let result =
-            matches!(self.control.read(&mut byte), Ok(1) if byte[0] == CHILD_PURGE_REQUEST);
-        let _ = self.control.set_nonblocking(false);
+        let result = matches!(
+            self.purge_request.read(&mut byte),
+            Ok(1) if byte[0] == CHILD_PURGE_REQUEST
+        );
+        let _ = self.purge_request.set_nonblocking(false);
         result
     }
 
@@ -248,6 +273,7 @@ impl Drop for SpawnedDashboardChild {
 fn cleanup_socket_dir(socket_dir: &std::path::Path) {
     let _ = std::fs::remove_file(socket_dir.join("control.sock"));
     let _ = std::fs::remove_file(socket_dir.join("inspection.sock"));
+    let _ = std::fs::remove_file(socket_dir.join("purge_request.sock"));
     let _ = std::fs::remove_dir(socket_dir);
 }
 
