@@ -175,7 +175,7 @@ async fn noop_args_dispatch_succeeds_when_sibling_advances_generation() {
 
     assert!(
         result.is_ok(),
-        "no-op args dispatch must not fail on a concurrent generation advance: {result:?}"
+        "no-op args dispatch must not fail on a concurrent generation advance"
     );
     assert_eq!(
         *store.events.lock().unwrap(),
@@ -239,7 +239,7 @@ async fn real_args_dispatch_still_fails_closed_when_sibling_advances_generation(
 
     assert!(
         matches!(result, Err(DispatchError::Transaction(_))),
-        "real args mutation must fail closed on a concurrent generation advance: {result:?}"
+        "real args mutation must fail closed on a concurrent generation advance"
     );
     assert_eq!(
         *store.events.lock().unwrap(),
