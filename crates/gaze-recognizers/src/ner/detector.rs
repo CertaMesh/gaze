@@ -190,7 +190,7 @@ fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> 
     let mut merged: Vec<NerSpanResult> = Vec::new();
     for span in spans {
         if let Some(last) = merged.last_mut() {
-            if last.class == span.class && last.span.end >= span.span.start {
+            if last.class == span.class && last.span.end > span.span.start {
                 last.span.end = last.span.end.max(span.span.end);
                 last.score = last.score.max(span.score);
                 continue;
@@ -199,4 +199,63 @@ fn merge_overlapping_spans(mut spans: Vec<NerSpanResult>) -> Vec<NerSpanResult> 
         merged.push(span);
     }
     merged
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{merge_overlapping_spans, NerSpanResult};
+    use gaze_types::PiiClass;
+
+    /// Regression: touching half-open same-class ranges (`[0..3)` and `[3..7)`
+    /// share zero bytes) must remain separate so the downstream pipeline mints
+    /// one pseudonym per entity. Introduced by the fail-closed chunking change
+    /// in ca90f53, which used `>=` and collapsed byte-adjacent same-class PII.
+    #[test]
+    fn touching_same_class_spans_remain_separate() {
+        let spans = vec![
+            NerSpanResult {
+                span: 0..3,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+            NerSpanResult {
+                span: 3..7,
+                class: PiiClass::Name,
+                score: 0.8,
+            },
+        ];
+        let merged = merge_overlapping_spans(spans);
+        assert_eq!(
+            merged.len(),
+            2,
+            "touching same-class spans must not merge: {merged:?}"
+        );
+        assert_eq!(merged[0].span, 0..3);
+        assert_eq!(merged[1].span, 3..7);
+        assert_eq!(merged[0].score, 0.9);
+        assert_eq!(merged[1].score, 0.8);
+    }
+
+    #[test]
+    fn strictly_overlapping_same_class_spans_still_merge() {
+        let spans = vec![
+            NerSpanResult {
+                span: 10..20,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+            NerSpanResult {
+                span: 15..25,
+                class: PiiClass::Name,
+                score: 0.7,
+            },
+        ];
+        let merged = merge_overlapping_spans(spans);
+        assert_eq!(
+            merged.len(),
+            1,
+            "strictly overlapping same-class spans must merge: {merged:?}"
+        );
+        assert_eq!(merged[0].span, 10..25);
+    }
 }
