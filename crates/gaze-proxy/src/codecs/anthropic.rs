@@ -357,6 +357,7 @@ fn validate_adjacent_response_text(
                 .map(|range| base + range.start..base + range.end),
         );
     }
+    guard_mutable_text_response(&logical)?;
     ctx.validate(&logical, &authorized)
 }
 
@@ -4428,6 +4429,8 @@ fn restore_sse_frames(
             CodecPhase::SseLifecycle,
         ));
     }
+    guard_mutable_text_response(&concatenated_text)
+        .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
     ctx.validate(&concatenated_text, &concatenated_authorized)
         .map_err(|code| codec_error(code, CodecPhase::SseLifecycle))?;
     let mut output = Vec::new();
