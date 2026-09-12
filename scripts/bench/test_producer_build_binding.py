@@ -157,12 +157,20 @@ class CargoSelectionTests(unittest.TestCase):
 class SnapshotTests(unittest.TestCase):
     def test_exact_git_files_and_ancestor_directories(self):
         files = {'a/Cargo.toml': b'[package]\nname="fixture"\n', 'Cargo.lock': b'version = 4\n'}
+        self.assert_snapshot(files)
+
+    def test_tar_end_markers_before_record_padding(self):
+        # Header plus payload is 9,728 bytes. End markers need another record.
+        self.assert_snapshot({'Cargo.lock': b'#'+b'x'*8704})
+
+    def assert_snapshot(self, files):
         rows = []
         stream = io.BytesIO()
         with tarfile.open(fileobj=stream, mode='w') as tar:
-            directory = tarfile.TarInfo('a')
-            directory.type = tarfile.DIRTYPE
-            tar.addfile(directory)
+            if any(name.startswith('a/') for name in files):
+                directory = tarfile.TarInfo('a')
+                directory.type = tarfile.DIRTYPE
+                tar.addfile(directory)
             for name, content in files.items():
                 oid = binding.hashlib.sha1(f'blob {len(content)}\0'.encode()+content).hexdigest()
                 rows.append(f'100644 blob {oid} {len(content)}\t{name}'.encode())
