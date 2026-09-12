@@ -404,6 +404,7 @@ struct JsonlRow {
     restore_manifest_bypass_count: Option<i64>,
     restore_fresh_pii_count: Option<i64>,
     restore_phase_mask: Option<i64>,
+    restore_trap_shape_count: Option<i64>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -447,6 +448,7 @@ impl TryFrom<AuditLogRow> for JsonlRow {
             restore_manifest_bypass_count: row.restore_manifest_bypass_count,
             restore_fresh_pii_count: row.restore_fresh_pii_count,
             restore_phase_mask: row.restore_phase_mask,
+            restore_trap_shape_count: row.restore_trap_shape_count,
         })
     }
 }
