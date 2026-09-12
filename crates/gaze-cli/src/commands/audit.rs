@@ -398,6 +398,12 @@ struct JsonlRow {
     provenance_native_class: Option<String>,
     provenance_confidence: Option<f64>,
     provenance_merged_from: Option<String>,
+    restore_policy: Option<String>,
+    restore_decision: Option<String>,
+    restore_unknown_token_count: Option<i64>,
+    restore_manifest_bypass_count: Option<i64>,
+    restore_fresh_pii_count: Option<i64>,
+    restore_phase_mask: Option<i64>,
 }
 
 impl TryFrom<AuditLogRow> for JsonlRow {
@@ -435,6 +441,12 @@ impl TryFrom<AuditLogRow> for JsonlRow {
             provenance_native_class: row.provenance_native_class,
             provenance_confidence: row.provenance_confidence,
             provenance_merged_from: row.provenance_merged_from,
+            restore_policy: row.restore_policy,
+            restore_decision: row.restore_decision,
+            restore_unknown_token_count: row.restore_unknown_token_count,
+            restore_manifest_bypass_count: row.restore_manifest_bypass_count,
+            restore_fresh_pii_count: row.restore_fresh_pii_count,
+            restore_phase_mask: row.restore_phase_mask,
         })
     }
 }
