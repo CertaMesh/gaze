@@ -277,41 +277,52 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
     create_parent(&options.paths.log_file)?;
     let lock = lock_pidfile(&options.paths)?;
 
-    let stdout = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&options.paths.log_file)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: options.paths.log_file.clone(),
-            source,
-        })?;
-    let stderr = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&options.paths.stderr_file)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: options.paths.stderr_file.clone(),
-            source,
-        })?;
-    let mut command =
-        Command::new(
-            std::env::current_exe().map_err(|source| ProxyError::DaemonIo {
-                path: PathBuf::from("current_exe"),
+    let mut child = {
+        let spawn_result = (|| {
+            let stdout = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&options.paths.log_file)
+                .map_err(|source| ProxyError::DaemonIo {
+                    path: options.paths.log_file.clone(),
+                    source,
+                })?;
+            let stderr = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&options.paths.stderr_file)
+                .map_err(|source| ProxyError::DaemonIo {
+                    path: options.paths.stderr_file.clone(),
+                    source,
+                })?;
+            let mut command =
+                Command::new(
+                    std::env::current_exe().map_err(|source| ProxyError::DaemonIo {
+                        path: PathBuf::from("current_exe"),
+                        source,
+                    })?,
+                );
+            command
+                .args(["proxy", "serve", "--_foreground-daemon"])
+                .args(serve_args(&options.config))
+                .args(&options.extra_args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::from(stdout))
+                .stderr(Stdio::from(stderr));
+            drop(lock);
+            command.spawn().map_err(|source| ProxyError::DaemonIo {
+                path: PathBuf::from("gaze proxy serve"),
                 source,
-            })?,
-        );
-    command
-        .args(["proxy", "serve", "--_foreground-daemon"])
-        .args(serve_args(&options.config))
-        .args(options.extra_args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-    drop(lock);
-    let mut child = command.spawn().map_err(|source| ProxyError::DaemonIo {
-        path: PathBuf::from("gaze proxy serve"),
-        source,
-    })?;
+            })
+        })();
+        match spawn_result {
+            Ok(child) => child,
+            Err(e) => {
+                let _ = fs::remove_file(&options.paths.pidfile);
+                return Err(e);
+            }
+        }
+    };
     confirm_started(&mut child, &options.paths)
 }
 
@@ -411,15 +422,20 @@ pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
 }
 
 pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
-    if let Some(status) = status(paths)? {
-        if !status.running {
+    match status(paths) {
+        Ok(Some(status)) if !status.running => {
             fs::remove_file(&paths.pidfile).map_err(|source| ProxyError::DaemonIo {
                 path: paths.pidfile.clone(),
                 source,
-            })?;
+            })
         }
+        Ok(_) => Ok(()),
+        Err(ProxyError::DaemonPidfileStale { .. }) => {
+            let _ = fs::remove_file(&paths.pidfile);
+            Ok(())
+        }
+        Err(e) => Err(e),
     }
-    Ok(())
 }
 
 pub fn logs(paths: &DaemonPaths, follow: bool) -> Result<(), ProxyError> {
@@ -605,6 +621,44 @@ mod tests {
         .unwrap();
         cleanup_stale(&paths).unwrap();
         assert!(!paths.pidfile.exists());
+    }
+
+    #[test]
+    fn cleanup_stale_unlinks_empty_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        std::fs::write(&paths.pidfile, "").unwrap();
+
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.pidfile.exists());
+        assert!(status(&paths).unwrap().is_none());
+    }
+
+    #[test]
+    fn cleanup_stale_leaves_running_pidfile_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        init_foreground_daemon(&paths, "127.0.0.1:8787".parse().unwrap()).unwrap();
+
+        cleanup_stale(&paths).unwrap();
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink a live daemon pidfile"
+        );
+    }
+
+    #[test]
+    fn cleanup_stale_propagates_non_stale_io_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        std::fs::create_dir(&paths.pidfile).unwrap();
+
+        let err = cleanup_stale(&paths).unwrap_err();
+        assert!(matches!(err, ProxyError::DaemonIo { .. }));
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink for non-stale errors"
+        );
     }
 
     // solo todo #2965: every field the adopter can configure has to reach the
