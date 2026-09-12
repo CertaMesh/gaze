@@ -93,6 +93,7 @@ struct UpstreamState {
     rate_limited: bool,
     invalid_stream: bool,
     delayed_stream: bool,
+    split_carrier: bool,
     provider_text: Option<String>,
 }
 
@@ -201,6 +202,43 @@ async fn capture_anthropic_request(
         body,
     });
 
+    if state.split_carrier {
+        let protected = state.provider_text.as_deref().unwrap_or_else(|| {
+            request_json["messages"][0]["content"]
+                .as_str()
+                .unwrap_or("synthetic")
+        });
+        let suffix = format!("s://evil.example.invalid/{protected}");
+        let escaped_suffix = serde_json::to_string(&suffix).unwrap();
+        if request_json["stream"].as_bool().unwrap_or(false) {
+            let frames = [
+                "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_1\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-test\",\"content\":[],\"stop_reason\":null,\"stop_sequence\":null,\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\n",
+                "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"http\"}}\n\n",
+                "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+                "event: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\n",
+                &format!("event: content_block_delta\ndata: {{\"type\":\"content_block_delta\",\"index\":1,\"delta\":{{\"type\":\"text_delta\",\"text\":{escaped_suffix}}}}}\n\n"),
+                "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1}\n\n",
+                "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"usage\":{\"output_tokens\":1}}\n\n",
+                "event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+            ]
+            .concat();
+            return axum::response::Response::builder()
+                .status(StatusCode::OK)
+                .header("content-type", "text/event-stream")
+                .body(Body::from(frames))
+                .unwrap();
+        }
+        let body = format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"http"}},{{"type":"text","text":{escaped_suffix}}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+        );
+        return axum::response::Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "application/json")
+            .body(Body::from(body))
+            .unwrap();
+    }
+
     if state.rate_limited {
         return axum::response::Response::builder()
             .status(StatusCode::TOO_MANY_REQUESTS)
@@ -263,21 +301,26 @@ async fn capture_anthropic_request(
 }
 
 async fn spawn_upstream() -> MockUpstream {
-    spawn_upstream_with_mode(false, false, false, None).await
+    spawn_upstream_with_mode(false, false, false, false, None).await
 }
 
 async fn spawn_upstream_with_rate_limit(rate_limited: bool) -> MockUpstream {
-    spawn_upstream_with_mode(rate_limited, false, false, None).await
+    spawn_upstream_with_mode(rate_limited, false, false, false, None).await
 }
 
 async fn spawn_upstream_with_provider_text(provider_text: &str) -> MockUpstream {
-    spawn_upstream_with_mode(false, false, false, Some(provider_text.to_string())).await
+    spawn_upstream_with_mode(false, false, false, false, Some(provider_text.to_string())).await
+}
+
+async fn spawn_upstream_with_split_carrier() -> MockUpstream {
+    spawn_upstream_with_mode(false, false, false, true, None).await
 }
 
 async fn spawn_upstream_with_mode(
     rate_limited: bool,
     invalid_stream: bool,
     delayed_stream: bool,
+    split_carrier: bool,
     provider_text: Option<String>,
 ) -> MockUpstream {
     let captures = Arc::new(Mutex::new(Vec::new()));
@@ -288,6 +331,7 @@ async fn spawn_upstream_with_mode(
             rate_limited,
             invalid_stream,
             delayed_stream,
+            split_carrier,
             provider_text,
         });
     let backend_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1095,6 +1139,67 @@ async fn split_opaque_carriers_reject_across_complete_request_views_without_side
 }
 
 #[tokio::test]
+async fn production_pipeline_rejects_split_url_carrier_json() {
+    // End-to-end: the client request carries `alice@example.invalid`; the proxy
+    // pseudonymizes it; the mock upstream returns two `text` blocks assembling
+    // `http` + `s://evil.example.invalid/<token>`. After restoration the concatenation
+    // is `https://evil.example.invalid/alice@example.invalid`, which the cross-block
+    // guard rejects. The response must not reach the client and no PII may leak.
+    let upstream = spawn_upstream_with_split_carrier().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": EMAIL}],
+        "stream": false
+    });
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+    let body = response.text().await.unwrap();
+    assert!(!body.contains(EMAIL));
+    assert!(!body.contains("s://evil.example.invalid"));
+    assert_eq!(upstream.captures.lock().await.len(), 1);
+}
+
+#[tokio::test]
+async fn production_pipeline_rejects_split_url_carrier_sse() {
+    // Same split-URL carrier as the JSON case, delivered as two SSE text blocks. The
+    // cross-block guard rejects the reassembled carrier at the end of the stream, so
+    // the proxy replays only the constant safe error frame and the restored PII never
+    // reaches the client.
+    let upstream = spawn_upstream_with_split_carrier().await;
+    let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
+    let request = json!({
+        "model": "claude-test",
+        "max_tokens": 32,
+        "messages": [{"role": "user", "content": EMAIL}],
+        "stream": true
+    });
+    let response = Client::new()
+        .post(format!("{}/v1/messages", proxy.base_url))
+        .header("x-api-key", "sdk-synthetic-key")
+        .header("anthropic-version", "2023-06-01")
+        .json(&request)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.bytes().await.unwrap();
+    assert_eq!(body, ANTHROPIC_PROXY_ERROR_FRAME);
+    assert!(!body
+        .windows(EMAIL.len())
+        .any(|window| window == EMAIL.as_bytes()));
+    assert_eq!(upstream.captures.lock().await.len(), 1);
+}
+
+#[tokio::test]
 async fn joined_opaque_guard_preserves_signed_bytes_without_a_joined_finding() {
     const SIGNED_BLOCK: &[u8] = br#"{"type":"redacted_thinking","data":"opaque-synthetic-data"}"#;
     let upstream = spawn_upstream().await;
@@ -1277,7 +1382,7 @@ async fn closed_errors_and_debug_omit_credentials_pii_and_upstream_text() {
 
 #[tokio::test]
 async fn late_stream_proof_failure_emits_only_the_constant_safe_error_frame() {
-    let upstream = spawn_upstream_with_mode(false, true, false, None).await;
+    let upstream = spawn_upstream_with_mode(false, true, false, false, None).await;
     let proxy = spawn_proxy(AnthropicAdapter::new(upstream.origin.clone())).await;
     let response = sdk_client_request(&Client::new(), &proxy, true)
         .send()
@@ -1291,7 +1396,7 @@ async fn late_stream_proof_failure_emits_only_the_constant_safe_error_frame() {
 
 #[tokio::test]
 async fn delayed_stream_emits_only_the_compiled_ping_before_proved_replay() {
-    let upstream = spawn_upstream_with_mode(false, false, true, None).await;
+    let upstream = spawn_upstream_with_mode(false, false, true, false, None).await;
     let adapter = AnthropicAdapter::builder(upstream.origin.clone())
         .ping_interval(Duration::from_secs(1))
         .unwrap()
@@ -1318,7 +1423,7 @@ async fn delayed_stream_emits_only_the_compiled_ping_before_proved_replay() {
 async fn unmodified_official_python_sdk_runs_non_stream_and_stream_against_loopback() {
     let python = std::env::var_os("GAZE_OFFICIAL_SDK_PYTHON")
         .expect("GAZE_OFFICIAL_SDK_PYTHON must identify the prepared SDK interpreter");
-    let upstream = spawn_upstream_with_mode(false, false, true, None).await;
+    let upstream = spawn_upstream_with_mode(false, false, true, false, None).await;
     let proxy = spawn_proxy(
         AnthropicAdapter::builder(upstream.origin.clone())
             .ping_interval(Duration::from_secs(1))
