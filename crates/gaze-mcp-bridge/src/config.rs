@@ -59,16 +59,25 @@ impl BridgeConfig {
     }
 }
 
+pub(crate) const DEFAULT_MAX_SESSIONS: usize = 1_000;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionCfg {
     pub mode: SessionMode,
     pub dir: Option<PathBuf>,
     pub key_env: Option<String>,
+    #[serde(default = "default_max_sessions")]
+    pub max_sessions: usize,
 }
 
 impl SessionCfg {
     fn validate(&self) -> BridgeResult<()> {
+        if self.max_sessions == 0 {
+            return Err(BridgeError::Config(
+                "session.max_sessions must be greater than 0".to_string(),
+            ));
+        }
         match self.mode {
             SessionMode::File => {
                 let Some(key_env) = self.key_env.as_deref().filter(|value| !value.is_empty())
@@ -153,6 +162,10 @@ impl Default for LimitCfg {
             content_blocks: default_content_blocks(),
         }
     }
+}
+
+fn default_max_sessions() -> usize {
+    DEFAULT_MAX_SESSIONS
 }
 
 fn default_call_timeout_ms() -> u64 {
