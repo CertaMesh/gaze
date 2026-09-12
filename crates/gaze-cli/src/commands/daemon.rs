@@ -342,20 +342,20 @@ impl Daemon {
             .sessions
             .iter()
             .filter(|(_, entry)| now.duration_since(entry.last_seen) >= self.session_idle_timeout)
-            .map(|(session_id, _)| session_id.clone())
+            .map(|(id, _)| id.clone())
             .collect::<Vec<_>>();
-        for session_id in expired {
-            if let Some(entry) = self.sessions.remove(&session_id) {
-                self.lru.retain(|existing| existing != &session_id);
-                self.log_eviction(&session_id, &entry, "idle_timeout");
+        for evicted in expired {
+            if let Some(entry) = self.sessions.remove(&evicted) {
+                self.lru.retain(|existing| existing != &evicted);
+                self.log_eviction(&evicted, &entry, "idle_timeout");
             }
         }
     }
 
-    fn log_eviction(&self, session_id: &str, entry: &SessionEntry, reason: &str) {
-        tracing::warn!(session_id = %session_id, reason = %reason, "gaze daemon evicted session");
+    fn log_eviction(&self, evicted: &str, entry: &SessionEntry, reason: &str) {
+        tracing::warn!(session_id = %evicted, reason = %reason, "gaze daemon evicted session");
         if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
-            let session_id = serde_json::to_string(session_id)
+            let session_id = serde_json::to_string(evicted)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());

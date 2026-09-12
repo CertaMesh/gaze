@@ -1493,6 +1493,19 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
     thread::sleep(Duration::from_millis(500));
 
+    // Confirm the first request's audit row landed before breaking the DB.
+    // This guards against a timing race where the daemon hasn't yet committed
+    // the SQLite write when chattr +i is applied to the directory.
+    let conn = rusqlite::Connection::open(&audit_db).unwrap();
+    let redaction_count: i64 = conn
+        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
+        .unwrap();
+    assert!(
+        redaction_count >= 1,
+        "redaction audit row should be present after the first request"
+    );
+    drop(conn);
+
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
 
