@@ -36,13 +36,17 @@ pub fn sample_token_shapes() -> &'static [&'static str] {
         "<deadbeef:Location_1>",
         "<deadbeef:Organization_1>",
         "<deadbeef:Custom:class_alpha_1>",
+        "<deadbeef:Custom:family:tenant-document_1>",
         "email1.deadbeef@gaze-fake.invalid",
         "deadbeef:email_1",
         "deadbeef:custom:class_alpha_1",
+        "deadbeef:custom:family:tenant-document_1",
         "<Email_1>",
         "<email_1>",
         "<Custom:class_alpha_1>",
+        "<Custom:family:tenant-document_1>",
         "<custom:class_alpha_1>",
+        "custom:family:tenant-document_1",
         "Email_1",
         "email_1",
         "custom:class_alpha_1",
@@ -130,7 +134,7 @@ fn build_pattern() -> String {
         .join("|");
 
     format!(
-        r"<[0-9a-f]{{8}}:(?:{builtin_alt})_[0-9]+>|<[0-9a-f]{{8}}:Custom:[a-z0-9_]*_[0-9]+>|\bemail[0-9]+\.[0-9a-f]{{8}}@gaze-fake\.invalid\b|\b[0-9a-f]{{8}}:(?:{builtin_lower_alt})_[0-9]+\b|\b[0-9a-f]{{8}}:custom:[a-z0-9_]*_[0-9]+\b|<(?:{builtin_alt})_[0-9]+>|<Custom:[a-z0-9_]*_[0-9]+>|\b(?:{builtin_lower_alt})_[0-9]+\b|\bcustom:[a-z0-9_]*_[0-9]+\b|\bemail[0-9]+@example\.test\b|\bemail[0-9]+@gaze-fake\.invalid\b|<[A-Z][a-zA-Z0-9]+_[0-9]+>|<[a-z][a-zA-Z0-9_]*_[0-9]+>|\b[A-Z][a-zA-Z0-9]+_[0-9]+\b|\b[a-z][a-zA-Z0-9_]*_[0-9]+\b",
+        r"<[0-9a-f]{{8}}:(?:{builtin_alt})_[0-9]+>|<[0-9a-f]{{8}}:Custom:family:[a-z0-9_-]+_[0-9]+>|<[0-9a-f]{{8}}:Custom:[a-z0-9_]*_[0-9]+>|\bemail[0-9]+\.[0-9a-f]{{8}}@gaze-fake\.invalid\b|\b[0-9a-f]{{8}}:(?:{builtin_lower_alt})_[0-9]+\b|\b[0-9a-f]{{8}}:custom:family:[a-z0-9_-]+_[0-9]+\b|\b[0-9a-f]{{8}}:custom:[a-z0-9_]*_[0-9]+\b|<(?:{builtin_alt})_[0-9]+>|<Custom:family:[a-z0-9_-]+_[0-9]+>|<Custom:[a-z0-9_]*_[0-9]+>|\b(?:{builtin_lower_alt})_[0-9]+\b|\bcustom:family:[a-z0-9_-]+_[0-9]+\b|\bcustom:[a-z0-9_]*_[0-9]+\b|\bemail[0-9]+@example\.test\b|\bemail[0-9]+@gaze-fake\.invalid\b|<[A-Z][a-zA-Z0-9]+_[0-9]+>|<[a-z][a-zA-Z0-9_]*_[0-9]+>|\b[A-Z][a-zA-Z0-9]+_[0-9]+\b|\b[a-z][a-zA-Z0-9_]*_[0-9]+\b",
         builtin_alt = builtin_alt,
         builtin_lower_alt = builtin_lower_alt,
     )
@@ -177,6 +181,8 @@ mod tests {
             .iter()
             .cloned()
             .chain(std::iter::once(PiiClass::custom("class_alpha")))
+            .chain(std::iter::once(PiiClass::family("tenant-document")))
+            .chain(std::iter::once(PiiClass::family("foo")))
         {
             assert!(contains_token(&tokenized_for(class.clone())));
             assert!(contains_token(&format_preserving_for(class)));
@@ -358,5 +364,38 @@ mod tests {
             restored,
             "See alice@example.invalid. Reply bob@example.invalid"
         );
+    }
+
+    #[test]
+    fn family_token_matches_as_single_full_span() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::family("tenant-document"), "DOC-12345")
+            .expect("family token");
+        assert!(token.contains(":Custom:family:tenant-document_"));
+
+        let haystack = format!("case {token} now");
+        let m = pattern().find(&haystack).expect("family token must match");
+        assert_eq!(m.as_str(), token.as_str());
+    }
+
+    #[test]
+    fn non_hyphenated_family_token_text_restore_roundtrip() {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let token = session
+            .tokenize(&PiiClass::family("foo"), "DOC-12345")
+            .expect("token");
+        let prose = format!("See {token} now");
+        assert_eq!(
+            session.restore_strict_text(&prose).expect("restore"),
+            "See DOC-12345 now"
+        );
+    }
+
+    #[test]
+    fn bare_family_arms_do_not_span_across_colon_separator() {
+        let rendered = "custom:family:foo_1:custom:family:bar_2";
+        let matches: Vec<&str> = find_tokens(rendered).collect();
+        assert_eq!(matches, vec!["custom:family:foo_1", "custom:family:bar_2"]);
     }
 }
