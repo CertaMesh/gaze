@@ -458,10 +458,12 @@ fn clean_with_options(
     let counts = count_pii_by_class(&spans);
     let pii_token_count: u32 = counts.iter().map(|c| c.count).sum();
 
+    let clean_markdown = format_clean_markdown(&clean_text, kind);
+
     let report = BundleReport::new(
         kind_label(kind),
         &extraction.ocr_result,
-        clean_text.chars().count(),
+        clean_markdown.chars().count(),
         pii_token_count,
         counts,
         extraction.pdf_page_count,
@@ -470,7 +472,6 @@ fn clean_with_options(
         options.low_confidence_threshold,
     );
 
-    let clean_markdown = format_clean_markdown(&clean_text, kind);
     write_bundle(&agent_out, &owner_out, &clean_markdown, &manifest, &report)?;
 
     Ok(SafeBundle::new(
@@ -1055,6 +1056,65 @@ mod tests {
             !bundle.clean_markdown.contains("alice@example.invalid"),
             "{}",
             bundle.clean_markdown
+        );
+    }
+
+    #[test]
+    fn clean_char_count_matches_persisted_clean_md_length() {
+        let backend = MockBackend {
+            spans: vec![
+                span("Bill", 20, 10, 0.92),
+                span("to:", 116, 10, 0.92),
+                span("Jane", 20, 36, 0.92),
+                span("Doe", 116, 36, 0.92),
+                span("Email:", 360, 10, 0.92),
+                // fixture-cited(crates/gaze-document/src/bundle/mod.rs:bundle::tests::clean_char_count_matches_persisted_clean_md_length)
+                span("alice@example.invalid", 360, 36, 0.92),
+            ],
+        };
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let input = tmp.path().join("input.png");
+        fs::write(&input, b"\x89PNG\r\n\x1A\nnot-real-image").expect("write input");
+        let (agent_out, owner_out) = bundle_dirs(&tmp);
+        let clean_md_path = agent_out.as_path().join(CLEAN_MARKDOWN_FILE);
+
+        let bundle = Pipeline::new()
+            .clean_with_ocr_backend(&input, agent_out, owner_out, &backend)
+            .expect("clean succeeds");
+
+        let on_disk = fs::read_to_string(&clean_md_path).expect("clean.md readable");
+        assert_eq!(
+            bundle.report.clean_char_count,
+            bundle.clean_markdown.chars().count(),
+            "clean_char_count must match SafeBundle.clean_markdown, got report={} vs markdown={}",
+            bundle.report.clean_char_count,
+            bundle.clean_markdown.chars().count(),
+        );
+        assert_eq!(
+            bundle.report.clean_char_count,
+            on_disk.chars().count(),
+            "clean_char_count must match the on-disk clean.md length, got report={} vs disk={}",
+            bundle.report.clean_char_count,
+            on_disk.chars().count(),
+        );
+        assert!(
+            bundle
+                .clean_markdown
+                .starts_with("# gaze-document safe bundle\n"),
+            "clean_markdown must carry the bundle header: {}",
+            bundle.clean_markdown,
+        );
+        let body = bundle
+            .clean_markdown
+            .strip_prefix("# gaze-document safe bundle\n\nSource kind: `png`\n\n---\n\n")
+            .expect("header prefix present");
+        let bare = body.trim_end_matches('\n').chars().count();
+        assert!(
+            bundle.report.clean_char_count > bare,
+            "clean_char_count ({}) must exceed the bare redacted body length ({}) \
+             because the header + appended trailing newline are part of the persisted artifact",
+            bundle.report.clean_char_count,
+            bare,
         );
     }
 
