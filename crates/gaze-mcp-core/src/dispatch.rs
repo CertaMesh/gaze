@@ -169,6 +169,7 @@ impl<'a> PiiEnvelope<'a> {
         descriptor.argument_carriers().preflight(&raw_args)?;
         let context = gaze::ProtectionContext::strict(self.locale_chain, self.dictionaries);
         let mut args_transaction = self.session.begin_transaction();
+        let pre_commit_token_count = args_transaction.tokens().len();
         let redacted_args = protect_json(self.pipeline, &mut args_transaction, context, &raw_args)?;
 
         // Generate the call id once and reuse it as the manifest handle.
@@ -186,16 +187,20 @@ impl<'a> PiiEnvelope<'a> {
             started_at,
         };
         let handle = self.manifest.begin_call(begin_ctx).await?;
-        if let Err(error) = args_transaction.commit() {
-            self.manifest
-                .fail_call(
-                    handle,
-                    FailureReason::RedactionFailed {
-                        message: "session transaction conflict".into(),
-                    },
-                )
-                .await?;
-            return Err(error.into());
+        if args_transaction.tokens().len() != pre_commit_token_count {
+            if let Err(error) = args_transaction.commit() {
+                self.manifest
+                    .fail_call(
+                        handle,
+                        FailureReason::RedactionFailed {
+                            message: "session transaction conflict".into(),
+                        },
+                    )
+                    .await?;
+                return Err(error.into());
+            }
+        } else {
+            std::mem::drop(args_transaction);
         }
 
         // 6. Build the sealed ToolCtx — pub(crate) constructor; this is the

@@ -373,8 +373,9 @@ def snapshot(repo, revision, destination, deadline):
                 and parts.as_posix() == path and path not in expected)
         expected[path] = (int(mode, 8) & 0o777, oid.decode('ascii'), int(size))
         ancestors.update(str(p) for p in parts.parents if str(p) != '.')
+    # Include end markers before rounding to the next 10 KiB tar record.
     bound = min(64*MIB, sum(((v[2]+511)//512+1)*512 for v in expected.values())
-                + len(ancestors)*512 + 10240)
+                + len(ancestors)*512 + 12288)
     archive = bytearray()
     def collect(chunk):
         require(len(archive)+len(chunk) <= bound, 'output_limit')
