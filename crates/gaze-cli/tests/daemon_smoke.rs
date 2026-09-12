@@ -1461,9 +1461,11 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         .iter()
         .find(|line| line.contains("AuditWriteFailed"))
         .expect("AuditWriteFailed line must be present");
-    let parsed: serde_json::Value = serde_json::from_str(failure_line)
-        .expect("AuditWriteFailed line must be valid JSON");
-    let audit_id = parsed["session_id"].as_str().expect("session_id must be a string");
+    let parsed: serde_json::Value =
+        serde_json::from_str(failure_line).expect("AuditWriteFailed line must be valid JSON");
+    let audit_id = parsed["session_id"]
+        .as_str()
+        .expect("session_id must be a string");
     assert_eq!(audit_id.len(), 36, "session_id must be a UUID: {audit_id}");
     assert_ne!(audit_id, "sess1", "raw caller ID must not appear in stderr");
     assert!(
@@ -1568,10 +1570,16 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
         .iter()
         .find(|line| line.contains("AuditWriteFailed"))
         .expect("AuditWriteFailed line must be present");
-    let parsed_lru: serde_json::Value = serde_json::from_str(failure_line)
-        .expect("AuditWriteFailed line must be valid JSON");
-    let audit_id_lru = parsed_lru["session_id"].as_str().expect("session_id must be a string");
-    assert_eq!(audit_id_lru.len(), 36, "session_id must be a UUID: {audit_id_lru}");
+    let parsed_lru: serde_json::Value =
+        serde_json::from_str(failure_line).expect("AuditWriteFailed line must be valid JSON");
+    let audit_id_lru = parsed_lru["session_id"]
+        .as_str()
+        .expect("session_id must be a string");
+    assert_eq!(
+        audit_id_lru.len(),
+        36,
+        "session_id must be a UUID: {audit_id_lru}"
+    );
     assert_ne!(audit_id_lru, "a", "raw caller ID must not appear in stderr");
     // Raw caller IDs must not appear in stderr.
     assert!(
@@ -1750,8 +1758,14 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     let parsed: Value = serde_json::from_str(failure_line).unwrap_or_else(|err| {
         panic!("AuditWriteFailed line must be valid JSON ({err}): {failure_line}")
     });
-    let audit_id_t4 = parsed["session_id"].as_str().expect("session_id must be a string");
-    assert_eq!(audit_id_t4.len(), 36, "session_id must be a UUID: {audit_id_t4}");
+    let audit_id_t4 = parsed["session_id"]
+        .as_str()
+        .expect("session_id must be a string");
+    assert_eq!(
+        audit_id_t4.len(),
+        36,
+        "session_id must be a UUID: {audit_id_t4}"
+    );
     // The hostile raw caller ID must not appear in any form in stderr.
     assert!(
         !stderr_text.contains(r#"a"b"#),
