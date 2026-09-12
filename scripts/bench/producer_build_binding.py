@@ -374,7 +374,7 @@ def snapshot(repo, revision, destination, deadline):
         expected[path] = (int(mode, 8) & 0o777, oid.decode('ascii'), int(size))
         ancestors.update(str(p) for p in parts.parents if str(p) != '.')
     bound = min(64*MIB, sum(((v[2]+511)//512+1)*512 for v in expected.values())
-                + len(ancestors)*512 + 10240)
+                + len(ancestors)*512 + 12288)
     archive = bytearray()
     def collect(chunk):
         require(len(archive)+len(chunk) <= bound, 'output_limit')
