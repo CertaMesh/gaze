@@ -120,7 +120,7 @@ Re-materialising original values from tokens is a **privileged operation**, not 
 **What Gaze guarantees at the boundary:**
 
 - A token is restored to its original value **only if** the currently-active session manifest authorises that exact token-to-value mapping.
-- **Unknown tokens, tokens minted in another session, tokens from another tenant boundary, and malformed tokens all fail closed** — they return a typed restore failure. Restore never guesses, never falls back to a best-effort value, and never passes a token-shaped string through as raw.
+- **Unknown tokens, tokens minted in another session, tokens from another tenant boundary, and malformed tokens all fail closed** — they return a typed restore failure. Restore never guesses a mapping, never falls back to a best-effort value, and never reconstructs a sensitive value the active manifest did not authorise.
 - Restore decisions are **deterministic and auditable**: a restore can be logged with metadata (recognizer identity, session, timestamp, the typed outcome) without ever writing the raw value to the audit sink (see [§7](#7-audit-logs-and-metadata)).
 
 **Restore is not "on by default" — it is a capability you must deliberately wire and constrain.** For adopters this means:
