@@ -1185,63 +1185,13 @@ impl Pipeline {
         }
         #[cfg(feature = "bundled-recognizers")]
         if let Some(registry) = &self.safety_net_registry {
-            let locale = locale_chain
-                .first()
-                .cloned()
-                .unwrap_or(crate::LocaleTag::Global);
-            let selected = registry
-                .resolve(&locale, ModelStage::Pass3SafetyNet)
-                .map_err(|error| {
-                    if mandatory
-                        && matches!(
-                            error,
-                            ModelError::NoLocaleModelCoverage { .. }
-                                | ModelError::LocaleNotSupported(_)
-                        )
-                    {
-                        Error::Protection(ProtectionError::UnsupportedCoverage)
-                    } else {
-                        Error::SafetyNet(model_error_to_safety_net_error(error))
-                    }
-                })?;
-            if mandatory && !registry.is_empty() && selected.is_empty() {
-                return Err(ProtectionError::UnsupportedCoverage.into());
-            }
-            if !mandatory && selected.len() > 1 {
-                let selected_backend = selected[0].name();
-                let dropped = selected
-                    .iter()
-                    .skip(1)
-                    .map(|backend| backend.name().to_string())
-                    .collect::<Vec<_>>();
-                tracing::debug!(
-                    selected_backend,
-                    backend_silently_dropped = ?dropped,
-                    "locale-aware safety-net registry resolved multiple backends; using first"
-                );
-                self.log_backend_silently_dropped(
-                    target,
-                    document_kind,
-                    field_path,
-                    selected_backend,
-                    dropped,
-                )?;
-            }
-            for model in selected
-                .iter()
-                .take(if mandatory { selected.len() } else { 1 })
-            {
-                let spans = model
-                    .infer(
-                        ModelInput {
-                            text: clean_text.to_string(),
-                            locale: locale.clone(),
-                        },
-                        ModelHints {
-                            stage: ModelStage::Pass3SafetyNet,
-                            max_spans: None,
-                        },
-                    )
+            if !registry.is_empty() {
+                let locale = locale_chain
+                    .first()
+                    .cloned()
+                    .unwrap_or(crate::LocaleTag::Global);
+                let selected = registry
+                    .resolve(&locale, ModelStage::Pass3SafetyNet)
                     .map_err(|error| {
                         if mandatory
                             && matches!(
@@ -1255,17 +1205,69 @@ impl Pipeline {
                             Error::SafetyNet(model_error_to_safety_net_error(error))
                         }
                     })?;
-                for span in spans {
-                    if mandatory
-                        && (span.byte_range.start >= span.byte_range.end
-                            || clean_text.get(span.byte_range.clone()).is_none())
-                    {
-                        return Err(ProtectionError::Residual.into());
-                    }
-                    if let Some(suspect) =
-                        model_span_to_suspect(span, model.name(), manifest, field_path)
-                    {
-                        suspects.push(suspect);
+                if mandatory && !registry.is_empty() && selected.is_empty() {
+                    return Err(ProtectionError::UnsupportedCoverage.into());
+                }
+                if !mandatory && selected.len() > 1 {
+                    let selected_backend = selected[0].name();
+                    let dropped = selected
+                        .iter()
+                        .skip(1)
+                        .map(|backend| backend.name().to_string())
+                        .collect::<Vec<_>>();
+                    tracing::debug!(
+                        selected_backend,
+                        backend_silently_dropped = ?dropped,
+                        "locale-aware safety-net registry resolved multiple backends; using first"
+                    );
+                    self.log_backend_silently_dropped(
+                        target,
+                        document_kind,
+                        field_path,
+                        selected_backend,
+                        dropped,
+                    )?;
+                }
+                for model in selected
+                    .iter()
+                    .take(if mandatory { selected.len() } else { 1 })
+                {
+                    let spans = model
+                        .infer(
+                            ModelInput {
+                                text: clean_text.to_string(),
+                                locale: locale.clone(),
+                            },
+                            ModelHints {
+                                stage: ModelStage::Pass3SafetyNet,
+                                max_spans: None,
+                            },
+                        )
+                        .map_err(|error| {
+                            if mandatory
+                                && matches!(
+                                    error,
+                                    ModelError::NoLocaleModelCoverage { .. }
+                                        | ModelError::LocaleNotSupported(_)
+                                )
+                            {
+                                Error::Protection(ProtectionError::UnsupportedCoverage)
+                            } else {
+                                Error::SafetyNet(model_error_to_safety_net_error(error))
+                            }
+                        })?;
+                    for span in spans {
+                        if mandatory
+                            && (span.byte_range.start >= span.byte_range.end
+                                || clean_text.get(span.byte_range.clone()).is_none())
+                        {
+                            return Err(ProtectionError::Residual.into());
+                        }
+                        if let Some(suspect) =
+                            model_span_to_suspect(span, model.name(), manifest, field_path)
+                        {
+                            suspects.push(suspect);
+                        }
                     }
                 }
             }
