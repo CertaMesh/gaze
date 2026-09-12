@@ -2277,6 +2277,144 @@ action = "preserve"
     assert_symmetric_policy_config(cli_out, toml_out);
 }
 
+/// Regression for the silent PII leak when `--rulepack-path` was the only
+/// rulepack override and `--policy` was omitted.
+///
+/// Before the fix, [`CleanOverrides`] admitted the path-only no-policy mode
+/// (`has_rulepack_overrides` ORs in `--rulepack-path`) but
+/// `class_rules_for_bundled_overrides` only generated class rules for
+/// `--rulepack-bundled`, so the synthesized policy held only
+/// `Default { action: Preserve }`. The path rulepack was still loaded, so the
+/// recognizer fired on PII spans, but with no matching class rule the default
+/// `Preserve` action copied every detected span to the output verbatim -- a
+/// silent PII leak with no error and no warning. This test exercises that
+/// exact invocation (`--rulepack-path` only, no `--policy`,
+/// no `--rulepack-bundled`) and asserts the redaction now tokenizes the
+/// detected `custom:class_alpha` span, the audit log records `Action::Tokenize`
+/// (was `Action::Preserve`), and the round-trip restores the original.
+#[test]
+fn s1_rulepack_path_only_no_policy_tokenizes_custom_class() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let input = "ticket class-alpha-123";
+
+    let v = clean_json_with_args(
+        &[
+            &format!("--rulepack-path={}", rulepack_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        input,
+    );
+
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(
+        clean.starts_with("ticket <"),
+        "path-only no-policy run must redact the detected span; got: {clean}"
+    );
+    assert!(
+        clean.ends_with(":Custom:class_alpha_1>"),
+        "expected a custom:class_alpha token; got: {clean}"
+    );
+    assert_ne!(
+        clean, input,
+        "PII span must be tokenized, not preserved verbatim (silent leak)"
+    );
+    assert_eq!(v["stats"]["detections"], 1);
+
+    assert_eq!(
+        restore_success_text(v["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+
+    let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
+    let entries = logger.entries().expect("audit entries");
+    assert_eq!(entries.len(), 1, "the recognizer must fire exactly once");
+    assert_eq!(
+        entries[0].action,
+        gaze::Action::Tokenize,
+        "path-only no-policy redaction must tokenize, not preserve"
+    );
+    assert!(
+        matches!(entries[0].class, PiiClass::Custom(ref name) if name == "class_alpha"),
+        "unexpected detection class: {:?}",
+        entries[0].class
+    );
+    assert_eq!(
+        entries[0].recognizer_id.as_deref(),
+        Some("class-alpha.regex"),
+        "unexpected recognizer_id: {:?}",
+        entries[0].recognizer_id
+    );
+}
+
+/// Companion to [`s1_rulepack_path_only_no_policy_tokenizes_custom_class`]:
+/// when `--rulepack-bundled` and `--rulepack-path` are supplied together
+/// without `--policy`, the synthesized policy must generate `Tokenize` class
+/// rules for BOTH sources. Before the fix, the bundled branch ran and the
+/// path branch was skipped, so bundled-rulepack PII was tokenized while the
+/// path rulepack's PII leaked through the `Default { action: Preserve }`
+/// fallback. This test mixes a `core`-bundled phone (NANPA 555-01XX fixture)
+/// with the fixture `class-alpha` path rulepack and asserts both spans are
+/// tokenized together.
+#[test]
+fn s1_rulepack_bundled_and_path_no_policy_tokenize_both_sources() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let input = "Phone +1 555 0100 ticket class-alpha-123";
+
+    let v = clean_json_with_args(
+        &[
+            "--rulepack-bundled",
+            "core",
+            &format!("--rulepack-path={}", rulepack_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        input,
+    );
+
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(
+        !clean.contains("class-alpha-123"),
+        "path rulepack PII must be tokenized, not preserved (leak): {clean}"
+    );
+    assert!(
+        !clean.contains("+1 555 0100"),
+        "bundled core phone must still be tokenized when a path rulepack is also present: {clean}"
+    );
+    assert_eq!(
+        v["stats"]["detections"], 2,
+        "both the bundled phone and the path custom class must be detected"
+    );
+    assert_eq!(
+        restore_success_text(v["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+
+    let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
+    let entries = logger.entries().expect("audit entries");
+    assert_eq!(entries.len(), 2, "both detections must be audited");
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry.action == gaze::Action::Tokenize),
+        "every audited detection must be tokenized, none preserved: {entries:?}"
+    );
+    let path_entry = entries
+        .iter()
+        .find(|entry| matches!(entry.class, PiiClass::Custom(ref name) if name == "class_alpha"))
+        .expect("the path rulepack's custom:class_alpha detection must be audited");
+    assert_eq!(
+        path_entry.recognizer_id.as_deref(),
+        Some("class-alpha.regex"),
+        "unexpected path recognizer_id: {:?}",
+        path_entry.recognizer_id
+    );
+}
+
 #[test]
 fn s1_invalid_ner_locale_is_symmetric_between_cli_and_toml() {
     let (_valid_dir, valid_policy) = write_policy_with_ner_locale("en-US");
