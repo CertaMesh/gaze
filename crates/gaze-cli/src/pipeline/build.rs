@@ -127,7 +127,7 @@ fn has_rulepack_overrides(overrides: &CleanOverrides) -> bool {
 fn policy_for_rulepack_overrides(
     overrides: &CleanOverrides,
 ) -> std::result::Result<Policy, CliError> {
-    let mut rules = class_rules_for_bundled_overrides(overrides)?;
+    let mut rules = class_rules_for_rulepack_overrides(overrides)?;
     rules.push(RuleSpec::Default {
         action: Action::Preserve,
     });
@@ -141,39 +141,25 @@ fn policy_for_rulepack_overrides(
     Ok(overrides.apply_to(&base))
 }
 
-fn class_rules_for_bundled_overrides(
+fn class_rules_for_rulepack_overrides(
     overrides: &CleanOverrides,
 ) -> std::result::Result<Vec<RuleSpec>, CliError> {
-    let Some(bundled) = &overrides.rulepack_bundled else {
-        return Ok(Vec::new());
-    };
     let mut classes = std::collections::BTreeSet::new();
-    for bundle in bundled {
-        let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
-            CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
-        })?;
-        let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
-            CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
-        })?;
+    if let Some(bundled) = &overrides.rulepack_bundled {
+        for bundle in bundled {
+            let contents = gaze_recognizers::embedded(bundle).ok_or_else(|| {
+                CliError::PolicyConfigDetail(format!("unknown bundled rulepack: {bundle}"))
+            })?;
+            let rulepack = Rulepack::load(RulepackSource::Embedded(contents)).map_err(|err| {
+                CliError::PolicyConfigDetail(format!("embedded rulepack '{bundle}': {err}"))
+            })?;
+            classes.extend(rulepack.activated_classes());
+        }
+    }
+    for path in &overrides.rulepack_paths {
+        let rulepack = Rulepack::load(RulepackSource::Path(path.clone()))
+            .map_err(|err| map_pipeline_error(gaze::Error::Rulepack(err)))?;
         classes.extend(rulepack.activated_classes());
-        classes.extend(
-            rulepack
-                .recognizers
-                .iter()
-                .filter(|recognizer| recognizer.enabled)
-                .filter_map(|recognizer| {
-                    recognizer
-                        .collision
-                        .as_ref()
-                        .and_then(|collision| {
-                            collision
-                                .mandatory_anchor
-                                .as_ref()
-                                .map(|_| &collision.family)
-                        })
-                        .map(|family| PiiClass::family(family))
-                }),
-        );
     }
     Ok(classes
         .into_iter()
