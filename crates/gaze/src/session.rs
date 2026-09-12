@@ -2064,6 +2064,21 @@ mod tests {
     use super::*;
 
     #[test]
+    fn restore_strict_text_rejects_malformed_family() {
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        for malformed in [
+            "directory/<Custom:family:tenant-document_>/input.png",
+            "<deadbeef:Custom:family:tenant-document_>",
+            "<custom:family:tenant-document_>",
+        ] {
+            assert!(
+                session.restore_strict_text(malformed).is_err(),
+                "{malformed}"
+            );
+        }
+    }
+
+    #[test]
     fn test_only_constructor_pins_session_hex_without_changing_token_contract() {
         let session =
             Session::new_with_session_hex_for_tests(Scope::Ephemeral, [0x01, 0x23, 0x45, 0x67])

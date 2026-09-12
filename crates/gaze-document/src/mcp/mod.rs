@@ -166,11 +166,7 @@ impl Tool for GazeReadFile {
         // Restore only inside the trusted tool, after protected manifest args
         // were recorded. Opening the token spelling can select a different file.
         let protected_path = required_string(ctx.redacted_args(), "path")?;
-        let raw_path = ctx
-            .resources()
-            .session()
-            .restore_strict_text(protected_path)
-            .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+        let raw_path = restore_path(ctx.resources().session(), protected_path)?;
         let path = PathBuf::from(raw_path);
         validate_file(&path, self.max_file_size)?;
         read_file_response(&path, ctx).map(|response| ToolResponse::json(json!(response)))
@@ -235,6 +231,43 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
         .map_err(ToolError::internal)?;
     transaction.commit().map_err(ToolError::internal)?;
     Ok(clean)
+}
+
+/// Restore the `path` carrier of `gaze_read_file` to its raw form.
+///
+/// Arg protection only rewrites spans matched by the installed PII detectors
+/// and already-known session tokens; ordinary non-PII filenames such as
+/// `scan_1.png` pass through protection unchanged and are never registered as
+/// tokens. Unlike `Session::restore_strict_text`, which fails closed on *any*
+/// unowned token-shaped substring, this restores owned session tokens and only
+/// fails closed when:
+/// - the path contains a malformed token spelling (e.g. `<Email_>`,
+///   `<deadbeef:Email_>`), or
+/// - the path contains a nested-wrapper token spelling (e.g.
+///   `<<deadbeef:Email_1>>`), or
+/// - an unowned **non-bare** token spelling remains after restoration (e.g.
+///   an injected `<deadbeef:Email_999>`, `<Email_1>`, or `email_1`).
+///
+/// Broad bare `<word>_<digits>` identifiers that are not session-issued and are
+/// not built-in-class aliases (e.g. `scan_1`, `Scan_1`) are passed through to
+/// file validation, preserving the `restore(protect(path)) == path` round-trip
+/// for non-PII paths.
+fn restore_path(session: &gaze::Session, protected_path: &str) -> Result<String, ToolError> {
+    // Gate 1: reject malformed and nested-wrapper spellings before any
+    // substitution or filesystem access.
+    gaze::token_shape::validate_restore_shapes(protected_path)
+        .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+
+    // Gate 2: substitute known tokens and classify remaining shapes.
+    // Bare identifiers (e.g. `scan_1`) are audit-only; other unowned shapes
+    // (e.g. `<Email_1>`, `email_1`, `<deadbeef:Email_999>`) are rejected.
+    let assessment = session
+        .assess_restore_text(protected_path)
+        .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+    if !assessment.unknown_tokens().is_empty() {
+        return Err(ToolError::InvalidArgs("path restoration failed".into()));
+    }
+    Ok(assessment.into_restored().text)
 }
 
 fn validate_file(path: &Path, max_file_size: u64) -> Result<(), ToolError> {
@@ -361,6 +394,52 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn w1_restore_path_rejects_malformed_session_placeholder() {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        assert!(
+            super::restore_path(&session, "directory/<deadbeef:Email_>/input.png").is_err(),
+            "malformed session placeholder reached filesystem path"
+        );
+    }
+
+    #[test]
+    fn r1_restore_path_preserves_owned_and_legacy_boundaries() {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let token = session
+            .tokenize(&gaze::PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        assert_eq!(
+            super::restore_path(&session, &format!("directory/{token}/input.png")).unwrap(),
+            "directory/alice@example.invalid/input.png"
+        );
+        for path in [
+            format!("directory/<{token}>/input.png"),
+            "directory/email1@gaze-fake.invalid/input.png".to_owned(),
+            "directory/<Email_999>/input.png".to_owned(),
+        ] {
+            assert!(
+                super::restore_path(&session, &path).is_err(),
+                "unowned or nested token reached filesystem path: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn r1_restore_path_retains_malformed_family_rejection() {
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        for path in [
+            "directory/<Custom:family:tenant-document_>/input.png",
+            "directory/<deadbeef:Custom:family:tenant-document_>/input.png",
+        ] {
+            assert!(session.restore_strict_text(path).is_err());
+            assert!(
+                super::restore_path(&session, path).is_err(),
+                "malformed family token reached filesystem path: {path}"
+            );
+        }
+    }
 
     struct AllowAllAuth;
 
@@ -642,7 +721,264 @@ mod tests {
             matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
             "{err:?}"
         );
+        // Ordinary bare `<word>_<digits>` filenames were previously rejected at
+        // the restore gate with `InvalidArgs`; they must now reach `validate_file`
+        // and surface `NotFound` for non-existent paths. Run one lowercase- and
+        // one capital-initial shape under the production-equivalent core rulepack
+        // (28 recognizers) to confirm none rewrites the shape before the gate.
+        for bare in ["scan_1.png", "Scan_1.png"] {
+            let path = directory.path().join(bare);
+            assert!(!path.exists(), "fixture `{bare}` must not exist");
+            let err = envelope
+                .dispatch(
+                    &Principal::new("unit-test"),
+                    "gaze_read_file",
+                    json!({ "path": path }),
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, DispatchError::ToolError(ToolError::NotFound(_))),
+                "bare-shape `{bare}` must reach validate_file, got: {err:?}",
+            );
+        }
+        // Every dispatch in this test failed before `finish_call`.
         assert_eq!(manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_unowned_session_prefixed_token_in_path() {
+        let harness = Harness::new();
+        // The realistic attack vector — an injected unowned session-prefixed
+        // token that a different session's manifest authorizes — must still be
+        // blocked at the restore gate before any filesystem access.
+        let err = harness
+            .dispatch(
+                "gaze_read_file",
+                json!({ "path": "directory/<deadbeef:Email_999>/input.png" }),
+            )
+            .await
+            .expect_err("unowned session-prefixed token must fail at the restore gate");
+        match err {
+            DispatchError::ToolError(ToolError::InvalidArgs(message)) => {
+                assert_eq!(message, "path restoration failed");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert_eq!(harness.manifest.failures.load(Ordering::SeqCst), 1);
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_passes_ordinary_bare_shape_filenames_to_validation() {
+        let harness = Harness::new();
+        let directory = tempfile::tempdir().unwrap();
+
+        // Ordinary filenames containing a bare `<word>_<digits>` shape were
+        // previously rejected at the restore gate with `InvalidArgs`. They must
+        // now reach `validate_file` and surface `NotFound` for non-existent
+        // paths. Covers the lowercase- and capital-initial regex alternations
+        // plus a long-ordinal shape; `doc_v2.png` is a near-miss (underscore
+        // followed by `v`, not a digit) that already worked and must not regress.
+        for bare in [
+            "scan_1.png",
+            "Scan_1.png",
+            "invoice_20250111.pdf",
+            "doc_v2.png",
+        ] {
+            let path = directory.path().join(bare);
+            assert!(!path.exists(), "fixture `{bare}` must not exist");
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": path }))
+                .await
+                .expect_err("path must reach validate_file, not the restore gate");
+            match err {
+                DispatchError::ToolError(ToolError::NotFound(message)) => {
+                    assert!(
+                        message.contains(bare),
+                        "NotFound for `{bare}` should mention the filename: {message}"
+                    );
+                }
+                other => panic!("unexpected error for `{bare}`: {other:?}"),
+            }
+        }
+
+        // Every dispatch failed at `validate_file` (NotFound), none at the
+        // restore gate, so no call reached `finish_call`.
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_malformed_session_prefixed_token_in_path() {
+        let harness = Harness::new();
+        // `<deadbeef:Email_>` has a missing ordinal — the malformed-token gate
+        // must reject it before any filesystem access, regardless of whether a
+        // session-prefixed prefix is present.
+        for malformed in [
+            "directory/<deadbeef:Email_>/input.png",
+            "path/<Email_>/file.pdf",
+            "/tmp/<deadbeef:Name_>/doc.png",
+            "directory/<Custom:family:tenant-document_>/input.png",
+            "directory/<deadbeef:Custom:family:tenant-document_>/input.png",
+            "directory/<custom:family:tenant-document_>/input.png",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": malformed }))
+                .await
+                .expect_err("malformed token in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "malformed `{malformed}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_nested_wrapper_token_in_path() {
+        let harness = Harness::new();
+        // `<<deadbeef:Email_1>>` wraps a valid token-shaped match in an extra
+        // layer of angle brackets; the nested-wrapper gate must reject it before
+        // any filesystem access.
+        for nested in [
+            "directory/<<deadbeef:Email_1>>/input.png",
+            "path/<<Email_1>>/file.pdf",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": nested }))
+                .await
+                .expect_err("nested-wrapper token in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "nested `{nested}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_unowned_wrapped_and_legacy_placeholders() {
+        let harness = Harness::new();
+        // Unowned wrapped (`<Email_1>`) and legacy (`email_1`) placeholders are
+        // not bare identifiers and must be rejected at the restore gate rather
+        // than passed through to filesystem access.
+        for unowned in [
+            "<Email_1>/input.png",
+            "directory/<Email_1>/input.png",
+            "email_1/input.png",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": unowned }))
+                .await
+                .expect_err("unowned trap placeholder in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "unowned trap `{unowned}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_restores_owned_token_alongside_negative_cases() {
+        // Owned token must restore to raw PII; negative cases must still be
+        // blocked. This test covers both paths in the same session to confirm
+        // the assessment and malformed/nested gates interact correctly.
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let raw_path = directory
+            .path()
+            .join("alice@example.invalid")
+            .join("report.pdf");
+        std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
+        std::fs::write(&raw_path, b"dummy").unwrap();
+        let gaze::CleanDocument::Text(protected_path) = core
+            .pseudonymize_text(&session, raw_path.to_str().unwrap())
+            .unwrap()
+        else {
+            panic!("text expected")
+        };
+        assert_ne!(protected_path, raw_path.to_str().unwrap());
+
+        let mut registry = ToolRegistry::new();
+        registry
+            .register(GazeReadFile::with_max_file_size(1))
+            .unwrap();
+        let manifest = RecordingManifest::new();
+        let policy = SessionIdPolicy::default_strict();
+        let envelope = PiiEnvelope::new(
+            &registry,
+            &AllowAllAuth,
+            &manifest,
+            core.pipeline(),
+            &session,
+            core.locale_chain().as_slice(),
+            &policy,
+        );
+
+        // Owned token restores and reaches validate_file (LimitExceeded).
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": protected_path}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::LimitExceeded(_))),
+            "owned-token path must reach validate_file: {err:?}",
+        );
+
+        // Malformed token in path is rejected at the restore gate.
+        let malformed = format!(
+            "{}/file.pdf",
+            directory.path().join("<deadbeef:Email_>").display()
+        );
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": malformed}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
+            "malformed token in path must be rejected: {err:?}",
+        );
+
+        // Unowned wrapped placeholder is rejected at the restore gate.
+        let unowned_wrapped = format!("{}/file.pdf", directory.path().join("<Email_1>").display());
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": unowned_wrapped}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
+            "unowned wrapped placeholder must be rejected: {err:?}",
+        );
     }
 
     #[cfg(feature = "ocr-tesseract")]
