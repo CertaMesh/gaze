@@ -318,7 +318,24 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
         match spawn_result {
             Ok(child) => child,
             Err(e) => {
-                let _ = fs::remove_file(&options.paths.pidfile);
+                // The lock was already released before the spawn attempt so
+                // that the child could acquire it.  Remove the empty pidfile
+                // only when we can re-acquire the exclusive lock and confirm
+                // no PID has been written; if another startup has taken over
+                // the file in the interim, leave it alone.
+                if let Ok(mut f) = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&options.paths.pidfile)
+                {
+                    if f.try_lock_exclusive().is_ok() {
+                        let mut contents = String::new();
+                        let _ = f.read_to_string(&mut contents);
+                        if contents.trim().is_empty() {
+                            let _ = fs::remove_file(&options.paths.pidfile);
+                        }
+                    }
+                }
                 return Err(e);
             }
         }
@@ -431,7 +448,21 @@ pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
         }
         Ok(_) => Ok(()),
         Err(ProxyError::DaemonPidfileStale { .. }) => {
-            let _ = fs::remove_file(&paths.pidfile);
+            // The file is empty or unparseable.  It may be a startup in
+            // progress: `lock_pidfile` creates and exclusively locks an empty
+            // file before the child publishes its PID.  Only remove it if we
+            // can ourselves acquire the exclusive lock — if we cannot, another
+            // startup owns the file and we must leave it intact.
+            if let Ok(f) = OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(&paths.pidfile)
+            {
+                if f.try_lock_exclusive().is_ok() {
+                    let _ = fs::remove_file(&paths.pidfile);
+                }
+                // else: locked by an active startup — leave it alone.
+            }
             Ok(())
         }
         Err(e) => Err(e),
@@ -720,5 +751,52 @@ mod tests {
             loaded.adapters.openai.upstream,
             config.adapters.openai.upstream
         );
+    }
+
+    /// A locked empty pidfile is a startup in progress.  `cleanup_stale` must
+    /// not unlink it: doing so lets a concurrent caller create a fresh inode at
+    /// the same path, acquire its own lock, and proceed as a second daemon.
+    #[test]
+    fn cleanup_stale_preserves_locked_startup_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+
+        // Simulate a startup that has created and locked an empty pidfile but
+        // has not yet published a PID.
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&paths.pidfile)
+            .unwrap();
+        lock.try_lock_exclusive()
+            .expect("should be able to lock a freshly created file");
+
+        // `cleanup_stale` sees an unparseable (empty) file, but must recognise
+        // the exclusive lock and leave the inode intact.
+        cleanup_stale(&paths).unwrap();
+
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink an actively locked startup pidfile"
+        );
+
+        // A second concurrent start attempt must not be able to re-lock the
+        // file, proving the original startup still owns it.
+        let second = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&paths.pidfile)
+            .unwrap();
+        assert!(
+            second.try_lock_exclusive().is_err(),
+            "a second startup must not acquire the lock while the first holds it"
+        );
+
+        // Releasing the lock explicitly (mimics startup completing or aborting).
+        drop(lock);
     }
 }
