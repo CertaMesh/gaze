@@ -28,7 +28,7 @@ use gaze_proxy::adapters::{GeminiAdapter, OpenAiAdapter};
 use gaze_proxy::{ProviderAdapter, ProxyConfig};
 use gaze_recognizers::RegexDetector;
 use reqwest::Client;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use url::Url;
 
