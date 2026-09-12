@@ -4,6 +4,7 @@
 use std::io;
 use std::path::Path;
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use gaze_inspection::{
@@ -14,6 +15,14 @@ use gaze_proxy_dashboard::{
     DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor, IpcLimits,
     LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
 };
+
+// Subprocess-spawning tests share Unix-domain and TCP sockets and multiple
+// threads with a short-lived child process.  Running them in parallel can
+// cause the child's control socket to be torn down before the parent sends its
+// purge command, producing a spurious PurgeFailed.  Serialising them is safe:
+// they are inherently process-level tests, not unit tests.
+#[cfg(not(target_os = "macos"))]
+static SUBPROCESS_SERIAL: Mutex<()> = Mutex::new(());
 
 #[test]
 #[ignore = "subprocess helper only"]
@@ -85,6 +94,7 @@ fn assert_process_reaped(pid: u32) {
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     let temp = tempfile::tempdir().unwrap();
     let (paired, pid) = spawn_paired_dashboard(&temp.path().join("child.pid"));
     let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
@@ -148,6 +158,7 @@ fn spawn_paired_dashboard_with_authority(
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn realistic_chrome_top_level_navigation_reaches_shell_over_raw_socket() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     use std::io::{Read, Write};
     use std::net::TcpStream;
     let temp = tempfile::tempdir().unwrap();
@@ -208,6 +219,7 @@ fn realistic_chrome_top_level_navigation_reaches_shell_over_raw_socket() {
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn descriptor_equal_double_swap_fails_closed_disables_producers_and_reaps_children() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     let temp_a = tempfile::tempdir().unwrap();
     let temp_b = tempfile::tempdir().unwrap();
     let (paired_a, pid_a) = spawn_paired_dashboard(&temp_a.path().join("child.pid"));
