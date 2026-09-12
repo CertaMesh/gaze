@@ -353,19 +353,26 @@ impl Daemon {
     }
 
     fn log_eviction(&self, evicted: &str, entry: &SessionEntry, reason: &str) {
-        tracing::warn!(session_id = %evicted, reason = %reason, "gaze daemon evicted session");
+        let audit_id = entry.session.audit_session_id();
+        tracing::warn!(audit_session_id = %audit_id, reason = %reason, "gaze daemon evicted session");
         if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
-            let session_id = serde_json::to_string(evicted)
+            let session_id = serde_json::to_string(audit_id)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
-            let detail = serde_json::to_string(&err.to_string())
+            let error_code = match &err {
+                RedactionLogError::Sqlite(_) => "Sqlite",
+                RedactionLogError::Backend(_) => "Backend",
+                _ => "Unknown",
+            };
+            let detail = serde_json::to_string(error_code)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             eprintln!(
                 r#"{{"error":"AuditWriteFailed","session_id":{},"reason":{},"detail":{}}}"#,
                 session_id, reason, detail
             );
         }
+        let _ = evicted; // caller identity not written to any output
     }
 }
 

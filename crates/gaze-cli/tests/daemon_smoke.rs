@@ -1456,13 +1456,30 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         stderr_text.contains(r#""reason":"idle_timeout""#),
         "stderr must show idle_timeout reason: {stderr_text}"
     );
-    assert!(
-        stderr_text.contains(r#""session_id":"sess1""#),
-        "stderr must name the evicted session: {stderr_text}"
-    );
+    // session_id in the error line is the generated audit UUID, not the raw caller ID.
+    let failure_line = stderr_lines
+        .iter()
+        .find(|line| line.contains("AuditWriteFailed"))
+        .expect("AuditWriteFailed line must be present");
+    let parsed: serde_json::Value = serde_json::from_str(failure_line)
+        .expect("AuditWriteFailed line must be valid JSON");
+    let audit_id = parsed["session_id"].as_str().expect("session_id must be a string");
+    assert_eq!(audit_id.len(), 36, "session_id must be a UUID: {audit_id}");
+    assert_ne!(audit_id, "sess1", "raw caller ID must not appear in stderr");
     assert!(
         stderr_text.contains(r#""detail""#),
         "stderr must carry a detail field: {stderr_text}"
+    );
+    // detail must be a safe error code, not an arbitrary error message.
+    let detail = parsed["detail"].as_str().expect("detail must be a string");
+    assert!(
+        detail == "Sqlite" || detail == "Backend",
+        "detail must be a safe error code, got: {detail}"
+    );
+    // Raw caller ID must not appear in stderr.
+    assert!(
+        !stderr_text.contains("sess1"),
+        "raw caller session ID must not appear in stderr: {stderr_text}"
     );
     // Eviction emits no JSONL response.
     assert_eq!(
@@ -1546,9 +1563,20 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
         stderr_text.contains(r#""reason":"lru""#),
         "stderr must show lru reason: {stderr_text}"
     );
+    // session_id in the error line is the generated audit UUID, not the raw caller ID.
+    let failure_line = stderr_lines
+        .iter()
+        .find(|line| line.contains("AuditWriteFailed"))
+        .expect("AuditWriteFailed line must be present");
+    let parsed_lru: serde_json::Value = serde_json::from_str(failure_line)
+        .expect("AuditWriteFailed line must be valid JSON");
+    let audit_id_lru = parsed_lru["session_id"].as_str().expect("session_id must be a string");
+    assert_eq!(audit_id_lru.len(), 36, "session_id must be a UUID: {audit_id_lru}");
+    assert_ne!(audit_id_lru, "a", "raw caller ID must not appear in stderr");
+    // Raw caller IDs must not appear in stderr.
     assert!(
-        stderr_text.contains(r#""session_id":"a""#),
-        "stderr must name evicted session 'a': {stderr_text}"
+        !stderr_text.contains(r#""session_id":"a""#),
+        "raw caller session ID must not appear in stderr: {stderr_text}"
     );
     // stdout: first response is Clean, second is Pipeline error (audit DB
     // broken, pipeline redaction-log write fails).
@@ -1713,7 +1741,8 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
         stderr_text.contains("AuditWriteFailed"),
         "stderr should contain AuditWriteFailed: {stderr_text}"
     );
-    // The line must be valid JSON with the exact hostile session_id round-tripped.
+    // The line must be valid JSON. session_id is the generated audit UUID,
+    // not the raw caller-supplied hostile ID; hostile characters must not appear.
     let failure_line = stderr_lines
         .iter()
         .find(|line| line.contains("AuditWriteFailed"))
@@ -1721,17 +1750,19 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
     let parsed: Value = serde_json::from_str(failure_line).unwrap_or_else(|err| {
         panic!("AuditWriteFailed line must be valid JSON ({err}): {failure_line}")
     });
-    assert_eq!(
-        parsed["session_id"].as_str().unwrap(),
-        hostile,
-        "session_id must round-trip the hostile string: {}",
-        parsed["session_id"]
+    let audit_id_t4 = parsed["session_id"].as_str().expect("session_id must be a string");
+    assert_eq!(audit_id_t4.len(), 36, "session_id must be a UUID: {audit_id_t4}");
+    // The hostile raw caller ID must not appear in any form in stderr.
+    assert!(
+        !stderr_text.contains(r#"a"b"#),
+        "hostile caller ID must not appear in stderr: {stderr_text}"
     );
     assert_eq!(parsed["reason"], "idle_timeout");
+    // detail is a safe error code, not an arbitrary error message.
+    let detail_t4 = parsed["detail"].as_str().expect("detail must be a string");
     assert!(
-        parsed["detail"].as_str().unwrap().contains("sqlite"),
-        "detail should mention sqlite: {}",
-        parsed["detail"]
+        detail_t4 == "Sqlite" || detail_t4 == "Backend",
+        "detail must be a safe error code, got: {detail_t4}"
     );
 }
 
