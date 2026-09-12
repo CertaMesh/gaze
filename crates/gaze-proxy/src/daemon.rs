@@ -333,9 +333,7 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
                         // Only remove if we can read the file and it is still
                         // empty; a read error means we cannot confirm the
                         // contents, so leave the file alone.
-                        if f.read_to_string(&mut contents).is_ok()
-                            && contents.trim().is_empty()
-                        {
+                        if f.read_to_string(&mut contents).is_ok() && contents.trim().is_empty() {
                             let _ = fs::remove_file(&options.paths.pidfile);
                         }
                     }
@@ -378,7 +376,7 @@ fn confirm_started(child: &mut Child, paths: &DaemonPaths) -> Result<u32, ProxyE
                 return Err(ProxyError::DaemonIo {
                     path: PathBuf::from("gaze proxy serve"),
                     source,
-                })
+                });
             }
         }
     }
@@ -460,7 +458,7 @@ pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
             return Err(ProxyError::DaemonIo {
                 path: paths.pidfile.clone(),
                 source,
-            })
+            });
         }
     };
 
@@ -472,10 +470,11 @@ pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
 
     // Re-read the contents under the lock so we see the final state.
     let mut contents = String::new();
-    f.read_to_string(&mut contents).map_err(|source| ProxyError::DaemonIo {
-        path: paths.pidfile.clone(),
-        source,
-    })?;
+    f.read_to_string(&mut contents)
+        .map_err(|source| ProxyError::DaemonIo {
+            path: paths.pidfile.clone(),
+            source,
+        })?;
 
     // Parse the PID from the locked file.  Empty/unparseable means the
     // startup that created this file never finished; removable.
