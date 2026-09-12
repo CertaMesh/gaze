@@ -185,18 +185,40 @@ fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
 }
 
 fn has_identifier_char_before(input: &str, start: usize) -> bool {
-    input[..start]
-        .chars()
-        .next_back()
-        .is_some_and(is_identifier_char)
+    let prefix = &input[..start];
+    match prefix.chars().next_back() {
+        Some(ch) if is_base_identifier_char(ch) => true,
+        Some('-') => {
+            // A leading hyphen blocks the match only when it is itself preceded
+            // by a base identifier character, i.e. it connects two components.
+            prefix[..prefix.len() - 1]
+                .chars()
+                .next_back()
+                .is_some_and(is_base_identifier_char)
+        }
+        _ => false,
+    }
 }
 
 fn has_identifier_char_after(input: &str, end: usize) -> bool {
-    input[end..].chars().next().is_some_and(is_identifier_char)
+    let suffix = &input[end..];
+    match suffix.chars().next() {
+        Some(ch) if is_base_identifier_char(ch) => true,
+        Some('-') => {
+            // A trailing hyphen blocks the match only when it is itself followed
+            // by a base identifier character, i.e. it connects two components.
+            // '-' is ASCII (1 byte), so suffix[1..] is safe.
+            suffix[1..]
+                .chars()
+                .next()
+                .is_some_and(is_base_identifier_char)
+        }
+        _ => false,
+    }
 }
 
-fn is_identifier_char(ch: char) -> bool {
-    ch == '_' || ch == '-' || ch.is_alphanumeric()
+fn is_base_identifier_char(ch: char) -> bool {
+    ch == '_' || ch.is_alphanumeric()
 }
 
 #[cfg(test)]
@@ -388,8 +410,9 @@ mod tests {
         assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
     }
 
-    #[test]
-    fn dictionary_recognizer_does_not_match_prefix_inside_hyphenated_identifier() {
+    /// Build a single-term recognizer for `AAA` (case-sensitive) and run
+    /// `detect` on `input`, returning the collected hit spans.
+    fn aaa_spans(input: &str) -> Vec<std::ops::Range<usize>> {
         let ctx = TypedContext {
             dictionaries: HashMap::from([(
                 "dict_alpha".to_string(),
@@ -410,12 +433,42 @@ mod tests {
             true,
             "counter",
         );
+        recognizer
+            .detect(input, &detect_context)
+            .unwrap()
+            .into_iter()
+            .map(|h| h.span)
+            .collect()
+    }
 
-        let hits = recognizer
-            .detect("AAA then AAA-12345", &detect_context)
-            .unwrap();
+    #[test]
+    fn dictionary_recognizer_does_not_match_prefix_inside_hyphenated_identifier() {
+        // "AAA" followed by "-12345" — the hyphen connects AAA to a numeric
+        // suffix, so only the standalone occurrence (offset 0) should match.
+        let spans = aaa_spans("AAA then AAA-12345");
+        assert_eq!(spans, vec![0..3], "expected only standalone AAA");
+    }
 
-        assert_eq!(hits.len(), 1, "expected only standalone AAA, got {hits:?}");
-        assert_eq!(hits[0].span, 0..3);
+    #[test]
+    fn dictionary_recognizer_matches_term_with_leading_standalone_hyphen() {
+        // "-AAA" — the hyphen precedes AAA but has no identifier char before it,
+        // so it is punctuation, not a connector; both occurrences must match.
+        let spans = aaa_spans("-AAA AAA-");
+        assert_eq!(
+            spans,
+            vec![1..4, 5..8],
+            "expected both AAA spans in -AAA AAA-"
+        );
+    }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_suffix_inside_hyphenated_identifier() {
+        // "prefix-AAA-suffix" — AAA is connected on both sides to identifier
+        // components via hyphens; it must not produce a match.
+        let spans = aaa_spans("prefix-AAA-suffix");
+        assert!(
+            spans.is_empty(),
+            "expected no match for AAA inside connected identifier, got {spans:?}"
+        );
     }
 }
