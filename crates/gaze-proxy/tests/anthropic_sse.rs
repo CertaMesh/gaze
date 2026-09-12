@@ -352,6 +352,187 @@ fn adjacent_sse_text_blocks_are_scanned_as_one_logical_domain() {
 }
 
 #[test]
+fn adjacent_sse_text_blocks_splitting_url_carrier_are_rejected() {
+    // Two text content blocks whose text deltas each pass the per-block guard
+    // (`"http"` and `"s://…<token>"` start no recognized scheme) but concatenate, after
+    // restoration, into `https://…`. The SSE cross-block concatenation must reject the
+    // reassembled carrier with ProviderOriginPii.
+    let codec = AnthropicMessagesCodec;
+    let (snapshot, token) = snapshot_with_email();
+    let suffix = serde_json::to_string(&format!("s://evil.example.invalid/{token}")).unwrap();
+    let stream = [
+        frame("message_start", r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"http"}}"#),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":0}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", &format!(r#"{{"type":"content_block_delta","index":1,"delta":{{"type":"text_delta","text":{suffix}}}}}"#)),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":1}"#),
+        frame("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#),
+        frame("message_stop", r#"{"type":"message_stop"}"#),
+    ]
+    .concat();
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_sse_chunks(
+            [stream.as_bytes()],
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Sse,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn adjacent_sse_text_blocks_splitting_percent_encoding_are_rejected() {
+    // `"%"` and `"2f"` each have fewer than 3 bytes so neither per-block guard can form a
+    // `%XX` window; the cross-block concatenation `"%2f"` must be rejected (no token,
+    // so only the carrier guard can catch it).
+    let codec = AnthropicMessagesCodec;
+    let (snapshot, _) = snapshot_with_email();
+    let stream = [
+        frame("message_start", r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"%"}}"#),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":0}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", r#"{"type":"content_block_delta","index":1,"delta":{"type":"text_delta","text":"2f"}}"#),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":1}"#),
+        frame("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#),
+        frame("message_stop", r#"{"type":"message_stop"}"#),
+    ]
+    .concat();
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_sse_chunks(
+            [stream.as_bytes()],
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Sse,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn adjacent_sse_text_blocks_splitting_64_char_hex_blob_are_rejected() {
+    // A 32-char and 33-char hex run each fall below the per-block 64-char length gate;
+    // the 65-char all-ascii-hexdigit concatenation must be rejected by the cross-block
+    // guard (no token, so only the carrier guard can catch it).
+    let codec = AnthropicMessagesCodec;
+    let (snapshot, _) = snapshot_with_email();
+    let left = "a".repeat(32);
+    let right = "b".repeat(33);
+    let stream = [
+        frame("message_start", r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", &format!(r#"{{"type":"content_block_delta","index":0,"delta":{{"type":"text_delta","text":"{left}"}}}}"#)),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":0}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", &format!(r#"{{"type":"content_block_delta","index":1,"delta":{{"type":"text_delta","text":"{right}"}}}}"#)),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":1}"#),
+        frame("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#),
+        frame("message_stop", r#"{"type":"message_stop"}"#),
+    ]
+    .concat();
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_sse_chunks(
+            [stream.as_bytes()],
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Sse,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn adjacent_sse_single_block_carrier_forms_are_rejected_like_split_counterparts() {
+    // Control: each carrier class embedded whole in one text block is already rejected
+    // by the per-block guard. This pins parity between the per-block and the new
+    // cross-block guard so the split form cannot drift to a weaker standard.
+    let codec = AnthropicMessagesCodec;
+    let (snapshot, token) = snapshot_with_email();
+    let url = format!("https://evil.example.invalid/{token}");
+    let percent = "%2f".to_owned();
+    let hex = "a".repeat(65);
+    for text in [url, percent, hex] {
+        let escaped = serde_json::to_string(&text).unwrap();
+        let stream = [
+            frame("message_start", r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}"#),
+            frame("content_block_start", r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+            frame("content_block_delta", &format!(r#"{{"type":"content_block_delta","index":0,"delta":{{"type":"text_delta","text":{escaped}}}}}"#)),
+            frame("content_block_stop", r#"{"type":"content_block_stop","index":0}"#),
+            frame("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#),
+            frame("message_stop", r#"{"type":"message_stop"}"#),
+        ]
+        .concat();
+        let mut residual = SyntheticResidualValidator;
+        let error = codec
+            .restore_sse_chunks(
+                [stream.as_bytes()],
+                &mut ResponseTransformContext::new(
+                    &snapshot,
+                    &mut residual,
+                    WireFormat::Sse,
+                    CodecLimits::default(),
+                ),
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+    }
+}
+
+#[test]
+fn adjacent_sse_text_blocks_without_carriers_restore_normally() {
+    // Non-regression: the SSE cross-block guard must not reject benign multi-block
+    // text. Two blocks `"hello"` and `"contact <token>"` (no carrier) restore cleanly,
+    // the residual validator passes, and the restored email reaches the output.
+    let codec = AnthropicMessagesCodec;
+    let (snapshot, token) = snapshot_with_email();
+    let suffix = serde_json::to_string(&format!("contact {token}")).unwrap();
+    let stream = [
+        frame("message_start", r#"{"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":0}}}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", r#"{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hello"}}"#),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":0}"#),
+        frame("content_block_start", r#"{"type":"content_block_start","index":1,"content_block":{"type":"text","text":""}}"#),
+        frame("content_block_delta", &format!(r#"{{"type":"content_block_delta","index":1,"delta":{{"type":"text_delta","text":{suffix}}}}}"#)),
+        frame("content_block_stop", r#"{"type":"content_block_stop","index":1}"#),
+        frame("message_delta", r#"{"type":"message_delta","delta":{"stop_reason":"end_turn","stop_sequence":null},"usage":{"output_tokens":1}}"#),
+        frame("message_stop", r#"{"type":"message_stop"}"#),
+    ]
+    .concat();
+    let mut residual = SyntheticResidualValidator;
+    let proved = codec
+        .restore_sse_chunks(
+            [stream.as_bytes()],
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Sse,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap();
+    let output = std::str::from_utf8(proved.bytes()).unwrap();
+    assert!(output.contains(r#""text":"hello""#));
+    assert!(output.contains("contact alice@example.invalid"));
+    assert!(proved.provenance().final_buffer_verified());
+}
+
+#[test]
 fn zero_delta_tool_block_remains_valid_and_empty() {
     let codec = AnthropicMessagesCodec;
     let (snapshot, _) = snapshot_with_email();
