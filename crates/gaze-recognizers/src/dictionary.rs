@@ -185,17 +185,23 @@ fn is_token_boundary_match(input: &str, start: usize, end: usize) -> bool {
 }
 
 fn has_identifier_char_before(input: &str, start: usize) -> bool {
-    input[..start]
-        .chars()
-        .next_back()
-        .is_some_and(is_identifier_char)
+    has_identifier_component(input[..start].chars().rev())
 }
 
 fn has_identifier_char_after(input: &str, end: usize) -> bool {
-    input[end..].chars().next().is_some_and(is_identifier_char)
+    has_identifier_component(input[end..].chars())
 }
 
-fn is_identifier_char(ch: char) -> bool {
+fn has_identifier_component(mut chars: impl Iterator<Item = char>) -> bool {
+    match chars.next() {
+        // A hyphen connects components only when a base identifier character follows.
+        Some('-') => chars.next().is_some_and(is_base_identifier_char),
+        Some(ch) => is_base_identifier_char(ch),
+        None => false,
+    }
+}
+
+fn is_base_identifier_char(ch: char) -> bool {
     ch == '_' || ch.is_alphanumeric()
 }
 
@@ -386,5 +392,59 @@ mod tests {
             .unwrap();
 
         assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
+    }
+
+    fn aaa_spans(input: &str) -> Vec<std::ops::Range<usize>> {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "dict_alpha".to_string(),
+                ContextDictionary {
+                    terms: vec!["AAA".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "dict/dict_alpha",
+            PiiClass::Custom("class_alpha".to_string()),
+            "dict_alpha",
+            true,
+            "counter",
+        );
+        recognizer
+            .detect(input, &detect_context)
+            .unwrap()
+            .into_iter()
+            .map(|h| h.span)
+            .collect()
+    }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_prefix_inside_hyphenated_identifier() {
+        let spans = aaa_spans("AAA then AAA-12345");
+        assert_eq!(spans, vec![0..3], "expected only standalone AAA");
+    }
+
+    #[test]
+    fn dictionary_recognizer_matches_term_with_leading_standalone_hyphen() {
+        let spans = aaa_spans("-AAA AAA-");
+        assert_eq!(
+            spans,
+            vec![1..4, 5..8],
+            "expected both AAA spans in -AAA AAA-"
+        );
+    }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_suffix_inside_hyphenated_identifier() {
+        let spans = aaa_spans("prefix-AAA-suffix");
+        assert!(
+            spans.is_empty(),
+            "expected no match for AAA inside connected identifier, got {spans:?}"
+        );
     }
 }
