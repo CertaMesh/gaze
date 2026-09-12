@@ -181,8 +181,8 @@ impl BridgeHost {
             tool,
             arg_paths: Vec::new(),
             result_paths: processed.result_paths,
-            outcome: DecisionOutcome::Allowed,
-            deciding_rule: "ingress.processed".to_string(),
+            outcome: processed.outcome,
+            deciding_rule: processed.deciding_rule,
         })
         .await?;
         Ok(processed.response)
@@ -454,6 +454,19 @@ impl EgressState<'_> {
 struct IngressResult {
     response: ToolResponse,
     result_paths: Vec<ResultPath>,
+    outcome: DecisionOutcome,
+    deciding_rule: String,
+}
+
+impl IngressResult {
+    fn blocked(reason: &str, rule: &str, result_paths: Vec<ResultPath>) -> Self {
+        Self {
+            response: blocked_response(reason, rule),
+            result_paths,
+            outcome: DecisionOutcome::Blocked,
+            deciding_rule: rule.to_string(),
+        }
+    }
 }
 
 fn process_ingress(
@@ -468,24 +481,27 @@ fn process_ingress(
         .map_err(|err| BridgeError::Downstream(format!("serialize result failed: {err}")))?
         .len();
     if raw_len > limits.response_bytes {
-        return Ok(IngressResult {
-            response: blocked_response("response_too_large", "ingress.limit.bytes"),
-            result_paths: vec![ResultPath::root()],
-        });
+        return Ok(IngressResult::blocked(
+            "response_too_large",
+            "ingress.limit.bytes",
+            vec![ResultPath::root()],
+        ));
     }
     if result.content.len() > limits.content_blocks {
-        return Ok(IngressResult {
-            response: blocked_response("too_many_content_blocks", "ingress.limit.blocks"),
-            result_paths: vec![ResultPath::root()],
-        });
+        return Ok(IngressResult::blocked(
+            "too_many_content_blocks",
+            "ingress.limit.blocks",
+            vec![ResultPath::root()],
+        ));
     }
 
     match policy.result.mode {
         ResultMode::Deny => {
-            return Ok(IngressResult {
-                response: blocked_response("result_denied", "ingress.result.deny"),
-                result_paths: vec![ResultPath::root()],
-            });
+            return Ok(IngressResult::blocked(
+                "result_denied",
+                "ingress.result.deny",
+                vec![ResultPath::root()],
+            ));
         }
         ResultMode::Allow => {
             return Ok(IngressResult {
@@ -494,6 +510,8 @@ fn process_ingress(
                         .map_err(|err| BridgeError::Downstream(err.to_string()))?,
                 ),
                 result_paths: Vec::new(),
+                outcome: DecisionOutcome::Allowed,
+                deciding_rule: "ingress.processed".to_string(),
             });
         }
         ResultMode::Process => {}
@@ -534,12 +552,13 @@ fn process_ingress(
             | RawContent::Audio(_)
             | RawContent::Resource(_)
             | RawContent::ResourceLink(_) => {
-                return Ok(IngressResult {
-                    response: blocked_response("unsupported_content_block", "ingress.kind.deny"),
-                    result_paths: vec![ResultPath::root()
+                return Ok(IngressResult::blocked(
+                    "unsupported_content_block",
+                    "ingress.kind.deny",
+                    vec![ResultPath::root()
                         .child("content")?
                         .child(format!("[{idx}]"))?],
-                });
+                ));
             }
         }
         content_values.push(
@@ -579,6 +598,8 @@ fn process_ingress(
             "_meta": meta,
         })),
         result_paths,
+        outcome: DecisionOutcome::Allowed,
+        deciding_rule: "ingress.processed".to_string(),
     })
 }
 
@@ -613,6 +634,8 @@ fn process_downstream_error(
             }
         })),
         result_paths,
+        outcome: DecisionOutcome::Allowed,
+        deciding_rule: "ingress.processed".to_string(),
     })
 }
 
@@ -626,6 +649,8 @@ fn process_downstream_service_error() -> BridgeResult<IngressResult> {
             }
         })),
         result_paths: vec![ResultPath::root().child("error")?.child("message")?],
+        outcome: DecisionOutcome::Allowed,
+        deciding_rule: "ingress.processed".to_string(),
     })
 }
 
