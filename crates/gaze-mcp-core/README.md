@@ -15,7 +15,7 @@
 
 ### Scope
 
-`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an MCP tool to the model** passes through `PiiEnvelope::dispatch` and is redacted before the model sees it.
+`gaze-mcp` enforces the chokepoint on the **data-source ↔ model** path. Any data flowing **from a source through an agent-tier MCP tool to the model** passes through `PiiEnvelope::dispatch` and is protected before the model sees it. Authorized operator-tier tools can explicitly bypass response protection for restore/export semantics; their raw responses must stay on the operator surface.
 
 `gaze-mcp` **does not** cover the **user ↔ model** path. Pasted text, uploaded files, and screenshots in the agent host's chat UI reach the model unredacted. For that axis, use `gaze-proxy`, the v0.8+ multi-vendor reverse proxy supporting OpenAI, Anthropic, and Gemini SDK base-URL swaps.
 
