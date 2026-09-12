@@ -430,6 +430,51 @@ mod tests {
             None
         );
     }
+
+    // Dangling memberships can change real variants' precedence through min aggregation.
+    // Assembly must register collision metadata only after building its recognizer.
+    #[test]
+    fn dangling_collision_membership_flips_family_precedence() {
+        let clean = RecognizerRegistry::builder()
+            .register_collision(
+                "ssn.de_cue",
+                CollisionMembership::new("government-id", "ssn", 10, None),
+            )
+            .register_collision(
+                "tax_number.cue_anchored",
+                CollisionMembership::new("government-id", "tax-number", 20, None),
+            )
+            .build();
+
+        assert_eq!(
+            clean
+                .family_policy()
+                .compare("tax_number.cue_anchored", "ssn.de_cue"),
+            Some(false)
+        );
+
+        let polluted = RecognizerRegistry::builder()
+            .register_collision(
+                "ssn.de_cue",
+                CollisionMembership::new("government-id", "ssn", 10, None),
+            )
+            .register_collision(
+                "tax_number.cue_anchored",
+                CollisionMembership::new("government-id", "tax-number", 20, None),
+            )
+            .register_collision(
+                "custom.name_marker",
+                CollisionMembership::new("government-id", "tax-number", 5, None),
+            )
+            .build();
+
+        assert_eq!(
+            polluted
+                .family_policy()
+                .compare("tax_number.cue_anchored", "ssn.de_cue"),
+            Some(true)
+        );
+    }
 }
 
 impl RecognizerRegistry {
