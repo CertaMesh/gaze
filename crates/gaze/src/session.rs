@@ -1937,7 +1937,7 @@ fn parse_ascii_ordinal(raw: &str) -> Option<u32> {
 fn malformed_restore_token_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
-        Regex::new(r"<(?:[0-9a-f]{8}:)?(?:Email|Name|Location|Organization|email|name|location|organization|Custom:[a-z0-9_]*|custom:[a-z0-9_]*)_?>")
+        Regex::new(r"<(?:[0-9a-f]{8}:)?(?:Email|Name|Location|Organization|email|name|location|organization|Custom:family:[a-z0-9_-]+|Custom:[a-z0-9_]*|custom:family:[a-z0-9_-]+|custom:[a-z0-9_]*)_?>")
             .expect("malformed restore token regex must compile")
     })
 }

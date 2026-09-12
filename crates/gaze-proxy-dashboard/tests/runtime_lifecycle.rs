@@ -540,3 +540,41 @@ fn concurrent_browser_purges_do_not_corrupt_rotate_pairing() {
     assert_process_reaped(pid);
     drop(producer);
 }
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn child_survives_control_idle_after_pairing() {
+    let temp = tempfile::tempdir().unwrap();
+    let (paired, pid, _token) = spawn_paired_dashboard(&temp.path().join("child.pid"));
+    let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
+    let producer = PendingInspectionProducerV1::new(descriptor);
+    let (producer, activated) = install_inspection_v1(producer, consumer).unwrap();
+    let launch = pending.commit(activated).unwrap();
+    let control = launch.control();
+
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(0));
+    let start = Instant::now();
+    let idle_deadline = start + Duration::from_secs(5);
+    while Instant::now() < idle_deadline {
+        let alive = Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .is_ok_and(|status| status.success());
+        assert!(
+            alive,
+            "dashboard child (pid {pid}) self-terminated after {:?} of control-idle; \
+             the 2s read timeout leaked from pairing into child_control_loop",
+            start.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Running(0));
+    control.shutdown().unwrap();
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
+    assert!(matches!(
+        producer.begin_logical(),
+        Err(InspectionBeginLogicalErrorV1::Disabled)
+    ));
+    drop(launch);
+    assert_process_reaped(pid);
+}
