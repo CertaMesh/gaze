@@ -130,35 +130,55 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
 
     let principal = local_principal(&domain);
     let session = RedactionSession::ephemeral_for(&principal.id).map_err(map_bridge_error)?;
-    let class = args.class.unwrap_or_else(|| infer_class(&args.entity));
-    let source_token = session
-        .tokenize(&class, &args.entity)
-        .map_err(map_bridge_error)?;
-    let request = BridgeRequest {
-        principal: principal.clone(),
-        tenant_id: principal.tenant_id.clone(),
-        workspace_id: principal.workspace_id.clone(),
-        agent_run_id: "gaze-index-cli".to_string(),
-        conversation_session_id: session.session_id().to_string(),
-        tool_name: LOCAL_TOOL_NAME.to_string(),
-        action: LOCAL_ACTION.to_string(),
-        purpose: LOCAL_PURPOSE.to_string(),
-        source_token,
-        target_domain: args.domain,
-        requested_scope: RequestedScope::SameDomain,
+
+    // When `--class` is omitted, do not guess a single class: the PII class is a
+    // hard discriminator through tokenize/canonicalize/project, so a wrong guess
+    // (e.g. `Name` for an `Organization` entity) deterministically misses. Probe
+    // every class the target domain is configured to hold, and aggregate hits.
+    let candidate_classes: Vec<PiiClass> = match args.class {
+        Some(class) => vec![class],
+        None => domain.allowed_entity_classes.clone(),
     };
 
-    match bridge.search(&session, &request) {
-        BridgeSearchOutcome::Allowed(response) if !response.results.is_empty() => {
-            for hit in response.results {
-                println!("doc: {}", hit.doc_id);
-                println!("snippet: {}", hit.snippet);
+    let mut any_hits = false;
+    let mut seen_doc_ids = BTreeSet::new();
+    for class in candidate_classes {
+        if !domain.allows_class(&class) {
+            continue;
+        }
+        let source_token = session
+            .tokenize(&class, &args.entity)
+            .map_err(map_bridge_error)?;
+        let request = BridgeRequest {
+            principal: principal.clone(),
+            tenant_id: principal.tenant_id.clone(),
+            workspace_id: principal.workspace_id.clone(),
+            agent_run_id: "gaze-index-cli".to_string(),
+            conversation_session_id: session.session_id().to_string(),
+            tool_name: LOCAL_TOOL_NAME.to_string(),
+            action: LOCAL_ACTION.to_string(),
+            purpose: LOCAL_PURPOSE.to_string(),
+            source_token,
+            target_domain: args.domain.clone(),
+            requested_scope: RequestedScope::SameDomain,
+        };
+        match bridge.search(&session, &request) {
+            BridgeSearchOutcome::Allowed(response) if !response.results.is_empty() => {
+                any_hits = true;
+                for hit in response.results {
+                    if seen_doc_ids.insert(hit.doc_id.clone()) {
+                        println!("doc: {}", hit.doc_id);
+                        println!("snippet: {}", hit.snippet);
+                    }
+                }
             }
+            BridgeSearchOutcome::Allowed(_) => {}
+            BridgeSearchOutcome::Denied(reason) => return Err(index_denied(reason)),
         }
-        BridgeSearchOutcome::Allowed(_) => {
-            println!("no hits");
-        }
-        BridgeSearchOutcome::Denied(reason) => return Err(index_denied(reason)),
+    }
+
+    if !any_hits {
+        println!("no hits");
     }
     println!("raw PII never shown (owner-side only)");
 
@@ -295,14 +315,6 @@ fn index_kiji_safety_net(
     Err(CliError::SafetyNetConfigDetail(
         "gaze index requires gaze-cli feature safety-net-kiji".to_string(),
     ))
-}
-
-fn infer_class(entity: &str) -> PiiClass {
-    if entity.contains('@') {
-        PiiClass::Email
-    } else {
-        PiiClass::Name
-    }
 }
 
 fn local_principal(domain: &gaze_token_bridge::model::IndexDomain) -> Principal {
