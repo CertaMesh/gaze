@@ -50,12 +50,25 @@ use regex::Regex;
 /// Returns an owned `String`. The function is allocation-cheap on
 /// already-clean input (only the regex pass walks the string).
 pub(crate) fn normalize_ocr_artifacts(text: &str) -> String {
-    let text = email_separator_regex()
+    let mut text = email_separator_regex()
         .replace_all(text, "$pre@$post")
         .into_owned();
-    email_domain_dot_regex()
-        .replace_all(&text, "$pre$post")
-        .into_owned()
+    // Rule 2 may need more than one pass: a single `replace_all` only closes
+    // the first `dot-space` gap in a multi-label domain (e.g.
+    // `user@mail. corp. example. com`), because the `\S+@\S+\.` prefix
+    // anchors on the `@` and consumes everything up to the first dot. Each
+    // subsequent iteration re-anchors on the result and closes the next gap.
+    // The loop terminates because every non-trivial pass removes at least
+    // one whitespace character.
+    let rule2 = email_domain_dot_regex();
+    loop {
+        let next = rule2.replace_all(&text, "$pre$post").into_owned();
+        if next == text {
+            break;
+        }
+        text = next;
+    }
+    text
 }
 
 fn email_separator_regex() -> &'static Regex {
@@ -118,6 +131,27 @@ mod tests {
         assert_eq!(
             normalize_ocr_artifacts("Email: jane.doe@example. invalid"),
             "Email: jane.doe@example.invalid"
+        );
+    }
+
+    #[test]
+    fn collapses_space_after_every_domain_dot_multilabel() {
+        // A single `replace_all` pass of Rule 2 only closes the first
+        // `dot-space` gap in a multi-label domain; without the fixpoint loop
+        // this would yield `user@mail.corp. example. com` and leak the tail.
+        assert_eq!(
+            normalize_ocr_artifacts("user@mail. corp. example. com"),
+            "user@mail.corp.example.com"
+        );
+    }
+
+    #[test]
+    fn multilabel_fixpoint_does_not_over_collapse_surrounding_whitespace() {
+        // The fixpoint loop must not become aggressive about whitespace
+        // outside the dot-space-in-domain shape.
+        assert_eq!(
+            normalize_ocr_artifacts("Contact: user@mail. corp. example. com  Phone: +1 555"),
+            "Contact: user@mail.corp.example.com  Phone: +1 555"
         );
     }
 
