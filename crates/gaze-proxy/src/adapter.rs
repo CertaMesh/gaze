@@ -507,12 +507,23 @@ pub(crate) fn push_text_blocks<'a>(
                         text,
                     }),
                     Value::Object(map) => {
-                        if matches!(map.get("type"), Some(Value::String(kind)) if kind == "text") {
+                        if matches!(map.get("type"), Some(Value::String(kind))
+                            if kind == "text" || kind == "input_text" || kind == "output_text")
+                        {
                             if let Some(Value::String(text)) = map.get_mut("text") {
                                 surfaces.push(PiiSurface {
                                     field_path: format!("{prefix}[{index}].text"),
                                     text,
                                 });
+                            }
+                        } else if matches!(map.get("type"), Some(Value::String(kind)) if kind == "message")
+                        {
+                            if let Some(content) = map.get_mut("content") {
+                                push_text_blocks(
+                                    surfaces,
+                                    &format!("{prefix}[{index}].content"),
+                                    content,
+                                );
                             }
                         }
                     }

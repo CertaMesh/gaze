@@ -273,6 +273,184 @@ async fn openai_responses_instructions_redacts_before_forwarding() {
 }
 
 #[tokio::test]
+async fn openai_responses_structured_input_message_input_text_is_tokenized_and_forwarded() {
+    let upstream = spawn_upstream(|_| json!({"output": [{"content": [{"text": "ok"}]}]})).await;
+    let proxy = spawn_proxy(upstream.base_url.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/responses", proxy.base_url))
+        .json(&json!({
+            "model": "gpt-test",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": [{
+                    "type": "input_text",
+                    "text": "my email is alice@example.invalid"
+                }]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "structured input should be forwarded, got {}",
+        response.status()
+    );
+
+    let forwarded = upstream.forwarded().await;
+    assert_eq!(forwarded.len(), 1);
+    let serialized = forwarded[0].to_string();
+    assert!(
+        !serialized.contains("alice@example.invalid"),
+        "PII egressed raw: {serialized}"
+    );
+    assert!(
+        serialized.contains("Email_1"),
+        "expected a token: {serialized}"
+    );
+    assert_eq!(
+        forwarded[0]["input"][0]["type"], "message",
+        "message item shape preserved"
+    );
+    assert_eq!(
+        forwarded[0]["input"][0]["content"][0]["type"], "input_text",
+        "content part shape preserved"
+    );
+}
+
+#[tokio::test]
+async fn openai_responses_structured_input_string_content_is_tokenized_and_forwarded() {
+    let upstream = spawn_upstream(|_| json!({"output": [{"content": [{"text": "ok"}]}]})).await;
+    let proxy = spawn_proxy(upstream.base_url.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/responses", proxy.base_url))
+        .json(&json!({
+            "model": "gpt-test",
+            "input": [{
+                "type": "message",
+                "role": "user",
+                "content": "my email is alice@example.invalid"
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let forwarded = upstream.forwarded().await;
+    assert_eq!(forwarded.len(), 1);
+    let serialized = forwarded[0].to_string();
+    assert!(!serialized.contains("alice@example.invalid"));
+    assert!(serialized.contains("Email_1"));
+    assert_eq!(forwarded[0]["input"][0]["type"], "message");
+    assert!(forwarded[0]["input"][0]["content"].is_string());
+}
+
+#[tokio::test]
+async fn openai_responses_structured_input_multiple_messages_and_parts_all_tokenized() {
+    let upstream = spawn_upstream(|_| json!({"output": [{"content": [{"text": "ok"}]}]})).await;
+    let proxy = spawn_proxy(upstream.base_url.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/responses", proxy.base_url))
+        .json(&json!({
+            "model": "gpt-test",
+            "input": [
+                {"type": "message", "role": "system", "content": [{"type": "input_text", "text": "reach me at alice@example.invalid"}]},
+                {"type": "message", "role": "user", "content": [
+                    {"type": "input_text", "text": "and cc bob@example.invalid too"},
+                    {"type": "input_text", "text": "no pii here"}
+                ]}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let forwarded = upstream.forwarded().await;
+    assert_eq!(forwarded.len(), 1);
+    let serialized = forwarded[0].to_string();
+    assert!(!serialized.contains("alice@example.invalid"));
+    assert!(!serialized.contains("bob@example.invalid"));
+    assert!(serialized.contains("Email_1"));
+    assert!(serialized.contains("Email_2"));
+    assert_eq!(forwarded[0]["input"][0]["content"][0]["type"], "input_text");
+    assert_eq!(forwarded[0]["input"][1]["content"][0]["type"], "input_text");
+    assert_eq!(
+        forwarded[0]["input"][1]["content"][1]["text"],
+        "no pii here"
+    );
+}
+
+#[tokio::test]
+async fn openai_chat_completions_text_parts_are_unaffected_by_input_text_broadening() {
+    let upstream = spawn_upstream(|_| json!({"choices": [{"message": {"content": "ok"}}]})).await;
+    let proxy = spawn_proxy(upstream.base_url.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/chat/completions", proxy.base_url))
+        .json(&json!({
+            "model": "gpt-test",
+            "messages": [{
+                "role": "user",
+                "content": [{"type": "text", "text": "my email is alice@example.invalid"}]
+            }]
+        }))
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+
+    let forwarded = upstream.forwarded().await;
+    assert_eq!(forwarded.len(), 1);
+    let serialized = forwarded[0].to_string();
+    assert!(!serialized.contains("alice@example.invalid"));
+    assert!(serialized.contains("Email_1"));
+    assert_eq!(forwarded[0]["messages"][0]["content"][0]["type"], "text");
+}
+
+/// Resource-identifiers in Responses-API structured `input` stay UNSURFACED by
+/// design: a `function_call` item is not a `message`, so its fields are not enumerated
+/// by the adapter, and any PII there fails closed rather than being silently rewritten.
+/// This is the blast-radius guard — the `push_text_blocks` broadening must only add
+/// surfacing for `message` items' `content` text parts, not rewrite non-message kinds.
+#[tokio::test]
+async fn openai_responses_structured_input_function_call_arguments_still_fail_closed() {
+    let upstream = spawn_upstream(|_| json!({"output": [{"content": [{"text": "ok"}]}]})).await;
+    let proxy = spawn_proxy(upstream.base_url.clone()).await;
+
+    let response = Client::new()
+        .post(format!("{}/v1/responses", proxy.base_url))
+        .json(&json!({
+            "model": "gpt-test",
+            "input": [
+                {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+                {"type": "function_call", "call_id": "call_7001234", "arguments": "{\"email\":\"alice@example.invalid\"}"}
+            ]
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // PII inside an unsurfaced non-message item must fail closed, never forwarded.
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::UNPROCESSABLE_ENTITY,
+        "function_call.arguments carrying PII must fail closed, got {}",
+        response.status()
+    );
+    assert_eq!(
+        response.text().await.unwrap(),
+        r#"{"error":"UnsurfacedPii"}"#
+    );
+    assert!(upstream.forwarded().await.is_empty());
+}
+
+#[tokio::test]
 async fn unmatched_path_returns_404_without_forwarding_upstream() {
     let upstream = spawn_upstream(|_| json!({"unexpected": true})).await;
     let proxy = spawn_proxy(upstream.base_url.clone()).await;
