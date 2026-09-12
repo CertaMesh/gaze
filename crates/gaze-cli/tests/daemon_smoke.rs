@@ -1345,11 +1345,9 @@ fn wait_for_redaction_rows(audit_db: &Path, min_count: i64, timeout: Duration) -
     let deadline = Instant::now() + timeout;
     loop {
         if let Ok(conn) = rusqlite::Connection::open(audit_db) {
-            if let Ok(count) = conn.query_row(
-                "SELECT count(*) FROM redaction_log",
-                [],
-                |row| row.get::<_, i64>(0),
-            ) {
+            if let Ok(count) = conn.query_row("SELECT count(*) FROM redaction_log", [], |row| {
+                row.get::<_, i64>(0)
+            }) {
                 if count >= min_count {
                     return count;
                 }
