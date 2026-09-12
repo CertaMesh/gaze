@@ -330,8 +330,12 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
                 {
                     if f.try_lock_exclusive().is_ok() {
                         let mut contents = String::new();
-                        let _ = f.read_to_string(&mut contents);
-                        if contents.trim().is_empty() {
+                        // Only remove if we can read the file and it is still
+                        // empty; a read error means we cannot confirm the
+                        // contents, so leave the file alone.
+                        if f.read_to_string(&mut contents).is_ok()
+                            && contents.trim().is_empty()
+                        {
                             let _ = fs::remove_file(&options.paths.pidfile);
                         }
                     }
@@ -439,33 +443,66 @@ pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
 }
 
 pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
-    match status(paths) {
-        Ok(Some(status)) if !status.running => {
-            fs::remove_file(&paths.pidfile).map_err(|source| ProxyError::DaemonIo {
+    // Open the pidfile and acquire an exclusive lock before inspecting or
+    // removing it.  Classifying the file via status() and then removing by
+    // pathname (without holding a lock) creates a window: a concurrent startup
+    // can publish a live PID between the read and the remove, and we would
+    // delete the running daemon's pidfile.  Acquiring the lock first ties
+    // cleanup to the inode we are about to remove and prevents that window.
+    let mut f = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&paths.pidfile)
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(ProxyError::DaemonIo {
                 path: paths.pidfile.clone(),
                 source,
             })
         }
-        Ok(_) => Ok(()),
-        Err(ProxyError::DaemonPidfileStale { .. }) => {
-            // The file is empty or unparseable.  It may be a startup in
-            // progress: `lock_pidfile` creates and exclusively locks an empty
-            // file before the child publishes its PID.  Only remove it if we
-            // can ourselves acquire the exclusive lock — if we cannot, another
-            // startup owns the file and we must leave it intact.
-            if let Ok(f) = OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&paths.pidfile)
-            {
-                if f.try_lock_exclusive().is_ok() {
-                    let _ = fs::remove_file(&paths.pidfile);
-                }
-                // else: locked by an active startup — leave it alone.
-            }
-            Ok(())
+    };
+
+    // If we cannot acquire the exclusive lock, an active startup or the daemon
+    // itself holds it; leave the file intact.
+    if f.try_lock_exclusive().is_err() {
+        return Ok(());
+    }
+
+    // Re-read the contents under the lock so we see the final state.
+    let mut contents = String::new();
+    f.read_to_string(&mut contents).map_err(|source| ProxyError::DaemonIo {
+        path: paths.pidfile.clone(),
+        source,
+    })?;
+
+    // Parse the PID from the locked file.  Empty/unparseable means the
+    // startup that created this file never finished; removable.
+    let is_stale = if contents.trim().is_empty() {
+        true
+    } else {
+        match contents.lines().next().and_then(|l| l.parse::<u32>().ok()) {
+            Some(pid) => !process_exists(pid),
+            None => true, // unparseable — treat as stale
         }
-        Err(e) => Err(e),
+    };
+
+    if !is_stale {
+        return Ok(());
+    }
+
+    // The file is stale and we hold the lock.  Remove by inode (the lock fd
+    // still refers to this inode even after the unlink, so no other path
+    // can slip a replacement in under the same lock).
+    match fs::remove_file(&paths.pidfile) {
+        Ok(()) => Ok(()),
+        // Benign: another cleanup already removed it between our open and now.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(ProxyError::DaemonIo {
+            path: paths.pidfile.clone(),
+            source,
+        }),
     }
 }
 
@@ -798,5 +835,49 @@ mod tests {
 
         // Releasing the lock explicitly (mimics startup completing or aborting).
         drop(lock);
+    }
+
+    /// `cleanup_stale` must propagate real unlink failures rather than
+    /// swallowing them and reporting success.  This regression covers the
+    /// deterministic path described in the r2 review: make the parent directory
+    /// read/execute-only so that `unlink` (which requires write permission on
+    /// the parent) fails with EACCES, then verify that the file is still present
+    /// and that `cleanup_stale` returns an I/O error.
+    ///
+    /// Skipped when running as root because root bypasses DAC permission checks.
+    #[test]
+    #[cfg(unix)]
+    fn cleanup_stale_reports_unlink_failure() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if unsafe { libc::getuid() } == 0 {
+            // root ignores DAC permissions; the test would be a false pass.
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+
+        // Create an empty (stale) pidfile.
+        std::fs::write(&paths.pidfile, "").unwrap();
+
+        // Revoke write permission on the parent directory so unlink fails.
+        let parent = paths.pidfile.parent().unwrap();
+        let original = std::fs::metadata(parent).unwrap().permissions();
+        std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = cleanup_stale(&paths);
+
+        // Restore permissions before asserting so the TempDir drop can clean up.
+        std::fs::set_permissions(parent, original).unwrap();
+
+        assert!(
+            result.is_err(),
+            "cleanup_stale must propagate the unlink failure, not return Ok"
+        );
+        assert!(
+            paths.pidfile.exists(),
+            "the stale pidfile must remain when unlink failed"
+        );
     }
 }
