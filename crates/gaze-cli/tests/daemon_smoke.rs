@@ -1337,6 +1337,32 @@ fn eviction_row_count(audit_db: &Path) -> i64 {
     }
 }
 
+/// Polls `redaction_log` until at least `min_count` rows are present or the
+/// deadline is exceeded.  Returns the final row count.  This replaces a fixed
+/// `thread::sleep` before breaking the audit DB so the test is not sensitive
+/// to how long the daemon needs to commit its SQLite write.
+fn wait_for_redaction_rows(audit_db: &Path, min_count: i64, timeout: Duration) -> i64 {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Ok(conn) = rusqlite::Connection::open(audit_db) {
+            if let Ok(count) = conn.query_row(
+                "SELECT count(*) FROM redaction_log",
+                [],
+                |row| row.get::<_, i64>(0),
+            ) {
+                if count >= min_count {
+                    return count;
+                }
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {min_count} row(s) in redaction_log"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
 /// Spawns `gaze daemon` and returns the child plus background stdout/stderr
 /// reader threads. The threads collect all lines so the test can keep stdin
 /// open (to let the session age out for idle eviction) and close it when
@@ -1402,17 +1428,10 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
 
-    let conn = rusqlite::Connection::open(&audit_db).unwrap();
-    let redaction_count: i64 = conn
-        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
-        .unwrap();
-    assert!(
-        redaction_count >= 1,
-        "redaction audit row should be present after the first request"
-    );
-    drop(conn);
+    // Poll until the audit row lands instead of sleeping a fixed interval;
+    // this prevents the test from being sensitive to daemon startup latency.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
 
     // Break the audit DB so the next SQLite write fails with
     // `RedactionLogError::Sqlite`.
@@ -1491,20 +1510,11 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
-    thread::sleep(Duration::from_millis(500));
 
-    // Confirm the first request's audit row landed before breaking the DB.
+    // Poll until the audit row lands before breaking the DB.
     // This guards against a timing race where the daemon hasn't yet committed
     // the SQLite write when chattr +i is applied to the directory.
-    let conn = rusqlite::Connection::open(&audit_db).unwrap();
-    let redaction_count: i64 = conn
-        .query_row("SELECT count(*) FROM redaction_log", [], |row| row.get(0))
-        .unwrap();
-    assert!(
-        redaction_count >= 1,
-        "redaction audit row should be present after the first request"
-    );
-    drop(conn);
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
@@ -1815,7 +1825,10 @@ fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
         .unwrap();
         stdin.flush().unwrap();
     }
-    thread::sleep(Duration::from_millis(500));
+
+    // Poll until the first request's audit row has landed before breaking the
+    // DB, so we don't race with the daemon's SQLite write.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
 
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
