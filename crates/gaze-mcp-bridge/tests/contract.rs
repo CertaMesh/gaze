@@ -830,6 +830,272 @@ async fn file_mode_parallel_sessions_do_not_corrupt_each_other() {
     assert_eq!(std::fs::read_dir(dir.path()).expect("read dir").count(), 8);
 }
 
+fn session_cap_config(dir: Option<&Path>, max_sessions: usize) -> String {
+    let session_block = match dir {
+        Some(d) => format!(
+            r#"
+        [session]
+        mode = "file"
+        dir = "{dir}"
+        key_env = "GAZE_BRIDGE_TEST_KEY_EVICT"
+        max_sessions = {max_sessions}
+        "#,
+            dir = d.display(),
+        ),
+        None => format!(
+            r#"
+        [session]
+        mode = "ephemeral"
+        max_sessions = {max_sessions}
+        "#,
+        ),
+    };
+    format!(
+        "{session_block}
+        [servers.mail]
+        command = \"mail\"
+        ",
+    )
+}
+
+#[tokio::test]
+async fn session_cap_defaults_to_one_thousand_when_omitted() {
+    let raw = r#"
+        [session]
+        mode = "ephemeral"
+
+        [servers.mail]
+        command = "mcp-mail"
+    "#;
+    let config = BridgeConfig::from_toml_str(raw).expect("config");
+    assert_eq!(config.session.max_sessions, 1_000);
+}
+
+#[tokio::test]
+async fn session_cap_rejects_zero() {
+    let raw = r#"
+        [session]
+        mode = "ephemeral"
+        max_sessions = 0
+
+        [servers.mail]
+        command = "mcp-mail"
+    "#;
+    assert!(BridgeConfig::from_toml_str(raw).is_err());
+}
+
+#[tokio::test]
+async fn ephemeral_mode_rejects_new_sessions_when_cap_reached() {
+    let config = BridgeConfig::from_toml_str(&session_cap_config(None, 2)).expect("config");
+    let store = BridgeSessionStore::from_config(&config.session).expect("store");
+
+    let sids = [
+        "01HRT7K6P6X5Q9M0V8YQ4N7T01",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T02",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T03",
+    ];
+    store.get(sids[0]).await.expect("first session");
+    store.get(sids[1]).await.expect("second session");
+    assert_eq!(store.len().await, 2, "ephemeral store fills to the cap");
+
+    match store.get(sids[2]).await {
+        Err(err) => assert!(
+            matches!(err, gaze_mcp_bridge::BridgeError::LimitExceeded(_)),
+            "expected LimitExceeded, got {err:?}"
+        ),
+        Ok(_) => panic!("third session should exceed ephemeral cap"),
+    }
+    assert_eq!(
+        store.len().await,
+        2,
+        "a rejected new session must not enlarge the cache"
+    );
+
+    // Cached sessions remain usable after the cap is reached.
+    let still_cached = store.get(sids[0]).await.expect("cached session retained");
+    assert_eq!(still_cached.lock().await.snapshot_entries().len(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn file_mode_evicts_lru_and_reloads_evicted_session_from_disk() {
+    let dir = TempDir::new().expect("tempdir");
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config =
+        BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 2)).expect("config");
+    let store = Arc::new(BridgeSessionStore::from_config(&config.session).expect("store"));
+
+    let sids = [
+        "01HRT7K6P6X5Q9M0V8YQ4N7T01",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T02",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T03",
+    ];
+
+    // Tokenize + persist sid_a so its token can be restored from disk after eviction.
+    let token_a = {
+        let session = store.get(sids[0]).await.expect("a");
+        let guard = session.lock().await;
+        let token = guard.tokenize(&PiiClass::Email, RAW_EMAIL).expect("token");
+        store.persist(sids[0], &guard).await.expect("persist a");
+        token
+    };
+    let _ = store.get(sids[1]).await.expect("b");
+    assert_eq!(store.len().await, 2);
+
+    // Inserting a third session exceeds the cap and evicts the LRU (sid_a).
+    let _ = store.get(sids[2]).await.expect("c");
+    assert_eq!(store.len().await, 2, "file store stays bounded at the cap");
+
+    // sid_a was evicted; reloading it must re-read the encrypted file and restore
+    // the previously issued token (round-trip works after eviction).
+    let reloaded = store.get(sids[0]).await.expect("reload a");
+    let guard = reloaded.lock().await;
+    assert_eq!(guard.restore(&token_a), Some(RAW_EMAIL.to_string()));
+    assert_eq!(guard.snapshot_entries().len(), 1);
+    drop(guard);
+    assert_eq!(
+        store.len().await,
+        2,
+        "reload evicts again rather than growing"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn file_mode_lru_keeps_recently_used_session_cached() {
+    let dir = TempDir::new().expect("tempdir");
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "55".repeat(32));
+    let config =
+        BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 2)).expect("config");
+    let store = BridgeSessionStore::from_config(&config.session).expect("store");
+
+    let sids = [
+        "01HRT7K6P6X5Q9M0V8YQ4N7T01",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T02",
+        "01HRT7K6P6X5Q9M0V8YQ4N7T03",
+    ];
+
+    // Tokenize sid_a without persisting: its token lives only in the in-memory
+    // cache, so if sid_a is evicted the token is permanently lost.
+    let token_a = {
+        let session = store.get(sids[0]).await.expect("a");
+        let guard = session.lock().await;
+        guard.tokenize(&PiiClass::Email, RAW_EMAIL).expect("token")
+    };
+    let _ = store.get(sids[1]).await.expect("b");
+    // Touch sid_a → it becomes most-recently-used; sid_b is now the LRU.
+    let _ = store.get(sids[0]).await;
+    // Insert sid_c → cap exceeded → evict the LRU (sid_b), not sid_a.
+    let _ = store.get(sids[2]).await.expect("c");
+    assert_eq!(store.len().await, 2);
+
+    // sid_a survived eviction: its cached token is still valid (no disk reload).
+    let a_cached = store.get(sids[0]).await.expect("a still cached");
+    assert_eq!(
+        a_cached.lock().await.restore(&token_a),
+        Some(RAW_EMAIL.to_string()),
+        "LRU must keep the most-recently-used session cached"
+    );
+
+    // sid_b was evicted: it has no on-disk file, so reload yields a fresh empty
+    // session (proving sid_b — not sid_a — was the evicted entry).
+    let b_reloaded = store.get(sids[1]).await.expect("b reloaded");
+    assert_eq!(
+        b_reloaded.lock().await.snapshot_entries().len(),
+        0,
+        "LRU must evict the least-recently-used session"
+    );
+}
+
+/// Regression test for the active-session eviction race.
+///
+/// Scenario: cap=1, call A holds its SharedSession Arc while call B for a
+/// different session id is attempted. The LRU eviction loop must not remove
+/// session A from the cache while A's Arc is still live, because doing so
+/// would allow a subsequent get(A) to load the older on-disk snapshot into a
+/// second independent Session object — the two live sessions could then
+/// overwrite each other's persisted token mappings on persist().
+///
+/// Expected behaviour: get(B) is rejected with LimitExceeded (all cached
+/// sessions are active), A remains canonical in the cache, and after A's Arc
+/// is dropped a fresh get(A) returns the same in-memory session (no stale
+/// reload).
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn w1_file_cap_retains_active_session_identity() {
+    let dir = TempDir::new().expect("tempdir");
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_ACTIVE", "66".repeat(32));
+    let config = BridgeConfig::from_toml_str(&format!(
+        r#"
+        [session]
+        mode = "file"
+        dir = "{dir}"
+        key_env = "GAZE_BRIDGE_TEST_KEY_ACTIVE"
+        max_sessions = 1
+
+        [servers.mail]
+        command = "mail"
+        "#,
+        dir = dir.path().display(),
+    ))
+    .expect("config");
+    let store = Arc::new(BridgeSessionStore::from_config(&config.session).expect("store"));
+
+    let sid_a = "01HRT7K6P6X5Q9M0V8YQ4N7T01";
+    let sid_b = "01HRT7K6P6X5Q9M0V8YQ4N7T02";
+
+    // Acquire session A and tokenize something — do NOT release the Arc yet.
+    let session_a = store.get(sid_a).await.expect("session A");
+    let token_a = {
+        let guard = session_a.lock().await;
+        let token = guard
+            .tokenize(&PiiClass::Email, RAW_EMAIL)
+            .expect("tokenize");
+        store.persist(sid_a, &guard).await.expect("persist A");
+        token
+    };
+    // session_a Arc is still live: strong_count >= 2 (cache + this variable).
+    assert_eq!(store.len().await, 1);
+
+    // Attempting to insert a second session while A is active must be rejected.
+    // The eviction loop should detect that session A is in use and refuse to
+    // evict it, returning LimitExceeded instead of inserting B over a live A.
+    match store.get(sid_b).await {
+        Err(err) => assert!(
+            matches!(err, gaze_mcp_bridge::BridgeError::LimitExceeded(_)),
+            "expected LimitExceeded, got {err:?}"
+        ),
+        Ok(_) => panic!("B must be rejected while A is active"),
+    }
+    // The cache must not have grown: B was rejected, A is still the sole entry.
+    assert_eq!(store.len().await, 1, "cache must not grow past the cap");
+
+    // A must still be canonical: the Arc we hold must still resolve the correct
+    // token — there must be no second independent Session for A in existence.
+    assert_eq!(
+        session_a.lock().await.restore(&token_a),
+        Some(RAW_EMAIL.to_string()),
+        "held session A must still contain the token after failed B insertion"
+    );
+
+    // Drop A's Arc — now only the cache holds the reference (strong_count == 1).
+    drop(session_a);
+
+    // Now B's insertion should succeed: A is inactive and can be evicted.
+    {
+        let session_b = store.get(sid_b).await.expect("B must succeed after A is released");
+        assert_eq!(store.len().await, 1, "B evicted A, cache stays at cap");
+        drop(session_b);
+    }
+
+    // Reloading A from disk must restore the persisted token (proving the
+    // eviction/reload path preserves reversibility and does not corrupt the
+    // on-disk snapshot).
+    let reloaded_a = store.get(sid_a).await.expect("reload A");
+    assert_eq!(
+        reloaded_a.lock().await.restore(&token_a),
+        Some(RAW_EMAIL.to_string()),
+        "A must be restorable from disk after eviction"
+    );
+}
+
 proptest::proptest! {
     #[test]
     fn audit_event_serializes_paths_only(local in "[a-z]{1,12}") {
