@@ -575,7 +575,8 @@ fn extract_recognizer_lint_config(raw: &str) -> (String, RawRecognizerLintConfig
         if in_lint {
             if let Some((key, value)) = trimmed.split_once('=') {
                 if key.trim() == "strict_locale_overlap" {
-                    lint.strict_locale_overlap = value.trim().eq_ignore_ascii_case("true");
+                    let cleaned = value.split('#').next().unwrap_or(value).trim();
+                    lint.strict_locale_overlap = cleaned.eq_ignore_ascii_case("true");
                 }
             }
             continue;
@@ -1207,6 +1208,13 @@ fn default_collision_precedence() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extract_lint_config_parses_true_with_inline_comment() {
+        let raw = "[recognizers.lint]\nstrict_locale_overlap = true  # enforce strict guard\n";
+        let (_, lint) = extract_recognizer_lint_config(raw);
+        assert!(lint.strict_locale_overlap);
+    }
 
     const CORE: &str = r#"
 schema_version = "0.1.0"

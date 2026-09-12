@@ -211,6 +211,28 @@ fn lint_strict_mode_rejects_overlap() {
 }
 
 #[test]
+fn lint_strict_mode_rejects_overlap_with_inline_comment() {
+    let mut raw = postal_collision_rulepack(r#""global", "en-US", "de-DE""#, true);
+    raw = raw.replace(
+        "strict_locale_overlap = true\n",
+        "strict_locale_overlap = true  # enforce strict overlap guard\n",
+    );
+    let err = Rulepack::parse(&raw)
+        .expect_err("inline TOML comment must not disable strict_locale_overlap");
+
+    assert!(matches!(
+        err,
+        RulepackError::ConflictingLocaleProjection {
+            class: PiiClass::Custom(ref class),
+            ref recognizer_ids,
+            ref locale_overlap,
+        } if class == "postal_code"
+            && recognizer_ids == &vec!["postal.de".to_string(), "postal.us".to_string()]
+            && locale_overlap == &vec![LocaleTag::DeDe, LocaleTag::EnUs]
+    ));
+}
+
+#[test]
 fn lint_rejects_ambiguous_collision_family_precedence() {
     let raw = collision_lint_rulepack(
         r#"
