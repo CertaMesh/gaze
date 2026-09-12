@@ -240,28 +240,35 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
 /// `scan_1.png` pass through protection unchanged and are never registered as
 /// tokens. Unlike `Session::restore_strict_text`, which fails closed on *any*
 /// unowned token-shaped substring, this restores owned session tokens and only
-/// fails closed when an unowned **session-prefixed** token spelling remains
-/// (e.g. an injected `<deadbeef:Email_999>`). Bare `<word>_<digits>` shapes the
-/// session never owned are passed through to file validation, preserving the
-/// `restore(protect(path)) == path` round-trip for non-PII paths.
+/// fails closed when:
+/// - the path contains a malformed token spelling (e.g. `<Email_>`,
+///   `<deadbeef:Email_>`), or
+/// - the path contains a nested-wrapper token spelling (e.g.
+///   `<<deadbeef:Email_1>>`), or
+/// - an unowned **non-bare** token spelling remains after restoration (e.g.
+///   an injected `<deadbeef:Email_999>`, `<Email_1>`, or `email_1`).
+///
+/// Broad bare `<word>_<digits>` identifiers that are not session-issued and are
+/// not built-in-class aliases (e.g. `scan_1`, `Scan_1`) are passed through to
+/// file validation, preserving the `restore(protect(path)) == path` round-trip
+/// for non-PII paths.
 fn restore_path(session: &gaze::Session, protected_path: &str) -> Result<String, ToolError> {
-    let pattern = gaze::token_shape::pattern();
-    let mut restored = String::with_capacity(protected_path.len());
-    let mut last = 0usize;
-    for matched in pattern.find_iter(protected_path) {
-        restored.push_str(&protected_path[last..matched.start()]);
-        let token = matched.as_str();
-        match session.restore(token) {
-            Some(raw) => restored.push_str(&raw),
-            None if gaze::token_shape::starts_with_session_prefix(token) => {
-                return Err(ToolError::InvalidArgs("path restoration failed".into()));
-            }
-            None => restored.push_str(token),
-        }
-        last = matched.end();
+    // Gate 1: reject malformed and nested-wrapper spellings before any
+    // substitution or filesystem access.
+    gaze::token_shape::validate_restore_shapes(protected_path)
+        .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+
+    // Gate 2: substitute known tokens and classify remaining shapes.
+    // Bare identifiers (e.g. `scan_1`) are audit-only; other unowned shapes
+    // (e.g. `<Email_1>`, `email_1`, `<deadbeef:Email_999>`) are rejected.
+    let assessment = session
+        .assess_restore_text(protected_path)
+        .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+    if let Some(unknown) = assessment.unknown_tokens().first() {
+        let _ = unknown; // error message is constant to avoid leaking token content
+        return Err(ToolError::InvalidArgs("path restoration failed".into()));
     }
-    restored.push_str(&protected_path[last..]);
-    Ok(restored)
+    Ok(assessment.into_restored().text)
 }
 
 fn validate_file(path: &Path, max_file_size: u64) -> Result<(), ToolError> {
@@ -755,6 +762,172 @@ mod tests {
         // Every dispatch failed at `validate_file` (NotFound), none at the
         // restore gate, so no call reached `finish_call`.
         assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_malformed_session_prefixed_token_in_path() {
+        let harness = Harness::new();
+        // `<deadbeef:Email_>` has a missing ordinal — the malformed-token gate
+        // must reject it before any filesystem access, regardless of whether a
+        // session-prefixed prefix is present.
+        for malformed in [
+            "directory/<deadbeef:Email_>/input.png",
+            "path/<Email_>/file.pdf",
+            "/tmp/<deadbeef:Name_>/doc.png",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": malformed }))
+                .await
+                .expect_err("malformed token in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "malformed `{malformed}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_nested_wrapper_token_in_path() {
+        let harness = Harness::new();
+        // `<<deadbeef:Email_1>>` wraps a valid token-shaped match in an extra
+        // layer of angle brackets; the nested-wrapper gate must reject it before
+        // any filesystem access.
+        for nested in [
+            "directory/<<deadbeef:Email_1>>/input.png",
+            "path/<<Email_1>>/file.pdf",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": nested }))
+                .await
+                .expect_err("nested-wrapper token in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "nested `{nested}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_unowned_wrapped_and_legacy_placeholders() {
+        let harness = Harness::new();
+        // Unowned wrapped (`<Email_1>`) and legacy (`email_1`) placeholders are
+        // not bare identifiers and must be rejected at the restore gate rather
+        // than passed through to filesystem access.
+        for unowned in [
+            "<Email_1>/input.png",
+            "directory/<Email_1>/input.png",
+            "email_1/input.png",
+        ] {
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": unowned }))
+                .await
+                .expect_err("unowned trap placeholder in path must fail at the restore gate");
+            assert!(
+                matches!(
+                    err,
+                    DispatchError::ToolError(ToolError::InvalidArgs(ref msg))
+                    if msg == "path restoration failed"
+                ),
+                "unowned trap `{unowned}` must return InvalidArgs, got: {err:?}",
+            );
+        }
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_restores_owned_token_alongside_negative_cases() {
+        // Owned token must restore to raw PII; negative cases must still be
+        // blocked. This test covers both paths in the same session to confirm
+        // the assessment and malformed/nested gates interact correctly.
+        let core = gaze_assembly::CorePipelineConfig::new().build().unwrap();
+        let session = gaze::Session::new(gaze::Scope::Ephemeral).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let raw_path = directory
+            .path()
+            .join("alice@example.invalid")
+            .join("report.pdf");
+        std::fs::create_dir_all(raw_path.parent().unwrap()).unwrap();
+        std::fs::write(&raw_path, b"dummy").unwrap();
+        let gaze::CleanDocument::Text(protected_path) = core
+            .pseudonymize_text(&session, raw_path.to_str().unwrap())
+            .unwrap()
+        else {
+            panic!("text expected")
+        };
+        assert_ne!(protected_path, raw_path.to_str().unwrap());
+
+        let mut registry = ToolRegistry::new();
+        registry
+            .register(GazeReadFile::with_max_file_size(1))
+            .unwrap();
+        let manifest = RecordingManifest::new();
+        let policy = SessionIdPolicy::default_strict();
+        let envelope = PiiEnvelope::new(
+            &registry,
+            &AllowAllAuth,
+            &manifest,
+            core.pipeline(),
+            &session,
+            core.locale_chain().as_slice(),
+            &policy,
+        );
+
+        // Owned token restores and reaches validate_file (LimitExceeded).
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": protected_path}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::LimitExceeded(_))),
+            "owned-token path must reach validate_file: {err:?}",
+        );
+
+        // Malformed token in path is rejected at the restore gate.
+        let malformed = format!("{}/file.pdf", directory.path().join("<deadbeef:Email_>").display());
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": malformed}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
+            "malformed token in path must be rejected: {err:?}",
+        );
+
+        // Unowned wrapped placeholder is rejected at the restore gate.
+        let unowned_wrapped = format!("{}/file.pdf", directory.path().join("<Email_1>").display());
+        let err = envelope
+            .dispatch(
+                &Principal::new("unit-test"),
+                "gaze_read_file",
+                json!({"path": unowned_wrapped}),
+                None,
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
+            "unowned wrapped placeholder must be rejected: {err:?}",
+        );
     }
 
     #[cfg(feature = "ocr-tesseract")]

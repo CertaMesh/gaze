@@ -125,6 +125,63 @@ pub fn is_bare_identifier(match_text: &str) -> bool {
         })
 }
 
+/// Validate that `text` contains no malformed or nested token-shaped substrings.
+///
+/// This runs the same format-level gate as the session's strict restore path
+/// without performing any manifest lookup or substitution.  Call this before
+/// processing a path or other carrier that performs its own substitution loop,
+/// so that malformed spellings (e.g. `<Email_>`, `<deadbeef:Email_>`) and
+/// nested-wrapper spellings (e.g. `<<deadbeef:Email_1>>`) are rejected before
+/// any filesystem access.
+///
+/// Returns the offending substring on failure.
+pub fn validate_restore_shapes(text: &str) -> Result<(), String> {
+    // Check 1 — nested wrapper: a valid token-shape match immediately preceded
+    // by `<` or immediately followed by `>` indicates an extra bracket layer.
+    for matched in pattern().find_iter(text) {
+        let nested_start = matched.start() > 0 && text.as_bytes()[matched.start() - 1] == b'<';
+        let nested_end = matched.end() < text.len() && text.as_bytes()[matched.end()] == b'>';
+        if nested_start || nested_end {
+            let start = matched.start().saturating_sub(usize::from(nested_start));
+            let end = matched.end() + usize::from(nested_end);
+            return Err(text[start..end].to_owned());
+        }
+    }
+
+    // Check 2 — malformed token: angle-bracket token-shaped substrings with a
+    // missing or empty ordinal that the main pattern does not capture.
+    let valid_spans: Vec<_> = pattern()
+        .find_iter(text)
+        .map(|m| m.range())
+        .collect();
+    for matched in malformed_restore_pattern().find_iter(text) {
+        let overlaps_valid = valid_spans
+            .iter()
+            .any(|range| matched.start() < range.end && range.start < matched.end());
+        if !overlaps_valid {
+            return Err(matched.as_str().to_owned());
+        }
+    }
+
+    Ok(())
+}
+
+fn malformed_restore_pattern() -> &'static Regex {
+    static PATTERN: OnceLock<Regex> = OnceLock::new();
+    PATTERN.get_or_init(|| {
+        let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
+        let builtin_lower_alt = BUILTIN_CLASS_NAMES
+            .iter()
+            .map(|name| name.to_ascii_lowercase())
+            .collect::<Vec<_>>()
+            .join("|");
+        Regex::new(&format!(
+            r"<(?:[0-9a-f]{{8}}:)?(?:{builtin_alt}|{builtin_lower_alt}|Custom:[a-z0-9_]*|custom:[a-z0-9_]*)_?>"
+        ))
+        .expect("malformed restore token regex must compile")
+    })
+}
+
 fn build_pattern() -> String {
     let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
     let builtin_lower_alt = BUILTIN_CLASS_NAMES
@@ -397,5 +454,36 @@ mod tests {
         let rendered = "custom:family:foo_1:custom:family:bar_2";
         let matches: Vec<&str> = find_tokens(rendered).collect();
         assert_eq!(matches, vec!["custom:family:foo_1", "custom:family:bar_2"]);
+    }
+
+    #[test]
+    fn validate_restore_shapes_accepts_bare_and_session_prefixed() {
+        // Bare identifiers must pass the format gate.
+        assert!(validate_restore_shapes("scan_1.png").is_ok());
+        assert!(validate_restore_shapes("Scan_1.png").is_ok());
+        assert!(validate_restore_shapes("/tmp/invoice_20250111.pdf").is_ok());
+        // Session-prefixed tokens also have valid format.
+        assert!(validate_restore_shapes("directory/<deadbeef:Email_1>/input.png").is_ok());
+        // Completely clean paths.
+        assert!(validate_restore_shapes("/tmp/report.pdf").is_ok());
+    }
+
+    #[test]
+    fn validate_restore_shapes_rejects_malformed_token_spellings() {
+        // Missing ordinal (trailing `_>`) must be rejected.
+        assert!(validate_restore_shapes("directory/<deadbeef:Email_>/input.png").is_err());
+        assert!(validate_restore_shapes("<Email_>").is_err());
+        assert!(validate_restore_shapes("<Name_>").is_err());
+        assert!(validate_restore_shapes("<deadbeef:Name_>").is_err());
+        assert!(validate_restore_shapes("<Custom:foo_>").is_err());
+    }
+
+    #[test]
+    fn validate_restore_shapes_rejects_nested_wrapper_spellings() {
+        // Extra angle brackets around a token match must be rejected.
+        assert!(validate_restore_shapes("<<deadbeef:Email_1>>").is_err());
+        assert!(validate_restore_shapes("<<Email_1>>").is_err());
+        // Mixed nesting variants.
+        assert!(validate_restore_shapes("path/<<deadbeef:Name_1>>/file.pdf").is_err());
     }
 }
