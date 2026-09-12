@@ -575,7 +575,8 @@ fn extract_recognizer_lint_config(raw: &str) -> (String, RawRecognizerLintConfig
         if in_lint {
             if let Some((key, value)) = trimmed.split_once('=') {
                 if key.trim() == "strict_locale_overlap" {
-                    lint.strict_locale_overlap = value.trim().eq_ignore_ascii_case("true");
+                    let cleaned = strip_toml_inline_comment(value).trim();
+                    lint.strict_locale_overlap = cleaned.eq_ignore_ascii_case("true");
                 }
             }
             continue;
@@ -585,6 +586,42 @@ fn extract_recognizer_lint_config(raw: &str) -> (String, RawRecognizerLintConfig
     }
 
     (sanitized, lint)
+}
+
+/// Strips a TOML inline comment from a value on a single line.
+///
+/// `#` begins a comment unless it appears inside a basic (`"..."`) or literal
+/// (`'...'`) string. Only the single-line forms are handled because
+/// [`extract_recognizer_lint_config`] scans the rulepack one line at a time.
+fn strip_toml_inline_comment(value: &str) -> &str {
+    let mut in_basic = false;
+    let mut in_literal = false;
+    let mut escaped = false;
+    for (index, ch) in value.char_indices() {
+        if in_basic {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                in_basic = false;
+            }
+            continue;
+        }
+        if in_literal {
+            if ch == '\'' {
+                in_literal = false;
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_basic = true,
+            '\'' => in_literal = true,
+            '#' => return &value[..index],
+            _ => {}
+        }
+    }
+    value
 }
 
 impl From<RawLocaleData> for LocaleData {
@@ -1207,6 +1244,32 @@ fn default_collision_precedence() -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strip_toml_inline_comment_drops_trailing_comment() {
+        assert_eq!(
+            strip_toml_inline_comment("true  # enforce strict"),
+            "true  "
+        );
+    }
+
+    #[test]
+    fn strip_toml_inline_comment_keeps_value_without_comment() {
+        assert_eq!(strip_toml_inline_comment("true"), "true");
+        assert_eq!(strip_toml_inline_comment("  false  "), "  false  ");
+    }
+
+    #[test]
+    fn strip_toml_inline_comment_ignores_hash_inside_basic_string() {
+        assert_eq!(strip_toml_inline_comment(r#""a#b" # tail"#), r#""a#b" "#);
+    }
+
+    #[test]
+    fn extract_lint_config_parses_true_with_inline_comment() {
+        let raw = "[recognizers.lint]\nstrict_locale_overlap = true  # enforce strict guard\n";
+        let (_, lint) = extract_recognizer_lint_config(raw);
+        assert!(lint.strict_locale_overlap);
+    }
 
     const CORE: &str = r#"
 schema_version = "0.1.0"
