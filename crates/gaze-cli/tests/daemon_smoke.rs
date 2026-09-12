@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Output, Stdio};
@@ -408,9 +408,11 @@ fn daemon_processes_jsonl_and_isolates_sessions() {
     assert!(responses
         .iter()
         .all(|value| value["clean_text"].as_str().unwrap().contains("<")));
-    assert!(responses.iter().all(|value| value["manifest"]
-        .as_array()
-        .is_some_and(|spans| !spans.is_empty())));
+    assert!(responses.iter().all(|value| {
+        value["manifest"]
+            .as_array()
+            .is_some_and(|spans| !spans.is_empty())
+    }));
 
     let token_a = responses
         .iter()
@@ -1105,7 +1107,8 @@ fn daemon_single_backend_ships_what_the_registry_refuses() {
     ];
     let (shipped, output) = daemon_request(&policy, &single_backend, german);
     assert_eq!(
-        shipped["clean_text"], german,
+        shipped["clean_text"],
+        german,
         "the single-backend daemon ships the de-DE document unflagged: response={shipped}, stderr={}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -1181,7 +1184,8 @@ fn daemon_safety_net_registry_finding_is_enforced_not_merely_parsed() {
     // Same daemon, same document, registry flags withheld.
     let (missed, output) = daemon_request(&policy, &["--locale=de-DE".to_string()], text);
     assert_eq!(
-        missed["clean_text"], text,
+        missed["clean_text"],
+        text,
         "without the registry the identical daemon ships the name verbatim: response={missed}, stderr={}",
         String::from_utf8_lossy(&output.stderr)
     );
@@ -1253,5 +1257,695 @@ fn daemon_rulepack_override_changes_the_detection_surface() {
     assert_eq!(
         overridden_text, text,
         "--rulepack-path replaced the policy's rulepack, so the ES id is no longer tokenized: {overridden_text}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Eviction audit-write failure surfacing.
+//
+// `Daemon::log_eviction` used `let _ = self.logger.log_eviction(...)`, so a
+// SQLite audit-write failure during background eviction was silently dropped
+// with no signal on any channel: stderr was empty, stdout emitted nothing
+// (eviction has no response), and `tracing::warn!` is a runtime no-op because
+// the CLI installs no tracing subscriber. The fix surfaces the error via
+// `eprintln!` (the same channel as the panic hook and `CliError::emit_stderr`)
+// with sanitized JSON.
+//
+// To induce the `RedactionLogError::Sqlite` the tests below set the immutable
+// flag (`chattr +i`) on the audit DB's *parent directory* after the first
+// successful row is written. `SqliteLogger` uses SQLite's default rollback
+// journal mode, so each write transaction must create a `<db>-journal` file in
+// that directory. An immutable directory blocks that creation — even for root
+// — so the daemon's next INSERT fails with `SQLITE_CANTOPEN`. The existing rows
+// and the table itself stay intact, so the tests can still query the DB to
+// verify the row was *not* written. If `chattr` is unavailable or unsupported
+// on the filesystem, the fallback drops `redaction_log` via a separate
+// connection, which makes the daemon's next `INSERT INTO redaction_log` fail
+// with `SQLITE_ERROR`/no-such-table.
+// ---------------------------------------------------------------------------
+
+/// How the audit DB was broken. Determined at runtime by [`break_audit_db`].
+enum AuditBreak {
+    /// `chattr +i` was set on the parent directory. The guard removes it.
+    Chattr(PathBuf),
+    /// `redaction_log` was dropped via a separate connection. No undo needed.
+    Dropped,
+}
+
+impl Drop for AuditBreak {
+    fn drop(&mut self) {
+        if let AuditBreak::Chattr(dir) = self {
+            let _ = Command::new("chattr").arg("-i").arg(dir).output();
+        }
+    }
+}
+
+/// Makes the daemon's next audit write fail with `RedactionLogError::Sqlite`.
+///
+/// Tries `chattr +i` on the parent directory first (works even when the test
+/// runs as root, and preserves the existing table/rows for post-test
+/// queries). Falls back to `DROP TABLE redaction_log` via a separate SQLite
+/// connection if `chattr` is unavailable or the filesystem rejects the
+/// immutable flag.
+fn break_audit_db(audit_db: &Path, audit_dir: &Path) -> AuditBreak {
+    let chattr_ok = Command::new("chattr")
+        .arg("+i")
+        .arg(audit_dir)
+        .output()
+        .is_ok_and(|o| o.status.success());
+    if chattr_ok {
+        return AuditBreak::Chattr(audit_dir.to_path_buf());
+    }
+    let conn = rusqlite::Connection::open(audit_db).expect("open audit db for DROP TABLE fallback");
+    conn.execute_batch("DROP TABLE IF EXISTS redaction_log;")
+        .expect("DROP TABLE redaction_log fallback");
+    AuditBreak::Dropped
+}
+
+/// Counts `daemon.session_eviction` rows in `redaction_log`, returning `0`
+/// when the table itself is gone (DROP TABLE fallback) rather than panicking.
+fn eviction_row_count(audit_db: &Path) -> i64 {
+    let conn = rusqlite::Connection::open(audit_db).expect("open audit db for post-eviction query");
+    match conn.query_row(
+        "SELECT count(*) FROM redaction_log WHERE source = 'daemon.session_eviction'",
+        [],
+        |row| row.get(0),
+    ) {
+        Ok(count) => count,
+        Err(rusqlite::Error::SqliteFailure(_, Some(msg))) if msg.contains("no such table") => 0,
+        Err(err) => panic!("unexpected error querying audit db: {err}"),
+    }
+}
+
+/// Polls `redaction_log` until at least `min_count` rows are present or the
+/// deadline is exceeded.  Returns the final row count.  This replaces a fixed
+/// `thread::sleep` before breaking the audit DB so the test is not sensitive
+/// to how long the daemon needs to commit its SQLite write.
+fn wait_for_redaction_rows(audit_db: &Path, min_count: i64, timeout: Duration) -> i64 {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if let Ok(conn) = rusqlite::Connection::open(audit_db) {
+            if let Ok(count) = conn.query_row("SELECT count(*) FROM redaction_log", [], |row| {
+                row.get::<_, i64>(0)
+            }) {
+                if count >= min_count {
+                    return count;
+                }
+            }
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {min_count} row(s) in redaction_log"
+        );
+        thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Spawns `gaze daemon` and returns the child plus background stdout/stderr
+/// reader threads. The threads collect all lines so the test can keep stdin
+/// open (to let the session age out for idle eviction) and close it when
+/// ready. The child is wrapped in `ChildGuard` so a panicked test does not
+/// leak a daemon process.
+fn spawn_daemon_collect(
+    args: &[&str],
+) -> (
+    ChildGuard,
+    thread::JoinHandle<Vec<String>>,
+    thread::JoinHandle<Vec<String>>,
+) {
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let stdout_thread = thread::spawn(move || {
+        std::io::BufReader::new(stdout)
+            .lines()
+            .map(|l| l.unwrap())
+            .collect::<Vec<_>>()
+    });
+    let stderr_thread = thread::spawn(move || {
+        std::io::BufReader::new(stderr)
+            .lines()
+            .map(|l| l.unwrap())
+            .collect::<Vec<_>>()
+    });
+    (ChildGuard(child), stdout_thread, stderr_thread)
+}
+
+/// T1 — Idle-eviction audit-write failure surfaces on stderr.
+#[cfg(unix)]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
+    let (_policy_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+
+    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+        "daemon",
+        "--policy",
+        policy.to_str().unwrap(),
+        "--audit-db",
+        audit_db.to_str().unwrap(),
+        "--session-idle-timeout",
+        "1",
+        "--idle-timeout",
+        "30",
+    ]);
+
+    // One request — use a PII-shaped caller ID to prove it never reaches stderr.
+    // audit write succeeds, redaction row appears.
+    let t1_caller_id = "user@pii-test.invalid";
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id": t1_caller_id, "text":"alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+
+    // Poll until the audit row lands instead of sleeping a fixed interval;
+    // this prevents the test from being sensitive to daemon startup latency.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+
+    // Break the audit DB so the next SQLite write fails with
+    // `RedactionLogError::Sqlite`.
+    let _breaker = break_audit_db(&audit_db, audit_dir.path());
+
+    // Wait for idle eviction (session-idle-timeout is 1s).
+    thread::sleep(Duration::from_millis(2000));
+
+    drop(guard.0.stdin.take());
+    let status = guard.0.wait().unwrap();
+    let stdout_lines = stdout_thread.join().unwrap();
+    let stderr_lines = stderr_thread.join().unwrap();
+    let stderr_text = stderr_lines.join("\n");
+
+    assert!(
+        status.success(),
+        "daemon should exit cleanly after eviction, stderr={stderr_text}"
+    );
+    assert!(
+        stderr_text.contains(r#""error":"AuditWriteFailed""#),
+        "stderr must surface AuditWriteFailed: {stderr_text}"
+    );
+    assert!(
+        stderr_text.contains(r#""reason":"idle_timeout""#),
+        "stderr must show idle_timeout reason: {stderr_text}"
+    );
+    // audit_session_id in the error line is the generated audit UUID, not the raw caller ID.
+    let failure_line = stderr_lines
+        .iter()
+        .find(|line| line.contains("AuditWriteFailed"))
+        .expect("AuditWriteFailed line must be present");
+    let parsed: serde_json::Value =
+        serde_json::from_str(failure_line).expect("AuditWriteFailed line must be valid JSON");
+    let audit_id = parsed["audit_session_id"]
+        .as_str()
+        .expect("audit_session_id must be a string");
+    assert_eq!(
+        audit_id.len(),
+        36,
+        "audit_session_id must be a UUID: {audit_id}"
+    );
+    assert_ne!(
+        audit_id, t1_caller_id,
+        "raw caller ID must not appear in audit_session_id field"
+    );
+    assert!(
+        stderr_text.contains(r#""detail""#),
+        "stderr must carry a detail field: {stderr_text}"
+    );
+    // detail must be a safe error code, not an arbitrary error message.
+    let detail = parsed["detail"].as_str().expect("detail must be a string");
+    assert!(
+        detail == "Sqlite" || detail == "Backend",
+        "detail must be a safe error code, got: {detail}"
+    );
+    // Raw caller ID (PII-shaped) must not appear in stderr.
+    assert!(
+        !stderr_text.contains(t1_caller_id),
+        "raw caller session ID must not appear in stderr: {stderr_text}"
+    );
+    // Eviction emits no JSONL response.
+    assert_eq!(
+        stdout_lines.len(),
+        1,
+        "stdout should be exactly the one clean response, got: {stdout_lines:?}"
+    );
+    // The eviction audit row is still lost (log_eviction cannot fail-closed),
+    // but the loss is now detectable via stderr.
+    assert_eq!(
+        eviction_row_count(&audit_db),
+        0,
+        "eviction audit row should be absent (write failed)"
+    );
+}
+
+/// T2 — LRU-eviction audit-write failure surfaces on stderr.
+#[cfg(unix)]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
+    let (_policy_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+
+    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+        "daemon",
+        "--policy",
+        policy.to_str().unwrap(),
+        "--audit-db",
+        audit_db.to_str().unwrap(),
+        "--session-cap",
+        "1",
+        "--idle-timeout",
+        "30",
+    ]);
+
+    // First request — use a PII-shaped caller ID to prove it never reaches stderr.
+    // audit write succeeds.
+    let t2_caller_id = "lru-victim@pii-test.invalid";
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id": t2_caller_id, "text":"alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+
+    // Poll until the audit row lands before breaking the DB.
+    // This guards against a timing race where the daemon hasn't yet committed
+    // the SQLite write when chattr +i is applied to the directory.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+
+    // Break the audit DB.
+    let _breaker = break_audit_db(&audit_db, audit_dir.path());
+
+    // Second request creates a new session, evicting the first via LRU. The
+    // eviction audit write fails (surfaced on stderr); the pipeline call for
+    // the second session also fails (surfaced as a Pipeline error on stdout).
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id":"lru-new@pii-test.invalid","text":"alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+    thread::sleep(Duration::from_millis(500));
+
+    drop(guard.0.stdin.take());
+    let status = guard.0.wait().unwrap();
+    let stdout_lines = stdout_thread.join().unwrap();
+    let stderr_lines = stderr_thread.join().unwrap();
+    let stderr_text = stderr_lines.join("\n");
+
+    assert!(status.success(), "stderr={stderr_text}");
+
+    // stderr: LRU eviction audit failure for "a".
+    assert!(
+        stderr_text.contains(r#""error":"AuditWriteFailed""#),
+        "stderr must surface AuditWriteFailed: {stderr_text}"
+    );
+    assert!(
+        stderr_text.contains(r#""reason":"lru""#),
+        "stderr must show lru reason: {stderr_text}"
+    );
+    // audit_session_id in the error line is the generated audit UUID, not the raw caller ID.
+    let failure_line = stderr_lines
+        .iter()
+        .find(|line| line.contains("AuditWriteFailed"))
+        .expect("AuditWriteFailed line must be present");
+    let parsed_lru: serde_json::Value =
+        serde_json::from_str(failure_line).expect("AuditWriteFailed line must be valid JSON");
+    let audit_id_lru = parsed_lru["audit_session_id"]
+        .as_str()
+        .expect("audit_session_id must be a string");
+    assert_eq!(
+        audit_id_lru.len(),
+        36,
+        "audit_session_id must be a UUID: {audit_id_lru}"
+    );
+    assert_ne!(
+        audit_id_lru, t2_caller_id,
+        "raw caller ID must not appear in audit_session_id field"
+    );
+    // Raw caller ID (PII-shaped) must not appear in stderr.
+    assert!(
+        !stderr_text.contains(t2_caller_id),
+        "raw caller session ID must not appear in stderr: {stderr_text}"
+    );
+    // stdout: first response is Clean, second is Pipeline error (audit DB
+    // broken, pipeline redaction-log write fails).
+    assert_eq!(
+        stdout_lines.len(),
+        2,
+        "stdout should have two responses, got: {stdout_lines:?}"
+    );
+    let resp0: Value = serde_json::from_str(&stdout_lines[0]).unwrap();
+    assert!(
+        resp0.get("clean_text").is_some(),
+        "first response should be clean: {resp0}"
+    );
+    let resp1: Value = serde_json::from_str(&stdout_lines[1]).unwrap();
+    assert_eq!(
+        resp1["error"], "Pipeline",
+        "second response should be Pipeline error: {resp1}"
+    );
+    assert!(
+        resp1.get("clean_text").is_none(),
+        "Pipeline error must not carry clean_text: {resp1}"
+    );
+    // No eviction audit row in the DB.
+    assert_eq!(
+        eviction_row_count(&audit_db),
+        0,
+        "eviction audit row should be absent (write failed)"
+    );
+}
+
+/// T3 — Happy-path eviction writes the audit row and emits no error.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_eviction_writes_audit_row_when_db_healthy() {
+    let (_policy_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+
+    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+        "daemon",
+        "--policy",
+        policy.to_str().unwrap(),
+        "--audit-db",
+        audit_db.to_str().unwrap(),
+        "--session-idle-timeout",
+        "1",
+        "--idle-timeout",
+        "30",
+    ]);
+
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id":"sess1","text":"alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+    thread::sleep(Duration::from_millis(500));
+
+    // Wait for idle eviction (session-idle-timeout is 1s, audit DB is healthy).
+    thread::sleep(Duration::from_millis(2000));
+
+    drop(guard.0.stdin.take());
+    let status = guard.0.wait().unwrap();
+    let stdout_lines = stdout_thread.join().unwrap();
+    let stderr_lines = stderr_thread.join().unwrap();
+    let stderr_text = stderr_lines.join("\n");
+
+    assert!(status.success(), "stderr={stderr_text}");
+    assert!(
+        !stderr_text.contains("AuditWriteFailed"),
+        "stderr should not contain AuditWriteFailed when DB is healthy: {stderr_text}"
+    );
+    assert_eq!(
+        stdout_lines.len(),
+        1,
+        "stdout should have exactly one clean response"
+    );
+    // The eviction audit row should be present with correct metadata.
+    let conn = rusqlite::Connection::open(&audit_db).unwrap();
+    let mut stmt = conn
+        .prepare(
+            "SELECT source, provenance_stage, class, action, session_id \
+             FROM redaction_log WHERE source = 'daemon.session_eviction'",
+        )
+        .unwrap();
+    let rows = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, Option<String>>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert_eq!(rows.len(), 1, "exactly one eviction audit row: {rows:?}");
+    let (source, stage, class, action, session_id) = &rows[0];
+    assert_eq!(source, "daemon.session_eviction");
+    assert_eq!(stage.as_deref(), Some("daemon"));
+    assert_eq!(class, "custom:daemon_session");
+    assert_eq!(action, "preserve");
+    assert!(
+        session_id.is_some(),
+        "eviction row should carry the audit session id"
+    );
+}
+
+/// T4 — Stderr sanitization: hostile session_id round-trips as valid JSON.
+#[cfg(unix)]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_audit_failure_stderr_survives_hostile_session_id() {
+    let (_policy_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+
+    let hostile = r#"a"b\c{d}e"#;
+
+    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+        "daemon",
+        "--policy",
+        policy.to_str().unwrap(),
+        "--audit-db",
+        audit_db.to_str().unwrap(),
+        "--session-idle-timeout",
+        "1",
+        "--idle-timeout",
+        "30",
+    ]);
+
+    // A request with a session_id containing characters that would break
+    // naive {} interpolation: double quote, backslash, braces.
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id": hostile, "text": "alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+    thread::sleep(Duration::from_millis(500));
+
+    // Break the audit DB.
+    let _breaker = break_audit_db(&audit_db, audit_dir.path());
+
+    // Wait for idle eviction of the hostile-id session.
+    thread::sleep(Duration::from_millis(2000));
+
+    drop(guard.0.stdin.take());
+    let status = guard.0.wait().unwrap();
+    let stdout_lines = stdout_thread.join().unwrap();
+    let stderr_lines = stderr_thread.join().unwrap();
+
+    assert!(status.success());
+    assert_eq!(stdout_lines.len(), 1, "one clean response only");
+
+    let stderr_text = stderr_lines.join("\n");
+    assert!(
+        stderr_text.contains("AuditWriteFailed"),
+        "stderr should contain AuditWriteFailed: {stderr_text}"
+    );
+    // The line must be valid JSON. audit_session_id is the generated audit UUID,
+    // not the raw caller-supplied hostile ID; hostile characters must not appear.
+    let failure_line = stderr_lines
+        .iter()
+        .find(|line| line.contains("AuditWriteFailed"))
+        .unwrap();
+    let parsed: Value = serde_json::from_str(failure_line).unwrap_or_else(|err| {
+        panic!("AuditWriteFailed line must be valid JSON ({err}): {failure_line}")
+    });
+    let audit_id_t4 = parsed["audit_session_id"]
+        .as_str()
+        .expect("audit_session_id must be a string");
+    assert_eq!(
+        audit_id_t4.len(),
+        36,
+        "audit_session_id must be a UUID: {audit_id_t4}"
+    );
+    // The hostile raw caller ID must not appear in any form in stderr —
+    // neither as a raw substring nor as its JSON-escaped equivalent.
+    assert!(
+        !stderr_text.contains(r#"a"b"#),
+        "hostile caller ID (raw) must not appear in stderr: {stderr_text}"
+    );
+    // Derive the JSON-escaped interior of the hostile ID and verify it too is absent.
+    let hostile_json = serde_json::to_string(hostile).unwrap();
+    // hostile_json is e.g. "\"a\\\"b\\\\c{d}e\""; strip the outer quotes.
+    let hostile_json_inner = &hostile_json[1..hostile_json.len() - 1];
+    assert!(
+        !stderr_text.contains(hostile_json_inner),
+        "hostile caller ID (JSON-escaped) must not appear in stderr: {stderr_text}"
+    );
+    assert_eq!(parsed["reason"], "idle_timeout");
+    // detail is a safe error code, not an arbitrary error message.
+    let detail_t4 = parsed["detail"].as_str().expect("detail must be a string");
+    assert!(
+        detail_t4 == "Sqlite" || detail_t4 == "Backend",
+        "detail must be a safe error code, got: {detail_t4}"
+    );
+}
+
+/// T5 — No-audit-db path does not emit AuditWriteFailed.
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_eviction_without_audit_db_produces_no_error() {
+    let (_policy_dir, policy) = write_policy();
+
+    let (mut guard, stdout_thread, stderr_thread) = spawn_daemon_collect(&[
+        "daemon",
+        "--policy",
+        policy.to_str().unwrap(),
+        "--session-idle-timeout",
+        "1",
+        "--idle-timeout",
+        "30",
+    ]);
+
+    writeln!(
+        guard.0.stdin.as_mut().unwrap(),
+        "{}",
+        json!({"session_id":"sess1","text":"alice@example.invalid"})
+    )
+    .unwrap();
+    guard.0.stdin.as_mut().unwrap().flush().unwrap();
+    thread::sleep(Duration::from_millis(500));
+
+    // Wait for idle eviction — no audit DB, so log_eviction's Ok(()) guard
+    // means no error and no AuditWriteFailed stderr line.
+    thread::sleep(Duration::from_millis(2000));
+
+    drop(guard.0.stdin.take());
+    let status = guard.0.wait().unwrap();
+    let stdout_lines = stdout_thread.join().unwrap();
+    let stderr_lines = stderr_thread.join().unwrap();
+    let stderr_text = stderr_lines.join("\n");
+
+    assert!(status.success(), "stderr={stderr_text}");
+    assert!(
+        stderr_text.is_empty(),
+        "stderr should be empty without --audit-db: {stderr_text}"
+    );
+    assert_eq!(
+        stdout_lines.len(),
+        1,
+        "stdout should have exactly one clean response"
+    );
+}
+
+/// T6 — Request-path audit failure surfaces on stdout (not stderr).
+///
+/// `clean_request` maps the RedactionLogError to a typed `Pipeline` error on
+/// the JSONL stdout stream. The eviction `AuditWriteFailed` line uses stderr.
+/// This test pins that the two surfacing channels remain distinct and that
+/// only the eviction path changed.
+#[cfg(unix)]
+#[test]
+#[file_serial(gaze_subprocess)]
+fn daemon_request_path_audit_failure_surfaces_on_stdout_not_stderr() {
+    let (_policy_dir, policy) = write_policy();
+    let audit_dir = tempdir().unwrap();
+    let audit_db = audit_dir.path().join("audit.db");
+
+    let mut child = Command::new(assert_cmd::cargo::cargo_bin("gaze"))
+        .args([
+            "daemon",
+            "--policy",
+            policy.to_str().unwrap(),
+            "--audit-db",
+            audit_db.to_str().unwrap(),
+            "--idle-timeout",
+            "30",
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // First request succeeds (audit DB is writable).
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        writeln!(
+            stdin,
+            "{}",
+            json!({"session_id":"sess1","text":"alice@example.invalid"})
+        )
+        .unwrap();
+        stdin.flush().unwrap();
+    }
+
+    // Poll until the first request's audit row has landed before breaking the
+    // DB, so we don't race with the daemon's SQLite write.
+    wait_for_redaction_rows(&audit_db, 1, Duration::from_secs(5));
+
+    // Break the audit DB.
+    let _breaker = break_audit_db(&audit_db, audit_dir.path());
+
+    // Second request — the pipeline's redaction-log write fails, surfaced as a
+    // typed Pipeline error on stdout (not AuditWriteFailed on stderr).
+    {
+        let stdin = child.stdin.as_mut().unwrap();
+        writeln!(
+            stdin,
+            "{}",
+            json!({"session_id":"sess2","text":"alice@example.invalid"})
+        )
+        .unwrap();
+        stdin.flush().unwrap();
+    }
+    drop(child.stdin.take());
+
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    let responses: Vec<Value> = stdout
+        .lines()
+        .map(serde_json::from_str)
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(responses.len(), 2, "two responses: {stdout}");
+    assert!(
+        responses[0].get("clean_text").is_some(),
+        "first response should be clean: {}",
+        responses[0]
+    );
+    assert_eq!(
+        responses[1]["error"], "Pipeline",
+        "second response should be Pipeline error: {}",
+        responses[1]
+    );
+    assert!(
+        responses[1].get("clean_text").is_none(),
+        "Pipeline error must not carry clean_text: {}",
+        responses[1]
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !stderr.contains("AuditWriteFailed"),
+        "no eviction occurred, so no AuditWriteFailed on stderr: {stderr}"
     );
 }
