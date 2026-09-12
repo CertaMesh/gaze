@@ -356,7 +356,7 @@ impl Daemon {
         let audit_id = entry.session.audit_session_id();
         tracing::warn!(audit_session_id = %audit_id, reason = %reason, "gaze daemon evicted session");
         if let Err(err) = self.logger.log_eviction(&entry.session, reason) {
-            let session_id = serde_json::to_string(audit_id)
+            let audit_uuid_json = serde_json::to_string(audit_id)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             let reason = serde_json::to_string(reason)
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
@@ -369,7 +369,7 @@ impl Daemon {
                 .unwrap_or_else(|_| "\"<unserializable>\"".to_string());
             eprintln!(
                 r#"{{"error":"AuditWriteFailed","session_id":{},"reason":{},"detail":{}}}"#,
-                session_id, reason, detail
+                audit_uuid_json, reason, detail
             );
         }
         let _ = evicted; // caller identity not written to any output

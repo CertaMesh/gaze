@@ -1418,11 +1418,13 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         "30",
     ]);
 
-    // One request — audit write succeeds, redaction row appears.
+    // One request — use a PII-shaped caller ID to prove it never reaches stderr.
+    // audit write succeeds, redaction row appears.
+    let t1_caller_id = "user@pii-test.invalid";
     writeln!(
         guard.0.stdin.as_mut().unwrap(),
         "{}",
-        json!({"session_id":"sess1","text":"alice@example.invalid"})
+        json!({"session_id": t1_caller_id, "text":"alice@example.invalid"})
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
@@ -1467,7 +1469,10 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         .as_str()
         .expect("session_id must be a string");
     assert_eq!(audit_id.len(), 36, "session_id must be a UUID: {audit_id}");
-    assert_ne!(audit_id, "sess1", "raw caller ID must not appear in stderr");
+    assert_ne!(
+        audit_id, t1_caller_id,
+        "raw caller ID must not appear in session_id field"
+    );
     assert!(
         stderr_text.contains(r#""detail""#),
         "stderr must carry a detail field: {stderr_text}"
@@ -1478,9 +1483,9 @@ fn daemon_idle_eviction_audit_failure_surfaces_on_stderr() {
         detail == "Sqlite" || detail == "Backend",
         "detail must be a safe error code, got: {detail}"
     );
-    // Raw caller ID must not appear in stderr.
+    // Raw caller ID (PII-shaped) must not appear in stderr.
     assert!(
-        !stderr_text.contains("sess1"),
+        !stderr_text.contains(t1_caller_id),
         "raw caller session ID must not appear in stderr: {stderr_text}"
     );
     // Eviction emits no JSONL response.
@@ -1519,11 +1524,13 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
         "30",
     ]);
 
-    // First request creates session "a" — audit write succeeds.
+    // First request — use a PII-shaped caller ID to prove it never reaches stderr.
+    // audit write succeeds.
+    let t2_caller_id = "lru-victim@pii-test.invalid";
     writeln!(
         guard.0.stdin.as_mut().unwrap(),
         "{}",
-        json!({"session_id":"a","text":"alice@example.invalid"})
+        json!({"session_id": t2_caller_id, "text":"alice@example.invalid"})
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
@@ -1536,13 +1543,13 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
     // Break the audit DB.
     let _breaker = break_audit_db(&audit_db, audit_dir.path());
 
-    // Second request creates session "b", evicting "a" via LRU. The eviction
-    // audit write fails (surfaced on stderr); the pipeline call for "b" also
-    // fails (surfaced as a Pipeline error on stdout).
+    // Second request creates a new session, evicting the first via LRU. The
+    // eviction audit write fails (surfaced on stderr); the pipeline call for
+    // the second session also fails (surfaced as a Pipeline error on stdout).
     writeln!(
         guard.0.stdin.as_mut().unwrap(),
         "{}",
-        json!({"session_id":"b","text":"alice@example.invalid"})
+        json!({"session_id":"lru-new@pii-test.invalid","text":"alice@example.invalid"})
     )
     .unwrap();
     guard.0.stdin.as_mut().unwrap().flush().unwrap();
@@ -1580,10 +1587,13 @@ fn daemon_lru_eviction_audit_failure_surfaces_on_stderr() {
         36,
         "session_id must be a UUID: {audit_id_lru}"
     );
-    assert_ne!(audit_id_lru, "a", "raw caller ID must not appear in stderr");
-    // Raw caller IDs must not appear in stderr.
+    assert_ne!(
+        audit_id_lru, t2_caller_id,
+        "raw caller ID must not appear in session_id field"
+    );
+    // Raw caller ID (PII-shaped) must not appear in stderr.
     assert!(
-        !stderr_text.contains(r#""session_id":"a""#),
+        !stderr_text.contains(t2_caller_id),
         "raw caller session ID must not appear in stderr: {stderr_text}"
     );
     // stdout: first response is Clean, second is Pipeline error (audit DB
@@ -1766,10 +1776,19 @@ fn daemon_audit_failure_stderr_survives_hostile_session_id() {
         36,
         "session_id must be a UUID: {audit_id_t4}"
     );
-    // The hostile raw caller ID must not appear in any form in stderr.
+    // The hostile raw caller ID must not appear in any form in stderr —
+    // neither as a raw substring nor as its JSON-escaped equivalent.
     assert!(
         !stderr_text.contains(r#"a"b"#),
-        "hostile caller ID must not appear in stderr: {stderr_text}"
+        "hostile caller ID (raw) must not appear in stderr: {stderr_text}"
+    );
+    // Derive the JSON-escaped interior of the hostile ID and verify it too is absent.
+    let hostile_json = serde_json::to_string(hostile).unwrap();
+    // hostile_json is e.g. "\"a\\\"b\\\\c{d}e\""; strip the outer quotes.
+    let hostile_json_inner = &hostile_json[1..hostile_json.len() - 1];
+    assert!(
+        !stderr_text.contains(hostile_json_inner),
+        "hostile caller ID (JSON-escaped) must not appear in stderr: {stderr_text}"
     );
     assert_eq!(parsed["reason"], "idle_timeout");
     // detail is a safe error code, not an arbitrary error message.
