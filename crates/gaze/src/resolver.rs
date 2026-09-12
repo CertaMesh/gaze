@@ -333,10 +333,10 @@ fn family_tie_candidate(
     policy: &FamilyPolicyTable,
 ) -> Option<Candidate> {
     let family = policy.precedence_tie_family(&candidate.recognizer_id, &existing.recognizer_id)?;
-    let mut merged_sources = vec![
-        existing.recognizer_id.clone(),
-        candidate.recognizer_id.clone(),
-    ];
+    let mut merged_sources = existing.merged_sources.clone();
+    merged_sources.extend(candidate.merged_sources.iter().cloned());
+    merged_sources.push(existing.recognizer_id.clone());
+    merged_sources.push(candidate.recognizer_id.clone());
     merged_sources.sort();
     merged_sources.dedup();
     Some(Candidate::new(
@@ -380,6 +380,13 @@ fn family_fallback_candidate(
     decided_by: ConflictTier,
 ) -> Candidate {
     let original_recognizer_id = candidate.recognizer_id.clone();
+    let mut merged_sources = candidate.merged_sources;
+    if !merged_sources
+        .iter()
+        .any(|source| source == &original_recognizer_id)
+    {
+        merged_sources.push(original_recognizer_id);
+    }
     Candidate::new(
         candidate.span,
         PiiClass::family(&family),
@@ -390,7 +397,7 @@ fn family_fallback_candidate(
         format!("collision-family:{family}"),
         candidate.source,
         decided_by,
-        vec![original_recognizer_id],
+        merged_sources,
     )
 }
 
@@ -642,6 +649,61 @@ mod tests {
         );
     }
 
+    /// A non-family rival that loses to the first family-tie partner before the
+    /// second partner arrives must survive in `merged_sources` after the tie
+    /// collapses the two partners into the family-level candidate. The audit
+    /// trail derives loser accounting exclusively from `merged_sources`, so a
+    /// reset here would silently drop the earlier loser from `conflict_loser`
+    /// rows and `AmbiguityRecord.losing_candidates`.
+    #[test]
+    fn family_tie_preserves_prior_nonfamily_loser_in_merged_sources() {
+        let registry = tenant_document_registry();
+
+        let resolved = resolve_candidates_with_policy(
+            vec![
+                candidate(0..5, PiiClass::custom("alpha_doc"), 0.95, "doc.alpha"),
+                candidate(0..5, PiiClass::custom("nonfamily"), 0.92, "aaa.nonfamily"),
+                candidate(0..5, PiiClass::custom("beta_doc"), 0.90, "doc.beta"),
+            ],
+            registry.family_policy(),
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::Custom("family:tenant-document".to_string())
+        );
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:tenant-document"
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::CollisionPolicy);
+        assert!(
+            resolved[0]
+                .merged_sources
+                .iter()
+                .any(|src| src == "aaa.nonfamily"),
+            "prior non-family loser must survive the family tie: {:?}",
+            resolved[0].merged_sources
+        );
+        assert!(
+            resolved[0]
+                .merged_sources
+                .iter()
+                .any(|src| src == "doc.alpha"),
+            "first tie partner must be recorded: {:?}",
+            resolved[0].merged_sources
+        );
+        assert!(
+            resolved[0]
+                .merged_sources
+                .iter()
+                .any(|src| src == "doc.beta"),
+            "second tie partner must be recorded: {:?}",
+            resolved[0].merged_sources
+        );
+    }
+
     /// Positive control for `counting_removals`. A non-exact winner widens the
     /// slot it took, so it must enter overlap removal; without this, the two
     /// zero-call assertions below would also pass on a counter that never
@@ -843,6 +905,62 @@ mod tests {
         assert_eq!(resolved[0].recognizer_id, "iban.structural");
         assert_eq!(resolved[0].span, 6..10);
         assert_eq!(resolved[0].decided_by, ConflictTier::Score);
+    }
+
+    /// When an anchored recognizer's mandatory anchor is `Missing`, the
+    /// winner is rebuilt as the family-level fallback candidate. A rival that
+    /// lost to the winner on the base ladder *before* the fallback fired must
+    /// survive in `merged_sources` — the audit trail derives loser accounting
+    /// exclusively from `merged_sources`, so a reset here would drop the actual
+    /// loser from `conflict_loser` rows and `AmbiguityRecord.losing_candidates`
+    /// and mis-attribute the loser slot to the original winner's recognizer id.
+    #[test]
+    fn missing_anchor_fallback_preserves_prior_loser_in_merged_sources() {
+        let registry = crate::RecognizerRegistry::builder()
+            .register_collision(
+                "iban.structural",
+                crate::CollisionMembership::new(
+                    "payment-card-or-iban",
+                    "iban",
+                    10,
+                    Some("iban".to_string()),
+                ),
+            )
+            .build();
+        // No anchor cue bundle registered → anchor resolves to `Missing`.
+        let resolved = resolve_candidates_with_policy_and_anchors(
+            vec![
+                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
+                candidate(6..10, PiiClass::custom("digits"), 0.50, "digits.generic"),
+            ],
+            registry.family_policy(),
+            &AnchorResolver::default(),
+            "field DE89",
+            &[LocaleTag::DeDe],
+        );
+
+        assert_eq!(resolved.len(), 1);
+        assert_eq!(
+            resolved[0].recognizer_id,
+            "collision-family:payment-card-or-iban"
+        );
+        assert_eq!(resolved[0].decided_by, ConflictTier::AnchoredContext);
+        assert!(
+            resolved[0]
+                .merged_sources
+                .iter()
+                .any(|src| src == "digits.generic"),
+            "prior rival that lost on score must survive the fallback: {:?}",
+            resolved[0].merged_sources
+        );
+        assert!(
+            resolved[0]
+                .merged_sources
+                .iter()
+                .any(|src| src == "iban.structural"),
+            "the demoted original variant must still be recorded: {:?}",
+            resolved[0].merged_sources
+        );
     }
 
     /// When the ladder is exhausted (identical recognizer id, class, priority,

@@ -966,6 +966,262 @@ fn anchored_iban_beating_a_rival_on_score_logs_score_not_anchored_context() {
     }
 }
 
+/// Regression for the anchor-missing fallback path. When an anchored
+/// recognizer's mandatory anchor is `Missing` at resolve time, the winner is
+/// rebuilt as the family-level fallback candidate. A rival that lost to the
+/// winner on the base ladder *before* the fallback fired must still be logged
+/// as a `conflict_loser` and appear in `AmbiguityRecord.losing_candidates`.
+/// Before the fix, `family_fallback_candidate` reset `merged_sources` to only
+/// the original winner's recognizer id, silently dropping the actual loser and
+/// mis-attributing the loser slot to the original winner.
+#[test]
+fn anchor_missing_fallback_preserves_prior_loser_in_audit() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let family_class = PiiClass::Custom("family:payment-card-or-iban".to_string());
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7} ?[A-Z0-9]{1,4}\b",
+                PiiClass::Custom("iban".to_string()),
+                "iban.structural",
+                vec![gaze::LocaleTag::Global],
+                0.70,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                Some(ValidatorKind::IbanMod97),
+                Some(NormalizerKind::IbanCanonical),
+            )
+            .expect("iban detector"),
+        )
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                r"\b\d{4}\b",
+                PiiClass::Custom("digits".to_string()),
+                "digits.generic",
+                vec![gaze::LocaleTag::Global],
+                0.50,
+                80,
+                "counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("digits detector"),
+        )
+        .register_collision(
+            "iban.structural",
+            CollisionMembership::new("payment-card-or-iban", "iban", 10, Some("iban".to_string())),
+        )
+        // No register_anchor_cue_bundle -> anchor always Missing for iban.
+        .rule(ClassRule::new(
+            PiiClass::Custom("iban".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(
+            PiiClass::Custom("digits".to_string()),
+            Action::Tokenize,
+        ))
+        .rule(ClassRule::new(family_class.clone(), Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .pseudonymize_with_context(
+            &session,
+            RawDocument::Text("DE89 3704 0044 0532 0130 00".to_string()),
+            &[gaze::LocaleTag::DeDe],
+        )
+        .expect("redact");
+    let CleanDocument::Text(_clean) = clean else {
+        panic!("expected text document");
+    };
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.class, family_class);
+    assert_eq!(winner.decided_by, gaze::ConflictTier::AnchoredContext);
+
+    let ambiguity = winner.ambiguity_record.as_ref().expect("ambiguity record");
+    assert_eq!(ambiguity.reason, AmbiguityReason::NoAnchor);
+
+    // The actual prior loser (digits.generic) must be present, not dropped.
+    let digits_loser = ambiguity
+        .losing_candidates
+        .iter()
+        .find(|lc| lc.recognizer_id == "digits.generic")
+        .expect("digits.generic must appear in losing_candidates");
+    assert_eq!(
+        digits_loser.class,
+        PiiClass::Custom("digits".to_string()),
+        "losing candidate must be attributed to the correct recognizer"
+    );
+    // The demoted original variant (iban.structural) is also a losing candidate
+    // per the NoAnchor contract, so it must still be present.
+    assert!(
+        ambiguity
+            .losing_candidates
+            .iter()
+            .any(|lc| lc.recognizer_id == "iban.structural"),
+        "demoted variant must remain in losing_candidates"
+    );
+
+    // The conflict_loser audit rows must include the actual prior loser.
+    assert!(
+        entries.iter().any(|entry| {
+            entry.conflict_loser && entry.recognizer_id.as_deref() == Some("digits.generic")
+        }),
+        "digits.generic must be logged as a conflict_loser"
+    );
+    assert!(
+        entries.iter().any(|entry| {
+            entry.conflict_loser && entry.recognizer_id.as_deref() == Some("iban.structural")
+        }),
+        "demoted variant must be logged as a conflict_loser"
+    );
+}
+
+/// Regression for the family precedence-tie path. A non-family rival that
+/// loses to the first family-tie partner before the second partner arrives
+/// must survive the family-tie collapse and remain in the audit trail. Before
+/// the fix, `family_tie_candidate` rebuilt `merged_sources` from only the two
+/// variant recognizer ids, silently dropping the earlier non-family loser.
+#[test]
+fn family_tie_preserves_prior_nonfamily_loser_in_audit() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let alpha_class = PiiClass::Custom("alpha_doc".to_string());
+    let nonfamily_class = PiiClass::Custom("nonfamily".to_string());
+    let beta_class = PiiClass::Custom("beta_doc".to_string());
+    let family_class = PiiClass::Custom("family:tenant-document".to_string());
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                "DOC-[0-9]+",
+                alpha_class.clone(),
+                "doc.alpha",
+                vec![gaze::LocaleTag::Global],
+                0.95,
+                0,
+                "counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("alpha detector"),
+        )
+        .register_collision(
+            "doc.alpha",
+            CollisionMembership::new("tenant-document", "alpha", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                "DOC-[0-9]+",
+                nonfamily_class.clone(),
+                "aaa.nonfamily",
+                vec![gaze::LocaleTag::Global],
+                0.92,
+                0,
+                "counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("nonfamily detector"),
+        )
+        .recognizer(
+            RegexDetector::with_rulepack_fields(
+                "DOC-[0-9]+",
+                beta_class.clone(),
+                "doc.beta",
+                vec![gaze::LocaleTag::Global],
+                0.90,
+                0,
+                "counter",
+                None,
+                Vec::new(),
+                None,
+                None,
+            )
+            .expect("beta detector"),
+        )
+        .register_collision(
+            "doc.beta",
+            CollisionMembership::new("tenant-document", "beta", 10, None),
+        )
+        .rule(ClassRule::new(family_class.clone(), Action::Tokenize))
+        .rule(ClassRule::new(alpha_class, Action::Tokenize))
+        .rule(ClassRule::new(beta_class, Action::Tokenize))
+        .rule(ClassRule::new(nonfamily_class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger.clone())
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("DOC-12345".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(_clean) = clean else {
+        panic!("expected text document");
+    };
+
+    let entries = logger.entries();
+    let winner = entries
+        .iter()
+        .find(|entry| !entry.conflict_loser)
+        .expect("winner");
+    assert_eq!(winner.class, family_class);
+    assert_eq!(winner.decided_by, gaze::ConflictTier::CollisionPolicy);
+
+    let ambiguity = winner.ambiguity_record.as_ref().expect("ambiguity record");
+    assert_eq!(ambiguity.reason, AmbiguityReason::PrecedenceTie);
+
+    // The actual pre-tie loser (aaa.nonfamily) must be present, not dropped.
+    let nonfamily_loser = ambiguity
+        .losing_candidates
+        .iter()
+        .find(|lc| lc.recognizer_id == "aaa.nonfamily")
+        .expect("aaa.nonfamily must appear in losing_candidates");
+    assert_eq!(
+        nonfamily_loser.class,
+        PiiClass::Custom("nonfamily".to_string()),
+        "losing candidate must be attributed to the correct recognizer"
+    );
+    // Both tie partners must also remain.
+    assert!(
+        ambiguity
+            .losing_candidates
+            .iter()
+            .any(|lc| lc.recognizer_id == "doc.alpha"),
+        "first tie partner must remain in losing_candidates"
+    );
+    assert!(
+        ambiguity
+            .losing_candidates
+            .iter()
+            .any(|lc| lc.recognizer_id == "doc.beta"),
+        "second tie partner must remain in losing_candidates"
+    );
+
+    // The conflict_loser audit rows must include the actual pre-tie loser.
+    assert!(
+        entries.iter().any(|entry| {
+            entry.conflict_loser && entry.recognizer_id.as_deref() == Some("aaa.nonfamily")
+        }),
+        "aaa.nonfamily must be logged as a conflict_loser"
+    );
+}
+
 fn mandatory_anchor_iban_pipeline(logger: MemoryLogger) -> Pipeline {
     Pipeline::builder()
         .recognizer(
