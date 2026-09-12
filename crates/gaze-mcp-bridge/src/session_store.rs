@@ -113,11 +113,52 @@ impl BridgeSessionStore {
         lru.push_back(validated_session_id.to_string());
 
         if matches!(self.mode, SessionStoreMode::File { .. }) && self.max_sessions > 0 {
-            while sessions.len() > self.max_sessions {
-                let Some(evicted) = lru.pop_front() else {
-                    break;
-                };
-                sessions.remove(&evicted);
+            // Evict LRU entries that are not currently held by any caller.
+            // An entry is "active" when Arc::strong_count > 1 (the cache holds
+            // one reference; any additional references belong to in-flight
+            // callers). Evicting an active session would leave the caller's Arc
+            // pointing at a live Session object that is no longer canonical —
+            // a subsequent get() for the same id would load the older on-disk
+            // snapshot into a second independent Session, allowing two callers
+            // to hold conflicting state and overwrite each other's persisted
+            // token mappings.
+            //
+            // When all entries are active (no safe eviction candidate), reject
+            // the new session rather than racing with an in-flight caller.
+            let mut evicted_any = true;
+            while sessions.len() > self.max_sessions && evicted_any {
+                evicted_any = false;
+                let mut skipped = VecDeque::new();
+                while let Some(candidate) = lru.pop_front() {
+                    if sessions.len() <= self.max_sessions {
+                        skipped.push_back(candidate);
+                        break;
+                    }
+                    match sessions.get(&candidate) {
+                        Some(arc) if Arc::strong_count(arc) == 1 => {
+                            sessions.remove(&candidate);
+                            evicted_any = true;
+                        }
+                        _ => {
+                            // Active or already-gone — put back at the front to
+                            // preserve LRU order and try the next oldest entry.
+                            skipped.push_front(candidate);
+                        }
+                    }
+                }
+                // Restore any entries we peeked over back into the LRU.
+                for entry in skipped {
+                    lru.push_front(entry);
+                }
+            }
+            if sessions.len() > self.max_sessions {
+                // All cached sessions are active. Undo the insert we just did
+                // and reject the request to preserve session ownership invariants.
+                sessions.remove(validated_session_id);
+                lru.retain(|id| id != validated_session_id);
+                return Err(BridgeError::LimitExceeded(
+                    "session cap reached; all cached sessions are active".to_string(),
+                ));
             }
         }
 
