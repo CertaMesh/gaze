@@ -125,6 +125,14 @@ pub fn is_bare_identifier(match_text: &str) -> bool {
         })
 }
 
+/// Reject malformed or nested token spellings using the session restore scanner.
+///
+/// This checks syntax only, without manifest lookup or substitution. Callers
+/// must still assess ownership before using restored text at a trusted boundary.
+pub fn validate_restore_shapes(text: &str) -> Result<(), crate::RestoreError> {
+    crate::session::strict_restore_tokens(text).map(|_| ())
+}
+
 fn build_pattern() -> String {
     let builtin_alt = BUILTIN_CLASS_NAMES.join("|");
     let builtin_lower_alt = BUILTIN_CLASS_NAMES
@@ -397,5 +405,43 @@ mod tests {
         let rendered = "custom:family:foo_1:custom:family:bar_2";
         let matches: Vec<&str> = find_tokens(rendered).collect();
         assert_eq!(matches, vec!["custom:family:foo_1", "custom:family:bar_2"]);
+    }
+
+    #[test]
+    fn validate_restore_shapes_accepts_bare_and_session_prefixed() {
+        // Bare identifiers must pass the format gate.
+        assert!(validate_restore_shapes("scan_1.png").is_ok());
+        assert!(validate_restore_shapes("Scan_1.png").is_ok());
+        assert!(validate_restore_shapes("/tmp/invoice_20250111.pdf").is_ok());
+        // Session-prefixed tokens also have valid format.
+        assert!(validate_restore_shapes("directory/<deadbeef:Email_1>/input.png").is_ok());
+        // Completely clean paths.
+        assert!(validate_restore_shapes("/tmp/report.pdf").is_ok());
+    }
+
+    #[test]
+    fn validate_restore_shapes_rejects_malformed_token_spellings() {
+        // Missing ordinal (trailing `_>`) must be rejected.
+        assert!(validate_restore_shapes("directory/<deadbeef:Email_>/input.png").is_err());
+        assert!(validate_restore_shapes("<Email_>").is_err());
+        assert!(validate_restore_shapes("<Name_>").is_err());
+        assert!(validate_restore_shapes("<deadbeef:Name_>").is_err());
+        assert!(validate_restore_shapes("<Custom:foo_>").is_err());
+        // Malformed family token spellings must also be rejected.
+        assert!(
+            validate_restore_shapes("directory/<Custom:family:tenant-document_>/input.png")
+                .is_err()
+        );
+        assert!(validate_restore_shapes("<deadbeef:Custom:family:tenant-document_>").is_err());
+        assert!(validate_restore_shapes("<custom:family:foo_>").is_err());
+    }
+
+    #[test]
+    fn validate_restore_shapes_rejects_nested_wrapper_spellings() {
+        // Extra angle brackets around a token match must be rejected.
+        assert!(validate_restore_shapes("<<deadbeef:Email_1>>").is_err());
+        assert!(validate_restore_shapes("<<Email_1>>").is_err());
+        // Mixed nesting variants.
+        assert!(validate_restore_shapes("path/<<deadbeef:Name_1>>/file.pdf").is_err());
     }
 }
