@@ -736,6 +736,56 @@ fn precedence_tie_emits_family_level_token_and_ambiguity_record() {
 }
 
 #[test]
+fn family_token_text_restore_roundtrip_via_pipeline() {
+    let session = Session::new(Scope::Ephemeral).expect("session");
+    let logger = MemoryLogger::default();
+    let family_class = PiiClass::Custom("family:tenant-document".to_string());
+    let pipeline = Pipeline::builder()
+        .recognizer(
+            RegexDetector::with_source(
+                "DOC-[0-9]+",
+                PiiClass::Custom("alpha_doc".to_string()),
+                "doc.alpha",
+            )
+            .expect("alpha detector"),
+        )
+        .register_collision(
+            "doc.alpha",
+            CollisionMembership::new("tenant-document", "alpha", 10, None),
+        )
+        .recognizer(
+            RegexDetector::with_source(
+                "DOC-[0-9]+",
+                PiiClass::Custom("beta_doc".to_string()),
+                "doc.beta",
+            )
+            .expect("beta detector"),
+        )
+        .register_collision(
+            "doc.beta",
+            CollisionMembership::new("tenant-document", "beta", 10, None),
+        )
+        .rule(ClassRule::new(family_class, Action::Tokenize))
+        .rule(DefaultRule::new(Action::Preserve))
+        .redaction_logger(logger)
+        .build()
+        .expect("pipeline");
+
+    let clean = pipeline
+        .redact(&session, RawDocument::Text("case DOC-12345".to_string()))
+        .expect("redact");
+    let CleanDocument::Text(clean) = clean else {
+        panic!("expected text document");
+    };
+
+    assert!(clean.contains(":Custom:family:tenant-document_"));
+    assert_eq!(
+        session.restore_strict_text(&clean).expect("restore"),
+        "case DOC-12345"
+    );
+}
+
+#[test]
 fn mandatory_anchor_missing_emits_family_token_and_no_anchor_ambiguity() {
     let session = Session::new(Scope::Ephemeral).expect("session");
     let logger = MemoryLogger::default();
