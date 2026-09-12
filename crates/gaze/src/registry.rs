@@ -430,6 +430,58 @@ mod tests {
             None
         );
     }
+
+    // Characterizes the corruption mechanism the assembly layer must defend
+    // against: a collision membership for a recognizer id that is never
+    // `.register`ed still enters `FamilyPolicyTable::from_memberships`, where
+    // its `min`-aggregated precedence lowers a real variant's effective
+    // precedence in `family_index` and flips `compare()` between two real,
+    // registered recognizers. `register_rulepack_recognizers` must only
+    // register collision for recognizers it actually built — a skipped
+    // `anchored_match` recognizer (the `continue` path for a missing optional
+    // builtin cue bucket) must not leak its collision here.
+    #[test]
+    fn dangling_collision_membership_flips_family_precedence() {
+        let clean = RecognizerRegistry::builder()
+            .register_collision(
+                "ssn.de_cue",
+                CollisionMembership::new("government-id", "ssn", 10, None),
+            )
+            .register_collision(
+                "tax_number.cue_anchored",
+                CollisionMembership::new("government-id", "tax-number", 20, None),
+            )
+            .build();
+
+        assert_eq!(
+            clean
+                .family_policy()
+                .compare("tax_number.cue_anchored", "ssn.de_cue"),
+            Some(false)
+        );
+
+        let polluted = RecognizerRegistry::builder()
+            .register_collision(
+                "ssn.de_cue",
+                CollisionMembership::new("government-id", "ssn", 10, None),
+            )
+            .register_collision(
+                "tax_number.cue_anchored",
+                CollisionMembership::new("government-id", "tax-number", 20, None),
+            )
+            .register_collision(
+                "custom.name_marker",
+                CollisionMembership::new("government-id", "tax-number", 5, None),
+            )
+            .build();
+
+        assert_eq!(
+            polluted
+                .family_policy()
+                .compare("tax_number.cue_anchored", "ssn.de_cue"),
+            Some(true)
+        );
+    }
 }
 
 impl RecognizerRegistry {

@@ -245,6 +245,213 @@ cue_position = "before"
     assert!(matches!(err, BuildError::NoRecognizers), "{err:?}");
 }
 
+// Regression: a recognizer that is skipped via `continue` (the optional
+// builtin cue-bucket path for `anchored_match`) must not leak a collision
+// entry into `FamilyPolicyTable`. Before the fix the collision was registered
+// BEFORE the `match recognizer.matcher` block, so the skip path left a
+// dangling membership whose `min`-aggregated precedence silently flipped
+// `compare()` between two real, registered recognizers in the same family.
+//
+// Two real regex recognizers form the `"doc"` collision family: `alpha`
+// (precedence 10, winner) and `beta` (precedence 20, loser). A separate
+// rulepack carries an `anchored_match` recognizer whose optional builtin
+// bucket `"forward_markers"` is empty under the default chain — so it hits
+// `continue`. Its collision (variant `beta`, precedence 5) would, if leaked,
+// lower `family_index["doc"]["beta"]` from 20 to 5 and flip the verdict from
+// alpha-wins to beta-wins. The fix skips the collision too; alpha must win.
+#[test]
+fn skipped_anchored_match_does_not_leak_collision_into_family_policy() {
+    let real_rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "real-collision"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "real.alpha"
+class = "custom:alpha"
+enabled = true
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''SECRET\d+'''
+
+[recognizers.collision]
+family = "doc"
+variant = "alpha"
+precedence = 10
+
+[[recognizers]]
+id = "real.beta"
+class = "custom:beta"
+enabled = true
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''SECRET\d+'''
+
+[recognizers.collision]
+family = "doc"
+variant = "beta"
+precedence = 20
+"#,
+    )
+    .expect("real rulepack");
+
+    let skip_rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "skipped-collision"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[[recognizers]]
+id = "skip.me"
+class = "custom:beta"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.collision]
+family = "doc"
+variant = "beta"
+precedence = 5
+"#,
+    )
+    .expect("skip rulepack");
+
+    let mut policy = empty_policy();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::custom("alpha"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::custom("beta"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+
+    let text =
+        clean_with_policy_and_rulepacks(&policy, &[real_rulepack, skip_rulepack], "SECRET123");
+
+    assert!(
+        text.contains(":Custom:alpha_"),
+        "alpha (precedence 10) must win the overlap; got: {text}"
+    );
+    assert!(
+        !text.contains(":Custom:beta_"),
+        "the skipped recognizer's leaked collision must not flip arbitration to beta; got: {text}"
+    );
+}
+
+// Complement to the skip-path regression: when the `anchored_match`
+// recognizer IS built (cue bucket present), its `[recognizers.collision]`
+// block must still be registered after the match so family-policy
+// arbitration works. The anchored recognizer always reports `PiiClass::Name`
+// (`AnchoredMatchRecognizer::supported_class`), so it wins on the base
+// conflict ladder (class priority 80 > 50) against the `custom:regex`
+// candidate. But its collision precedence (20) is higher than the regex
+// precedence (10), so family policy must flip the verdict to the regex —
+// only a registered collision makes that happen. Were the post-match
+// registration dropped for `anchored_match`, `policy.compare` would return
+// `None` and the ladder would keep the `Name` candidate.
+#[test]
+fn built_anchored_match_registers_collision_so_family_policy_arbitrates() {
+    let rulepack = Rulepack::parse(
+        r#"
+schema_version = "0.1.0"
+rulepack_id = "anchored-collision"
+rulepack_version = "0.1.0"
+default_locales = ["global"]
+
+[locale.forward_markers]
+names = ["Forwarded message from"]
+
+[[recognizers]]
+id = "name.forward_marker"
+class = "Name"
+enabled = true
+
+[recognizers.match]
+kind = "anchored_match"
+cues_bucket = "forward_markers"
+boundary = "punctuation"
+right_window_chars = 64
+name_shape = "person_name"
+cue_position = "before"
+
+[recognizers.collision]
+family = "doc"
+variant = "anchor"
+precedence = 20
+
+[[recognizers]]
+id = "regex.name"
+class = "custom:regex"
+enabled = true
+locale_basis = "format"
+
+[recognizers.match]
+kind = "regex"
+pattern = '''Alice\s+Example'''
+
+[recognizers.scoring]
+base = 0.9
+priority = 0
+
+[recognizers.collision]
+family = "doc"
+variant = "regex"
+precedence = 10
+"#,
+    )
+    .expect("rulepack");
+    let mut policy = empty_policy();
+    policy.rules = vec![
+        RuleSpec::Class {
+            class: PiiClass::Name,
+            action: Action::Tokenize,
+        },
+        RuleSpec::Class {
+            class: PiiClass::custom("regex"),
+            action: Action::Tokenize,
+        },
+        RuleSpec::Default {
+            action: Action::Preserve,
+        },
+    ];
+
+    let text = clean_with_policy_and_rulepacks(
+        &policy,
+        &[rulepack],
+        "Forwarded message from Alice Example:",
+    );
+
+    assert!(
+        regex::Regex::new(r"^Forwarded message from <[0-9a-f]{8}:Custom:regex_\d+>:$")
+            .unwrap()
+            .is_match(&text),
+        "family policy must let the lower-precedence regex win; got: {text}"
+    );
+    assert!(
+        !text.contains(":Name_"),
+        "the higher class-priority anchored recognizer must lose to family policy; got: {text}"
+    );
+}
+
 // Pins #414: a format-basis recognizer registers regardless of the document
 // locale chain, so a format-only rulepack passes the guard under a chain that
 // would filter the same recognizer on document basis (compare
