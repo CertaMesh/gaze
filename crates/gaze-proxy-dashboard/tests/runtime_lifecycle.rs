@@ -6,7 +6,7 @@ use std::net::{SocketAddrV4, TcpStream};
 use std::path::Path;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -20,6 +20,14 @@ use gaze_proxy_dashboard::{
     DashboardPayloadAcceptance, DashboardStartupConfig, DashboardSupervisor, IpcLimits,
     LoopbackBind, PairedDashboard, RetentionLimits, SpawnedDashboardChild,
 };
+
+// Subprocess-spawning tests share Unix-domain and TCP sockets and multiple
+// threads with a short-lived child process.  Running them in parallel can
+// cause the child's control socket to be torn down before the parent sends its
+// purge command, producing a spurious PurgeFailed.  Serialising them is safe:
+// they are inherently process-level tests, not unit tests.
+#[cfg(not(target_os = "macos"))]
+static SUBPROCESS_SERIAL: Mutex<()> = Mutex::new(());
 
 #[test]
 #[ignore = "subprocess helper only"]
@@ -94,6 +102,7 @@ fn assert_process_reaped(pid: u32) {
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     let temp = tempfile::tempdir().unwrap();
     let (paired, pid, _token) = spawn_paired_dashboard(&temp.path().join("child.pid"));
     let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
@@ -115,9 +124,110 @@ fn matched_activation_owns_serialized_purge_shutdown_and_child_reap() {
     assert_process_reaped(pid);
 }
 
+#[cfg(not(target_os = "macos"))]
+fn spawn_paired_dashboard_with_authority(
+    pid_file: &Path,
+) -> (PairedDashboard, u32, std::net::SocketAddrV4) {
+    use std::sync::{Arc, Mutex};
+    let mut command = Command::new(std::env::current_exe().unwrap());
+    command
+        .args([
+            "--ignored",
+            "--exact",
+            "dashboard_child_helper",
+            "--nocapture",
+        ])
+        .env("GAZE_TEST_CHILD_PID_FILE", pid_file);
+    let spawned = SpawnedDashboardChild::spawn(command).unwrap();
+    let pid = std::fs::read_to_string(pid_file)
+        .unwrap()
+        .parse::<u32>()
+        .unwrap();
+    let acceptance = DashboardPayloadAcceptance::provider_visible();
+    let config = DashboardStartupConfig::Enabled {
+        acceptance,
+        bind: LoopbackBind::configured("127.0.0.1:0".parse().unwrap()).unwrap(),
+        retention: RetentionLimits::new(4, 64 * 1024, Duration::from_secs(30)).unwrap(),
+        clients: ClientLimits::conservative(),
+        ipc: IpcLimits::new(4, 64 * 1024).unwrap(),
+    };
+    let authority_cell = Arc::new(Mutex::new(None::<std::net::SocketAddrV4>));
+    let authority_capture = authority_cell.clone();
+    let paired = DashboardSupervisor::prepare(config, spawned, move |authority, token: &[u8]| {
+        assert_eq!(token.len(), 43);
+        *authority_capture.lock().unwrap() = Some(authority);
+        Ok::<(), io::Error>(())
+    })
+    .unwrap();
+    let authority = authority_cell.lock().unwrap().unwrap();
+    (paired, pid, authority)
+}
+
+#[test]
+#[cfg(not(target_os = "macos"))]
+fn realistic_chrome_top_level_navigation_reaches_shell_over_raw_socket() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    let temp = tempfile::tempdir().unwrap();
+    let (paired, pid, authority) =
+        spawn_paired_dashboard_with_authority(&temp.path().join("child.pid"));
+    let (pending, consumer, descriptor) = paired.into_pending_activation().unwrap();
+    let producer = PendingInspectionProducerV1::new(descriptor);
+    let (_producer, activated) = install_inspection_v1(producer, consumer).unwrap();
+    let launch = pending.commit(activated).unwrap();
+    let control = launch.control();
+
+    let host = format!("{}:{}", authority.ip(), authority.port());
+    let origin = format!("http://{host}");
+    let navigation = format!(
+        "GET / HTTP/1.1\r\n\
+         Host: {host}\r\n\
+         Upgrade-Insecure-Requests: 1\r\n\
+         User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36\r\n\
+         Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n\
+         Sec-Fetch-Site: none\r\n\
+         Sec-Fetch-Mode: navigate\r\n\
+         Sec-Fetch-User: ?1\r\n\
+         Sec-Fetch-Dest: document\r\n\
+         Accept-Encoding: gzip, deflate\r\n\
+         Accept-Language: en-US,en;q=0.9\r\n\
+         sec-ch-ua: \"Not/A)Brand\";v=\"8\", \"Chromium\";v=\"126\", \"Google Chrome\";v=\"126\"\r\n\
+         sec-ch-ua-mobile: ?0\r\n\
+         sec-ch-ua-platform: \"Linux\"\r\n\
+         \r\n"
+    );
+    let mut stream = TcpStream::connect(std::net::SocketAddr::V4(authority)).unwrap();
+    stream
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .unwrap();
+    stream.write_all(navigation.as_bytes()).unwrap();
+    stream.flush().unwrap();
+    let mut response = Vec::with_capacity(4 * 1024);
+    stream.read_to_end(&mut response).unwrap();
+    let head = std::str::from_utf8(&response[..response.len().min(64)]).unwrap_or("");
+    assert!(
+        head.contains("HTTP/1.1 200 OK"),
+        "realistic browser navigation must serve the shell (200), got head={head:?}"
+    );
+    assert!(
+        std::str::from_utf8(&response)
+            .unwrap_or("")
+            .contains("<!doctype html"),
+        "response body must be the dashboard HTML shell"
+    );
+    let _ = origin; // origin not needed for the GET shell route; silence unused warning.
+
+    control.shutdown().unwrap();
+    assert_eq!(control.lifecycle(), DashboardLifecycle::Stopped);
+    drop(launch);
+    assert_process_reaped(pid);
+}
+
 #[test]
 #[cfg(not(target_os = "macos"))]
 fn descriptor_equal_double_swap_fails_closed_disables_producers_and_reaps_children() {
+    let _guard = SUBPROCESS_SERIAL.lock().unwrap_or_else(|p| p.into_inner());
     let temp_a = tempfile::tempdir().unwrap();
     let temp_b = tempfile::tempdir().unwrap();
     let (paired_a, pid_a, _token_a) = spawn_paired_dashboard(&temp_a.path().join("child.pid"));
