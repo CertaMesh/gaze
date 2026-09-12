@@ -150,10 +150,7 @@ pub fn validate_restore_shapes(text: &str) -> Result<(), String> {
 
     // Check 2 — malformed token: angle-bracket token-shaped substrings with a
     // missing or empty ordinal that the main pattern does not capture.
-    let valid_spans: Vec<_> = pattern()
-        .find_iter(text)
-        .map(|m| m.range())
-        .collect();
+    let valid_spans: Vec<_> = pattern().find_iter(text).map(|m| m.range()).collect();
     for matched in malformed_restore_pattern().find_iter(text) {
         let overlaps_valid = valid_spans
             .iter()
@@ -477,7 +474,10 @@ mod tests {
         assert!(validate_restore_shapes("<deadbeef:Name_>").is_err());
         assert!(validate_restore_shapes("<Custom:foo_>").is_err());
         // Malformed family token spellings must also be rejected.
-        assert!(validate_restore_shapes("directory/<Custom:family:tenant-document_>/input.png").is_err());
+        assert!(
+            validate_restore_shapes("directory/<Custom:family:tenant-document_>/input.png")
+                .is_err()
+        );
         assert!(validate_restore_shapes("<deadbeef:Custom:family:tenant-document_>").is_err());
         assert!(validate_restore_shapes("<custom:family:foo_>").is_err());
     }

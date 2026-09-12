@@ -898,7 +898,10 @@ mod tests {
         );
 
         // Malformed token in path is rejected at the restore gate.
-        let malformed = format!("{}/file.pdf", directory.path().join("<deadbeef:Email_>").display());
+        let malformed = format!(
+            "{}/file.pdf",
+            directory.path().join("<deadbeef:Email_>").display()
+        );
         let err = envelope
             .dispatch(
                 &Principal::new("unit-test"),
