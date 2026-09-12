@@ -166,11 +166,7 @@ impl Tool for GazeReadFile {
         // Restore only inside the trusted tool, after protected manifest args
         // were recorded. Opening the token spelling can select a different file.
         let protected_path = required_string(ctx.redacted_args(), "path")?;
-        let raw_path = ctx
-            .resources()
-            .session()
-            .restore_strict_text(protected_path)
-            .map_err(|_| ToolError::InvalidArgs("path restoration failed".into()))?;
+        let raw_path = restore_path(ctx.resources().session(), protected_path)?;
         let path = PathBuf::from(raw_path);
         validate_file(&path, self.max_file_size)?;
         read_file_response(&path, ctx).map(|response| ToolResponse::json(json!(response)))
@@ -235,6 +231,37 @@ fn redact_document_text(text: &str, ctx: &ToolCtx<'_>) -> Result<String, ToolErr
         .map_err(ToolError::internal)?;
     transaction.commit().map_err(ToolError::internal)?;
     Ok(clean)
+}
+
+/// Restore the `path` carrier of `gaze_read_file` to its raw form.
+///
+/// Arg protection only rewrites spans matched by the installed PII detectors
+/// and already-known session tokens; ordinary non-PII filenames such as
+/// `scan_1.png` pass through protection unchanged and are never registered as
+/// tokens. Unlike `Session::restore_strict_text`, which fails closed on *any*
+/// unowned token-shaped substring, this restores owned session tokens and only
+/// fails closed when an unowned **session-prefixed** token spelling remains
+/// (e.g. an injected `<deadbeef:Email_999>`). Bare `<word>_<digits>` shapes the
+/// session never owned are passed through to file validation, preserving the
+/// `restore(protect(path)) == path` round-trip for non-PII paths.
+fn restore_path(session: &gaze::Session, protected_path: &str) -> Result<String, ToolError> {
+    let pattern = gaze::token_shape::pattern();
+    let mut restored = String::with_capacity(protected_path.len());
+    let mut last = 0usize;
+    for matched in pattern.find_iter(protected_path) {
+        restored.push_str(&protected_path[last..matched.start()]);
+        let token = matched.as_str();
+        match session.restore(token) {
+            Some(raw) => restored.push_str(&raw),
+            None if gaze::token_shape::starts_with_session_prefix(token) => {
+                return Err(ToolError::InvalidArgs("path restoration failed".into()));
+            }
+            None => restored.push_str(token),
+        }
+        last = matched.end();
+    }
+    restored.push_str(&protected_path[last..]);
+    Ok(restored)
 }
 
 fn validate_file(path: &Path, max_file_size: u64) -> Result<(), ToolError> {
@@ -642,7 +669,92 @@ mod tests {
             matches!(err, DispatchError::ToolError(ToolError::InvalidArgs(_))),
             "{err:?}"
         );
+        // Ordinary bare `<word>_<digits>` filenames were previously rejected at
+        // the restore gate with `InvalidArgs`; they must now reach `validate_file`
+        // and surface `NotFound` for non-existent paths. Run one lowercase- and
+        // one capital-initial shape under the production-equivalent core rulepack
+        // (28 recognizers) to confirm none rewrites the shape before the gate.
+        for bare in ["scan_1.png", "Scan_1.png"] {
+            let path = directory.path().join(bare);
+            assert!(!path.exists(), "fixture `{bare}` must not exist");
+            let err = envelope
+                .dispatch(
+                    &Principal::new("unit-test"),
+                    "gaze_read_file",
+                    json!({ "path": path }),
+                    None,
+                )
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, DispatchError::ToolError(ToolError::NotFound(_))),
+                "bare-shape `{bare}` must reach validate_file, got: {err:?}",
+            );
+        }
+        // Every dispatch in this test failed before `finish_call`.
         assert_eq!(manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_rejects_unowned_session_prefixed_token_in_path() {
+        let harness = Harness::new();
+        // The realistic attack vector — an injected unowned session-prefixed
+        // token that a different session's manifest authorizes — must still be
+        // blocked at the restore gate before any filesystem access.
+        let err = harness
+            .dispatch(
+                "gaze_read_file",
+                json!({ "path": "directory/<deadbeef:Email_999>/input.png" }),
+            )
+            .await
+            .expect_err("unowned session-prefixed token must fail at the restore gate");
+        match err {
+            DispatchError::ToolError(ToolError::InvalidArgs(message)) => {
+                assert_eq!(message, "path restoration failed");
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
+        assert_eq!(harness.manifest.failures.load(Ordering::SeqCst), 1);
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn read_file_dispatch_passes_ordinary_bare_shape_filenames_to_validation() {
+        let harness = Harness::new();
+        let directory = tempfile::tempdir().unwrap();
+
+        // Ordinary filenames containing a bare `<word>_<digits>` shape were
+        // previously rejected at the restore gate with `InvalidArgs`. They must
+        // now reach `validate_file` and surface `NotFound` for non-existent
+        // paths. Covers the lowercase- and capital-initial regex alternations
+        // plus a long-ordinal shape; `doc_v2.png` is a near-miss (underscore
+        // followed by `v`, not a digit) that already worked and must not regress.
+        for bare in [
+            "scan_1.png",
+            "Scan_1.png",
+            "invoice_20250111.pdf",
+            "doc_v2.png",
+        ] {
+            let path = directory.path().join(bare);
+            assert!(!path.exists(), "fixture `{bare}` must not exist");
+            let err = harness
+                .dispatch("gaze_read_file", json!({ "path": path }))
+                .await
+                .expect_err("path must reach validate_file, not the restore gate");
+            match err {
+                DispatchError::ToolError(ToolError::NotFound(message)) => {
+                    assert!(
+                        message.contains(bare),
+                        "NotFound for `{bare}` should mention the filename: {message}"
+                    );
+                }
+                other => panic!("unexpected error for `{bare}`: {other:?}"),
+            }
+        }
+
+        // Every dispatch failed at `validate_file` (NotFound), none at the
+        // restore gate, so no call reached `finish_call`.
+        assert_eq!(harness.manifest.finishes.load(Ordering::SeqCst), 0);
     }
 
     #[cfg(feature = "ocr-tesseract")]
