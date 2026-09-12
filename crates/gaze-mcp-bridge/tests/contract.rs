@@ -693,6 +693,184 @@ async fn response_byte_and_block_limits_block_before_return() {
     );
 }
 
+async fn last_audit_event(audit: &MemoryAudit) -> BridgeAuditEvent {
+    audit
+        .events
+        .lock()
+        .await
+        .last()
+        .expect("at least one audit event")
+        .clone()
+}
+
+fn assert_blocked_audit(
+    event: &BridgeAuditEvent,
+    expected_rule: &str,
+    server: &str,
+    tool: &str,
+    has_result_path: bool,
+) {
+    assert_eq!(
+        event.outcome,
+        DecisionOutcome::Blocked,
+        "post-ingress audit for a block ({expected_rule}) should be Blocked, but was {:?}",
+        event.outcome,
+    );
+    assert_eq!(event.deciding_rule, expected_rule);
+    assert_eq!(event.decision, "Blocked");
+    assert_eq!(event.server, server);
+    assert_eq!(event.tool, tool);
+    if has_result_path {
+        assert!(
+            !event.result_paths_affected.is_empty(),
+            "a blocked ingress result should record at least one result_path_affected"
+        );
+    }
+}
+
+#[tokio::test]
+async fn ingress_result_deny_block_is_audited_as_blocked() {
+    let client = FakeClient::new(FakeResponse::Result(result_text("screen bytes")));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) = host_with_fake(client, deny_result_policy(), audit.clone()).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token}),
+            Some(SID_A),
+        )
+        .await
+        .expect("dispatch");
+    assert_eq!(response.payload["gaze_bridge"]["reason"], "result_denied");
+    let post_ingress = last_audit_event(&audit).await;
+    assert_blocked_audit(&post_ingress, "ingress.result.deny", "mail", "send", true);
+}
+
+#[tokio::test]
+async fn ingress_byte_limit_block_is_audited_as_blocked() {
+    let client = FakeClient::new(FakeResponse::Result(result_text(
+        "this response is too long",
+    )));
+    let limits = LimitCfg {
+        call_timeout_ms: 1_000,
+        response_bytes: 16,
+        content_blocks: 64,
+    };
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) =
+        host_with_fake_and_limits(client, allow_to_policy(), audit.clone(), limits).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token}),
+            Some(SID_A),
+        )
+        .await
+        .expect("blocked");
+    assert_eq!(
+        response.payload["gaze_bridge"]["reason"],
+        "response_too_large"
+    );
+    let post_ingress = last_audit_event(&audit).await;
+    assert_blocked_audit(&post_ingress, "ingress.limit.bytes", "mail", "send", true);
+}
+
+#[tokio::test]
+async fn ingress_block_count_limit_is_audited_as_blocked() {
+    let many = CallToolResult::success(
+        (0..65)
+            .map(|idx| Content::text(format!("block {idx}")))
+            .collect::<Vec<_>>(),
+    );
+    let client = FakeClient::new(FakeResponse::Result(many));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) = host_with_fake(client, allow_to_policy(), audit.clone()).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token}),
+            Some(SID_A),
+        )
+        .await
+        .expect("blocked");
+    assert_eq!(
+        response.payload["gaze_bridge"]["reason"],
+        "too_many_content_blocks"
+    );
+    let post_ingress = last_audit_event(&audit).await;
+    assert_blocked_audit(&post_ingress, "ingress.limit.blocks", "mail", "send", true);
+}
+
+#[tokio::test]
+async fn ingress_kind_deny_block_is_audited_as_blocked() {
+    let content = Content::image("AAAA", "image/png");
+    let client = FakeClient::new(FakeResponse::Result(CallToolResult::success(vec![content])));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) = host_with_fake(client, allow_to_policy(), audit.clone()).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token}),
+            Some(SID_A),
+        )
+        .await
+        .expect("blocked");
+    assert_eq!(
+        response.payload["gaze_bridge"]["reason"],
+        "unsupported_content_block"
+    );
+    let post_ingress = last_audit_event(&audit).await;
+    assert_blocked_audit(&post_ingress, "ingress.kind.deny", "mail", "send", true);
+}
+
+#[tokio::test]
+async fn ingress_allowed_text_result_is_audited_as_allowed_with_processed_rule() {
+    let client = FakeClient::new(FakeResponse::Result(result_text("sent")));
+    let audit = Arc::new(MemoryAudit::default());
+    let (host, store) = host_with_fake(client, allow_to_policy(), audit.clone()).await;
+    let token = seed_email_token(&store, SID_A).await;
+    let response = host
+        .dispatch(
+            &Principal::new("agent"),
+            "mail.send",
+            json!({"to": token, "subject": "hello"}),
+            Some(SID_A),
+        )
+        .await
+        .expect("dispatch");
+    assert_eq!(response.payload["content"][0]["text"], "sent");
+
+    let events = audit.events.lock().await.clone();
+    // A successful forward emits two events: egress-allowed then ingress-allowed.
+    assert_eq!(events.len(), 2);
+    let egress = &events[0];
+    assert_eq!(egress.outcome, DecisionOutcome::Allowed);
+    assert!(
+        egress.deciding_rule.starts_with("egress."),
+        "egress event should carry an egress.* rule, got {}",
+        egress.deciding_rule
+    );
+    let ingress = &events[1];
+    assert_eq!(ingress.outcome, DecisionOutcome::Allowed);
+    assert_eq!(ingress.deciding_rule, "ingress.processed");
+    assert_eq!(ingress.decision, "Allowed");
+    // Both events for a single forwarded call share the same call id.
+    assert_eq!(egress.upstream_request_id, ingress.upstream_request_id);
+    assert_eq!(ingress.server, "mail");
+    assert_eq!(ingress.tool, "send");
+    // An allowed ResultMode::Process result carries no result_paths_affected by
+    // default (no PII touched this short opaque text).
+    assert!(ingress.result_paths_affected.is_empty());
+}
+
 #[tokio::test]
 async fn downstream_json_rpc_error_data_is_redacted() {
     let client = FakeClient::new(FakeResponse::McpError {
