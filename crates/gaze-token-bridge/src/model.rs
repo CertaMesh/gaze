@@ -77,10 +77,9 @@ impl CanonicalEntity {
     pub fn from_raw(class: PiiClass, raw: &str) -> Self {
         let normalized = match &class {
             PiiClass::Email => raw.trim().to_ascii_lowercase(),
-            PiiClass::Name | PiiClass::Location | PiiClass::Organization => {
+            PiiClass::Name | PiiClass::Location | PiiClass::Organization | PiiClass::Custom(_) => {
                 collapse_ascii_whitespace(raw).to_ascii_lowercase()
             }
-            PiiClass::Custom(_) => raw.trim().to_ascii_lowercase(),
         };
         Self {
             canonical_value: format!("{}:{normalized}", class.to_canonical_str()),
