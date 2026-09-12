@@ -269,7 +269,6 @@ fn person_name_at(
     }
 
     if !pending_particles.is_empty() {
-        end = pending_particles[0].0.saturating_sub(1);
         components = components.saturating_sub(pending_particles.len());
     }
 
@@ -800,6 +799,61 @@ mod tests {
             find_cue_ranges("aaaa", &folded("aa")),
             Vec::<std::ops::Range<usize>>::new()
         );
+    }
+
+    #[test]
+    fn trailing_particle_after_multi_byte_whitespace_does_not_panic() {
+        // The normalizer passes NBSP / em-space / narrow-NBSP through unchanged,
+        // so a trailing particle separated from the last uppercase component by
+        // such a multi-byte whitespace reaches `person_name_at`. The rollback
+        // must keep `end` on the component's char boundary instead of backing
+        // one byte (which used to land inside the multi-byte char and panic).
+        for ws in [
+            '\u{00A0}', '\u{2003}', '\u{202F}', '\u{2007}', '\u{2009}', '\u{205F}',
+        ] {
+            let input = format!("Alice{ws}de");
+            let span =
+                is_person_name_candidate(&input).expect("trailing particle must match, not panic");
+            assert_eq!(
+                span,
+                0..5,
+                "multi-byte ws {ws:?} must trim to the component"
+            );
+            assert_eq!(&input[span], "Alice");
+        }
+    }
+
+    #[test]
+    fn trailing_particle_after_double_ascii_space_trims_to_component() {
+        // Two ASCII spaces used to retain one separator byte in the span
+        // ("Alice "); keeping `end` at the component boundary trims it.
+        let input = "Alice  de";
+        let span = is_person_name_candidate(input).expect("should match Alice");
+        assert_eq!(span, 0..5);
+        assert_eq!(&input[span.clone()], "Alice");
+        assert!(!input[span].ends_with(' '), "no trailing separator in span");
+    }
+
+    #[test]
+    fn detect_through_cue_does_not_panic_on_unicode_whitespace_particle() {
+        let recognizer = test_recognizer(
+            "test.from",
+            vec!["from"],
+            AnchoredBoundary::Punctuation,
+            CuePosition::Before,
+            "from",
+        );
+        // Trailing particle after NBSP with min_components=2: the trimmed
+        // candidate has one component -> no match. This used to panic inside
+        // `candidate_after_cue` before reaching the boundary check.
+        let hits = recognizer.detect("from Alice\u{00A0}de:", &ctx()).unwrap();
+        assert!(hits.is_empty());
+
+        // A complete name through NBSP separators is still recognised.
+        let text = "from Alice\u{00A0}de la Cruz:";
+        let hits = recognizer.detect(text, &ctx()).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(&text[hits[0].span.clone()], "Alice\u{00A0}de la Cruz");
     }
 
     fn test_recognizer(
