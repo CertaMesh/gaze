@@ -844,4 +844,91 @@ mod tests {
         assert_eq!(default_candidates[0].score, 0.40);
         assert!(stricter_candidates.is_empty());
     }
+
+    /// Regression (ca90f53): two byte-adjacent same-class PII entities —
+    /// `[0..3)` and `[3..7)` share zero bytes — must reach the resolver as two
+    /// separate `Candidate`s. Before the fix `merge_overlapping_spans` used `>=`
+    /// and collapsed them into one `Candidate`, so the pipeline minted a single
+    /// pseudonym instead of two.
+    #[test]
+    fn touching_same_class_entities_emit_two_candidates() {
+        let input = "BobMary";
+        let recognizer = recognizer_with_spans(vec![
+            NerSpanResult {
+                span: 0..3,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+            NerSpanResult {
+                span: 3..7,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+        ]);
+        let dictionaries = DictionaryBundle::default();
+        let ctx = DetectContext::new(&[LocaleTag::Global], &dictionaries);
+
+        let candidates = Recognizer::detect(&recognizer, input, &ctx).unwrap();
+
+        assert_eq!(
+            candidates.len(),
+            2,
+            "touching same-class entities must be two candidates: {candidates:?}"
+        );
+        assert_eq!(candidates[0].span, 0..3);
+        assert_eq!(candidates[1].span, 3..7);
+    }
+
+    /// End-to-end manifestation of the touching-spans bug: the pipeline mints
+    /// one pseudonym per surviving `Candidate`. Two touching same-class Names
+    /// must produce two distinct `:Name_` pseudonyms (not one), and restoring
+    /// must reconstruct the original byte string.
+    #[test]
+    fn touching_same_class_entities_mint_two_distinct_pseudonyms() {
+        let input = "BobMary";
+        let recognizer = recognizer_with_spans(vec![
+            NerSpanResult {
+                span: 0..3,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+            NerSpanResult {
+                span: 3..7,
+                class: PiiClass::Name,
+                score: 0.9,
+            },
+        ]);
+        let pipeline = tokenizing_pipeline(recognizer);
+        let session = Session::new(Scope::Ephemeral).expect("session");
+
+        let redacted = clean_text(
+            pipeline
+                .redact(&session, RawDocument::Text(input.to_string()))
+                .expect("redact"),
+        );
+
+        let name_tokens = redacted.matches(":Name_").count();
+        assert_eq!(
+            name_tokens, 2,
+            "two touching same-class entities must mint two pseudonyms: {redacted}"
+        );
+        assert!(
+            !redacted.contains("Bob"),
+            "Bob was not pseudonymized: {redacted}"
+        );
+        assert!(
+            !redacted.contains("Mary"),
+            "Mary was not pseudonymized: {redacted}"
+        );
+
+        let restored = pipeline
+            .restore_with_telemetry(&session, &redacted)
+            .expect("restore")
+            .0
+            .text;
+        assert_eq!(
+            restored, input,
+            "restore must reconstruct the original bytes"
+        );
+    }
 }
