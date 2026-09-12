@@ -36,5 +36,5 @@ operator-tier = []
 
 [dev-dependencies]
 gaze = { path = "../gaze", version = "0.14.0", package = "gaze-pii", features = ["test-support"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync"] }
 trybuild = "1"

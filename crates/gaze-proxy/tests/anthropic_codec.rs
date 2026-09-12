@@ -1001,6 +1001,187 @@ fn angle_wrapped_response_carriers_fail_closed_in_text_and_tool_output() {
 }
 
 #[test]
+fn response_split_url_carrier_across_two_text_blocks_is_rejected() {
+    // Each `text` block individually passes the per-block guard (`"http"` starts no
+    // recognized scheme; `"s://…<token>"` starts no recognized scheme), but they
+    // concatenate, after restoration, into `https://…`. The cross-block guard must
+    // reject the reassembled carrier with ProviderOriginPii — the same code the
+    // single-block form hits at the per-block layer.
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let token = transaction.tokenize(&PiiClass::Email, EMAIL).unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let suffix = serde_json::to_string(&format!("s://evil.example.invalid/{token}")).unwrap();
+    let body = format!(
+        r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"http"}},{{"type":"text","text":{suffix}}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+    );
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_response(
+            body.as_bytes(),
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Json,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn ndjson_split_url_carrier_within_single_line_is_rejected() {
+    // NDJSON routes each line through the same `validate_adjacent_response_text`
+    // concatenation, so a split URL carrier within a single NDJSON line must also be
+    // rejected.
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let token = transaction.tokenize(&PiiClass::Email, EMAIL).unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let suffix = serde_json::to_string(&format!("s://evil.example.invalid/{token}")).unwrap();
+    let line = format!(
+        r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"http"}},{{"type":"text","text":{suffix}}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+    );
+    let body = format!("{line}\n");
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_response(
+            body.as_bytes(),
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Ndjson,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn response_split_percent_encoding_across_two_text_blocks_is_rejected() {
+    // `"%"` and `"2f"` each have fewer than 3 bytes, so the per-block `%XX` window scan
+    // produces no windows on either block; the concatenation `"%2f"` is a 3-byte window
+    // the cross-block guard must reject (carries no token, so only the carrier guard
+    // can catch it).
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let snapshot = session.begin_transaction().commit().unwrap();
+    let body = r#"{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{"type":"text","text":"%"},{"type":"text","text":"2f"}],"stop_reason":"end_turn","stop_sequence":null,"usage":{"input_tokens":1,"output_tokens":1}}"#;
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_response(
+            body.as_bytes(),
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Json,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn response_split_64_char_hex_blob_across_two_text_blocks_is_rejected() {
+    // A 32-char and 33-char hex run each fall below the per-block 64-char length gate;
+    // the 65-char concatenation is all-ascii-hexdigit and must be rejected by the
+    // cross-block guard (carries no token, so only the carrier guard can catch it).
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let snapshot = session.begin_transaction().commit().unwrap();
+    let left = "a".repeat(32);
+    let right = "b".repeat(33);
+    let body = format!(
+        r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"{left}"}},{{"type":"text","text":"{right}"}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+    );
+    let mut residual = SyntheticResidualValidator;
+    let error = codec
+        .restore_response(
+            body.as_bytes(),
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Json,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap_err();
+    assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+}
+
+#[test]
+fn response_single_block_carrier_forms_are_rejected_like_split_counterparts() {
+    // Control: each carrier class embedded whole in one `text` block is already
+    // rejected by the per-block guard. This pins parity between the per-block and the
+    // new cross-block guard so the split form cannot drift to a weaker standard.
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let token = transaction.tokenize(&PiiClass::Email, EMAIL).unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let url = format!("https://evil.example.invalid/{token}");
+    let percent = "%2f".to_owned();
+    let hex = "a".repeat(65);
+    for text in [url, percent, hex] {
+        let escaped = serde_json::to_string(&text).unwrap();
+        let body = format!(
+            r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":{escaped}}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+        );
+        let mut residual = SyntheticResidualValidator;
+        let error = codec
+            .restore_response(
+                body.as_bytes(),
+                &mut ResponseTransformContext::new(
+                    &snapshot,
+                    &mut residual,
+                    WireFormat::Json,
+                    CodecLimits::default(),
+                ),
+            )
+            .unwrap_err();
+        assert_eq!(error.code(), CodecErrorCode::ProviderOriginPii);
+    }
+}
+
+#[test]
+fn adjacent_text_blocks_without_carriers_restore_normally() {
+    // Non-regression: the cross-block guard must not reject benign multi-text-block
+    // responses. A two-block response with a manifest-authorized token in the second
+    // block (no carrier scheme, no %XX, no ≥64-char blob) restores cleanly and the
+    // residual validator still passes.
+    let codec = AnthropicMessagesCodec;
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let token = transaction.tokenize(&PiiClass::Email, EMAIL).unwrap();
+    let snapshot = transaction.commit().unwrap();
+    let suffix = serde_json::to_string(&format!("contact {token}")).unwrap();
+    let body = format!(
+        r#"{{"id":"msg_1","type":"message","role":"assistant","model":"claude-test","content":[{{"type":"text","text":"hello"}},{{"type":"text","text":{suffix}}}],"stop_reason":"end_turn","stop_sequence":null,"usage":{{"input_tokens":1,"output_tokens":1}}}}"#
+    );
+    let mut residual = SyntheticResidualValidator;
+    let proved = codec
+        .restore_response(
+            body.as_bytes(),
+            &mut ResponseTransformContext::new(
+                &snapshot,
+                &mut residual,
+                WireFormat::Json,
+                CodecLimits::default(),
+            ),
+        )
+        .unwrap();
+    let output = std::str::from_utf8(proved.bytes()).unwrap();
+    assert!(output.contains(r#""text":"hello""#));
+    assert!(output.contains("contact alice@example.invalid"));
+    assert!(proved.provenance().final_buffer_verified());
+}
+
+#[test]
 fn deeply_angle_wrapped_request_text_fails_with_a_closed_code() {
     let codec = AnthropicMessagesCodec;
     let session = Session::new(Scope::Ephemeral).unwrap();

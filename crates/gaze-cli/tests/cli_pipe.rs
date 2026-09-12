@@ -908,6 +908,46 @@ fn t04d_restore_telemetry_json_and_audit_query_are_metadata_only() {
     assert!(stdout.contains("\tstrict\tsuccess\t0\t0\t0\t"));
     assert!(!stdout.contains("alice@example.invalid"));
     assert!(!stdout.contains("<Email_1>"));
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--restore-events",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "jsonl export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    let export_stdout = String::from_utf8(export.stdout).unwrap();
+    let row: Value = serde_json::from_str(
+        export_stdout
+            .lines()
+            .next()
+            .expect("jsonl export must emit at least one restore-event row"),
+    )
+    .unwrap();
+    assert_eq!(row["restore_policy"], "strict");
+    assert_eq!(row["restore_decision"], "success");
+    assert_eq!(row["restore_unknown_token_count"], 0);
+    assert_eq!(row["restore_manifest_bypass_count"], 0);
+    assert_eq!(row["restore_fresh_pii_count"], 0);
+    assert!(
+        row["restore_phase_mask"].is_i64(),
+        "restore_phase_mask must be a present integer: {row}"
+    );
+    assert!(
+        !export_stdout.contains("alice@example.invalid") && !export_stdout.contains("<Email_1>"),
+        "jsonl export must not contain raw PII"
+    );
 }
 
 #[test]
@@ -1893,6 +1933,81 @@ fn s4_audit_query_columns_are_restricted() {
 }
 
 #[test]
+fn s4_audit_export_jsonl_keys_match_restricted_columns() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let stdout = String::from_utf8(export.stdout).unwrap();
+    let line = stdout
+        .lines()
+        .next()
+        .expect("jsonl export must emit at least one row");
+    let row: Value = serde_json::from_str(line).expect("jsonl line must be valid JSON");
+    let mut keys: Vec<String> = row
+        .as_object()
+        .expect("jsonl row must be a JSON object")
+        .keys()
+        .map(|key| key.to_string())
+        .collect();
+    keys.sort();
+    let mut expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| (*column).to_string())
+        .collect();
+    expected.sort();
+    assert_eq!(
+        keys.len(),
+        AUDIT_RESTRICTED_COLUMNS.len(),
+        "jsonl row must have one key per restricted column"
+    );
+    assert_eq!(
+        keys, expected,
+        "audit export jsonl keys must match AUDIT_RESTRICTED_COLUMNS"
+    );
+    for column in [
+        "restore_policy",
+        "restore_decision",
+        "restore_unknown_token_count",
+        "restore_manifest_bypass_count",
+        "restore_fresh_pii_count",
+        "restore_phase_mask",
+    ] {
+        assert!(
+            row.as_object().unwrap().contains_key(column),
+            "jsonl row must include {column}"
+        );
+    }
+}
+
+#[test]
 fn p5_audit_query_reads_structural_agent_recipient_source() {
     let (_dir, policy_path) =
         write_policy_with_bundled_rulepacks(&["core", "locale-de", "locale-en"], "de-DE");
@@ -2275,6 +2390,122 @@ action = "preserve"
     );
 
     assert_symmetric_policy_config(cli_out, toml_out);
+}
+
+// Path-only overrides must tokenize detected classes and preserve restore/audit behavior.
+#[test]
+fn s1_rulepack_path_only_no_policy_tokenizes_custom_class() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let input = "ticket class-alpha-123";
+
+    let v = clean_json_with_args(
+        &[
+            &format!("--rulepack-path={}", rulepack_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        input,
+    );
+
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(
+        clean.starts_with("ticket <"),
+        "path-only no-policy run must redact the detected span; got: {clean}"
+    );
+    assert!(
+        clean.ends_with(":Custom:class_alpha_1>"),
+        "expected a custom:class_alpha token; got: {clean}"
+    );
+    assert_ne!(
+        clean, input,
+        "PII span must be tokenized, not preserved verbatim (silent leak)"
+    );
+    assert_eq!(v["stats"]["detections"], 1);
+
+    assert_eq!(
+        restore_success_text(v["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+
+    let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
+    let entries = logger.entries().expect("audit entries");
+    assert_eq!(entries.len(), 1, "the recognizer must fire exactly once");
+    assert_eq!(
+        entries[0].action,
+        gaze::Action::Tokenize,
+        "path-only no-policy redaction must tokenize, not preserve"
+    );
+    assert!(
+        matches!(entries[0].class, PiiClass::Custom(ref name) if name == "class_alpha"),
+        "unexpected detection class: {:?}",
+        entries[0].class
+    );
+    assert_eq!(
+        entries[0].recognizer_id.as_deref(),
+        Some("class-alpha.regex"),
+        "unexpected recognizer_id: {:?}",
+        entries[0].recognizer_id
+    );
+}
+
+// Combining sources must protect classes from both bundled and path rulepacks.
+#[test]
+fn s1_rulepack_bundled_and_path_no_policy_tokenize_both_sources() {
+    let dir = tempdir().unwrap();
+    let rulepack_path = dir.path().join("class-alpha.toml");
+    fs::write(&rulepack_path, class_alpha_rulepack()).unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+    let input = "Phone +1 555 0100 ticket class-alpha-123";
+
+    let v = clean_json_with_args(
+        &[
+            "--rulepack-bundled",
+            "core",
+            &format!("--rulepack-path={}", rulepack_path.display()),
+            &format!("--audit-db={}", audit_path.display()),
+        ],
+        input,
+    );
+
+    let clean = v["clean_text"].as_str().unwrap();
+    assert!(
+        !clean.contains("class-alpha-123"),
+        "path rulepack PII must be tokenized, not preserved (leak): {clean}"
+    );
+    assert!(
+        !clean.contains("+1 555 0100"),
+        "bundled core phone must still be tokenized when a path rulepack is also present: {clean}"
+    );
+    assert_eq!(
+        v["stats"]["detections"], 2,
+        "both the bundled phone and the path custom class must be detected"
+    );
+    assert_eq!(
+        restore_success_text(v["session_blob"].as_str().unwrap(), clean),
+        input
+    );
+
+    let logger = SqliteLogger::new(&audit_path).expect("audit log opens");
+    let entries = logger.entries().expect("audit entries");
+    assert_eq!(entries.len(), 2, "both detections must be audited");
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry.action == gaze::Action::Tokenize),
+        "every audited detection must be tokenized, none preserved: {entries:?}"
+    );
+    let path_entry = entries
+        .iter()
+        .find(|entry| matches!(entry.class, PiiClass::Custom(ref name) if name == "class_alpha"))
+        .expect("the path rulepack's custom:class_alpha detection must be audited");
+    assert_eq!(
+        path_entry.recognizer_id.as_deref(),
+        Some("class-alpha.regex"),
+        "unexpected path recognizer_id: {:?}",
+        path_entry.recognizer_id
+    );
 }
 
 #[test]

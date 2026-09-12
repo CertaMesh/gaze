@@ -111,9 +111,8 @@ pub(crate) fn register_rulepack_recognizers(
             );
             continue;
         }
-        if let Some(collision) = recognizer.collision.clone() {
-            builder.register_collision(recognizer.id.clone(), collision);
-        }
+        let recognizer_id = recognizer.id.clone();
+        let collision = recognizer.collision.clone();
         match recognizer.matcher {
             RawMatch::Regex {
                 pattern,
@@ -260,6 +259,9 @@ pub(crate) fn register_rulepack_recognizers(
                 );
             }
             _ => return Err(RulepackError::UnsupportedMatcher("unknown".to_string()).into()),
+        }
+        if let Some(collision) = collision {
+            builder.register_collision(recognizer_id, collision);
         }
     }
 

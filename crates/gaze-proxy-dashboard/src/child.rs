@@ -165,6 +165,9 @@ impl DashboardChildEntrypoint {
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let secret = PairingSecret::generate()?;
         child_pair(&mut control, authority, &secret)?;
+        control
+            .set_read_timeout(None)
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
 
         let state = Arc::new(Mutex::new(ChildState {
             store: EventStore::new(config.retention, InspectionEpochV1::new(0)),

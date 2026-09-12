@@ -83,22 +83,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 4. Restore after the LLM responds
 
-There is no `Pipeline::restore_text`. Scan the response for tokens with
-`gaze::token_shape::pattern()` and call `Session::restore_strict` per token:
+Call `Session::restore_strict_text` on the complete LLM response and keep its
+restored output on the owner side:
 
 ```rust,no_run
-use gaze::{token_shape, SensitiveSnapshot, Session};
+use gaze::{SensitiveSnapshot, Session};
 
 fn restore_text(session: &Session, text: &str) -> Result<String, gaze::Error> {
-    let mut out = String::with_capacity(text.len());
-    let mut last = 0;
-    for m in token_shape::pattern().find_iter(text) {
-        out.push_str(&text[last..m.start()]);
-        out.push_str(&session.restore_strict(m.as_str())?);
-        last = m.end();
-    }
-    out.push_str(&text[last..]);
-    Ok(out)
+    session.restore_strict_text(text)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
