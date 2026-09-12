@@ -202,9 +202,11 @@ impl Recognizer for RegexDetector {
 
 impl RegexDetector {
     fn is_excluded(&self, matched: &str) -> bool {
-        self.exclusions
-            .iter()
-            .any(|excluded| matched.eq_ignore_ascii_case(excluded) || matched.contains(excluded))
+        let lowered = matched.to_ascii_lowercase();
+        self.exclusions.iter().any(|excluded| {
+            let excl = excluded.to_ascii_lowercase();
+            lowered == excl || lowered.contains(&excl)
+        })
     }
 
     fn canonical_form(&self, matched: &str) -> Option<String> {
@@ -362,6 +364,42 @@ mod tests {
             detections[0].canonical_form.as_deref(),
             Some("alice@example.invalid")
         );
+    }
+
+    fn detector_with_exclusions(exclusions: &[&str]) -> RegexDetector {
+        RegexDetector::with_rulepack_fields(
+            r"(?i)(?-u:\b)([a-z0-9._%+\-]+@(?:test\.local|example\.invalid))(?-u:\b)",
+            PiiClass::Email,
+            "email.global",
+            vec![LocaleTag::Global],
+            0.70,
+            90,
+            "counter",
+            Some(vec![1]),
+            exclusions.iter().map(|&s| s.to_string()).collect(),
+            Some(ValidatorKind::EmailRfc),
+            Some(NormalizerKind::EmailCanonical),
+        )
+        .expect("regex detector")
+    }
+
+    #[test]
+    fn is_excluded_is_ascii_case_insensitive_for_both_branches_and_cased_exclusion_values() {
+        // Substring and exact-match branches must both be ASCII-case-insensitive,
+        // and a cased exclusion value must match a differently-cased matched text.
+        let detector = detector_with_exclusions(&["test.local"]);
+        assert!(detector.is_excluded("user@test.local"));
+        assert!(detector.is_excluded("User@Test.Local"));
+        assert!(detector.is_excluded("USER@TEST.LOCAL"));
+        assert!(detector.is_excluded("test.local"));
+        assert!(detector.is_excluded("Test.Local"));
+        assert!(!detector.is_excluded("user@example.invalid"));
+        assert!(!detector.is_excluded("example.invalid"));
+
+        let detector = detector_with_exclusions(&["TEST.LOCAL"]);
+        assert!(detector.is_excluded("user@test.local"));
+        assert!(detector.is_excluded("User@Test.Local"));
+        assert!(!detector.is_excluded("user@example.invalid"));
     }
 
     #[test]
