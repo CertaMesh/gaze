@@ -196,7 +196,7 @@ fn has_identifier_char_after(input: &str, end: usize) -> bool {
 }
 
 fn is_identifier_char(ch: char) -> bool {
-    ch == '_' || ch.is_alphanumeric()
+    ch == '_' || ch == '-' || ch.is_alphanumeric()
 }
 
 #[cfg(test)]
@@ -386,5 +386,36 @@ mod tests {
             .unwrap();
 
         assert!(hits.is_empty(), "unexpected dictionary hits: {hits:?}");
+    }
+
+    #[test]
+    fn dictionary_recognizer_does_not_match_prefix_inside_hyphenated_identifier() {
+        let ctx = TypedContext {
+            dictionaries: HashMap::from([(
+                "dict_alpha".to_string(),
+                ContextDictionary {
+                    terms: vec!["AAA".to_string()],
+                    case_sensitive: true,
+                },
+            )]),
+            class_map: HashMap::new(),
+            fields: Map::new(),
+        };
+        let bundle = dictionary_bundle_from_context(&ctx);
+        let detect_context = DetectContext::new(&[LocaleTag::Global], &bundle);
+        let recognizer = DictionaryRecognizer::new(
+            "dict/dict_alpha",
+            PiiClass::Custom("class_alpha".to_string()),
+            "dict_alpha",
+            true,
+            "counter",
+        );
+
+        let hits = recognizer
+            .detect("AAA then AAA-12345", &detect_context)
+            .unwrap();
+
+        assert_eq!(hits.len(), 1, "expected only standalone AAA, got {hits:?}");
+        assert_eq!(hits[0].span, 0..3);
     }
 }
