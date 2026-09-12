@@ -1521,6 +1521,46 @@ fn core_email_global_matches_non_ascii_and_punctuation_boundaries() {
 }
 
 #[test]
+fn core_email_global_excludes_test_local_regardless_of_case() {
+    let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
+    let email_spec = core
+        .recognizers
+        .iter()
+        .find(|recognizer| recognizer.id == "email.global")
+        .expect("email.global");
+    assert_eq!(
+        email_spec
+            .context
+            .as_ref()
+            .map(|context| context.exclusions.clone())
+            .unwrap_or_default(),
+        vec!["test.local".to_string()]
+    );
+
+    for input in [
+        "Email user@test.local please",
+        "Email User@Test.Local please",
+        "Email USER@TEST.LOCAL please",
+    ] {
+        assert!(
+            detect_recognizer(&core, "email.global", input, LocaleTag::EnUs).is_empty(),
+            "test.local must be excluded regardless of casing: {input}"
+        );
+    }
+
+    assert_eq!(
+        detect_recognizer(
+            &core,
+            "email.global",
+            "Email Alice@Example.invalid please",
+            LocaleTag::EnUs
+        ),
+        vec!["Alice@Example.invalid".to_string()],
+        "non-excluded emails must still tokenize"
+    );
+}
+
+#[test]
 fn core_and_core_extended_compose_without_counter_collision() {
     let core = Rulepack::load(RulepackSource::Embedded(embedded("core").unwrap())).unwrap();
     let extended = core_extended();
