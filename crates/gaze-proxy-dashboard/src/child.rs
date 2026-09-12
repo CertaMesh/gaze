@@ -70,37 +70,51 @@ impl NoDumpReadiness {
 pub struct ChildInheritedHandles {
     control: UnixStream,
     inspection: UnixStream,
+    purge_request: UnixStream,
 }
 
 impl ChildInheritedHandles {
-    /// Connects only the two crate-owned channels supplied by
+    /// Connects only the three crate-owned channels supplied by
     /// [`crate::SpawnedDashboardChild::spawn`].
     pub fn connect_from_environment() -> Result<Self, DashboardError> {
         let control_path = std::env::var_os("GAZE_DASHBOARD_CONTROL_SOCKET_V1")
             .ok_or_else(|| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let inspection_path = std::env::var_os("GAZE_DASHBOARD_INSPECTION_SOCKET_V1")
             .ok_or_else(|| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        let purge_request_path = std::env::var_os("GAZE_DASHBOARD_PURGE_REQUEST_SOCKET_V1")
+            .ok_or_else(|| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         std::env::remove_var("GAZE_DASHBOARD_CONTROL_SOCKET_V1");
         std::env::remove_var("GAZE_DASHBOARD_INSPECTION_SOCKET_V1");
+        std::env::remove_var("GAZE_DASHBOARD_PURGE_REQUEST_SOCKET_V1");
         let control = UnixStream::connect(control_path)
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let inspection = UnixStream::connect(inspection_path)
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
-        Self::new(control, inspection)
+        let purge_request = UnixStream::connect(purge_request_path)
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        Self::new(control, inspection, purge_request)
     }
 
     /// Accepts only connected local Unix sockets. Descriptors 0/1/2, terminals, character
     /// devices, and regular files are unrepresentable through this constructor.
-    fn new(control: UnixStream, inspection: UnixStream) -> Result<Self, DashboardError> {
+    fn new(
+        control: UnixStream,
+        inspection: UnixStream,
+        purge_request: UnixStream,
+    ) -> Result<Self, DashboardError> {
         control
             .peer_addr()
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         inspection
             .peer_addr()
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        purge_request
+            .peer_addr()
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         Ok(Self {
             control,
             inspection,
+            purge_request,
         })
     }
 }
@@ -157,10 +171,17 @@ impl DashboardChildEntrypoint {
         };
 
         let mut control = handles.control;
+        let purge_request = handles.purge_request;
         control
             .set_read_timeout(Some(Duration::from_secs(2)))
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         control
+            .set_write_timeout(Some(Duration::from_secs(2)))
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        purge_request
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        purge_request
             .set_write_timeout(Some(Duration::from_secs(2)))
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let secret = PairingSecret::generate()?;
@@ -199,6 +220,9 @@ impl DashboardChildEntrypoint {
         let server_control = control
             .try_clone()
             .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
+        let server_purge_request = purge_request
+            .try_clone()
+            .map_err(|_| DashboardError::new(DashboardErrorCode::InvalidInheritedHandle))?;
         let limits = ServerLimits {
             responses: config.clients.active_payload_responses(),
             connections: config.clients.active_http_connections(),
@@ -214,6 +238,7 @@ impl DashboardChildEntrypoint {
                     server_state,
                     server_stop,
                     server_control,
+                    server_purge_request,
                     server_active,
                     limits,
                 );
@@ -401,12 +426,14 @@ struct ConnectionBudget {
     max_followers: usize,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn server_loop(
     listener: TcpListener,
     authority: SocketAddrV4,
     state: Arc<Mutex<ChildState>>,
     stop: Arc<AtomicBool>,
     mut control: UnixStream,
+    purge_request: UnixStream,
     active_responses: Arc<AtomicUsize>,
     limits: ServerLimits,
 ) {
@@ -436,8 +463,8 @@ fn server_loop(
                 };
                 let state = state.clone();
                 let budget = budget.clone();
-                let control = match control.try_clone() {
-                    Ok(control) => control,
+                let worker_purge_request = match purge_request.try_clone() {
+                    Ok(purge_request) => purge_request,
                     Err(_) => break,
                 };
                 match thread::Builder::new()
@@ -447,7 +474,7 @@ fn server_loop(
                             stream,
                             authority,
                             state,
-                            control,
+                            worker_purge_request,
                             budget,
                             connection_slot,
                         );
@@ -494,7 +521,7 @@ fn handle_connection(
     mut stream: TcpStream,
     authority: SocketAddrV4,
     state: Arc<Mutex<ChildState>>,
-    mut control: UnixStream,
+    mut purge_request: UnixStream,
     budget: ConnectionBudget,
     _connection_slot: CountedSlot,
 ) {
@@ -572,8 +599,8 @@ fn handle_connection(
                     let _ = write_json(&mut stream, 200, &body);
                 }
                 ValidatedDashboardRequestV1::Purge => {
-                    let _ = control.write_all(&[CHILD_PURGE_REQUEST]);
-                    let _ = control.flush();
+                    let _ = purge_request.write_all(&[CHILD_PURGE_REQUEST]);
+                    let _ = purge_request.flush();
                     let _ = write_constant(&mut stream, 202, b"purge requested\n");
                 }
                 ValidatedDashboardRequestV1::ProviderVisible
