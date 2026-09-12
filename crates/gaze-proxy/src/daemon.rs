@@ -277,41 +277,71 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
     create_parent(&options.paths.log_file)?;
     let lock = lock_pidfile(&options.paths)?;
 
-    let stdout = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&options.paths.log_file)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: options.paths.log_file.clone(),
-            source,
-        })?;
-    let stderr = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&options.paths.stderr_file)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: options.paths.stderr_file.clone(),
-            source,
-        })?;
-    let mut command =
-        Command::new(
-            std::env::current_exe().map_err(|source| ProxyError::DaemonIo {
-                path: PathBuf::from("current_exe"),
+    let mut child = {
+        let spawn_result = (|| {
+            let stdout = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&options.paths.log_file)
+                .map_err(|source| ProxyError::DaemonIo {
+                    path: options.paths.log_file.clone(),
+                    source,
+                })?;
+            let stderr = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&options.paths.stderr_file)
+                .map_err(|source| ProxyError::DaemonIo {
+                    path: options.paths.stderr_file.clone(),
+                    source,
+                })?;
+            let mut command =
+                Command::new(
+                    std::env::current_exe().map_err(|source| ProxyError::DaemonIo {
+                        path: PathBuf::from("current_exe"),
+                        source,
+                    })?,
+                );
+            command
+                .args(["proxy", "serve", "--_foreground-daemon"])
+                .args(serve_args(&options.config))
+                .args(&options.extra_args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::from(stdout))
+                .stderr(Stdio::from(stderr));
+            drop(lock);
+            command.spawn().map_err(|source| ProxyError::DaemonIo {
+                path: PathBuf::from("gaze proxy serve"),
                 source,
-            })?,
-        );
-    command
-        .args(["proxy", "serve", "--_foreground-daemon"])
-        .args(serve_args(&options.config))
-        .args(options.extra_args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(stdout))
-        .stderr(Stdio::from(stderr));
-    drop(lock);
-    let mut child = command.spawn().map_err(|source| ProxyError::DaemonIo {
-        path: PathBuf::from("gaze proxy serve"),
-        source,
-    })?;
+            })
+        })();
+        match spawn_result {
+            Ok(child) => child,
+            Err(e) => {
+                // The lock was already released before the spawn attempt so
+                // that the child could acquire it.  Remove the empty pidfile
+                // only when we can re-acquire the exclusive lock and confirm
+                // no PID has been written; if another startup has taken over
+                // the file in the interim, leave it alone.
+                if let Ok(mut f) = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(&options.paths.pidfile)
+                {
+                    if f.try_lock_exclusive().is_ok() {
+                        let mut contents = String::new();
+                        // Only remove if we can read the file and it is still
+                        // empty; a read error means we cannot confirm the
+                        // contents, so leave the file alone.
+                        if f.read_to_string(&mut contents).is_ok() && contents.trim().is_empty() {
+                            let _ = fs::remove_file(&options.paths.pidfile);
+                        }
+                    }
+                }
+                return Err(e);
+            }
+        }
+    };
     confirm_started(&mut child, &options.paths)
 }
 
@@ -346,7 +376,7 @@ fn confirm_started(child: &mut Child, paths: &DaemonPaths) -> Result<u32, ProxyE
                 return Err(ProxyError::DaemonIo {
                     path: PathBuf::from("gaze proxy serve"),
                     source,
-                })
+                });
             }
         }
     }
@@ -411,15 +441,68 @@ pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
 }
 
 pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
-    if let Some(status) = status(paths)? {
-        if !status.running {
-            fs::remove_file(&paths.pidfile).map_err(|source| ProxyError::DaemonIo {
+    // Open the pidfile and acquire an exclusive lock before inspecting or
+    // removing it.  Classifying the file via status() and then removing by
+    // pathname (without holding a lock) creates a window: a concurrent startup
+    // can publish a live PID between the read and the remove, and we would
+    // delete the running daemon's pidfile.  Acquiring the lock first ties
+    // cleanup to the inode we are about to remove and prevents that window.
+    let mut f = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&paths.pidfile)
+    {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(source) => {
+            return Err(ProxyError::DaemonIo {
                 path: paths.pidfile.clone(),
                 source,
-            })?;
+            });
         }
+    };
+
+    // If we cannot acquire the exclusive lock, an active startup or the daemon
+    // itself holds it; leave the file intact.
+    if f.try_lock_exclusive().is_err() {
+        return Ok(());
     }
-    Ok(())
+
+    // Re-read the contents under the lock so we see the final state.
+    let mut contents = String::new();
+    f.read_to_string(&mut contents)
+        .map_err(|source| ProxyError::DaemonIo {
+            path: paths.pidfile.clone(),
+            source,
+        })?;
+
+    // Parse the PID from the locked file.  Empty/unparseable means the
+    // startup that created this file never finished; removable.
+    let is_stale = if contents.trim().is_empty() {
+        true
+    } else {
+        match contents.lines().next().and_then(|l| l.parse::<u32>().ok()) {
+            Some(pid) => !process_exists(pid),
+            None => true, // unparseable — treat as stale
+        }
+    };
+
+    if !is_stale {
+        return Ok(());
+    }
+
+    // The file is stale and we hold the lock.  Remove by inode (the lock fd
+    // still refers to this inode even after the unlink, so no other path
+    // can slip a replacement in under the same lock).
+    match fs::remove_file(&paths.pidfile) {
+        Ok(()) => Ok(()),
+        // Benign: another cleanup already removed it between our open and now.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(source) => Err(ProxyError::DaemonIo {
+            path: paths.pidfile.clone(),
+            source,
+        }),
+    }
 }
 
 pub fn logs(paths: &DaemonPaths, follow: bool) -> Result<(), ProxyError> {
@@ -607,6 +690,44 @@ mod tests {
         assert!(!paths.pidfile.exists());
     }
 
+    #[test]
+    fn cleanup_stale_unlinks_empty_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        std::fs::write(&paths.pidfile, "").unwrap();
+
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.pidfile.exists());
+        assert!(status(&paths).unwrap().is_none());
+    }
+
+    #[test]
+    fn cleanup_stale_leaves_running_pidfile_alone() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        init_foreground_daemon(&paths, "127.0.0.1:8787".parse().unwrap()).unwrap();
+
+        cleanup_stale(&paths).unwrap();
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink a live daemon pidfile"
+        );
+    }
+
+    #[test]
+    fn cleanup_stale_propagates_non_stale_io_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        std::fs::create_dir(&paths.pidfile).unwrap();
+
+        let err = cleanup_stale(&paths).unwrap_err();
+        assert!(matches!(err, ProxyError::DaemonIo { .. }));
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink for non-stale errors"
+        );
+    }
+
     // solo todo #2965: every field the adopter can configure has to reach the
     // detached child, because the child's argv is all it ever sees.
     #[test]
@@ -665,6 +786,97 @@ mod tests {
         assert_eq!(
             loaded.adapters.openai.upstream,
             config.adapters.openai.upstream
+        );
+    }
+
+    /// A locked empty pidfile is a startup in progress.  `cleanup_stale` must
+    /// not unlink it: doing so lets a concurrent caller create a fresh inode at
+    /// the same path, acquire its own lock, and proceed as a second daemon.
+    #[test]
+    fn cleanup_stale_preserves_locked_startup_pidfile() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+
+        // Simulate a startup that has created and locked an empty pidfile but
+        // has not yet published a PID.
+        let lock = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&paths.pidfile)
+            .unwrap();
+        lock.try_lock_exclusive()
+            .expect("should be able to lock a freshly created file");
+
+        // `cleanup_stale` sees an unparseable (empty) file, but must recognise
+        // the exclusive lock and leave the inode intact.
+        cleanup_stale(&paths).unwrap();
+
+        assert!(
+            paths.pidfile.exists(),
+            "cleanup_stale must not unlink an actively locked startup pidfile"
+        );
+
+        // A second concurrent start attempt must not be able to re-lock the
+        // file, proving the original startup still owns it.
+        let second = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&paths.pidfile)
+            .unwrap();
+        assert!(
+            second.try_lock_exclusive().is_err(),
+            "a second startup must not acquire the lock while the first holds it"
+        );
+
+        // Releasing the lock explicitly (mimics startup completing or aborting).
+        drop(lock);
+    }
+
+    /// `cleanup_stale` must propagate real unlink failures rather than
+    /// swallowing them and reporting success.  This regression covers the
+    /// deterministic path described in the r2 review: make the parent directory
+    /// read/execute-only so that `unlink` (which requires write permission on
+    /// the parent) fails with EACCES, then verify that the file is still present
+    /// and that `cleanup_stale` returns an I/O error.
+    ///
+    /// Skipped when running as root because root bypasses DAC permission checks.
+    #[test]
+    #[cfg(unix)]
+    fn cleanup_stale_reports_unlink_failure() {
+        use std::os::unix::fs::PermissionsExt;
+
+        if unsafe { libc::getuid() } == 0 {
+            // root ignores DAC permissions; the test would be a false pass.
+            return;
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+
+        // Create an empty (stale) pidfile.
+        std::fs::write(&paths.pidfile, "").unwrap();
+
+        // Revoke write permission on the parent directory so unlink fails.
+        let parent = paths.pidfile.parent().unwrap();
+        let original = std::fs::metadata(parent).unwrap().permissions();
+        std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = cleanup_stale(&paths);
+
+        // Restore permissions before asserting so the TempDir drop can clean up.
+        std::fs::set_permissions(parent, original).unwrap();
+
+        assert!(
+            result.is_err(),
+            "cleanup_stale must propagate the unlink failure, not return Ok"
+        );
+        assert!(
+            paths.pidfile.exists(),
+            "the stale pidfile must remain when unlink failed"
         );
     }
 }
