@@ -1752,7 +1752,7 @@ async fn proxy(
         Err(_) if is_direct => {
             return direct_error_response(
                 ProxyErrorCode::RequestBodyLimitExceeded.error(ProxyErrorPhase::RequestValidation),
-            )
+            );
         }
         Err(error) => return proxy_error_response(error),
     };
@@ -1910,7 +1910,8 @@ async fn proxy_inner(
             source,
         })?;
 
-    let body = if content_type.contains("text/event-stream") {
+    let is_sse = content_type.contains("text/event-stream");
+    let body = if is_sse {
         transform_sse(&adapter, &session, &bytes)?
     } else {
         let mut response_json: Value =
@@ -1920,14 +1921,14 @@ async fn proxy_inner(
     };
 
     let mut response = Response::builder().status(status);
-    for (name, value) in upstream_headers {
-        if let Some(name) = name {
-            if name == axum::http::header::CONTENT_LENGTH {
-                continue;
-            }
-            response = response.header(name, value);
-        }
-    }
+    response = response.header(
+        axum::http::header::CONTENT_TYPE,
+        if is_sse {
+            "text/event-stream"
+        } else {
+            "application/json"
+        },
+    );
     response
         .body(axum::body::Body::from(body))
         .map_err(|source| ProxyError::DaemonConfig {

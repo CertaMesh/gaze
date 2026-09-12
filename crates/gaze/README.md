@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-For restore, scan the LLM response with `gaze::token_shape::pattern()` and call `session.restore_strict(token)` per match. Full walk-through: [`docs/tutorials/getting-started.md`](https://github.com/CertaMesh/gaze/blob/main/docs/tutorials/getting-started.md).
+For restore, call `Session::restore_strict_text` on the complete LLM response and keep its restored output on the owner side. Full walk-through: [`docs/tutorials/getting-started.md`](https://github.com/CertaMesh/gaze/blob/main/docs/tutorials/getting-started.md).
 
 ## What this crate owns
 

@@ -908,6 +908,46 @@ fn t04d_restore_telemetry_json_and_audit_query_are_metadata_only() {
     assert!(stdout.contains("\tstrict\tsuccess\t0\t0\t0\t"));
     assert!(!stdout.contains("alice@example.invalid"));
     assert!(!stdout.contains("<Email_1>"));
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--restore-events",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "jsonl export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+    let export_stdout = String::from_utf8(export.stdout).unwrap();
+    let row: Value = serde_json::from_str(
+        export_stdout
+            .lines()
+            .next()
+            .expect("jsonl export must emit at least one restore-event row"),
+    )
+    .unwrap();
+    assert_eq!(row["restore_policy"], "strict");
+    assert_eq!(row["restore_decision"], "success");
+    assert_eq!(row["restore_unknown_token_count"], 0);
+    assert_eq!(row["restore_manifest_bypass_count"], 0);
+    assert_eq!(row["restore_fresh_pii_count"], 0);
+    assert!(
+        row["restore_phase_mask"].is_i64(),
+        "restore_phase_mask must be a present integer: {row}"
+    );
+    assert!(
+        !export_stdout.contains("alice@example.invalid") && !export_stdout.contains("<Email_1>"),
+        "jsonl export must not contain raw PII"
+    );
 }
 
 #[test]
@@ -1890,6 +1930,81 @@ fn s4_audit_query_columns_are_restricted() {
         column_names, expected,
         "audit query SQL must return exactly AUDIT_RESTRICTED_COLUMNS"
     );
+}
+
+#[test]
+fn s4_audit_export_jsonl_keys_match_restricted_columns() {
+    let dir = tempdir().unwrap();
+    let audit_path = dir.path().join("audit.sqlite");
+
+    let clean = clean_raw_with_args(
+        &[&format!("--audit-db={}", audit_path.display())],
+        "Email alice@example.invalid",
+    );
+    assert!(
+        clean.status.success(),
+        "clean failed: {}",
+        String::from_utf8_lossy(&clean.stderr)
+    );
+
+    let export = Command::cargo_bin("gaze")
+        .unwrap()
+        .args([
+            "audit",
+            "export",
+            "--audit-db",
+            audit_path.to_str().unwrap(),
+            "--format",
+            "jsonl",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        export.status.success(),
+        "audit export failed: {}",
+        String::from_utf8_lossy(&export.stderr)
+    );
+
+    let stdout = String::from_utf8(export.stdout).unwrap();
+    let line = stdout
+        .lines()
+        .next()
+        .expect("jsonl export must emit at least one row");
+    let row: Value = serde_json::from_str(line).expect("jsonl line must be valid JSON");
+    let mut keys: Vec<String> = row
+        .as_object()
+        .expect("jsonl row must be a JSON object")
+        .keys()
+        .map(|key| key.to_string())
+        .collect();
+    keys.sort();
+    let mut expected: Vec<String> = AUDIT_RESTRICTED_COLUMNS
+        .iter()
+        .map(|column| (*column).to_string())
+        .collect();
+    expected.sort();
+    assert_eq!(
+        keys.len(),
+        AUDIT_RESTRICTED_COLUMNS.len(),
+        "jsonl row must have one key per restricted column"
+    );
+    assert_eq!(
+        keys, expected,
+        "audit export jsonl keys must match AUDIT_RESTRICTED_COLUMNS"
+    );
+    for column in [
+        "restore_policy",
+        "restore_decision",
+        "restore_unknown_token_count",
+        "restore_manifest_bypass_count",
+        "restore_fresh_pii_count",
+        "restore_phase_mask",
+    ] {
+        assert!(
+            row.as_object().unwrap().contains_key(column),
+            "jsonl row must include {column}"
+        );
+    }
 }
 
 #[test]

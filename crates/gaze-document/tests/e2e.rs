@@ -145,7 +145,16 @@ fn assert_clean_bundle(input: &Path, expect_pdf_fields: bool) {
     let report: BundleReport = serde_json::from_slice(&report_bytes).expect("report deserializes");
     assert_eq!(report.bundle_version, BUNDLE_VERSION);
     assert!(report.pii_token_count >= 2);
-    assert!(report.clean_char_count > 0);
+    assert_eq!(
+        report.clean_char_count,
+        clean_text.chars().count(),
+        "report.clean_char_count must match the on-disk clean.md length"
+    );
+    assert_eq!(
+        report.clean_char_count,
+        bundle.clean_markdown.chars().count(),
+        "report.clean_char_count must match SafeBundle.clean_markdown length"
+    );
     assert_eq!(report.low_confidence_threshold, 0.65);
     assert_eq!(report.pages.len(), 1);
     assert_eq!(report.pages[0].page_index, 0);
