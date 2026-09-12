@@ -176,7 +176,7 @@ fn malformed_restore_pattern() -> &'static Regex {
             .collect::<Vec<_>>()
             .join("|");
         Regex::new(&format!(
-            r"<(?:[0-9a-f]{{8}}:)?(?:{builtin_alt}|{builtin_lower_alt}|Custom:[a-z0-9_]*|custom:[a-z0-9_]*)_?>"
+            r"<(?:[0-9a-f]{{8}}:)?(?:{builtin_alt}|{builtin_lower_alt}|Custom:family:[a-z0-9_-]+|Custom:[a-z0-9_]*|custom:family:[a-z0-9_-]+|custom:[a-z0-9_]*)_?>"
         ))
         .expect("malformed restore token regex must compile")
     })
@@ -476,6 +476,10 @@ mod tests {
         assert!(validate_restore_shapes("<Name_>").is_err());
         assert!(validate_restore_shapes("<deadbeef:Name_>").is_err());
         assert!(validate_restore_shapes("<Custom:foo_>").is_err());
+        // Malformed family token spellings must also be rejected.
+        assert!(validate_restore_shapes("directory/<Custom:family:tenant-document_>/input.png").is_err());
+        assert!(validate_restore_shapes("<deadbeef:Custom:family:tenant-document_>").is_err());
+        assert!(validate_restore_shapes("<custom:family:foo_>").is_err());
     }
 
     #[test]
