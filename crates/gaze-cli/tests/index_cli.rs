@@ -735,6 +735,64 @@ print(json.dumps(spans))
     script
 }
 
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_search_explicit_disallowed_class_returns_policy_denial_not_no_hits() {
+    // Regression: the new `allows_class` guard must NOT apply when `--class` is
+    // explicitly supplied.  Previously the bridge returned DenyReason::ClassNotAllowed
+    // (non-zero exit, PolicyConfig in stderr).  The guard silently turned that into a
+    // successful "no hits", hiding the authorization failure.
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let fake_kiji = write_fake_kiji(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    // Ingest email-only corpus so the domain's allowed_entity_classes = [email].
+    fs::write(
+        corpus.join("email-only.md"),
+        "Email: alice@example.invalid\n",
+    )
+    .expect("write email-only");
+
+    let ingest = gaze_index_command(&fake_kiji)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "ingest failed: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    // Search with --class org, which is NOT in the domain's allow-list.
+    let search = gaze_index_command(&fake_kiji)
+        .args(["search", "alice@example.invalid"])
+        .args(["--class", "org", "--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search");
+
+    // Must fail with a non-zero exit (policy denial), not succeed with "no hits".
+    assert!(
+        !search.status.success(),
+        "explicit disallowed class must return non-zero exit, got success with stdout={}",
+        String::from_utf8_lossy(&search.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&search.stderr);
+    assert!(
+        stderr.contains("PolicyConfig") || stderr.contains("ClassNotAllowed"),
+        "stderr must contain policy denial reason, got: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&search.stdout);
+    assert!(
+        !stdout.contains("no hits"),
+        "explicit disallowed class must not produce 'no hits' success: {stdout}"
+    );
+}
+
 fn bytes_contain(haystack: &[u8], needle: &[u8]) -> bool {
     haystack
         .windows(needle.len())

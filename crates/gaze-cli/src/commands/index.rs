@@ -140,12 +140,8 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         None => domain.allowed_entity_classes.clone(),
     };
 
-    let mut any_hits = false;
     let mut seen_doc_ids = BTreeSet::new();
     for class in candidate_classes {
-        if !domain.allows_class(&class) {
-            continue;
-        }
         let source_token = session
             .tokenize(&class, &args.entity)
             .map_err(map_bridge_error)?;
@@ -164,7 +160,6 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         };
         match bridge.search(&session, &request) {
             BridgeSearchOutcome::Allowed(response) if !response.results.is_empty() => {
-                any_hits = true;
                 for hit in response.results {
                     if seen_doc_ids.insert(hit.doc_id.clone()) {
                         println!("doc: {}", hit.doc_id);
@@ -177,7 +172,7 @@ pub(crate) fn search(args: SearchArgs) -> Result<(), CliError> {
         }
     }
 
-    if !any_hits {
+    if seen_doc_ids.is_empty() {
         println!("no hits");
     }
     println!("raw PII never shown (owner-side only)");
