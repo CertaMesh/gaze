@@ -409,6 +409,236 @@ fn index_ingest_fails_closed_without_kiji_model_or_command() {
     );
 }
 
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_search_without_class_finds_organization_and_custom_class_entities() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let fake_kiji = write_fake_kiji(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(
+        corpus.join("data.md"),
+        "Organization: Globex GmbH\nCustomer ID: 90210\n",
+    )
+    .expect("write data");
+
+    let ingest = gaze_index_command(&fake_kiji)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "ingest failed: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+    let ingest_stdout = String::from_utf8_lossy(&ingest.stdout).to_string();
+    assert!(
+        ingest_stdout.contains("entities: 2"),
+        "expected organization + custom entities, got: {ingest_stdout}"
+    );
+
+    // Armed `--class` searches confirm both entities are actually indexed.
+    let org_armed = gaze_index_command(&fake_kiji)
+        .args(["search", "Globex GmbH"])
+        .args(["--class", "org", "--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search --class org");
+    assert!(org_armed.status.success(), "org armed search failed");
+    let org_armed_stdout = String::from_utf8_lossy(&org_armed.stdout).to_string();
+    assert!(
+        org_armed_stdout.contains("doc: doc:"),
+        "--class org must find indexed org: {org_armed_stdout}"
+    );
+    assert!(org_armed_stdout.contains(":Organization_"));
+
+    let custom_armed = gaze_index_command(&fake_kiji)
+        .args(["search", "90210"])
+        .args([
+            "--class",
+            "custom:customer_id",
+            "--domain",
+            DOMAIN,
+            "--index-path",
+        ])
+        .arg(&index)
+        .output()
+        .expect("run index search --class custom:customer_id");
+    assert!(custom_armed.status.success(), "custom armed search failed");
+    let custom_armed_stdout = String::from_utf8_lossy(&custom_armed.stdout).to_string();
+    assert!(
+        custom_armed_stdout.contains("doc: doc:"),
+        "--class custom must find indexed custom: {custom_armed_stdout}"
+    );
+    assert!(custom_armed_stdout.contains(":Custom:customer_id_"));
+
+    // The bug: no `--class` must also reach both indexed classes.
+    let org_default = gaze_index_command(&fake_kiji)
+        .args(["search", "Globex GmbH"])
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search no --class (org)");
+    assert!(org_default.status.success(), "org default search failed");
+    let org_default_stdout = String::from_utf8_lossy(&org_default.stdout).to_string();
+    assert!(
+        org_default_stdout.contains("doc: doc:"),
+        "BUG[org]: no --class search missed indexed org: {org_default_stdout}"
+    );
+    assert!(org_default_stdout.contains(":Organization_"));
+    assert!(
+        !org_default_stdout.contains("no hits"),
+        "no --class search for indexed org must not say no hits: {org_default_stdout}"
+    );
+
+    let custom_default = gaze_index_command(&fake_kiji)
+        .args(["search", "90210"])
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search no --class (custom)");
+    assert!(
+        custom_default.status.success(),
+        "custom default search failed"
+    );
+    let custom_default_stdout = String::from_utf8_lossy(&custom_default.stdout).to_string();
+    assert!(
+        custom_default_stdout.contains("doc: doc:"),
+        "BUG[custom]: no --class search missed indexed custom: {custom_default_stdout}"
+    );
+    assert!(custom_default_stdout.contains(":Custom:customer_id_"));
+    assert!(
+        !custom_default_stdout.contains("no hits"),
+        "no --class search for indexed custom must not say no hits: {custom_default_stdout}"
+    );
+
+    // Raw PII never leaks on the default path; the owner-side footer still prints.
+    for stdout in [&org_default_stdout, &custom_default_stdout] {
+        for raw in ["Globex GmbH", "90210"] {
+            assert!(
+                !stdout.contains(raw),
+                "default search leaked raw fixture value {raw}: {stdout}"
+            );
+        }
+        assert!(
+            stdout.contains("raw PII never shown (owner-side only)"),
+            "default search must show owner-side footer: {stdout}"
+        );
+    }
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_search_without_class_still_finds_name_email_and_reports_no_hits_when_absent() {
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let fake_kiji = write_fake_kiji(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    fs::write(
+        corpus.join("people.md"),
+        "\
+Name: Dr. Schmidt
+Email: alice@example.invalid
+Organization: Globex GmbH
+",
+    )
+    .expect("write people");
+
+    let ingest = gaze_index_command(&fake_kiji)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "ingest failed: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    // Name entity reachable without --class (regression guard for the old Name default).
+    let name_default = gaze_index_command(&fake_kiji)
+        .args(["search", "Dr. Schmidt"])
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search no --class (name)");
+    assert!(name_default.status.success(), "name default search failed");
+    let name_default_stdout = String::from_utf8_lossy(&name_default.stdout).to_string();
+    assert!(
+        name_default_stdout.contains("doc: doc:"),
+        "no --class search for indexed name must hit: {name_default_stdout}"
+    );
+    assert!(name_default_stdout.contains(":Name_"));
+    assert!(
+        !name_default_stdout.contains("no hits"),
+        "no --class search for indexed name must not say no hits: {name_default_stdout}"
+    );
+
+    // Email entity reachable without --class (regression guard for the old Email heuristic).
+    let email_default = gaze_index_command(&fake_kiji)
+        .args(["search", "alice@example.invalid"])
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search no --class (email)");
+    assert!(
+        email_default.status.success(),
+        "email default search failed"
+    );
+    let email_default_stdout = String::from_utf8_lossy(&email_default.stdout).to_string();
+    assert!(
+        email_default_stdout.contains("doc: doc:"),
+        "no --class search for indexed email must hit: {email_default_stdout}"
+    );
+    assert!(email_default_stdout.contains(":Email_"));
+    assert!(
+        !email_default_stdout.contains("no hits"),
+        "no --class search for indexed email must not say no hits: {email_default_stdout}"
+    );
+
+    // A value absent from the index under every class still reports `no hits`.
+    let miss_default = gaze_index_command(&fake_kiji)
+        .args(["search", "nobody-nowhere-cafebabe"])
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index search no --class (absent)");
+    assert!(
+        miss_default.status.success(),
+        "absent default search failed"
+    );
+    let miss_default_stdout = String::from_utf8_lossy(&miss_default.stdout).to_string();
+    assert!(
+        miss_default_stdout.contains("no hits"),
+        "absent value must still report no hits: {miss_default_stdout}"
+    );
+
+    // No raw PII leaks; owner-side footer present on every default search.
+    for stdout in [
+        &name_default_stdout,
+        &email_default_stdout,
+        &miss_default_stdout,
+    ] {
+        for raw in ["Dr. Schmidt", "alice@example.invalid", "Globex GmbH"] {
+            assert!(
+                !stdout.contains(raw),
+                "default search leaked raw fixture value {raw}: {stdout}"
+            );
+        }
+        assert!(
+            stdout.contains("raw PII never shown (owner-side only)"),
+            "default search must show owner-side footer: {stdout}"
+        );
+    }
+}
+
 fn gaze_index_command(fake_kiji: &Path) -> Command {
     gaze_index_command_with_key(fake_kiji, TEST_INDEX_KEY)
 }
@@ -503,6 +733,70 @@ print(json.dumps(spans))
     permissions.set_mode(0o755);
     fs::set_permissions(&script, permissions).expect("chmod residual fake kiji");
     script
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn index_search_explicit_disallowed_class_returns_policy_denial_not_no_hits() {
+    // Regression: the new `allows_class` guard must NOT apply when `--class` is
+    // explicitly supplied.  Previously the bridge returned DenyReason::ClassNotAllowed
+    // (non-zero exit, PolicyConfig in stderr).  The guard silently turned that into a
+    // successful "no hits", hiding the authorization failure.
+    let temp = tempfile::tempdir().expect("tempdir");
+    let corpus = temp.path().join("corpus");
+    let index = temp.path().join("owner-index");
+    let fake_kiji = write_fake_kiji(&temp);
+    fs::create_dir_all(&corpus).expect("corpus dir");
+    // Built-in classes are always allowed; this corpus introduces no custom class.
+    fs::write(
+        corpus.join("email-only.md"),
+        "Email: alice@example.invalid\n",
+    )
+    .expect("write email-only");
+
+    let ingest = gaze_index_command(&fake_kiji)
+        .arg("ingest")
+        .arg(&corpus)
+        .args(["--domain", DOMAIN, "--index-path"])
+        .arg(&index)
+        .output()
+        .expect("run index ingest");
+    assert!(
+        ingest.status.success(),
+        "ingest failed: stderr={}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+
+    // An unconfigured custom class must reach bridge authorization and be denied.
+    let search = gaze_index_command(&fake_kiji)
+        .args(["search", "alice@example.invalid"])
+        .args([
+            "--class",
+            "custom:unconfigured",
+            "--domain",
+            DOMAIN,
+            "--index-path",
+        ])
+        .arg(&index)
+        .output()
+        .expect("run index search");
+
+    // Must fail with a non-zero exit (policy denial), not succeed with "no hits".
+    assert!(
+        !search.status.success(),
+        "explicit disallowed class must return non-zero exit, got success with stdout={}",
+        String::from_utf8_lossy(&search.stdout)
+    );
+    let stderr = String::from_utf8_lossy(&search.stderr);
+    assert!(
+        stderr.contains("PolicyConfig") || stderr.contains("ClassNotAllowed"),
+        "stderr must contain policy denial reason, got: {stderr}"
+    );
+    let stdout = String::from_utf8_lossy(&search.stdout);
+    assert!(
+        !stdout.contains("no hits"),
+        "explicit disallowed class must not produce 'no hits' success: {stdout}"
+    );
 }
 
 fn bytes_contain(haystack: &[u8], needle: &[u8]) -> bool {
