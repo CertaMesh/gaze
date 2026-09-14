@@ -23,7 +23,7 @@ pub const DEFAULT_NER_THRESHOLD: f32 = 0.3;
 ///
 /// Mirrors the rulepack-side `SUPPORTED_SCHEMA_MAJOR_MINOR` in
 /// [`crate::rulepack`].
-pub const SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR: &str = "0.1";
+pub const SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR: &str = "0.1.";
 
 /// Schema version stamped on policy.toml documents that omit the field.
 ///

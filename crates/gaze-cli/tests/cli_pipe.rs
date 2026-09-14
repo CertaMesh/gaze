@@ -4299,7 +4299,7 @@ action = "preserve"
     assert_eq!(value["error"], "PolicySchemaUnsupported");
     assert_eq!(value["exit"], 2);
     assert_eq!(value["found"], "9.9.0");
-    assert_eq!(value["supported"], "0.1");
+    assert_eq!(value["supported"], "0.1.");
 }
 
 #[test]

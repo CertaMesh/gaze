@@ -84,10 +84,10 @@ schema_version = "0.1.0"
 
 The loader checks the `major.minor` prefix against
 [`SUPPORTED_POLICY_SCHEMA_MAJOR_MINOR`](../../crates/gaze/src/policy.rs) (currently
-`"0.1"`). A mismatch fails closed at load time with a typed envelope:
+`"0.1."`). A mismatch fails closed at load time with a typed envelope:
 
 ```json
-{"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1"}
+{"error":"PolicySchemaUnsupported","exit":2,"found":"0.2.0","supported":"0.1."}
 ```
 
 The envelope is intentionally distinct from `PolicyConfig` so adopters
