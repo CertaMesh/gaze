@@ -1,9 +1,10 @@
 //! Manifest persistence contract for the gaze-mcp-core chokepoint.
 //!
 //! Adopters (`gaze-cli`, `gaze-lens`, custom hosts) implement [`ManifestStore`]
-//! against their own backing store — `gaze-cli` writes to the canonical
-//! `gaze-audit` SQLite, `gaze-lens` keeps its `~/.gaze-lens/manifest.sqlite`
-//! schema, custom hosts can persist to whatever durable store satisfies their
+//! against their own backing store — `gaze-cli mcp serve` writes JSON call
+//! records to its manifest directory, `gaze-lens` keeps its
+//! `~/.gaze-lens/manifest.sqlite` schema, custom hosts can persist to whatever
+//! durable store satisfies their
 //! axis-1 (never-leak) + axis-2 (reversible) requirements.
 //!
 //! The dispatcher in [`crate::dispatch`] enforces the ordering invariant: a
@@ -172,9 +173,10 @@ impl ManifestError {
 ///
 /// Implementations are responsible for binding the call to whatever external
 /// session schema the adopter has chosen (lens binds to its
-/// `lens_session_id`/`gaze_audit_session_id` pair, gaze-cli binds to
-/// `gaze-audit`'s session ulid). gaze-mcp-core never reads back manifest
-/// rows — it only writes them — so the trait surface is narrow on purpose.
+/// `lens_session_id`/`gaze_audit_session_id` pair; `gaze-cli mcp serve` records
+/// the supplied external session id in its JSON journal). gaze-mcp-core never
+/// reads back manifest rows — it only writes them — so the trait surface is
+/// narrow on purpose.
 #[async_trait]
 pub trait ManifestStore: Send + Sync {
     /// Open a manifest entry for a tool call. The dispatcher invokes this

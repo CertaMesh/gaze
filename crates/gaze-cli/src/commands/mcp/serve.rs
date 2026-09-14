@@ -155,6 +155,11 @@ impl FileManifestStore {
         self.dir.join(format!("{}.json", handle.id()))
     }
 
+    // Both terminal outcomes leave the begin-side audit context untouched.
+    fn terminal_path_for(&self, handle: CallHandle) -> PathBuf {
+        self.dir.join(format!("{}.terminal.json", handle.id()))
+    }
+
     fn write_record(&self, path: &Path, record: &ManifestRecord) -> Result<(), ManifestError> {
         let bytes = serde_json::to_vec_pretty(record).map_err(ManifestError::backend)?;
         std::fs::write(path, bytes).map_err(ManifestError::backend)
@@ -192,7 +197,7 @@ impl ManifestStore for FileManifestStore {
     ) -> Result<(), ManifestError> {
         self.finish_handle(handle)?;
         self.write_record(
-            &self.path_for(handle),
+            &self.terminal_path_for(handle),
             &ManifestRecord::Finished {
                 call_id: handle.id().to_string(),
                 snapshot,
@@ -207,7 +212,7 @@ impl ManifestStore for FileManifestStore {
     ) -> Result<(), ManifestError> {
         self.finish_handle(handle)?;
         self.write_record(
-            &self.path_for(handle),
+            &self.terminal_path_for(handle),
             &ManifestRecord::Failed {
                 call_id: handle.id().to_string(),
                 reason,
