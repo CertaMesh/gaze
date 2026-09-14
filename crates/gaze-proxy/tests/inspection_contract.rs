@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, TcpListener as StdTcpListener};
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::time::Duration;
@@ -1062,7 +1062,8 @@ async fn spawn_proxy(
     upstream: &RunningServer,
     inspection: Option<(ProxyInspectionProducerV1, ActivatedInspectionConsumerV1)>,
 ) -> RunningProxy {
-    let bind = unused_local_addr();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind = listener.local_addr().unwrap();
     let adapter = AnthropicAdapter::new(Url::parse(&upstream.base_url).unwrap());
     let config = ProxyConfig::anthropic_direct(bind, adapter);
     let (config, consumer) = match inspection {
@@ -1070,7 +1071,7 @@ async fn spawn_proxy(
         None => (config, None),
     };
     let handle = tokio::spawn(async move {
-        gaze_proxy::serve(config, Arc::new(inspection_pipeline()))
+        gaze_proxy::serve_with_listener(config, Arc::new(inspection_pipeline()), listener)
             .await
             .unwrap();
     });
@@ -1084,27 +1085,24 @@ async fn spawn_proxy(
     }
 }
 
-fn unused_local_addr() -> SocketAddr {
-    let listener = StdTcpListener::bind("127.0.0.1:0").unwrap();
-    listener.local_addr().unwrap()
-}
-
 async fn wait_for_proxy(bind: SocketAddr) {
-    let client = Client::new();
-    let health_url = format!("http://{bind}/_gaze_proxy/healthz");
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-    loop {
-        if client
-            .get(&health_url)
+    // The owned listener queues this request until our server is accepting.
+    let response = tokio::time::timeout(Duration::from_secs(3), async {
+        Client::new()
+            .get(format!("http://{bind}/_gaze_proxy/healthz"))
             .send()
             .await
-            .is_ok_and(|response| response.status().is_success())
-        {
-            return;
-        }
-        assert!(tokio::time::Instant::now() < deadline);
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json::<Value>()
+            .await
+            .unwrap()
+    })
+    .await
+    .expect("owned proxy listener did not become ready");
+    assert_eq!(response["bind"], bind.to_string());
+    assert_eq!(response["adapters"][0]["name"], "anthropic");
 }
 
 async fn wait_for_events(sink: &RecordingSink, count: usize) {
