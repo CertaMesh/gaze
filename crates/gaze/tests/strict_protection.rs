@@ -65,6 +65,34 @@ fn primary_floor_and_round_trip_without_publication() {
     assert_eq!(protect(&pipeline, &mut transaction, &token), Ok(token));
 }
 #[test]
+fn owned_bare_tokens_keep_the_same_ranges_during_transaction_protection() {
+    let session = Session::new(Scope::Ephemeral).unwrap();
+    let mut transaction = session.begin_transaction();
+    let short = transaction
+        .format_preserving_fake(&PiiClass::Custom("family:tenant".into()), "Synthetic Short")
+        .unwrap();
+    let long = transaction
+        .format_preserving_fake(
+            &PiiClass::Custom("family:tenant_1-extra".into()),
+            "Synthetic Long",
+        )
+        .unwrap();
+    let name = transaction
+        .format_preserving_fake(&PiiClass::Name, "Synthetic Name")
+        .unwrap();
+    let input = format!("rec_{short} é{long} 中{name}.");
+    assert_eq!(
+        protect(&pipeline(Action::Tokenize), &mut transaction, &input),
+        Ok(input.clone())
+    );
+    transaction.commit().unwrap();
+    assert_eq!(
+        session.restore_strict_text(&input).unwrap(),
+        "rec_Synthetic Short éSynthetic Long 中Synthetic Name."
+    );
+}
+
+#[test]
 fn literal_collision_and_one_way_replacements_reject_without_publish() {
     for action in [Action::Redact, Action::Generalize] {
         let session = Session::new(Scope::Ephemeral).unwrap();

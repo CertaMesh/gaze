@@ -38,13 +38,22 @@ mod tests {
             PiiClass::Custom("class_alpha".into()),
         ] {
             let session = Session::new(Scope::Ephemeral).unwrap();
-            let token = session.format_preserving_fake(&class, "Synthetic Value").unwrap();
+            let token = session
+                .format_preserving_fake(&class, "Synthetic Value")
+                .unwrap();
             for leading in ["rec_", "x", "7", "é", "中", "\u{301}", "(", ""] {
-                let assessment = session.assess_restore_text(&format!("{leading}{token}.")).unwrap();
+                let assessment = session
+                    .assess_restore_text(&format!("{leading}{token}."))
+                    .unwrap();
                 for mode in [RestoreMode::Strict, RestoreMode::Tolerant] {
-                    assert!(restore_pass2_validate(&assessment, mode).unwrap().is_empty());
+                    assert!(restore_pass2_validate(&assessment, mode)
+                        .unwrap()
+                        .is_empty());
                 }
-                assert_eq!(assessment.into_restored().text, format!("{leading}Synthetic Value."));
+                assert_eq!(
+                    assessment.into_restored().text,
+                    format!("{leading}Synthetic Value.")
+                );
             }
         }
     }

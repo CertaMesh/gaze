@@ -706,6 +706,83 @@ where
     (BASE64.encode(snap.into_bytes()), tokens)
 }
 
+#[test]
+fn restore_prefixed_bare_adjacency_roundtrips_without_phantom_warnings() {
+    let (blob, tokens) = build_blob_and_tokens(|session| {
+        [
+            PiiClass::Name,
+            PiiClass::Location,
+            PiiClass::Organization,
+            PiiClass::custom("class_alpha"),
+        ]
+        .iter()
+        .map(|class| {
+            session
+                .format_preserving_fake(class, "Synthetic Value")
+                .unwrap()
+        })
+        .collect()
+    });
+    let text = format!(
+        "rec_{} é{} 中{} _{}.",
+        tokens[0], tokens[1], tokens[2], tokens[3]
+    );
+    for mode in ["--restore-mode=strict", "--restore-mode=tolerant"] {
+        let (code, stdout, stderr) = restore_json_with_args(&[mode, "--telemetry"], &blob, &text);
+        assert_eq!(code, Some(0), "{}", String::from_utf8_lossy(&stderr));
+        assert!(stderr.is_empty());
+        let response: Value = serde_json::from_slice(&stdout).unwrap();
+        assert_eq!(
+            response["text"],
+            "rec_Synthetic Value éSynthetic Value 中Synthetic Value _Synthetic Value."
+        );
+        assert!(response.get("restore_warning").is_none());
+        assert_eq!(response["restore_telemetry"]["unknown_token_count"], 0);
+        assert_eq!(response["restore_telemetry"]["restore_decision"], "success");
+    }
+}
+
+#[test]
+fn restore_prefixed_bare_adjacency_keeps_unknowns_and_raw_token_text_separate() {
+    let (blob, tokens) = build_blob_and_tokens(|session| {
+        let inner = session
+            .format_preserving_fake(&PiiClass::Name, "Synthetic Inner")
+            .unwrap();
+        let outer = session
+            .format_preserving_fake(&PiiClass::Location, &inner)
+            .unwrap();
+        let family = session
+            .format_preserving_fake(
+                &PiiClass::Custom("family:tenant".into()),
+                "Synthetic Family",
+            )
+            .unwrap();
+        vec![inner, outer, family]
+    });
+    // The raw value itself names another known token, but must not be expanded again.
+    assert_eq!(
+        restore_success_text(&blob, &format!("rec_{}.", tokens[1])),
+        format!("rec_{}.", tokens[0])
+    );
+    let unknown = format!("{}0", tokens[0]);
+    let unknown_family = format!("{}-other_999", tokens[2]);
+    let text = format!("rec_{}. rec_{unknown}. rec_{unknown_family}.", tokens[1]);
+    let (code, stdout, stderr) = restore_json(&blob, &text);
+    assert_eq!(code, Some(3));
+    assert!(stdout.is_empty());
+    assert_eq!(parse_stderr_variant(&stderr)["error"], "UnknownToken");
+    let (code, stdout, stderr) = restore_json_with_args(&["--restore-mode=tolerant"], &blob, &text);
+    assert_eq!(code, Some(0));
+    assert!(stderr.is_empty());
+    let response: Value = serde_json::from_slice(&stdout).unwrap();
+    assert_eq!(
+        response["text"],
+        format!("rec_{}. rec_{unknown}. rec_{unknown_family}.", tokens[0])
+    );
+    assert_eq!(response["restore_warning"].as_array().unwrap().len(), 2);
+    assert_eq!(response["restore_warning"][0]["variant"], "UnknownToken");
+}
+
 // -----------------------------------------------------------------------
 // 1. Roundtrip
 // -----------------------------------------------------------------------

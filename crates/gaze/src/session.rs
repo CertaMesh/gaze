@@ -920,8 +920,14 @@ impl Session {
 }
 
 impl<'session> SessionTransaction<'session> {
-    pub(crate) fn restore_regex(&self) -> Result<Option<Arc<Regex>>> {
-        build_restore_regex(&self.staged)
+    pub(crate) fn restore_token_ranges(&self, text: &str) -> Result<Vec<Range<usize>>> {
+        Ok(build_restore_regex(&self.staged)?
+            .map(|regex| {
+                known_restore_matches(&regex, text)
+                    .map(|matched| matched.range())
+                    .collect()
+            })
+            .unwrap_or_default())
     }
 
     pub fn tokenize(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
@@ -1168,6 +1174,13 @@ fn build_restore_regex(state: &SessionState) -> Result<Option<Arc<Regex>>> {
             let escaped = regex::escape(token);
             if token.starts_with('<') && token.ends_with('>') {
                 escaped
+            } else if token
+                .split_once(':')
+                .is_some_and(|(prefix, _)| is_session_hex(prefix))
+            {
+                // Exact manifest-owned hex prefixes survive leading word adjacency.
+                // Keep the end boundary: ordinal 1 must never consume part of 10.
+                format!(r"(?:{escaped})\b")
             } else {
                 format!(r"\b(?:{escaped})\b")
             }
@@ -1178,6 +1191,21 @@ fn build_restore_regex(state: &SessionState) -> Result<Option<Arc<Regex>>> {
         .map(Arc::new)
         .map(Some)
         .map_err(Error::InvalidRegex)
+}
+
+fn known_restore_matches<'a>(
+    regex: &'a Regex,
+    text: &'a str,
+) -> impl Iterator<Item = regex::Match<'a>> + 'a {
+    regex.find_iter(text).filter(|matched| {
+        // Hyphens extend family labels even though regex word boundaries allow them.
+        // Never restore a known short key inside an unknown longer family token.
+        !(matched
+            .as_str()
+            .split_once(':')
+            .is_some_and(|(_, body)| body.starts_with("custom:family:"))
+            && text.as_bytes().get(matched.end()) == Some(&b'-'))
+    })
 }
 
 fn store_prefix_cache_in_state(
@@ -1282,8 +1310,7 @@ fn assess_restore_text_from_state(state: &SessionState, text: &str) -> Result<Re
     let tokens = regex
         .as_ref()
         .map(|regex| {
-            regex
-                .find_iter(text)
+            known_restore_matches(regex, text)
                 .map(|matched| StrictRestoreToken {
                     start: matched.start(),
                     end: matched.end(),

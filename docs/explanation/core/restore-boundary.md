@@ -66,6 +66,28 @@ by authorized substitutions, do not count as unknowns or manifest bypasses.
 Adjacent unknowns and matches crossing a substitution boundary remain subject
 to classification. No original-text allowlist or new snapshot state is stored.
 
+For known bare format-preserving tokens beginning with the session's eight-hex
+prefix, leading ASCII or Unicode word adjacency is allowed: `rec_a7f3b8e2:name_1`
+restores the exact known token after `rec_`. The mapping must exist in the active
+manifest. Matching uses the original input once, longest known keys first; raw
+values containing token-like text are never recursively substituted.
+
+A trailing Unicode word boundary is still required. `name_1` cannot consume the
+start of `name_10`, `name_1x`, or `name_1é`. A known longer key restores in full;
+an unknown longer canonical token remains subject to strict rejection. Arbitrary
+word-suffixed text that is not a canonical token remains unchanged, without a
+new promise that the lexical classifier will reject it. Family labels also allow
+hyphens, so a known `custom:family:tenant_1` does not consume the start of
+`custom:family:tenant_1-other_999`. A hyphen immediately after a family token is
+ambiguous and therefore prevents substitution; separate prose punctuation with
+whitespace when needed. Other punctuation boundaries and legacy/email-shaped
+leading-boundary rules remain unchanged.
+
+CLI, pipeline restore, and Session strict restore share this assessment. Staged
+transaction protection uses the same known-token ranges so its provenance proof
+agrees with owner-side restore. Strict syntax validation and unknown-token
+classification remain separate from exact-known matching.
+
 The API failure contracts remain distinct:
 
 - `Pipeline::restore_with_policy_telemetry` returns restored text and telemetry.

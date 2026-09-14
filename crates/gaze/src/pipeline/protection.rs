@@ -94,13 +94,9 @@ impl Pipeline {
     ) -> std::result::Result<String, ProtectionError> {
         self.validate_protection_context(context)?;
         let owned = transaction.snapshot_entries();
-        let regex = transaction
-            .restore_regex()
+        let ranges = transaction
+            .restore_token_ranges(input)
             .map_err(|_| ProtectionError::Provenance)?;
-        let ranges = regex
-            .as_ref()
-            .map(|re| re.find_iter(input).map(|m| m.range()).collect::<Vec<_>>())
-            .unwrap_or_default();
         let mut clean = String::with_capacity(input.len());
         let mut expected = String::with_capacity(input.len());
         let mut spans = Vec::new();
@@ -166,14 +162,8 @@ impl Pipeline {
         // Actual session restore must agree with provenance. A freshly minted spelling
         // in an originally literal gap must not acquire authority by coincidence.
         let actual_ranges = transaction
-            .restore_regex()
-            .map_err(|_| ProtectionError::Provenance)?
-            .map(|re| {
-                re.find_iter(&clean)
-                    .map(|found| found.range())
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
+            .restore_token_ranges(&clean)
+            .map_err(|_| ProtectionError::Provenance)?;
         if actual_ranges
             != manifest
                 .spans
