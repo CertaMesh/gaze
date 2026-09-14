@@ -124,7 +124,7 @@ fn descendant_held_pipes_cancel_and_close_owned_handles() {
                 std::thread::sleep(Duration::from_millis(10));
             }
             let closed = std::fs::read_to_string(marker.with_extension("closed"))
-                .expect("descendant must observe EOF/broken pipe, not just a fast infer return");
+                .unwrap_or_else(|error| panic!("descendant must observe EOF/broken pipe: kiji={kiji} fd={fd}, {error}; fixture error: {:?}", std::fs::read_to_string(marker.with_extension("error"))));
             if fd == 0 {
                 assert!(closed.parse::<usize>().unwrap() < input.len());
             }

@@ -23,7 +23,12 @@ if mode.startswith('witness'):
     # Delay consumption until after the caller's deadline for blocked stdin.
     if fd in (0, 1):
         time.sleep(3)
-    os.set_blocking(fd, False)
+    if fd != 0:
+        try:
+            os.set_blocking(fd, False)
+        except OSError as error:
+            publish('.error', repr(error))
+            os._exit(94)
     count = 0
     end = time.monotonic() + 7
     while time.monotonic() < end:
@@ -41,6 +46,9 @@ if mode.startswith('witness'):
             os._exit(0)
         except BlockingIOError:
             pass
+        except OSError as error:
+            publish('.error', repr(error))
+            os._exit(95)
         time.sleep(0.005)
     os._exit(92)
 

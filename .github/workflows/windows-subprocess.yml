@@ -2,8 +2,6 @@ name: Windows subprocess ownership
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [agent/fix-500-488-stderr]
 permissions:
   contents: read
 jobs:
