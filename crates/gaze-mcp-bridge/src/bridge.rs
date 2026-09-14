@@ -38,13 +38,13 @@ impl BridgeHost {
         config: BridgeConfig,
         audit: Arc<dyn BridgeAuditSink>,
     ) -> BridgeResult<Self> {
+        let session_store = Arc::new(BridgeSessionStore::from_config(&config.session)?);
         let mut clients = BTreeMap::<String, Arc<dyn DownstreamClient>>::new();
         for (name, server) in &config.servers {
             clients.insert(name.clone(), RmcpChildClient::spawn(server).await?);
         }
         let registry =
             Arc::new(BridgeRegistry::discover(clients, config.limits.call_timeout()).await?);
-        let session_store = Arc::new(BridgeSessionStore::from_config(&config.session)?);
         let core = CorePipelineConfig::new()
             .build()
             .map_err(|err| BridgeError::Config(format!("core pipeline build failed: {err}")))?;

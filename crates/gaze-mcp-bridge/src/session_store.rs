@@ -38,11 +38,13 @@ pub struct BridgeSessionStore {
     // work. Tracked as a known secondary leak with a small (~60-80 byte) per-entry
     // cost; safe eviction requires an `Arc::strong_count` sweep and is deferred.
     file_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    // Positive at every construction boundary.
     max_sessions: usize,
 }
 
 impl BridgeSessionStore {
     pub fn from_config(config: &SessionCfg) -> BridgeResult<Self> {
+        config.validate()?;
         let mode = match config.mode {
             SessionMode::Ephemeral => SessionStoreMode::Ephemeral,
             SessionMode::File => {
@@ -93,7 +95,7 @@ impl BridgeSessionStore {
             return Ok(session);
         }
 
-        let candidate = if self.max_sessions > 0 && cache.entries.len() >= self.max_sessions {
+        let candidate = if cache.entries.len() >= self.max_sessions {
             if matches!(self.mode, SessionStoreMode::Ephemeral) {
                 return Err(BridgeError::LimitExceeded(
                     "session cap reached; use file mode for long-lived bridge deployments"

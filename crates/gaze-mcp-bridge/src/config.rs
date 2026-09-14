@@ -67,8 +67,8 @@ pub struct SessionCfg {
     pub mode: SessionMode,
     pub dir: Option<PathBuf>,
     pub key_env: Option<String>,
-    /// Maximum cached sessions. File mode persists inactive LRU candidates
-    /// before eviction; persistence failure rejects admission. Strong or weak
+    /// Maximum cached sessions; must be greater than zero. File mode persists
+    /// inactive LRU candidates before eviction; persistence failure rejects admission. Strong or weak
     /// session handles retain their candidate and can reject admission. Per-id file
     /// locks are retained separately and are not bounded by this limit.
     #[serde(default = "default_max_sessions")]
@@ -76,7 +76,7 @@ pub struct SessionCfg {
 }
 
 impl SessionCfg {
-    fn validate(&self) -> BridgeResult<()> {
+    pub(crate) fn validate(&self) -> BridgeResult<()> {
         if self.max_sessions == 0 {
             return Err(BridgeError::Config(
                 "session.max_sessions must be greater than 0".to_string(),
