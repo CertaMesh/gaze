@@ -12,12 +12,12 @@ pub(super) struct Cancellation(Arc<AtomicBool>);
 
 impl Cancellation {
     pub(super) fn check_platform() -> io::Result<()> {
-        if cfg!(unix) {
+        if cfg!(any(unix, windows)) {
             Ok(())
         } else {
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
-                "cancellable subprocess pipes require Unix",
+                "no cancellable subprocess pipe adapter for this target",
             ))
         }
     }
@@ -61,11 +61,23 @@ impl<T> Pipe<T> {
         })
     }
 
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    pub(super) fn new(inner: T, cancellation: &Cancellation) -> io::Result<Self>
+    where
+        T: windows::ChildPipe,
+    {
+        inner.configure()?;
+        Ok(Self {
+            inner,
+            cancellation: cancellation.clone(),
+        })
+    }
+
+    #[cfg(not(any(unix, windows)))]
     pub(super) fn new(_inner: T, _cancellation: &Cancellation) -> io::Result<Self> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "cancellable subprocess pipes require Unix",
+            "no cancellable subprocess pipe adapter for this target",
         ))
     }
 
@@ -83,12 +95,14 @@ impl<T> Pipe<T> {
     }
 }
 
+#[cfg(not(windows))]
 impl<T: Read> Read for Pipe<T> {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
         self.retry(|inner| inner.read(bytes))
     }
 }
 
+#[cfg(not(windows))]
 impl<T: Write> Write for Pipe<T> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.retry(|inner| inner.write(bytes))
@@ -98,3 +112,6 @@ impl<T: Write> Write for Pipe<T> {
         self.retry(Write::flush)
     }
 }
+
+#[cfg(windows)]
+mod windows;

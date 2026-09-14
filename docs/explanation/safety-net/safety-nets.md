@@ -330,10 +330,12 @@ sanitization rule.
 
 ### Subprocess timeout and resource isolation
 
-Both subprocess adapters require Unix for cancellable pipe I/O; on other
-platforms inference returns `ModelUnavailable` before spawning a child. This
-restriction replaces an unbounded blocking-pipe fallback. In-process backends
-are unaffected.
+Both subprocess adapters provide cancellable pipe I/O on Unix and Windows.
+Windows uses exclusively owned parent pipes with nonblocking writes and
+availability-bounded reads; see [Windows pipe ownership](windows-subprocess-io.md).
+Targets that are neither Unix nor Windows currently have no adapter and return
+`ModelUnavailable` before spawn. This describes this implementation, not a claim
+that those targets cannot support subprocesses. In-process backends are unaffected.
 
 The subprocess runner enforces a single deadline that covers stdin write,
 stdout read, stderr read, and child wait. Parent pipe ends are nonblocking,
