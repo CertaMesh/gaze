@@ -829,12 +829,23 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let paths = temp_paths(&dir);
         std::fs::write(&paths.pidfile, "").unwrap();
+        // Reach unlink, rather than failing to create the sidecar directory entry.
+        drop(PidfileGuard::namespace(&paths.pidfile).unwrap());
+        let reached_unlink = std::rc::Rc::new(std::cell::Cell::new(false));
+        let reached = reached_unlink.clone();
+        CLEANUP_BEFORE_UNLINK.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || reached.set(true)));
+        });
         let original_permissions = std::fs::metadata(dir.path()).unwrap().permissions();
         std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o555)).unwrap();
         let cleanup_result = cleanup_stale(&paths);
         let remains = paths.pidfile.exists();
         // Restore permissions before asserting so the fixture always cleans up.
         std::fs::set_permissions(dir.path(), original_permissions).unwrap();
+        assert!(
+            reached_unlink.get(),
+            "fixture must reach the unlink operation"
+        );
         assert!(
             remains,
             "fixture must actually prevent unlink (run unprivileged)"
@@ -1193,6 +1204,13 @@ mod tests {
 
         // Create an empty (stale) pidfile.
         std::fs::write(&paths.pidfile, "").unwrap();
+        // Reach unlink, rather than failing to create the sidecar directory entry.
+        drop(PidfileGuard::namespace(&paths.pidfile).unwrap());
+        let reached_unlink = std::rc::Rc::new(std::cell::Cell::new(false));
+        let reached = reached_unlink.clone();
+        CLEANUP_BEFORE_UNLINK.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(move || reached.set(true)));
+        });
 
         // Revoke write permission on the parent directory so unlink fails.
         let parent = paths.pidfile.parent().unwrap();
@@ -1203,6 +1221,10 @@ mod tests {
 
         // Restore permissions before asserting so the TempDir drop can clean up.
         std::fs::set_permissions(parent, original).unwrap();
+        assert!(
+            reached_unlink.get(),
+            "fixture must reach the unlink operation"
+        );
 
         assert!(
             result.is_err(),
