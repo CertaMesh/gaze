@@ -315,67 +315,71 @@ mod tests {
         use std::future::Future;
         use std::task::Poll;
 
-        let dir = tempfile::TempDir::new().unwrap();
-        let store = BridgeSessionStore {
-            mode: SessionStoreMode::File {
-                dir: dir.path().to_path_buf(),
-                key: [0x44; 32],
-            },
-            cache: Mutex::new(SessionCache::default()),
-            file_locks: Mutex::new(HashMap::new()),
-            max_sessions: 1,
-        };
-        let a = store.get("session-a").await.unwrap();
-        let token = a
-            .lock()
-            .await
-            .tokenize(&gaze_types::PiiClass::Email, "alice@example.invalid")
-            .unwrap();
-        drop(a);
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            let dir = tempfile::TempDir::new().unwrap();
+            let store = BridgeSessionStore {
+                mode: SessionStoreMode::File {
+                    dir: dir.path().to_path_buf(),
+                    key: [0x44; 32],
+                },
+                cache: Mutex::new(SessionCache::default()),
+                file_locks: Mutex::new(HashMap::new()),
+                max_sessions: 1,
+            };
+            let a = store.get("session-a").await.unwrap();
+            let token = a
+                .lock()
+                .await
+                .tokenize(&gaze_types::PiiClass::Email, "alice@example.invalid")
+                .unwrap();
+            drop(a);
 
-        // Hold the candidate's file lock until admission reaches persist, after
-        // acquiring exclusive session ownership. Its clone is the rendezvous.
-        let file_lock = store.file_lock("session-a").await;
-        let guard = file_lock.lock().await;
-        assert_eq!(Arc::strong_count(&file_lock), 2);
-        let mut admission = Box::pin(store.get("session-b"));
-        std::future::poll_fn(|cx| {
-            assert!(admission.as_mut().poll(cx).is_pending());
-            if Arc::strong_count(&file_lock) == 3 {
-                Poll::Ready(())
-            } else {
-                Poll::Pending
-            }
+            // Hold the candidate's file lock until admission reaches persist, after
+            // acquiring exclusive session ownership. Its clone is the rendezvous.
+            let file_lock = store.file_lock("session-a").await;
+            let guard = file_lock.lock().await;
+            assert_eq!(Arc::strong_count(&file_lock), 2);
+            let mut admission = Box::pin(store.get("session-b"));
+            std::future::poll_fn(|cx| {
+                assert!(admission.as_mut().poll(cx).is_pending());
+                if Arc::strong_count(&file_lock) == 3 {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            })
+            .await;
+            drop(admission);
+            drop(guard);
+            assert_eq!(store.len().await, 1);
+            assert_eq!(
+                store
+                    .get("session-a")
+                    .await
+                    .unwrap()
+                    .lock()
+                    .await
+                    .restore(&token),
+                Some("alice@example.invalid".to_string())
+            );
+            drop(
+                store
+                    .get("session-b")
+                    .await
+                    .expect("retry after cancellation"),
+            );
+            assert_eq!(
+                store
+                    .get("session-a")
+                    .await
+                    .unwrap()
+                    .lock()
+                    .await
+                    .restore(&token),
+                Some("alice@example.invalid".to_string())
+            );
         })
-        .await;
-        drop(admission);
-        drop(guard);
-        assert_eq!(store.len().await, 1);
-        assert_eq!(
-            store
-                .get("session-a")
-                .await
-                .unwrap()
-                .lock()
-                .await
-                .restore(&token),
-            Some("alice@example.invalid".to_string())
-        );
-        drop(
-            store
-                .get("session-b")
-                .await
-                .expect("retry after cancellation"),
-        );
-        assert_eq!(
-            store
-                .get("session-a")
-                .await
-                .unwrap()
-                .lock()
-                .await
-                .restore(&token),
-            Some("alice@example.invalid".to_string())
-        );
+        .await
+        .expect("cancellation rendezvous and retry must complete within 10 seconds");
     }
 }
