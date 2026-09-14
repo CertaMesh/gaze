@@ -471,7 +471,6 @@ mod manifest_store_tests {
         }
         let (handle, before) = probe.started.lock().unwrap().take().unwrap();
         assert_consumed(&probe.store, handle).await;
-        drop(envelope);
         drop(host);
         drop(probe);
         let reopened = FileManifestStore::new(directory.path().to_owned()).unwrap();
