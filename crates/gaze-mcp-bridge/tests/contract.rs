@@ -1593,3 +1593,43 @@ async fn eviction_preserves_unpersisted_state_after_caller_cancellation() {
         Some(RAW_EMAIL.to_string())
     );
 }
+
+#[tokio::test]
+async fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
+    use std::future::Future;
+    use std::task::Poll;
+
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+    let store = BridgeSessionStore::from_config(&config.session).unwrap();
+    let a = store.get(SID_A).await.unwrap();
+    let weak = Arc::downgrade(&a);
+    drop(a);
+
+    // Poll admission into persistence I/O, after its inactivity check.
+    let mut admission = Box::pin(store.get(SID_B));
+    std::future::poll_fn(|cx| {
+        assert!(admission.as_mut().poll(cx).is_pending());
+        Poll::Ready(())
+    })
+    .await;
+    let revived = weak
+        .upgrade()
+        .expect("candidate remains cached during persist");
+    drop(admission.await);
+
+    // Public Weak::upgrade bypasses the cache lock and creates a live caller.
+    let token = revived
+        .lock()
+        .await
+        .tokenize(&PiiClass::Email, RAW_EMAIL)
+        .unwrap();
+    let reacquired = store.get(SID_A).await.unwrap();
+    assert_eq!(
+        reacquired.lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string()),
+        "eviction split the canonical manifest from a revived public session"
+    );
+    assert!(Arc::ptr_eq(&revived, &reacquired));
+}
