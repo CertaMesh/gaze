@@ -118,7 +118,10 @@ fn check_rescan(kind: &str, staged: bool) {
     };
     assert!(!control.contains("alice@example.invalid"));
     let clean = protect(extended);
-    assert!(!clean.contains("alice@example.invalid"), "{kind}, staged={staged}");
+    assert!(
+        !clean.contains("alice@example.invalid"),
+        "{kind}, staged={staged}"
+    );
     assert_eq!(
         if staged {
             transaction.restore_strict_text(&clean).unwrap()

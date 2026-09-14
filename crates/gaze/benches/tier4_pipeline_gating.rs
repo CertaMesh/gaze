@@ -160,6 +160,10 @@ fn run_config(
 fn run_prefix_cache_bench() -> String {
     let baseline = run_prefix_cache_config("baseline", false);
     let cached = run_prefix_cache_config("prefix_cache", true);
+    assert_eq!(
+        baseline.bytes_processed, cached.bytes_processed,
+        "prefix reuse must remain disabled"
+    );
     let byte_reduction = 1.0 - (cached.bytes_processed as f64 / baseline.bytes_processed as f64);
     let latency_reduction = 1.0 - (cached.elapsed_ms / baseline.elapsed_ms);
     format!(

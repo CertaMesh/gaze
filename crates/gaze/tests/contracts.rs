@@ -1735,7 +1735,7 @@ fn sqlite_logger_migrates_legacy_tables_and_purges_by_created_at() {
 }
 
 #[test]
-fn prefix_cache_respects_field_decisions_and_retains_same_field_hits() {
+fn prefix_cache_respects_field_decisions_and_rescans_same_field() {
     for staged in [false, true] {
         let session = Session::new(Scope::Ephemeral).expect("session");
         let logger = MemoryLogger::default();
@@ -1761,7 +1761,7 @@ fn prefix_cache_respects_field_decisions_and_retains_same_field_hits() {
             }
             .expect("redact")
         };
-        // The sorted preserve field primes the cache before the tokenize field.
+        // Preserve runs first so stale decisions would expose the later tokenize field.
         for suffix in ["", " extra"] {
             let clean = redact(RawDocument::Structured(BTreeMap::from([
                 (
@@ -1781,14 +1781,37 @@ fn prefix_cache_respects_field_decisions_and_retains_same_field_hits() {
             assert!(!protected.contains("alice@example.invalid"));
             assert!(protected.contains(":Email_1>"));
         }
-        // The next extension must reuse the tokenize field's entry, with audit.
-        redact(RawDocument::Structured(BTreeMap::from([(
+        // Later extensions still protect the complete field and audit the current decision.
+        let clean = redact(RawDocument::Structured(BTreeMap::from([(
             "tokenize".into(),
             Value::String("alice@example.invalid x extra more".into()),
         )])));
-        assert!(logger.entries().iter().any(|entry| {
-            entry.source == "prefix_cache"
-                && entry.provenance_stage.as_deref() == Some("prefix_cache")
+        let CleanDocument::Structured(fields) = clean else {
+            panic!("expected structured document");
+        };
+        assert!(!fields["tokenize"]
+            .as_str()
+            .unwrap()
+            .contains("alice@example.invalid"));
+        let entries = logger.entries();
+        assert_eq!(entries.len(), 5);
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.action == Action::Preserve)
+                .count(),
+            2
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.action == Action::Tokenize)
+                .count(),
+            3
+        );
+        assert!(entries.iter().all(|entry| {
+            entry.source != "prefix_cache"
+                && entry.provenance_stage.as_deref() != Some("prefix_cache")
         }));
     }
 }
