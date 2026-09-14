@@ -301,6 +301,24 @@ mod manifest_store_tests {
     use super::*;
     use serde_json::{json, Value};
 
+    struct FailingText(ToolDescriptor);
+
+    #[async_trait]
+    impl gaze_mcp_core::Tool for FailingText {
+        fn descriptor(&self) -> &ToolDescriptor {
+            &self.0
+        }
+
+        async fn invoke(
+            &self,
+            _ctx: &gaze_mcp_core::ToolCtx<'_>,
+        ) -> Result<ToolResponse, gaze_mcp_core::ToolError> {
+            Err(gaze_mcp_core::ToolError::InvalidArgs(
+                "synthetic tool failure".into(),
+            ))
+        }
+    }
+
     // Observe the real dispatcher context without adding a public context constructor.
     struct Probe {
         store: FileManifestStore,
@@ -396,8 +414,23 @@ mod manifest_store_tests {
             None,
         )
         .unwrap();
+        let mut failing_registry = ToolRegistry::new();
+        if failure {
+            let descriptor = host
+                .registry
+                .list()
+                .into_iter()
+                .find(|tool| tool.name() == "gaze_read_text")
+                .unwrap()
+                .clone();
+            failing_registry.register(FailingText(descriptor)).unwrap();
+        }
         let envelope = PiiEnvelope::new(
-            &host.registry,
+            if failure {
+                &failing_registry
+            } else {
+                &host.registry
+            },
             &host.auth,
             &probe,
             host.pipeline.pipeline(),
@@ -408,11 +441,7 @@ mod manifest_store_tests {
         // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::success_preserves_audit_context_on_disk)
         // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::failure_preserves_audit_context_on_disk)
         let raw = "alice@example.invalid";
-        let args = if failure {
-            json!({"missing_text": raw})
-        } else {
-            json!({"text": raw})
-        };
+        let args = json!({"text": raw});
         let result = envelope
             .dispatch(
                 &Principal::new("synthetic-agent"),
