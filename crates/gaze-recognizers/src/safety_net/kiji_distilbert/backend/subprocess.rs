@@ -6,6 +6,11 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use gaze_types::SafetyNetError;
+
+#[cfg(test)]
+use crate::safety_net::subprocess_diagnostics::sanitize_stderr;
+use crate::safety_net::subprocess_diagnostics::{read_stderr, sanitize_error};
+use crate::safety_net::subprocess_io::{Cancellation, Pipe};
 use serde::Deserialize;
 
 use super::artifacts::{verify_model_dir, KIJI_DISTILBERT_BUNDLE_SHA256};
@@ -15,7 +20,6 @@ use crate::safety_net::kiji_distilbert::class_map::map_kiji_label;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES: usize = 4 * 1024 * 1024;
-const MAX_VERBOSE_STDERR_BYTES: usize = 256;
 const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Configuration for the local Kiji DistilBERT subprocess backend.
@@ -168,6 +172,10 @@ impl SubprocessKijiBackend {
             });
         }
 
+        Cancellation::check_platform().map_err(|error| SafetyNetError::ModelUnavailable {
+            reason: error.to_string(),
+        })?;
+        let cancellation = Cancellation::default();
         let mut command = Command::new(&self.config.command);
         command.args(&self.config.args);
         if let Some(model_dir) = &self.config.model_dir {
@@ -190,25 +198,47 @@ impl SubprocessKijiBackend {
                 ),
             })?;
 
-        let mut stdin = child.stdin.take().ok_or_else(|| SafetyNetError::Runtime {
-            message: "failed to open kiji stdin".to_string(),
-        })?;
+        // Configure every pipe before starting workers, so setup errors cannot
+        // leave a running worker behind. Each worker owns and closes its pipe.
+        let pipes = (|| -> std::io::Result<_> {
+            let stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| std::io::Error::other("missing stdin"))?;
+            let stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| std::io::Error::other("missing stdout"))?;
+            Ok((
+                Pipe::new(stdin, &cancellation)?,
+                Pipe::new(stdout, &cancellation)?,
+                child
+                    .stderr
+                    .take()
+                    .map(|pipe| Pipe::new(pipe, &cancellation))
+                    .transpose()?,
+            ))
+        })();
+        let (mut stdin, stdout, stderr) = match pipes {
+            Ok(pipes) => pipes,
+            Err(error) => {
+                kill_reap(&mut child);
+                return Err(SafetyNetError::Runtime {
+                    message: format!(
+                        "kiji pipe setup failed: {}",
+                        sanitize_error(&error.to_string())
+                    ),
+                });
+            }
+        };
         let input = clean.as_bytes().to_vec();
         let stdin_thread = thread::spawn(move || {
             stdin.write_all(&input)?;
             stdin.flush()
         });
-
-        let stdout = child.stdout.take().ok_or_else(|| SafetyNetError::Runtime {
-            message: "failed to open kiji stdout".to_string(),
-        })?;
         let max_stdout_bytes = self.config.max_stdout_bytes;
         let stdout_thread = thread::spawn(move || read_bounded(stdout, max_stdout_bytes));
-
-        let stderr_thread = child
-            .stderr
-            .take()
-            .map(|stderr| thread::spawn(move || read_bounded(stderr, MAX_VERBOSE_STDERR_BYTES)));
+        let stderr_thread = stderr.map(|stderr| thread::spawn(move || read_stderr(stderr)));
 
         let deadline = Instant::now() + self.config.timeout;
         let mut stdin_thread = Some(stdin_thread);
@@ -229,6 +259,7 @@ impl SubprocessKijiBackend {
             {
                 let thread = stdin_thread.take().expect("checked stdin thread");
                 if let Err(error) = join_stdin(thread) {
+                    cancellation.cancel();
                     kill_reap(&mut child);
                     join_remaining(stdin_thread, stdout_thread, stderr_thread);
                     return Err(error);
@@ -243,6 +274,7 @@ impl SubprocessKijiBackend {
                 match join_reader(thread, "stdout") {
                     Ok(output) => stdout = Some(output),
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(error);
@@ -256,8 +288,9 @@ impl SubprocessKijiBackend {
             {
                 let thread = stderr_thread.take().expect("checked stderr thread");
                 match join_reader(thread, "stderr") {
-                    Ok(output) => stderr = Some(sanitize_stderr(&output)),
+                    Ok(output) => stderr = Some(output),
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(error);
@@ -270,6 +303,7 @@ impl SubprocessKijiBackend {
                     Ok(Some(child_status)) => status = Some(child_status),
                     Ok(None) => {}
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(SafetyNetError::Runtime {
@@ -287,6 +321,7 @@ impl SubprocessKijiBackend {
             }
 
             if Instant::now() >= deadline {
+                cancellation.cancel();
                 kill_reap(&mut child);
                 join_remaining(stdin_thread, stdout_thread, stderr_thread);
                 return Err(SafetyNetError::Runtime {
@@ -418,10 +453,10 @@ fn read_bounded(mut reader: impl Read, max_bytes: usize) -> std::io::Result<Vec<
     }
 }
 
-fn join_reader(
-    thread: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+fn join_reader<T>(
+    thread: thread::JoinHandle<std::io::Result<T>>,
     stream: &'static str,
-) -> Result<Vec<u8>, SafetyNetError> {
+) -> Result<T, SafetyNetError> {
     thread
         .join()
         .map_err(|_| SafetyNetError::Runtime {
@@ -457,7 +492,7 @@ fn kill_reap(child: &mut Child) {
 fn join_remaining(
     stdin_thread: Option<thread::JoinHandle<std::io::Result<()>>>,
     stdout_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
-    stderr_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+    stderr_thread: Option<thread::JoinHandle<std::io::Result<String>>>,
 ) {
     if let Some(thread) = stdin_thread {
         let _ = join_stdin(thread);
@@ -468,45 +503,6 @@ fn join_remaining(
     if let Some(thread) = stderr_thread {
         let _ = join_reader(thread, "stderr");
     }
-}
-
-fn sanitize_stderr(bytes: &[u8]) -> String {
-    let ascii = bytes
-        .iter()
-        .map(|byte| {
-            if byte.is_ascii_graphic() || *byte == b' ' {
-                char::from(*byte)
-            } else {
-                ' '
-            }
-        })
-        .collect::<String>();
-
-    sanitize_error(&ascii)
-        .chars()
-        .take(MAX_VERBOSE_STDERR_BYTES)
-        .collect()
-}
-
-fn sanitize_error(message: &str) -> String {
-    message
-        .split_ascii_whitespace()
-        .map(sanitize_token)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn sanitize_token(token: &str) -> String {
-    if token.contains('@') {
-        return "<redacted>".to_string();
-    }
-
-    let digit_count = token.bytes().filter(u8::is_ascii_digit).count();
-    if digit_count >= 7 {
-        return "<redacted>".to_string();
-    }
-
-    token.to_string()
 }
 
 fn verify_command_path(command: &Path) -> Result<(), SafetyNetError> {

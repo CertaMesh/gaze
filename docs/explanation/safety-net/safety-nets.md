@@ -306,28 +306,56 @@ race with the JSON adapter or appear in operator logs. Adopters who need
 diagnostics can enable `SubprocessOpenAiFilterConfig::with_stderr_diagnostics(true)`,
 which:
 
-1. Captures stderr in a bounded buffer of at most 256 bytes.
+1. Captures a stderr prefix in a bounded buffer of at most 256 bytes and
+   drains/discards the rest to EOF so a verbose child cannot block its pipe.
+   Diagnostic overflow alone does not fail inference. An incomplete trailing
+   token is discarded back to the last captured ASCII whitespace before
+   redaction. Arbitrary Unicode bytes and control bytes are not evidence of
+   a complete raw token; a partial email or phone token could evade the sanitizer.
 2. Maps non-printable bytes to spaces.
 3. Sanitizes whitespace-separated tokens with the same redactor used for
    error messages: any token containing `@` or seven or more ASCII digits
    is replaced with `<redacted>`. This catches the most common email and
    phone shapes that backends might log.
-4. Truncates to the 256-byte cap.
+4. Truncates sanitized output to the 256-byte cap, including a
+   `[truncated]` marker when capture or display was shortened.
+
+The Kiji subprocess adapter uses the same diagnostic rules. Stdout still has
+a hard byte cap: overflow, I/O errors, invalid model output, and timeouts remain
+errors. Diagnostics stay disabled by default. The heuristic redactor does not
+provide general PII-detection completeness.
 
 The `verbose_stderr_is_stripped_and_capped` test locks both the cap and the
 sanitization rule.
 
 ### Subprocess timeout and resource isolation
 
-The subprocess runner enforces a single deadline that covers stdin write,
-stdout read, stderr read, and child wait. On timeout the adapter:
+Both subprocess adapters provide cancellable pipe I/O on Unix and Windows.
+Windows uses exclusively owned parent pipes with nonblocking writes and
+availability-bounded reads; see [Windows pipe ownership](windows-subprocess-io.md).
+Targets that are neither Unix nor Windows currently have no adapter and return
+`ModelUnavailable` before spawn. This describes this implementation, not a claim
+that those targets cannot support subprocesses. In-process backends are unaffected.
 
-1. Sends `SIGKILL` (`Child::kill`) and reaps the process via `wait` to
+The subprocess runner enforces a single deadline that covers stdin write,
+stdout read, stderr read, and child wait. Parent pipe ends are nonblocking,
+with cancellation checked between I/O operations and at most 5 ms of idle
+polling delay (plus OS scheduling). On timeout or worker failure the adapter:
+
+1. Signals cancellation to all pipe workers.
+2. Sends `SIGKILL` (`Child::kill`) and reaps the direct child via `wait` to
    prevent zombies.
-2. Drains the writer/reader threads so file descriptors are not leaked.
-3. Returns `SafetyNetError::Runtime` with the message
+3. Joins every worker, closing all parent pipe ends without waiting for EOF
+   from descendants. Descendant processes themselves are not killed.
+4. Returns the original failure; for a deadline, `SafetyNetError::Runtime`
+   with the message
    `"opf subprocess timed out and was killed"`. The CLI maps this branch to
    exit-code `3` with `variant = "Timeout"`.
+
+Success still requires completed stdin, stdout/stderr EOF, and successful
+direct-child exit. A descendant keeping a pipe open produces a timeout, never
+partial successful output. Cleanup is cooperative, not a hard real-time
+guarantee against OS scheduling delays or an uninterruptible child wait.
 
 Initialization failures are cached in a `OnceLock<Result<Arc<_>, Arc<_>>>`
 so deterministic problems (missing checkpoint, malformed config) are not
