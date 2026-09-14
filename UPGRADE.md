@@ -5,18 +5,6 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
-## Pending security fix: prefix reuse disabled
-
-`enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
-remain source-compatible but no longer skip detection or retain raw prefixes.
-Every input is fully rescanned under its current field, locale, dictionaries,
-recognizers and rules. Both transactional prefix-cache modes use that same path.
-
-Adopters that enabled prefix reuse should budget for full-scan latency on growing
-inputs and update audit consumers to expect actual recognizer/rule rows instead
-of `prefix_cache` provenance. Token mappings and manifest restoration retain their
-normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
-
 ## How this file is organized
 
 - One H2 section per `MAJOR.MINOR` release in **reverse-chronological** order.
@@ -42,6 +30,121 @@ minor unless this file explicitly says otherwise. (No such exception
 exists today.)
 
 [semver-pre1]: https://semver.org/spec/v2.0.0.html#spec-item-4
+
+---
+
+## v0.14.x → v0.15.0
+
+### TL;DR
+
+1. Handle the result of `PiiClass::custom` and add `max_sessions` to Rust
+   `SessionCfg` literals.
+2. Budget full-input scanning latency and handle session-capacity errors.
+3. Review the fresh [benchmark evidence](docs/reference/benchmarks/README.md).
+   This release's fixes do not by themselves prove detection completeness.
+
+### Custom class construction (action required)
+
+`PiiClass::custom(name)` now returns `Result<PiiClass, EmptyCustomClassName>`.
+At least one ASCII letter or digit must survive normalization. Propagate or
+handle invalid runtime input in a fallible caller:
+
+```rust
+use gaze::{EmptyCustomClassName, PiiClass};
+
+fn make_class(name: &str) -> Result<PiiClass, EmptyCustomClassName> {
+    let class = PiiClass::custom(name)?;
+    Ok(class)
+}
+```
+
+An explicit `expect` is appropriate only for a known-valid literal. Constructing
+`PiiClass::Custom` directly does not bypass live/staged tokenization validation.
+The token bridge now treats surrounding and repeated custom-entity whitespace
+consistently across its normalization paths.
+
+### Bridge session capacity (action required for Rust configuration)
+
+Add `max_sessions: 1000` to `gaze_mcp_bridge::SessionCfg` literals, or choose a
+positive deployment-specific capacity. TOML omission defaults to 1,000:
+
+```toml
+[session]
+mode = "ephemeral"
+max_sessions = 1000
+```
+
+Zero is rejected by every construction boundary. Existing sessions remain
+accessible at capacity. Ephemeral mode rejects new sessions instead of evicting
+restoration mappings. In file mode, an inactive eviction candidate must be
+exclusively owned and persisted successfully before admission commits. Retained
+strong or weak handles, persistence errors, and cancellation preserve the
+canonical cached session and can prevent admission. Release handles promptly
+and handle `BridgeError::LimitExceeded` and persistence failures.
+
+**Limitation:** `max_sessions` bounds cached sessions only. The separate per-ID
+file-lock registry remains unbounded; it is not a total-memory limit.
+
+### Prefix reuse disabled (latency and audit action required)
+
+`enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
+remain source-compatible but no longer skip detection or retain raw prefixes.
+Every input is fully rescanned under its current field, locale, dictionaries,
+recognizers, and rules. Both transactional prefix-cache modes use that same path.
+
+Budget full-scan latency on growing inputs. Update audit consumers to expect
+actual recognizer/rule rows instead of `prefix_cache` provenance. Token mappings
+and manifest restoration retain their normal behavior. Correctness takes
+priority over the removed optimization. See the
+[safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
+
+### Policy and restoration (review integration assumptions)
+
+Keep policy `schema_version = "0.1.0"`; the policy schema does not follow crate
+version 0.15.0. Unsupported two-digit minor schemas now fail closed instead of
+accidentally matching a prefix. Inline comments no longer suppress strict
+overlap validation. Production integrations still need an explicit policy even
+though CLI path-rulepack tokenization now works without one.
+
+Use complete-text restoration through the existing manifest/session APIs.
+Known bare session tokens can now restore after leading ASCII or Unicode word
+characters. Matching is single-pass over original input; inserted values are
+not scanned again as tokens. Family-namespace tokens restore in prose and keep
+resolver provenance. Trailing word boundaries and family-hyphen ambiguity remain
+guarded: separate a family token from a following hyphen with whitespace.
+Restoration guarantees only reconstruction authorized by the supplied manifest,
+not arbitrary suffix handling or universal unknown-suffix rejection.
+
+### Agent surfaces and audit (review consumers)
+
+Proxy integrations must accept rebuilt safe response headers and guards across
+content blocks and structured Responses text. Agent responses remain separate
+from owner/operator restoration surfaces. Audit integrations should retain
+terminal MCP journal context, deciding ingress rules, and JSONL restore fields.
+The MCP journal preserves context, not durable duplicate protection after
+completion or restart. No dashboard configuration migration is required.
+
+`gaze_proxy::serve_with_listener` is additive. Embedders can hand off an owned
+listener; its address must match configuration, except that a configured port
+of zero resolves to the actual port. Existing `serve` remains available.
+
+### Subprocess diagnostics and remaining limits
+
+Verbose stderr no longer fails otherwise valid inference. Diagnostics remain
+opt-in, retain at most a bounded sanitized prefix, and discard the rest.
+Stdout limits, invalid responses, I/O errors, and deadlines still fail closed.
+Diagnostic redaction is heuristic and cannot guarantee arbitrary logged PII is
+removed. Keep diagnostics off unless the operator accepts that limitation.
+
+Unix and Windows adapters cancel pipe workers and reap the direct child on
+failure. Descendant processes are not killed; cleanup is cooperative rather
+than a hard real-time guarantee. Other platforms return `ModelUnavailable`
+before spawning. See [subprocess behavior](docs/explanation/safety-net/safety-nets.md).
+
+The previous v0.14.0 benchmark failed release readiness with residual labeled
+PII and one-way redact fallback. Review the new scorecard's absolute readiness,
+regression, and exact-restore metrics separately. A valid manifest alone does not
+prove detection completeness or a successful round trip.
 
 ---
 

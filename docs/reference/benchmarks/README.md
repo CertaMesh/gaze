@@ -490,7 +490,7 @@ uv run --project scripts/bench python scripts/bench/run_no_opf_benchmark.py full
   --seed 20260710 --no-download
 
 # 2. Commit it under its release name and regenerate this document.
-cp target/bench-data/no-opf/scorecard-v4.json \
+cp target/bench-data/no-opf/full/scorecard-v4.json \
    docs/reference/benchmarks/scorecard-vX.Y.Z.json
 uv run --project scripts/bench python scripts/bench/render_benchmark_doc.py \
   --scorecard docs/reference/benchmarks/scorecard-vX.Y.Z.json \
