@@ -1,6 +1,6 @@
 use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::Read;
+use std::io::{Read, Seek};
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -276,6 +276,10 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
     create_parent(&options.paths.pidfile)?;
     create_parent(&options.paths.log_file)?;
     let lock = lock_pidfile(&options.paths)?;
+    let owned_file = lock
+        .file
+        .try_clone()
+        .map_err(|source| daemon_io(&options.paths.pidfile, source))?;
 
     let mut child = {
         let spawn_result = (|| {
@@ -318,31 +322,14 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
         match spawn_result {
             Ok(child) => child,
             Err(e) => {
-                // The lock was already released before the spawn attempt so
-                // that the child could acquire it.  Remove the empty pidfile
-                // only when we can re-acquire the exclusive lock and confirm
-                // no PID has been written; if another startup has taken over
-                // the file in the interim, leave it alone.
-                if let Ok(mut f) = OpenOptions::new()
-                    .read(true)
-                    .write(true)
-                    .open(&options.paths.pidfile)
-                {
-                    if f.try_lock_exclusive().is_ok() {
-                        let mut contents = String::new();
-                        // Only remove if we can read the file and it is still
-                        // empty; a read error means we cannot confirm the
-                        // contents, so leave the file alone.
-                        if f.read_to_string(&mut contents).is_ok() && contents.trim().is_empty() {
-                            let _ = fs::remove_file(&options.paths.pidfile);
-                        }
-                    }
-                }
+                #[cfg(test)]
+                tests::run_start_before_cleanup_hook();
+                cleanup_owned(&options.paths.pidfile, owned_file, CleanupRule::Empty)?;
                 return Err(e);
             }
         }
     };
-    confirm_started(&mut child, &options.paths)
+    confirm_started(&mut child, &options.paths, owned_file)
 }
 
 /// Confirms the spawned child is still alive after a short probe window and
@@ -356,15 +343,16 @@ pub fn start(options: StartOptions) -> Result<u32, ProxyError> {
 ///
 /// A failure slower than the probe window still reports success; that daemon is
 /// dead rather than serving unprotected, and `gaze proxy status` shows it.
-fn confirm_started(child: &mut Child, paths: &DaemonPaths) -> Result<u32, ProxyError> {
+fn confirm_started(
+    child: &mut Child,
+    paths: &DaemonPaths,
+    owned_file: File,
+) -> Result<u32, ProxyError> {
     let deadline = Instant::now() + Duration::from_millis(250);
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // The parent created this pidfile before spawning and the child
-                // never filled it in; leaving the empty file behind would fail
-                // every later start as stale.
-                let _ = fs::remove_file(&paths.pidfile);
+                cleanup_owned(&paths.pidfile, owned_file, CleanupRule::Stale)?;
                 return Err(ProxyError::DaemonExitedEarly {
                     code: status.code(),
                     stderr_file: paths.stderr_file.clone(),
@@ -394,18 +382,23 @@ pub fn stop(options: StopOptions) -> Result<(), ProxyError> {
     let Some(status) = status(&options.paths)? else {
         return Err(ProxyError::DaemonNotRunning);
     };
+    let owned_file = open_pidfile(&options.paths.pidfile)?;
     terminate(status.pid, false)?;
     let started = Instant::now();
     while started.elapsed() < options.timeout {
         if !process_exists(status.pid) {
-            let _ = fs::remove_file(&options.paths.pidfile);
+            if let Some(file) = owned_file {
+                cleanup_owned(&options.paths.pidfile, file, CleanupRule::Pid(status.pid))?;
+            }
             return Ok(());
         }
         std::thread::sleep(Duration::from_millis(100));
     }
     if options.force {
         terminate(status.pid, true)?;
-        let _ = fs::remove_file(&options.paths.pidfile);
+        if let Some(file) = owned_file {
+            cleanup_owned(&options.paths.pidfile, file, CleanupRule::Pid(status.pid))?;
+        }
         Ok(())
     } else {
         Err(ProxyError::DaemonAlreadyRunning {
@@ -441,70 +434,164 @@ pub fn status(paths: &DaemonPaths) -> Result<Option<DaemonStatus>, ProxyError> {
 }
 
 pub fn cleanup_stale(paths: &DaemonPaths) -> Result<(), ProxyError> {
-    // Open the pidfile and acquire an exclusive lock before inspecting or
-    // removing it.  Classifying the file via status() and then removing by
-    // pathname (without holding a lock) creates a window: a concurrent startup
-    // can publish a live PID between the read and the remove, and we would
-    // delete the running daemon's pidfile.  Acquiring the lock first ties
-    // cleanup to the inode we are about to remove and prevents that window.
-    let mut f = match OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(&paths.pidfile)
-    {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(source) => {
-            return Err(ProxyError::DaemonIo {
-                path: paths.pidfile.clone(),
-                source,
-            });
-        }
+    let Some(file) = open_pidfile(&paths.pidfile)? else {
+        return Ok(());
     };
-
     #[cfg(test)]
     tests::run_cleanup_after_open_hook();
+    cleanup_owned(&paths.pidfile, file, CleanupRule::Stale)?;
+    Ok(())
+}
 
-    // If we cannot acquire the exclusive lock, an active startup or the daemon
-    // itself holds it; leave the file intact.
-    if f.try_lock_exclusive().is_err() {
-        return Ok(());
+fn daemon_io(path: &Path, source: std::io::Error) -> ProxyError {
+    ProxyError::DaemonIo {
+        path: path.to_path_buf(),
+        source,
     }
+}
 
-    // Re-read the contents under the lock so we see the final state.
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: paths.pidfile.clone(),
-            source,
-        })?;
+fn open_pidfile(path: &Path) -> Result<Option<File>, ProxyError> {
+    match OpenOptions::new().read(true).write(true).open(path) {
+        Ok(file) => Ok(Some(file)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(source) => Err(daemon_io(path, source)),
+    }
+}
 
-    // Parse the PID from the locked file.  Empty/unparseable means the
-    // startup that created this file never finished; removable.
-    let is_stale = if contents.trim().is_empty() {
-        true
-    } else {
-        match contents.lines().next().and_then(|l| l.parse::<u32>().ok()) {
-            Some(pid) => !process_exists(pid),
-            None => true, // unparseable — treat as stale
+fn lock_contended(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::WouldBlock
+        || error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
+}
+
+fn try_pidfile_lock(file: &File) -> std::io::Result<()> {
+    #[cfg(test)]
+    if let Some(error) = tests::take_lock_error() {
+        return Err(error);
+    }
+    file.try_lock_exclusive()
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CleanupOutcome {
+    Removed,
+    Missing,
+    Replaced,
+    Busy,
+    Kept,
+}
+
+#[derive(Clone, Copy)]
+enum CleanupRule {
+    Empty,
+    Stale,
+    Pid(u32),
+}
+
+impl CleanupRule {
+    fn permits(self, contents: &str) -> bool {
+        let pid = contents
+            .lines()
+            .next()
+            .and_then(|line| line.parse::<u32>().ok());
+        match self {
+            Self::Empty => contents.trim().is_empty(),
+            Self::Stale => pid.is_none_or(|pid| !process_exists(pid)),
+            Self::Pid(expected) => pid == Some(expected),
         }
-    };
+    }
+}
 
-    if !is_stale {
-        return Ok(());
+/// Owns both the descriptor lock and the persistent `<pidfile>.lock` lock.
+///
+/// Identity uses `same_file::Handle`, comparing `(dev, ino)` on Unix and the
+/// corresponding file identity on Windows.
+///
+/// The sidecar is never unlinked: startup takes it before creating the pidfile,
+/// foreground publication holds it through the write, and every removal (stale,
+/// failed spawn, early exit, stop) goes through this guard. Thus no competing
+/// lifecycle path can replace the pathname between identity check and unlink.
+/// Lock order is always sidecar then pidfile; contention never blocks a handoff.
+/// External programs must not remove the sidecar or mutate the pidfile while
+/// Gaze is using it. The inode lock alone cannot protect a pathname after unlink.
+struct PidfileGuard {
+    file: File,
+    _namespace: File,
+}
+
+impl Drop for PidfileGuard {
+    fn drop(&mut self) {
+        // A failed startup retains a cloned descriptor as its identity witness.
+        // Explicit unlock releases the shared lock before the child takes over.
+        let _ = FileExt::unlock(&self.file);
+    }
+}
+
+impl PidfileGuard {
+    fn namespace(path: &Path) -> std::io::Result<File> {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(".lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(PathBuf::from(name))?;
+        file.try_lock_exclusive()?;
+        Ok(file)
     }
 
-    // The file is stale and we hold the lock.  Remove by inode (the lock fd
-    // still refers to this inode even after the unlink, so no other path
-    // can slip a replacement in under the same lock).
-    match fs::remove_file(&paths.pidfile) {
-        Ok(()) => Ok(()),
-        // Benign: another cleanup already removed it between our open and now.
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(source) => Err(ProxyError::DaemonIo {
-            path: paths.pidfile.clone(),
-            source,
-        }),
+    fn remove(mut self, path: &Path, rule: CleanupRule) -> Result<CleanupOutcome, ProxyError> {
+        let identity = same_file::Handle::from_file(
+            self.file
+                .try_clone()
+                .map_err(|source| daemon_io(path, source))?,
+        )
+        .map_err(|source| daemon_io(path, source))?;
+        let current = match same_file::Handle::from_path(path) {
+            Ok(current) => current,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(CleanupOutcome::Missing)
+            }
+            Err(source) => return Err(daemon_io(path, source)),
+        };
+        if identity != current {
+            tracing::debug!("pidfile cleanup skipped: owned inode was replaced");
+            return Ok(CleanupOutcome::Replaced);
+        }
+        self.file
+            .rewind()
+            .map_err(|source| daemon_io(path, source))?;
+        let mut contents = String::new();
+        self.file
+            .read_to_string(&mut contents)
+            .map_err(|source| daemon_io(path, source))?;
+        if !rule.permits(&contents) {
+            return Ok(CleanupOutcome::Kept);
+        }
+        #[cfg(test)]
+        tests::run_cleanup_before_unlink_hook();
+        match fs::remove_file(path) {
+            Ok(()) => Ok(CleanupOutcome::Removed),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(CleanupOutcome::Missing),
+            Err(source) => Err(daemon_io(path, source)),
+        }
+    }
+}
+
+fn cleanup_owned(path: &Path, file: File, rule: CleanupRule) -> Result<CleanupOutcome, ProxyError> {
+    let namespace = match PidfileGuard::namespace(path) {
+        Ok(lock) => lock,
+        Err(e) if lock_contended(&e) => return Ok(CleanupOutcome::Busy),
+        Err(source) => return Err(daemon_io(path, source)),
+    };
+    match try_pidfile_lock(&file) {
+        Ok(()) => PidfileGuard {
+            file,
+            _namespace: namespace,
+        }
+        .remove(path, rule),
+        Err(e) if lock_contended(&e) => Ok(CleanupOutcome::Busy),
+        Err(source) => Err(daemon_io(path, source)),
     }
 }
 
@@ -538,23 +625,21 @@ fn create_parent(path: &Path) -> Result<(), ProxyError> {
     Ok(())
 }
 
-fn lock_pidfile(paths: &DaemonPaths) -> Result<File, ProxyError> {
+fn lock_pidfile(paths: &DaemonPaths) -> Result<PidfileGuard, ProxyError> {
+    let namespace = PidfileGuard::namespace(&paths.pidfile)
+        .map_err(|source| daemon_io(&paths.pidfile, source))?;
     let file = OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
         .open(&paths.pidfile)
-        .map_err(|source| ProxyError::DaemonIo {
-            path: paths.pidfile.clone(),
-            source,
-        })?;
-    file.try_lock_exclusive()
-        .map_err(|source| ProxyError::DaemonIo {
-            path: paths.pidfile.clone(),
-            source,
-        })?;
-    Ok(file)
+        .map_err(|source| daemon_io(&paths.pidfile, source))?;
+    try_pidfile_lock(&file).map_err(|source| daemon_io(&paths.pidfile, source))?;
+    Ok(PidfileGuard {
+        file,
+        _namespace: namespace,
+    })
 }
 
 fn write_pidfile(
@@ -655,6 +740,30 @@ mod tests {
             std::cell::RefCell::new(None);
     }
 
+    thread_local! {
+        static START_BEFORE_CLEANUP: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
+        static CLEANUP_BEFORE_UNLINK: std::cell::RefCell<Option<Box<dyn FnOnce()>>> = std::cell::RefCell::new(None);
+        static LOCK_ERROR: std::cell::RefCell<Option<std::io::Error>> = const { std::cell::RefCell::new(None) };
+    }
+
+    pub(super) fn take_lock_error() -> Option<std::io::Error> {
+        LOCK_ERROR.with(|slot| slot.borrow_mut().take())
+    }
+
+    pub(super) fn run_start_before_cleanup_hook() {
+        let hook = START_BEFORE_CLEANUP.with(|slot| slot.borrow_mut().take());
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
+    pub(super) fn run_cleanup_before_unlink_hook() {
+        let hook = CLEANUP_BEFORE_UNLINK.with(|slot| slot.borrow_mut().take());
+        if let Some(hook) = hook {
+            hook();
+        }
+    }
+
     pub(super) fn run_cleanup_after_open_hook() {
         let hook = CLEANUP_AFTER_OPEN.with(|slot| slot.borrow_mut().take());
         if let Some(hook) = hook {
@@ -734,6 +843,142 @@ mod tests {
             matches!(cleanup_result, Err(ProxyError::DaemonIo { .. })),
             "cleanup must report the failed unlink instead of success: {cleanup_result:?}"
         );
+    }
+
+    #[test]
+    fn cleanup_reports_non_contention_lock_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(&paths.pidfile, "").unwrap();
+        LOCK_ERROR
+            .with(|slot| *slot.borrow_mut() = Some(std::io::Error::from_raw_os_error(libc::EIO)));
+        let error = cleanup_stale(&paths).unwrap_err();
+        assert!(
+            matches!(error, ProxyError::DaemonIo { source, .. } if source.raw_os_error() == Some(libc::EIO))
+        );
+        assert!(paths.pidfile.exists());
+    }
+
+    #[test]
+    fn cleanup_documented_lock_contention_is_benign() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(&paths.pidfile, "").unwrap();
+        LOCK_ERROR.with(|slot| *slot.borrow_mut() = Some(fs2::lock_contended_error()));
+        cleanup_stale(&paths).unwrap();
+        assert!(paths.pidfile.exists());
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.pidfile.exists());
+    }
+
+    #[test]
+    fn cleanup_holds_namespace_through_unlink() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(&paths.pidfile, "").unwrap();
+        let concurrent_paths = paths.clone();
+        CLEANUP_BEFORE_UNLINK.with(|slot| *slot.borrow_mut() = Some(Box::new(move || {
+            // Exercise startup and another cleaner in the check-to-unlink window.
+            assert!(matches!(PidfileGuard::namespace(&concurrent_paths.pidfile), Err(error) if lock_contended(&error)));
+            assert!(matches!(lock_pidfile(&concurrent_paths), Err(ProxyError::DaemonIo { source, .. }) if lock_contended(&source)));
+            let file = open_pidfile(&concurrent_paths.pidfile).unwrap().unwrap();
+            assert_eq!(cleanup_owned(&concurrent_paths.pidfile, file, CleanupRule::Stale).unwrap(), CleanupOutcome::Busy);
+            assert!(concurrent_paths.pidfile.exists());
+        })));
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.pidfile.exists());
+        let lock = lock_pidfile(&paths).unwrap();
+        drop(lock);
+        cleanup_stale(&paths).unwrap();
+    }
+
+    #[test]
+    fn cleanup_failed_start_preserves_replacement_inode() {
+        // Both a startup holding its lock and an unlocked, still-empty handoff
+        // belong to the replacement. Contents alone cannot establish ownership.
+        for hold_lock in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let paths = temp_paths(&dir);
+            fs::create_dir(&paths.stderr_file).unwrap();
+            let replacement = std::rc::Rc::new(std::cell::RefCell::new(None));
+            let held = replacement.clone();
+            let concurrent_paths = paths.clone();
+            START_BEFORE_CLEANUP.with(|slot| {
+                *slot.borrow_mut() = Some(Box::new(move || {
+                    cleanup_stale(&concurrent_paths).unwrap();
+                    let lock = lock_pidfile(&concurrent_paths).unwrap();
+                    if hold_lock {
+                        *held.borrow_mut() = Some(lock);
+                    }
+                }))
+            });
+            assert!(matches!(
+                start(StartOptions::new(paths.clone(), DaemonConfig::default())),
+                Err(ProxyError::DaemonIo { .. })
+            ));
+            assert!(
+                paths.pidfile.exists(),
+                "failed start removed replacement (locked={hold_lock})"
+            );
+            assert_eq!(fs::read_to_string(&paths.pidfile).unwrap(), "");
+        }
+    }
+
+    #[test]
+    fn cleanup_failed_start_reports_lock_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::create_dir(&paths.stderr_file).unwrap();
+        START_BEFORE_CLEANUP.with(|slot| {
+            *slot.borrow_mut() = Some(Box::new(|| {
+                LOCK_ERROR.with(|slot| {
+                    *slot.borrow_mut() = Some(std::io::Error::from_raw_os_error(libc::EIO))
+                });
+            }))
+        });
+        let error = start(StartOptions::new(paths.clone(), DaemonConfig::default())).unwrap_err();
+        assert!(
+            matches!(error, ProxyError::DaemonIo { source, .. } if source.raw_os_error() == Some(libc::EIO))
+        );
+        assert!(paths.pidfile.exists());
+    }
+
+    #[test]
+    fn cleanup_stop_preserves_changed_pid_on_owned_inode() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        fs::write(&paths.pidfile, "999999").unwrap();
+        let original = open_pidfile(&paths.pidfile).unwrap().unwrap();
+        init_foreground_daemon(&paths, "127.0.0.1:8787".parse().unwrap()).unwrap();
+        assert_eq!(
+            cleanup_owned(&paths.pidfile, original, CleanupRule::Pid(999999)).unwrap(),
+            CleanupOutcome::Kept
+        );
+        assert!(status(&paths).unwrap().unwrap().running);
+    }
+
+    #[test]
+    fn cleanup_early_exit_preserves_replacement_inode() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let lock = lock_pidfile(&paths).unwrap();
+        let original = lock.file.try_clone().unwrap();
+        drop(lock);
+        cleanup_stale(&paths).unwrap();
+        let replacement = lock_pidfile(&paths).unwrap();
+        drop(replacement);
+        // Reaping is deterministic: the probe observes an already-exited child.
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .arg("--list")
+            .stdout(Stdio::null())
+            .spawn()
+            .unwrap();
+        child.wait().unwrap();
+        assert!(matches!(
+            confirm_started(&mut child, &paths, original),
+            Err(ProxyError::DaemonExitedEarly { .. })
+        ));
+        assert!(paths.pidfile.exists());
     }
 
     fn temp_paths(dir: &tempfile::TempDir) -> DaemonPaths {
