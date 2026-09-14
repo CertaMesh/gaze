@@ -598,9 +598,9 @@ fn default_classes() -> Vec<PiiClass> {
         PiiClass::Email,
         PiiClass::Name,
         PiiClass::Organization,
-        PiiClass::custom("customer_id"),
-        PiiClass::custom("account_id"),
-        PiiClass::custom("case_id"),
+        PiiClass::custom("customer_id").expect("valid custom class"),
+        PiiClass::custom("account_id").expect("valid custom class"),
+        PiiClass::custom("case_id").expect("valid custom class"),
     ]
 }
 

@@ -444,7 +444,7 @@ fn class_for_label(label: &str) -> Option<PiiClass> {
                 || custom.ends_with("_number")
                 || custom.ends_with("_code") =>
         {
-            Some(PiiClass::custom(custom))
+            PiiClass::custom(custom).ok()
         }
         _ => None,
     }

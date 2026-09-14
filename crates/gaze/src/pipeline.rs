@@ -33,6 +33,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("invalid custom class: {0}")]
+    EmptyCustomClassName(#[from] gaze_types::EmptyCustomClassName),
     #[error("strict protection failed: {0}")]
     Protection(#[from] ProtectionError),
     #[error("invalid regex: {0}")]
@@ -3715,7 +3717,7 @@ mod tests {
         let email_token = session
             .tokenize_with_family("counter", &PiiClass::Email, email_raw)
             .expect("email token");
-        let phone_class = PiiClass::custom("phone");
+        let phone_class = PiiClass::custom("phone").expect("valid custom class");
         let phone_token = session
             .tokenize_with_family("counter", &phone_class, phone_raw)
             .expect("phone token");
@@ -5013,7 +5015,7 @@ mod tests {
             "security_token.anchored",
             vec![Detection::new(
                 credential,
-                PiiClass::custom("security_token"),
+                PiiClass::custom("security_token").expect("valid custom class"),
                 "security_token.anchored",
             )],
         );
@@ -5030,7 +5032,7 @@ mod tests {
             .detector(structured)
             .detector(ner)
             .rule(ClassRule::new(
-                PiiClass::custom("security_token"),
+                PiiClass::custom("security_token").expect("valid custom class"),
                 Action::Tokenize,
             ))
             .rule(ClassRule::new(PiiClass::Organization, Action::Tokenize))
@@ -5325,11 +5327,11 @@ mod tests {
         let pipeline = Pipeline::builder()
             .recognizer(TieRecognizer {
                 id: "doc.alpha",
-                class: PiiClass::custom("alpha"),
+                class: PiiClass::custom("alpha").expect("valid custom class"),
             })
             .recognizer(TieRecognizer {
                 id: "doc.beta",
-                class: PiiClass::custom("beta"),
+                class: PiiClass::custom("beta").expect("valid custom class"),
             })
             .register_collision(
                 "doc.alpha",

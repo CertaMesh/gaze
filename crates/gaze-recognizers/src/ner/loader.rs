@@ -209,7 +209,9 @@ fn parse_flat_labels(raw: BTreeMap<String, String>) -> Result<LabelMap, NerLoadE
             "organization" | "org" => PiiClass::Organization,
             "email" => PiiClass::Email,
             "drop" | "ignore" | "" => continue,
-            other => PiiClass::custom(other),
+            other => {
+                PiiClass::custom(other).map_err(|err| NerLoadError::LabelsParse(err.to_string()))?
+            }
         };
         map.insert(key, class);
     }
@@ -252,7 +254,7 @@ fn parse_kiji_labels(raw: KijiLabelsFile) -> Result<ParsedLabels, NerLoadError> 
             "person" => PiiClass::Name,
             "location" => PiiClass::Location,
             "organization" => PiiClass::Organization,
-            "miscellaneous" => PiiClass::custom("miscellaneous"),
+            "miscellaneous" => PiiClass::custom("miscellaneous").expect("valid custom class"),
             other => {
                 return Err(NerLoadError::LabelsParse(format!(
                     "unsupported Kiji label id `{other}`"

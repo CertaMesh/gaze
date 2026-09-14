@@ -40,7 +40,7 @@ fn empty_context() -> Context {
 }
 
 fn security_token_class() -> PiiClass {
-    PiiClass::custom("security_token")
+    PiiClass::custom("security_token").expect("valid custom class")
 }
 
 /// Builds the core bundle under an explicit locale chain with locale-gated auto-activation OFF.

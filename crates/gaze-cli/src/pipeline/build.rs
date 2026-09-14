@@ -400,7 +400,8 @@ fn build_context_pipeline(context: &TypedContext) -> GazeResult<Pipeline> {
             .class_map
             .get(name)
             .cloned()
-            .unwrap_or_else(|| PiiClass::custom(name));
+            .map(Ok)
+            .unwrap_or_else(|| PiiClass::custom(name))?;
         builder = builder
             .recognizer(DictionaryRecognizer::new(
                 format!("context/{name}"),

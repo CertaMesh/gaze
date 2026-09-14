@@ -27,7 +27,7 @@ pub(crate) fn class_for_dictionary(
     }
 }
 
-fn class_has_tokenize_or_stricter_action(
+pub(crate) fn class_has_tokenize_or_stricter_action(
     rules: &[RuleSpec],
     class: &PiiClass,
 ) -> Result<bool, RulepackError> {

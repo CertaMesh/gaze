@@ -72,7 +72,12 @@ fn strict_roundtrip_accepts_authorized_value_containing_shape() {
         "record <Email_1>",
         "record location_7",
     ] {
-        let token = session.tokenize(&PiiClass::custom("record"), raw).unwrap();
+        let token = session
+            .tokenize(
+                &PiiClass::custom("record").expect("valid custom class"),
+                raw,
+            )
+            .unwrap();
         assert_success(&session, &format!("π/{token}."), &format!("π/{raw}."), 0);
     }
 }
@@ -148,7 +153,11 @@ fn strict_restore_rejects_missing_own_mapping() {
 fn strict_restore_rejects_foreign_session_token_in_every_format() {
     let session = Session::new(Scope::Ephemeral).unwrap();
     let foreign = Session::new(Scope::Ephemeral).unwrap();
-    for class in [PiiClass::Email, PiiClass::Name, PiiClass::custom("record")] {
+    for class in [
+        PiiClass::Email,
+        PiiClass::Name,
+        PiiClass::custom("record").expect("valid custom class"),
+    ] {
         assert_unknown(
             &session,
             &foreign.tokenize(&class, "synthetic value").unwrap(),
@@ -244,7 +253,10 @@ fn incomplete_prefixed_wrappers_fail_shared_assessment() {
     ] {
         assert_unknown(&session, text);
         let token = session
-            .tokenize(&PiiClass::custom("class_alpha"), text)
+            .tokenize(
+                &PiiClass::custom("class_alpha").expect("valid custom class"),
+                text,
+            )
             .unwrap();
         assert_success(&session, &token, text, 0);
         let (_, telemetry) = pipeline()
@@ -359,11 +371,14 @@ fn differential_enumeration_only_relaxes_bare_identifiers_and_authorized_output(
             .format_preserving_fake(&PiiClass::Name, "Dr. Schmidt")
             .unwrap();
         let trap = session
-            .tokenize(&PiiClass::custom("record"), &format!("ORDER_{ordinal}"))
+            .tokenize(
+                &PiiClass::custom("record").expect("valid custom class"),
+                &format!("ORDER_{ordinal}"),
+            )
             .unwrap();
         let authorized = session
             .tokenize(
-                &PiiClass::custom("reference"),
+                &PiiClass::custom("reference").expect("valid custom class"),
                 &format!("<{foreign}:Email_{ordinal}>"),
             )
             .unwrap();

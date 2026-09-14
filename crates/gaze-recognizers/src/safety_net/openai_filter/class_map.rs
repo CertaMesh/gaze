@@ -79,11 +79,26 @@ mod tests {
             ("private_person", PiiClass::Name),
             ("private_address", PiiClass::Location),
             ("private_email", PiiClass::Email),
-            ("private_phone", PiiClass::custom("phone")),
-            ("private_url", PiiClass::custom("url")),
-            ("private_date", PiiClass::custom("date")),
-            ("account_number", PiiClass::custom("account_number")),
-            ("secret", PiiClass::custom("secret")),
+            (
+                "private_phone",
+                PiiClass::custom("phone").expect("valid custom class"),
+            ),
+            (
+                "private_url",
+                PiiClass::custom("url").expect("valid custom class"),
+            ),
+            (
+                "private_date",
+                PiiClass::custom("date").expect("valid custom class"),
+            ),
+            (
+                "account_number",
+                PiiClass::custom("account_number").expect("valid custom class"),
+            ),
+            (
+                "secret",
+                PiiClass::custom("secret").expect("valid custom class"),
+            ),
         ];
 
         for (label, expected) in cases {

@@ -13,7 +13,7 @@ fn validator_pipeline(
 ) -> Pipeline {
     custom_validator_pipeline(
         pattern,
-        PiiClass::custom("credit_card_or_iban"),
+        PiiClass::custom("credit_card_or_iban").expect("valid custom class"),
         validator,
         normalizer,
     )
@@ -301,7 +301,7 @@ fn iban_canonical_is_uppercase_whitespace_free_and_idempotent() {
 fn s3a_e164_phone_passing_candidate_emits_detection_and_round_trips() {
     let pipeline = custom_validator_pipeline(
         r"\+\d{6,15}\b",
-        PiiClass::custom("phone"),
+        PiiClass::custom("phone").expect("valid custom class"),
         ValidatorKind::E164Phone,
         None,
     );
@@ -319,7 +319,7 @@ fn s3a_e164_phone_passing_candidate_emits_detection_and_round_trips() {
 fn s3a_e164_phone_unassigned_candidate_emits_no_detection() {
     let pipeline = custom_validator_pipeline(
         r"\+\d{6,15}\b",
-        PiiClass::custom("phone"),
+        PiiClass::custom("phone").expect("valid custom class"),
         ValidatorKind::E164Phone,
         None,
     );
@@ -530,7 +530,12 @@ fn assert_validator_pipeline_round_trip(
     input: &str,
     class: &str,
 ) {
-    let pipeline = custom_validator_pipeline(pattern, PiiClass::custom(class), validator, None);
+    let pipeline = custom_validator_pipeline(
+        pattern,
+        PiiClass::custom(class).expect("valid custom class"),
+        validator,
+        None,
+    );
     let session = Session::new(Scope::Ephemeral).expect("session");
     let clean = clean_text(&pipeline, &session, input);
 

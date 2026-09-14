@@ -92,6 +92,11 @@ pub enum PiiClass {
     Custom(String),
 }
 
+/// A custom class must contain at least one ASCII letter or digit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("custom class name normalizes to empty")]
+pub struct EmptyCustomClassName;
+
 /// Built-in class labels in stable display order.
 pub const BUILTIN_CLASS_NAMES: &[&str] = &["Email", "Name", "Location", "Organization"];
 
@@ -257,7 +262,7 @@ impl PiiClass {
         if let Some(family) = name.strip_prefix("family:") {
             (!family.trim().is_empty()).then(|| Self::family(family))
         } else {
-            (!name.is_empty()).then(|| Self::custom(name))
+            Self::custom(name).ok()
         }
     }
 
@@ -272,7 +277,9 @@ impl PiiClass {
     }
 
     /// Builds a normalized custom class name.
-    pub fn custom(name: &str) -> Self {
+    ///
+    /// Returns [`EmptyCustomClassName`] when no ASCII letter or digit remains.
+    pub fn custom(name: &str) -> Result<Self, EmptyCustomClassName> {
         let mut normalized = String::new();
         let mut pending_underscore = false;
         for ch in name.trim().chars() {
@@ -287,7 +294,18 @@ impl PiiClass {
             }
         }
 
-        Self::Custom(normalized)
+        let class = Self::Custom(normalized);
+        class.validate_custom_name()?;
+        Ok(class)
+    }
+
+    /// Checks names supplied through the public enum before token emission.
+    pub fn validate_custom_name(&self) -> Result<(), EmptyCustomClassName> {
+        if matches!(self, Self::Custom(name) if !name.chars().any(|ch| ch.is_ascii_alphanumeric()))
+        {
+            return Err(EmptyCustomClassName);
+        }
+        Ok(())
     }
 
     /// Builds a collision-family class without normalizing its reserved namespace.
@@ -1906,11 +1924,11 @@ impl SafetyNetPiiClass {
             Self::Email => PiiClass::Email,
             Self::Name => PiiClass::Name,
             Self::Location => PiiClass::Location,
-            Self::Phone => PiiClass::custom("phone"),
-            Self::Url => PiiClass::custom("url"),
-            Self::Date => PiiClass::custom("date"),
-            Self::AccountNumber => PiiClass::custom("account_number"),
-            Self::Secret => PiiClass::custom("secret"),
+            Self::Phone => PiiClass::custom("phone").expect("valid custom class"),
+            Self::Url => PiiClass::custom("url").expect("valid custom class"),
+            Self::Date => PiiClass::custom("date").expect("valid custom class"),
+            Self::AccountNumber => PiiClass::custom("account_number").expect("valid custom class"),
+            Self::Secret => PiiClass::custom("secret").expect("valid custom class"),
         }
     }
 }
