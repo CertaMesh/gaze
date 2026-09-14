@@ -48,6 +48,9 @@ tracing = "0.1"
 tract-onnx = { version = "=0.23.0-dev.5", optional = true }
 unicode-normalization = "0.1"
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Pipes"] }
+
 [dev-dependencies]
 criterion = "0.5"
 gaze = { path = "../gaze", package = "gaze-pii", default-features = false, features = ["test-support"] }
