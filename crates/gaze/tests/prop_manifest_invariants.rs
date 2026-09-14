@@ -42,7 +42,7 @@ fn prop_config() -> ProptestConfig {
 }
 
 fn deterministic_pipeline() -> Pipeline {
-    let phone = PiiClass::custom("phone");
+    let phone = PiiClass::custom("phone").expect("valid custom class");
 
     Pipeline::builder()
         .detector(RegexDetector::emails().expect("email detector"))

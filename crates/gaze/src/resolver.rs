@@ -542,7 +542,12 @@ mod tests {
         let resolved = resolve_candidates_with_policy(
             vec![
                 candidate(0..5, PiiClass::Email, 0.70, "pan"),
-                candidate(0..5, PiiClass::custom("iban"), 0.70, "iban"),
+                candidate(
+                    0..5,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.70,
+                    "iban",
+                ),
             ],
             registry.family_policy(),
         );
@@ -573,7 +578,12 @@ mod tests {
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
                 candidate(0..5, PiiClass::Email, 0.70, "pan.structural"),
-                candidate(0..5, PiiClass::custom("iban"), 0.70, "iban.structural"),
+                candidate(
+                    0..5,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.70,
+                    "iban.structural",
+                ),
             ],
             registry.family_policy(),
             &AnchorResolver::default(),
@@ -593,8 +603,18 @@ mod tests {
 
         let resolved = resolve_candidates_with_policy(
             vec![
-                candidate(0..5, PiiClass::custom("alpha"), 0.70, "doc.alpha"),
-                candidate(0..5, PiiClass::custom("beta"), 0.70, "doc.beta"),
+                candidate(
+                    0..5,
+                    PiiClass::custom("alpha").expect("valid custom class"),
+                    0.70,
+                    "doc.alpha",
+                ),
+                candidate(
+                    0..5,
+                    PiiClass::custom("beta").expect("valid custom class"),
+                    0.70,
+                    "doc.beta",
+                ),
             ],
             registry.family_policy(),
         );
@@ -626,8 +646,18 @@ mod tests {
 
         let resolved = resolve_candidates_with_policy(
             vec![
-                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
-                candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+                candidate(
+                    0..5,
+                    PiiClass::custom("tenant-doc").expect("valid custom class"),
+                    0.70,
+                    "doc.alpha",
+                ),
+                candidate(
+                    0..5,
+                    PiiClass::custom("tenant-doc").expect("valid custom class"),
+                    0.70,
+                    "doc.beta",
+                ),
             ],
             registry.family_policy(),
         );
@@ -661,9 +691,24 @@ mod tests {
 
         let resolved = resolve_candidates_with_policy(
             vec![
-                candidate(0..5, PiiClass::custom("alpha_doc"), 0.95, "doc.alpha"),
-                candidate(0..5, PiiClass::custom("nonfamily"), 0.92, "aaa.nonfamily"),
-                candidate(0..5, PiiClass::custom("beta_doc"), 0.90, "doc.beta"),
+                candidate(
+                    0..5,
+                    PiiClass::custom("alpha_doc").expect("valid custom class"),
+                    0.95,
+                    "doc.alpha",
+                ),
+                candidate(
+                    0..5,
+                    PiiClass::custom("nonfamily").expect("valid custom class"),
+                    0.92,
+                    "aaa.nonfamily",
+                ),
+                candidate(
+                    0..5,
+                    PiiClass::custom("beta_doc").expect("valid custom class"),
+                    0.90,
+                    "doc.beta",
+                ),
             ],
             registry.family_policy(),
         );
@@ -733,8 +778,18 @@ mod tests {
         let (resolved, removal_calls) = counting_removals(|| {
             resolve_candidates_with_policy(
                 vec![
-                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.alpha"),
-                    candidate(0..5, PiiClass::custom("tenant-doc"), 0.70, "doc.beta"),
+                    candidate(
+                        0..5,
+                        PiiClass::custom("tenant-doc").expect("valid custom class"),
+                        0.70,
+                        "doc.alpha",
+                    ),
+                    candidate(
+                        0..5,
+                        PiiClass::custom("tenant-doc").expect("valid custom class"),
+                        0.70,
+                        "doc.beta",
+                    ),
                 ],
                 registry.family_policy(),
             )
@@ -768,7 +823,12 @@ mod tests {
             resolve_candidates_with_policy(
                 vec![
                     candidate(0..5, PiiClass::Email, 0.70, "pan"),
-                    candidate(0..5, PiiClass::custom("iban"), 0.70, "iban"),
+                    candidate(
+                        0..5,
+                        PiiClass::custom("iban").expect("valid custom class"),
+                        0.70,
+                        "iban",
+                    ),
                 ],
                 registry.family_policy(),
             )
@@ -854,8 +914,18 @@ mod tests {
 
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
-                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
-                candidate(6..10, PiiClass::custom("digits"), 0.50, "digits.generic"),
+                candidate(
+                    6..10,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.90,
+                    "iban.structural",
+                ),
+                candidate(
+                    6..10,
+                    PiiClass::custom("digits").expect("valid custom class"),
+                    0.50,
+                    "digits.generic",
+                ),
             ],
             registry.family_policy(),
             &anchors,
@@ -865,7 +935,10 @@ mod tests {
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].recognizer_id, "iban.structural");
-        assert_eq!(resolved[0].class, PiiClass::custom("iban"));
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::custom("iban").expect("valid custom class")
+        );
         assert_eq!(
             resolved[0].merged_sources,
             vec!["digits.generic".to_string()]
@@ -892,8 +965,18 @@ mod tests {
 
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
-                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
-                candidate(8..12, PiiClass::custom("digits"), 0.50, "digits.generic"),
+                candidate(
+                    6..10,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.90,
+                    "iban.structural",
+                ),
+                candidate(
+                    8..12,
+                    PiiClass::custom("digits").expect("valid custom class"),
+                    0.50,
+                    "digits.generic",
+                ),
             ],
             registry.family_policy(),
             &anchors,
@@ -930,8 +1013,18 @@ mod tests {
         // No anchor cue bundle registered → anchor resolves to `Missing`.
         let resolved = resolve_candidates_with_policy_and_anchors(
             vec![
-                candidate(6..10, PiiClass::custom("iban"), 0.90, "iban.structural"),
-                candidate(6..10, PiiClass::custom("digits"), 0.50, "digits.generic"),
+                candidate(
+                    6..10,
+                    PiiClass::custom("iban").expect("valid custom class"),
+                    0.90,
+                    "iban.structural",
+                ),
+                candidate(
+                    6..10,
+                    PiiClass::custom("digits").expect("valid custom class"),
+                    0.50,
+                    "digits.generic",
+                ),
             ],
             registry.family_policy(),
             &AnchorResolver::default(),
@@ -994,7 +1087,12 @@ mod tests {
     fn builtin_sub_span_does_not_evict_custom_container() {
         for container_first in [true, false] {
             let container = prioritized(
-                candidate(0..24, PiiClass::custom("url"), 0.80, "url.anchored"),
+                candidate(
+                    0..24,
+                    PiiClass::custom("url").expect("valid custom class"),
+                    0.80,
+                    "url.anchored",
+                ),
                 90,
             );
             let enclosed = candidate(12..16, PiiClass::Organization, 0.99, "ner");
@@ -1008,7 +1106,10 @@ mod tests {
 
             assert_eq!(resolved.len(), 1, "container_first={container_first}");
             assert_eq!(resolved[0].span, 0..24);
-            assert_eq!(resolved[0].class, PiiClass::custom("url"));
+            assert_eq!(
+                resolved[0].class,
+                PiiClass::custom("url").expect("valid custom class")
+            );
             assert_eq!(resolved[0].recognizer_id, "url.anchored");
             assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
             assert_eq!(resolved[0].merged_sources, vec!["ner".to_string()]);
@@ -1022,7 +1123,12 @@ mod tests {
         let resolved = resolve_candidates(vec![
             candidate(12..16, PiiClass::Organization, 0.99, "ner"),
             prioritized(
-                candidate(0..30, PiiClass::custom("url"), 0.80, "url.anchored"),
+                candidate(
+                    0..30,
+                    PiiClass::custom("url").expect("valid custom class"),
+                    0.80,
+                    "url.anchored",
+                ),
                 90,
             ),
             candidate(20..26, PiiClass::Name, 0.97, "ner"),
@@ -1030,7 +1136,10 @@ mod tests {
 
         assert_eq!(resolved.len(), 1);
         assert_eq!(resolved[0].span, 0..30);
-        assert_eq!(resolved[0].class, PiiClass::custom("url"));
+        assert_eq!(
+            resolved[0].class,
+            PiiClass::custom("url").expect("valid custom class")
+        );
         assert_eq!(resolved[0].decided_by, ConflictTier::StructuredContainment);
     }
 
@@ -1041,7 +1150,12 @@ mod tests {
     fn partial_overlap_with_a_custom_span_still_uses_class_priority() {
         let resolved = resolve_candidates(vec![
             prioritized(
-                candidate(0..24, PiiClass::custom("url"), 0.80, "url.anchored"),
+                candidate(
+                    0..24,
+                    PiiClass::custom("url").expect("valid custom class"),
+                    0.80,
+                    "url.anchored",
+                ),
                 90,
             ),
             candidate(20..30, PiiClass::Organization, 0.99, "ner"),
@@ -1060,14 +1174,19 @@ mod tests {
             prioritized(
                 candidate(
                     0..13,
-                    PiiClass::custom("tax_number"),
+                    PiiClass::custom("tax_number").expect("valid custom class"),
                     0.85,
                     "tax_number.cue_anchored",
                 ),
                 84,
             ),
             prioritized(
-                candidate(8..13, PiiClass::custom("postal_code"), 0.80, "postal.de"),
+                candidate(
+                    8..13,
+                    PiiClass::custom("postal_code").expect("valid custom class"),
+                    0.80,
+                    "postal.de",
+                ),
                 70,
             ),
         ]);
@@ -1084,7 +1203,12 @@ mod tests {
         let resolved = resolve_candidates(vec![
             candidate(0..20, PiiClass::Location, 0.95, "ner"),
             prioritized(
-                candidate(10..15, PiiClass::custom("postal_code"), 0.80, "postal.de"),
+                candidate(
+                    10..15,
+                    PiiClass::custom("postal_code").expect("valid custom class"),
+                    0.80,
+                    "postal.de",
+                ),
                 70,
             ),
         ]);

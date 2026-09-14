@@ -969,7 +969,10 @@ fn t04c_tolerant_restore_omits_empty_warning_array() {
 fn cascade_restored_class_alpha_not_trapped() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![s
-            .tokenize(&PiiClass::custom("order_ref"), "tenant_class_a")
+            .tokenize(
+                &PiiClass::custom("order_ref").expect("valid custom class"),
+                "tenant_class_a",
+            )
             .unwrap()]
     });
     assert_session_scoped_custom_token(&tokens[0]);
@@ -990,7 +993,10 @@ fn cascade_restored_song_user_artist_tenant() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
+            .map(|(class, raw)| {
+                s.tokenize(&PiiClass::custom(class).expect("valid custom class"), raw)
+                    .unwrap()
+            })
             .collect()
     });
     for token in &tokens {
@@ -1020,7 +1026,10 @@ fn cascade_restored_snake_case() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         cases
             .iter()
-            .map(|(class, raw)| s.tokenize(&PiiClass::custom(class), raw).unwrap())
+            .map(|(class, raw)| {
+                s.tokenize(&PiiClass::custom(class).expect("valid custom class"), raw)
+                    .unwrap()
+            })
             .collect()
     });
     for token in &tokens {
@@ -1037,7 +1046,10 @@ fn cascade_restored_snake_case() {
 fn cascade_llm_hallucination_still_trapped() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![s
-            .tokenize(&PiiClass::custom("order_ref"), "tenant_class_a")
+            .tokenize(
+                &PiiClass::custom("order_ref").expect("valid custom class"),
+                "tenant_class_a",
+            )
             .unwrap()]
     });
     assert_session_scoped_custom_token(&tokens[0]);
@@ -1062,7 +1074,10 @@ fn cascade_llm_hallucination_still_trapped() {
 fn cascade_trap_boundary_crossing_not_exempted() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
         vec![s
-            .tokenize(&PiiClass::custom("name_ref"), "deadbeef:email")
+            .tokenize(
+                &PiiClass::custom("name_ref").expect("valid custom class"),
+                "deadbeef:email",
+            )
             .unwrap()]
     });
     assert_session_scoped_custom_token(&tokens[0]);
@@ -4155,7 +4170,12 @@ action = "preserve"
 #[test]
 fn t19_restore_custom_token_round_trip_ok() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
-        vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
+        vec![s
+            .tokenize(
+                &PiiClass::custom("class_alpha").expect("valid custom class"),
+                "42",
+            )
+            .unwrap()]
     });
     let text = format!("Order {} is shipped.", tokens[0]);
 
@@ -4168,7 +4188,12 @@ fn t19_restore_custom_token_round_trip_ok() {
 #[test]
 fn t20_restore_custom_hallucination_exits_3() {
     let (blob, tokens) = build_blob_and_tokens(|s| {
-        vec![s.tokenize(&PiiClass::custom("class_alpha"), "42").unwrap()]
+        vec![s
+            .tokenize(
+                &PiiClass::custom("class_alpha").expect("valid custom class"),
+                "42",
+            )
+            .unwrap()]
     });
 
     let text = format!(

@@ -140,7 +140,7 @@ fn email_pipeline() -> Pipeline {
 }
 
 fn dictionary_pipeline() -> (Pipeline, DictionaryBundle) {
-    let class = PiiClass::custom("catalog_title");
+    let class = PiiClass::custom("catalog_title").expect("valid custom class");
     let pipeline = Pipeline::builder()
         .recognizer(DictionaryRecognizer::new(
             "dictionary.synthetic_catalog",
@@ -162,7 +162,7 @@ fn dictionary_pipeline() -> (Pipeline, DictionaryBundle) {
 }
 
 fn document_locale_pipeline() -> Pipeline {
-    let class = PiiClass::custom("locale_identifier");
+    let class = PiiClass::custom("locale_identifier").expect("valid custom class");
     Pipeline::builder()
         .recognizer(
             RegexDetector::with_rulepack_fields(

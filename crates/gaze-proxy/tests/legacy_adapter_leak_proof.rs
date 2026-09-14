@@ -104,7 +104,7 @@ fn postal_probe_pipeline(class_label: &str) -> Pipeline {
 }
 
 fn dictionary_probe() -> (Pipeline, DictionaryBundle) {
-    let class = PiiClass::custom("catalog_title");
+    let class = PiiClass::custom("catalog_title").expect("valid custom class");
     let pipeline = Pipeline::builder()
         .recognizer(DictionaryRecognizer::new(
             "dictionary.synthetic_catalog",

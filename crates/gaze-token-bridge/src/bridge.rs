@@ -443,7 +443,7 @@ fn build_demo_pipeline(docs: &[SyntheticDoc]) -> Result<Pipeline, BridgeError> {
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
         .rule(ClassRule::new(PiiClass::Organization, Action::Tokenize))
         .rule(ClassRule::new(
-            PiiClass::custom("customer_id"),
+            PiiClass::custom("customer_id").expect("valid custom class"),
             Action::Tokenize,
         ))
         .rule(DefaultRule::new(Action::Preserve))
@@ -465,7 +465,10 @@ impl SyntheticCorpusDetector {
             entries.push((doc.name.to_string(), PiiClass::Name));
             entries.push((doc.email.to_string(), PiiClass::Email));
             entries.push((doc.organization.to_string(), PiiClass::Organization));
-            entries.push((doc.customer_id.to_string(), PiiClass::custom("customer_id")));
+            entries.push((
+                doc.customer_id.to_string(),
+                PiiClass::custom("customer_id").expect("valid custom class"),
+            ));
         }
         // Longest values first so a longer value claims its span before any shorter
         // value that might be a substring of it.

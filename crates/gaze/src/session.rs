@@ -546,6 +546,7 @@ impl Session {
     where
         F: FnOnce(usize) -> String,
     {
+        class.validate_custom_name()?;
         let family_key = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
         Ok(
             self.mutate_state(|state| {
@@ -934,6 +935,7 @@ impl<'session> SessionTransaction<'session> {
         class: &PiiClass,
         raw: &str,
     ) -> Result<String> {
+        class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(
             intern_mapping_in_state(&mut self.staged, family, class, raw, |index| {
@@ -944,6 +946,7 @@ impl<'session> SessionTransaction<'session> {
     }
 
     pub fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(intern_mapping_in_state(
             &mut self.staged,
@@ -1641,7 +1644,7 @@ fn collect_phone_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in phone_pattern().find_iter(text) {
         let raw = matched.as_str();
         findings.push(StructuralFinding {
-            class: PiiClass::custom("phone"),
+            class: PiiClass::custom("phone").expect("valid custom class"),
             raw: raw.to_string(),
             canonical: ascii_digits(raw),
             location: matched.range(),
@@ -1657,7 +1660,7 @@ fn collect_iban_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
             continue;
         }
         findings.push(StructuralFinding {
-            class: PiiClass::custom("iban"),
+            class: PiiClass::custom("iban").expect("valid custom class"),
             raw: raw.to_string(),
             canonical,
             location: matched.range(),
@@ -1673,7 +1676,7 @@ fn collect_credit_card_findings(text: &str, findings: &mut Vec<StructuralFinding
             continue;
         }
         findings.push(StructuralFinding {
-            class: PiiClass::custom("credit_card"),
+            class: PiiClass::custom("credit_card").expect("valid custom class"),
             raw: raw.to_string(),
             canonical,
             location: matched.range(),
@@ -1685,7 +1688,7 @@ fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in api_key_pattern().find_iter(text) {
         let raw = matched.as_str();
         findings.push(StructuralFinding {
-            class: PiiClass::custom("api_key"),
+            class: PiiClass::custom("api_key").expect("valid custom class"),
             raw: raw.to_string(),
             canonical: raw.to_string(),
             location: matched.range(),
@@ -1923,7 +1926,7 @@ fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
 
     let (class, ordinal) = body.rsplit_once('_')?;
     let ordinal = parse_ascii_ordinal(ordinal)?;
-    let class = PiiClass::from_canonical_str(class).unwrap_or_else(|| PiiClass::custom(class));
+    let class = PiiClass::from_canonical_str(class).or_else(|| PiiClass::custom(class).ok())?;
     Some((class, ordinal))
 }
 
@@ -2541,7 +2544,7 @@ mod tests {
             let builtin_token = session
                 .tokenize(&builtin, &builtin_value)
                 .expect("builtin token");
-            let custom_class = PiiClass::custom(name);
+            let custom_class = PiiClass::custom(name).expect("valid custom class");
             let custom_token = session
                 .tokenize(&custom_class, &custom_value)
                 .expect("custom token");
@@ -2563,8 +2566,8 @@ mod tests {
     #[test]
     fn tokenize_distinguishes_custom_classes_with_matching_pascal_case() {
         let session = Session::new(Scope::Ephemeral).expect("session");
-        let first_class = PiiClass::custom("email");
-        let second_class = PiiClass::custom("custom_email");
+        let first_class = PiiClass::custom("email").expect("valid custom class");
+        let second_class = PiiClass::custom("custom_email").expect("valid custom class");
 
         let first_token = session
             .tokenize(&first_class, "alice@corp.com")
@@ -2802,16 +2805,28 @@ mod tests {
     fn restore_boundary_events_cover_structural_identifier_scope() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         session
-            .tokenize(&PiiClass::custom("phone"), "+1-555-0101")
+            .tokenize(
+                &PiiClass::custom("phone").expect("valid custom class"),
+                "+1-555-0101",
+            )
             .expect("phone token");
         session
-            .tokenize(&PiiClass::custom("iban"), "DE89 3704 0044 0532 0130 00")
+            .tokenize(
+                &PiiClass::custom("iban").expect("valid custom class"),
+                "DE89 3704 0044 0532 0130 00",
+            )
             .expect("iban token");
         session
-            .tokenize(&PiiClass::custom("credit_card"), "4111 1111 1111 1111")
+            .tokenize(
+                &PiiClass::custom("credit_card").expect("valid custom class"),
+                "4111 1111 1111 1111",
+            )
             .expect("card token");
         session
-            .tokenize(&PiiClass::custom("api_key"), "sk-test-00000000000000000000")
+            .tokenize(
+                &PiiClass::custom("api_key").expect("valid custom class"),
+                "sk-test-00000000000000000000",
+            )
             .expect("api key token");
 
         let events = session.restore_boundary_events(
@@ -2823,35 +2838,35 @@ mod tests {
 
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("phone")
+                && event.class == PiiClass::custom("phone").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("phone")
+                && event.class == PiiClass::custom("phone").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("iban")
+                && event.class == PiiClass::custom("iban").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("iban")
+                && event.class == PiiClass::custom("iban").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("credit_card")
+                && event.class == PiiClass::custom("credit_card").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("credit_card")
+                && event.class == PiiClass::custom("credit_card").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("api_key")
+                && event.class == PiiClass::custom("api_key").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("api_key")
+                && event.class == PiiClass::custom("api_key").expect("valid custom class")
         }));
     }
 

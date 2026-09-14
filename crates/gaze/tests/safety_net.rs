@@ -1151,8 +1151,11 @@ fn scan_safety_nets_structured_does_not_mutate_session() {
 
 #[test]
 fn scan_safety_nets_structured_covers_scalar_leaves() {
-    let net =
-        MockNet::new(Some(0..2), PiiClass::custom("customer_id")).with_field_path("customer_id");
+    let net = MockNet::new(
+        Some(0..2),
+        PiiClass::custom("customer_id").expect("valid custom class"),
+    )
+    .with_field_path("customer_id");
     let pipeline = pipeline_with_net(Some(net));
     let session = session();
     let document = BTreeMap::from([("customer_id".to_string(), Value::I64(42))]);

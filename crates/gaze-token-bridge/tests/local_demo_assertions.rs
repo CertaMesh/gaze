@@ -73,7 +73,10 @@ impl SyntheticFixtureOutputSafetyNet {
         for doc in docs {
             entries.push((doc.name.to_string(), PiiClass::Name));
             entries.push((doc.email.to_string(), PiiClass::Email));
-            entries.push((doc.customer_id.to_string(), PiiClass::custom("customer_id")));
+            entries.push((
+                doc.customer_id.to_string(),
+                PiiClass::custom("customer_id").expect("valid custom class"),
+            ));
             entries.push((doc.organization.to_string(), PiiClass::Organization));
         }
         entries.sort_by_key(|entry| std::cmp::Reverse(entry.0.len()));

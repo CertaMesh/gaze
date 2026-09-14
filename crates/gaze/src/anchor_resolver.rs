@@ -152,7 +152,7 @@ mod tests {
         )]));
         let candidate = Candidate::new(
             5..24,
-            PiiClass::custom("iban"),
+            PiiClass::custom("iban").expect("valid custom class"),
             "iban.structural",
             0.9,
             80,

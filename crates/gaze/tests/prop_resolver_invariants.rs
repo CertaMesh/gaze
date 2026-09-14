@@ -57,8 +57,8 @@ fn class_for(index: usize) -> PiiClass {
         1 => PiiClass::Name,
         2 => PiiClass::Organization,
         3 => PiiClass::Location,
-        4 => PiiClass::custom("iban"),
-        _ => PiiClass::custom("pan"),
+        4 => PiiClass::custom("iban").expect("valid custom class"),
+        _ => PiiClass::custom("pan").expect("valid custom class"),
     }
 }
 

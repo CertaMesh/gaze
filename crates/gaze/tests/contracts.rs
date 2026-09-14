@@ -1572,7 +1572,9 @@ fn tokenize_assigns_indices_left_to_right() {
 #[test]
 fn custom_pii_class_normalizes_name() {
     assert_eq!(
-        PiiClass::custom(" Class-Alpha ").as_custom_name(),
+        PiiClass::custom(" Class-Alpha ")
+            .expect("valid custom class")
+            .as_custom_name(),
         Some("class_alpha")
     );
 }

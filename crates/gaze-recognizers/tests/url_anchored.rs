@@ -40,7 +40,7 @@ fn empty_context() -> Context {
 }
 
 fn url_class() -> PiiClass {
-    PiiClass::custom("url")
+    PiiClass::custom("url").expect("valid custom class")
 }
 
 /// The core bundle assembled through the real activation path, with `global` as the only active

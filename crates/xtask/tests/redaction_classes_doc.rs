@@ -368,7 +368,11 @@ fn expected_class_rows() -> BTreeSet<ClassRow> {
         (PiiClass::Name, "Name", "name"),
         (PiiClass::Location, "Location", "location"),
         (PiiClass::Organization, "Organization", "organization"),
-        (PiiClass::custom("reference"), "Custom", "custom:<name>"),
+        (
+            PiiClass::custom("reference").expect("valid custom class"),
+            "Custom",
+            "custom:<name>",
+        ),
     ];
     actual_policy_pairs
         .into_iter()

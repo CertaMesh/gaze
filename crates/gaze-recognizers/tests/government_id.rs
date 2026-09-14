@@ -64,7 +64,7 @@ fn pipeline_for(chain: &[LocaleTag]) -> Pipeline {
     policy.rules = CLASSES
         .iter()
         .map(|class| RuleSpec::Class {
-            class: PiiClass::custom(class),
+            class: PiiClass::custom(class).expect("valid custom class"),
             action: Action::Tokenize,
         })
         .chain(std::iter::once(RuleSpec::Default {
@@ -304,7 +304,7 @@ fn ssn_us_still_covers_english_cues_under_its_own_locale() {
     let mut policy = gaze::Policy::default();
     policy.rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("ssn"),
+            class: PiiClass::custom("ssn").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {

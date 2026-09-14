@@ -1367,30 +1367,30 @@ window_chars = 48
             BTreeSet::from([
                 PiiClass::Email,
                 PiiClass::Name,
-                PiiClass::custom("phone"),
-                PiiClass::custom("iban"),
+                PiiClass::custom("phone").expect("valid custom class"),
+                PiiClass::custom("iban").expect("valid custom class"),
                 PiiClass::Custom("family:payment-card-or-iban".to_string()),
-                PiiClass::custom("credit_card"),
-                PiiClass::custom("ip_address"),
-                PiiClass::custom("eth_address"),
-                PiiClass::custom("url"),
-                PiiClass::custom("security_token"),
-                PiiClass::custom("tax_number"),
-                PiiClass::custom("driver_license"),
-                PiiClass::custom("national_id"),
-                PiiClass::custom("passport"),
-                PiiClass::custom("aadhaar"),
-                PiiClass::custom("nir"),
-                PiiClass::custom("steuer_id"),
-                PiiClass::custom("vat_id"),
-                PiiClass::custom("bsn"),
-                PiiClass::custom("cpf"),
-                PiiClass::custom("cnpj"),
-                PiiClass::custom("nhs_number"),
-                PiiClass::custom("ssn"),
-                PiiClass::custom("nino"),
-                PiiClass::custom("pan"),
-                PiiClass::custom("postal_code"),
+                PiiClass::custom("credit_card").expect("valid custom class"),
+                PiiClass::custom("ip_address").expect("valid custom class"),
+                PiiClass::custom("eth_address").expect("valid custom class"),
+                PiiClass::custom("url").expect("valid custom class"),
+                PiiClass::custom("security_token").expect("valid custom class"),
+                PiiClass::custom("tax_number").expect("valid custom class"),
+                PiiClass::custom("driver_license").expect("valid custom class"),
+                PiiClass::custom("national_id").expect("valid custom class"),
+                PiiClass::custom("passport").expect("valid custom class"),
+                PiiClass::custom("aadhaar").expect("valid custom class"),
+                PiiClass::custom("nir").expect("valid custom class"),
+                PiiClass::custom("steuer_id").expect("valid custom class"),
+                PiiClass::custom("vat_id").expect("valid custom class"),
+                PiiClass::custom("bsn").expect("valid custom class"),
+                PiiClass::custom("cpf").expect("valid custom class"),
+                PiiClass::custom("cnpj").expect("valid custom class"),
+                PiiClass::custom("nhs_number").expect("valid custom class"),
+                PiiClass::custom("ssn").expect("valid custom class"),
+                PiiClass::custom("nino").expect("valid custom class"),
+                PiiClass::custom("pan").expect("valid custom class"),
+                PiiClass::custom("postal_code").expect("valid custom class"),
             ])
         );
     }
@@ -1466,7 +1466,7 @@ priority = 1
         assert!(
             rulepack
                 .activated_classes()
-                .contains(&PiiClass::custom("test_only")),
+                .contains(&PiiClass::custom("test_only").expect("valid custom class")),
             "new recognizer class must be derived from rulepack data"
         );
     }

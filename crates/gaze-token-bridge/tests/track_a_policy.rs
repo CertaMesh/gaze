@@ -204,7 +204,7 @@ fn default_deny_when_no_allow_rule_matches() {
 #[test]
 fn class_not_allowed_denies_after_owner_side_resolution() {
     let principal = admin_principal();
-    let class = PiiClass::custom("customer_id");
+    let class = PiiClass::custom("customer_id").expect("valid custom class");
     let (session, token) = session_with_token(&principal, class.clone(), "demo-customer-id-001");
 
     let (reason, entity_class, raw_sha256) =

@@ -22,7 +22,7 @@ pub const CHECKSUMS_FILE: &str = "SHA256SUMS";
 ///   `{ "B-PER": "Name", "I-PER": "Name", "B-LOC": "Location", "I-LOC": "Location" }`.
 ///
 /// Values are matched against `PiiClass` variants by lowercase name, falling
-/// back to `PiiClass::custom(value)` if no built-in matches. The sentinel
+/// back to `PiiClass::custom(value)` if no built-in matches; empty-normalized names fail loading. The sentinel
 /// value `"drop"` (or `"ignore"`, `""`) removes the entry entirely so the
 /// detector silently skips that label.
 ///

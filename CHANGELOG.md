@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Custom class names that normalize to empty (for example `custom:!!!`) are now
+  a typed load-time error. `PiiClass::custom` returns `Result<PiiClass,
+  EmptyCustomClassName>`; callers must handle invalid names. Live and staged
+  sessions also reject empty custom classes constructed directly through the
+  enum before changing session state. Valid session tokens continue to
+  round-trip through the token bridge's strict parser (#507).
+
 ## [0.14.0] - 2026-09-11
 
 ### Fixed

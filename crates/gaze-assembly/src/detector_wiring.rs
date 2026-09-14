@@ -371,7 +371,12 @@ pub(crate) fn register_context_dictionaries(
         if registered_dictionaries.contains(name) {
             continue;
         }
-        let class = class_for_dictionary(policy, context, name, PiiClass::custom(name))?;
+        let class = class_for_dictionary(
+            policy,
+            context,
+            name,
+            PiiClass::custom(name).map_err(gaze::Error::from)?,
+        )?;
         builder.recognizer(DictionaryRecognizer::new(
             format!("context/{name}"),
             class,
