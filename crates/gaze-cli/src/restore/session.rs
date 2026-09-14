@@ -30,6 +30,35 @@ mod tests {
     use gaze::{PiiClass, Scope, Session};
 
     #[test]
+    fn restore_known_session_bare_tokens_after_word_characters() {
+        for class in [
+            PiiClass::Name,
+            PiiClass::Location,
+            PiiClass::Organization,
+            PiiClass::Custom("class_alpha".into()),
+        ] {
+            let session = Session::new(Scope::Ephemeral).unwrap();
+            let token = session
+                .format_preserving_fake(&class, "Synthetic Value")
+                .unwrap();
+            for leading in ["rec_", "x", "7", "é", "中", "\u{301}", "(", ""] {
+                let assessment = session
+                    .assess_restore_text(&format!("{leading}{token}."))
+                    .unwrap();
+                for mode in [RestoreMode::Strict, RestoreMode::Tolerant] {
+                    assert!(restore_pass2_validate(&assessment, mode)
+                        .unwrap()
+                        .is_empty());
+                }
+                assert_eq!(
+                    assessment.into_restored().text,
+                    format!("{leading}Synthetic Value.")
+                );
+            }
+        }
+    }
+
+    #[test]
     fn pass2_accepts_dense_authorized_shapes_and_audits_bare_literals() {
         let session = Session::new(Scope::Ephemeral).unwrap();
         let token = session

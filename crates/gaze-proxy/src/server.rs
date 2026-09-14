@@ -1671,8 +1671,47 @@ pub struct AdapterSnapshot {
     pub upstream: String,
 }
 
+/// Bind the configured address and serve until cancelled or the server fails.
 pub async fn serve(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<(), ProxyError> {
     let bind = config.bind;
+    let app = build_app(config, pipeline)?;
+    let listener = TcpListener::bind(bind)
+        .await
+        .map_err(|source| ProxyError::Server { source })?;
+    serve_app(listener, app).await
+}
+
+/// Serve on an already bound listener, retaining ownership throughout startup.
+///
+/// The listener must match `config.bind` exactly, except that a configured port of
+/// zero accepts the listener's assigned port. IP addresses (including wildcard
+/// addresses) must match so listener ownership cannot bypass principal validation.
+/// Health reports the actual bound address. Configuration is validated before any
+/// request is accepted; cancellation and routing are the same as [`serve`].
+pub async fn serve_with_listener(
+    mut config: ProxyConfig,
+    pipeline: Arc<Pipeline>,
+    listener: TcpListener,
+) -> Result<(), ProxyError> {
+    let actual = listener
+        .local_addr()
+        .map_err(|source| ProxyError::Server { source })?;
+    if config.bind.port() == 0 {
+        config.bind.set_port(actual.port());
+    }
+    if config.bind != actual {
+        return Err(ProxyError::Server {
+            source: std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "listener address does not match proxy configuration",
+            ),
+        });
+    }
+    let app = build_app(config, pipeline)?;
+    serve_app(listener, app).await
+}
+
+fn build_app(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<Router, ProxyError> {
     let direct = DirectRuntime::from_config(&config)?.map(Arc::new);
     let state = AppState {
         config: Arc::new(config),
@@ -1682,13 +1721,13 @@ pub async fn serve(config: ProxyConfig, pipeline: Arc<Pipeline>) -> Result<(), P
         sessions: Arc::new(RwLock::new(HashMap::new())),
         started_at: Instant::now(),
     };
-    let app = Router::new()
+    Ok(Router::new()
         .route("/_gaze_proxy/healthz", get(healthz))
         .fallback(proxy)
-        .with_state(state);
-    let listener = TcpListener::bind(bind)
-        .await
-        .map_err(|source| ProxyError::Server { source })?;
+        .with_state(state))
+}
+
+async fn serve_app(listener: TcpListener, app: Router) -> Result<(), ProxyError> {
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -3311,6 +3350,122 @@ mod tests {
         control.body_started.notified().await;
         let expired_at = Instant::now() + Duration::from_secs(60 * 60);
         (response, control, registry, expired_at, server)
+    }
+
+    async fn assert_owned_listener_health(config: ProxyConfig, listener: TcpListener) {
+        let actual = listener.local_addr().unwrap();
+        let destination = SocketAddr::from(([127, 0, 0, 1], actual.port()));
+        let server = serve_with_listener(config, Arc::new(email_pipeline()), listener);
+        let health = async {
+            let response = Client::new()
+                .get(format!("http://{destination}/_gaze_proxy/healthz"))
+                .send()
+                .await
+                .unwrap()
+                .error_for_status()
+                .unwrap()
+                .json::<serde_json::Value>()
+                .await
+                .unwrap();
+            assert_eq!(response["bind"], actual.to_string());
+            assert_eq!(response["adapters"][0]["name"], "anthropic");
+        };
+        tokio::select! {
+            result = server => panic!("owned listener server stopped: {result:?}"),
+            result = tokio::time::timeout(Duration::from_secs(3), health) => result.unwrap(),
+        }
+        // Dropping the serving future releases the listener, as with `serve`.
+    }
+
+    #[tokio::test]
+    async fn reserved_port_rebind_fails_but_owned_listener_handoff_serves() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bind = listener.local_addr().unwrap();
+        let config = ProxyConfig::anthropic_direct(
+            bind,
+            AnthropicAdapter::new(Url::parse("http://127.0.0.1:1").unwrap()),
+        );
+        let error = serve(config.clone(), Arc::new(email_pipeline()))
+            .await
+            .unwrap_err();
+        assert!(matches!(error, ProxyError::Server { source }
+            if source.kind() == std::io::ErrorKind::AddrInUse));
+        assert_owned_listener_health(config, listener).await;
+    }
+
+    #[tokio::test]
+    async fn owned_listener_resolves_ephemeral_port_in_health() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let config = ProxyConfig::anthropic_direct(
+            "127.0.0.1:0".parse().unwrap(),
+            AnthropicAdapter::new(Url::parse("http://127.0.0.1:1").unwrap()),
+        );
+        assert_owned_listener_health(config, listener).await;
+    }
+
+    #[tokio::test]
+    async fn owned_listener_rejects_wrong_ip_wildcard_and_port() {
+        for (listen, configured) in [
+            ("0.0.0.0:0", "127.0.0.1:0"),
+            ("127.0.0.1:0", "0.0.0.0:0"),
+            ("127.0.0.1:0", "127.0.0.2:0"),
+            ("127.0.0.1:0", "127.0.0.1:1"),
+        ] {
+            let listener = TcpListener::bind(listen).await.unwrap();
+            let config = ProxyConfig::anthropic_direct(
+                configured.parse().unwrap(),
+                AnthropicAdapter::new(Url::parse("http://127.0.0.1:1").unwrap()),
+            );
+            let error = serve_with_listener(config, Arc::new(email_pipeline()), listener)
+                .await
+                .unwrap_err();
+            assert!(matches!(error, ProxyError::Server { source }
+                if source.kind() == std::io::ErrorKind::InvalidInput));
+        }
+    }
+
+    #[tokio::test]
+    async fn owned_non_loopback_listener_requires_explicit_resolver() {
+        let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let config = ProxyConfig::anthropic_direct(
+            "0.0.0.0:0".parse().unwrap(),
+            AnthropicAdapter::new(Url::parse("http://127.0.0.1:1").unwrap()),
+        );
+        let error = serve_with_listener(config, Arc::new(email_pipeline()), listener)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, ProxyError::DaemonConfig { detail }
+            if detail == "direct_principal_required"));
+
+        let listener = TcpListener::bind("0.0.0.0:0").await.unwrap();
+        let config = ProxyConfig::anthropic_direct(
+            "0.0.0.0:0".parse().unwrap(),
+            AnthropicAdapter::builder(Url::parse("http://127.0.0.1:1").unwrap())
+                .principal_resolver(Arc::new(SyntheticPrincipalResolver))
+                .build()
+                .unwrap(),
+        );
+        assert_owned_listener_health(config, listener).await;
+    }
+
+    #[tokio::test]
+    async fn serve_validates_before_rebind_and_owned_listener_validates_before_serving() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let config = ProxyConfig::anthropic_direct(
+            listener.local_addr().unwrap(),
+            AnthropicAdapter::new(Url::parse("http://synthetic:credential@127.0.0.1").unwrap()),
+        );
+        for error in [
+            serve(config.clone(), Arc::new(email_pipeline()))
+                .await
+                .unwrap_err(),
+            serve_with_listener(config, Arc::new(email_pipeline()), listener)
+                .await
+                .unwrap_err(),
+        ] {
+            assert!(matches!(error, ProxyError::DaemonConfig { detail }
+                if detail == "direct_upstream_invalid"));
+        }
     }
 
     #[test]

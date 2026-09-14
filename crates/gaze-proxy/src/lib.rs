@@ -62,9 +62,9 @@ pub use principal::{
     TlsClientCertificateHash, MAX_AUTHENTICATED_PRINCIPAL_BYTES, MAX_LOCAL_AUTH_CREDENTIAL_BYTES,
 };
 pub use server::{
-    classify_upstream_status, parse_request_stream_format, serve, validate_declared_body,
-    validate_direct_response_head, DirectResponseHead, HealthSnapshot, DIRECT_PROXY_ERROR_FRAME,
-    DIRECT_PROXY_PING_FRAME,
+    classify_upstream_status, parse_request_stream_format, serve, serve_with_listener,
+    validate_declared_body, validate_direct_response_head, DirectResponseHead, HealthSnapshot,
+    DIRECT_PROXY_ERROR_FRAME, DIRECT_PROXY_PING_FRAME,
 };
 
 #[derive(Clone)]

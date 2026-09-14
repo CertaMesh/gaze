@@ -1620,44 +1620,85 @@ async fn eviction_preserves_unpersisted_state_after_caller_cancellation() {
     );
 }
 
-#[tokio::test]
-async fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
+#[test]
+fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
     use std::future::Future;
     use std::task::Poll;
+    use std::time::Duration;
 
-    let dir = TempDir::new().unwrap();
-    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
-    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
-    let store = BridgeSessionStore::from_config(&config.session).unwrap();
-    let a = store.get(SID_A).await.unwrap();
-    let weak = Arc::downgrade(&a);
-    drop(a);
+    const BOUND: Duration = Duration::from_secs(10);
+    struct ReleaseOnDrop(std::sync::mpsc::Sender<()>);
+    impl Drop for ReleaseOnDrop {
+        fn drop(&mut self) {
+            // Also release during assertion unwinding or timeout cancellation.
+            let _ = self.0.send(());
+        }
+    }
 
-    // Poll admission into I/O, after its inactivity hint and before removal.
-    let mut admission = Box::pin(store.get(SID_B));
-    std::future::poll_fn(|cx| {
-        assert!(admission.as_mut().poll(cx).is_pending());
-        Poll::Ready(())
-    })
-    .await;
-    let revived = weak
-        .upgrade()
-        .expect("candidate remains cached during admission");
-    drop(admission.await);
-
-    // Public Weak::upgrade bypasses the cache lock and creates a live caller.
-    let token = revived
-        .lock()
-        .await
-        .tokenize(&PiiClass::Email, RAW_EMAIL)
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .max_blocking_threads(1)
+        .enable_all()
+        .build()
         .unwrap();
-    let reacquired = store.get(SID_A).await.unwrap();
-    assert_eq!(
-        reacquired.lock().await.restore(&token),
-        Some(RAW_EMAIL.to_string()),
-        "eviction split the canonical manifest from a revived public session"
-    );
-    assert!(Arc::ptr_eq(&revived, &reacquired));
+    runtime.block_on(async {
+        tokio::time::timeout(BOUND, async {
+            let dir = TempDir::new().unwrap();
+            std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+            let config =
+                BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+            let store = BridgeSessionStore::from_config(&config.session).unwrap();
+            let a = store.get(SID_A).await.unwrap();
+            let weak = Arc::downgrade(&a);
+            drop(a);
+
+            // Tokio fs::read uses spawn_blocking. Occupy the only blocking worker
+            // after setup so admission must suspend after its inactivity hint.
+            let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let release = ReleaseOnDrop(release_tx);
+            let blocker = tokio::task::spawn_blocking(move || {
+                ready_tx.send(()).expect("signal blocking worker ready");
+                release_rx.recv_timeout(BOUND)
+            });
+            ready_rx.recv_timeout(BOUND).expect("blocking worker ready");
+            let mut admission = Box::pin(store.get(SID_B));
+            std::future::poll_fn(|cx| {
+                assert!(admission.as_mut().poll(cx).is_pending());
+                Poll::Ready(())
+            })
+            .await;
+            let revived = weak
+                .upgrade()
+                .expect("candidate remains cached during admission");
+            drop(release);
+            blocker
+                .await
+                .expect("blocking worker joined")
+                .expect("barrier released before deadline");
+            let admission_result = admission.await.map(drop);
+
+            // Public Weak::upgrade bypasses the cache lock and creates a live caller.
+            let token = revived
+                .lock()
+                .await
+                .tokenize(&PiiClass::Email, RAW_EMAIL)
+                .unwrap();
+            let reacquired = store.get(SID_A).await.unwrap();
+            assert_eq!(
+                reacquired.lock().await.restore(&token),
+                Some(RAW_EMAIL.to_string()),
+                "eviction split the canonical manifest from a revived public session"
+            );
+            assert!(Arc::ptr_eq(&revived, &reacquired));
+            assert!(matches!(
+                admission_result,
+                Err(gaze_mcp_bridge::BridgeError::LimitExceeded(_))
+            ));
+            assert_eq!(store.len().await, 1);
+        })
+        .await
+        .expect("bounded staged-load regression");
+    });
 }
 
 #[tokio::test]
