@@ -5,6 +5,18 @@ workspace (the published cargo name; the library is imported as `gaze`).
 Pair it with [CHANGELOG.md](CHANGELOG.md): CHANGELOG records what changed,
 UPGRADE.md tells you what *you* need to do.
 
+## Pending security fix: prefix reuse disabled
+
+`enable_prefix_cache()` and `PipelineOptimizationConfig::with_prefix_cache(true)`
+remain source-compatible but no longer skip detection or retain raw prefixes.
+Every input is fully rescanned under its current field, locale, dictionaries,
+recognizers and rules. Both transactional prefix-cache modes use that same path.
+
+Adopters that enabled prefix reuse should budget for full-scan latency on growing
+inputs and update audit consumers to expect actual recognizer/rule rows instead
+of `prefix_cache` provenance. Token mappings and manifest restoration retain their
+normal behavior. See [the safety rationale](docs/explanation/pipeline/tier4-pipeline-gating.md).
+
 ## How this file is organized
 
 - One H2 section per `MAJOR.MINOR` release in **reverse-chronological** order.

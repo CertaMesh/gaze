@@ -1733,3 +1733,85 @@ fn sqlite_logger_migrates_legacy_tables_and_purges_by_created_at() {
     assert_eq!(logger.purge_before(4_102_444_800_000).unwrap(), 1);
     assert_eq!(logger.entries().unwrap().len(), 0);
 }
+
+#[test]
+fn prefix_cache_respects_field_decisions_and_rescans_same_field() {
+    for staged in [false, true] {
+        let session = Session::new(Scope::Ephemeral).expect("session");
+        let logger = MemoryLogger::default();
+        let pipeline = Pipeline::builder()
+            .detector(RegexDetector::emails().expect("email detector"))
+            .rule(ColumnRule::new("preserve", Action::Preserve))
+            .rule(DefaultRule::new(Action::Tokenize))
+            .redaction_logger(logger.clone())
+            .enable_prefix_cache()
+            .build()
+            .expect("pipeline");
+        let mut transaction = session.begin_transaction();
+        let mut redact = |raw| {
+            if staged {
+                pipeline.pseudonymize_transaction_with_detect_context(
+                    &mut transaction,
+                    raw,
+                    &[],
+                    &gaze::DictionaryBundle::default(),
+                )
+            } else {
+                pipeline.redact(&session, raw)
+            }
+            .expect("redact")
+        };
+        // Preserve runs first so stale decisions would expose the later tokenize field.
+        for suffix in ["", " extra"] {
+            let clean = redact(RawDocument::Structured(BTreeMap::from([
+                (
+                    "preserve".into(),
+                    Value::String("alice@example.invalid x".into()),
+                ),
+                (
+                    "tokenize".into(),
+                    Value::String(format!("alice@example.invalid x{suffix}")),
+                ),
+            ])));
+            let CleanDocument::Structured(fields) = clean else {
+                panic!("expected structured document");
+            };
+            assert_eq!(fields["preserve"], "alice@example.invalid x");
+            let protected = fields["tokenize"].as_str().unwrap();
+            assert!(!protected.contains("alice@example.invalid"));
+            assert!(protected.contains(":Email_1>"));
+        }
+        // Later extensions still protect the complete field and audit the current decision.
+        let clean = redact(RawDocument::Structured(BTreeMap::from([(
+            "tokenize".into(),
+            Value::String("alice@example.invalid x extra more".into()),
+        )])));
+        let CleanDocument::Structured(fields) = clean else {
+            panic!("expected structured document");
+        };
+        assert!(!fields["tokenize"]
+            .as_str()
+            .unwrap()
+            .contains("alice@example.invalid"));
+        let entries = logger.entries();
+        assert_eq!(entries.len(), 5);
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.action == Action::Preserve)
+                .count(),
+            2
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.action == Action::Tokenize)
+                .count(),
+            3
+        );
+        assert!(entries.iter().all(|entry| {
+            entry.source != "prefix_cache"
+                && entry.provenance_stage.as_deref() != Some("prefix_cache")
+        }));
+    }
+}
