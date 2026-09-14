@@ -68,7 +68,8 @@ pub struct SessionCfg {
     pub dir: Option<PathBuf>,
     pub key_env: Option<String>,
     /// Maximum cached sessions. File mode persists inactive LRU candidates
-    /// before eviction; persistence failure rejects admission. Per-id file
+    /// before eviction; persistence failure rejects admission. Strong or weak
+    /// session handles retain their candidate and can reject admission. Per-id file
     /// locks are retained separately and are not bounded by this limit.
     #[serde(default = "default_max_sessions")]
     pub max_sessions: usize,

@@ -1154,7 +1154,14 @@ async fn file_mode_lru_keeps_recently_used_session_cached() {
         guard.tokenize(&PiiClass::Email, RAW_EMAIL).expect("token")
     };
     let a_identity = Arc::downgrade(&store.get(sids[0]).await.unwrap());
-    let b_identity = Arc::downgrade(&store.get(sids[1]).await.expect("b"));
+    let token_b = store
+        .get(sids[1])
+        .await
+        .expect("b")
+        .lock()
+        .await
+        .tokenize(&PiiClass::Email, RAW_EMAIL)
+        .unwrap();
     // Touch sid_a → it becomes most-recently-used; sid_b is now the LRU.
     let _ = store.get(sids[0]).await;
     // Insert sid_c → cap exceeded → evict the LRU (sid_b), not sid_a.
@@ -1165,9 +1172,28 @@ async fn file_mode_lru_keeps_recently_used_session_cached() {
         a_identity.upgrade().is_some(),
         "recent session stays cached"
     );
-    assert!(
-        b_identity.upgrade().is_none(),
-        "least recent session was evicted"
+    // Eviction persists B, whereas A still has no file. Observe disk state
+    // without a weak B handle, which now deliberately prevents eviction.
+    let disk = BridgeSessionStore::from_config(&config.session).unwrap();
+    assert_eq!(
+        disk.get(sids[1])
+            .await
+            .unwrap()
+            .lock()
+            .await
+            .restore(&token_b),
+        Some(RAW_EMAIL.to_string()),
+        "least recent session was persisted for eviction"
+    );
+    assert_eq!(
+        disk.get(sids[0])
+            .await
+            .unwrap()
+            .lock()
+            .await
+            .restore(&token_a),
+        None,
+        "most recent session was not persisted for eviction"
     );
 
     // sid_a survived eviction: its cached token is still valid (no disk reload).
@@ -1178,11 +1204,11 @@ async fn file_mode_lru_keeps_recently_used_session_cached() {
         "LRU must keep the most-recently-used session cached"
     );
 
-    // sid_b was evicted after its empty state was persisted; reload is empty.
+    // sid_b was evicted after its current state was persisted; reload restores it.
     let b_reloaded = store.get(sids[1]).await.expect("b reloaded");
     assert_eq!(
-        b_reloaded.lock().await.snapshot_entries().len(),
-        0,
+        b_reloaded.lock().await.restore(&token_b),
+        Some(RAW_EMAIL.to_string()),
         "LRU must evict the least-recently-used session"
     );
 }
@@ -1607,7 +1633,7 @@ async fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
     let weak = Arc::downgrade(&a);
     drop(a);
 
-    // Poll admission into persistence I/O, after its inactivity check.
+    // Poll admission into I/O, after its inactivity hint and before removal.
     let mut admission = Box::pin(store.get(SID_B));
     std::future::poll_fn(|cx| {
         assert!(admission.as_mut().poll(cx).is_pending());
@@ -1616,7 +1642,7 @@ async fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
     .await;
     let revived = weak
         .upgrade()
-        .expect("candidate remains cached during persist");
+        .expect("candidate remains cached during admission");
     drop(admission.await);
 
     // Public Weak::upgrade bypasses the cache lock and creates a live caller.
@@ -1632,4 +1658,42 @@ async fn r3_weak_upgrade_during_eviction_preserves_canonical_manifest() {
         "eviction split the canonical manifest from a revived public session"
     );
     assert!(Arc::ptr_eq(&revived, &reacquired));
+}
+
+#[tokio::test]
+async fn eviction_retains_weak_only_candidate_until_handle_release() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+    let store = BridgeSessionStore::from_config(&config.session).unwrap();
+    let a = store.get(SID_A).await.unwrap();
+    let weak = Arc::downgrade(&a);
+    drop(a);
+
+    assert!(matches!(
+        store.get(SID_B).await,
+        Err(gaze_mcp_bridge::BridgeError::LimitExceeded(_))
+    ));
+    assert_eq!(store.len().await, 1);
+    let revived = weak.upgrade().expect("weak-only candidate stays canonical");
+    let token = revived
+        .lock()
+        .await
+        .tokenize(&PiiClass::Email, RAW_EMAIL)
+        .unwrap();
+    let reacquired = store.get(SID_A).await.unwrap();
+    assert!(Arc::ptr_eq(&revived, &reacquired));
+    drop((revived, reacquired, weak));
+
+    drop(
+        store
+            .get(SID_B)
+            .await
+            .expect("retry after all handles drop"),
+    );
+    assert_eq!(store.len().await, 1);
+    assert_eq!(
+        store.get(SID_A).await.unwrap().lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string())
+    );
 }

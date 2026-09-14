@@ -110,25 +110,36 @@ impl BridgeSessionStore {
                     )
                 })?
                 .clone();
-            // Inactivity alone does not prove durability: a caller may have
-            // mutated the session and then failed or been cancelled. Persist
-            // the current state while the cache lock prevents new borrowers.
-            let session = cache.entries[&candidate].lock().await;
-            self.persist(&candidate, &session).await?;
             Some(candidate)
         } else {
             None
         };
 
-        let session = match &self.mode {
+        // Stage the load without changing the cache. Preserve persistence-error
+        // precedence if both the incoming load and candidate flush fail.
+        let incoming = match &self.mode {
             SessionStoreMode::Ephemeral => gaze::Session::new(gaze::Scope::Ephemeral)
-                .map_err(|err| BridgeError::SessionStore(err.to_string()))?,
+                .map_err(|err| BridgeError::SessionStore(err.to_string())),
             SessionStoreMode::File { dir, key } => {
-                self.load_file_session(dir, key, validated_session_id)
-                    .await?
+                self.load_file_session(dir, key, validated_session_id).await
             }
         };
-        let shared = Arc::new(Mutex::new(session));
+        if let Some(candidate) = &candidate {
+            // The earlier count is only a hint: Weak::upgrade bypasses the
+            // cache lock. get_mut atomically excludes both strong borrowers and
+            // weak handles before persistence. With the cache still locked,
+            // no new handle can appear before removal, even across the await.
+            let candidate_session = Arc::get_mut(cache.entries.get_mut(candidate).unwrap())
+                .ok_or_else(|| {
+                    BridgeError::LimitExceeded(
+                        "session cap reached; eviction candidate is still shared".to_string(),
+                    )
+                })?;
+            // Persist under exclusive ownership: failed/cancelled callers may
+            // have left mappings that never reached disk.
+            self.persist(candidate, candidate_session.get_mut()).await?;
+        }
+        let shared = Arc::new(Mutex::new(incoming?));
         // Commit both indexes only after every fallible/awaiting operation.
         // Failure or cancellation leaves the canonical entry and LRU intact.
         if let Some(candidate) = candidate {
@@ -295,5 +306,74 @@ mod tests {
     fn parse_hex_key_accepts_32_bytes() {
         let key = parse_key(&"11".repeat(32)).expect("key");
         assert_eq!(key, [0x11; 32]);
+    }
+
+    #[tokio::test]
+    async fn cancelled_exclusive_persist_retains_candidate_and_allows_retry() {
+        use std::future::Future;
+        use std::task::Poll;
+
+        let dir = tempfile::TempDir::new().unwrap();
+        let store = BridgeSessionStore {
+            mode: SessionStoreMode::File {
+                dir: dir.path().to_path_buf(),
+                key: [0x44; 32],
+            },
+            cache: Mutex::new(SessionCache::default()),
+            file_locks: Mutex::new(HashMap::new()),
+            max_sessions: 1,
+        };
+        let a = store.get("session-a").await.unwrap();
+        let token = a
+            .lock()
+            .await
+            .tokenize(&gaze_types::PiiClass::Email, "alice@example.invalid")
+            .unwrap();
+        drop(a);
+
+        // Hold the candidate's file lock until admission reaches persist, after
+        // acquiring exclusive session ownership. Its clone is the rendezvous.
+        let file_lock = store.file_lock("session-a").await;
+        let guard = file_lock.lock().await;
+        assert_eq!(Arc::strong_count(&file_lock), 2);
+        let mut admission = Box::pin(store.get("session-b"));
+        std::future::poll_fn(|cx| {
+            assert!(admission.as_mut().poll(cx).is_pending());
+            if Arc::strong_count(&file_lock) == 3 {
+                Poll::Ready(())
+            } else {
+                Poll::Pending
+            }
+        })
+        .await;
+        drop(admission);
+        drop(guard);
+        assert_eq!(store.len().await, 1);
+        assert_eq!(
+            store
+                .get("session-a")
+                .await
+                .unwrap()
+                .lock()
+                .await
+                .restore(&token),
+            Some("alice@example.invalid".to_string())
+        );
+        drop(
+            store
+                .get("session-b")
+                .await
+                .expect("retry after cancellation"),
+        );
+        assert_eq!(
+            store
+                .get("session-a")
+                .await
+                .unwrap()
+                .lock()
+                .await
+                .restore(&token),
+            Some("alice@example.invalid".to_string())
+        );
     }
 }
