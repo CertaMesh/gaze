@@ -1132,9 +1132,12 @@ async fn file_mode_evicts_lru_and_reloads_evicted_session_from_disk() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn file_mode_lru_keeps_recently_used_session_cached() {
     let dir = TempDir::new().expect("tempdir");
-    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "55".repeat(32));
-    let config =
-        BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 2)).expect("config");
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_LRU", "55".repeat(32));
+    let config = BridgeConfig::from_toml_str(
+        &session_cap_config(Some(dir.path()), 2)
+            .replace("GAZE_BRIDGE_TEST_KEY_EVICT", "GAZE_BRIDGE_TEST_KEY_LRU"),
+    )
+    .expect("config");
     let store = BridgeSessionStore::from_config(&config.session).expect("store");
 
     let sids = [
@@ -1144,18 +1147,28 @@ async fn file_mode_lru_keeps_recently_used_session_cached() {
     ];
 
     // Tokenize sid_a without persisting: its token lives only in the in-memory
-    // cache, so if sid_a is evicted the token is permanently lost.
+    // cache. Weak references distinguish cached identity from a disk reload.
     let token_a = {
         let session = store.get(sids[0]).await.expect("a");
         let guard = session.lock().await;
         guard.tokenize(&PiiClass::Email, RAW_EMAIL).expect("token")
     };
-    let _ = store.get(sids[1]).await.expect("b");
+    let a_identity = Arc::downgrade(&store.get(sids[0]).await.unwrap());
+    let b_identity = Arc::downgrade(&store.get(sids[1]).await.expect("b"));
     // Touch sid_a → it becomes most-recently-used; sid_b is now the LRU.
     let _ = store.get(sids[0]).await;
     // Insert sid_c → cap exceeded → evict the LRU (sid_b), not sid_a.
     let _ = store.get(sids[2]).await.expect("c");
     assert_eq!(store.len().await, 2);
+
+    assert!(
+        a_identity.upgrade().is_some(),
+        "recent session stays cached"
+    );
+    assert!(
+        b_identity.upgrade().is_none(),
+        "least recent session was evicted"
+    );
 
     // sid_a survived eviction: its cached token is still valid (no disk reload).
     let a_cached = store.get(sids[0]).await.expect("a still cached");
@@ -1165,8 +1178,7 @@ async fn file_mode_lru_keeps_recently_used_session_cached() {
         "LRU must keep the most-recently-used session cached"
     );
 
-    // sid_b was evicted: it has no on-disk file, so reload yields a fresh empty
-    // session (proving sid_b — not sid_a — was the evicted entry).
+    // sid_b was evicted after its empty state was persisted; reload is empty.
     let b_reloaded = store.get(sids[1]).await.expect("b reloaded");
     assert_eq!(
         b_reloaded.lock().await.snapshot_entries().len(),
@@ -1485,5 +1497,99 @@ async fn r2_failed_persist_must_not_allow_dirty_session_eviction() {
         recovered.lock().await.restore(&token),
         Some("alice@example.invalid".to_string()),
         "failed persistence must not make unpersisted token mappings eligible for eviction"
+    );
+}
+
+#[tokio::test]
+async fn eviction_persists_unpersisted_candidate_before_restore_round_trip() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+    let store = BridgeSessionStore::from_config(&config.session).unwrap();
+    let a = store.get(SID_A).await.unwrap();
+    let token = a
+        .lock()
+        .await
+        .tokenize(&PiiClass::Email, RAW_EMAIL)
+        .unwrap();
+    drop(a);
+    let b = store.get(SID_B).await.unwrap();
+    assert_eq!(store.len().await, 1);
+    let reloaded = BridgeSessionStore::from_config(&config.session).unwrap();
+    let restored = reloaded.get(SID_A).await.unwrap();
+    assert_eq!(
+        restored.lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string())
+    );
+    assert!(!String::from_utf8_lossy(&read_all_files(dir.path())).contains(RAW_EMAIL));
+    drop(b);
+}
+
+#[tokio::test]
+async fn eviction_rejects_admission_when_candidate_persistence_fails() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+    let store = BridgeSessionStore::from_config(&config.session).unwrap();
+    let a = store.get(SID_A).await.unwrap();
+    let token = a
+        .lock()
+        .await
+        .tokenize(&PiiClass::Email, RAW_EMAIL)
+        .unwrap();
+    drop(a);
+    std::fs::remove_dir(dir.path()).unwrap();
+    std::fs::write(dir.path(), "unavailable session directory").unwrap();
+    let result = store.get(SID_B).await;
+    assert!(
+        matches!(result, Err(gaze_mcp_bridge::BridgeError::SessionStore(ref message))
+        if message.starts_with("create session dir failed:")),
+        "admission must reject a failed eviction-time persist"
+    );
+    assert_eq!(store.len().await, 1);
+    let retained = store.get(SID_A).await.unwrap();
+    assert_eq!(
+        retained.lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string())
+    );
+    drop(retained);
+    std::fs::remove_file(dir.path()).unwrap();
+    std::fs::create_dir(dir.path()).unwrap();
+    drop(
+        store
+            .get(SID_B)
+            .await
+            .expect("retry after filesystem recovery"),
+    );
+    assert_eq!(
+        store.get(SID_A).await.unwrap().lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string())
+    );
+}
+
+#[tokio::test]
+async fn eviction_preserves_unpersisted_state_after_caller_cancellation() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("GAZE_BRIDGE_TEST_KEY_EVICT", "44".repeat(32));
+    let config = BridgeConfig::from_toml_str(&session_cap_config(Some(dir.path()), 1)).unwrap();
+    let store = Arc::new(BridgeSessionStore::from_config(&config.session).unwrap());
+    let (ready, mutated) = tokio::sync::oneshot::channel();
+    let caller_store = Arc::clone(&store);
+    let caller = tokio::spawn(async move {
+        let session = caller_store.get(SID_A).await.unwrap();
+        let guard = session.lock().await;
+        let token = guard.tokenize(&PiiClass::Email, RAW_EMAIL).unwrap();
+        ready.send(token).unwrap();
+        std::future::pending::<()>().await;
+        drop(guard);
+    });
+    let token = mutated.await.unwrap();
+    caller.abort();
+    assert!(caller.await.unwrap_err().is_cancelled());
+    drop(store.get(SID_B).await.unwrap());
+    let recovered = store.get(SID_A).await.unwrap();
+    assert_eq!(
+        recovered.lock().await.restore(&token),
+        Some(RAW_EMAIL.to_string())
     );
 }

@@ -23,16 +23,21 @@ pub enum SessionStoreMode {
     File { dir: PathBuf, key: [u8; 32] },
 }
 
+#[derive(Default)]
+struct SessionCache {
+    entries: HashMap<String, SharedSession>,
+    lru: VecDeque<String>,
+}
+
 pub struct BridgeSessionStore {
     mode: SessionStoreMode,
-    sessions: Mutex<HashMap<String, SharedSession>>,
+    cache: Mutex<SessionCache>,
     // One entry per distinct session id ever observed in File mode. Not bounded
-    // by `max_sessions`; evicting a `sessions` entry does not drop its lock entry
+    // by `max_sessions`; evicting a cache entry does not drop its lock entry
     // because callers may hold the `Arc` clone across long-running load/persist
     // work. Tracked as a known secondary leak with a small (~60-80 byte) per-entry
     // cost; safe eviction requires an `Arc::strong_count` sweep and is deferred.
     file_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    lru: Mutex<VecDeque<String>>,
     max_sessions: usize,
 }
 
@@ -56,9 +61,8 @@ impl BridgeSessionStore {
         };
         Ok(Self {
             mode,
-            sessions: Mutex::new(HashMap::new()),
+            cache: Mutex::new(SessionCache::default()),
             file_locks: Mutex::new(HashMap::new()),
-            lru: Mutex::new(VecDeque::new()),
             max_sessions: config.max_sessions,
         })
     }
@@ -66,39 +70,55 @@ impl BridgeSessionStore {
     pub fn ephemeral() -> Self {
         Self {
             mode: SessionStoreMode::Ephemeral,
-            sessions: Mutex::new(HashMap::new()),
+            cache: Mutex::new(SessionCache::default()),
             file_locks: Mutex::new(HashMap::new()),
-            lru: Mutex::new(VecDeque::new()),
             max_sessions: crate::config::DEFAULT_MAX_SESSIONS,
         }
     }
 
     pub async fn len(&self) -> usize {
-        self.sessions.lock().await.len()
+        self.cache.lock().await.entries.len()
     }
 
     pub async fn is_empty(&self) -> bool {
-        self.sessions.lock().await.is_empty()
+        self.cache.lock().await.entries.is_empty()
     }
 
     pub async fn get(&self, validated_session_id: &str) -> BridgeResult<SharedSession> {
-        let mut sessions = self.sessions.lock().await;
-        let mut lru = self.lru.lock().await;
+        let mut cache = self.cache.lock().await;
 
-        if let Some(session) = sessions.get(validated_session_id) {
-            lru.retain(|id| id != validated_session_id);
-            lru.push_back(validated_session_id.to_string());
-            return Ok(Arc::clone(session));
+        if let Some(session) = cache.entries.get(validated_session_id).cloned() {
+            cache.lru.retain(|id| id != validated_session_id);
+            cache.lru.push_back(validated_session_id.to_string());
+            return Ok(session);
         }
 
-        if matches!(self.mode, SessionStoreMode::Ephemeral)
-            && self.max_sessions > 0
-            && sessions.len() >= self.max_sessions
-        {
-            return Err(BridgeError::LimitExceeded(
-                "session cap reached; use file mode for long-lived bridge deployments".to_string(),
-            ));
-        }
+        let candidate = if self.max_sessions > 0 && cache.entries.len() >= self.max_sessions {
+            if matches!(self.mode, SessionStoreMode::Ephemeral) {
+                return Err(BridgeError::LimitExceeded(
+                    "session cap reached; use file mode for long-lived bridge deployments"
+                        .to_string(),
+                ));
+            }
+            let candidate = cache
+                .lru
+                .iter()
+                .find(|id| Arc::strong_count(&cache.entries[*id]) == 1)
+                .ok_or_else(|| {
+                    BridgeError::LimitExceeded(
+                        "session cap reached; all cached sessions are active".to_string(),
+                    )
+                })?
+                .clone();
+            // Inactivity alone does not prove durability: a caller may have
+            // mutated the session and then failed or been cancelled. Persist
+            // the current state while the cache lock prevents new borrowers.
+            let session = cache.entries[&candidate].lock().await;
+            self.persist(&candidate, &session).await?;
+            Some(candidate)
+        } else {
+            None
+        };
 
         let session = match &self.mode {
             SessionStoreMode::Ephemeral => gaze::Session::new(gaze::Scope::Ephemeral)
@@ -109,58 +129,16 @@ impl BridgeSessionStore {
             }
         };
         let shared = Arc::new(Mutex::new(session));
-        sessions.insert(validated_session_id.to_string(), Arc::clone(&shared));
-        lru.push_back(validated_session_id.to_string());
-
-        if matches!(self.mode, SessionStoreMode::File { .. }) && self.max_sessions > 0 {
-            // Evict LRU entries that are not currently held by any caller.
-            // An entry is "active" when Arc::strong_count > 1 (the cache holds
-            // one reference; any additional references belong to in-flight
-            // callers). Evicting an active session would leave the caller's Arc
-            // pointing at a live Session object that is no longer canonical —
-            // a subsequent get() for the same id would load the older on-disk
-            // snapshot into a second independent Session, allowing two callers
-            // to hold conflicting state and overwrite each other's persisted
-            // token mappings.
-            //
-            // When all entries are active (no safe eviction candidate), reject
-            // the new session rather than racing with an in-flight caller.
-            let mut evicted_any = true;
-            while sessions.len() > self.max_sessions && evicted_any {
-                evicted_any = false;
-                let mut skipped = VecDeque::new();
-                while let Some(candidate) = lru.pop_front() {
-                    if sessions.len() <= self.max_sessions {
-                        skipped.push_back(candidate);
-                        break;
-                    }
-                    match sessions.get(&candidate) {
-                        Some(arc) if Arc::strong_count(arc) == 1 => {
-                            sessions.remove(&candidate);
-                            evicted_any = true;
-                        }
-                        _ => {
-                            // Active or already-gone — put back at the front to
-                            // preserve LRU order and try the next oldest entry.
-                            skipped.push_front(candidate);
-                        }
-                    }
-                }
-                // Restore any entries we peeked over back into the LRU.
-                for entry in skipped {
-                    lru.push_front(entry);
-                }
-            }
-            if sessions.len() > self.max_sessions {
-                // All cached sessions are active. Undo the insert we just did
-                // and reject the request to preserve session ownership invariants.
-                sessions.remove(validated_session_id);
-                lru.retain(|id| id != validated_session_id);
-                return Err(BridgeError::LimitExceeded(
-                    "session cap reached; all cached sessions are active".to_string(),
-                ));
-            }
+        // Commit both indexes only after every fallible/awaiting operation.
+        // Failure or cancellation leaves the canonical entry and LRU intact.
+        if let Some(candidate) = candidate {
+            cache.entries.remove(&candidate);
+            cache.lru.retain(|id| id != &candidate);
         }
+        cache
+            .entries
+            .insert(validated_session_id.to_string(), Arc::clone(&shared));
+        cache.lru.push_back(validated_session_id.to_string());
 
         Ok(shared)
     }
