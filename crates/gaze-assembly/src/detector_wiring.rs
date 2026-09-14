@@ -9,7 +9,9 @@ use gaze_recognizers::{
 };
 
 use crate::{
-    class_map::class_for_dictionary, registration::AssemblyBuilder, template::lower_regex_pattern,
+    class_map::{class_for_dictionary, class_has_tokenize_or_stricter_action},
+    registration::AssemblyBuilder,
+    template::lower_regex_pattern,
     BuildError,
 };
 
@@ -371,12 +373,18 @@ pub(crate) fn register_context_dictionaries(
         if registered_dictionaries.contains(name) {
             continue;
         }
-        let class = class_for_dictionary(
-            policy,
-            context,
-            name,
-            PiiClass::custom(name).map_err(gaze::Error::from)?,
-        )?;
+        // Dictionary keys need not be valid class names when a protected override is selected.
+        let class = match context.class_map.get(name) {
+            Some(class) if class_has_tokenize_or_stricter_action(&policy.rules, class)? => {
+                class.clone()
+            }
+            _ => class_for_dictionary(
+                policy,
+                context,
+                name,
+                PiiClass::custom(name).map_err(gaze::Error::from)?,
+            )?,
+        };
         builder.recognizer(DictionaryRecognizer::new(
             format!("context/{name}"),
             class,
