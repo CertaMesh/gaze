@@ -1119,34 +1119,13 @@ impl Pipeline {
         #[cfg(feature = "bundled-recognizers")]
         if let Some(registry) = &self.safety_net_registry {
             if !registry.is_empty() {
-                let locale = locale_chain
-                    .first()
-                    .cloned()
-                    .unwrap_or(crate::LocaleTag::Global);
-                let selected = registry
-                    .resolve(&locale, ModelStage::Pass3SafetyNet)
-                    .map_err(|error| {
-                        if mandatory
-                            && matches!(
-                                error,
-                                ModelError::NoLocaleModelCoverage { .. }
-                                    | ModelError::LocaleNotSupported(_)
-                            )
-                        {
-                            Error::Protection(ProtectionError::UnsupportedCoverage)
-                        } else {
-                            Error::SafetyNet(model_error_to_safety_net_error(error))
-                        }
-                    })?;
-                if mandatory && selected.is_empty() {
-                    return Err(ProtectionError::UnsupportedCoverage.into());
-                }
+                let selected = resolve_safety_net_models(registry, locale_chain, mandatory)?;
                 if !mandatory && selected.len() > 1 {
-                    let selected_backend = selected[0].name();
+                    let selected_backend = selected[0].0.name();
                     let dropped = selected
                         .iter()
                         .skip(1)
-                        .map(|backend| backend.name().to_string())
+                        .map(|(backend, _)| backend.name().to_string())
                         .collect::<Vec<_>>();
                     tracing::debug!(
                         selected_backend,
@@ -1161,9 +1140,10 @@ impl Pipeline {
                         dropped,
                     )?;
                 }
-                for model in selected
-                    .iter()
-                    .take(if mandatory { selected.len() } else { 1 })
+                for (model, locale) in
+                    selected
+                        .iter()
+                        .take(if mandatory { selected.len() } else { 1 })
                 {
                     let spans = model
                         .infer(
@@ -2741,6 +2721,52 @@ fn model_span_to_suspect(
         format!("{:?}", span.class),
         field_path.map(str::to_string),
     ))
+}
+
+#[cfg(feature = "bundled-recognizers")]
+fn resolve_safety_net_models<'a>(
+    registry: &'a LocaleAwareModelRegistry,
+    locale_chain: &[crate::LocaleTag],
+    mandatory: bool,
+) -> Result<Vec<(&'a dyn gaze_recognizers::LocaleAwareModel, crate::LocaleTag)>> {
+    let locales = if locale_chain.is_empty() {
+        &[crate::LocaleTag::Global]
+    } else if mandatory {
+        locale_chain
+    } else {
+        &locale_chain[..1]
+    };
+    let mut selected: Vec<(&dyn gaze_recognizers::LocaleAwareModel, crate::LocaleTag)> = Vec::new();
+    for locale in locales {
+        let models = registry
+            .resolve(locale, ModelStage::Pass3SafetyNet)
+            .map_err(|error| {
+                if mandatory
+                    && matches!(
+                        error,
+                        ModelError::NoLocaleModelCoverage { .. }
+                            | ModelError::LocaleNotSupported(_)
+                    )
+                {
+                    Error::Protection(ProtectionError::UnsupportedCoverage)
+                } else {
+                    Error::SafetyNet(model_error_to_safety_net_error(error))
+                }
+            })?;
+        if mandatory && models.is_empty() {
+            return Err(ProtectionError::UnsupportedCoverage.into());
+        }
+        for model in models {
+            // Names need not be unique. Keep each backend once, with its first matching locale.
+            if !selected
+                .iter()
+                .any(|(existing, _)| std::ptr::eq(*existing, model))
+            {
+                selected.push((model, locale.clone()));
+            }
+        }
+    }
+    Ok(selected)
 }
 
 #[cfg(feature = "bundled-recognizers")]
