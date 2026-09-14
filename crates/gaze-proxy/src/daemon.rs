@@ -515,7 +515,17 @@ impl CleanupRule {
 /// Gaze is using it. The inode lock alone cannot protect a pathname after unlink.
 struct PidfileGuard {
     file: File,
-    _namespace: File,
+    _namespace: NamespaceLock,
+}
+
+struct NamespaceLock(File);
+
+impl Drop for NamespaceLock {
+    fn drop(&mut self) {
+        // A concurrent process spawn can briefly inherit a duplicate descriptor.
+        // Closing ours alone would leave its shared flock alive until exec.
+        let _ = FileExt::unlock(&self.0);
+    }
 }
 
 impl Drop for PidfileGuard {
@@ -527,7 +537,7 @@ impl Drop for PidfileGuard {
 }
 
 impl PidfileGuard {
-    fn namespace(path: &Path) -> std::io::Result<File> {
+    fn namespace(path: &Path) -> std::io::Result<NamespaceLock> {
         let mut name = path.as_os_str().to_os_string();
         name.push(".lock");
         let file = OpenOptions::new()
@@ -537,7 +547,7 @@ impl PidfileGuard {
             .write(true)
             .open(PathBuf::from(name))?;
         file.try_lock_exclusive()?;
-        Ok(file)
+        Ok(NamespaceLock(file))
     }
 
     fn remove(mut self, path: &Path, rule: CleanupRule) -> Result<CleanupOutcome, ProxyError> {
@@ -878,6 +888,21 @@ mod tests {
         LOCK_ERROR.with(|slot| *slot.borrow_mut() = Some(fs2::lock_contended_error()));
         cleanup_stale(&paths).unwrap();
         assert!(paths.pidfile.exists());
+        cleanup_stale(&paths).unwrap();
+        assert!(!paths.pidfile.exists());
+    }
+
+    #[test]
+    fn cleanup_releases_namespace_with_inherited_descriptor() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = temp_paths(&dir);
+        let lock = lock_pidfile(&paths).unwrap();
+        // Deterministic equivalent of a descriptor inherited during fork/exec.
+        let inherited = lock._namespace.0.try_clone().unwrap();
+        drop(lock);
+        let next = lock_pidfile(&paths).unwrap();
+        drop(next);
+        drop(inherited);
         cleanup_stale(&paths).unwrap();
         assert!(!paths.pidfile.exists());
     }
