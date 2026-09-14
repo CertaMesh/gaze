@@ -172,8 +172,11 @@ pub(crate) struct PrefixCacheHit {
     pub manifest: Vec<gaze_types::EmittedTokenSpan>,
 }
 
+/// Cached decisions may only be replayed within the same field context.
+/// `None` denotes unstructured text and must not match a named field.
 #[derive(Debug, Clone)]
 struct PrefixCacheEntry {
+    field_name: Option<String>,
     raw: String,
     clean_text: String,
     manifest: Vec<gaze_types::EmittedTokenSpan>,
@@ -619,12 +622,18 @@ impl Session {
         &self.identity.audit_session_id
     }
 
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+    pub(crate) fn lookup_prefix_cache(
+        &self,
+        text: &str,
+        field_name: Option<&str>,
+    ) -> Option<PrefixCacheHit> {
         self.state_snapshot()
             .prefix_cache
             .values()
             .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
+                cached.field_name.as_deref() == field_name
+                    && text.starts_with(&cached.raw)
+                    && text.is_char_boundary(cached.raw.len())
             })
             .map(|cached| PrefixCacheHit {
                 raw_len: cached.raw.len(),
@@ -639,12 +648,13 @@ impl Session {
         raw: &str,
         clean_text: &str,
         manifest: &[gaze_types::EmittedTokenSpan],
+        field_name: Option<&str>,
     ) {
         if raw.is_empty() {
             return;
         }
         self.mutate_state(|state| {
-            let changed = store_prefix_cache_in_state(state, raw, clean_text, manifest);
+            let changed = store_prefix_cache_in_state(state, raw, clean_text, manifest, field_name);
             ((), changed)
         });
     }
@@ -998,12 +1008,18 @@ impl<'session> SessionTransaction<'session> {
 
     // Kept crate-private: the Pipeline is the sole cache reader/writer, so
     // adopters cannot bypass its trusted prefix-cache population contract.
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+    pub(crate) fn lookup_prefix_cache(
+        &self,
+        text: &str,
+        field_name: Option<&str>,
+    ) -> Option<PrefixCacheHit> {
         self.staged
             .prefix_cache
             .values()
             .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
+                cached.field_name.as_deref() == field_name
+                    && text.starts_with(&cached.raw)
+                    && text.is_char_boundary(cached.raw.len())
             })
             .map(|cached| PrefixCacheHit {
                 raw_len: cached.raw.len(),
@@ -1018,8 +1034,9 @@ impl<'session> SessionTransaction<'session> {
         raw: &str,
         clean_text: &str,
         manifest: &[gaze_types::EmittedTokenSpan],
+        field_name: Option<&str>,
     ) {
-        store_prefix_cache_in_state(&mut self.staged, raw, clean_text, manifest);
+        store_prefix_cache_in_state(&mut self.staged, raw, clean_text, manifest, field_name);
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
@@ -1185,6 +1202,7 @@ fn store_prefix_cache_in_state(
     raw: &str,
     clean_text: &str,
     manifest: &[gaze_types::EmittedTokenSpan],
+    field_name: Option<&str>,
 ) -> bool {
     if raw.is_empty() {
         return false;
@@ -1192,14 +1210,16 @@ fn store_prefix_cache_in_state(
     if state.prefix_cache.len() >= 64 {
         state.prefix_cache.clear();
     }
-    let hash = prefix_cache_hash(raw);
+    let hash = prefix_cache_hash(raw, field_name);
     let entry = PrefixCacheEntry {
+        field_name: field_name.map(str::to_owned),
         raw: raw.to_string(),
         clean_text: clean_text.to_string(),
         manifest: manifest.to_vec(),
     };
     let changed = state.prefix_cache.get(&hash).is_none_or(|existing| {
-        existing.raw != entry.raw
+        existing.field_name != entry.field_name
+            || existing.raw != entry.raw
             || existing.clean_text != entry.clean_text
             || existing.manifest != entry.manifest
     });
@@ -1399,9 +1419,10 @@ fn default_counter_family() -> String {
     DEFAULT_COUNTER_FAMILY.to_string()
 }
 
-fn prefix_cache_hash(raw: &str) -> u64 {
+fn prefix_cache_hash(raw: &str, field_name: Option<&str>) -> u64 {
     let mut hasher = DefaultHasher::new();
     raw.hash(&mut hasher);
+    field_name.hash(&mut hasher);
     hasher.finish()
 }
 
@@ -2866,7 +2887,7 @@ mod tests {
             let discarded_token = discarded
                 .tokenize(&PiiClass::Email, "alice@example.invalid")
                 .expect("staged token");
-            discarded.store_prefix_cache("alice", &discarded_token, &[]);
+            discarded.store_prefix_cache("alice", &discarded_token, &[], None);
         }
         assert_eq!(session.snapshot_entries(), initial_entries);
         assert!(Arc::ptr_eq(&initial_state, &session.state_snapshot()));
@@ -2880,7 +2901,7 @@ mod tests {
             transaction.restore_strict(&token).expect("staged restore"),
             "alice@example.invalid"
         );
-        transaction.store_prefix_cache("alice", &token, &[]);
+        transaction.store_prefix_cache("alice", &token, &[], None);
         let snapshot = transaction.commit().expect("commit");
 
         assert_eq!(
@@ -2902,7 +2923,7 @@ mod tests {
         );
         assert_eq!(
             session
-                .lookup_prefix_cache("alice and more")
+                .lookup_prefix_cache("alice and more", None)
                 .expect("committed prefix cache")
                 .clean_text,
             token
@@ -2990,7 +3011,7 @@ mod tests {
         ));
 
         let transaction = session.begin_transaction();
-        session.store_prefix_cache("prefix", "clean", &[]);
+        session.store_prefix_cache("prefix", "clean", &[], None);
         assert!(matches!(
             transaction.commit(),
             Err(SessionTransactionError::GenerationConflict)
@@ -3046,7 +3067,7 @@ mod tests {
                                 .expect("format preserving fake"),
                         ),
                         MutationRoute::PrefixCache => {
-                            session.store_prefix_cache("prefix", "clean", &[]);
+                            session.store_prefix_cache("prefix", "clean", &[], None);
                             MutationOutcome::PrefixCache
                         }
                     }
@@ -3070,7 +3091,7 @@ mod tests {
                 MutationOutcome::Token(token) => assert!(session.contains_token(&token)),
                 MutationOutcome::PrefixCache => assert_eq!(
                     session
-                        .lookup_prefix_cache("prefix suffix")
+                        .lookup_prefix_cache("prefix suffix", None)
                         .expect("prefix cache")
                         .clean_text,
                     "clean"

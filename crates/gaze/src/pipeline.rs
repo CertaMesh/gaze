@@ -340,21 +340,29 @@ impl ProtectionTarget<'_, '_> {
         }
     }
 
-    fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
+    fn lookup_prefix_cache(&self, text: &str, field_name: Option<&str>) -> Option<PrefixCacheHit> {
         match self {
-            Self::Live(session) => session.lookup_prefix_cache(text),
+            Self::Live(session) => session.lookup_prefix_cache(text, field_name),
             Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
-                transaction.lookup_prefix_cache(text)
+                transaction.lookup_prefix_cache(text, field_name)
             }
             Self::Staged(_, PrefixCacheWriteMode::Suppress) => None,
         }
     }
 
-    fn store_prefix_cache(&mut self, raw: &str, clean_text: &str, manifest: &[EmittedTokenSpan]) {
+    fn store_prefix_cache(
+        &mut self,
+        raw: &str,
+        clean_text: &str,
+        manifest: &[EmittedTokenSpan],
+        field_name: Option<&str>,
+    ) {
         match self {
-            Self::Live(session) => session.store_prefix_cache(raw, clean_text, manifest),
+            Self::Live(session) => {
+                session.store_prefix_cache(raw, clean_text, manifest, field_name)
+            }
             Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
-                transaction.store_prefix_cache(raw, clean_text, manifest);
+                transaction.store_prefix_cache(raw, clean_text, manifest, field_name);
             }
             Self::Staged(_, PrefixCacheWriteMode::Suppress) => {}
         }
@@ -936,7 +944,7 @@ impl Pipeline {
     ) -> Result<CleanText> {
         if self.optimization_config.prefix_cache {
             if let Some(hit) = target
-                .lookup_prefix_cache(text)
+                .lookup_prefix_cache(text, field_name)
                 .filter(|hit| hit.raw_len < text.len())
             {
                 let suffix = &text[hit.raw_len..];
@@ -968,7 +976,7 @@ impl Pipeline {
                     document_kind,
                     locale_chain,
                 )?;
-                target.store_prefix_cache(text, &clean_text, &manifest);
+                target.store_prefix_cache(text, &clean_text, &manifest, field_name);
                 return Ok(CleanText {
                     text: clean_text,
                     manifest,
@@ -986,7 +994,7 @@ impl Pipeline {
             None,
         )?;
         if self.optimization_config.prefix_cache {
-            target.store_prefix_cache(text, &clean.text, &clean.manifest);
+            target.store_prefix_cache(text, &clean.text, &clean.manifest, field_name);
         }
         Ok(clean)
     }
@@ -5750,10 +5758,14 @@ mod tests {
         assert_eq!(extended, format!("{first} reports"));
         assert_eq!(transaction.tokens().len(), 1);
         assert!(session.tokens().is_empty());
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        assert!(session
+            .lookup_prefix_cache("Dr. Schmidt reports", None)
+            .is_none());
         drop(transaction);
         assert!(session.tokens().is_empty());
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        assert!(session
+            .lookup_prefix_cache("Dr. Schmidt reports", None)
+            .is_none());
 
         let mut transaction = session.begin_transaction();
         pipeline
@@ -5776,7 +5788,9 @@ mod tests {
         let snapshot = transaction.commit().expect("atomic commit");
         assert_eq!(snapshot.tokens(), staged_tokens);
         assert_eq!(session.tokens(), staged_tokens);
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_some());
+        assert!(session
+            .lookup_prefix_cache("Dr. Schmidt reports", None)
+            .is_some());
     }
 
     #[test]
@@ -5810,7 +5824,7 @@ mod tests {
         assert_eq!(cached_prefix, "alice@");
         assert_eq!(
             transaction
-                .lookup_prefix_cache("alice@example.invalid")
+                .lookup_prefix_cache("alice@example.invalid", None)
                 .expect("preseeded prefix cache hit")
                 .raw_len,
             "alice@".len()
@@ -5843,7 +5857,7 @@ mod tests {
         drop(transaction);
         assert!(session.tokens().is_empty());
         assert!(session
-            .lookup_prefix_cache("alice@example.invalid")
+            .lookup_prefix_cache("alice@example.invalid", None)
             .is_none());
     }
 
@@ -5882,6 +5896,6 @@ mod tests {
         ));
         assert!(session.contains_token(&winner));
         assert!(!session.contains_token(&staged_token));
-        assert!(session.lookup_prefix_cache("Dr. Schmidt").is_none());
+        assert!(session.lookup_prefix_cache("Dr. Schmidt", None).is_none());
     }
 }
