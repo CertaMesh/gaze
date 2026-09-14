@@ -23,7 +23,7 @@ pub(super) fn read_stderr(mut reader: impl Read) -> std::io::Result<String> {
         // Only display tokens whose delimiter was captured.
         let complete = prefix
             .iter()
-            .rposition(|byte| !byte.is_ascii_graphic())
+            .rposition(u8::is_ascii_whitespace)
             .map_or(0, |index| index + 1);
         prefix.truncate(complete);
     }

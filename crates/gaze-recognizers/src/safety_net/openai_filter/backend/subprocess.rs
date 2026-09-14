@@ -10,6 +10,7 @@ use gaze_types::SafetyNetError;
 #[cfg(test)]
 use crate::safety_net::subprocess_diagnostics::sanitize_stderr;
 use crate::safety_net::subprocess_diagnostics::{read_stderr, sanitize_error};
+use crate::safety_net::subprocess_io::{Cancellation, Pipe};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -215,6 +216,10 @@ impl SubprocessOpenAiFilterBackend {
             });
         }
 
+        Cancellation::check_platform().map_err(|error| SafetyNetError::ModelUnavailable {
+            reason: error.to_string(),
+        })?;
+        let cancellation = Cancellation::default();
         let mut command = Command::new(&self.config.command);
         command.args(&self.config.args);
         if let Some(checkpoint_path) = &self.config.checkpoint_path {
@@ -237,25 +242,47 @@ impl SubprocessOpenAiFilterBackend {
                 ),
             })?;
 
-        let mut stdin = child.stdin.take().ok_or_else(|| SafetyNetError::Runtime {
-            message: "failed to open opf stdin".to_string(),
-        })?;
+        // Configure every pipe before starting workers, so setup errors cannot
+        // leave a running worker behind. Each worker owns and closes its pipe.
+        let pipes = (|| -> std::io::Result<_> {
+            let stdin = child
+                .stdin
+                .take()
+                .ok_or_else(|| std::io::Error::other("missing stdin"))?;
+            let stdout = child
+                .stdout
+                .take()
+                .ok_or_else(|| std::io::Error::other("missing stdout"))?;
+            Ok((
+                Pipe::new(stdin, &cancellation)?,
+                Pipe::new(stdout, &cancellation)?,
+                child
+                    .stderr
+                    .take()
+                    .map(|pipe| Pipe::new(pipe, &cancellation))
+                    .transpose()?,
+            ))
+        })();
+        let (mut stdin, stdout, stderr) = match pipes {
+            Ok(pipes) => pipes,
+            Err(error) => {
+                kill_reap(&mut child);
+                return Err(SafetyNetError::Runtime {
+                    message: format!(
+                        "opf pipe setup failed: {}",
+                        sanitize_error(&error.to_string())
+                    ),
+                });
+            }
+        };
         let input = clean.as_bytes().to_vec();
         let stdin_thread = thread::spawn(move || {
             stdin.write_all(&input)?;
             stdin.flush()
         });
-
-        let stdout = child.stdout.take().ok_or_else(|| SafetyNetError::Runtime {
-            message: "failed to open opf stdout".to_string(),
-        })?;
         let max_stdout_bytes = self.config.max_stdout_bytes;
         let stdout_thread = thread::spawn(move || read_bounded(stdout, max_stdout_bytes));
-
-        let stderr_thread = child
-            .stderr
-            .take()
-            .map(|stderr| thread::spawn(move || read_stderr(stderr)));
+        let stderr_thread = stderr.map(|stderr| thread::spawn(move || read_stderr(stderr)));
 
         let deadline = Instant::now() + self.config.timeout;
         let mut stdin_thread = Some(stdin_thread);
@@ -276,6 +303,7 @@ impl SubprocessOpenAiFilterBackend {
             {
                 let thread = stdin_thread.take().expect("checked stdin thread");
                 if let Err(error) = join_stdin(thread) {
+                    cancellation.cancel();
                     kill_reap(&mut child);
                     join_remaining(stdin_thread, stdout_thread, stderr_thread);
                     return Err(error);
@@ -290,6 +318,7 @@ impl SubprocessOpenAiFilterBackend {
                 match join_reader(thread, "stdout") {
                     Ok(output) => stdout = Some(output),
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(error);
@@ -305,6 +334,7 @@ impl SubprocessOpenAiFilterBackend {
                 match join_reader(thread, "stderr") {
                     Ok(output) => stderr = Some(output),
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(error);
@@ -317,6 +347,7 @@ impl SubprocessOpenAiFilterBackend {
                     Ok(Some(child_status)) => status = Some(child_status),
                     Ok(None) => {}
                     Err(error) => {
+                        cancellation.cancel();
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
                         return Err(SafetyNetError::Runtime {
@@ -334,6 +365,7 @@ impl SubprocessOpenAiFilterBackend {
             }
 
             if Instant::now() >= deadline {
+                cancellation.cancel();
                 kill_reap(&mut child);
                 join_remaining(stdin_thread, stdout_thread, stderr_thread);
                 return Err(SafetyNetError::Runtime {
