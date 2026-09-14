@@ -173,7 +173,7 @@ impl Pipeline {
         {
             return Err(ProtectionError::Provenance);
         }
-        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Suppress);
+        let mut target = ProtectionTarget::Staged(transaction);
         let report = self
             .run_safety_nets_in_context(
                 &mut target,
@@ -232,7 +232,7 @@ impl Pipeline {
         if input.is_empty() {
             return Ok(());
         }
-        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Suppress);
+        let mut target = ProtectionTarget::Staged(transaction);
         let result = self
             .redact_text_with_manifest_uncached(
                 &mut target,

@@ -123,10 +123,10 @@ fn bridge_with_custom_corpus(corpus_raw: &str) -> TokenBridge {
     let pipeline = Pipeline::builder()
         .detector(LiteralDetector {
             literal: corpus_raw.to_string(),
-            class: PiiClass::custom("customer_id"),
+            class: PiiClass::custom("customer_id").expect("valid custom class"),
         })
         .rule(ClassRule::new(
-            PiiClass::custom("customer_id"),
+            PiiClass::custom("customer_id").expect("valid custom class"),
             Action::Tokenize,
         ))
         .rule(DefaultRule::new(Action::Preserve))
@@ -154,11 +154,22 @@ fn unwrap_allowed(outcome: BridgeSearchOutcome) -> usize {
 
 #[test]
 fn from_raw_collapses_internal_whitespace_for_custom_class() {
-    let double_space = CanonicalEntity::from_raw(PiiClass::custom("customer_id"), "Case  123");
-    let single_space = CanonicalEntity::from_raw(PiiClass::custom("customer_id"), "Case 123");
-    let tab = CanonicalEntity::from_raw(PiiClass::custom("customer_id"), "Case\t123");
-    let leading_trailing =
-        CanonicalEntity::from_raw(PiiClass::custom("customer_id"), "  Case 123  ");
+    let double_space = CanonicalEntity::from_raw(
+        PiiClass::custom("customer_id").expect("valid custom class"),
+        "Case  123",
+    );
+    let single_space = CanonicalEntity::from_raw(
+        PiiClass::custom("customer_id").expect("valid custom class"),
+        "Case 123",
+    );
+    let tab = CanonicalEntity::from_raw(
+        PiiClass::custom("customer_id").expect("valid custom class"),
+        "Case\t123",
+    );
+    let leading_trailing = CanonicalEntity::from_raw(
+        PiiClass::custom("customer_id").expect("valid custom class"),
+        "  Case 123  ",
+    );
 
     assert_eq!(double_space.canonical_value, single_space.canonical_value);
     assert_eq!(tab.canonical_value, single_space.canonical_value);
@@ -187,7 +198,10 @@ fn custom_class_internal_whitespace_divergence_finds_the_hit() {
     let mut bridge = bridge_with_custom_corpus("Case  123");
     let session = RedactionSession::ephemeral_for(&support_principal().id).unwrap();
     let token = session
-        .tokenize(&PiiClass::custom("customer_id"), "Case 123")
+        .tokenize(
+            &PiiClass::custom("customer_id").expect("valid custom class"),
+            "Case 123",
+        )
         .unwrap();
 
     let hit_count = unwrap_allowed(bridge.search(&session, &support_customer_request(&token)));

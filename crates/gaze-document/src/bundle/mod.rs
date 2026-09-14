@@ -689,7 +689,7 @@ pub(crate) fn build_document_pipeline() -> Result<GazePipeline, DocumentError> {
     // common separators. Synthetic fixture uses `+1-555-0142`-style numbers.
     let phone = RegexDetector::new(
         r"\+?\d{1,3}[-.\s]\(?\d{3}\)?[-.\s]?\d{3,4}[-.\s]?\d{0,4}",
-        PiiClass::custom("phone"),
+        PiiClass::custom("phone").expect("valid custom class"),
     )
     .map_err(|err| pipeline_err("phone-regex", err))?;
     // Invoice / shipping recipient block names. Scope is intentionally
@@ -722,7 +722,10 @@ pub(crate) fn build_document_pipeline() -> Result<GazePipeline, DocumentError> {
         .detector(phone)
         .recognizer(recipient_name)
         .rule(ClassRule::new(PiiClass::Email, Action::Tokenize))
-        .rule(ClassRule::new(PiiClass::custom("phone"), Action::Tokenize))
+        .rule(ClassRule::new(
+            PiiClass::custom("phone").expect("valid custom class"),
+            Action::Tokenize,
+        ))
         .rule(ClassRule::new(PiiClass::Name, Action::Tokenize))
         .rule(DefaultRule::new(Action::Preserve))
         .build()
@@ -906,7 +909,11 @@ mod tests {
         let spans = vec![
             EmittedTokenSpan::new(0..10, 0..10, PiiClass::Email),
             EmittedTokenSpan::new(20..28, 20..28, PiiClass::Email),
-            EmittedTokenSpan::new(40..50, 40..50, PiiClass::custom("phone")),
+            EmittedTokenSpan::new(
+                40..50,
+                40..50,
+                PiiClass::custom("phone").expect("valid custom class"),
+            ),
         ];
         let counts = count_pii_by_class(&spans);
         assert_eq!(counts.len(), 2);

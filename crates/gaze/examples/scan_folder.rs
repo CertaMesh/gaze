@@ -101,8 +101,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn build_pipeline() -> Result<Pipeline, Box<dyn Error>> {
-    let phone = PiiClass::custom("phone");
-    let case_id = PiiClass::custom("case_id");
+    let phone = PiiClass::custom("phone").expect("valid custom class");
+    let case_id = PiiClass::custom("case_id").expect("valid custom class");
 
     Ok(Pipeline::builder()
         .detector(RegexDetector::emails()?)

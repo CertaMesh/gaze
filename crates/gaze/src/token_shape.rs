@@ -188,7 +188,9 @@ mod tests {
         for class in PiiClass::builtin_variants()
             .iter()
             .cloned()
-            .chain(std::iter::once(PiiClass::custom("class_alpha")))
+            .chain(std::iter::once(
+                PiiClass::custom("class_alpha").expect("valid custom class"),
+            ))
             .chain(std::iter::once(PiiClass::family("tenant-document")))
             .chain(std::iter::once(PiiClass::family("foo")))
         {
@@ -235,7 +237,7 @@ mod tests {
     #[test]
     fn custom_and_builtin_do_not_collide() {
         let builtin = tokenized_for(PiiClass::Email);
-        let custom = tokenized_for(PiiClass::custom("email"));
+        let custom = tokenized_for(PiiClass::custom("email").expect("valid custom class"));
 
         assert!(builtin.ends_with(":Email_1>"));
         assert!(custom.ends_with(":Custom:email_1>"));
@@ -245,15 +247,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_normalized_name_matches_current_shape() {
-        let token = tokenized_for(PiiClass::custom("!!!"));
-        assert!(token.ends_with(":Custom:_1>"));
-        assert!(contains_token(&token));
+    fn empty_normalized_name_is_rejected() {
+        assert_eq!(
+            PiiClass::custom("!!!"),
+            Err(gaze_types::EmptyCustomClassName)
+        );
     }
 
     #[test]
     fn single_char_custom_name_matches_current_shape() {
-        let token = tokenized_for(PiiClass::custom("x"));
+        let token = tokenized_for(PiiClass::custom("x").expect("valid custom class"));
         assert!(token.ends_with(":Custom:x_1>"));
         assert!(contains_token(&token));
     }

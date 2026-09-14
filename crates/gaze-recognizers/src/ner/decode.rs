@@ -347,7 +347,7 @@ mod tests {
     #[test]
     fn bridges_url() {
         let source = "https://example.invalid/path";
-        let label_map = labels(&[("URL", PiiClass::custom("url"))]);
+        let label_map = labels(&[("URL", PiiClass::custom("url").expect("valid custom class"))]);
         let out = merge(
             source,
             &["https", "://", "example.invalid", "/", "path"],
@@ -357,13 +357,19 @@ mod tests {
 
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..source.len());
-        assert_eq!(out[0].class, PiiClass::custom("url"));
+        assert_eq!(
+            out[0].class,
+            PiiClass::custom("url").expect("valid custom class")
+        );
     }
 
     #[test]
     fn bridges_phone() {
         let source = "+49-1555-0112233";
-        let label_map = labels(&[("PHONE", PiiClass::custom("phone"))]);
+        let label_map = labels(&[(
+            "PHONE",
+            PiiClass::custom("phone").expect("valid custom class"),
+        )]);
         let out = merge(
             source,
             &["+49", "-", "1555", "-", "0112233"],
@@ -373,7 +379,10 @@ mod tests {
 
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].span, 0..source.len());
-        assert_eq!(out[0].class, PiiClass::custom("phone"));
+        assert_eq!(
+            out[0].class,
+            PiiClass::custom("phone").expect("valid custom class")
+        );
     }
 
     #[test]

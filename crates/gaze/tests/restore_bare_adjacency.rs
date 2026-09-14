@@ -7,7 +7,7 @@ fn known_bare_tokens_restore_after_unicode_words_and_before_punctuation() {
         PiiClass::Name,
         PiiClass::Location,
         PiiClass::Organization,
-        PiiClass::custom("class_alpha"),
+        PiiClass::Custom("class_alpha".into()),
     ] {
         let token = session
             .format_preserving_fake(&class, "Synthetic Value")
@@ -27,7 +27,7 @@ fn known_bare_tokens_restore_after_unicode_words_and_before_punctuation() {
 #[test]
 fn bare_token_trailing_word_adjacency_never_partially_restores() {
     let session = Session::new(Scope::Ephemeral).unwrap();
-    for class in [PiiClass::Name, PiiClass::custom("class_alpha")] {
+    for class in [PiiClass::Name, PiiClass::Custom("class_alpha".into())] {
         let token = session
             .format_preserving_fake(&class, "Synthetic Value")
             .unwrap();
@@ -53,10 +53,10 @@ fn known_longer_ordinals_and_custom_labels_win_without_authorizing_unknowns() {
         );
     }
     let short = session
-        .format_preserving_fake(&PiiClass::custom("class_alpha"), "Synthetic Short")
+        .format_preserving_fake(&PiiClass::Custom("class_alpha".into()), "Synthetic Short")
         .unwrap();
     let long = session
-        .format_preserving_fake(&PiiClass::custom("class_alpha_1"), "Synthetic Long")
+        .format_preserving_fake(&PiiClass::Custom("class_alpha_1".into()), "Synthetic Long")
         .unwrap();
     assert_eq!(
         session
@@ -86,7 +86,7 @@ fn foreign_legacy_and_partial_prefixes_keep_rejection() {
         PiiClass::Name,
         PiiClass::Location,
         PiiClass::Organization,
-        PiiClass::custom("class_alpha"),
+        PiiClass::Custom("class_alpha".into()),
     ] {
         let known = session
             .format_preserving_fake(&class, "Synthetic Value")

@@ -286,7 +286,10 @@ fn token_minted_in_different_session_denies() {
 fn entity_class_not_allowed_in_target_domain_denies() {
     let (mut bridge, session, _) = bridge_and_session_for(&admin_principal());
     let customer_id_token = session
-        .tokenize(&PiiClass::custom("customer_id"), "91A")
+        .tokenize(
+            &PiiClass::custom("customer_id").expect("valid custom class"),
+            "91A",
+        )
         .unwrap();
 
     let reason = bridge

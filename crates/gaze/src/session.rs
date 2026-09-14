@@ -1,7 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -165,27 +163,12 @@ struct SnapshotPayload {
     document: Option<DocumentExtension>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct PrefixCacheHit {
-    pub raw_len: usize,
-    pub clean_text: String,
-    pub manifest: Vec<gaze_types::EmittedTokenSpan>,
-}
-
-#[derive(Debug, Clone)]
-struct PrefixCacheEntry {
-    raw: String,
-    clean_text: String,
-    manifest: Vec<gaze_types::EmittedTokenSpan>,
-}
-
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
     next_by_class: HashMap<PiiClass, usize>,
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
-    prefix_cache: HashMap<u64, PrefixCacheEntry>,
     restore_regex_cache: Option<(u64, Arc<Regex>)>,
 }
 
@@ -196,7 +179,6 @@ impl SessionState {
             next_by_class: HashMap::new(),
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
-            prefix_cache: HashMap::new(),
             restore_regex_cache: None,
         }
     }
@@ -546,6 +528,7 @@ impl Session {
     where
         F: FnOnce(usize) -> String,
     {
+        class.validate_custom_name()?;
         let family_key = family.unwrap_or(DEFAULT_COUNTER_FAMILY);
         Ok(
             self.mutate_state(|state| {
@@ -574,11 +557,11 @@ impl Session {
             .collect()
     }
 
-    /// Returns only the prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.state_snapshot().prefix_cache.len()
+        0
     }
 
     fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
@@ -617,36 +600,6 @@ impl Session {
 
     pub fn audit_session_id(&self) -> &str {
         &self.identity.audit_session_id
-    }
-
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        self.state_snapshot()
-            .prefix_cache
-            .values()
-            .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
-            })
-            .map(|cached| PrefixCacheHit {
-                raw_len: cached.raw.len(),
-                clean_text: cached.clean_text.clone(),
-                manifest: cached.manifest.clone(),
-            })
-            .max_by_key(|hit| hit.raw_len)
-    }
-
-    pub(crate) fn store_prefix_cache(
-        &self,
-        raw: &str,
-        clean_text: &str,
-        manifest: &[gaze_types::EmittedTokenSpan],
-    ) {
-        if raw.is_empty() {
-            return;
-        }
-        self.mutate_state(|state| {
-            let changed = store_prefix_cache_in_state(state, raw, clean_text, manifest);
-            ((), changed)
-        });
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
@@ -940,6 +893,7 @@ impl<'session> SessionTransaction<'session> {
         class: &PiiClass,
         raw: &str,
     ) -> Result<String> {
+        class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(
             intern_mapping_in_state(&mut self.staged, family, class, raw, |index| {
@@ -950,6 +904,7 @@ impl<'session> SessionTransaction<'session> {
     }
 
     pub fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
+        class.validate_custom_name()?;
         let prefix = hex::encode(self.identity.session_hex);
         Ok(intern_mapping_in_state(
             &mut self.staged,
@@ -975,11 +930,11 @@ impl<'session> SessionTransaction<'session> {
         self.staged.value_by_token.keys().cloned().collect()
     }
 
-    /// Returns only the staged prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.staged.prefix_cache.len()
+        0
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -1000,32 +955,6 @@ impl<'session> SessionTransaction<'session> {
     /// restored string or otherwise materialize mapped owner PII.
     pub fn validate_token_shapes(&self, text: &str) -> std::result::Result<(), RestoreError> {
         validate_token_shapes_from_state(&self.staged, text)
-    }
-
-    // Kept crate-private: the Pipeline is the sole cache reader/writer, so
-    // adopters cannot bypass its trusted prefix-cache population contract.
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        self.staged
-            .prefix_cache
-            .values()
-            .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
-            })
-            .map(|cached| PrefixCacheHit {
-                raw_len: cached.raw.len(),
-                clean_text: cached.clean_text.clone(),
-                manifest: cached.manifest.clone(),
-            })
-            .max_by_key(|hit| hit.raw_len)
-    }
-
-    pub(crate) fn store_prefix_cache(
-        &mut self,
-        raw: &str,
-        clean_text: &str,
-        manifest: &[gaze_types::EmittedTokenSpan],
-    ) {
-        store_prefix_cache_in_state(&mut self.staged, raw, clean_text, manifest);
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
@@ -1088,11 +1017,11 @@ impl CommittedSessionSnapshot {
         self.state.value_by_token.keys().cloned().collect()
     }
 
-    /// Returns only the committed prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.state.prefix_cache.len()
+        0
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -1206,33 +1135,6 @@ fn known_restore_matches<'a>(
             .is_some_and(|(_, body)| body.starts_with("custom:family:"))
             && text.as_bytes().get(matched.end()) == Some(&b'-'))
     })
-}
-
-fn store_prefix_cache_in_state(
-    state: &mut SessionState,
-    raw: &str,
-    clean_text: &str,
-    manifest: &[gaze_types::EmittedTokenSpan],
-) -> bool {
-    if raw.is_empty() {
-        return false;
-    }
-    if state.prefix_cache.len() >= 64 {
-        state.prefix_cache.clear();
-    }
-    let hash = prefix_cache_hash(raw);
-    let entry = PrefixCacheEntry {
-        raw: raw.to_string(),
-        clean_text: clean_text.to_string(),
-        manifest: manifest.to_vec(),
-    };
-    let changed = state.prefix_cache.get(&hash).is_none_or(|existing| {
-        existing.raw != entry.raw
-            || existing.clean_text != entry.clean_text
-            || existing.manifest != entry.manifest
-    });
-    state.prefix_cache.insert(hash, entry);
-    changed
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
@@ -1424,12 +1326,6 @@ fn validated_restore_tokens(
 
 fn default_counter_family() -> String {
     DEFAULT_COUNTER_FAMILY.to_string()
-}
-
-fn prefix_cache_hash(raw: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    raw.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn new_audit_session_id() -> String {
@@ -1668,7 +1564,7 @@ fn collect_phone_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in phone_pattern().find_iter(text) {
         let raw = matched.as_str();
         findings.push(StructuralFinding {
-            class: PiiClass::custom("phone"),
+            class: PiiClass::custom("phone").expect("valid custom class"),
             raw: raw.to_string(),
             canonical: ascii_digits(raw),
             location: matched.range(),
@@ -1684,7 +1580,7 @@ fn collect_iban_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
             continue;
         }
         findings.push(StructuralFinding {
-            class: PiiClass::custom("iban"),
+            class: PiiClass::custom("iban").expect("valid custom class"),
             raw: raw.to_string(),
             canonical,
             location: matched.range(),
@@ -1700,7 +1596,7 @@ fn collect_credit_card_findings(text: &str, findings: &mut Vec<StructuralFinding
             continue;
         }
         findings.push(StructuralFinding {
-            class: PiiClass::custom("credit_card"),
+            class: PiiClass::custom("credit_card").expect("valid custom class"),
             raw: raw.to_string(),
             canonical,
             location: matched.range(),
@@ -1712,7 +1608,7 @@ fn collect_api_key_findings(text: &str, findings: &mut Vec<StructuralFinding>) {
     for matched in api_key_pattern().find_iter(text) {
         let raw = matched.as_str();
         findings.push(StructuralFinding {
-            class: PiiClass::custom("api_key"),
+            class: PiiClass::custom("api_key").expect("valid custom class"),
             raw: raw.to_string(),
             canonical: raw.to_string(),
             location: matched.range(),
@@ -1950,7 +1846,7 @@ fn parse_restore_token_parts(raw: &str) -> Option<(PiiClass, u32)> {
 
     let (class, ordinal) = body.rsplit_once('_')?;
     let ordinal = parse_ascii_ordinal(ordinal)?;
-    let class = PiiClass::from_canonical_str(class).unwrap_or_else(|| PiiClass::custom(class));
+    let class = PiiClass::from_canonical_str(class).or_else(|| PiiClass::custom(class).ok())?;
     Some((class, ordinal))
 }
 
@@ -2568,7 +2464,7 @@ mod tests {
             let builtin_token = session
                 .tokenize(&builtin, &builtin_value)
                 .expect("builtin token");
-            let custom_class = PiiClass::custom(name);
+            let custom_class = PiiClass::custom(name).expect("valid custom class");
             let custom_token = session
                 .tokenize(&custom_class, &custom_value)
                 .expect("custom token");
@@ -2590,8 +2486,8 @@ mod tests {
     #[test]
     fn tokenize_distinguishes_custom_classes_with_matching_pascal_case() {
         let session = Session::new(Scope::Ephemeral).expect("session");
-        let first_class = PiiClass::custom("email");
-        let second_class = PiiClass::custom("custom_email");
+        let first_class = PiiClass::custom("email").expect("valid custom class");
+        let second_class = PiiClass::custom("custom_email").expect("valid custom class");
 
         let first_token = session
             .tokenize(&first_class, "alice@corp.com")
@@ -2829,16 +2725,28 @@ mod tests {
     fn restore_boundary_events_cover_structural_identifier_scope() {
         let session = Session::new(Scope::Ephemeral).expect("session");
         session
-            .tokenize(&PiiClass::custom("phone"), "+1-555-0101")
+            .tokenize(
+                &PiiClass::custom("phone").expect("valid custom class"),
+                "+1-555-0101",
+            )
             .expect("phone token");
         session
-            .tokenize(&PiiClass::custom("iban"), "DE89 3704 0044 0532 0130 00")
+            .tokenize(
+                &PiiClass::custom("iban").expect("valid custom class"),
+                "DE89 3704 0044 0532 0130 00",
+            )
             .expect("iban token");
         session
-            .tokenize(&PiiClass::custom("credit_card"), "4111 1111 1111 1111")
+            .tokenize(
+                &PiiClass::custom("credit_card").expect("valid custom class"),
+                "4111 1111 1111 1111",
+            )
             .expect("card token");
         session
-            .tokenize(&PiiClass::custom("api_key"), "sk-test-00000000000000000000")
+            .tokenize(
+                &PiiClass::custom("api_key").expect("valid custom class"),
+                "sk-test-00000000000000000000",
+            )
             .expect("api key token");
 
         let events = session.restore_boundary_events(
@@ -2850,35 +2758,35 @@ mod tests {
 
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("phone")
+                && event.class == PiiClass::custom("phone").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("phone")
+                && event.class == PiiClass::custom("phone").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("iban")
+                && event.class == PiiClass::custom("iban").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("iban")
+                && event.class == PiiClass::custom("iban").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("credit_card")
+                && event.class == PiiClass::custom("credit_card").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("credit_card")
+                && event.class == PiiClass::custom("credit_card").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::ManifestBypass
-                && event.class == PiiClass::custom("api_key")
+                && event.class == PiiClass::custom("api_key").expect("valid custom class")
         }));
         assert!(events.iter().any(|event| {
             event.kind == RestoreEventKind::FreshPiiDetected
-                && event.class == PiiClass::custom("api_key")
+                && event.class == PiiClass::custom("api_key").expect("valid custom class")
         }));
     }
 
@@ -2890,10 +2798,9 @@ mod tests {
 
         {
             let mut discarded = session.begin_transaction();
-            let discarded_token = discarded
+            discarded
                 .tokenize(&PiiClass::Email, "alice@example.invalid")
                 .expect("staged token");
-            discarded.store_prefix_cache("alice", &discarded_token, &[]);
         }
         assert_eq!(session.snapshot_entries(), initial_entries);
         assert!(Arc::ptr_eq(&initial_state, &session.state_snapshot()));
@@ -2907,7 +2814,6 @@ mod tests {
             transaction.restore_strict(&token).expect("staged restore"),
             "alice@example.invalid"
         );
-        transaction.store_prefix_cache("alice", &token, &[]);
         let snapshot = transaction.commit().expect("commit");
 
         assert_eq!(
@@ -2926,13 +2832,6 @@ mod tests {
         assert_eq!(
             snapshot_restored.authorized_output_ranges[0],
             "owner=".len().."owner=alice@example.invalid".len()
-        );
-        assert_eq!(
-            session
-                .lookup_prefix_cache("alice and more")
-                .expect("committed prefix cache")
-                .clean_text,
-            token
         );
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
@@ -3015,13 +2914,6 @@ mod tests {
             transaction.commit(),
             Err(SessionTransactionError::GenerationConflict)
         ));
-
-        let transaction = session.begin_transaction();
-        session.store_prefix_cache("prefix", "clean", &[]);
-        assert!(matches!(
-            transaction.commit(),
-            Err(SessionTransactionError::GenerationConflict)
-        ));
     }
 
     #[test]
@@ -3031,19 +2923,12 @@ mod tests {
             Tokenize,
             TokenizeWithFamily,
             FormatPreserving,
-            PrefixCache,
-        }
-
-        enum MutationOutcome {
-            Token(String),
-            PrefixCache,
         }
 
         for route in [
             MutationRoute::Tokenize,
             MutationRoute::TokenizeWithFamily,
             MutationRoute::FormatPreserving,
-            MutationRoute::PrefixCache,
         ] {
             let session = Session::new(Scope::Ephemeral).expect("session");
             let mut transaction = session.begin_transaction();
@@ -3057,25 +2942,15 @@ mod tests {
                 let mutator = scope.spawn(|| {
                     mutator_barrier.wait();
                     match route {
-                        MutationRoute::Tokenize => MutationOutcome::Token(
-                            session
-                                .tokenize(&PiiClass::Email, "alice@example.invalid")
-                                .expect("tokenize"),
-                        ),
-                        MutationRoute::TokenizeWithFamily => MutationOutcome::Token(
-                            session
-                                .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
-                                .expect("family tokenize"),
-                        ),
-                        MutationRoute::FormatPreserving => MutationOutcome::Token(
-                            session
-                                .format_preserving_fake(&PiiClass::Location, "München")
-                                .expect("format preserving fake"),
-                        ),
-                        MutationRoute::PrefixCache => {
-                            session.store_prefix_cache("prefix", "clean", &[]);
-                            MutationOutcome::PrefixCache
-                        }
+                        MutationRoute::Tokenize => session
+                            .tokenize(&PiiClass::Email, "alice@example.invalid")
+                            .expect("tokenize"),
+                        MutationRoute::TokenizeWithFamily => session
+                            .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
+                            .expect("family tokenize"),
+                        MutationRoute::FormatPreserving => session
+                            .format_preserving_fake(&PiiClass::Location, "München")
+                            .expect("format preserving fake"),
                     }
                 });
                 barrier.wait();
@@ -3093,16 +2968,7 @@ mod tests {
                     assert!(!session.contains_token(&staged));
                 }
             }
-            match mutation {
-                MutationOutcome::Token(token) => assert!(session.contains_token(&token)),
-                MutationOutcome::PrefixCache => assert_eq!(
-                    session
-                        .lookup_prefix_cache("prefix suffix")
-                        .expect("prefix cache")
-                        .clean_text,
-                    "clean"
-                ),
-            }
+            assert!(session.contains_token(&mutation));
         }
     }
 

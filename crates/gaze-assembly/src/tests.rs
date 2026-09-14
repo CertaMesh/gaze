@@ -320,11 +320,11 @@ precedence = 5
     let mut policy = empty_policy();
     policy.rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("alpha"),
+            class: PiiClass::custom("alpha").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Class {
-            class: PiiClass::custom("beta"),
+            class: PiiClass::custom("beta").expect("valid custom class"),
             action: Action::Preserve,
         },
         RuleSpec::Default {
@@ -408,7 +408,7 @@ precedence = 10
             action: Action::Tokenize,
         },
         RuleSpec::Class {
-            class: PiiClass::custom("regex"),
+            class: PiiClass::custom("regex").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {
@@ -515,7 +515,7 @@ fn build_pipeline_context_only_still_succeeds() {
     let mut policy = empty_policy();
     policy.rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("song"),
+            class: PiiClass::custom("song").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {
@@ -532,7 +532,7 @@ fn build_pipeline_context_only_still_succeeds() {
         )]),
         class_map: std::collections::HashMap::from([(
             "song".to_string(),
-            PiiClass::custom("song"),
+            PiiClass::custom("song").expect("valid custom class"),
         )]),
         fields: serde_json::Map::new(),
     };
@@ -930,7 +930,7 @@ fn policy_with_registered_dictionary(rules: Vec<RuleSpec>) -> gaze::Policy {
     let mut detector = gaze::DetectorSpec::default();
     detector.kind = DetectorKind::Dictionary;
     detector.name = "alpha".to_string();
-    detector.class = PiiClass::custom("foo");
+    detector.class = PiiClass::custom("foo").expect("valid custom class");
     detector.dictionary_name = Some("dict_alpha".to_string());
     detector.case_sensitive = true;
 
@@ -952,7 +952,7 @@ fn context_with_alpha_override() -> Context {
         )]),
         class_map: std::collections::HashMap::from([(
             "dict_alpha".to_string(),
-            PiiClass::custom("bar"),
+            PiiClass::custom("bar").expect("valid custom class"),
         )]),
         fields: serde_json::Map::new(),
     }
@@ -962,7 +962,7 @@ fn context_with_alpha_override() -> Context {
 fn t20_context_class_map_overrides_policy_dict_class() {
     let policy = policy_with_registered_dictionary(vec![
         RuleSpec::Class {
-            class: PiiClass::custom("bar"),
+            class: PiiClass::custom("bar").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {
@@ -995,7 +995,7 @@ fn t20_context_class_map_overrides_policy_dict_class() {
 fn t20a_class_map_override_fails_closed_when_action_rule_uncovered() {
     let policy = policy_with_registered_dictionary(vec![
         RuleSpec::Class {
-            class: PiiClass::custom("foo"),
+            class: PiiClass::custom("foo").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {
@@ -1018,8 +1018,8 @@ fn t20a_class_map_override_fails_closed_when_action_rule_uncovered() {
             new_class,
             ..
         }) if dict == "dict_alpha"
-            && old_class == PiiClass::custom("foo")
-            && new_class == PiiClass::custom("bar")
+            && old_class == PiiClass::custom("foo").expect("valid custom class")
+            && new_class == PiiClass::custom("bar").expect("valid custom class")
     ));
 }
 
@@ -1028,7 +1028,7 @@ fn t20b_rulepack_context_dict_override_fails_closed_when_uncovered() {
     let mut policy = gaze::Policy::default();
     policy.rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("foo"),
+            class: PiiClass::custom("foo").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {
@@ -1071,8 +1071,8 @@ case_sensitive = true
             new_class,
             ..
         }) if dict == "dict_alpha"
-            && old_class == PiiClass::custom("foo")
-            && new_class == PiiClass::custom("bar")
+            && old_class == PiiClass::custom("foo").expect("valid custom class")
+            && new_class == PiiClass::custom("bar").expect("valid custom class")
     ));
 }
 
@@ -1784,7 +1784,7 @@ fn iban_preserve_default_policy() -> gaze::Policy {
     policy.session = SessionPolicy::default();
     policy.rules = vec![
         RuleSpec::Class {
-            class: PiiClass::custom("iban"),
+            class: PiiClass::custom("iban").expect("valid custom class"),
             action: Action::Tokenize,
         },
         RuleSpec::Default {

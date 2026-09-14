@@ -23,7 +23,10 @@ async fn observe(request: &Value) -> Option<Value> {
         return None;
     }
     let session = fresh_session();
-    let token = must(session.tokenize(&PiiClass::custom("phone"), PHONE));
+    let token = must(session.tokenize(
+        &PiiClass::custom("phone").expect("valid custom class"),
+        PHONE,
+    ));
     let a = if arm == "base" {
         token.as_str()
     } else if ordinal == 0 {
