@@ -359,6 +359,11 @@ fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
     let mut cmd = ProcessCommand::new(command.program);
     cmd.args(command.args);
     cmd.env_clear();
+    // Bound artifacts in this build and inherited nested/adversarial builds.
+    // These are fixed policy values, never caller-controlled overrides.
+    cmd.env("CARGO_INCREMENTAL", "0")
+        .env("CARGO_PROFILE_DEV_DEBUG", "0")
+        .env("CARGO_PROFILE_TEST_DEBUG", "0");
     // Keep matrix children deterministic: no caller Cargo/Rust pollution, only
     // process basics Cargo/rustup need to find toolchains and temp storage.
     for var in [
@@ -394,3 +399,7 @@ fn configured_command(command: MatrixCommand) -> Result<ProcessCommand> {
 
     Ok(cmd)
 }
+
+#[cfg(test)]
+#[path = "ci_feature_matrix_tests.rs"]
+mod tests;
