@@ -438,3 +438,187 @@ fn malformed_custom_spans_fail_and_errors_require_discarding_staging() {
         Err(ProtectionError::EmptyPrimary)
     );
 }
+
+#[cfg(feature = "bundled-recognizers")]
+mod locale_chain_registry {
+    use super::*;
+    use gaze_recognizers::{
+        LocaleAwareModel, LocaleAwareModelRegistry, ModelError, ModelHints, ModelInput, ModelSpan,
+    };
+
+    type Calls = Arc<Mutex<Vec<(&'static str, LocaleTag)>>>;
+
+    struct Model {
+        id: &'static str,
+        locales: Vec<LocaleTag>,
+        residual: bool,
+        calls: Calls,
+    }
+
+    impl LocaleAwareModel for Model {
+        fn name(&self) -> &str {
+            // Deliberately shared: names are diagnostics, not backend identity.
+            "test-model"
+        }
+        fn native_locales(&self) -> &[LocaleTag] {
+            &self.locales
+        }
+        fn infer(
+            &self,
+            input: ModelInput,
+            _: ModelHints,
+        ) -> std::result::Result<Vec<ModelSpan>, ModelError> {
+            self.calls.lock().unwrap().push((self.id, input.locale));
+            // Synthetic invalid-checksum IBAN shape; the primary email detector misses it.
+            let fixture = "DE00370400440532013000";
+            Ok(if self.residual {
+                input
+                    .text
+                    .find(fixture)
+                    .map(|start| ModelSpan {
+                        text: fixture.into(),
+                        byte_range: start..start + fixture.len(),
+                        class: PiiClass::Custom("iban".into()),
+                        confidence: Some(0.99),
+                        model_name: self.name().into(),
+                    })
+                    .into_iter()
+                    .collect()
+            } else {
+                vec![]
+            })
+        }
+    }
+
+    fn configured(models: Vec<(&'static str, Vec<LocaleTag>, bool)>) -> (Pipeline, Calls) {
+        let calls = Calls::default();
+        let registry = LocaleAwareModelRegistry::from_backends(
+            models
+                .into_iter()
+                .map(|(id, locales, residual)| {
+                    Box::new(Model {
+                        id,
+                        locales,
+                        residual,
+                        calls: calls.clone(),
+                    }) as Box<dyn LocaleAwareModel>
+                })
+                .collect(),
+        );
+        (
+            pipeline(Action::Tokenize).with_safety_net_registry(registry),
+            calls,
+        )
+    }
+
+    #[test]
+    fn second_locale_residual_reproducer_fails_closed() {
+        let (p, calls) = configured(vec![
+            ("global-benign", vec![LocaleTag::Global], false),
+            ("dede-iban", vec![LocaleTag::DeDe], true),
+        ]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let dictionaries = DictionaryBundle::default();
+        for chain in [
+            vec![LocaleTag::EnUs, LocaleTag::DeDe],
+            vec![LocaleTag::DeDe],
+        ] {
+            calls.lock().unwrap().clear();
+            let context = ProtectionContext::strict(&chain, &dictionaries);
+            assert_eq!(p.validate_protection_context(context), Ok(()));
+            assert_eq!(
+                p.protect_text_transaction(
+                    &mut session.begin_transaction(),
+                    "transfer DE00370400440532013000 now",
+                    context,
+                ),
+                Err(ProtectionError::Residual)
+            );
+            assert!(calls
+                .lock()
+                .unwrap()
+                .contains(&("dede-iban", LocaleTag::DeDe)));
+            assert!(session.tokens().is_empty());
+        }
+    }
+
+    #[test]
+    fn validation_and_dispatch_cover_chain_in_order_once_per_backend() {
+        // Registry order differs from chain order; one backend matches both locales.
+        let (p, calls) = configured(vec![
+            ("de", vec![LocaleTag::DeDe], false),
+            ("shared", vec![LocaleTag::EnUs, LocaleTag::DeDe], false),
+            ("en", vec![LocaleTag::EnUs], false),
+        ]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let dictionaries = DictionaryBundle::default();
+        let context = ProtectionContext::strict(
+            &[LocaleTag::EnUs, LocaleTag::DeDe, LocaleTag::EnUs],
+            &dictionaries,
+        );
+        assert_eq!(p.validate_protection_context(context), Ok(()));
+        assert!(calls.lock().unwrap().is_empty());
+        assert_eq!(
+            p.protect_text_transaction(&mut session.begin_transaction(), "benign", context,),
+            Ok("benign".into())
+        );
+        assert_eq!(
+            *calls.lock().unwrap(),
+            vec![
+                ("shared", LocaleTag::EnUs),
+                ("en", LocaleTag::EnUs),
+                ("de", LocaleTag::DeDe),
+            ]
+        );
+    }
+
+    #[test]
+    fn uncovered_later_locale_rejects_at_validation_before_inference() {
+        let (p, calls) = configured(vec![("en", vec![LocaleTag::EnUs], false)]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let dictionaries = DictionaryBundle::default();
+        let context = ProtectionContext::strict(&[LocaleTag::EnUs, LocaleTag::DeDe], &dictionaries);
+        assert_eq!(
+            p.validate_protection_context(context),
+            Err(ProtectionError::UnsupportedCoverage)
+        );
+        assert_eq!(
+            p.protect_text_transaction(&mut session.begin_transaction(), "benign", context,),
+            Err(ProtectionError::UnsupportedCoverage)
+        );
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn observer_keeps_first_locale_first_backend() {
+        let (p, calls) = configured(vec![
+            ("en-first", vec![LocaleTag::EnUs], false),
+            ("en-second", vec![LocaleTag::EnUs], false),
+            ("de", vec![LocaleTag::DeDe], true),
+        ]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let result = p
+            .scan_safety_nets(
+                &session,
+                "transfer DE00370400440532013000 now",
+                &[LocaleTag::EnUs, LocaleTag::DeDe],
+            )
+            .unwrap();
+        assert!(result.report.suspects.is_empty());
+        assert_eq!(*calls.lock().unwrap(), vec![("en-first", LocaleTag::EnUs)]);
+    }
+
+    #[test]
+    fn empty_chain_uses_global_fallback() {
+        let (p, calls) = configured(vec![("global", vec![LocaleTag::Global], false)]);
+        let session = Session::new(Scope::Ephemeral).unwrap();
+        let dictionaries = DictionaryBundle::default();
+        let context = ProtectionContext::strict(&[], &dictionaries);
+        assert_eq!(p.validate_protection_context(context), Ok(()));
+        assert_eq!(
+            p.protect_text_transaction(&mut session.begin_transaction(), "benign", context,),
+            Ok("benign".into())
+        );
+        assert_eq!(*calls.lock().unwrap(), vec![("global", LocaleTag::Global)]);
+    }
+}
