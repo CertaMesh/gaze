@@ -274,3 +274,89 @@ printf '%s\n' '[{"label":"person","start":0,"end":11,"score":0.97}]'
     assert!(message.contains("stdout capture failed"));
     assert!(message.contains("stream exceeded configured byte cap"));
 }
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn overflowing_pipes_still_kill_and_reap_child() {
+    for stdout_overflow in [false, true] {
+        let dir = tempfile::tempdir().unwrap();
+        let pidfile = dir.path().join("child.pid");
+        // Keep the shell itself writing: no descendant can retain a pipe after kill.
+        let output = if stdout_overflow {
+            "printf '%8192s' w; printf '%8192s' w >&2"
+        } else {
+            "printf '%8192s' w >&2"
+        };
+        let body = format!(
+            r#"#!/bin/sh
+cat >/dev/null
+printf '%s\n' "$$" > '{}'
+while :; do {output}; done
+"#,
+            pidfile.display()
+        );
+        let (_command_dir, command) = write_mock_kiji("[]");
+        fs::write(&command, &body).unwrap();
+        let (model, expected_sha) = populate_model_dir();
+        let config = SubprocessKijiConfig::new(command)
+            .with_model_dir(model.path())
+            .with_expected_bundle_sha256_for_tests(expected_sha);
+        let started = std::time::Instant::now();
+        let error = SubprocessKijiBackend::new(
+            config
+                .with_timeout(Duration::from_secs(5))
+                .with_max_stdout_bytes(128 * 1024)
+                .with_stderr_diagnostics(true),
+        )
+        .unwrap()
+        .infer("clean")
+        .unwrap_err();
+        let SafetyNetError::Runtime { message } = error else {
+            panic!("expected runtime error");
+        };
+        if stdout_overflow {
+            assert!(message.contains("stdout capture failed"), "{message}");
+        } else {
+            assert!(message.contains("timed out"), "{message}");
+        }
+        assert!(started.elapsed() < Duration::from_secs(20));
+        let pid = fs::read_to_string(pidfile).unwrap();
+        assert!(
+            !std::process::Command::new("ps")
+                .args(["-p", pid.trim()])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .unwrap()
+                .success(),
+            "child must be killed and reaped"
+        );
+    }
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn invalid_stdout_remains_invalid_output_with_verbose_stderr() {
+    let body = r#"#!/bin/sh
+cat >/dev/null
+head -c 2097152 /dev/zero | tr '\000' w >&2
+printf '%s\n' 'alice@example.invalid'
+"#
+    .to_string();
+    let (_command_dir, command) = write_mock_kiji("[]");
+    fs::write(&command, &body).unwrap();
+    let (model, expected_sha) = populate_model_dir();
+    let config = SubprocessKijiConfig::new(command)
+        .with_model_dir(model.path())
+        .with_expected_bundle_sha256_for_tests(expected_sha);
+    let error = SubprocessKijiBackend::new(
+        config
+            .with_timeout(test_subprocess_timeout())
+            .with_stderr_diagnostics(true),
+    )
+    .unwrap()
+    .infer("clean")
+    .unwrap_err();
+    assert!(matches!(error, SafetyNetError::InvalidOutput { .. }));
+    assert!(!error.to_string().contains("alice@example.invalid"));
+}

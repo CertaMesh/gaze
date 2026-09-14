@@ -6,6 +6,10 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use gaze_types::SafetyNetError;
+
+#[cfg(test)]
+use crate::safety_net::subprocess_diagnostics::sanitize_stderr;
+use crate::safety_net::subprocess_diagnostics::{read_stderr, sanitize_error};
 use serde::Deserialize;
 
 use super::artifacts::{verify_model_dir, KIJI_DISTILBERT_BUNDLE_SHA256};
@@ -15,7 +19,6 @@ use crate::safety_net::kiji_distilbert::class_map::map_kiji_label;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(5);
 const DEFAULT_MAX_INPUT_BYTES: usize = 1024 * 1024;
 const DEFAULT_MAX_STDOUT_BYTES: usize = 4 * 1024 * 1024;
-const MAX_VERBOSE_STDERR_BYTES: usize = 256;
 const WAIT_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Configuration for the local Kiji DistilBERT subprocess backend.
@@ -208,7 +211,7 @@ impl SubprocessKijiBackend {
         let stderr_thread = child
             .stderr
             .take()
-            .map(|stderr| thread::spawn(move || read_bounded(stderr, MAX_VERBOSE_STDERR_BYTES)));
+            .map(|stderr| thread::spawn(move || read_stderr(stderr)));
 
         let deadline = Instant::now() + self.config.timeout;
         let mut stdin_thread = Some(stdin_thread);
@@ -256,7 +259,7 @@ impl SubprocessKijiBackend {
             {
                 let thread = stderr_thread.take().expect("checked stderr thread");
                 match join_reader(thread, "stderr") {
-                    Ok(output) => stderr = Some(sanitize_stderr(&output)),
+                    Ok(output) => stderr = Some(output),
                     Err(error) => {
                         kill_reap(&mut child);
                         join_remaining(stdin_thread, stdout_thread, stderr_thread);
@@ -418,10 +421,10 @@ fn read_bounded(mut reader: impl Read, max_bytes: usize) -> std::io::Result<Vec<
     }
 }
 
-fn join_reader(
-    thread: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+fn join_reader<T>(
+    thread: thread::JoinHandle<std::io::Result<T>>,
     stream: &'static str,
-) -> Result<Vec<u8>, SafetyNetError> {
+) -> Result<T, SafetyNetError> {
     thread
         .join()
         .map_err(|_| SafetyNetError::Runtime {
@@ -457,7 +460,7 @@ fn kill_reap(child: &mut Child) {
 fn join_remaining(
     stdin_thread: Option<thread::JoinHandle<std::io::Result<()>>>,
     stdout_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
-    stderr_thread: Option<thread::JoinHandle<std::io::Result<Vec<u8>>>>,
+    stderr_thread: Option<thread::JoinHandle<std::io::Result<String>>>,
 ) {
     if let Some(thread) = stdin_thread {
         let _ = join_stdin(thread);
@@ -468,45 +471,6 @@ fn join_remaining(
     if let Some(thread) = stderr_thread {
         let _ = join_reader(thread, "stderr");
     }
-}
-
-fn sanitize_stderr(bytes: &[u8]) -> String {
-    let ascii = bytes
-        .iter()
-        .map(|byte| {
-            if byte.is_ascii_graphic() || *byte == b' ' {
-                char::from(*byte)
-            } else {
-                ' '
-            }
-        })
-        .collect::<String>();
-
-    sanitize_error(&ascii)
-        .chars()
-        .take(MAX_VERBOSE_STDERR_BYTES)
-        .collect()
-}
-
-fn sanitize_error(message: &str) -> String {
-    message
-        .split_ascii_whitespace()
-        .map(sanitize_token)
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn sanitize_token(token: &str) -> String {
-    if token.contains('@') {
-        return "<redacted>".to_string();
-    }
-
-    let digit_count = token.bytes().filter(u8::is_ascii_digit).count();
-    if digit_count >= 7 {
-        return "<redacted>".to_string();
-    }
-
-    token.to_string()
 }
 
 fn verify_command_path(command: &Path) -> Result<(), SafetyNetError> {

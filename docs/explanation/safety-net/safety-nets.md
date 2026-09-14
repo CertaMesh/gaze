@@ -306,13 +306,22 @@ race with the JSON adapter or appear in operator logs. Adopters who need
 diagnostics can enable `SubprocessOpenAiFilterConfig::with_stderr_diagnostics(true)`,
 which:
 
-1. Captures stderr in a bounded buffer of at most 256 bytes.
+1. Captures a stderr prefix in a bounded buffer of at most 256 bytes and
+   drains/discards the rest to EOF so a verbose child cannot block its pipe.
+   Diagnostic overflow alone does not fail inference. An incomplete trailing
+   token is discarded before redaction, since a partial email or phone token
+   might otherwise evade the sanitizer.
 2. Maps non-printable bytes to spaces.
 3. Sanitizes whitespace-separated tokens with the same redactor used for
    error messages: any token containing `@` or seven or more ASCII digits
    is replaced with `<redacted>`. This catches the most common email and
    phone shapes that backends might log.
-4. Truncates to the 256-byte cap.
+4. Truncates sanitized output to the 256-byte cap, including a
+   `[truncated]` marker when capture or display was shortened.
+
+The Kiji subprocess adapter uses the same diagnostic rules. Stdout still has
+a hard byte cap: overflow, I/O errors, invalid model output, and timeouts remain
+errors. Diagnostics stay disabled by default.
 
 The `verbose_stderr_is_stripped_and_capped` test locks both the cap and the
 sanitization rule.
