@@ -98,6 +98,9 @@ gaze proxy restart
 
 Pidfiles live under the platform local-data directory, never `/tmp`. Stale
 pidfiles are revalidated with process liveness checks and cleaned before start.
+Lifecycle operations coordinate through a persistent `<pidfile>.lock` sidecar.
+Do not remove this sidecar or edit the pidfile while daemon commands are active;
+cleanup removes only the owned pidfile and leaves the sidecar in place.
 
 `gaze proxy logs --follow` is also available for local daemon inspection.
 
