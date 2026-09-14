@@ -295,3 +295,213 @@ mod strict_host_tests {
         std::fs::remove_dir_all(directory).expect("remove synthetic manifest");
     }
 }
+
+#[cfg(test)]
+mod manifest_store_tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    // Observe the real dispatcher context without adding a public context constructor.
+    struct Probe {
+        store: FileManifestStore,
+        started: Mutex<Option<(CallHandle, Vec<u8>)>>,
+        block_begin: bool,
+        block_terminal: bool,
+    }
+
+    #[async_trait]
+    impl ManifestStore for Probe {
+        async fn begin_call(&self, ctx: BeginCallContext<'_>) -> Result<CallHandle, ManifestError> {
+            let handle = CallHandle::new(ctx.call_id);
+            let path = self.store.path_for(handle);
+            if self.block_begin {
+                std::fs::create_dir(&path).unwrap();
+            }
+            let result = self.store.begin_call(ctx).await;
+            assert!(matches!(
+                self.store.begin_call(ctx).await,
+                Err(ManifestError::DuplicateCallId(h)) if h == handle
+            ));
+            let handle = result?;
+            let bytes = std::fs::read(path).unwrap();
+            let record: Value = serde_json::from_slice(&bytes).unwrap();
+            assert_eq!(
+                record,
+                json!({
+                    "status": "started",
+                    "call_id": ctx.call_id.to_string(),
+                    "external_session_id": ctx.external_session_id,
+                    "principal_id": ctx.principal_id,
+                    "tool_name": ctx.tool_name,
+                    "redacted_args": ctx.redacted_args,
+                    "started_at_unix_ms": unix_ms(ctx.started_at),
+                })
+            );
+            *self.started.lock().unwrap() = Some((handle, bytes));
+            if self.block_terminal {
+                std::fs::create_dir(
+                    self.store
+                        .dir
+                        .join(format!("{}.terminal.json", handle.id())),
+                )
+                .unwrap();
+            }
+            Ok(handle)
+        }
+
+        async fn finish_call(
+            &self,
+            handle: CallHandle,
+            snapshot: SnapshotRef,
+        ) -> Result<(), ManifestError> {
+            self.store.finish_call(handle, snapshot).await
+        }
+
+        async fn fail_call(
+            &self,
+            handle: CallHandle,
+            reason: FailureReason,
+        ) -> Result<(), ManifestError> {
+            self.store.fail_call(handle, reason).await
+        }
+    }
+
+    fn reason() -> FailureReason {
+        FailureReason::Other {
+            message: "synthetic failure".into(),
+        }
+    }
+
+    async fn assert_consumed(store: &FileManifestStore, handle: CallHandle) {
+        assert!(matches!(
+            store.finish_call(handle, SnapshotRef::new("synthetic", "00", 0)).await,
+            Err(ManifestError::UnknownHandle(h)) if h == handle
+        ));
+        assert!(matches!(
+            store.fail_call(handle, reason()).await,
+            Err(ManifestError::UnknownHandle(h)) if h == handle
+        ));
+    }
+
+    async fn exercise(failure: bool, block_begin: bool, block_terminal: bool) {
+        let directory = tempfile::tempdir().unwrap();
+        let probe = Probe {
+            store: FileManifestStore::new(directory.path().to_owned()).unwrap(),
+            started: Mutex::new(None),
+            block_begin,
+            block_terminal,
+        };
+        let host = McpHost::new(
+            Arc::new(FileManifestStore::new(directory.path().to_owned()).unwrap()),
+            None,
+        )
+        .unwrap();
+        let envelope = PiiEnvelope::new(
+            &host.registry,
+            &host.auth,
+            &probe,
+            host.pipeline.pipeline(),
+            &host.session,
+            host.pipeline.locale_chain().as_slice(),
+            &host.session_id_policy,
+        );
+        // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::success_preserves_audit_context_on_disk)
+        // fixture-cited(crates/gaze-cli/src/commands/mcp/serve.rs:commands::mcp::serve::manifest_store_tests::failure_preserves_audit_context_on_disk)
+        let raw = "alice@example.invalid";
+        let args = if failure {
+            json!({"missing_text": raw})
+        } else {
+            json!({"text": raw})
+        };
+        let result = envelope
+            .dispatch(
+                &Principal::new("synthetic-agent"),
+                "gaze_read_text",
+                args.clone(),
+                Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            )
+            .await;
+        if block_begin || block_terminal {
+            assert!(matches!(
+                result,
+                Err(DispatchError::Manifest(ManifestError::Backend(_)))
+            ));
+        } else if failure {
+            assert!(matches!(result, Err(DispatchError::ToolError(_))));
+        } else {
+            result.unwrap();
+        }
+        if block_begin {
+            assert!(probe.started.lock().unwrap().is_none());
+            return;
+        }
+        let (handle, before) = probe.started.lock().unwrap().take().unwrap();
+        assert_consumed(&probe.store, handle).await;
+        drop(envelope);
+        drop(host);
+        drop(probe);
+        let reopened = FileManifestStore::new(directory.path().to_owned()).unwrap();
+        assert_eq!(
+            std::fs::read(reopened.path_for(handle)).unwrap(),
+            before,
+            "terminal persistence must preserve the complete begin record byte-for-byte"
+        );
+        let start: Value = serde_json::from_slice(&before).unwrap();
+        assert_eq!(start["principal_id"], "synthetic-agent");
+        assert_eq!(start["tool_name"], "gaze_read_text");
+        assert_eq!(start["external_session_id"], "01ARZ3NDEKTSV4RRFFQ69G5FAV");
+        assert_ne!(start["redacted_args"], args);
+        assert!(!String::from_utf8(before).unwrap().contains(raw));
+        assert!(start["started_at_unix_ms"].as_u64().unwrap() > 0);
+        let terminal_path = directory
+            .path()
+            .join(format!("{}.terminal.json", handle.id()));
+        if block_terminal {
+            assert!(terminal_path.is_dir());
+        } else {
+            let terminal: Value =
+                serde_json::from_slice(&std::fs::read(terminal_path).unwrap()).unwrap();
+            assert_eq!(terminal["call_id"], start["call_id"]);
+            assert_eq!(
+                terminal["status"],
+                if failure { "failed" } else { "finished" }
+            );
+            assert!(terminal
+                .get(if failure { "reason" } else { "snapshot" })
+                .is_some());
+            assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 2);
+        }
+        // Reopening does not restore in-flight handles or permit terminal retries.
+        assert_consumed(&reopened, handle).await;
+    }
+
+    #[tokio::test]
+    async fn success_preserves_audit_context_on_disk() {
+        exercise(false, false, false).await;
+    }
+
+    #[tokio::test]
+    async fn failure_preserves_audit_context_on_disk() {
+        exercise(true, false, false).await;
+    }
+
+    #[tokio::test]
+    async fn terminal_io_failure_preserves_start_and_consumes_handle() {
+        exercise(false, false, true).await;
+        exercise(true, false, true).await;
+    }
+
+    #[tokio::test]
+    async fn begin_io_failure_rejects_duplicate_retry() {
+        exercise(false, true, false).await;
+    }
+
+    #[tokio::test]
+    async fn unknown_handles_never_write_records() {
+        let directory = tempfile::tempdir().unwrap();
+        let store = FileManifestStore::new(directory.path().to_owned()).unwrap();
+        let handle = CallHandle::new("01ARZ3NDEKTSV4RRFFQ69G5FAV".parse().unwrap());
+        assert_consumed(&store, handle).await;
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 0);
+    }
+}
