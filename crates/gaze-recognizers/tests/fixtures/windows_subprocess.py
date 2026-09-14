@@ -69,6 +69,9 @@ if mode.startswith('witness'):
 
 if mode.startswith('hold'):
     fd = int(mode[-1])
+    if fd != 0:
+        # Complete stdin before exiting, so this case isolates a held reader.
+        sys.stdin.buffer.read()
     subprocess.Popen([sys.executable, __file__, 'witness' + str(fd), backend, marker],
                      stdin=sys.stdin if fd == 0 else subprocess.DEVNULL,
                      stdout=sys.stdout if fd == 1 else subprocess.DEVNULL,

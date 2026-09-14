@@ -24,4 +24,4 @@ jobs:
         run: cargo test -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --lib subprocess_io::tests
       - name: Lint Windows adapter
         if: ${{ !cancelled() }}
-        run: cargo clippy -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --lib --test windows_subprocess -- -D warnings
+        run: cargo clippy --no-deps -p gaze-recognizers --no-default-features --features safety-net-openai,safety-net-kiji,test-support --locked -j4 --lib --test windows_subprocess -- -D warnings
