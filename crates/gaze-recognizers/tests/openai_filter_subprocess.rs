@@ -426,3 +426,96 @@ fn assert_private_payload_absent(value: &str) {
         );
     }
 }
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn verbose_stderr_preserves_successful_spans() {
+    for bytes in [257, 300, 2 * 1024 * 1024] {
+        let body = format!(
+            r#"#!/bin/sh
+cat >/dev/null
+head -c {bytes} /dev/zero | tr '\000' w >&2
+printf '%s\n' '[{{"label":"private_person","start":0,"end":11,"score":0.97}}]'
+"#
+        );
+        let command = script("opf-diagnostics", &body).unwrap();
+        let config = SubprocessOpenAiFilterConfig::new(command);
+        let quiet = SubprocessOpenAiFilterBackend::new(
+            config.clone().with_timeout(test_subprocess_timeout()),
+        )
+        .unwrap()
+        .infer("Dr. Schmidt greets you")
+        .unwrap();
+        let verbose = SubprocessOpenAiFilterBackend::new(
+            config
+                .with_timeout(test_subprocess_timeout())
+                .with_stderr_diagnostics(true),
+        )
+        .unwrap()
+        .infer("Dr. Schmidt greets you")
+        .unwrap();
+        assert_eq!(verbose, quiet, "stderr bytes: {bytes}");
+        assert_eq!(verbose.len(), 1);
+    }
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn overflowing_stderr_failure_is_sanitized_and_marked() {
+    let body = r#"#!/bin/sh
+cat >/dev/null
+printf 'failed alice@example.invalid +1-555-0101 \033\377é ' >&2
+head -c 2097152 /dev/zero | tr '\000' w >&2
+exit 7
+"#
+    .to_string();
+    let command = script("opf-diagnostics", &body).unwrap();
+    let config = SubprocessOpenAiFilterConfig::new(command);
+    let error = SubprocessOpenAiFilterBackend::new(
+        config
+            .with_timeout(test_subprocess_timeout())
+            .with_stderr_diagnostics(true),
+    )
+    .unwrap()
+    .infer("clean")
+    .unwrap_err();
+    let SafetyNetError::Runtime { message } = error else {
+        panic!("expected runtime error");
+    };
+    assert!(message.contains("exited with status"));
+    let diagnostic = message.split_once(": ").unwrap().1;
+    assert!(diagnostic.len() <= 256);
+    assert!(diagnostic.ends_with("[truncated]"));
+    assert!(diagnostic.contains("<redacted>"));
+    assert!(!diagnostic.contains("alice"));
+    assert!(!diagnostic.contains("555"));
+    assert!(diagnostic.is_ascii());
+    assert!(!diagnostic.chars().any(char::is_control));
+}
+
+#[test]
+#[file_serial(gaze_subprocess)]
+fn stdout_overflow_still_fails_closed_with_verbose_stderr() {
+    let body = r#"#!/bin/sh
+cat >/dev/null
+head -c 2097152 /dev/zero | tr '\000' w >&2
+printf '%s\n' '[{"label":"private_person","start":0,"end":11,"score":0.97}]'
+"#
+    .to_string();
+    let command = script("opf-diagnostics", &body).unwrap();
+    let config = SubprocessOpenAiFilterConfig::new(command);
+    let error = SubprocessOpenAiFilterBackend::new(
+        config
+            .with_timeout(test_subprocess_timeout())
+            .with_stderr_diagnostics(true)
+            .with_max_stdout_bytes(8),
+    )
+    .unwrap()
+    .infer("Dr. Schmidt")
+    .unwrap_err();
+    let SafetyNetError::Runtime { message } = error else {
+        panic!("expected runtime error");
+    };
+    assert!(message.contains("stdout capture failed"));
+    assert!(message.contains("stream exceeded configured byte cap"));
+}
