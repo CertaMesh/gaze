@@ -115,3 +115,64 @@ impl<T: Write> Write for Pipe<T> {
 
 #[cfg(windows)]
 mod windows;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Barrier;
+
+    #[test]
+    fn cancellation_between_check_and_operation_stops_idle_and_progress_retries() {
+        for progress in [false, true] {
+            let cancellation = Cancellation::default();
+            let gate = Arc::new(Barrier::new(2));
+            let worker_gate = gate.clone();
+            let mut pipe = Pipe {
+                inner: (),
+                cancellation: cancellation.clone(),
+            };
+            let worker = std::thread::spawn(move || {
+                let mut attempts = 0;
+                let first = pipe.retry(|_| {
+                    attempts += 1;
+                    worker_gate.wait();
+                    worker_gate.wait();
+                    if progress {
+                        Ok(1)
+                    } else {
+                        Err(io::ErrorKind::WouldBlock.into())
+                    }
+                });
+                if progress {
+                    assert_eq!(first.unwrap(), 1);
+                    let next = pipe.retry(|_| {
+                        attempts += 1;
+                        Ok(2)
+                    });
+                    assert_eq!(next.unwrap_err().kind(), io::ErrorKind::TimedOut);
+                } else {
+                    assert_eq!(first.unwrap_err().kind(), io::ErrorKind::TimedOut);
+                }
+                assert_eq!(attempts, 1);
+            });
+            gate.wait(); // Worker passed the check, but has not finished IO.
+            cancellation.cancel();
+            gate.wait();
+            worker.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn cancellation_before_io_and_after_io_error_do_not_issue_more_operations() {
+        let cancellation = Cancellation::default();
+        let mut pipe = Pipe {
+            inner: (),
+            cancellation: cancellation.clone(),
+        };
+        let error = pipe.retry::<()>(|_| Err(io::ErrorKind::BrokenPipe.into()));
+        assert_eq!(error.unwrap_err().kind(), io::ErrorKind::BrokenPipe);
+        cancellation.cancel();
+        let error = pipe.retry::<()>(|_| panic!("cancelled worker issued IO"));
+        assert_eq!(error.unwrap_err().kind(), io::ErrorKind::TimedOut);
+    }
+}

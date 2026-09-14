@@ -12,7 +12,7 @@ use windows_sys::Win32::System::Pipes::{PeekNamedPipe, SetNamedPipeHandleState, 
 
 // Only these owned, freshly spawned std pipes enter the adapter. In particular,
 // no File, borrowed handle, clone, or second reader may consume peeked bytes.
-pub(super) trait ChildPipe: AsRawHandle {
+pub(in crate::safety_net) trait ChildPipe: AsRawHandle {
     fn configure(&self) -> io::Result<()>;
 }
 
