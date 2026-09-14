@@ -65,21 +65,12 @@ impl Pipeline {
         #[cfg(feature = "bundled-recognizers")]
         if let Some(registry) = &self.safety_net_registry {
             if !registry.is_empty() {
-                let locale = context
-                    .locale_chain
-                    .first()
-                    .cloned()
-                    .unwrap_or(crate::LocaleTag::Global);
-                let models = registry
-                    .resolve(&locale, ModelStage::Pass3SafetyNet)
-                    .map_err(|error| match error {
-                        ModelError::NoLocaleModelCoverage { .. }
-                        | ModelError::LocaleNotSupported(_) => ProtectionError::UnsupportedCoverage,
+                resolve_safety_net_models(registry, context.locale_chain, true).map_err(
+                    |error| match error {
+                        Error::Protection(error) => error,
                         _ => ProtectionError::SafetyNet,
-                    })?;
-                if models.is_empty() {
-                    return Err(ProtectionError::UnsupportedCoverage);
-                }
+                    },
+                )?;
             }
         }
         Ok(())
@@ -192,7 +183,7 @@ impl Pipeline {
         {
             return Err(ProtectionError::Provenance);
         }
-        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Suppress);
+        let mut target = ProtectionTarget::Staged(transaction);
         let report = self
             .run_safety_nets_in_context(
                 &mut target,
@@ -251,7 +242,7 @@ impl Pipeline {
         if input.is_empty() {
             return Ok(());
         }
-        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Suppress);
+        let mut target = ProtectionTarget::Staged(transaction);
         let result = self
             .redact_text_with_manifest_uncached(
                 &mut target,

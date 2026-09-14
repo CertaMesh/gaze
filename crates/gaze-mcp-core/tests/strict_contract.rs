@@ -742,7 +742,10 @@ async fn later_residual_leaf_rejects_all_staging_and_undeclared_response_preflig
         .redact(&session, gaze::RawDocument::Text("cache seed".into()))
         .unwrap();
     let cache_before = session.prefix_cache_entry_count();
-    assert!(cache_before > 0);
+    assert_eq!(
+        cache_before, 0,
+        "prefix storage is disabled even when requested"
+    );
     let store = Store::default();
     let registry_a = registry(&store, Default::default(), None, false, false);
     assert!(matches!(

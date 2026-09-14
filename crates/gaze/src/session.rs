@@ -1,7 +1,5 @@
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
-use std::hash::{Hash, Hasher};
 use std::ops::Range;
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -165,27 +163,12 @@ struct SnapshotPayload {
     document: Option<DocumentExtension>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct PrefixCacheHit {
-    pub raw_len: usize,
-    pub clean_text: String,
-    pub manifest: Vec<gaze_types::EmittedTokenSpan>,
-}
-
-#[derive(Debug, Clone)]
-struct PrefixCacheEntry {
-    raw: String,
-    clean_text: String,
-    manifest: Vec<gaze_types::EmittedTokenSpan>,
-}
-
 #[derive(Clone)]
 struct SessionState {
     generation: u64,
     next_by_class: HashMap<PiiClass, usize>,
     token_by_value: HashMap<TokenKey, String>,
     value_by_token: HashMap<String, String>,
-    prefix_cache: HashMap<u64, PrefixCacheEntry>,
     restore_regex_cache: Option<(u64, Arc<Regex>)>,
 }
 
@@ -196,7 +179,6 @@ impl SessionState {
             next_by_class: HashMap::new(),
             token_by_value: HashMap::new(),
             value_by_token: HashMap::new(),
-            prefix_cache: HashMap::new(),
             restore_regex_cache: None,
         }
     }
@@ -575,11 +557,11 @@ impl Session {
             .collect()
     }
 
-    /// Returns only the prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.state_snapshot().prefix_cache.len()
+        0
     }
 
     fn restore_state_snapshot(&self) -> Result<Arc<SessionState>> {
@@ -618,36 +600,6 @@ impl Session {
 
     pub fn audit_session_id(&self) -> &str {
         &self.identity.audit_session_id
-    }
-
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        self.state_snapshot()
-            .prefix_cache
-            .values()
-            .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
-            })
-            .map(|cached| PrefixCacheHit {
-                raw_len: cached.raw.len(),
-                clean_text: cached.clean_text.clone(),
-                manifest: cached.manifest.clone(),
-            })
-            .max_by_key(|hit| hit.raw_len)
-    }
-
-    pub(crate) fn store_prefix_cache(
-        &self,
-        raw: &str,
-        clean_text: &str,
-        manifest: &[gaze_types::EmittedTokenSpan],
-    ) {
-        if raw.is_empty() {
-            return;
-        }
-        self.mutate_state(|state| {
-            let changed = store_prefix_cache_in_state(state, raw, clean_text, manifest);
-            ((), changed)
-        });
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
@@ -972,11 +924,11 @@ impl<'session> SessionTransaction<'session> {
         self.staged.value_by_token.keys().cloned().collect()
     }
 
-    /// Returns only the staged prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.staged.prefix_cache.len()
+        0
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -997,32 +949,6 @@ impl<'session> SessionTransaction<'session> {
     /// restored string or otherwise materialize mapped owner PII.
     pub fn validate_token_shapes(&self, text: &str) -> std::result::Result<(), RestoreError> {
         validate_token_shapes_from_state(&self.staged, text)
-    }
-
-    // Kept crate-private: the Pipeline is the sole cache reader/writer, so
-    // adopters cannot bypass its trusted prefix-cache population contract.
-    pub(crate) fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        self.staged
-            .prefix_cache
-            .values()
-            .filter(|cached| {
-                text.starts_with(&cached.raw) && text.is_char_boundary(cached.raw.len())
-            })
-            .map(|cached| PrefixCacheHit {
-                raw_len: cached.raw.len(),
-                clean_text: cached.clean_text.clone(),
-                manifest: cached.manifest.clone(),
-            })
-            .max_by_key(|hit| hit.raw_len)
-    }
-
-    pub(crate) fn store_prefix_cache(
-        &mut self,
-        raw: &str,
-        clean_text: &str,
-        manifest: &[gaze_types::EmittedTokenSpan],
-    ) {
-        store_prefix_cache_in_state(&mut self.staged, raw, clean_text, manifest);
     }
 
     pub fn snapshot_entries(&self) -> Vec<SessionSnapshotEntry> {
@@ -1085,11 +1011,11 @@ impl CommittedSessionSnapshot {
         self.state.value_by_token.keys().cloned().collect()
     }
 
-    /// Returns only the committed prefix-cache cardinality for cross-crate regression tests.
+    /// Compatibility probe: prefix storage is disabled, so this always returns zero.
     #[cfg(feature = "test-support")]
     #[doc(hidden)]
     pub fn prefix_cache_entry_count(&self) -> usize {
-        self.state.prefix_cache.len()
+        0
     }
 
     pub fn contains_token(&self, token: &str) -> bool {
@@ -1181,33 +1107,6 @@ fn build_restore_regex(state: &SessionState) -> Result<Option<Arc<Regex>>> {
         .map(Arc::new)
         .map(Some)
         .map_err(Error::InvalidRegex)
-}
-
-fn store_prefix_cache_in_state(
-    state: &mut SessionState,
-    raw: &str,
-    clean_text: &str,
-    manifest: &[gaze_types::EmittedTokenSpan],
-) -> bool {
-    if raw.is_empty() {
-        return false;
-    }
-    if state.prefix_cache.len() >= 64 {
-        state.prefix_cache.clear();
-    }
-    let hash = prefix_cache_hash(raw);
-    let entry = PrefixCacheEntry {
-        raw: raw.to_string(),
-        clean_text: clean_text.to_string(),
-        manifest: manifest.to_vec(),
-    };
-    let changed = state.prefix_cache.get(&hash).is_none_or(|existing| {
-        existing.raw != entry.raw
-            || existing.clean_text != entry.clean_text
-            || existing.manifest != entry.manifest
-    });
-    state.prefix_cache.insert(hash, entry);
-    changed
 }
 
 fn snapshot_entries_from_state(state: &SessionState) -> Vec<SessionSnapshotEntry> {
@@ -1400,12 +1299,6 @@ fn validated_restore_tokens(
 
 fn default_counter_family() -> String {
     DEFAULT_COUNTER_FAMILY.to_string()
-}
-
-fn prefix_cache_hash(raw: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    raw.hash(&mut hasher);
-    hasher.finish()
 }
 
 fn new_audit_session_id() -> String {
@@ -2878,10 +2771,9 @@ mod tests {
 
         {
             let mut discarded = session.begin_transaction();
-            let discarded_token = discarded
+            discarded
                 .tokenize(&PiiClass::Email, "alice@example.invalid")
                 .expect("staged token");
-            discarded.store_prefix_cache("alice", &discarded_token, &[]);
         }
         assert_eq!(session.snapshot_entries(), initial_entries);
         assert!(Arc::ptr_eq(&initial_state, &session.state_snapshot()));
@@ -2895,7 +2787,6 @@ mod tests {
             transaction.restore_strict(&token).expect("staged restore"),
             "alice@example.invalid"
         );
-        transaction.store_prefix_cache("alice", &token, &[]);
         let snapshot = transaction.commit().expect("commit");
 
         assert_eq!(
@@ -2914,13 +2805,6 @@ mod tests {
         assert_eq!(
             snapshot_restored.authorized_output_ranges[0],
             "owner=".len().."owner=alice@example.invalid".len()
-        );
-        assert_eq!(
-            session
-                .lookup_prefix_cache("alice and more")
-                .expect("committed prefix cache")
-                .clean_text,
-            token
         );
         assert!(Arc::ptr_eq(&session.identity, &snapshot.identity));
 
@@ -3003,13 +2887,6 @@ mod tests {
             transaction.commit(),
             Err(SessionTransactionError::GenerationConflict)
         ));
-
-        let transaction = session.begin_transaction();
-        session.store_prefix_cache("prefix", "clean", &[]);
-        assert!(matches!(
-            transaction.commit(),
-            Err(SessionTransactionError::GenerationConflict)
-        ));
     }
 
     #[test]
@@ -3019,19 +2896,12 @@ mod tests {
             Tokenize,
             TokenizeWithFamily,
             FormatPreserving,
-            PrefixCache,
-        }
-
-        enum MutationOutcome {
-            Token(String),
-            PrefixCache,
         }
 
         for route in [
             MutationRoute::Tokenize,
             MutationRoute::TokenizeWithFamily,
             MutationRoute::FormatPreserving,
-            MutationRoute::PrefixCache,
         ] {
             let session = Session::new(Scope::Ephemeral).expect("session");
             let mut transaction = session.begin_transaction();
@@ -3045,25 +2915,15 @@ mod tests {
                 let mutator = scope.spawn(|| {
                     mutator_barrier.wait();
                     match route {
-                        MutationRoute::Tokenize => MutationOutcome::Token(
-                            session
-                                .tokenize(&PiiClass::Email, "alice@example.invalid")
-                                .expect("tokenize"),
-                        ),
-                        MutationRoute::TokenizeWithFamily => MutationOutcome::Token(
-                            session
-                                .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
-                                .expect("family tokenize"),
-                        ),
-                        MutationRoute::FormatPreserving => MutationOutcome::Token(
-                            session
-                                .format_preserving_fake(&PiiClass::Location, "München")
-                                .expect("format preserving fake"),
-                        ),
-                        MutationRoute::PrefixCache => {
-                            session.store_prefix_cache("prefix", "clean", &[]);
-                            MutationOutcome::PrefixCache
-                        }
+                        MutationRoute::Tokenize => session
+                            .tokenize(&PiiClass::Email, "alice@example.invalid")
+                            .expect("tokenize"),
+                        MutationRoute::TokenizeWithFamily => session
+                            .tokenize_with_family("tool", &PiiClass::Name, "Dr. Schmidt")
+                            .expect("family tokenize"),
+                        MutationRoute::FormatPreserving => session
+                            .format_preserving_fake(&PiiClass::Location, "München")
+                            .expect("format preserving fake"),
                     }
                 });
                 barrier.wait();
@@ -3081,16 +2941,7 @@ mod tests {
                     assert!(!session.contains_token(&staged));
                 }
             }
-            match mutation {
-                MutationOutcome::Token(token) => assert!(session.contains_token(&token)),
-                MutationOutcome::PrefixCache => assert_eq!(
-                    session
-                        .lookup_prefix_cache("prefix suffix")
-                        .expect("prefix cache")
-                        .clean_text,
-                    "clean"
-                ),
-            }
+            assert!(session.contains_token(&mutation));
         }
     }
 

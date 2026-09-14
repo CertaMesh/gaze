@@ -24,7 +24,7 @@ use crate::redaction_log::{ConflictTier, DocumentKind, RedactionEntry};
 use crate::registry::{Candidate, DetectContext, Recognizer, RecognizerRegistry};
 use crate::rule::{Action, Rule, RuleContext};
 use crate::rulepack::RulepackError;
-use crate::session::{PrefixCacheHit, RestoreEvent, Session, SessionTransaction};
+use crate::session::{RestoreEvent, Session, SessionTransaction};
 use crate::types::{CleanDocument, RawDocument, Value};
 use crate::DictionaryBundle;
 
@@ -171,6 +171,7 @@ pub enum SafetyNetDecision {
 pub struct PipelineOptimizationConfig {
     pub skip_class_gating: bool,
     pub capitals_heuristic_gate: bool,
+    /// Compatibility flag only. Protection always rescans the complete input.
     pub prefix_cache: bool,
     pub length_bucketing: bool,
 }
@@ -187,6 +188,7 @@ impl PipelineOptimizationConfig {
         self.capitals_heuristic_gate = enabled;
         self
     }
+    /// Retains the requested flag for compatibility; prefix reuse is disabled.
     pub fn with_prefix_cache(mut self, enabled: bool) -> Self {
         self.prefix_cache = enabled;
         self
@@ -197,11 +199,10 @@ impl PipelineOptimizationConfig {
     }
 }
 
-/// Controls whether one transactional protection call may reuse or populate the prefix cache.
+/// Compatibility control for callers that distinguish emitted output from mutation probes.
 ///
-/// [`Self::Suppress`] bypasses both prefix-cache lookup and publication while retaining all
-/// detector, mapping, and manifest behavior. It is intended for mutation probes whose output is
-/// inspected but never emitted.
+/// Both modes rescan the complete input without reading or storing prefix decisions. Reuse
+/// cannot certify current detector/rule behavior or entities crossing an appended boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrefixCacheWriteMode {
     Allow,
@@ -284,10 +285,7 @@ pub struct Pipeline {
 
 enum ProtectionTarget<'target, 'session> {
     Live(&'target Session),
-    Staged(
-        &'target mut SessionTransaction<'session>,
-        PrefixCacheWriteMode,
-    ),
+    Staged(&'target mut SessionTransaction<'session>),
 }
 
 impl ProtectionTarget<'_, '_> {
@@ -299,21 +297,21 @@ impl ProtectionTarget<'_, '_> {
     ) -> Result<String> {
         match self {
             Self::Live(session) => session.tokenize_with_family(family, class, raw),
-            Self::Staged(transaction, _) => transaction.tokenize_with_family(family, class, raw),
+            Self::Staged(transaction) => transaction.tokenize_with_family(family, class, raw),
         }
     }
 
     fn format_preserving_fake(&mut self, class: &PiiClass, raw: &str) -> Result<String> {
         match self {
             Self::Live(session) => session.format_preserving_fake(class, raw),
-            Self::Staged(transaction, _) => transaction.format_preserving_fake(class, raw),
+            Self::Staged(transaction) => transaction.format_preserving_fake(class, raw),
         }
     }
 
     fn audit_session_id(&self) -> &str {
         match self {
             Self::Live(session) => session.audit_session_id(),
-            Self::Staged(transaction, _) => transaction.audit_session_id(),
+            Self::Staged(transaction) => transaction.audit_session_id(),
         }
     }
 
@@ -324,41 +322,21 @@ impl ProtectionTarget<'_, '_> {
     fn restore(&self, token: &str) -> Option<String> {
         match self {
             Self::Live(session) => session.restore(token),
-            Self::Staged(transaction, _) => transaction.restore(token),
+            Self::Staged(transaction) => transaction.restore(token),
         }
     }
 
     fn contains_token(&self, token: &str) -> bool {
         match self {
             Self::Live(session) => session.contains_token(token),
-            Self::Staged(transaction, _) => transaction.contains_token(token),
+            Self::Staged(transaction) => transaction.contains_token(token),
         }
     }
 
     fn restore_strict_text(&self, text: &str) -> std::result::Result<String, crate::RestoreError> {
         match self {
             Self::Live(session) => session.restore_strict_text(text),
-            Self::Staged(transaction, _) => transaction.restore_strict_text(text),
-        }
-    }
-
-    fn lookup_prefix_cache(&self, text: &str) -> Option<PrefixCacheHit> {
-        match self {
-            Self::Live(session) => session.lookup_prefix_cache(text),
-            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
-                transaction.lookup_prefix_cache(text)
-            }
-            Self::Staged(_, PrefixCacheWriteMode::Suppress) => None,
-        }
-    }
-
-    fn store_prefix_cache(&mut self, raw: &str, clean_text: &str, manifest: &[EmittedTokenSpan]) {
-        match self {
-            Self::Live(session) => session.store_prefix_cache(raw, clean_text, manifest),
-            Self::Staged(transaction, PrefixCacheWriteMode::Allow) => {
-                transaction.store_prefix_cache(raw, clean_text, manifest);
-            }
-            Self::Staged(_, PrefixCacheWriteMode::Suppress) => {}
+            Self::Staged(transaction) => transaction.restore_strict_text(text),
         }
     }
 }
@@ -527,7 +505,7 @@ impl Pipeline {
 
     /// Runs the detector/rule pipeline against isolated transaction state.
     ///
-    /// Mapping and prefix-cache publication occurs only when the caller commits
+    /// Mapping publication occurs only when the caller commits
     /// the transaction. Configured [`RedactionLogger`] sinks still receive
     /// trusted-side attempt rows synchronously; discarding the transaction does
     /// not retract those metadata-only audit attempts.
@@ -549,18 +527,17 @@ impl Pipeline {
 
     /// Runs transactional protection with an explicit prefix-cache mode.
     ///
-    /// Suppression bypasses cache lookup and publication without disabling detection,
-    /// tokenization, or manifest staging. The caller still owns the transaction and decides
-    /// whether any staged mapping is committed.
+    /// Both modes rescan the complete input without caching. Detection, tokenization, and
+    /// manifest staging still run. The caller decides whether staged mappings are committed.
     pub fn pseudonymize_transaction_with_detect_context_and_prefix_cache_write_mode(
         &self,
         transaction: &mut SessionTransaction<'_>,
         raw: RawDocument,
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
-        prefix_cache_write_mode: PrefixCacheWriteMode,
+        _prefix_cache_write_mode: PrefixCacheWriteMode,
     ) -> Result<CleanDocument> {
-        let mut target = ProtectionTarget::Staged(transaction, prefix_cache_write_mode);
+        let mut target = ProtectionTarget::Staged(transaction);
         self.pseudonymize_target_with_detect_context(&mut target, raw, locale_chain, dictionaries)
     }
 
@@ -660,7 +637,7 @@ impl Pipeline {
         dictionaries: &DictionaryBundle,
         policy: SafetyNetPolicy,
     ) -> Result<(CleanDocument, Vec<EmittedTokenSpan>, LeakReport)> {
-        let mut target = ProtectionTarget::Staged(transaction, PrefixCacheWriteMode::Allow);
+        let mut target = ProtectionTarget::Staged(transaction);
         self.clean_target_with_safety_net_policy_detect_context(
             &mut target,
             raw,
@@ -936,49 +913,9 @@ impl Pipeline {
         locale_chain: &[crate::LocaleTag],
         dictionaries: &DictionaryBundle,
     ) -> Result<CleanText> {
-        if self.optimization_config.prefix_cache {
-            if let Some(hit) = target
-                .lookup_prefix_cache(text)
-                .filter(|hit| hit.raw_len < text.len())
-            {
-                let suffix = &text[hit.raw_len..];
-                let suffix_clean = self.redact_text_with_manifest_uncached(
-                    target,
-                    suffix,
-                    field_name,
-                    document_kind,
-                    locale_chain,
-                    dictionaries,
-                    None,
-                )?;
-                let clean_offset = hit.clean_text.len();
-                let raw_offset = hit.raw_len;
-                let mut manifest = hit.manifest.clone();
-                manifest.extend(suffix_clean.manifest.into_iter().map(|mut span| {
-                    span.clean_span.start += clean_offset;
-                    span.clean_span.end += clean_offset;
-                    span.raw_span.start += raw_offset;
-                    span.raw_span.end += raw_offset;
-                    span
-                }));
-                let mut clean_text = hit.clean_text;
-                clean_text.push_str(&suffix_clean.text);
-                self.log_prefix_cache_entries(
-                    target,
-                    &hit.manifest,
-                    field_name,
-                    document_kind,
-                    locale_chain,
-                )?;
-                target.store_prefix_cache(text, &clean_text, &manifest);
-                return Ok(CleanText {
-                    text: clean_text,
-                    manifest,
-                });
-            }
-        }
-
-        let clean = self.redact_text_with_manifest_uncached(
+        // Full rescans are required even for identical configuration: custom recognizers and
+        // rules can change state, and a suffix can complete an entity across any cached split.
+        self.redact_text_with_manifest_uncached(
             target,
             text,
             field_name,
@@ -986,11 +923,7 @@ impl Pipeline {
             locale_chain,
             dictionaries,
             None,
-        )?;
-        if self.optimization_config.prefix_cache {
-            target.store_prefix_cache(text, &clean.text, &clean.manifest);
-        }
-        Ok(clean)
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1188,34 +1121,13 @@ impl Pipeline {
         #[cfg(feature = "bundled-recognizers")]
         if let Some(registry) = &self.safety_net_registry {
             if !registry.is_empty() {
-                let locale = locale_chain
-                    .first()
-                    .cloned()
-                    .unwrap_or(crate::LocaleTag::Global);
-                let selected = registry
-                    .resolve(&locale, ModelStage::Pass3SafetyNet)
-                    .map_err(|error| {
-                        if mandatory
-                            && matches!(
-                                error,
-                                ModelError::NoLocaleModelCoverage { .. }
-                                    | ModelError::LocaleNotSupported(_)
-                            )
-                        {
-                            Error::Protection(ProtectionError::UnsupportedCoverage)
-                        } else {
-                            Error::SafetyNet(model_error_to_safety_net_error(error))
-                        }
-                    })?;
-                if mandatory && selected.is_empty() {
-                    return Err(ProtectionError::UnsupportedCoverage.into());
-                }
+                let selected = resolve_safety_net_models(registry, locale_chain, mandatory)?;
                 if !mandatory && selected.len() > 1 {
-                    let selected_backend = selected[0].name();
+                    let selected_backend = selected[0].0.name();
                     let dropped = selected
                         .iter()
                         .skip(1)
-                        .map(|backend| backend.name().to_string())
+                        .map(|(backend, _)| backend.name().to_string())
                         .collect::<Vec<_>>();
                     tracing::debug!(
                         selected_backend,
@@ -1230,9 +1142,10 @@ impl Pipeline {
                         dropped,
                     )?;
                 }
-                for model in selected
-                    .iter()
-                    .take(if mandatory { selected.len() } else { 1 })
+                for (model, locale) in
+                    selected
+                        .iter()
+                        .take(if mandatory { selected.len() } else { 1 })
                 {
                     let spans = model
                         .infer(
@@ -1914,52 +1827,6 @@ impl Pipeline {
             logger.log(&entry)?;
         }
 
-        Ok(())
-    }
-
-    fn log_prefix_cache_entries(
-        &self,
-        target: &ProtectionTarget<'_, '_>,
-        manifest: &[EmittedTokenSpan],
-        field_name: Option<&str>,
-        document_kind: DocumentKind,
-        locale_chain: &[crate::LocaleTag],
-    ) -> Result<()> {
-        let locale = locale_chain
-            .first()
-            .map(crate::LocaleTag::as_str)
-            .unwrap_or("global")
-            .to_string();
-        for span in manifest {
-            let entry = RedactionEntry::new(
-                "prefix_cache",
-                span.class.clone(),
-                Action::Tokenize,
-                field_name.map(str::to_string),
-                document_kind,
-                false,
-                ConflictTier::None,
-                crate::redaction_log::current_epoch_ms(),
-                Some(target.audit_session_id().to_string()),
-            )
-            .with_recognizer_metadata(Some("prefix_cache".to_string()), None)
-            .with_provenance_metadata(
-                Some("prefix_cache".to_string()),
-                None,
-                None,
-                None,
-                None,
-                Some(locale.clone()),
-                Some("session_prefix".to_string()),
-                Some(span.class.to_canonical_str()),
-                Some(span.class.to_canonical_str()),
-                None,
-                None,
-            );
-            for logger in &self.redaction_loggers {
-                logger.log(&entry)?;
-            }
-        }
         Ok(())
     }
 
@@ -2798,6 +2665,7 @@ impl PipelineBuilder {
         self
     }
 
+    /// Compatibility option. Complete inputs are always rescanned; no prefixes are retained.
     pub fn enable_prefix_cache(mut self) -> Self {
         self.optimization_config.prefix_cache = true;
         self
@@ -2855,6 +2723,52 @@ fn model_span_to_suspect(
         format!("{:?}", span.class),
         field_path.map(str::to_string),
     ))
+}
+
+#[cfg(feature = "bundled-recognizers")]
+fn resolve_safety_net_models<'a>(
+    registry: &'a LocaleAwareModelRegistry,
+    locale_chain: &[crate::LocaleTag],
+    mandatory: bool,
+) -> Result<Vec<(&'a dyn gaze_recognizers::LocaleAwareModel, crate::LocaleTag)>> {
+    let locales = if locale_chain.is_empty() {
+        &[crate::LocaleTag::Global]
+    } else if mandatory {
+        locale_chain
+    } else {
+        &locale_chain[..1]
+    };
+    let mut selected: Vec<(&dyn gaze_recognizers::LocaleAwareModel, crate::LocaleTag)> = Vec::new();
+    for locale in locales {
+        let models = registry
+            .resolve(locale, ModelStage::Pass3SafetyNet)
+            .map_err(|error| {
+                if mandatory
+                    && matches!(
+                        error,
+                        ModelError::NoLocaleModelCoverage { .. }
+                            | ModelError::LocaleNotSupported(_)
+                    )
+                {
+                    Error::Protection(ProtectionError::UnsupportedCoverage)
+                } else {
+                    Error::SafetyNet(model_error_to_safety_net_error(error))
+                }
+            })?;
+        if mandatory && models.is_empty() {
+            return Err(ProtectionError::UnsupportedCoverage.into());
+        }
+        for model in models {
+            // Names need not be unique. Keep each backend once, with its first matching locale.
+            if !selected
+                .iter()
+                .any(|(existing, _)| std::ptr::eq(*existing, model))
+            {
+                selected.push((model, locale.clone()));
+            }
+        }
+    }
+    Ok(selected)
 }
 
 #[cfg(feature = "bundled-recognizers")]
@@ -4874,7 +4788,7 @@ mod tests {
     }
 
     #[test]
-    fn prefix_cache_hits_emit_audit_provenance() {
+    fn prefix_cache_option_rescans_with_recognizer_audit_provenance() {
         struct NameRecognizer;
         impl Recognizer for NameRecognizer {
             fn id(&self) -> &str {
@@ -4925,17 +4839,19 @@ mod tests {
         let session = Session::new(Scope::Ephemeral).expect("session");
         pipeline
             .redact(&session, RawDocument::Text("Dr. Schmidt".to_string()))
-            .expect("prime cache");
+            .expect("first scan");
         pipeline
             .redact(
                 &session,
                 RawDocument::Text("Dr. Schmidt reports".to_string()),
             )
-            .expect("cache hit");
+            .expect("full rescan");
         let entries = entries.lock().unwrap();
-        assert!(entries.iter().any(|entry| {
-            entry.source == "prefix_cache"
-                && entry.provenance_stage.as_deref() == Some("prefix_cache")
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|entry| {
+            entry.source == "name.fixture"
+                && entry.action == Action::Tokenize
+                && entry.provenance_stage.as_deref() != Some("prefix_cache")
         }));
     }
 
@@ -5714,7 +5630,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction_pipeline_prefix_cache_is_staged_and_drop_discards() {
+    fn transaction_pipeline_prefix_cache_option_keeps_mappings_staged_and_drop_discards() {
         let pipeline = Pipeline::builder()
             .detector(NeedleDetector {
                 needle: "Dr. Schmidt",
@@ -5737,7 +5653,7 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &dictionaries,
             )
-            .expect("prime staged cache");
+            .expect("first staged scan");
         let extended = pipeline
             .pseudonymize_transaction_with_detect_context(
                 &mut transaction,
@@ -5745,17 +5661,19 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &dictionaries,
             )
-            .expect("hit staged cache");
+            .expect("rescan staged input");
         let (CleanDocument::Text(first), CleanDocument::Text(extended)) = (first, extended) else {
             panic!("expected text outputs");
         };
         assert_eq!(extended, format!("{first} reports"));
         assert_eq!(transaction.tokens().len(), 1);
         assert!(session.tokens().is_empty());
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        #[cfg(feature = "test-support")]
+        assert_eq!(session.prefix_cache_entry_count(), 0);
         drop(transaction);
         assert!(session.tokens().is_empty());
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_none());
+        #[cfg(feature = "test-support")]
+        assert_eq!(session.prefix_cache_entry_count(), 0);
 
         let mut transaction = session.begin_transaction();
         pipeline
@@ -5765,7 +5683,7 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &dictionaries,
             )
-            .expect("prime committed cache");
+            .expect("stage first scan");
         pipeline
             .pseudonymize_transaction_with_detect_context(
                 &mut transaction,
@@ -5773,12 +5691,13 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &dictionaries,
             )
-            .expect("hit committed cache");
+            .expect("stage full rescan");
         let staged_tokens = transaction.tokens();
         let snapshot = transaction.commit().expect("atomic commit");
         assert_eq!(snapshot.tokens(), staged_tokens);
         assert_eq!(session.tokens(), staged_tokens);
-        assert!(session.lookup_prefix_cache("Dr. Schmidt reports").is_some());
+        #[cfg(feature = "test-support")]
+        assert_eq!(session.prefix_cache_entry_count(), 0);
     }
 
     #[test]
@@ -5805,18 +5724,13 @@ mod tests {
                 &[crate::LocaleTag::Global],
                 &dictionaries,
             )
-            .expect("prime staged prefix cache");
+            .expect("scan incomplete email");
         let CleanDocument::Text(cached_prefix) = cached_prefix else {
             panic!("expected text output");
         };
         assert_eq!(cached_prefix, "alice@");
-        assert_eq!(
-            transaction
-                .lookup_prefix_cache("alice@example.invalid")
-                .expect("preseeded prefix cache hit")
-                .raw_len,
-            "alice@".len()
-        );
+        #[cfg(feature = "test-support")]
+        assert_eq!(transaction.prefix_cache_entry_count(), 0);
         #[cfg(feature = "test-support")]
         let staged_cache_entries = transaction.prefix_cache_entry_count();
         #[cfg(feature = "test-support")]
@@ -5844,9 +5758,8 @@ mod tests {
 
         drop(transaction);
         assert!(session.tokens().is_empty());
-        assert!(session
-            .lookup_prefix_cache("alice@example.invalid")
-            .is_none());
+        #[cfg(feature = "test-support")]
+        assert_eq!(session.prefix_cache_entry_count(), 0);
     }
 
     #[test]
@@ -5884,6 +5797,7 @@ mod tests {
         ));
         assert!(session.contains_token(&winner));
         assert!(!session.contains_token(&staged_token));
-        assert!(session.lookup_prefix_cache("Dr. Schmidt").is_none());
+        #[cfg(feature = "test-support")]
+        assert_eq!(session.prefix_cache_entry_count(), 0);
     }
 }
